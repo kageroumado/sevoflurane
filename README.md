@@ -1,53 +1,71 @@
 # Sevoflurane
 
-A native macOS frontend for Steam running in a CrossOver bottle. The Windows Steam
-client runs headless in the bottle and keeps owning what it's good at — downloads,
-installs, ownership/DRM, game launch — while everything the user sees and touches is
-native macOS. No translated Chromium, no steamwebhelper windows, no blurry
-non-retina UI.
+**Steam for macOS, natively.** Your whole Steam library in a real Mac app —
+native windows, the real macOS menu bar, Retina-sharp, quiet in the menu
+bar — while the Windows Steam client that makes it possible runs invisibly
+in a Wine bottle. It keeps doing what it's good at (downloads, installs,
+ownership, launching games); everything you see and touch is macOS.
 
-Named for the inhalational anesthetic: a drug delivered as vapor, famous for smooth,
-fast, non-irritating induction — which is the product promise, applied to Steam.
-The anesthesia machine color code for sevoflurane is yellow; so is the accent color.
+Named for the inhalational anesthetic: a drug delivered as vapor, famous for
+smooth, fast, non-irritating induction — which is the product promise,
+applied to Steam. The anesthesia machine color code for sevoflurane is
+yellow; so is the accent color.
+
+> **Status: pre-release.** The core works — Steam's own UI rendering in
+> native windows against the bottled client, installs, launches, and a
+> supervisor that heals hangs automatically — and is being hardened for a
+> first public build. `Docs/release-plan.md` (untracked working notes)
+> tracks the road to 1.0.
+
+## How it works, in one paragraph
+
+The Windows Steam client runs headless in a CrossOver bottle
+(`-silent -cef-enable-debugging`). Steam's UI is a plain web app that only
+needs a `SteamClient` binding; Sevoflurane serves that bundle into native
+WKWebViews with a shim whose calls are replayed into the client's real
+`SharedJSContext` over the Chrome DevTools Protocol, and whose protobuf
+transport is relayed around CDP through a socket the client's own context
+opens. Every window Steam creates is adopted into a real `NSWindow`. The
+full architecture — and the fidelity rules that keep it honest — is
+`SPEC.md`.
 
 ## Layout
 
-- `SPEC.md` — the full spec: MVP scope, architecture, and the lsteamclient endgame
-- `HANDOFF.md` — living session handoff: current state, verified behavior, next work
-- `Docs/release-plan.md` — the road to 1.0: milestones R1–R5, risks, estimates
-- `Docs/resilience-spec.md` — steamwebhelper hangs, Steam's RescueDialog watchdog,
-  and the auto-recovery design
-- `Docs/onboarding-spec.md` — download-drag-launch self-setup: engine install,
-  bottle wiring, dock hygiene, updates
-- `Docs/cli-mcp-spec.md` — the `sevo` CLI and MCP server design
-- `Sevoflurane/` — the macOS app (Swift 6, WKWebView-hosted Steam UI, menu-bar app)
-- `Spike/` — the Python bridge (`bridge.py`), client lifecycle (`lifecycle.py`),
-  the `sevo` CLI prototype (`sevo.py`), the `SteamClient` shim
-  (`steamclient_shim.js`), and probes; being ported to Swift
-- `Docs/steam-client-hangs.md` — hang investigation with evidence
-- `Mockups/library.html`, `Mockups/onboarding.html` — HTML mockups of the library
-  UI and the first-run assistant (open locally in a browser)
+- `SPEC.md` — the architecture: hosting Steam's UI, the bridge, native
+  chrome, engine strategy, and the lsteamclient endgame
+- `Sevoflurane/` — the app (Swift 6): `Web/` hosts Steam's UI and windows,
+  `Bridge/` is the in-process page↔client bridge, `Setup/` the first-run
+  assistant, `App/` supervision, logging, menu bar
+- `Spike/` — Python prototypes still standing alone: `lifecycle.py` (bottle
+  provisioning + client lifecycle), `sevo.py` (management CLI), `bridge.py`
+  (the bridge's reference implementation), probes
+- `Site/` — the landing page (not yet deployed)
+- `Mockups/` — self-contained HTML design mockups (open in a browser)
 
-`Docs/` and `HANDOFF.md` are local working notes (investigations with machine-
-specific evidence, session handoffs, the living release plan) and stay
-untracked; the durable architecture lives in `SPEC.md`.
-- Research foundation: the research notes
-  (validated seams, prior-art survey, Steam client internals, Proton mechanism)
-
-## Status
-
-Steam's own desktop UI runs inside the app's native windows: library live from
-the bottled client, macOS menu bar driving Steam's real menus, `steam://` and
-file-open actions handled natively (no Wine windows). The Python bridge and
-client supervision are next to move into Swift — `HANDOFF.md` has the ordered
-list.
+`Docs/` and `HANDOFF.md` are untracked local working notes (investigations
+with machine-specific evidence, session handoffs, the living release plan);
+the durable architecture lives in `SPEC.md`.
 
 ## Running (dev)
 
-1. `python3 Spike/lifecycle.py start` — Steam up in the bottle with CDP on :8081
-2. `cd Spike && python3 -u bridge.py > bridge.log 2>&1 &` — serves the UI + proxy
-3. Launch the Sevoflurane app (Xcode or the Debug build); it loads
-   `http://127.0.0.1:8762/`
+Requirements: macOS 26+, Apple Silicon, Xcode 26+, CrossOver with a bottle
+named `Steam` (build one headlessly: `python3 Spike/lifecycle.py provision`).
 
-Stop with `python3 Spike/lifecycle.py stop` — and expect to `kill` survivors;
-see `Docs/steam-client-hangs.md` for why.
+1. `python3 Spike/lifecycle.py start` — Steam up in the bottle, CDP on :8081
+2. Build and launch the app — the bridge runs in-process; the app finds the
+   client, boots Steam's UI, and supervises from there
+3. Diagnostics: `python3 Spike/sevo.py doctor` · event log at
+   `~/Library/Logs/Sevoflurane.log` · `curl -X POST --data '<js>'
+   http://127.0.0.1:8762/__eval` evaluates in the page
+
+Quitting the app stops nothing today (dev behavior); stop the client with
+`python3 Spike/lifecycle.py stop`.
+
+## Contributing
+
+See `CONTRIBUTING.md` — start with SPEC.md's fidelity rules; most non-obvious
+bugs here are a violation of one of them.
+
+## License
+
+MIT. Not affiliated with Valve. Steam is a trademark of Valve Corporation.
