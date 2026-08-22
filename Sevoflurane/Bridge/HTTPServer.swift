@@ -123,7 +123,7 @@ nonisolated final class HTTPServer: Sendable {
 
     /// Returns the first complete request in `data` plus the unconsumed rest,
     /// or nil if more bytes are needed.
-    private static func parse(_ data: Data) -> (HTTPRequest, Data)? {
+    static func parse(_ data: Data) -> (HTTPRequest, Data)? {
         guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         guard let head = String(data: data[..<headerEnd.lowerBound], encoding: .utf8) else {
             return nil

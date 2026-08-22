@@ -83,23 +83,8 @@ nonisolated enum SetupProbe {
                 as? [String: Any] else { return nil }
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
 
-        var licensed = false
-        var expires: String?
-        if let text = try? String(contentsOf: license, encoding: .utf8) {
-            licensed = text.contains("[license]") && text.contains("id=")
-            for line in text.split(whereSeparator: \.isNewline)
-            where line.hasPrefix("expires=") {
-                let date = String(line.dropFirst("expires=".count))
-                    .trimmingCharacters(in: .whitespaces)
-                expires = date
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy/MM/dd"
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                if let parsed = formatter.date(from: date) {
-                    licensed = licensed && parsed > .now
-                }
-            }
-        }
+        let licenseText = (try? String(contentsOf: license, encoding: .utf8)) ?? ""
+        let (licensed, expires) = parseLicense(licenseText)
 
         var trialExpired = false
         if !licensed,
@@ -110,6 +95,25 @@ nonisolated enum SetupProbe {
         }
         return SetupDetection.CrossOver(version: version, licensed: licensed,
                                         expires: expires, trialExpired: trialExpired)
+    }
+
+    /// Parses the license INI: licensed = a `[license]` id is present and any
+    /// `expires=YYYY/MM/DD` is in the future.
+    static func parseLicense(_ text: String, now: Date = .now) -> (licensed: Bool, expires: String?) {
+        var licensed = text.contains("[license]") && text.contains("id=")
+        var expires: String?
+        for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix("expires=") {
+            let date = String(line.dropFirst("expires=".count))
+                .trimmingCharacters(in: .whitespaces)
+            expires = date
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy/MM/dd"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let parsed = formatter.date(from: date) {
+                licensed = licensed && parsed > now
+            }
+        }
+        return (licensed, expires)
     }
 
     static func bottles() -> [SetupDetection.Bottle] {
