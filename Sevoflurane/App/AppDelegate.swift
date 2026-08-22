@@ -5,6 +5,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let host = SteamWebHost()
+    let bridge = SteamBridge()
     lazy var supervisor = ClientSupervisor(host: host)
     private var menuMirror: SteamMenuMirror?
 
@@ -13,8 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
-        host.bootstrap()
-        supervisor.start()
+        // The page's first load 302s through the bridge, so the listeners
+        // must be up before the web view asks.
+        Task {
+            await bridge.start()
+            host.bootstrap()
+            supervisor.start()
+        }
     }
 
     /// The app lives in the menu bar; closing Steam's window is not quitting.

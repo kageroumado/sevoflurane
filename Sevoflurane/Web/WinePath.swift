@@ -7,7 +7,7 @@ import Foundation
 /// resolved through the bottle's own `dosdevices` symlinks (`c:` → `../drive_c`,
 /// `z:` → `/`), so any mapping CrossOver knows about is honored without a
 /// hardcoded table.
-enum WinePath {
+nonisolated enum WinePath {
     static let bottle = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/CrossOver/Bottles/Steam")
 
