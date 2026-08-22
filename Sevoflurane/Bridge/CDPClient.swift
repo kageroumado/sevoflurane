@@ -13,7 +13,7 @@ actor CDPClient {
     private let onPush: @Sendable (String) async -> Void
     private var task: URLSessionWebSocketTask?
     private var nextID = 0
-    private var pending: [Int: CheckedContinuation<String?, Error>] = [:]
+    private var pending: [Int: CheckedContinuation<String?, any Error>] = [:]
     private(set) var isClosed = false
 
     init(onPush: @escaping @Sendable (String) async -> Void) {
@@ -98,7 +98,7 @@ actor CDPClient {
         return reply
     }
 
-    private func fail(id: Int, error: Error) {
+    private func fail(id: Int, error: any Error) {
         pending.removeValue(forKey: id)?.resume(throwing: error)
     }
 

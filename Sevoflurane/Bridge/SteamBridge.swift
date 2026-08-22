@@ -53,7 +53,7 @@ actor SteamBridge {
     private var relayServer: WebSocketServer?
 
     private var cdp: CDPClient?
-    private var cdpTask: Task<CDPClient, Error>?
+    private var cdpTask: Task<CDPClient, any Error>?
     private var pages: [ObjectIdentifier: PageSession] = [:]
     /// The transport socket owned by SharedJSContext.
     private var relay: WSConnection?

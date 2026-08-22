@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Application-level wiring that SwiftUI has no scene for: the menu bar, the
 /// activation policy, and the single ``SteamWebHost`` everything else reads.
@@ -6,21 +7,51 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let host = SteamWebHost()
     let bridge = SteamBridge()
+    let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host)
     private var menuMirror: SteamMenuMirror?
+    private var setupWindow: NSWindow?
 
     func applicationDidFinishLaunching(_: Notification) {
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
-        // The page's first load 302s through the bridge, so the listeners
-        // must be up before the web view asks.
+        Task {
+            await provisioner.refreshDetection()
+            if provisioner.needsSetup {
+                showSetupWizard()
+            } else {
+                startRunning()
+            }
+        }
+    }
+
+    /// Bridge listeners must be up before the web view's first load 302s
+    /// through them.
+    private func startRunning() {
         Task {
             await bridge.start()
             host.bootstrap()
             supervisor.start()
         }
+    }
+
+    private func showSetupWizard() {
+        let view = SetupView(provisioner: provisioner) { [weak self] in
+            self?.setupWindow?.close()
+            self?.setupWindow = nil
+            self?.startRunning()
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.title = "Welcome to Sevoflurane"
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.center()
+        window.isReleasedWhenClosed = false
+        setupWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
     }
 
     /// The app lives in the menu bar; closing Steam's window is not quitting.

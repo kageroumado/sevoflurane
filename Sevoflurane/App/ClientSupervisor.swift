@@ -65,6 +65,8 @@ final class ClientSupervisor {
     /// Whether the current services outage already got its one page reload —
     /// the next escalation is a client restart.
     @ObservationIgnored private var serviceRecoveryTried = false
+    /// Dedupes the "Wine window visible" log line across probe cycles.
+    @ObservationIgnored private var wineWindowsVisible = false
 
     init(host: SteamWebHost) {
         self.host = host
@@ -111,6 +113,21 @@ final class ClientSupervisor {
     private func probe() async {
         if health == .paused || isRestarting { return }
 
+        // A visible Wine window is an anomaly (the client is -silent): most
+        // often Steam's own watchdog dialog. It is a symptom, never a control
+        // surface — when probes are failing too it confirms the wedge and
+        // skips the usual second-confirmation cycle; on its own it is
+        // reported and left alone (an update or EULA prompt may be legit).
+        let wineWindows = WineWindowWatch.visibleWineWindows()
+        if !wineWindows.isEmpty, !wineWindowsVisible {
+            wineWindowsVisible = true
+            log.log(.client, "Wine window visible: \(WineWindowWatch.describe(wineWindows)) "
+                    + "— Steam surfaced UI (its watchdog dialog, or an update/EULA prompt)")
+        } else if wineWindows.isEmpty, wineWindowsVisible {
+            wineWindowsVisible = false
+            log.log(.client, "Wine windows gone")
+        }
+
         let client = await Self.probeClient()
         guard client == .up else {
             let reason = client == .portWithoutContext
@@ -118,8 +135,9 @@ final class ClientSupervisor {
                 : "CDP unreachable — client down"
             clientFailures += 1
             if case .gaveUp = health { return }
-            if clientFailures >= 2 {
-                await restartClient(reason: reason)
+            if clientFailures >= 2 || !wineWindows.isEmpty {
+                await restartClient(reason: wineWindows.isEmpty ? reason
+                    : reason + " with a Wine dialog up — Steam's own watchdog likely fired")
             } else {
                 transition(to: .degraded(reason), logging: .client, reason)
             }
@@ -157,7 +175,13 @@ final class ClientSupervisor {
                            logging: .page, "page up, Steam services not initialized yet")
                 return
             }
-            if serviceRecoveryTried {
+            if !wineWindows.isEmpty {
+                // Services dead with a Wine dialog up is the known rescue-
+                // dialog wedge (HANDOFF 02:16): the webhelper is gone, a
+                // reload would reattach to the same dead session.
+                log.log(.client, "services dead with a Wine dialog up — restarting the client")
+                await restartClient(reason: "client UI session dead, Steam's watchdog dialog visible")
+            } else if serviceRecoveryTried {
                 log.log(.client, "Steam services still down after a reload — "
                         + "the client's UI session is dead; restarting the client")
                 await restartClient(reason: "client UI session dead (services never initialized)")
@@ -171,8 +195,14 @@ final class ClientSupervisor {
         case .answering(servicesUp: true):
             pageFailures = 0
             serviceRecoveryTried = false
-            transition(to: .healthy,
-                       logging: .supervisor, "healthy: client, bridge, page, and Steam services all up")
+            if wineWindows.isEmpty {
+                transition(to: .healthy,
+                           logging: .supervisor, "healthy: client, bridge, page, and Steam services all up")
+            } else {
+                transition(to: .degraded("Steam surfaced a window — see the log"),
+                           logging: .supervisor,
+                           "everything probes healthy but a Wine window is up — reporting, not acting")
+            }
         }
     }
 
