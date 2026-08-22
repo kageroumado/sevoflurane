@@ -1,0 +1,51 @@
+## Internal working notes — never in history (scrub-free open-sourcing)
+Docs/
+HANDOFF.md
+DELETE-CANDIDATES.md
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+## Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Code coverage
+*.profraw
+*.profdata
+
+## Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+## Python (Spike prototypes)
+__pycache__/
+*.pyc
+
+## Session artifacts
+*.log
+*.tmp
+*.refrax
+.env
+.env.local
+
+## Claude Code
+.claude/
