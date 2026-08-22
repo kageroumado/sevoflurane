@@ -8,7 +8,7 @@ struct SevofluraneApp: App {
         MenuBarExtra {
             MenuBarView(host: delegate.host, supervisor: delegate.supervisor)
         } label: {
-            Image(systemName: "cloud.fill")
+            Image(nsImage: MenuBarIcon.image)
         }
         .menuBarExtraStyle(.window)
     }

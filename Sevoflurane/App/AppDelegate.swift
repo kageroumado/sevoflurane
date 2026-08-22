@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await bridge.start()
             host.bootstrap()
             supervisor.start()
+            // Idempotent bottle config (tray suppression, …) — reasserted on
+            // every boot so a client update or registry rewrite can't
+            // silently bring the Wine tray icon back.
+            await provisioner.configureBottle(named: "Steam")
         }
     }
 

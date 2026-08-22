@@ -393,14 +393,24 @@ redistribution only (fine for a free app, License.pdf must ride along).
 - Emergency brake when a Steam update breaks under Wine: `steam.cfg` next to
   steam.exe with `BootStrapperInhibitAll=enable` (tradeoff: a pinned client
   eventually loses connectivity — use only while waiting for an engine fix).
-- Wine maps Windows tray icons to real macOS menu-bar NSStatusItems (macdrv
-  `systray.c`). Suppress all tray icons per-bottle with REG_DWORD
-  `NoTrayItemsDisplay=1` under
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer` — the
-  Explorer-policy key is the one that works; `ShowSystray` alone doesn't
-  remove macdrv items and `Mac Driver` has no systray key. Since Sevoflurane's
-  own menu-bar item replaces Steam's tray, suppress it — but remember `-silent`
-  parks Steam "in the tray": with the tray hidden, every window-raise must go
+- Wine maps Windows tray icons to real macOS menu-bar NSStatusItems
+  (`WineStatusItem` in winemac). **No registry value can suppress them.**
+  Decompiling CrossOver 26.3's `explorer.exe` settles it: `handle_incoming`
+  forwards every `NIM_ADD` straight to the display driver
+  (`NtUserMessageCall … 0x306`) and returns unless the driver declines, so
+  `add_icon` → `show_icon` — where both `NoTrayItemsDisplay` and `ShowSystray`
+  are read — is never reached, and the driver owns a real `NSStatusItem` from
+  another process. Both values are still written per bottle (they gate the
+  non-driver path, which OSS Wine builds may take), but the working
+  suppression is to end the bottle's `explorer.exe`: it is the only process
+  that can create the item, and the client neither needs nor notices its
+  absence *once running* (verified: full CDP target list, services up, 432
+  apps). **Timing is load-bearing** — explorer also owns the desktop during
+  startup, and killing it there stops the client from starting at all (CDP
+  never arrives). `ClientSupervisor` therefore suppresses only on the
+  transition to healthy, and skips it while a game is running. Since
+  Sevoflurane's own menu-bar item replaces Steam's tray, remember `-silent`
+  parks Steam "in the tray": with the tray gone, every window-raise must go
   through our CDP/`steam://` path (which is the design anyway).
 
 ### MVP milestones

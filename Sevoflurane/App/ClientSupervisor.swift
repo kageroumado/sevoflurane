@@ -206,6 +206,7 @@ final class ClientSupervisor {
             } else {
                 transition(to: .healthy,
                            logging: .supervisor, "healthy: client, bridge, page, and Steam services all up")
+                Task(name: "Wine tray suppression") { await Self.suppressWineTray() }
             }
         }
     }
@@ -346,6 +347,58 @@ final class ClientSupervisor {
         }
         guard reply.ok else { return .notAnswering(reply.v ?? "eval failed") }
         return .answering(servicesUp: reply.v?.contains("true") == true)
+    }
+
+    // MARK: - Wine tray suppression
+
+    /// Ends the bottle's `explorer.exe`, the only process that can turn Steam's
+    /// Windows tray icon into a macOS status item.
+    ///
+    /// Neither `ShowSystray` nor `NoTrayItemsDisplay` can stop it: decompiling
+    /// CrossOver 26.3's explorer.exe shows `handle_incoming` forwarding every
+    /// `NIM_ADD` to the display driver (`NtUserMessageCall … 0x306`) and
+    /// returning before `show_icon`, which is where both registry gates are
+    /// read. The driver then owns a real `NSStatusItem` we cannot reach. So the
+    /// suppression is the process itself — the bottled client neither needs nor
+    /// notices its absence (verified live: full CDP target list, working UI).
+    ///
+    /// Only called once the client is fully up: explorer also owns the desktop
+    /// during startup, and killing it there stops the client from starting at
+    /// all (measured — CDP never arrived within 180s). Skipped while a game is
+    /// running for the same reason, untested there.
+    private nonisolated static func suppressWineTray() async {
+        guard await run("/usr/bin/pgrep", ["-f", "explorer.exe /desktop"]).status == 0 else {
+            return
+        }
+        guard await !isGameRunning() else { return }
+        let explorers = await bottleProcessIDs(matching: "explorer.exe")
+        guard !explorers.isEmpty else { return }
+        for pid in explorers { kill(pid, SIGTERM) }
+        await MainActor.run {
+            EventLog.shared.log(.client,
+                                "suppressed the bottle's Wine tray host (explorer.exe \(explorers))")
+        }
+    }
+
+    /// True when a bottle process runs an executable that is not part of the
+    /// client's own infrastructure — the cheap "a game is up" signal.
+    private nonisolated static func isGameRunning() async -> Bool {
+        let infrastructure: Set<String> = [
+            "steam.exe", "steamwebhelper.exe", "steamservice.exe", "explorer.exe",
+            "services.exe", "winedevice.exe", "plugplay.exe", "svchost.exe",
+            "rpcss.exe", "conhost.exe", "wineboot.exe", "start.exe", "rundll32.exe",
+            "steamerrorreporter.exe", "steamerrorreporter64.exe", "tabtip.exe",
+            "gameoverlayui64.exe", "cefwebhelper.exe",
+        ]
+        let out = await run("/usr/bin/pgrep", ["-af", "\\.exe"]).output
+        for line in out.split(whereSeparator: \.isNewline) {
+            guard let executable = line.split(separator: " ").first(where: {
+                $0.lowercased().hasSuffix(".exe")
+            }) else { continue }
+            let name = String(executable.split(separator: "\\").last ?? executable).lowercased()
+            if !infrastructure.contains(name) { return true }
+        }
+        return false
     }
 
     // MARK: - Bottle processes

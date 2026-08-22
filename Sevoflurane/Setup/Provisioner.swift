@@ -110,12 +110,17 @@ final class Provisioner {
 
     /// Applies the idempotent bottle configuration every adoption gets —
     /// today the tray suppression; renderer/msync knobs land here too.
+    ///
+    /// The tray values gate explorer.exe's own systray window, which the Mac
+    /// driver's path bypasses entirely (see SPEC), so neither removes Steam's
+    /// status item here — `ClientSupervisor.suppressWineTray` does. They are
+    /// still written because they are correct for the non-driver path an OSS
+    /// Wine build may take.
     func configureBottle(named name: String) async {
         activity = .working("Configuring for background use…")
         _ = await Self.runWine(bottle: name, args: [
-            "reg", "add",
-            #"HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"#,
-            "/v", "NoTrayItemsDisplay", "/t", "REG_DWORD", "/d", "1", "/f",
+            "reg", "add", #"HKCU\Software\Wine\Explorer"#,
+            "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
         activity = .idle
     }
