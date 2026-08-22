@@ -195,13 +195,17 @@ final class ClientSupervisor {
         case .answering(servicesUp: true):
             pageFailures = 0
             serviceRecoveryTried = false
-            if wineWindows.isEmpty {
+            // steam.exe windows are VGUI dialogs (rescue/update/EULA) and
+            // worth surfacing as a state; webhelper windows are leaked client
+            // web UI (notification toasts) — logged on appearance, not a
+            // health downgrade.
+            if wineWindows.contains(where: { $0.owner.lowercased() == "steam.exe" }) {
+                transition(to: .degraded("Steam surfaced a dialog — see the log"),
+                           logging: .supervisor,
+                           "everything probes healthy but a steam.exe dialog is up — reporting, not acting")
+            } else {
                 transition(to: .healthy,
                            logging: .supervisor, "healthy: client, bridge, page, and Steam services all up")
-            } else {
-                transition(to: .degraded("Steam surfaced a window — see the log"),
-                           logging: .supervisor,
-                           "everything probes healthy but a Wine window is up — reporting, not acting")
             }
         }
     }
@@ -387,8 +391,12 @@ final class ClientSupervisor {
     private static func launchClient() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: Client.wineBin + "/wine")
+        // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
+        // ("Steamwebhelper is not responding"); with it, the client relaunches
+        // a wedged webhelper by itself instead of parking a visible Wine
+        // window (Docs/resilience-spec.md experiment #1, verified 2026-08-22).
         process.arguments = ["--bottle", Client.bottle, "--no-wait", Client.exe,
-                             "-silent", "-cef-enable-debugging",
+                             "-silent", "-nocrashdialog", "-cef-enable-debugging",
                              "-devtools-port", String(Client.cdpPort)]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
