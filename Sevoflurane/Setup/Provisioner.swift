@@ -38,9 +38,11 @@ final class Provisioner {
     /// progress; nothing of ours to configure.
     func installRosetta() async {
         activity = .working("Installing Rosetta…")
-        let result = await Self.run(
+        let result = await Subprocess.run(
             "/usr/sbin/softwareupdate",
             ["--install-rosetta", "--agree-to-license"],
+            capture: .combined,
+            timeout: .seconds(600),
         )
         activity = result.status == 0
             ? .idle
@@ -78,7 +80,7 @@ final class Provisioner {
         guard !detection.bottles.contains(where: { $0.name == bottleName }) else { return }
         activity = .working("Creating the Steam environment…")
         log.log(.client, "provision: creating bottle \(bottleName) (win10_64)")
-        let create = await Self.run(
+        let create = await Subprocess.run(
             Self.crossoverBin + "/cxbottle",
             [
                 "--bottle",
@@ -89,6 +91,8 @@ final class Provisioner {
                 "--description",
                 "Sevoflurane Steam",
             ],
+            capture: .combined,
+            timeout: .seconds(600),
         )
         guard create.status == 0 else {
             throw ProvisionError("bottle creation failed: \(create.output.suffix(200))")
@@ -133,7 +137,7 @@ final class Provisioner {
                 "-forcepackagedownload",
                 "-exitsteam",
             ],
-            timeout: 1800,
+            timeout: .seconds(1800),
         )
         await refreshDetection()
         guard detectionHasSteam else {
@@ -193,39 +197,17 @@ final class Provisioner {
     private static let steamSetupURL =
         URL(string: "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe")!
 
+    /// Wine's own chatter still comes back combined: provisioning quotes it
+    /// in failure messages, and these invocations are rare and bounded.
     private nonisolated static func runWine(
-        bottle: String, args: [String], timeout: TimeInterval = 600,
-    ) async -> (status: Int32, output: String) {
-        await run(
+        bottle: String, args: [String], timeout: Duration = .seconds(600),
+    ) async -> (status: Int32?, output: String) {
+        await Subprocess.run(
             crossoverBin + "/wine",
             ["--bottle", bottle, "--wait-children"] + args,
+            capture: .combined,
             timeout: timeout,
         )
     }
 
-    private nonisolated static func run(
-        _ launchPath: String, _ arguments: [String], timeout: TimeInterval = 600,
-    ) async -> (status: Int32, output: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: launchPath)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-        } catch {
-            return (-1, "\(error)")
-        }
-        let watchdog = Task {
-            try await Task.sleep(for: .seconds(timeout))
-            process.terminate()
-        }
-        let status: Int32 = await withCheckedContinuation { continuation in
-            process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
-        }
-        watchdog.cancel()
-        let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
-        return (status, String(data: data, encoding: .utf8) ?? "")
-    }
 }

@@ -423,7 +423,7 @@ final class ClientSupervisor {
     /// all (measured — CDP never arrived within 180s). Skipped while a game is
     /// running for the same reason, untested there.
     private nonisolated static func suppressWineTray() async {
-        guard await run("/usr/bin/pgrep", ["-f", "explorer.exe /desktop"]).status == 0 else {
+        guard await Subprocess.run("/usr/bin/pgrep", ["-f", "explorer.exe /desktop"]).status == 0 else {
             return
         }
         guard await !isGameRunning() else { return }
@@ -450,7 +450,7 @@ final class ClientSupervisor {
             "steamerrorreporter.exe", "steamerrorreporter64.exe", "tabtip.exe",
             "gameoverlayui64.exe", "cefwebhelper.exe",
         ]
-        let out = await run("/usr/bin/pgrep", ["-af", "\\.exe"]).output
+        let out = await Subprocess.run("/usr/bin/pgrep", ["-af", "\\.exe"]).output
         for line in out.split(whereSeparator: \.isNewline) {
             guard let executable = line.split(separator: " ").first(where: {
                 $0.lowercased().hasSuffix(".exe")
@@ -507,7 +507,7 @@ final class ClientSupervisor {
     private nonisolated static func bottleProcessIDs(matching name: String? = nil) async -> [pid_t] {
         var candidates: Set<pid_t> = []
         for processName in name.map({ [$0] }) ?? Client.processNames {
-            let out = await run("/usr/bin/pgrep", ["-if", processName]).output
+            let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
             for token in out.split(whereSeparator: \.isNewline) {
                 if let pid = pid_t(token.trimmingCharacters(in: .whitespaces)) {
                     candidates.insert(pid)
@@ -516,7 +516,7 @@ final class ClientSupervisor {
         }
         var scoped: [pid_t] = []
         for pid in candidates {
-            let count = await run(
+            let count = await Subprocess.run(
                 "/bin/sh", ["-c", "lsof -p \(pid) 2>/dev/null | grep -c 'Bottles/\(Client.bottle)'"],
             ).output.trimmingCharacters(in: .whitespacesAndNewlines)
             if (Int(count) ?? 0) > 0 { scoped.append(pid) }
@@ -525,21 +525,21 @@ final class ClientSupervisor {
     }
 
     private nonisolated static func gracefulShutdown() async {
-        _ = await run(
+        _ = await Subprocess.run(
             Client.wineBin + "/wine",
             ["--bottle", Client.bottle, "--no-wait", Client.exe, "-shutdown"],
-            captureOutput: false,
+            capture: .none,
             timeout: .seconds(30),
         )
     }
 
     private nonisolated static func killWineserver() async {
         // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
-        _ = await run(
+        _ = await Subprocess.run(
             Client.wineBin + "/wineserver",
             ["-k"],
             environment: ["WINEPREFIX": Client.bottlePath, "PATH": "/usr/bin"],
-            captureOutput: false,
+            capture: .none,
             timeout: .seconds(15),
         )
     }
@@ -585,56 +585,4 @@ final class ClientSupervisor {
         }
     }
 
-    /// Runs a subprocess to completion, killing it at the deadline. Output is
-    /// captured only for the small query tools (pgrep, lsof); wine's chatter
-    /// is not worth the pipe-buffer deadlock risk.
-    private nonisolated static func run(
-        _ path: String, _ arguments: [String],
-        environment: [String: String]? = nil,
-        captureOutput: Bool = true,
-        timeout: Duration = .seconds(20),
-    ) async -> (status: Int32?, output: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        if let environment { process.environment = environment }
-        let pipe: Pipe?
-        if captureOutput {
-            let captured = Pipe()
-            pipe = captured
-            process.standardOutput = captured
-            process.standardError = FileHandle.nullDevice
-        } else {
-            pipe = nil
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-        }
-
-        var watchdog: Task<Void, Never>?
-        var launched = true
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // The handler must be installed before run(): a process that exits
-            // first never fires a handler installed after the fact.
-            process.terminationHandler = { _ in continuation.resume() }
-            do {
-                try process.run()
-                let pid = process.processIdentifier
-                watchdog = Task.detached {
-                    try? await Task.sleep(for: timeout)
-                    kill(pid, SIGKILL)
-                }
-            } catch {
-                process.terminationHandler = nil
-                launched = false
-                continuation.resume()
-            }
-        }
-        watchdog?.cancel()
-        guard launched else { return (nil, "") }
-        var output = ""
-        if let pipe, let data = try? pipe.fileHandleForReading.readToEnd() {
-            output = String(decoding: data, as: UTF8.self)
-        }
-        return (process.terminationStatus, output)
-    }
 }
