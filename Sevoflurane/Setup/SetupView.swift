@@ -205,7 +205,3 @@ struct SetupView: View {
         }
     }
 }
-
-#Preview {
-    SetupView(provisioner: Provisioner()) {}
-}

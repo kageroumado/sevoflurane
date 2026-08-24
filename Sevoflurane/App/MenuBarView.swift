@@ -359,8 +359,3 @@ struct MenuBarView: View {
         }
     }
 }
-
-#Preview {
-    let host = SteamWebHost()
-    MenuBarView(host: host, supervisor: ClientSupervisor(host: host))
-}

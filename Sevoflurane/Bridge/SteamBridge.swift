@@ -136,7 +136,9 @@ actor SteamBridge {
         if let cdp, await !cdp.isClosed { return cdp }
         if let cdpTask { return try await cdpTask.value }
         let task = Task { [weak self] () throws -> CDPClient in
-            let client = CDPClient(onPush: { payload in
+            // Re-captured: the outer `weak self` is a mutable box, which a
+            // @Sendable closure may not reference; its own capture is a copy.
+            let client = CDPClient(onPush: { [weak self] payload in
                 await self?.broadcast(payload)
             })
             try await client.connect(port: BridgePorts.cdp)
@@ -202,7 +204,7 @@ actor SteamBridge {
             for await message in stream {
                 switch message {
                 case let .text(raw):
-                    await self?.handlePageMessage(raw, session: session, id: id)
+                    await self?.handlePageMessage(raw, id: id)
                 case .data:
                     break
                 case .closed:
@@ -225,8 +227,11 @@ actor SteamBridge {
         }
     }
 
-    private func handlePageMessage(_ raw: String, session: PageSession, id: ObjectIdentifier) {
-        guard let request = Self.jsonObject(raw) else { return }
+    /// The session is looked up rather than captured: `PageSession` lives in
+    /// the actor's region, and a consumer task may not carry a reference to
+    /// it across the isolation boundary.
+    private func handlePageMessage(_ raw: String, id: ObjectIdentifier) {
+        guard let session = pages[id], let request = Self.jsonObject(raw) else { return }
         let cmd = request["cmd"] as? String ?? ""
         if cmd.hasPrefix("ws_") {
             session.tunnel.yield(raw)

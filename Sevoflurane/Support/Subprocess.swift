@@ -49,7 +49,7 @@ enum Subprocess {
         }
 
         var watchdog: Task<Void, Never>?
-        var launchError: Error?
+        var launchError: (any Error)?
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             process.terminationHandler = { _ in continuation.resume() }
             do {

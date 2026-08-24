@@ -110,7 +110,3 @@ struct SettingsView: View {
             as? String ?? "dev"
     }
 }
-
-#Preview {
-    SettingsView(provisioner: Provisioner())
-}
