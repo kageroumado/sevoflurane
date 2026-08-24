@@ -33,6 +33,10 @@ actor SteamBridge {
     private var pages: [ObjectIdentifier: PageSession] = [:]
     /// The transport socket owned by SharedJSContext.
     private var relay: WSConnection?
+    /// Tunnel commands that arrived before the relay opened; resumed by
+    /// ``attachRelay(_:queue:)`` or expired by their own timeout task.
+    private var relayWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var relayWaiterSeq = 0
     /// Tunnel id → the page that opened it.
     private var tunnelOwner: [String: ObjectIdentifier] = [:]
     /// Callback id → the page that registered it.
@@ -366,6 +370,10 @@ actor SteamBridge {
 
     private func attachRelay(_ ws: WSConnection, queue: DispatchQueue) {
         relay = ws
+        for waiter in relayWaiters.values {
+            waiter.resume()
+        }
+        relayWaiters.removeAll()
         log(.bridge, "relay: SharedJSContext connected")
         let stream = Self.messages(of: ws, on: queue)
         Task { [weak self] in
@@ -418,13 +426,29 @@ actor SteamBridge {
         }
     }
 
+    /// Waits for the relay (it opens moments after CDP): resumed exactly when
+    /// ``attachRelay(_:queue:)`` runs, or by the timeout for a client that
+    /// never opens one.
+    private func awaitRelay(timeout: Duration = .seconds(10)) async -> WSConnection? {
+        if let relay { return relay }
+        relayWaiterSeq += 1
+        let id = relayWaiterSeq
+        let expiry = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            await self?.expireRelayWaiter(id)
+        }
+        await withCheckedContinuation { relayWaiters[id] = $0 }
+        expiry.cancel()
+        return relay
+    }
+
+    private func expireRelayWaiter(_ id: Int) {
+        relayWaiters.removeValue(forKey: id)?.resume()
+    }
+
     /// Forwards one tunnel command from a page to the relay.
     private func relaySend(_ raw: String, from id: ObjectIdentifier) async {
-        for _ in 0 ..< 100 { // the relay opens moments after CDP
-            if relay != nil { break }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        guard let relay, let request = Self.jsonObject(raw) else {
+        guard let relay = await awaitRelay(), let request = Self.jsonObject(raw) else {
             log(.bridge, "tunnel: no relay; dropping command")
             return
         }
