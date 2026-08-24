@@ -86,7 +86,7 @@ final class SteamMenuMirror: NSObject {
         guard let raw = await host?.evaluateInContext(Self.fetchScript),
               let data = raw.data(using: .utf8),
               let roots = try? JSONDecoder()
-                  .decode([String: [MirroredItem]].self, from: data) else { return false }
+              .decode([String: [MirroredItem]].self, from: data) else { return false }
         for (title, items) in roots {
             apply(items, to: menus[title])
         }
@@ -104,9 +104,11 @@ final class SteamMenuMirror: NSObject {
                 native = .separator()
             } else {
                 let label = item.label ?? ""
-                native = NSMenuItem(title: label,
-                                    action: #selector(activate(_:)),
-                                    keyEquivalent: Self.keyEquivalents[label] ?? "")
+                native = NSMenuItem(
+                    title: label,
+                    action: #selector(activate(_:)),
+                    keyEquivalent: Self.keyEquivalents[label] ?? "",
+                )
                 native.target = self
                 native.state = item.on == true ? .on : .off
                 native.isEnabled = item.disabled != true
@@ -123,8 +125,11 @@ final class SteamMenuMirror: NSObject {
         menu.items.filter { $0.tag != Self.nativeTag }.map { item in
             item.isSeparatorItem
                 ? MirroredItem(sep: true)
-                : MirroredItem(label: item.title, on: item.state == .on,
-                               disabled: !item.isEnabled)
+                : MirroredItem(
+                    label: item.title,
+                    on: item.state == .on,
+                    disabled: !item.isEnabled,
+                )
         }
     }
 
@@ -154,12 +159,14 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Driving the strip
 
-    @objc private func activate(_ sender: NSMenuItem) {
+    @objc
+    private func activate(_ sender: NSMenuItem) {
         guard let childIndex = sender.representedObject as? Int,
               let rootTitle = sender.menu?.title else { return }
         Task(name: "Dispatch \(rootTitle) ▸ \(sender.title)") {
             _ = await host?.evaluateInContext(
-                Self.clickScript(rootTitle: rootTitle, childIndex: childIndex))
+                Self.clickScript(rootTitle: rootTitle, childIndex: childIndex),
+            )
         }
     }
 

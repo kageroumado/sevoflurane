@@ -4,7 +4,7 @@ import Network
 /// One accepted WebSocket client. `NWConnection` is internally thread-safe,
 /// so sends may come from any isolation; receive callbacks arrive on the
 /// server's queue and are forwarded to the handlers given to ``start``.
-nonisolated final class WSConnection: Sendable {
+final nonisolated class WSConnection: Sendable {
     private let connection: NWConnection
 
     init(_ connection: NWConnection) {
@@ -14,25 +14,35 @@ nonisolated final class WSConnection: Sendable {
     func send(text: String) {
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
         let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
-        connection.send(content: Data(text.utf8), contentContext: context,
-                        completion: .contentProcessed { _ in })
+        connection.send(
+            content: Data(text.utf8),
+            contentContext: context,
+            completion: .contentProcessed { _ in },
+        )
     }
 
     func send(data: Data) {
         let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
         let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
-        connection.send(content: data, contentContext: context,
-                        completion: .contentProcessed { _ in })
+        connection.send(
+            content: data,
+            contentContext: context,
+            completion: .contentProcessed { _ in },
+        )
     }
 
-    func close() { connection.cancel() }
+    func close() {
+        connection.cancel()
+    }
 
     /// Begins the receive loop. `onClose` fires exactly once, for any of
     /// error, cancel, or a close frame from the peer.
-    func start(queue: DispatchQueue,
-               onText: @escaping @Sendable (String) -> Void,
-               onData: @escaping @Sendable (Data) -> Void,
-               onClose: @escaping @Sendable () -> Void) {
+    func start(
+        queue: DispatchQueue,
+        onText: @escaping @Sendable (String) -> Void,
+        onData: @escaping @Sendable (Data) -> Void,
+        onClose: @escaping @Sendable () -> Void,
+    ) {
         nonisolated(unsafe) var closed = false
         let finish: @Sendable () -> Void = {
             // Runs on `queue` from both stateUpdateHandler and the receive
@@ -50,9 +60,11 @@ nonisolated final class WSConnection: Sendable {
         receive(onText: onText, onData: onData, onClose: finish)
     }
 
-    private func receive(onText: @escaping @Sendable (String) -> Void,
-                         onData: @escaping @Sendable (Data) -> Void,
-                         onClose: @escaping @Sendable () -> Void) {
+    private func receive(
+        onText: @escaping @Sendable (String) -> Void,
+        onData: @escaping @Sendable (Data) -> Void,
+        onClose: @escaping @Sendable () -> Void,
+    ) {
         connection.receiveMessage { [weak self] data, context, _, error in
             guard let self else { return }
             if error != nil {
@@ -81,7 +93,7 @@ nonisolated final class WSConnection: Sendable {
 /// A loopback WebSocket server. Each accepted connection is handed to
 /// `onConnection` before its receive loop starts, so the owner can register
 /// it and then call ``WSConnection/start``.
-nonisolated final class WebSocketServer: Sendable {
+final nonisolated class WebSocketServer: Sendable {
     private let listener: NWListener
     let queue: DispatchQueue
 
@@ -89,7 +101,8 @@ nonisolated final class WebSocketServer: Sendable {
         queue = DispatchQueue(label: "sevo.ws.\(label)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
-            host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
+            host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
+        )
         parameters.allowLocalEndpointReuse = true
         let websocket = NWProtocolWebSocket.Options()
         websocket.autoReplyPing = true
@@ -105,5 +118,7 @@ nonisolated final class WebSocketServer: Sendable {
         listener.start(queue: queue)
     }
 
-    func stop() { listener.cancel() }
+    func stop() {
+        listener.cancel()
+    }
 }

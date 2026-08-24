@@ -41,10 +41,13 @@ nonisolated enum WineWindowWatch {
                   let bounds = entry[kCGWindowBounds as String] as? [String: Any] else {
                 return nil
             }
-            return Window(owner: owner, pid: pid,
-                          title: entry[kCGWindowName as String] as? String,
-                          width: (bounds["Width"] as? NSNumber)?.intValue ?? 0,
-                          height: (bounds["Height"] as? NSNumber)?.intValue ?? 0)
+            return Window(
+                owner: owner,
+                pid: pid,
+                title: entry[kCGWindowName as String] as? String,
+                width: (bounds["Width"] as? NSNumber)?.intValue ?? 0,
+                height: (bounds["Height"] as? NSNumber)?.intValue ?? 0,
+            )
         }
     }
 

@@ -35,7 +35,9 @@ final class SteamWebHost {
         let id: Int
         let name: String
         /// Capsule art, served by the bridge (local cache, CDN fallback).
-        var artURL: URL { URL(string: "http://127.0.0.1:8760/art/\(id).jpg")! }
+        var artURL: URL {
+            URL(string: "http://127.0.0.1:8760/art/\(id).jpg")!
+        }
     }
 
     func refreshRecentGames() {
@@ -60,7 +62,8 @@ final class SteamWebHost {
     /// Launches a game exactly as Steam's tray menu does.
     func launchGame(_ game: RecentGame) {
         context?.webView.evaluateJavaScript(
-            "SteamClient.Apps.RunGame(String(\(game.id)), '', -1, 100)")
+            "SteamClient.Apps.RunGame(String(\(game.id)), '', -1, 100)",
+        )
     }
 
     @ObservationIgnored private var context: SteamWindow?
@@ -83,21 +86,33 @@ final class SteamWebHost {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         configuration.userContentController.addScriptMessageHandler(
-            coordinator, contentWorld: .page, name: SteamWebCoordinator.handlerName)
+            coordinator, contentWorld: .page, name: SteamWebCoordinator.handlerName,
+        )
 
         let webView = makeWebView(configuration: configuration)
-        let page = SteamWindow(webView: webView, role: .context,
-                               name: "SharedJSContext",
-                               size: CGSize(width: 1280, height: 800),
-                               origin: nil, host: self)
+        let page = SteamWindow(
+            webView: webView,
+            role: .context,
+            name: "SharedJSContext",
+            size: CGSize(width: 1280, height: 800),
+            origin: nil,
+            host: self,
+        )
         context = page
 
         // The context renders nothing, but WebKit only schedules a web view
         // that lives in a window, so it is parked off-screen.
-        let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000,
-                                                  width: 1280, height: 800),
-                              styleMask: [.borderless],
-                              backing: .buffered, defer: false)
+        let window = NSWindow(
+            contentRect: NSRect(
+                x: -20_000,
+                y: -20_000,
+                width: 1280,
+                height: 800,
+            ),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false,
+        )
         let container = NSView(frame: webView.frame)
         container.addSubview(webView)
         window.contentView = container
@@ -111,7 +126,9 @@ final class SteamWebHost {
 
     func reload() {
         EventLog.shared.log(.page, "reloading the UI page (\(popups.count) popups detached)")
-        for popup in popups.values { popup.detach() }
+        for popup in popups.values {
+            popup.detach()
+        }
         popups.removeAll()
         desktop = nil
         status = "reloading"
@@ -177,10 +194,12 @@ final class SteamWebHost {
         let literal = Self.jsLiteral(url.absoluteString)
         Task(name: "Run \(url.absoluteString)") {
             let handled = await evaluateInContext(
-                "String(window.__sevoRunSteamURL ? __sevoRunSteamURL(\(literal)) : 0)")
+                "String(window.__sevoRunSteamURL ? __sevoRunSteamURL(\(literal)) : 0)",
+            )
             if handled == nil || handled == "0" {
                 _ = await evaluateInContext(
-                    "SteamClient.URL.ExecuteSteamURL(\(literal)), \"sent\"")
+                    "SteamClient.URL.ExecuteSteamURL(\(literal)), \"sent\"",
+                )
             }
         }
     }
@@ -188,8 +207,10 @@ final class SteamWebHost {
     // MARK: - Popup adoption
 
     private func makeWebView(configuration: WKWebViewConfiguration) -> WKWebView {
-        let webView = SteamWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800),
-                                   configuration: configuration)
+        let webView = SteamWebView(
+            frame: NSRect(x: 0, y: 0, width: 1280, height: 800),
+            configuration: configuration,
+        )
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
         webView.allowsBackForwardNavigationGestures = false
@@ -219,10 +240,14 @@ final class SteamWebHost {
     /// document itself. WebKit hands us the chance to supply the web view; the
     /// window around it waits until the shim says which popup this is, because
     /// the name is the only thing that tells a context menu from the desktop.
-    fileprivate func adoptPopup(configuration: WKWebViewConfiguration,
-                                features: WKWindowFeatures) -> WKWebView {
-        let size = CGSize(width: plausible(features.width) ?? 640,
-                          height: plausible(features.height) ?? 480)
+    fileprivate func adoptPopup(
+        configuration: WKWebViewConfiguration,
+        features: WKWindowFeatures,
+    ) -> WKWebView {
+        let size = CGSize(
+            width: plausible(features.width) ?? 640,
+            height: plausible(features.height) ?? 480,
+        )
         let origin: CGPoint? = if let x = plausible(features.x),
                                   let y = plausible(features.y) {
             CGPoint(x: x, y: y)
@@ -230,8 +255,14 @@ final class SteamWebHost {
             nil
         }
         let webView = makeWebView(configuration: configuration)
-        let popup = SteamWindow(webView: webView, role: .auxiliary, name: "",
-                                size: size, origin: origin, host: self)
+        let popup = SteamWindow(
+            webView: webView,
+            role: .auxiliary,
+            name: "",
+            size: size,
+            origin: origin,
+            host: self,
+        )
         popups[ObjectIdentifier(webView)] = popup
 
         // Every popup Steam opens is adopted a moment later over the shim. A
@@ -344,10 +375,12 @@ private final class SteamWebCoordinator: NSObject {
 }
 
 extension SteamWebCoordinator: WKUIDelegate {
-    func webView(_: WKWebView,
-                 createWebViewWith configuration: WKWebViewConfiguration,
-                 for navigationAction: WKNavigationAction,
-                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+    func webView(
+        _: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures,
+    ) -> WKWebView? {
         // Steam's popup manager always opens about:blank and writes into it;
         // a popup opened straight onto http(s) is an external link, and those
         // belong in the user's browser, not in an orphan app window.
@@ -369,8 +402,10 @@ extension SteamWebCoordinator: WKUIDelegate {
     /// screen" and flips every flyout upward. The rect is the AppKit frame;
     /// WebKit flips it to CSS coordinates itself (`convertToUserSpace`).
     @objc(_webView:getWindowFrameWithCompletionHandler:)
-    func _webView(_ webView: WKWebView,
-                  getWindowFrameWithCompletionHandler completionHandler: @escaping (CGRect) -> Void) {
+    func _webView(
+        _ webView: WKWebView,
+        getWindowFrameWithCompletionHandler completionHandler: @escaping (CGRect) -> Void,
+    ) {
         completionHandler(host?.window(for: webView)?.appKitFrame ?? .zero)
     }
 }
@@ -381,8 +416,10 @@ extension SteamWebCoordinator: WKNavigationDelegate {
     /// LaunchServices, launching the real Mac Steam app. Everything that is
     /// not part of the UI's own page traffic is cancelled, and `steam:` URLs
     /// are routed back into the client.
-    func webView(_: WKWebView,
-                 decidePolicyFor navigationAction: WKNavigationAction) async
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+    ) async
         -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url,
               let scheme = url.scheme?.lowercased() else { return .allow }
@@ -407,8 +444,11 @@ extension SteamWebCoordinator: WKNavigationDelegate {
         EventLog.shared.log(.page, "page load failed: \(error.localizedDescription)")
     }
 
-    func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!,
-                 withError error: any Error) {
+    func webView(
+        _: WKWebView,
+        didFailProvisionalNavigation _: WKNavigation!,
+        withError error: any Error,
+    ) {
         host?.setStatus("bridge unreachable: \(error.localizedDescription)")
         EventLog.shared.log(.bridge, "bridge unreachable: \(error.localizedDescription)")
     }
@@ -419,8 +459,10 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
     /// window the call is about, which is why the shim posts through the
     /// popup's own handler rather than the opener's: it identifies the target
     /// without a handshake.
-    func userContentController(_: WKUserContentController,
-                               didReceive message: WKScriptMessage) async -> (Any?, String?) {
+    func userContentController(
+        _: WKUserContentController,
+        didReceive message: WKScriptMessage,
+    ) async -> (Any?, String?) {
         guard let body = message.body as? [String: Any],
               let function = body["fn"] as? String,
               let webView = message.webView,

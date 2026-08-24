@@ -15,7 +15,11 @@ final class EventLog {
         .appending(path: "Library/Logs/Sevoflurane.log")
 
     enum Category: String {
-        case client, bridge, page, window, supervisor
+        case client
+        case bridge
+        case page
+        case window
+        case supervisor
     }
 
     struct Entry: Identifiable, Equatable {
@@ -28,7 +32,9 @@ final class EventLog {
     /// The newest entries, most recent last, capped for the menu-bar extra.
     private(set) var recent: [Entry] = []
 
-    var latest: Entry? { recent.last }
+    var latest: Entry? {
+        recent.last
+    }
 
     func log(_ category: Category, _ message: String) {
         logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
@@ -49,7 +55,8 @@ final class EventLog {
     @ObservationIgnored private var nextID = 0
     @ObservationIgnored private var handle: FileHandle?
     @ObservationIgnored private let logger = Logger(
-        subsystem: "glass.kagerou.sevoflurane", category: "events")
+        subsystem: "glass.kagerou.sevoflurane", category: "events",
+    )
     @ObservationIgnored private let stamp: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -73,8 +80,10 @@ final class EventLog {
             try? manager.moveItem(at: url, to: old)
         }
         if !manager.fileExists(atPath: url.path) {
-            try? manager.createDirectory(at: url.deletingLastPathComponent(),
-                                         withIntermediateDirectories: true)
+            try? manager.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+            )
             manager.createFile(atPath: url.path, contents: nil)
         }
         handle = try? FileHandle(forWritingTo: url)

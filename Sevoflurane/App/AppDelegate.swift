@@ -78,13 +78,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The context web view lives in an off-screen window, so AppKit always
     /// reports a visible window and its own reopen logic would never fire.
-    func applicationShouldHandleReopen(_: NSApplication,
-                                       hasVisibleWindows _: Bool) -> Bool {
+    func applicationShouldHandleReopen(
+        _: NSApplication,
+        hasVisibleWindows _: Bool,
+    ) -> Bool {
         host.showSteam()
         return true
     }
 
-    @objc func reloadSteamUI(_: Any?) {
+    @objc
+    func reloadSteamUI(_: Any?) {
         host.reload()
     }
 }

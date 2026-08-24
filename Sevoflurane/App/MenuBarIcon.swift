@@ -12,23 +12,33 @@ enum MenuBarIcon {
             NSColor.black.setStroke()
 
             let circle = NSBezierPath(
-                ovalIn: NSRect(x: 1.1, y: 1.1, width: 15.8, height: 15.8))
+                ovalIn: NSRect(x: 1.1, y: 1.1, width: 15.8, height: 15.8),
+            )
             circle.lineWidth = 1.4
             circle.stroke()
 
-            // Same one-period wave as the app icon's strokes, widest at the
-            // bottom, drifting slightly as it rises.
-            func wave(centerX: CGFloat, y: CGFloat, width: CGFloat,
-                      amplitude: CGFloat, stroke: CGFloat) {
+            /// Same one-period wave as the app icon's strokes, widest at the
+            /// bottom, drifting slightly as it rises.
+            func wave(
+                centerX: CGFloat,
+                y: CGFloat,
+                width: CGFloat,
+                amplitude: CGFloat,
+                stroke: CGFloat,
+            ) {
                 let x0 = centerX - width / 2
                 let path = NSBezierPath()
                 path.move(to: NSPoint(x: x0, y: y))
-                path.curve(to: NSPoint(x: x0 + width * 0.5, y: y),
-                           controlPoint1: NSPoint(x: x0 + width * 0.16, y: y - amplitude),
-                           controlPoint2: NSPoint(x: x0 + width * 0.34, y: y - amplitude))
-                path.curve(to: NSPoint(x: x0 + width, y: y),
-                           controlPoint1: NSPoint(x: x0 + width * 0.66, y: y + amplitude),
-                           controlPoint2: NSPoint(x: x0 + width * 0.84, y: y + amplitude))
+                path.curve(
+                    to: NSPoint(x: x0 + width * 0.5, y: y),
+                    controlPoint1: NSPoint(x: x0 + width * 0.16, y: y - amplitude),
+                    controlPoint2: NSPoint(x: x0 + width * 0.34, y: y - amplitude),
+                )
+                path.curve(
+                    to: NSPoint(x: x0 + width, y: y),
+                    controlPoint1: NSPoint(x: x0 + width * 0.66, y: y + amplitude),
+                    controlPoint2: NSPoint(x: x0 + width * 0.84, y: y + amplitude),
+                )
                 path.lineWidth = stroke
                 path.lineCapStyle = .round
                 path.stroke()

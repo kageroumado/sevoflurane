@@ -17,7 +17,7 @@ enum SteamDesktopChrome {
     static let script = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-
+    
       var STYLE_ID = "sevo-macos-chrome";
       /* Every selector is static — anchored on `.TitleBar.title-area`, the one
          semantic class, via `:has()` — so the rules bite from the moment the
@@ -46,14 +46,14 @@ enum SteamDesktopChrome {
         "div:has(> div > .TitleBar.title-area) { padding-top: 1px !important; }",
         "div:has(> div > .TitleBar.title-area) > :nth-last-child(2) { margin-inline-end: 12px !important; }"
       ].join("\\n");
-
+    
       function titleArea() { return document.querySelector(".TitleBar.title-area"); }
-
+    
       function titleRow() {
         var area = titleArea();
         return area && area.parentElement && area.parentElement.parentElement;
       }
-
+    
       function apply() {
         if (!document.head) return;
         var style = document.getElementById(STYLE_ID);
@@ -65,13 +65,13 @@ enum SteamDesktopChrome {
         }
         reportDragRegions();
       }
-
+    
       function rectOf(el) {
         var r = el.getBoundingClientRect();
         return [Math.round(r.left), Math.round(r.top),
                 Math.round(r.width), Math.round(r.height)];
       }
-
+    
       /* Steam marks its drag area with `-webkit-app-region: drag`, which WebKit
          neither acts on nor reports — getComputedStyle answers "" for the
          property, so there is nothing to read. What that rule is applied to is
@@ -89,7 +89,7 @@ enum SteamDesktopChrome {
         }
         return out;
       }
-
+    
       var pending = 0;
       function reportDragRegions() {
         var handler = window.webkit && window.webkit.messageHandlers
@@ -97,12 +97,12 @@ enum SteamDesktopChrome {
         if (!handler) return;
         handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
       }
-
+    
       function schedule() {
         if (pending) return;
         pending = setTimeout(function () { pending = 0; apply(); }, 150);
       }
-
+    
       /* Observed on the Document node, not documentElement: this script runs
          against the popup's initial about:blank, and Steam then document.open()s
          it — which replaces the whole element tree but keeps the Document (and
@@ -115,7 +115,7 @@ enum SteamDesktopChrome {
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-
+    
       window.__sevoChrome = { apply: apply };
       apply();
       return "installed";

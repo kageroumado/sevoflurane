@@ -10,7 +10,9 @@ nonisolated struct HTTPRequest: Sendable {
     let headers: [String: String]
     let body: Data
 
-    var path: String { String(target.prefix(while: { $0 != "?" })) }
+    var path: String {
+        String(target.prefix(while: { $0 != "?" }))
+    }
     var query: String {
         guard let mark = target.firstIndex(of: "?") else { return "" }
         return String(target[target.index(after: mark)...])
@@ -24,28 +26,42 @@ nonisolated struct HTTPResponse: Sendable {
     var headers: [(String, String)]
     var body: Data
 
-    static func ok(_ body: Data, type: String,
-                   headers extra: [(String, String)] = []) -> HTTPResponse {
-        HTTPResponse(status: 200, reason: "OK",
-                     headers: [("Content-Type", type)] + extra, body: body)
+    static func ok(
+        _ body: Data,
+        type: String,
+        headers extra: [(String, String)] = [],
+    ) -> HTTPResponse {
+        HTTPResponse(
+            status: 200,
+            reason: "OK",
+            headers: [("Content-Type", type)] + extra,
+            body: body,
+        )
     }
 
     static func redirect(to location: String) -> HTTPResponse {
-        HTTPResponse(status: 302, reason: "Found",
-                     headers: [("Location", location)], body: Data())
+        HTTPResponse(
+            status: 302,
+            reason: "Found",
+            headers: [("Location", location)],
+            body: Data(),
+        )
     }
 
     static func error(_ status: Int, _ reason: String) -> HTTPResponse {
-        HTTPResponse(status: status, reason: reason,
-                     headers: [("Content-Type", "text/plain")],
-                     body: Data("\(status) \(reason)".utf8))
+        HTTPResponse(
+            status: status,
+            reason: reason,
+            headers: [("Content-Type", "text/plain")],
+            body: Data("\(status) \(reason)".utf8),
+        )
     }
 }
 
 /// A minimal loopback HTTP/1.1 server on Network.framework: keep-alive, one
 /// async handler, no TLS, no ranges — the surface Steam's UI bundle and the
 /// art cache actually exercise. Listens on 127.0.0.1 only.
-nonisolated final class HTTPServer: Sendable {
+final nonisolated class HTTPServer: Sendable {
     private let listener: NWListener
     private let handler: @Sendable (HTTPRequest) async -> HTTPResponse
     private static let queue = DispatchQueue(label: "sevo.http", qos: .userInitiated)
@@ -54,7 +70,8 @@ nonisolated final class HTTPServer: Sendable {
         self.handler = handler
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
-            host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
+            host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
+        )
         parameters.allowLocalEndpointReuse = true
         listener = try NWListener(using: parameters)
     }
@@ -67,14 +84,18 @@ nonisolated final class HTTPServer: Sendable {
         listener.start(queue: Self.queue)
     }
 
-    func stop() { listener.cancel() }
+    func stop() {
+        listener.cancel()
+    }
 
     /// Reads one request (headers, then `Content-Length` bytes of body),
     /// answers it, and recurses for keep-alive. `leftover` carries bytes read
     /// past the previous request's end.
-    private static func serve(_ connection: NWConnection,
-                              handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
-                              leftover: Data) {
+    private static func serve(
+        _ connection: NWConnection,
+        handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
+        leftover: Data,
+    ) {
         readRequest(connection, buffer: leftover) { request, remainder in
             guard let request else {
                 connection.cancel()
@@ -100,8 +121,11 @@ nonisolated final class HTTPServer: Sendable {
         }
     }
 
-    private static func readRequest(_ connection: NWConnection, buffer: Data,
-                                    completion: @escaping @Sendable (HTTPRequest?, Data) -> Void) {
+    private static func readRequest(
+        _ connection: NWConnection,
+        buffer: Data,
+        completion: @escaping @Sendable (HTTPRequest?, Data) -> Void,
+    ) {
         if let request = parse(buffer) {
             completion(request.0, request.1)
             return
@@ -113,7 +137,7 @@ nonisolated final class HTTPServer: Sendable {
             }
             var grown = buffer
             grown.append(data)
-            if done && parse(grown) == nil {
+            if done, parse(grown) == nil {
                 completion(nil, Data())
             } else {
                 readRequest(connection, buffer: grown, completion: completion)
@@ -140,11 +164,14 @@ nonisolated final class HTTPServer: Sendable {
         let bodyLength = Int(headers["content-length"] ?? "0") ?? 0
         let bodyStart = headerEnd.upperBound
         guard data.count - bodyStart >= bodyLength else { return nil }
-        let body = data.subdata(in: bodyStart..<bodyStart + bodyLength)
-        let rest = data.subdata(in: bodyStart + bodyLength..<data.count)
-        let request = HTTPRequest(method: String(requestLine[0]),
-                                  target: String(requestLine[1]),
-                                  headers: headers, body: body)
+        let body = data.subdata(in: bodyStart ..< bodyStart + bodyLength)
+        let rest = data.subdata(in: bodyStart + bodyLength ..< data.count)
+        let request = HTTPRequest(
+            method: String(requestLine[0]),
+            target: String(requestLine[1]),
+            headers: headers,
+            body: body,
+        )
         return (request, rest)
     }
 }

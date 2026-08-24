@@ -96,14 +96,20 @@ actor SteamBridge {
                 Task { await self?.attachPage(connection, queue: page.queue) }
             }
             pageServer = page
-            let relaySocket = try WebSocketServer(port: BridgePorts.relayWS, label: "relay",
-                                                  maxMessageSize: 64 * 1024 * 1024)
+            let relaySocket = try WebSocketServer(
+                port: BridgePorts.relayWS,
+                label: "relay",
+                maxMessageSize: 64 * 1024 * 1024,
+            )
             relaySocket.start { [weak self] connection in
                 Task { await self?.attachRelay(connection, queue: relaySocket.queue) }
             }
             relayServer = relaySocket
-            log(.bridge, "bridge up — ui :\(BridgePorts.steamUI), art :\(BridgePorts.art), "
-                + "page ws :\(BridgePorts.pageWS), relay ws :\(BridgePorts.relayWS)")
+            log(
+                .bridge,
+                "bridge up — ui :\(BridgePorts.steamUI), art :\(BridgePorts.art), "
+                    + "page ws :\(BridgePorts.pageWS), relay ws :\(BridgePorts.relayWS)",
+            )
         } catch {
             log(.bridge, "bridge failed to start: \(error.localizedDescription)")
         }
@@ -115,7 +121,8 @@ actor SteamBridge {
 
     /// Wraps a connection's receive callbacks into one ordered stream.
     private nonisolated static func messages(
-        of connection: WSConnection, on queue: DispatchQueue) -> AsyncStream<WSMessage> {
+        of connection: WSConnection, on queue: DispatchQueue,
+    ) -> AsyncStream<WSMessage> {
         AsyncStream { continuation in
             connection.start(
                 queue: queue,
@@ -124,7 +131,8 @@ actor SteamBridge {
                 onClose: {
                     continuation.yield(.closed)
                     continuation.finish()
-                })
+                },
+            )
         }
     }
 
@@ -141,7 +149,9 @@ actor SteamBridge {
             _ = try await client.evaluate(BridgeJS.binaryCodec)
             let tunnel = try await client.evaluate(
                 BridgeJS.tunnel.replacingOccurrences(
-                    of: "%RELAY_PORT%", with: String(BridgePorts.relayWS)))
+                    of: "%RELAY_PORT%", with: String(BridgePorts.relayWS),
+                ),
+            )
             let registered = try await client.evaluate(BridgeJS.registerDownloads)
             self?.log(.bridge, "cdp connected — \(tunnel ?? "?"), \(registered ?? "?")")
             return client
@@ -196,7 +206,7 @@ actor SteamBridge {
             await self?.pushInitialLibrary(to: ws)
             for await message in stream {
                 switch message {
-                case .text(let raw):
+                case let .text(raw):
                     await self?.handlePageMessage(raw, session: session, id: id)
                 case .data:
                     break
@@ -234,7 +244,8 @@ actor SteamBridge {
                 // sending); re-encoding it here would double-escape.
                 continuation.resume(returning: (
                     ok: request["ok"] as? Bool ?? false,
-                    v: request["v"] as? String ?? "null"))
+                    v: request["v"] as? String ?? "null",
+                ))
             }
             return
         }
@@ -257,13 +268,15 @@ actor SteamBridge {
             case "sc_unregister":
                 if let rid = request["id"] as? Int {
                     _ = try await cdp.evaluate(
-                        "(window.__sevoRet||{})[\(rid)]?.unregister?.(); 'ok'")
+                        "(window.__sevoRet||{})[\(rid)]?.unregister?.(); 'ok'",
+                    )
                 }
             default:
                 guard let template = BridgeJS.commands[cmd],
                       let appid = request["appid"] as? Int else { return }
                 _ = try await cdp.evaluate(
-                    template.replacingOccurrences(of: "%ID%", with: String(appid)))
+                    template.replacingOccurrences(of: "%ID%", with: String(appid)),
+                )
                 if cmd == "install" {
                     try await Task.sleep(for: .milliseconds(500))
                     _ = try await cdp.evaluate(BridgeJS.commands["continue_install"]!)
@@ -281,8 +294,12 @@ actor SteamBridge {
     /// `__sevo` binding, so Steam's own callbacks stream back to the page
     /// that registered them. The return value is retained in `__sevoRet` so
     /// `unregister()` can find it.
-    private func forwardSteamClient(_ request: [String: Any], ws: WSConnection,
-                                    id: ObjectIdentifier, cdp: CDPClient) async throws {
+    private func forwardSteamClient(
+        _ request: [String: Any],
+        ws: WSConnection,
+        id: ObjectIdentifier,
+        cdp: CDPClient,
+    ) async throws {
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
               path.hasPrefix("SteamClient.") else { return }
@@ -352,9 +369,9 @@ actor SteamBridge {
         Task { [weak self] in
             for await message in stream {
                 switch message {
-                case .text(let raw):
+                case let .text(raw):
                     await self?.relayControl(raw)
-                case .data(let data):
+                case let .data(data):
                     await self?.relayFrame(data)
                 case .closed:
                     await self?.relayClosed(ws)
@@ -384,10 +401,10 @@ actor SteamBridge {
         guard let first = data.first else { return }
         let idLength = Int(first)
         guard data.count > idLength,
-              let tid = String(data: data.subdata(in: 1..<1 + idLength), encoding: .utf8),
+              let tid = String(data: data.subdata(in: 1 ..< 1 + idLength), encoding: .utf8),
               let owner = tunnelOwner[tid],
               let session = pages[owner] else { return }
-        let payload = data.subdata(in: 1 + idLength..<data.count)
+        let payload = data.subdata(in: 1 + idLength ..< data.count)
         session.ws.send(text: #"{"type":"ws_event","id":\#(Self.jsonText(tid) ?? "\"?\""),"#
             + #""ev":"message","b64":"\#(payload.base64EncodedString())"}"#)
     }
@@ -401,7 +418,7 @@ actor SteamBridge {
 
     /// Forwards one tunnel command from a page to the relay.
     private func relaySend(_ raw: String, from id: ObjectIdentifier) async {
-        for _ in 0..<100 {                    // the relay opens moments after CDP
+        for _ in 0 ..< 100 { // the relay opens moments after CDP
             if relay != nil { break }
             try? await Task.sleep(for: .milliseconds(100))
         }
@@ -485,7 +502,7 @@ actor SteamBridge {
                 // forever, and without USE_POPUPS=true no window is ever
                 // opened. Mirror the real SharedJSContext's params verbatim.
                 do {
-                    return .redirect(to: "/index.html" + (try await liveSearch()))
+                    return try await .redirect(to: "/index.html" + liveSearch())
                 } catch {
                     return .error(503, "Steam client unreachable")
                 }
@@ -534,8 +551,11 @@ actor SteamBridge {
         let body = html.replacingCharacters(in: range, with: injected)
         // The shim is injected here and edited constantly; a cached copy of
         // this document silently pins an old one.
-        return .ok(Data(body.utf8), type: "text/html; charset=utf-8",
-                   headers: [("Cache-Control", "no-store")])
+        return .ok(
+            Data(body.utf8),
+            type: "text/html; charset=utf-8",
+            headers: [("Cache-Control", "no-store")],
+        )
     }
 
     // MARK: - HTTP: art
@@ -552,8 +572,11 @@ actor SteamBridge {
         let file = BottleSteam.libraryCache
             .appendingPathComponent("\(appid)/library_600x900.jpg")
         if let data = try? Data(contentsOf: file) {
-            return .ok(data, type: "image/jpeg",
-                       headers: [("Cache-Control", "max-age=86400")])
+            return .ok(
+                data,
+                type: "image/jpeg",
+                headers: [("Cache-Control", "max-age=86400")],
+            )
         }
         // Newer clients cache under content-hash filenames with no local
         // name→asset index; the public CDN is the reliable fallback.
@@ -585,7 +608,8 @@ actor SteamBridge {
     private nonisolated static func jsonText(_ value: Any?) -> String? {
         guard let value, !(value is NSNull) else { return "null" }
         guard let data = try? JSONSerialization.data(
-            withJSONObject: value, options: [.fragmentsAllowed]) else { return nil }
+            withJSONObject: value, options: [.fragmentsAllowed],
+        ) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 }

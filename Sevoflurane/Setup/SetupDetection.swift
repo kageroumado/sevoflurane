@@ -25,7 +25,9 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     let managedEngineVersions: [String]
 
     /// The bottle setup would adopt, when exactly one candidate exists.
-    var steamBottles: [Bottle] { bottles.filter(\.hasSteam) }
+    var steamBottles: [Bottle] {
+        bottles.filter(\.hasSteam)
+    }
 
     var usableCrossOver: CrossOver? {
         guard let crossover, crossover.licensed || !crossover.trialExpired else {
@@ -34,7 +36,9 @@ nonisolated struct SetupDetection: Sendable, Equatable {
         return crossover
     }
 
-    var hasEngine: Bool { usableCrossOver != nil || !managedEngineVersions.isEmpty }
+    var hasEngine: Bool {
+        usableCrossOver != nil || !managedEngineVersions.isEmpty
+    }
 }
 
 nonisolated enum SetupProbe {
@@ -50,10 +54,12 @@ nonisolated enum SetupProbe {
     private static let trialDays = 14.0
 
     static func detect() async -> SetupDetection {
-        SetupDetection(rosetta: await rosettaWorks(),
-                       crossover: crossoverInfo(),
-                       bottles: bottles(),
-                       managedEngineVersions: managedEngineVersions())
+        await SetupDetection(
+            rosetta: rosettaWorks(),
+            crossover: crossoverInfo(),
+            bottles: bottles(),
+            managedEngineVersions: managedEngineVersions(),
+        )
     }
 
     /// The whole stack is x86_64; without Rosetta nothing below runs.
@@ -80,7 +86,7 @@ nonisolated enum SetupProbe {
         let infoPlist = crossoverApp.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: infoPlist),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil)
-                as? [String: Any] else { return nil }
+              as? [String: Any] else { return nil }
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
 
         let licenseText = (try? String(contentsOf: license, encoding: .utf8)) ?? ""
@@ -89,12 +95,17 @@ nonisolated enum SetupProbe {
         var trialExpired = false
         if !licensed,
            let prefs = try? PropertyListSerialization.propertyList(
-            from: Data(contentsOf: preferences), format: nil) as? [String: Any],
+               from: Data(contentsOf: preferences), format: nil,
+           ) as? [String: Any],
            let firstRun = prefs["FirstRunDate"] as? Date {
             trialExpired = Date.now.timeIntervalSince(firstRun) > trialDays * 86_400
         }
-        return SetupDetection.CrossOver(version: version, licensed: licensed,
-                                        expires: expires, trialExpired: trialExpired)
+        return SetupDetection.CrossOver(
+            version: version,
+            licensed: licensed,
+            expires: expires,
+            trialExpired: trialExpired,
+        )
     }
 
     /// Parses the license INI: licensed = a `[license]` id is present and any
@@ -127,9 +138,13 @@ nonisolated enum SetupProbe {
                 return nil
             }
             let steamDLL = url.appendingPathComponent(
-                "drive_c/Program Files (x86)/Steam/steamclient64.dll")
-            return SetupDetection.Bottle(name: name, url: url,
-                                         hasSteam: manager.fileExists(atPath: steamDLL.path))
+                "drive_c/Program Files (x86)/Steam/steamclient64.dll",
+            )
+            return SetupDetection.Bottle(
+                name: name,
+                url: url,
+                hasSteam: manager.fileExists(atPath: steamDLL.path),
+            )
         }
     }
 

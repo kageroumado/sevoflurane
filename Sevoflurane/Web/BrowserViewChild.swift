@@ -1,0 +1,219 @@
+import AppKit
+import WebKit
+
+/// One embedded web page (store, community, profile) living as a native child
+/// web view over a Steam window's page — the WKWebView stand-in for CEF's
+/// BrowserView. Its cookies persist in the default website data store, so a
+/// web login in the store survives app restarts.
+@MainActor
+final class BrowserViewChild: NSObject {
+    let webView: WKWebView
+
+    private let id: Int
+    /// The hosting window's page, where the shim's event sink lives.
+    private let hostPage: WKWebView
+    private weak var host: SteamWebHost?
+    private weak var container: NSView?
+
+    init(id: Int, container: NSView, hostPage: WKWebView, host: SteamWebHost) {
+        self.id = id
+        self.hostPage = hostPage
+        self.host = host
+        self.container = container
+
+        let configuration = WKWebViewConfiguration()
+        // Steam's web properties feature-detect the client from this token
+        // (install buttons become steam:// links, which route back natively).
+        configuration.applicationNameForUserAgent = "Valve Steam Client"
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isHidden = true
+        webView.allowsBackForwardNavigationGestures = true
+        webView.isInspectable = true
+        // Steam's tracking placeholders are empty pages; an opaque white flash
+        // under every internal route is WebKit's default without this.
+        if webView.responds(to: Selector(("_setDrawsBackground:"))) {
+            webView.setValue(false, forKey: "drawsBackground")
+        }
+        super.init()
+        webView.navigationDelegate = self
+        webView.uiDelegate = self
+        // Steam re-sends bounds on layout changes; between those, a flexible
+        // bottom margin keeps the view pinned to its top-left in AppKit's
+        // flipped terms.
+        webView.autoresizingMask = [.minYMargin]
+        container.addSubview(webView)
+        // Same-document navigations (the store and community are pushState
+        // SPAs) never reach the navigation delegate; the URL and title
+        // observations are what keeps Steam's history model and title bar in
+        // sync for those.
+        observations = [
+            webView.observe(\.url) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.fireHistoryChanged() }
+            },
+            webView.observe(\.title) { [weak self] view, _ in
+                MainActor.assumeIsolated {
+                    guard let self, let title = view.title else { return }
+                    self.fire("set-title", "[\(Self.jsString(title))]")
+                }
+            },
+        ]
+    }
+
+    private var observations: [NSKeyValueObservation] = []
+
+    func load(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        webView.load(URLRequest(url: url))
+    }
+
+    /// Bounds arrive in CSS pixels from the top-left of the hosting page.
+    func setBounds(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) {
+        guard let container else { return }
+        webView.frame = CGRect(
+            x: x,
+            y: container.bounds.height - y - height,
+            width: width,
+            height: height,
+        )
+    }
+
+    func setVisible(_ visible: Bool) {
+        webView.isHidden = !visible
+    }
+
+    func postMessage(type: String, dataJSON: String) {
+        webView.evaluateJavaScript(
+            "window.postMessage({type: \(Self.jsString(type)), data: \(dataJSON.isEmpty ? "null" : dataJSON)}, '*')",
+        )
+    }
+
+    func destroy() {
+        observations = []
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.removeFromSuperview()
+    }
+
+    /// Delivers an event to the shim's emitter for this view in the host page.
+    private func fire(_ event: String, _ argsJSON: String) {
+        hostPage.evaluateJavaScript(
+            "window.__sevoBV && __sevoBV[\(id)] && __sevoBV[\(id)](\(Self.jsString(event)), \(argsJSON))",
+        )
+    }
+
+    /// Steam's browser manager mirrors the browser's *whole* history model —
+    /// `history-changed` must carry `{entries: [{url, key}…], index}` or its
+    /// `LoadURL` throws before ever reaching the browser and every web
+    /// navigation silently dies on the previous page.
+    func fireHistoryChanged() {
+        let list = webView.backForwardList
+        var entries = list.backList.map(Self.historyEntry)
+        if let current = list.currentItem { entries.append(Self.historyEntry(current)) }
+        var index = entries.count - 1
+        if index < 0 {
+            entries = [["url": "about:blank", "key": "0"]]
+            index = 0
+        }
+        entries.append(contentsOf: list.forwardList.map(Self.historyEntry))
+        let model: [String: Any] = ["entries": entries, "index": index]
+        if let data = try? JSONSerialization.data(withJSONObject: [model]),
+           let json = String(data: data, encoding: .utf8) {
+            fire("history-changed", json)
+        }
+        fire("can-go-back-forward-changed", "[\(webView.canGoBack), \(webView.canGoForward)]")
+    }
+
+    /// A history entry's key identifies it across diffs (push/pop/replace
+    /// detection, client backstack jumps); the item's identity is the one
+    /// thing stable for its lifetime.
+    private static func historyEntry(_ item: WKBackForwardListItem) -> [String: String] {
+        [
+            "url": item.url.absoluteString,
+            "key": String(UInt(bitPattern: ObjectIdentifier(item).hashValue), radix: 36),
+        ]
+    }
+
+    private static func jsString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "\"\(escaped)\""
+    }
+}
+
+extension BrowserViewChild: WKNavigationDelegate {
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+    ) async
+        -> WKNavigationActionPolicy {
+        guard let url = navigationAction.request.url,
+              let scheme = url.scheme?.lowercased() else { return .allow }
+        switch scheme {
+        case "http", "https", "about", "blob", "data":
+            return .allow
+        case "steam":
+            host?.executeSteamURL(url)
+            return .cancel
+        default:
+            return .cancel
+        }
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
+        let url = Self.jsString(webView.url?.absoluteString ?? "")
+        fire("start-request", "[\(url)]")
+        fire("start-loading", "[\(url)]")
+    }
+
+    func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
+        fire(
+            "finished-request",
+            "[\(Self.jsString(webView.url?.absoluteString ?? "")), "
+                + "\(Self.jsString(webView.title ?? ""))]",
+        )
+        fireHistoryChanged()
+    }
+
+    func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
+        loadError(webView, error)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation _: WKNavigation!,
+        withError error: any Error,
+    ) {
+        loadError(webView, error)
+    }
+
+    private func loadError(_ webView: WKWebView, _ error: any Error) {
+        EventLog.shared.log(.page, "browser view load failed: \(error.localizedDescription)")
+        fire(
+            "load-error",
+            "[\((error as NSError).code), "
+                + "\(Self.jsString(webView.url?.absoluteString ?? "")), "
+                + "\(Self.jsString(error.localizedDescription))]",
+        )
+        fireHistoryChanged()
+    }
+}
+
+extension BrowserViewChild: WKUIDelegate {
+    /// `target=_blank` in embedded web content is an external link; it belongs
+    /// in the user's browser.
+    func webView(
+        _: WKWebView,
+        createWebViewWith _: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures _: WKWindowFeatures,
+    ) -> WKWebView? {
+        if let url = navigationAction.request.url,
+           url.scheme == "http" || url.scheme == "https" {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
+    }
+}

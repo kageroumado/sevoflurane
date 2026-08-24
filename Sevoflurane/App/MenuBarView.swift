@@ -67,27 +67,45 @@ struct MenuBarView: View {
         case .healthy:
             nil
         case .starting:
-            HealthCard(symbol: "hourglass", title: "Starting up",
-                       detail: supervisor.statusText, tint: nil, action: nil)
+            HealthCard(
+                symbol: "hourglass",
+                title: "Starting up",
+                detail: supervisor.statusText,
+                tint: nil,
+                action: nil,
+            )
         case .degraded:
-            HealthCard(symbol: "exclamationmark.triangle.fill",
-                       title: "Steam is struggling",
-                       detail: supervisor.statusText, tint: .orange, action: nil)
+            HealthCard(
+                symbol: "exclamationmark.triangle.fill",
+                title: "Steam is struggling",
+                detail: supervisor.statusText,
+                tint: .orange,
+                action: nil,
+            )
         case .restarting:
-            HealthCard(symbol: "arrow.triangle.2.circlepath",
-                       title: "Restarting Steam",
-                       detail: supervisor.statusText, tint: .accentColor, action: nil)
+            HealthCard(
+                symbol: "arrow.triangle.2.circlepath",
+                title: "Restarting Steam",
+                detail: supervisor.statusText,
+                tint: .accentColor,
+                action: nil,
+            )
         case .gaveUp:
-            HealthCard(symbol: "exclamationmark.octagon.fill",
-                       title: "Steam needs a hand",
-                       detail: supervisor.statusText, tint: .red,
-                       action: ("Restart Now", { supervisor.restartNow() }))
+            HealthCard(
+                symbol: "exclamationmark.octagon.fill",
+                title: "Steam needs a hand",
+                detail: supervisor.statusText,
+                tint: .red,
+                action: ("Restart Now", { supervisor.restartNow() }),
+            )
         case .paused:
-            HealthCard(symbol: "moon.zzz",
-                       title: "Auto-restart paused",
-                       detail: "Sevoflurane won't revive a hung client.",
-                       tint: nil,
-                       action: ("Resume", { supervisor.togglePaused() }))
+            HealthCard(
+                symbol: "moon.zzz",
+                title: "Auto-restart paused",
+                detail: "Sevoflurane won't revive a hung client.",
+                tint: nil,
+                action: ("Resume", { supervisor.togglePaused() }),
+            )
         }
     }
 
@@ -98,8 +116,11 @@ struct MenuBarView: View {
                     .font(.system(size: 18))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(card.tint ?? Color.secondary)
-                    .symbolEffect(.rotate, options: .repeat(.continuous),
-                                  isActive: isRestarting)
+                    .symbolEffect(
+                        .rotate,
+                        options: .repeat(.continuous),
+                        isActive: isRestarting,
+                    )
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.title)
@@ -111,15 +132,19 @@ struct MenuBarView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let action = card.action {
-                    ChipButton(title: action.label, prominent: true,
-                               action: action.run)
+                    ChipButton(
+                        title: action.label,
+                        prominent: true,
+                        action: action.run,
+                    )
                 }
             }
             .padding(12)
             .background(
                 card.tint.map { AnyShapeStyle($0.opacity(0.14)) }
                     ?? AnyShapeStyle(.quinary),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous),
+            )
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }
@@ -179,7 +204,8 @@ struct MenuBarView: View {
             .buttonStyle(PressableStyle())
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(isHovered ? 0.07 : 0)))
+                    .fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+            )
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
@@ -211,18 +237,26 @@ struct MenuBarView: View {
             }
             .help("Open the event log")
             Spacer(minLength: 0)
-            RoundIconButton(symbol: "arrow.clockwise", label: "Reload Steam UI",
-                            help: "Reload Steam's UI without touching the client") {
+            RoundIconButton(
+                symbol: "arrow.clockwise",
+                label: "Reload Steam UI",
+                help: "Reload Steam's UI without touching the client",
+            ) {
                 host.reload()
             }
-            RoundIconButton(symbol: "arrow.triangle.2.circlepath",
-                            label: "Restart Steam client",
-                            help: "Restart the Windows Steam client in its bottle") {
+            RoundIconButton(
+                symbol: "arrow.triangle.2.circlepath",
+                label: "Restart Steam client",
+                help: "Restart the Windows Steam client in its bottle",
+            ) {
                 supervisor.restartNow()
             }
-            RoundIconButton(symbol: "xmark", label: "Quit",
-                            help: "Quit Sevoflurane and shut down the Steam client",
-                            shortcut: "q") {
+            RoundIconButton(
+                symbol: "xmark",
+                label: "Quit",
+                help: "Quit Sevoflurane and shut down the Steam client",
+                shortcut: "q",
+            ) {
                 NSApplication.shared.terminate(nil)
             }
         }
@@ -276,7 +310,8 @@ struct MenuBarView: View {
                 .padding(.vertical, 6)
                 .background(
                     isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
-                    in: Capsule())
+                    in: Capsule(),
+                )
                 .contentShape(Capsule())
             }
             .buttonStyle(PressableStyle())
@@ -335,7 +370,8 @@ private struct ProminentFillStyle: ButtonStyle {
         configuration.label
             .background(
                 Color.accentColor.opacity(isHovered ? 1 : 0.9),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous),
+            )
             .opacity(configuration.isPressed ? 0.7 : 1)
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
@@ -347,7 +383,7 @@ private struct ProminentFillStyle: ButtonStyle {
 /// on hover; prominent chips are solid accent with ink text.
 private struct ChipButton: View {
     let title: String
-    var systemImage: String? = nil
+    var systemImage: String?
     var prominent = false
     let action: () -> Void
     @State private var isHovered = false
@@ -376,10 +412,9 @@ private struct ChipButton: View {
 
     private var fill: AnyShapeStyle {
         if prominent {
-            AnyShapeStyle(Color.accentColor.opacity(isHovered ? 1 : 0.9))
-        } else {
-            isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary)
+            return AnyShapeStyle(Color.accentColor.opacity(isHovered ? 1 : 0.9))
         }
+        return isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary)
     }
 }
 
@@ -388,7 +423,7 @@ private struct RoundIconButton: View {
     let symbol: String
     let label: String
     let help: String
-    var shortcut: KeyEquivalent? = nil
+    var shortcut: KeyEquivalent?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -410,7 +445,8 @@ private struct RoundIconButton: View {
                 .frame(width: 28, height: 28)
                 .background(
                     isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
-                    in: Circle())
+                    in: Circle(),
+                )
                 .contentShape(Circle())
         }
         if let shortcut {

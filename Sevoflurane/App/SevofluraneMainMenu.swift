@@ -35,9 +35,11 @@ enum SevofluraneMainMenu {
 
     private static func appMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "About Sevoflurane",
-                     action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
-                     keyEquivalent: "")
+        menu.addItem(
+            withTitle: "About Sevoflurane",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: "",
+        )
         menu.addItem(.separator())
 
         let services = NSMenu()
@@ -47,37 +49,61 @@ enum SevofluraneMainMenu {
         NSApp.servicesMenu = services
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Hide Sevoflurane",
-                     action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        menu.addItem(
+            withTitle: "Hide Sevoflurane",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h",
+        )
         let hideOthers = menu.addItem(
             withTitle: "Hide Others",
             action: #selector(NSApplication.hideOtherApplications(_:)),
-            keyEquivalent: "h")
+            keyEquivalent: "h",
+        )
         hideOthers.keyEquivalentModifierMask = [.command, .option]
-        menu.addItem(withTitle: "Show All",
-                     action: #selector(NSApplication.unhideAllApplications(_:)),
-                     keyEquivalent: "")
+        menu.addItem(
+            withTitle: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: "",
+        )
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Sevoflurane",
-                     action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(
+            withTitle: "Quit Sevoflurane",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q",
+        )
         return menu
     }
 
     private static func editMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = menu.addItem(withTitle: "Redo", action: Selector(("redo:")),
-                                keyEquivalent: "z")
+        let redo = menu.addItem(
+            withTitle: "Redo",
+            action: Selector(("redo:")),
+            keyEquivalent: "z",
+        )
         redo.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)),
-                     keyEquivalent: "x")
-        menu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)),
-                     keyEquivalent: "c")
-        menu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)),
-                     keyEquivalent: "v")
-        menu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)),
-                     keyEquivalent: "a")
+        menu.addItem(
+            withTitle: "Cut",
+            action: #selector(NSText.cut(_:)),
+            keyEquivalent: "x",
+        )
+        menu.addItem(
+            withTitle: "Copy",
+            action: #selector(NSText.copy(_:)),
+            keyEquivalent: "c",
+        )
+        menu.addItem(
+            withTitle: "Paste",
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: "v",
+        )
+        menu.addItem(
+            withTitle: "Select All",
+            action: #selector(NSText.selectAll(_:)),
+            keyEquivalent: "a",
+        )
         return menu
     }
 
@@ -87,31 +113,44 @@ enum SevofluraneMainMenu {
         let separator = NSMenuItem.separator()
         separator.tag = SteamMenuMirror.nativeTag
         menu.addItem(separator)
-        let reload = menu.addItem(withTitle: "Reload Steam UI",
-                                  action: #selector(AppDelegate.reloadSteamUI(_:)),
-                                  keyEquivalent: "r")
+        let reload = menu.addItem(
+            withTitle: "Reload Steam UI",
+            action: #selector(AppDelegate.reloadSteamUI(_:)),
+            keyEquivalent: "r",
+        )
         reload.tag = SteamMenuMirror.nativeTag
         let fullScreen = menu.addItem(
             withTitle: "Enter Full Screen",
-            action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+            action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f",
+        )
         fullScreen.keyEquivalentModifierMask = [.command, .control]
         fullScreen.tag = SteamMenuMirror.nativeTag
     }
 
     private static func windowMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Minimize",
-                     action: #selector(NSWindow.performMiniaturize(_:)),
-                     keyEquivalent: "m")
-        menu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)),
-                     keyEquivalent: "")
+        menu.addItem(
+            withTitle: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m",
+        )
+        menu.addItem(
+            withTitle: "Zoom",
+            action: #selector(NSWindow.performZoom(_:)),
+            keyEquivalent: "",
+        )
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)),
-                     keyEquivalent: "w")
+        menu.addItem(
+            withTitle: "Close",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w",
+        )
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Bring All to Front",
-                     action: #selector(NSApplication.arrangeInFront(_:)),
-                     keyEquivalent: "")
+        menu.addItem(
+            withTitle: "Bring All to Front",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: "",
+        )
         return menu
     }
 }

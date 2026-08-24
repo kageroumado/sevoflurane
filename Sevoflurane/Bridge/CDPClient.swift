@@ -67,8 +67,10 @@ actor CDPClient {
         case let text as String:
             return text
         default:
-            let data = try? JSONSerialization.data(withJSONObject: value as Any,
-                                                   options: [.fragmentsAllowed])
+            let data = try? JSONSerialization.data(
+                withJSONObject: value as Any,
+                options: [.fragmentsAllowed],
+            )
             return data.flatMap { String(data: $0, encoding: .utf8) }
         }
     }
@@ -92,7 +94,7 @@ actor CDPClient {
         }
         guard let raw,
               let reply = try? JSONSerialization.jsonObject(with: Data(raw.utf8))
-                as? [String: Any] else {
+              as? [String: Any] else {
             throw Failure.badReply(method)
         }
         return reply
@@ -112,9 +114,9 @@ actor CDPClient {
                 markClosed()
                 return
             }
-            guard case .string(let raw) = message,
+            guard case let .string(raw) = message,
                   let reply = try? JSONSerialization.jsonObject(with: Data(raw.utf8))
-                    as? [String: Any] else { continue }
+                  as? [String: Any] else { continue }
             if let id = reply["id"] as? Int {
                 // A second reply for one id must not double-resume.
                 if let continuation = pending.removeValue(forKey: id) {

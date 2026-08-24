@@ -9,7 +9,11 @@ struct SetupView: View {
     let onFinished: () -> Void
 
     private enum Step {
-        case welcome, engine, steam, options, done
+        case welcome
+        case engine
+        case steam
+        case options
+        case done
     }
 
     @State private var step: Step = .welcome
@@ -48,7 +52,7 @@ struct SetupView: View {
             Text("Welcome to Sevoflurane")
                 .font(.system(size: 26, weight: .bold))
             Text("Your Steam library, native on the Mac. Setup takes a few "
-                 + "minutes and runs by itself — you'll sign in to Steam once at the end.")
+                + "minutes and runs by itself — you'll sign in to Steam once at the end.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -65,7 +69,7 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
                 Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
-                     + "License it at codeweavers.com, or wait for the built-in engine.")
+                    + "License it at codeweavers.com, or wait for the built-in engine.")
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
@@ -73,16 +77,18 @@ struct SetupView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Built-in engine — coming in a later beta").font(.headline)
                     Text("This build requires CrossOver (14-day free trial works). "
-                         + "The free built-in engine is on the roadmap; CrossOver also "
-                         + "carries game fixes months earlier and funds Wine development.")
+                        + "The free built-in engine is on the roadmap; CrossOver also "
+                        + "carries game fixes months earlier and funds Wine development.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Link("Get CrossOver at codeweavers.com",
-                 destination: URL(string: "https://www.codeweavers.com/crossover")!)
+            Link(
+                "Get CrossOver at codeweavers.com",
+                destination: URL(string: "https://www.codeweavers.com/crossover")!,
+            )
             Button("Check again") {
                 Task { await provisioner.refreshDetection() }
             }
@@ -94,15 +100,15 @@ struct SetupView: View {
             Text("Setting up Steam")
                 .font(.system(size: 24, weight: .bold))
             Text("Downloading and installing the Steam client. This is the longest "
-                 + "step — a few minutes on most connections.")
+                + "step — a few minutes on most connections.")
                 .foregroundStyle(.secondary)
             GroupBox {
                 HStack(spacing: 10) {
                     switch provisioner.activity {
-                    case .working(let phase):
+                    case let .working(phase):
                         ProgressView().controlSize(.small)
                         Text(phase)
-                    case .failed(let reason):
+                    case let .failed(reason):
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                         Text(reason).font(.callout)
@@ -118,7 +124,7 @@ struct SetupView: View {
                 .padding(8)
             }
             Text("You can close this window — setup continues in the menu bar and "
-                 + "picks up where it left off if interrupted.")
+                + "picks up where it left off if interrupted.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -151,7 +157,7 @@ struct SetupView: View {
             Text("Ready to play")
                 .font(.system(size: 26, weight: .bold))
             Text("Your library lives in the menu bar — the yellow glyph, top right. "
-                 + "Steam's sign-in window opens next if you aren't signed in yet.")
+                + "Steam's sign-in window opens next if you aren't signed in yet.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)

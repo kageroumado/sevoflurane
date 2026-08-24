@@ -18,13 +18,20 @@ enum SteamScreenSpace {
 
     /// A window frame expressed the way Steam expects to read it back.
     static func steamRect(from frame: NSRect) -> CGRect {
-        CGRect(x: frame.minX, y: flipLine - frame.maxY,
-               width: frame.width, height: frame.height)
+        CGRect(
+            x: frame.minX,
+            y: flipLine - frame.maxY,
+            width: frame.width,
+            height: frame.height,
+        )
     }
 
     /// An AppKit frame origin for a Steam top-left point and a known size.
-    static func appKitOrigin(steamX: CGFloat, steamY: CGFloat,
-                             size: CGSize) -> CGPoint {
+    static func appKitOrigin(
+        steamX: CGFloat,
+        steamY: CGFloat,
+        size: CGSize,
+    ) -> CGPoint {
         CGPoint(x: steamX, y: flipLine - steamY - size.height)
     }
 
