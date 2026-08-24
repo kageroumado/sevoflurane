@@ -1,0 +1,202 @@
+import Foundation
+
+/// The support story: every detection from `Docs/onboarding-spec.md` S0–S3
+/// plus client/bridge/app health, one ✔/✖ line each. `--json` is what a user
+/// pastes into an issue — no secrets (no account names, no tokens; bottle
+/// paths are fine).
+nonisolated enum Doctor {
+    struct Check {
+        let id: String
+        let ok: Bool
+        let label: String
+        /// One-line fix hint, shown only when the check fails.
+        let hint: String
+        /// Whether a failure means the environment is unprovisioned (exit 3)
+        /// rather than a runtime fault (exit 1).
+        let provisioning: Bool
+
+        var dictionary: [String: Any] {
+            ["id": id, "ok": ok, "label": label, "hint": hint]
+        }
+    }
+
+    struct Snapshot {
+        let detection: SetupDetection
+        let clientState: ClientLifecycle.ClientState
+        let bottleProcesses: [pid_t]
+        let bridgeUp: Bool
+        let appStatus: [String: Any]?
+        let servicesUp: Bool?
+        let dumpCount: Int
+        let pinned: Bool
+    }
+
+    static func snapshot() async -> Snapshot {
+        let detection = await SetupProbe.detect()
+        let clientState = await ClientLifecycle.probeClient()
+        let bottleProcesses = await ClientLifecycle.bottleProcessIDs()
+        let appStatus = await AppControl.status()
+        var bridgeUp = false
+        var servicesUp: Bool?
+        if let reply = try? await BridgeEval.eval(
+            "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
+        ) {
+            bridgeUp = true
+            if reply.ok { servicesUp = reply.value.contains("true") }
+        } else if clientState == .up,
+                  let value = try? await SteamJS.eval(
+                      "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
+                  ) {
+            servicesUp = value.contains("true")
+        }
+        return Snapshot(
+            detection: detection,
+            clientState: clientState,
+            bottleProcesses: bottleProcesses,
+            bridgeUp: bridgeUp,
+            appStatus: appStatus,
+            servicesUp: servicesUp,
+            dumpCount: ClientLifecycle.recentDumpCount(),
+            pinned: ClientLifecycle.isPinned(),
+        )
+    }
+
+    static func checks(from s: Snapshot) -> [Check] {
+        var checks: [Check] = []
+        let d = s.detection
+
+        checks.append(Check(
+            id: "rosetta", ok: d.rosetta, label: "Rosetta 2",
+            hint: "softwareupdate --install-rosetta", provisioning: true,
+        ))
+
+        if let cx = d.crossover {
+            let state = cx.licensed ? "licensed" : cx.trialExpired ? "TRIAL EXPIRED" : "trial"
+            checks.append(Check(
+                id: "engine", ok: d.usableCrossOver != nil,
+                label: "CrossOver \(cx.version) (\(state))",
+                hint: "an expired trial cannot launch bottles — license CrossOver "
+                    + "or use the built-in engine (not shipped yet)",
+                provisioning: true,
+            ))
+        } else {
+            checks.append(Check(
+                id: "engine", ok: !d.managedEngineVersions.isEmpty,
+                label: d.managedEngineVersions.isEmpty
+                    ? "engine" : "built-in engine \(d.managedEngineVersions.joined(separator: ", "))",
+                hint: "no CrossOver and no managed engine — install CrossOver",
+                provisioning: true,
+            ))
+        }
+
+        let bottleNames = d.bottles.map(\.name).joined(separator: ", ")
+        checks.append(Check(
+            id: "bottles", ok: !d.bottles.isEmpty,
+            label: "bottles: \(bottleNames.isEmpty ? "none" : bottleNames)",
+            hint: "run Sevoflurane's setup wizard to create one", provisioning: true,
+        ))
+
+        let steamBottle = d.bottles.first { $0.name == SteamBottle.name }
+        checks.append(Check(
+            id: "steam", ok: steamBottle?.hasSteam == true,
+            label: "Steam client in bottle '\(SteamBottle.name)'",
+            hint: "run Sevoflurane's setup wizard to install it", provisioning: true,
+        ))
+
+        let clientLabel: String
+        let clientOK: Bool
+        switch s.clientState {
+        case .up:
+            clientLabel = "client: CDP :\(BridgePorts.cdp) up, SharedJSContext listed"
+            clientOK = true
+        case .portWithoutContext:
+            clientLabel = "client: CDP up but no SharedJSContext (half-wedged)"
+            clientOK = false
+        case .down:
+            // A stopped client is a state, not a fault; processes alive with
+            // CDP dead is the fault.
+            clientOK = s.bottleProcesses.isEmpty
+            clientLabel = clientOK
+                ? "client: stopped (ok when idle)"
+                : "client: processes alive (pids \(s.bottleProcesses)) but CDP down"
+        }
+        checks.append(Check(
+            id: "client", ok: clientOK, label: clientLabel,
+            hint: "sevo recover", provisioning: false,
+        ))
+
+        let appRunning = s.appStatus != nil
+        let appHealth = s.appStatus?["health"] as? String ?? "?"
+        checks.append(Check(
+            id: "app",
+            ok: !appRunning || !["degraded", "gaveUp"].contains(appHealth),
+            label: appRunning
+                ? "Sevoflurane app: running (\(appHealth) — \(s.appStatus?["detail"] as? String ?? ""))"
+                : "Sevoflurane app: not running (CLI drives the client directly)",
+            hint: "sevo logs --tail 50", provisioning: false,
+        ))
+
+        if appRunning {
+            checks.append(Check(
+                id: "bridge", ok: s.bridgeUp,
+                label: "bridge :\(BridgePorts.steamUI)",
+                hint: "app up but bridge down — relaunch Sevoflurane", provisioning: false,
+            ))
+        }
+
+        if s.clientState == .up {
+            checks.append(Check(
+                id: "services", ok: s.servicesUp == true,
+                label: "Steam services initialized: \(s.servicesUp.map(String.init) ?? "unknown")",
+                hint: "the client's UI session is dead — sevo recover", provisioning: false,
+            ))
+        }
+
+        // A single boot legitimately drops 1–2 asserts (HANDOFF 2026-08-21),
+        // and a supervised restart cycle can reach 3; five in ten minutes is
+        // the actual loop signature.
+        checks.append(Check(
+            id: "dumps", ok: s.dumpCount < 5,
+            label: "crash dumps last 10 min: \(s.dumpCount)",
+            hint: "crash loop — sevo recover --deep", provisioning: false,
+        ))
+
+        if s.pinned {
+            checks.append(Check(
+                id: "pinned", ok: false,
+                label: "client updates PINNED (steam.cfg)",
+                hint: "a pinned client eventually loses connectivity — sevo client unpin",
+                provisioning: false,
+            ))
+        }
+
+        return checks
+    }
+
+    static func jsonReport(from s: Snapshot, checks: [Check]) -> [String: Any] {
+        var report: [String: Any] = [
+            "sevo": Sevo.version,
+            "checks": checks.map(\.dictionary),
+            "ok": checks.allSatisfy(\.ok),
+            "dump_rate_10m": s.dumpCount,
+            "client_pinned": s.pinned,
+            "bottle_pids": s.bottleProcesses.map(Int.init),
+        ]
+        report["app"] = s.appStatus ?? ["app": "not running"]
+        let d = s.detection
+        report["detection"] = [
+            "rosetta": d.rosetta,
+            "crossover": d.crossover.map {
+                [
+                    "version": $0.version, "licensed": $0.licensed,
+                    "expires": $0.expires ?? NSNull(), "trial_expired": $0.trialExpired,
+                ] as [String: Any]
+            } ?? NSNull(),
+            "bottles": d.bottles.map {
+                ["name": $0.name, "steam": $0.hasSteam] as [String: Any]
+            },
+            "managed_engines": d.managedEngineVersions,
+        ] as [String: Any]
+        return report
+    }
+}

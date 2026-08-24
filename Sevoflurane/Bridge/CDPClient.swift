@@ -37,11 +37,11 @@ actor CDPClient {
         throw Failure.unreachable("no CDP endpoint on port \(port) (is Steam up?)")
     }
 
-    func connect(port: Int) async throws {
+    func connect(port: Int, targetTitle: String = "SharedJSContext") async throws {
         let targets = try await Self.discoverTargets(port: port)
-        guard let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
+        guard let shared = targets.first(where: { $0["title"] as? String == targetTitle }),
               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init) else {
-            throw Failure.unreachable("no SharedJSContext target (half-wedged client?)")
+            throw Failure.unreachable("no \(targetTitle) target (half-wedged client?)")
         }
         let socket = URLSession.shared.webSocketTask(with: socketURL)
         socket.maximumMessageSize = 64 * 1024 * 1024

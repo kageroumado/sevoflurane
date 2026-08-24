@@ -37,10 +37,11 @@ full architecture — and the fidelity rules that keep it honest — is
   `Bridge/` is the in-process page↔client bridge, `Setup/` the first-run
   assistant, `App/` supervision, logging, menu bar, `Support/` shared system
   access (bottle paths, ports, subprocesses)
+- `Sevo/` + `Package.swift` — the `sevo` CLI and MCP server (SwiftPM
+  executable sharing the app's own lifecycle/CDP sources; `swift build`)
 - `Spike/` — Python reference implementations, all ported into the app
   (`bridge.py` → `Bridge/`, `lifecycle.py` → `Setup/Provisioner` +
-  `App/ClientSupervisor`); `sevo.py` (diagnostics CLI) is the one still worth
-  running on its own
+  `App/ClientSupervisor`, `sevo.py` → `Sevo/`)
 - `Site/` — the landing page (not yet deployed)
 - `Mockups/` — self-contained HTML design mockups (open in a browser)
 
@@ -56,12 +57,47 @@ works; the first-run assistant creates the bottle and installs Steam itself).
 1. Build and launch the app — first run walks through setup; after that the
    app starts the bottled client with CDP on :8081, boots Steam's UI through
    the in-process bridge, and supervises from there
-2. Diagnostics: `python3 Spike/sevo.py doctor` · event log at
-   `~/Library/Logs/Sevoflurane.log` · `curl -X POST --data '<js>'
-   http://127.0.0.1:8762/__eval` evaluates in the page
+2. Diagnostics: `sevo doctor` (below) · event log at
+   `~/Library/Logs/Sevoflurane.log` · `sevo eval '<js>'` evaluates in the page
 
 Quitting the app shuts the bottled client down with it — nothing from the
 bottle outlives Sevoflurane.
+
+## `sevo` — the CLI
+
+`swift build` produces `.build/debug/sevo` (`sevo install-cli` symlinks it
+into `/usr/local/bin`). One management surface for terminals and agents:
+
+```
+sevo doctor [--json]        environment diagnosis, one ✔/✖ line per check
+sevo status [--json]        engine · bottle · client · bridge · app, one line
+sevo client start|stop|restart|update|pin|unpin
+sevo recover [--deep]       the wedge playbook; --deep adds cache purge + repair
+sevo app list|info|launch|terminate|install|verify|uninstall
+sevo downloads status|pause|resume|throttle KBPS
+sevo eval 'JS' · sevo cdp 'JS' [TARGET] · sevo logs [--tail N] [-f]
+```
+
+`--json` everywhere for scripts; exit codes: 0 ok · 1 failed · 3 not
+provisioned · 4 client unreachable. When the app is running, mutating verbs
+route through its supervisor (one owner for the restart ladder); when it
+isn't, `sevo` drives the same lifecycle code directly.
+
+### MCP: ask your agent to fix your Steam
+
+`sevo mcp` is a stdio MCP server exposing the same verbs as typed tools
+(plus `sevo://status`, `sevo://doctor`, `sevo://log`, `sevo://library`
+resources). Claude Desktop / Claude Code config:
+
+```json
+{ "mcpServers": { "sevoflurane": { "command": "sevo", "args": ["mcp"] } } }
+```
+
+Things that just work from an agent chat: "why won't Steam start" (doctor →
+recover), "install Hades and launch it" (library_list → app_install →
+downloads_status → app_launch), "my download is stuck" (downloads_status →
+recover). `eval_js` is only exposed with `SEVO_MCP_ALLOW_EVAL=1` in the
+server's environment.
 
 ## Contributing
 
