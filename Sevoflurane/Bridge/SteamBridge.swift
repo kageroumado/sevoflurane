@@ -38,7 +38,13 @@ actor SteamBridge {
     /// Callback id → the page that registered it.
     private var callbackOwner: [String: ObjectIdentifier] = [:]
     private var evalPending: [String: CheckedContinuation<(ok: Bool, v: String), Never>] = [:]
+    private var evalTimeouts: [String: Task<Void, Never>] = [:]
     private var evalSeq = 0
+    /// The most recently attached page. A reload leaves the old session
+    /// registered until its socket closes, and dictionary order could hand
+    /// `/__eval` — and with it the supervisor's health verdict — to the
+    /// stale one.
+    private var newestPage: ObjectIdentifier?
     private let shim: String
 
     init() {
@@ -62,7 +68,15 @@ actor SteamBridge {
         }
         do {
             let ui = try HTTPServer(port: BridgePorts.steamUI) { [weak self] request in
-                await self?.handleUIRequest(request) ?? .error(500, "bridge gone")
+                // Static assets never enter the actor: reading Steam's bundle
+                // here would serialize every asset load against CDP dispatch
+                // and the health probe. Only /, /index.html, and /__eval need
+                // actor state.
+                if request.method == "GET",
+                   request.path != "/", request.path != "/index.html" {
+                    return Self.serveFile(under: SteamBottle.steamui, path: request.path)
+                }
+                return await self?.handleUIRequest(request) ?? .error(500, "bridge gone")
             }
             ui.start()
             uiServer = ui
@@ -96,7 +110,7 @@ actor SteamBridge {
     }
 
     private nonisolated func log(_ category: EventLog.Category, _ message: String) {
-        Task { @MainActor in EventLog.shared.log(category, message) }
+        EventLog.shared.enqueue(category, message)
     }
 
     /// Wraps a connection's receive callbacks into one ordered stream.
@@ -172,6 +186,7 @@ actor SteamBridge {
         let session = PageSession(ws: ws, tunnel: tunnelContinuation)
         let id = ObjectIdentifier(ws)
         pages[id] = session
+        newestPage = id
         log(.bridge, "page connected (\(pages.count) total)")
 
         session.tasks.append(Task { [weak self] in
@@ -220,6 +235,7 @@ actor SteamBridge {
         if cmd == "eval_result" {
             if let eid = request["id"] as? String,
                let continuation = evalPending.removeValue(forKey: eid) {
+                evalTimeouts.removeValue(forKey: eid)?.cancel()
                 // The shim's `v` is already JSON text (it stringifies before
                 // sending); re-encoding it here would double-escape.
                 continuation.resume(returning: (
@@ -326,6 +342,7 @@ actor SteamBridge {
 
     private func detachPage(_ id: ObjectIdentifier) {
         guard let session = pages.removeValue(forKey: id) else { return }
+        if newestPage == id { newestPage = pages.keys.first }
         session.tunnel.finish()
         for task in session.tasks {
             task.cancel()
@@ -439,7 +456,7 @@ actor SteamBridge {
     /// context page. This is the programmatic Web Inspector: the only other
     /// channel into the app's DOM is Safari's, by hand.
     func pageEval(_ expr: String) async -> (ok: Bool, v: String) {
-        guard let session = pages.values.first else {
+        guard let session = newestPage.flatMap({ pages[$0] }) ?? pages.values.first else {
             return (false, "\"no page connected\"")
         }
         evalSeq += 1
@@ -451,7 +468,7 @@ actor SteamBridge {
         return await withCheckedContinuation { continuation in
             evalPending[eid] = continuation
             session.ws.send(text: encoded)
-            Task {
+            evalTimeouts[eid] = Task {
                 try? await Task.sleep(for: .seconds(20))
                 self.expireEval(eid)
             }
@@ -459,6 +476,8 @@ actor SteamBridge {
     }
 
     private func expireEval(_ eid: String) {
+        guard !Task.isCancelled else { return }
+        evalTimeouts.removeValue(forKey: eid)
         evalPending.removeValue(forKey: eid)?
             .resume(returning: (false, "\"eval timed out\""))
     }
@@ -522,7 +541,7 @@ actor SteamBridge {
            let snapshot = try? await cdp.evaluate(BridgeJS.shape) {
             shape = snapshot
         }
-        let injected = "<head>\(BridgeJS.spy)"
+        let injected = "<head>"
             + "<script>window.__sevoShape=\(shape);</script>"
             + "<script>\(shim)</script>"
         guard let range = html.range(of: "<head>") else {

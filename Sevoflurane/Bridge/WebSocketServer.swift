@@ -117,8 +117,4 @@ final nonisolated class WebSocketServer: Sendable {
         }
         listener.start(queue: queue)
     }
-
-    func stop() {
-        listener.cancel()
-    }
 }

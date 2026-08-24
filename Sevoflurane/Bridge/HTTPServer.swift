@@ -64,10 +64,13 @@ nonisolated struct HTTPResponse: Sendable {
 final nonisolated class HTTPServer: Sendable {
     private let listener: NWListener
     private let handler: @Sendable (HTTPRequest) async -> HTTPResponse
-    private static let queue = DispatchQueue(label: "sevo.http", qos: .userInitiated)
+    /// Per-instance: the UI and art servers must not interleave on one
+    /// serial queue.
+    private let queue: DispatchQueue
 
     init(port: UInt16, handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) throws {
         self.handler = handler
+        queue = DispatchQueue(label: "sevo.http.\(port)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
@@ -77,15 +80,11 @@ final nonisolated class HTTPServer: Sendable {
     }
 
     func start() {
-        listener.newConnectionHandler = { [handler] connection in
-            connection.start(queue: Self.queue)
+        listener.newConnectionHandler = { [handler, queue] connection in
+            connection.start(queue: queue)
             Self.serve(connection, handler: handler, leftover: Data())
         }
-        listener.start(queue: Self.queue)
-    }
-
-    func stop() {
-        listener.cancel()
+        listener.start(queue: queue)
     }
 
     /// Reads one request (headers, then `Content-Length` bytes of body),

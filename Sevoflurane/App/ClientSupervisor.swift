@@ -321,7 +321,7 @@ final class ClientSupervisor {
 
         health = .restarting("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
-        Self.launchClient()
+        await Self.launchClient()
 
         for waited in stride(from: 3, through: 180, by: 3) {
             health = .restarting("waiting for the client (\(waited)s)")
@@ -538,7 +538,8 @@ final class ClientSupervisor {
     /// Fire and forget: the wine launcher regularly outlives its useful work
     /// by half a minute, so CDP polling — not the launcher exiting — decides
     /// whether the client is up. The exit is still logged for the trail.
-    private static func launchClient() {
+    /// Nonisolated so the spawn never runs on the main thread.
+    private nonisolated static func launchClient() async {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
@@ -559,17 +560,12 @@ final class ClientSupervisor {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.terminationHandler = { finished in
-            let status = finished.terminationStatus
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    EventLog.shared.log(.client, "wine launcher exited (status \(status))")
-                }
-            }
+            EventLog.shared.enqueue(.client, "wine launcher exited (status \(finished.terminationStatus))")
         }
         do {
             try process.run()
         } catch {
-            EventLog.shared.log(
+            EventLog.shared.enqueue(
                 .client,
                 "wine launcher failed to start: \(error.localizedDescription)",
             )

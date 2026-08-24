@@ -188,29 +188,6 @@ final class SteamWindow: NSObject {
         }
     }
 
-    /// Debug tap for diagnosing menu placement: every `SteamClient.Window`
-    /// call a menu window receives, appended to /tmp/sevoflurane-menu-calls.log.
-    /// Remove once supernav positioning is settled.
-    private func logMenuCall(_ function: String, _ args: [Any]) {
-        guard role == .menu else { return }
-        let frame = window?.frame ?? .zero
-        let line = "\(Date().timeIntervalSince1970) \(name) " +
-            "\(function)(\(args.map { "\($0)" }.joined(separator: ", "))) " +
-            "frame=\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))\n"
-        if let data = line.data(using: .utf8),
-           let handle = FileHandle(forWritingAtPath: "/tmp/sevoflurane-menu-calls.log") {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            try? handle.close()
-        } else {
-            try? line.write(
-                toFile: "/tmp/sevoflurane-menu-calls.log",
-                atomically: false,
-                encoding: .utf8,
-            )
-        }
-    }
-
     // swiftlint:disable cyclomatic_complexity function_body_length
     /// Answers one `SteamClient.Window` call. The return value crosses back to
     /// the page as the resolution of the promise the UI is awaiting, so it must
@@ -220,7 +197,6 @@ final class SteamWindow: NSObject {
     /// Steam's API surface, not tangled logic, so the complexity metrics are
     /// silenced rather than the switch split along artificial lines.
     func perform(_ function: String, _ args: [Any]) -> Any? {
-        logMenuCall(function, args)
         switch function {
         case "ShowWindow", "SetKeyFocus", "MarkLastFocused", "SetForegroundWindow":
             show(activating: true)

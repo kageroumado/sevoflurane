@@ -173,47 +173,6 @@ nonisolated enum BridgeJS {
     })(SteamClient, 3))
     """#
 
-    /// Debug taps injected ahead of the shim: window.open attempts, console
-    /// output, page errors, and WebSocket lifecycles, all readable over
-    /// `/__eval`. Strippable once R5's cleanup lands (release-plan).
-    static let spy = #"""
-    <script>
-    window.__opens=[];
-    (function(o){window.open=function(u,n,f){
-      window.__opens.push({url:String(u).slice(0,120),name:String(n),feat:String(f).slice(0,120)});
-      try{return o.apply(window,arguments)}catch(e){window.__opens.push({err:String(e)});return null}
-    };})(window.open);
-    window.__logs=[];
-    ['log','warn','error','groupCollapsed','group'].forEach(function(k){
-      var orig=console[k];
-      console[k]=function(){
-        try{
-          window.__logs.push(k+': '+Array.prototype.map.call(arguments,function(a){
-            try{return typeof a==='string'?a:JSON.stringify(a)}catch(e){return String(a)}
-          }).join(' ').slice(0,240));
-          if(window.__logs.length>600)window.__logs.shift();
-        }catch(e){}
-        orig.apply(console,arguments);
-      };
-    });
-    window.__errs=[];
-    window.addEventListener('error',function(e){window.__errs.push({m:String(e.message).slice(0,200),f:(e.filename||'').split('/').pop(),l:e.lineno})});
-    window.addEventListener('unhandledrejection',function(e){window.__errs.push({m:('REJECT '+String((e.reason&&e.reason.message)||e.reason)).slice(0,200)})});
-    window.__wss=[];
-    (function(W){window.WebSocket=function(url,proto){
-      var rec={url:String(url).slice(0,120),state:'connecting',events:[]};
-      window.__wss.push(rec);
-      var ws=proto!==undefined?new W(url,proto):new W(url);
-      ws.addEventListener('open',function(){rec.state='open'});
-      ws.addEventListener('close',function(e){rec.state='closed';rec.events.push('close '+e.code)});
-      ws.addEventListener('error',function(){rec.events.push('error')});
-      return ws;
-    };window.WebSocket.prototype=W.prototype;
-    Object.defineProperties(window.WebSocket,{CONNECTING:{value:0},OPEN:{value:1},CLOSING:{value:2},CLOSED:{value:3}});
-    })(window.WebSocket);
-    </script>
-    """#
-
     /// Page commands answered by a one-line SteamClient call. `%ID%` is the
     /// integer appid.
     static let commands: [String: String] = [

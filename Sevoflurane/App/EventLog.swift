@@ -36,6 +36,27 @@ final class EventLog {
         recent.last
     }
 
+    /// Order-preserving entry point for nonisolated callers (the bridge
+    /// actor): entries land in the file and in `recent` in the order they
+    /// were enqueued. A `Task { @MainActor }` per line would not guarantee
+    /// that, and the file's purpose is a chronological trail.
+    nonisolated func enqueue(_ category: Category, _ message: String) {
+        entryContinuation.yield((category, message))
+    }
+
+    private init() {
+        let (stream, continuation) = AsyncStream.makeStream(of: (Category, String).self)
+        entryContinuation = continuation
+        Task(name: "Event log pipeline") { [weak self] in
+            for await (category, message) in stream {
+                self?.log(category, message)
+            }
+        }
+    }
+
+    @ObservationIgnored private let entryContinuation:
+        AsyncStream<(Category, String)>.Continuation
+
     func log(_ category: Category, _ message: String) {
         logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
         let entry = Entry(id: nextID, date: .now, category: category, message: message)
