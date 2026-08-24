@@ -18,7 +18,7 @@ import WebKit
 final class SteamWebHost {
     /// Steam's own `steamui` bundle, served with the `SteamClient` shim
     /// injected and proxied to the client running in the bottle.
-    static let uiURL = URL(string: "http://127.0.0.1:8762/")!
+    static let uiURL = URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/")!
 
     private(set) var status = "idle"
     /// The desktop window, once Steam has opened it.
@@ -36,7 +36,7 @@ final class SteamWebHost {
         let name: String
         /// Capsule art, served by the bridge (local cache, CDN fallback).
         var artURL: URL {
-            URL(string: "http://127.0.0.1:8760/art/\(id).jpg")!
+            URL(string: "http://127.0.0.1:\(BridgePorts.art)/art/\(id).jpg")!
         }
     }
 

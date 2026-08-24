@@ -204,7 +204,7 @@ struct SetupView: View {
             Task {
                 await provisioner.provisionSteam()
                 if case .done = provisioner.activity {
-                    await provisioner.configureBottle(named: "Steam")
+                    await provisioner.configureBottle(named: SteamBottle.name)
                 }
             }
         }

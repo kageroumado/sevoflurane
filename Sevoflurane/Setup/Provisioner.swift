@@ -60,7 +60,7 @@ final class Provisioner {
                 + "is not wired yet (release-plan R2.2); install CrossOver for now.")
             return
         }
-        let bottleName = "Steam"
+        let bottleName = SteamBottle.name
         do {
             try await createBottleIfMissing(bottleName, detection: detection)
             try await installBootstrapperIfMissing(inBottle: bottleName)
@@ -81,7 +81,7 @@ final class Provisioner {
         activity = .working("Creating the Steam environment…")
         log.log(.client, "provision: creating bottle \(bottleName) (win10_64)")
         let create = await Subprocess.run(
-            Self.crossoverBin + "/cxbottle",
+            SteamBottle.crossoverBin + "/cxbottle",
             [
                 "--bottle",
                 bottleName,
@@ -100,10 +100,9 @@ final class Provisioner {
     }
 
     private func installBootstrapperIfMissing(inBottle bottleName: String) async throws {
-        let bottleURL = SetupProbe.crossoverBottles.appendingPathComponent(bottleName)
-        let steamDLL = bottleURL.appendingPathComponent(
-            "drive_c/Program Files (x86)/Steam/steamclient64.dll",
-        )
+        let bottleURL = SteamBottle.bottlesRoot.appendingPathComponent(bottleName)
+        let steamDLL = SteamBottle.steamRoot(inBottle: bottleURL)
+            .appendingPathComponent("steamclient64.dll")
         guard !FileManager.default.fileExists(atPath: steamDLL.path) else { return }
 
         activity = .working("Downloading the Steam installer…")
@@ -132,7 +131,7 @@ final class Provisioner {
         _ = await Self.runWine(
             bottle: bottleName,
             args: [
-                Self.steamExe,
+                SteamBottle.exeWindowsPath,
                 "-forcesteamupdate",
                 "-forcepackagedownload",
                 "-exitsteam",
@@ -191,9 +190,6 @@ final class Provisioner {
         }
     }
 
-    private static let crossoverBin =
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin"
-    private static let steamExe = #"C:\Program Files (x86)\Steam\Steam.exe"#
     private static let steamSetupURL =
         URL(string: "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe")!
 
@@ -203,11 +199,10 @@ final class Provisioner {
         bottle: String, args: [String], timeout: Duration = .seconds(600),
     ) async -> (status: Int32?, output: String) {
         await Subprocess.run(
-            crossoverBin + "/wine",
+            SteamBottle.crossoverBin + "/wine",
             ["--bottle", bottle, "--wait-children"] + args,
             capture: .combined,
             timeout: timeout,
         )
     }
-
 }

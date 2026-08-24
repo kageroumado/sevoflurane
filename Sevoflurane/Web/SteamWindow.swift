@@ -294,7 +294,7 @@ final class SteamWindow: NSObject {
         case "__openLocalDirectory":
             // "Browse local files" and friends. Routed here by the shim; the
             // client's own handler would open Wine's explorer.exe.
-            if let target = WinePath.macURL(fromWindowsPath: string(args, 0)) {
+            if let target = SteamBottle.macURL(fromWindowsPath: string(args, 0)) {
                 NSWorkspace.shared.open(target)
             }
         case "__openExternalURL":

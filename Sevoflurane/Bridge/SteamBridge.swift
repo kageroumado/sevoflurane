@@ -1,29 +1,5 @@
 import Foundation
 
-/// Everything the bridge listens on, and the one port it dials out to. The
-/// page cannot open the CDP WebSocket itself (Chromium rejects
-/// browser-originated connections by Origin header), so this process is the
-/// neutral middleman between the app's page and the bottled client.
-nonisolated enum BridgePorts {
-    /// The bottled client's `-devtools-port` (outbound).
-    static let cdp = 8081
-    /// Capsule art for the menu-bar extra.
-    static let art: UInt16 = 8760
-    /// The page's command socket (dialed by the shim).
-    static let pageWS: UInt16 = 8761
-    /// Steam's UI bundle with the shim injected, plus `POST /__eval`.
-    static let steamUI: UInt16 = 8762
-    /// The transport relay (dialed by SharedJSContext itself).
-    static let relayWS: UInt16 = 8763
-}
-
-nonisolated enum BottleSteam {
-    static let root = WinePath.bottle
-        .appendingPathComponent("drive_c/Program Files (x86)/Steam")
-    static let steamui = root.appendingPathComponent("steamui")
-    static let libraryCache = root.appendingPathComponent("appcache/librarycache")
-}
-
 /// The Swift port of `Spike/bridge.py`: serves Steam's own UI bundle with the
 /// `SteamClient` shim injected, replays shim calls into the real
 /// `SharedJSContext` over CDP, relays the protobuf transport around CDP, and
@@ -68,7 +44,11 @@ actor SteamBridge {
     init() {
         if let url = Bundle.main.url(forResource: "steamclient_shim", withExtension: "js"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
-            shim = text
+            // The page port is templated like the relay port below, so the
+            // shim and BridgePorts cannot drift apart.
+            shim = text.replacingOccurrences(
+                of: "%PAGE_PORT%", with: String(BridgePorts.pageWS),
+            )
         } else {
             shim = ""
         }
@@ -509,7 +489,7 @@ actor SteamBridge {
             }
             return await injectedIndex()
         }
-        return Self.serveFile(under: BottleSteam.steamui, path: request.path)
+        return Self.serveFile(under: SteamBottle.steamui, path: request.path)
     }
 
     /// The real SharedJSContext's query string (IN_CLIENT, USE_POPUPS,
@@ -529,7 +509,7 @@ actor SteamBridge {
     }
 
     private func injectedIndex() async -> HTTPResponse {
-        let indexURL = BottleSteam.steamui.appendingPathComponent("index.html")
+        let indexURL = SteamBottle.steamui.appendingPathComponent("index.html")
         guard let html = try? String(contentsOf: indexURL, encoding: .utf8) else {
             return .error(404, "steamui/index.html not found in the bottle")
         }
@@ -569,7 +549,7 @@ actor SteamBridge {
         guard !appid.isEmpty, appid.allSatisfy(\.isNumber) else {
             return .error(404, "Not Found")
         }
-        let file = BottleSteam.libraryCache
+        let file = SteamBottle.libraryCache
             .appendingPathComponent("\(appid)/library_600x900.jpg")
         if let data = try? Data(contentsOf: file) {
             return .ok(

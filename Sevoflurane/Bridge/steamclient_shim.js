@@ -13,7 +13,7 @@
   if (window.__sevoInstalled) return;
   window.__sevoInstalled = true;
 
-  var WS_URL = "ws://127.0.0.1:8761";
+  var WS_URL = "ws://127.0.0.1:%PAGE_PORT%";
   var seq = 0;
   var pending = new Map();   // request id  → {resolve, reject}
   var callbacks = new Map(); // callback id → local function

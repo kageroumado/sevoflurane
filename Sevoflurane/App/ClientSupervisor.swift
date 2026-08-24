@@ -11,28 +11,19 @@ import Observation
 /// only for what the previous one left alive. A new client invalidates
 /// CLIENT_SESSION and the transport ports, so recovery ends by reloading the
 /// app's page — the bridge's 302 re-fetches both.
-private nonisolated enum Client {
-    static let bottle = "Steam"
-    static let cdpPort = 8081
-    static let exe = #"C:\Program Files (x86)\Steam\Steam.exe"#
-    static let wineBin = "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin"
-    static let bottlePath = NSString(
-        string: "~/Library/Application Support/CrossOver/Bottles/Steam",
-    ).expandingTildeInPath
+@MainActor
+@Observable
+final class ClientSupervisor {
     /// The names the kill ladder owns. Mac Steam's own `ipcserver`
     /// (launchd `com.valvesoftware.steam.ipctool`) matches none of them.
-    static let processNames = [
+    private nonisolated static let processNames = [
         "steam.exe",
         "steamwebhelper",
         "steamservice",
         "winedevice",
         "wineserver",
     ]
-}
 
-@MainActor
-@Observable
-final class ClientSupervisor {
     enum Health: Equatable {
         case starting
         case healthy
@@ -86,7 +77,7 @@ final class ClientSupervisor {
         // The page the app just booted needs time to reach the bridge before
         // an unanswered probe means anything.
         lastPageRecovery = .now
-        log.log(.supervisor, "supervision started (probing CDP :\(Client.cdpPort), bridge :8762)")
+        log.log(.supervisor, "supervision started (probing CDP :\(BridgePorts.cdp), bridge :\(BridgePorts.steamUI))")
         loop = Task(name: "Client supervision") { [weak self] in
             while !Task.isCancelled {
                 await self?.probe()
@@ -160,7 +151,7 @@ final class ClientSupervisor {
             transition(
                 to: .degraded("bridge is down — relaunch Sevoflurane"),
                 logging: .bridge,
-                "in-process bridge on :8762 is unreachable",
+                "in-process bridge on :\(BridgePorts.steamUI) is unreachable",
             )
         case let .notAnswering(detail):
             pageFailures += 1
@@ -329,7 +320,7 @@ final class ClientSupervisor {
         guard !isQuitting else { return }
 
         health = .restarting("launching the client")
-        log.log(.client, "launching the bottle client with CDP on :\(Client.cdpPort)")
+        log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
         Self.launchClient()
 
         for waited in stride(from: 3, through: 180, by: 3) {
@@ -367,7 +358,7 @@ final class ClientSupervisor {
     /// a given run, so the reachable one is discovered rather than assumed.
     private nonisolated static func probeClient() async -> ClientState {
         for hostName in ["127.0.0.1", "[::1]"] {
-            var request = URLRequest(url: URL(string: "http://\(hostName):\(Client.cdpPort)/json")!)
+            var request = URLRequest(url: URL(string: "http://\(hostName):\(BridgePorts.cdp)/json")!)
             request.timeoutInterval = 3
             guard let (data, _) = try? await URLSession.shared.data(for: request) else { continue }
             struct Target: Decodable { let title: String }
@@ -388,7 +379,7 @@ final class ClientSupervisor {
     /// (steamwebhelper hang, regression to the login window) — a state where
     /// CDP still lists SharedJSContext and the user sees a frozen splash.
     private nonisolated static func probePage() async -> PageState {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:8762/__eval")!)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"
         request.httpBody = Data(
             "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))".utf8,
@@ -506,7 +497,7 @@ final class ClientSupervisor {
     /// files inside the bottle so other bottles' wine processes are untouched.
     private nonisolated static func bottleProcessIDs(matching name: String? = nil) async -> [pid_t] {
         var candidates: Set<pid_t> = []
-        for processName in name.map({ [$0] }) ?? Client.processNames {
+        for processName in name.map({ [$0] }) ?? processNames {
             let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
             for token in out.split(whereSeparator: \.isNewline) {
                 if let pid = pid_t(token.trimmingCharacters(in: .whitespaces)) {
@@ -517,7 +508,7 @@ final class ClientSupervisor {
         var scoped: [pid_t] = []
         for pid in candidates {
             let count = await Subprocess.run(
-                "/bin/sh", ["-c", "lsof -p \(pid) 2>/dev/null | grep -c 'Bottles/\(Client.bottle)'"],
+                "/bin/sh", ["-c", "lsof -p \(pid) 2>/dev/null | grep -c 'Bottles/\(SteamBottle.name)'"],
             ).output.trimmingCharacters(in: .whitespacesAndNewlines)
             if (Int(count) ?? 0) > 0 { scoped.append(pid) }
         }
@@ -526,8 +517,8 @@ final class ClientSupervisor {
 
     private nonisolated static func gracefulShutdown() async {
         _ = await Subprocess.run(
-            Client.wineBin + "/wine",
-            ["--bottle", Client.bottle, "--no-wait", Client.exe, "-shutdown"],
+            SteamBottle.crossoverBin + "/wine",
+            ["--bottle", SteamBottle.name, "--no-wait", SteamBottle.exeWindowsPath, "-shutdown"],
             capture: .none,
             timeout: .seconds(30),
         )
@@ -536,9 +527,9 @@ final class ClientSupervisor {
     private nonisolated static func killWineserver() async {
         // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
         _ = await Subprocess.run(
-            Client.wineBin + "/wineserver",
+            SteamBottle.crossoverBin + "/wineserver",
             ["-k"],
-            environment: ["WINEPREFIX": Client.bottlePath, "PATH": "/usr/bin"],
+            environment: ["WINEPREFIX": SteamBottle.root.path, "PATH": "/usr/bin"],
             capture: .none,
             timeout: .seconds(15),
         )
@@ -549,21 +540,21 @@ final class ClientSupervisor {
     /// whether the client is up. The exit is still logged for the trail.
     private static func launchClient() {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: Client.wineBin + "/wine")
+        process.executableURL = URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches
         // a wedged webhelper by itself instead of parking a visible Wine
         // window (Docs/resilience-spec.md experiment #1, verified 2026-08-22).
         process.arguments = [
             "--bottle",
-            Client.bottle,
+            SteamBottle.name,
             "--no-wait",
-            Client.exe,
+            SteamBottle.exeWindowsPath,
             "-silent",
             "-nocrashdialog",
             "-cef-enable-debugging",
             "-devtools-port",
-            String(Client.cdpPort),
+            String(BridgePorts.cdp),
         ]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -584,5 +575,4 @@ final class ClientSupervisor {
             )
         }
     }
-
 }

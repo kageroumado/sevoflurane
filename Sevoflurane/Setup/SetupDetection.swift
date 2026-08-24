@@ -43,8 +43,7 @@ nonisolated struct SetupDetection: Sendable, Equatable {
 
 nonisolated enum SetupProbe {
     static let crossoverApp = URL(fileURLWithPath: "/Applications/CrossOver.app")
-    static let crossoverBottles = URL(fileURLWithPath: NSHomeDirectory())
-        .appendingPathComponent("Library/Application Support/CrossOver/Bottles")
+    static let crossoverBottles = SteamBottle.bottlesRoot
     static let managedEngines = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/Engines")
     private static let license = URL(fileURLWithPath: NSHomeDirectory())
@@ -137,9 +136,8 @@ nonisolated enum SetupProbe {
             guard manager.fileExists(atPath: url.appendingPathComponent("cxbottle.conf").path) else {
                 return nil
             }
-            let steamDLL = url.appendingPathComponent(
-                "drive_c/Program Files (x86)/Steam/steamclient64.dll",
-            )
+            let steamDLL = SteamBottle.steamRoot(inBottle: url)
+                .appendingPathComponent("steamclient64.dll")
             return SetupDetection.Bottle(
                 name: name,
                 url: url,
