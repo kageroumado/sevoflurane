@@ -26,6 +26,16 @@ nonisolated enum SteamBottle {
     /// Capsule art cache, served by the bridge's art endpoint.
     static let libraryCache = steamRoot.appendingPathComponent("appcache/librarycache")
 
+    /// Crash and assert dumps the client drops when steamwebhelper dies;
+    /// their arrival rate is the crash-loop signature.
+    static let dumps = steamRoot.appendingPathComponent("dumps")
+    /// The client's Chromium profile cache. A corrupt one crash-loops the
+    /// webhelper at startup; trashing it is the first hygiene rung.
+    static let htmlcache = root
+        .appendingPathComponent("drive_c/users/crossover/AppData/Local/Steam/htmlcache")
+    /// `steam.cfg` next to steam.exe — the update-pinning emergency brake.
+    static let steamCfg = steamRoot.appendingPathComponent("steam.cfg")
+
     /// The client executable, as the Windows side names it.
     static let exeWindowsPath = #"C:\Program Files (x86)\Steam\Steam.exe"#
 

@@ -16,4 +16,8 @@ nonisolated enum BridgePorts {
     static let steamUI: UInt16 = 8762
     /// The transport relay (dialed by SharedJSContext itself).
     static let relayWS: UInt16 = 8763
+    /// The app's control endpoint for the `sevo` CLI: when the app is
+    /// running, mutating verbs route through its supervisor — one owner for
+    /// the restart ladder.
+    static let control: UInt16 = 8764
 }

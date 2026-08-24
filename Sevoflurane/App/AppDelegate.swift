@@ -9,10 +9,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let bridge = SteamBridge()
     let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host)
+    private lazy var controlServer = ControlServer(supervisor: supervisor)
     private var menuMirror: SteamMenuMirror?
     private var setupWindow: NSWindow?
 
     func applicationDidFinishLaunching(_: Notification) {
+        ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        // Up before provisioning gates so `sevo status` can see the app even
+        // while the setup wizard is waiting for the user.
+        controlServer.start()
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror

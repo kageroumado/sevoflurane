@@ -14,16 +14,6 @@ import Observation
 @MainActor
 @Observable
 final class ClientSupervisor {
-    /// The names the kill ladder owns. Mac Steam's own `ipcserver`
-    /// (launchd `com.valvesoftware.steam.ipctool`) matches none of them.
-    private nonisolated static let processNames = [
-        "steam.exe",
-        "steamwebhelper",
-        "steamservice",
-        "winedevice",
-        "wineserver",
-    ]
-
     enum Health: Equatable {
         case starting
         case healthy
@@ -71,6 +61,9 @@ final class ClientSupervisor {
     /// Whether the current services outage already got its one page reload —
     /// the next escalation is a client restart.
     @ObservationIgnored private var serviceRecoveryTried = false
+    /// Whether the current crash loop already got its one hygiene pass
+    /// (htmlcache purge + headless client repair) — the next stop is `gaveUp`.
+    @ObservationIgnored private var hygieneTried = false
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
     /// Set once quit teardown begins; blocks every path that could relaunch
@@ -112,8 +105,43 @@ final class ClientSupervisor {
     /// budget — the user asking is what distinguishes "try again" from a loop.
     func restartNow() {
         recentRestarts.removeAll()
+        hygieneTried = false
         Task(name: "Manual client restart") {
             await restartClient(reason: "manual restart from the menu bar")
+        }
+    }
+
+    /// Whether the restart ladder is mid-flight — control verbs that would
+    /// race it (`sevo client stop`) refuse instead of interleaving.
+    var isBusyRestarting: Bool {
+        isRestarting
+    }
+
+    /// `sevo client stop`: pauses supervision (so nothing relaunches the
+    /// client behind the CLI's back) and brings the bottle down.
+    func stopForControl() async {
+        guard !isQuitting, !isRestarting else { return }
+        if health != .paused {
+            health = .paused
+            log.log(.supervisor, "auto-restart paused (sevo client stop)")
+        }
+        await ClientLifecycle.stopAll(gracePolls: 15)
+        log.log(.supervisor, "client stopped (sevo)")
+    }
+
+    /// `sevo client start`: resumes supervision, and restarts the client if
+    /// it is not already up — the supervisor's ladder, not a bare launch.
+    func startForControl() {
+        if health == .paused {
+            health = .starting
+            clientFailures = 0
+            pageFailures = 0
+            log.log(.supervisor, "auto-restart resumed (sevo client start)")
+        }
+        Task(name: "sevo client start") {
+            if await ClientLifecycle.probeClient() != .up {
+                await restartClient(reason: "sevo client start")
+            }
         }
     }
 
@@ -128,8 +156,8 @@ final class ClientSupervisor {
         loop?.cancel()
         loop = nil
         log.log(.supervisor, "quit: bringing the bottle down")
-        await stopBottleProcesses(gracePolls: 3) { _ in }
-        let survivors = await Self.bottleProcessIDs()
+        await ClientLifecycle.stopAll(gracePolls: 3)
+        let survivors = await ClientLifecycle.bottleProcessIDs()
         log.log(
             .supervisor,
             survivors.isEmpty
@@ -145,7 +173,7 @@ final class ClientSupervisor {
 
         let wineWindows = observeWineWindows()
 
-        let client = await Self.probeClient()
+        let client = await ClientLifecycle.probeClient()
         guard client == .up else {
             await handleClientDown(client, wineWindows: wineWindows)
             return
@@ -182,6 +210,7 @@ final class ClientSupervisor {
         case .answering(servicesUp: true):
             pageFailures = 0
             serviceRecoveryTried = false
+            hygieneTried = false
             // steam.exe windows are VGUI dialogs (rescue/update/EULA) and
             // worth surfacing as a state; webhelper windows are leaked client
             // web UI (notification toasts) — logged on appearance, not a
@@ -226,7 +255,7 @@ final class ClientSupervisor {
     }
 
     private func handleClientDown(
-        _ client: ClientState,
+        _ client: ClientLifecycle.ClientState,
         wineWindows: [WineWindowWatch.Window],
     ) async {
         let reason = client == .portWithoutContext
@@ -297,12 +326,7 @@ final class ClientSupervisor {
 
         recentRestarts.removeAll { $0.timeIntervalSinceNow < -600 }
         guard recentRestarts.count < 3 else {
-            transition(
-                to: .gaveUp("client keeps dying — likely crash-looping; see the log"),
-                logging: .supervisor,
-                "giving up after 3 restarts in 10 minutes — the client is crash-looping "
-                    + "(next: clear the bottle's htmlcache, then a headless client update)",
-            )
+            await escalateCrashLoop()
             return
         }
         recentRestarts.append(.now)
@@ -310,14 +334,14 @@ final class ClientSupervisor {
         log.log(.supervisor, "restarting client: \(reason)")
 
         health = .restarting("checking for a running client")
-        await stopBottleProcesses(gracePolls: 15) { phase in
+        await ClientLifecycle.stopAll(gracePolls: 15) { phase in
             health = .restarting(phase)
         }
 
         // The launcher can time out and *still* spawn a client later; a
         // steam.exe that survived everything above means launching now could
         // stack a second instance on top of it.
-        let leftovers = await Self.bottleProcessIDs(matching: "steam.exe")
+        let leftovers = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe")
         guard leftovers.isEmpty else {
             transition(
                 to: .degraded("a steam.exe survived kill -9 — not launching a second client"),
@@ -330,12 +354,58 @@ final class ClientSupervisor {
 
         health = .restarting("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
-        await Self.launchClient()
+        await ClientLifecycle.launchClient()
+        await awaitClientUp()
+    }
 
+    /// Three restarts in ten minutes is the crash-loop signature; another
+    /// plain restart would only stack crash dumps. The proven response is one
+    /// hygiene pass — trash the Chromium cache, headless client repair — and
+    /// a crash loop that survives *that* gets `gaveUp`: the machine needs a
+    /// human.
+    private func escalateCrashLoop() async {
+        let dumps = ClientLifecycle.recentDumpCount()
+        guard !hygieneTried else {
+            transition(
+                to: .gaveUp("client keeps dying — likely crash-looping; see the log"),
+                logging: .supervisor,
+                "giving up: still crash-looping after the hygiene pass "
+                    + "(\(dumps) fresh dumps in 10 min) — manual repair needed",
+            )
+            return
+        }
+        hygieneTried = true
+        log.log(
+            .supervisor,
+            "3 restarts in 10 minutes (\(dumps) fresh dumps) — crash loop; "
+                + "running the hygiene pass: htmlcache purge + headless client repair",
+        )
+        health = .restarting("crash loop: stopping the client")
+        await ClientLifecycle.stopAll(gracePolls: 15) { phase in
+            health = .restarting(phase)
+        }
+        guard !isQuitting else { return }
+        if ClientLifecycle.purgeHTMLCache() {
+            log.log(.client, "trashed the bottle's htmlcache")
+        }
+        health = .restarting("crash loop: repairing the client (takes minutes)")
+        let updated = await ClientLifecycle.headlessUpdate()
+        log.log(
+            .client,
+            updated ? "headless client repair finished"
+                : "headless client repair did not exit cleanly",
+        )
+        guard !isQuitting else { return }
+        health = .restarting("launching the client")
+        await ClientLifecycle.launchClient()
+        await awaitClientUp()
+    }
+
+    private func awaitClientUp() async {
         for waited in stride(from: 3, through: 180, by: 3) {
             health = .restarting("waiting for the client (\(waited)s)")
             try? await Task.sleep(for: .seconds(3))
-            if await Self.probeClient() == .up {
+            if await ClientLifecycle.probeClient() == .up {
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")
                 health = .restarting("reloading the UI")
                 lastPageRecovery = .now
@@ -354,21 +424,12 @@ final class ClientSupervisor {
 
     // MARK: - Probes
 
-    private enum ClientState: Equatable { case up, portWithoutContext, down }
     private enum PageState: Equatable {
         /// The page evals; `servicesUp` is whether Steam's stores finished
         /// initializing — the part that dies with the client's UI session.
         case answering(servicesUp: Bool)
         case bridgeDown
         case notAnswering(String)
-    }
-
-    private nonisolated static func probeClient() async -> ClientState {
-        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
-            return .down
-        }
-        return targets.contains { $0["title"] as? String == "SharedJSContext" }
-            ? .up : .portWithoutContext
     }
 
     /// One probe covers the whole chain the UI depends on: app page → bridge
@@ -421,7 +482,7 @@ final class ClientSupervisor {
             return
         }
         guard await !isGameRunning() else { return }
-        let explorers = await bottleProcessIDs(matching: "explorer.exe")
+        let explorers = await ClientLifecycle.bottleProcessIDs(matching: "explorer.exe")
         guard !explorers.isEmpty else { return }
         for pid in explorers {
             kill(pid, SIGTERM)
@@ -455,123 +516,4 @@ final class ClientSupervisor {
         return false
     }
 
-    // MARK: - Bottle processes
-
-    /// Brings every bottle process down: graceful `-shutdown`, then
-    /// `wineserver -k`, then signals, each rung only for what the previous
-    /// one left alive. `gracePolls` bounds the graceful rung at 2 s per
-    /// poll — a restart can afford 30 s of patience, quit cannot.
-    private func stopBottleProcesses(
-        gracePolls: Int,
-        setPhase: (String) -> Void,
-    ) async {
-        let existing = await Self.bottleProcessIDs()
-        guard !existing.isEmpty else { return }
-        log.log(.client, "bottle processes running (pids \(existing)) — shutting them down")
-        setPhase("stopping the client")
-        await Self.gracefulShutdown()
-        var clean = false
-        for _ in 0 ..< gracePolls {
-            if await Self.bottleProcessIDs().isEmpty { clean = true; break }
-            try? await Task.sleep(for: .seconds(2))
-        }
-        if !clean {
-            setPhase("force-killing wine")
-            log.log(.client, "graceful shutdown timed out — wineserver -k")
-            await Self.killWineserver()
-            try? await Task.sleep(for: .seconds(3))
-            var survivors = await Self.bottleProcessIDs()
-            if !survivors.isEmpty {
-                log.log(.client, "signalling survivors (pids \(survivors))")
-                for pid in survivors {
-                    kill(pid, SIGTERM)
-                }
-                try? await Task.sleep(for: .seconds(3))
-                survivors = await Self.bottleProcessIDs()
-                for pid in survivors {
-                    kill(pid, SIGKILL)
-                }
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
-    }
-
-    /// PIDs of the bottle's processes, matched by name and then scoped by open
-    /// files inside the bottle so other bottles' wine processes are untouched.
-    private nonisolated static func bottleProcessIDs(matching name: String? = nil) async -> [pid_t] {
-        var candidates: Set<pid_t> = []
-        for processName in name.map({ [$0] }) ?? processNames {
-            let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
-            for token in out.split(whereSeparator: \.isNewline) {
-                if let pid = pid_t(token.trimmingCharacters(in: .whitespaces)) {
-                    candidates.insert(pid)
-                }
-            }
-        }
-        var scoped: [pid_t] = []
-        for pid in candidates {
-            let count = await Subprocess.run(
-                "/bin/sh", ["-c", "lsof -p \(pid) 2>/dev/null | grep -c 'Bottles/\(SteamBottle.name)'"],
-            ).output.trimmingCharacters(in: .whitespacesAndNewlines)
-            if (Int(count) ?? 0) > 0 { scoped.append(pid) }
-        }
-        return scoped.sorted()
-    }
-
-    private nonisolated static func gracefulShutdown() async {
-        _ = await Subprocess.run(
-            SteamBottle.crossoverBin + "/wine",
-            ["--bottle", SteamBottle.name, "--no-wait", SteamBottle.exeWindowsPath, "-shutdown"],
-            capture: .none,
-            timeout: .seconds(30),
-        )
-    }
-
-    private nonisolated static func killWineserver() async {
-        // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
-        _ = await Subprocess.run(
-            SteamBottle.crossoverBin + "/wineserver",
-            ["-k"],
-            environment: ["WINEPREFIX": SteamBottle.root.path, "PATH": "/usr/bin"],
-            capture: .none,
-            timeout: .seconds(15),
-        )
-    }
-
-    /// Fire and forget: the wine launcher regularly outlives its useful work
-    /// by half a minute, so CDP polling — not the launcher exiting — decides
-    /// whether the client is up. The exit is still logged for the trail.
-    /// Nonisolated so the spawn never runs on the main thread.
-    private nonisolated static func launchClient() async {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
-        // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
-        // ("Steamwebhelper is not responding"); with it, the client relaunches
-        // a wedged webhelper by itself instead of parking a visible Wine
-        // window (Docs/resilience-spec.md experiment #1, verified 2026-08-22).
-        process.arguments = [
-            "--bottle",
-            SteamBottle.name,
-            "--no-wait",
-            SteamBottle.exeWindowsPath,
-            "-silent",
-            "-nocrashdialog",
-            "-cef-enable-debugging",
-            "-devtools-port",
-            String(BridgePorts.cdp),
-        ]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { finished in
-            EventLog.enqueue(.client, "wine launcher exited (status \(finished.terminationStatus))")
-        }
-        do {
-            try process.run()
-        } catch {
-            EventLog.enqueue(
-                .client,
-                "wine launcher failed to start: \(error.localizedDescription)",
-            )
-        }
-    }
 }
