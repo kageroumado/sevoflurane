@@ -3,88 +3,420 @@ import SwiftUI
 
 /// The menu-bar extra: what Steam's own tray menu shows — recent games first,
 /// then the client controls.
+///
+/// The design follows the kagerou house language (adrafinil, phosphene):
+/// one accent hue, low-opacity semantic fills instead of borders, capsule
+/// chips, uppercase kerned section labels, hover as a first-class state.
+/// Reinterpreted for Steam: the library leads, and the supervisor speaks
+/// only when something needs attention.
 struct MenuBarView: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
-
-    private var healthColor: Color {
-        switch supervisor.health {
-        case .healthy: .green
-        case .starting, .degraded, .restarting: .yellow
-        case .gaveUp: .red
-        case .paused: .gray
-        }
-    }
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "cloud.fill")
-                    .foregroundStyle(.yellow)
-                Text("Sevoflurane").font(.headline)
-            }
-
-            Text(host.status)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Circle().fill(healthColor).frame(width: 7, height: 7)
-                Text(supervisor.statusText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let event = EventLog.shared.latest {
-                Text("\(event.date, format: .dateTime.hour().minute()) \(event.message)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(2)
-            }
-
-            if !host.recentGames.isEmpty {
-                Divider()
-                Text("Recent Games")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ForEach(host.recentGames) { game in
-                    Button {
-                        host.launchGame(game)
-                    } label: {
-                        HStack(spacing: 8) {
-                            AsyncImage(url: game.artURL) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Color.secondary.opacity(0.2)
-                            }
-                            .frame(width: 24, height: 36)
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                            Text(game.name).lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Divider()
-
-            Button("Open Steam") { host.showSteam() }
-                .keyboardShortcut("o")
-            Button("Reload UI") { host.reload() }
-            Button("Restart Steam Client") { supervisor.restartNow() }
-            Button(supervisor.health == .paused ? "Resume Auto-Restart" : "Pause Auto-Restart") {
-                supervisor.togglePaused()
-            }
-            Button("Open Log") { NSWorkspace.shared.open(EventLog.fileURL) }
-            Button("Quit Sevoflurane") { NSApplication.shared.terminate(nil) }
-                .keyboardShortcut("q")
+            header
+            healthCard
+            recentGames
+            openSteamButton
+            footer
         }
         .padding(14)
-        .frame(width: 240, alignment: .leading)
+        .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
+        .animation(.smooth(duration: 0.3), value: supervisor.health)
+        .animation(.smooth(duration: 0.3), value: host.recentGames)
         .onAppear { host.refreshRecentGames() }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Sevoflurane")
+                .font(.system(size: 15, weight: .bold))
+            Spacer()
+            Button {
+                openURL(URL(string: "https://kagerou.glass")!)
+            } label: {
+                Text("made by kageroumado \(Image(systemName: "arrow.up.right"))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Health card
+
+    /// What the supervisor card shows for the current health state, or `nil`
+    /// when the client is healthy and the card stays out of the way.
+    private struct HealthCard {
+        let symbol: String
+        let title: String
+        let detail: String
+        /// Severity tint for the icon and the card fill; `nil` reads neutral.
+        let tint: Color?
+        let action: (label: String, run: () -> Void)?
+    }
+
+    private var healthCardModel: HealthCard? {
+        switch supervisor.health {
+        case .healthy:
+            nil
+        case .starting:
+            HealthCard(symbol: "hourglass", title: "Starting up",
+                       detail: supervisor.statusText, tint: nil, action: nil)
+        case .degraded:
+            HealthCard(symbol: "exclamationmark.triangle.fill",
+                       title: "Steam is struggling",
+                       detail: supervisor.statusText, tint: .orange, action: nil)
+        case .restarting:
+            HealthCard(symbol: "arrow.triangle.2.circlepath",
+                       title: "Restarting Steam",
+                       detail: supervisor.statusText, tint: .accentColor, action: nil)
+        case .gaveUp:
+            HealthCard(symbol: "exclamationmark.octagon.fill",
+                       title: "Steam needs a hand",
+                       detail: supervisor.statusText, tint: .red,
+                       action: ("Restart Now", { supervisor.restartNow() }))
+        case .paused:
+            HealthCard(symbol: "moon.zzz",
+                       title: "Auto-restart paused",
+                       detail: "Sevoflurane won't revive a hung client.",
+                       tint: nil,
+                       action: ("Resume", { supervisor.togglePaused() }))
+        }
+    }
+
+    @ViewBuilder private var healthCard: some View {
+        if let card = healthCardModel {
+            HStack(spacing: 10) {
+                Image(systemName: card.symbol)
+                    .font(.system(size: 18))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(card.tint ?? Color.secondary)
+                    .symbolEffect(.rotate, options: .repeat(.continuous),
+                                  isActive: isRestarting)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.title)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(card.detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let action = card.action {
+                    ChipButton(title: action.label, prominent: true,
+                               action: action.run)
+                }
+            }
+            .padding(12)
+            .background(
+                card.tint.map { AnyShapeStyle($0.opacity(0.14)) }
+                    ?? AnyShapeStyle(.quinary),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
+
+    private var isRestarting: Bool {
+        if case .restarting = supervisor.health { true } else { false }
+    }
+
+    // MARK: - Recent games
+
+    @ViewBuilder private var recentGames: some View {
+        if !host.recentGames.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recent Games")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .kerning(0.7)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
+                VStack(spacing: 1) {
+                    ForEach(host.recentGames) { game in
+                        GameRow(game: game) { host.launchGame(game) }
+                    }
+                }
+            }
+        }
+    }
+
+    private struct GameRow: View {
+        let game: SteamWebHost.RecentGame
+        let launch: () -> Void
+        @State private var isHovered = false
+
+        var body: some View {
+            Button(action: launch) {
+                HStack(spacing: 8) {
+                    AsyncImage(url: game.artURL) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Rectangle().fill(.quaternary.opacity(0.5))
+                    }
+                    .frame(width: 27, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    Text(game.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.accentColor)
+                        .opacity(isHovered ? 1 : 0)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 5)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(PressableStyle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(isHovered ? 0.07 : 0)))
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+        }
+    }
+
+    // MARK: - Primary action
+
+    private var openSteamButton: some View {
+        Button { host.showSteam() } label: {
+            Text("Open Steam")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Ink.onAccent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(ProminentFillStyle())
+        .keyboardShortcut("o")
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 5) {
+            StatusChip(host: host, supervisor: supervisor)
+            ChipButton(title: "Log", systemImage: "doc.text") {
+                NSWorkspace.shared.open(EventLog.fileURL)
+            }
+            .help("Open the event log")
+            Spacer(minLength: 0)
+            RoundIconButton(symbol: "arrow.clockwise", label: "Reload Steam UI",
+                            help: "Reload Steam's UI without touching the client") {
+                host.reload()
+            }
+            RoundIconButton(symbol: "arrow.triangle.2.circlepath",
+                            label: "Restart Steam client",
+                            help: "Restart the Windows Steam client in its bottle") {
+                supervisor.restartNow()
+            }
+            RoundIconButton(symbol: "xmark", label: "Quit",
+                            help: "Quit Sevoflurane and shut down the Steam client",
+                            shortcut: "q") {
+                NSApplication.shared.terminate(nil)
+            }
+        }
+    }
+
+    /// The footer's status atom: a health dot and one word at rest; on hover
+    /// it flips into the auto-restart switch, so the setting costs no space.
+    private struct StatusChip: View {
+        let host: SteamWebHost
+        let supervisor: ClientSupervisor
+        @State private var isHovered = false
+
+        private var status: (word: String, color: Color) {
+            switch supervisor.health {
+            case .starting: ("Starting", .gray)
+            case .healthy: ("Healthy", .green)
+            case .degraded: ("Degraded", .orange)
+            case .restarting: ("Restarting", .accentColor)
+            case .gaveUp: ("Stopped", .red)
+            case .paused: ("Paused", .gray)
+            }
+        }
+
+        private var tooltip: String {
+            var lines = ["\(supervisor.statusText) · \(host.status)"]
+            if let event = EventLog.shared.latest {
+                let time = event.date.formatted(date: .omitted, time: .shortened)
+                lines.append("last event \(time) — \(event.message)")
+            }
+            lines.append("Click to pause or resume auto-restart.")
+            return lines.joined(separator: "\n")
+        }
+
+        var body: some View {
+            Button { supervisor.togglePaused() } label: {
+                HStack(spacing: 4) {
+                    if isHovered {
+                        SwitchPip(isOn: supervisor.health != .paused)
+                        Text("Auto-restart")
+                    } else {
+                        Circle()
+                            .fill(status.color)
+                            .frame(width: 7, height: 7)
+                        Text(status.word)
+                    }
+                }
+                .frame(height: 12)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
+                    in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(PressableStyle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+            .help(tooltip)
+        }
+    }
+
+    private struct SwitchPip: View {
+        let isOn: Bool
+
+        var body: some View {
+            Capsule()
+                .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
+                .frame(width: 20, height: 12)
+                .overlay(alignment: isOn ? .trailing : .leading) {
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 8, height: 8)
+                        .padding(2)
+                }
+                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isOn)
+        }
+    }
+}
+
+#Preview {
+    let host = SteamWebHost()
+    MenuBarView(host: host, supervisor: ClientSupervisor(host: host))
+}
+
+// MARK: - Shared styles
+
+/// Foreground for text on a solid accent fill. The yellow stays light in both
+/// schemes, so this is a fixed warm near-black rather than `.primary`, which
+/// would flip to white in dark mode and fail contrast.
+private enum Ink {
+    static let onAccent = Color(.sRGB, red: 0.15, green: 0.11, blue: 0.02, opacity: 1)
+}
+
+/// The uniform pressed state: content dims, nothing moves.
+private struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// The primary action: solid accent that saturates on hover.
+private struct ProminentFillStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Color.accentColor.opacity(isHovered ? 1 : 0.9),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+    }
+}
+
+/// A capsule chip. Neutral chips rest on `.quinary` and lift to `.quaternary`
+/// on hover; prominent chips are solid accent with ink text.
+private struct ChipButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var prominent = false
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(title)
+            }
+            .font(.system(size: 11, weight: prominent ? .semibold : .medium))
+            .foregroundStyle(prominent ? AnyShapeStyle(Ink.onAccent) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(fill, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+    }
+
+    private var fill: AnyShapeStyle {
+        if prominent {
+            AnyShapeStyle(Color.accentColor.opacity(isHovered ? 1 : 0.9))
+        } else {
+            isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary)
+        }
+    }
+}
+
+/// A 28 pt circular icon-only button for the footer's client controls.
+private struct RoundIconButton: View {
+    let symbol: String
+    let label: String
+    let help: String
+    var shortcut: KeyEquivalent? = nil
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        button
+            .buttonStyle(PressableStyle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+            .help(help)
+            .accessibilityLabel(label)
+    }
+
+    @ViewBuilder private var button: some View {
+        let core = Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
+                    in: Circle())
+                .contentShape(Circle())
+        }
+        if let shortcut {
+            core.keyboardShortcut(shortcut)
+        } else {
+            core
+        }
     }
 }
