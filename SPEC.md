@@ -24,7 +24,7 @@ means store, community, and friends come for free, since those are web too.
 | WebKit parses/runs Steam's whole bundle | one `ReferenceError`, nothing else |
 | A shim boots the app | React mounts; Steam's global stores initialize |
 | Shim must mirror the real client's *shape* | desktop client has no `System.Audio` (Deck-only); a catch-all Proxy makes the UI call methods that don't exist — injecting a shape snapshot cut errors 11 → 2 |
-| Calls, results **and live callbacks** round-trip | `Spike/bridge.py` replays shim calls into the real SharedJSContext over CDP; callbacks stream back through a `Runtime.addBinding` push |
+| Calls, results **and live callbacks** round-trip | the bridge (`Bridge/SteamBridge`; reference: `Spike/bridge.py`) replays shim calls into the real SharedJSContext over CDP; callbacks stream back through a `Runtime.addBinding` push |
 | Boot surface is small | 88 calls across 21 namespaces, captured by `Spike/probe_steamui.py proxy` |
 | The app is menu-bar-only | LSUIElement + `.accessory`; verified zero Dock presence while running |
 | **The whole UI renders** | Steam's desktop window — chrome, nav, account, and the full 291-game library with art and playtime — drawn by Steam's bundle from live client data, at `devicePixelRatio = 2` |
@@ -325,7 +325,7 @@ stop sequence, so in-bottle Steam never outlives the app as a zombie.
 ### Provisioning & lifecycle (verified end-to-end 2026-08-09, throwaway bottle)
 
 The whole cycle was executed in a scratch bottle (`SevoTest`) and works without
-CrossOver's GUI ever running — `Spike/lifecycle.py` encodes it:
+CrossOver's GUI ever running — `Setup/Provisioner.swift` encodes it in-app:
 
 1. **Create bottle**: `cxbottle --bottle <B> --create --template win10_64` —
    CrossOver's CLI at `/Applications/CrossOver.app/Contents/SharedSupport/
@@ -421,16 +421,17 @@ Steam's UI supersedes it.
 
 1. **M1 — in the app, not a browser.** Popups are adopted through
    `WKUIDelegate.createWebViewWith` sharing one configuration, each into a real
-   `NSWindow` driven by `SteamClient.Window`. **Done**, except for two pieces
-   that stay open: the Python bridge still has to become Swift
-   (`WKScriptMessageHandler` + `URLSessionWebSocketTask`), and `BrowserView`
-   still has to become a child `WKWebView`.
+   `NSWindow` driven by `SteamClient.Window`. **Done**, except one piece that
+   stays open: `BrowserView` still has to become a child `WKWebView` (the
+   bridge is Swift, in `Bridge/`).
 2. **M2 — chrome polish.** Window controls **done**; the mirrored macOS menu bar
    and the toolbar cluster remain, per *Native chrome* above.
-3. **M3 — cockpit:** supervisor + watchdog + `steam://` handler; the client
-   lifecycle currently living in `Spike/lifecycle.py`.
-4. **M4 — provisioning:** bottle creation + Steam bootstrapper install from
-   scratch on a clean machine; login flow polish.
+3. **M3 — cockpit:** supervisor + watchdog + client lifecycle **done**
+   (`App/ClientSupervisor`, including quit teardown); the `steam://` handler
+   remains.
+4. **M4 — provisioning:** bottle creation + bootstrapper install **done**
+   (`Setup/Provisioner`, clean-machine verification pending); login flow
+   polish.
 5. **M5 — hygiene:** client-update survival soak test, EAC badge data (SteamDB
    anti-cheat lists), Sparkle updates, notarized DMG, `kagerou apps add sevoflurane`.
 

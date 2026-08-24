@@ -67,6 +67,9 @@ final class ClientSupervisor {
     @ObservationIgnored private var serviceRecoveryTried = false
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
+    /// Set once quit teardown begins; blocks every path that could relaunch
+    /// the client mid-teardown.
+    @ObservationIgnored private var isQuitting = false
 
     init(host: SteamWebHost) {
         self.host = host
@@ -108,10 +111,28 @@ final class ClientSupervisor {
         }
     }
 
+    /// Quit teardown: quitting Sevoflurane quits Steam. Stops supervision so
+    /// nothing relaunches the client, then brings every bottle process down —
+    /// the client's processes are launched detached, so without this they
+    /// outlive the app (and a leaked webhelper window parks a dead icon in
+    /// the Dock).
+    func shutdownForQuit() async {
+        guard !isQuitting else { return }
+        isQuitting = true
+        loop?.cancel()
+        loop = nil
+        log.log(.supervisor, "quit: bringing the bottle down")
+        await stopBottleProcesses(gracePolls: 3) { _ in }
+        let survivors = await Self.bottleProcessIDs()
+        log.log(.supervisor, survivors.isEmpty
+                ? "quit: bottle is down"
+                : "quit: pids \(survivors) survived SIGKILL")
+    }
+
     // MARK: - Probe cycle
 
     private func probe() async {
-        if health == .paused || isRestarting { return }
+        if health == .paused || isRestarting || isQuitting { return }
 
         // A visible Wine window is an anomaly (the client is -silent): most
         // often Steam's own watchdog dialog. It is a symptom, never a control
@@ -150,8 +171,8 @@ final class ClientSupervisor {
 
         switch await Self.probePage() {
         case .bridgeDown:
-            transition(to: .degraded("bridge is down — start Spike/bridge.py"),
-                       logging: .bridge, "bridge on :8762 is unreachable")
+            transition(to: .degraded("bridge is down — relaunch Sevoflurane"),
+                       logging: .bridge, "in-process bridge on :8762 is unreachable")
         case .notAnswering(let detail):
             pageFailures += 1
             if pageFailures >= 2, Date.now.timeIntervalSince(lastPageRecovery) > 90 {
@@ -221,7 +242,7 @@ final class ClientSupervisor {
     // MARK: - Restart ladder
 
     private func restartClient(reason: String) async {
-        guard !isRestarting else { return }
+        guard !isRestarting, !isQuitting else { return }
         isRestarting = true
         defer { isRestarting = false }
 
@@ -230,7 +251,7 @@ final class ClientSupervisor {
             transition(to: .gaveUp("client keeps dying — likely crash-looping; see the log"),
                        logging: .supervisor,
                        "giving up after 3 restarts in 10 minutes — the client is crash-looping "
-                       + "(next: clear the bottle's htmlcache, then lifecycle.py update)")
+                       + "(next: clear the bottle's htmlcache, then a headless client update)")
             return
         }
         recentRestarts.append(.now)
@@ -238,31 +259,8 @@ final class ClientSupervisor {
         log.log(.supervisor, "restarting client: \(reason)")
 
         health = .restarting("checking for a running client")
-        let existing = await Self.bottleProcessIDs()
-        if !existing.isEmpty {
-            log.log(.client, "bottle processes running (pids \(existing)) — shutting them down")
-            health = .restarting("stopping the client")
-            await Self.gracefulShutdown()
-            var clean = false
-            for _ in 0..<15 {
-                if await Self.bottleProcessIDs().isEmpty { clean = true; break }
-                try? await Task.sleep(for: .seconds(2))
-            }
-            if !clean {
-                health = .restarting("force-killing wine")
-                log.log(.client, "graceful shutdown timed out — wineserver -k")
-                await Self.killWineserver()
-                try? await Task.sleep(for: .seconds(3))
-                var survivors = await Self.bottleProcessIDs()
-                if !survivors.isEmpty {
-                    log.log(.client, "signalling survivors (pids \(survivors))")
-                    for pid in survivors { kill(pid, SIGTERM) }
-                    try? await Task.sleep(for: .seconds(3))
-                    survivors = await Self.bottleProcessIDs()
-                    for pid in survivors { kill(pid, SIGKILL) }
-                    try? await Task.sleep(for: .seconds(1))
-                }
-            }
+        await stopBottleProcesses(gracePolls: 15) { phase in
+            health = .restarting(phase)
         }
 
         // The launcher can time out and *still* spawn a client later; a
@@ -275,6 +273,7 @@ final class ClientSupervisor {
                        "steam.exe pids \(leftovers) survived SIGKILL — manual intervention needed")
             return
         }
+        guard !isQuitting else { return }
 
         health = .restarting("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(Client.cdpPort)")
@@ -402,6 +401,39 @@ final class ClientSupervisor {
     }
 
     // MARK: - Bottle processes
+
+    /// Brings every bottle process down: graceful `-shutdown`, then
+    /// `wineserver -k`, then signals, each rung only for what the previous
+    /// one left alive. `gracePolls` bounds the graceful rung at 2 s per
+    /// poll — a restart can afford 30 s of patience, quit cannot.
+    private func stopBottleProcesses(gracePolls: Int,
+                                     setPhase: (String) -> Void) async {
+        let existing = await Self.bottleProcessIDs()
+        guard !existing.isEmpty else { return }
+        log.log(.client, "bottle processes running (pids \(existing)) — shutting them down")
+        setPhase("stopping the client")
+        await Self.gracefulShutdown()
+        var clean = false
+        for _ in 0..<gracePolls {
+            if await Self.bottleProcessIDs().isEmpty { clean = true; break }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        if !clean {
+            setPhase("force-killing wine")
+            log.log(.client, "graceful shutdown timed out — wineserver -k")
+            await Self.killWineserver()
+            try? await Task.sleep(for: .seconds(3))
+            var survivors = await Self.bottleProcessIDs()
+            if !survivors.isEmpty {
+                log.log(.client, "signalling survivors (pids \(survivors))")
+                for pid in survivors { kill(pid, SIGTERM) }
+                try? await Task.sleep(for: .seconds(3))
+                survivors = await Self.bottleProcessIDs()
+                for pid in survivors { kill(pid, SIGKILL) }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
 
     /// PIDs of the bottle's processes, matched by name and then scoped by open
     /// files inside the bottle so other bottles' wine processes are untouched.

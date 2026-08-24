@@ -36,9 +36,10 @@ full architecture — and the fidelity rules that keep it honest — is
 - `Sevoflurane/` — the app (Swift 6): `Web/` hosts Steam's UI and windows,
   `Bridge/` is the in-process page↔client bridge, `Setup/` the first-run
   assistant, `App/` supervision, logging, menu bar
-- `Spike/` — Python prototypes still standing alone: `lifecycle.py` (bottle
-  provisioning + client lifecycle), `sevo.py` (management CLI), `bridge.py`
-  (the bridge's reference implementation), probes
+- `Spike/` — Python reference implementations, all ported into the app
+  (`bridge.py` → `Bridge/`, `lifecycle.py` → `Setup/Provisioner` +
+  `App/ClientSupervisor`); `sevo.py` (diagnostics CLI) is the one still worth
+  running on its own
 - `Site/` — the landing page (not yet deployed)
 - `Mockups/` — self-contained HTML design mockups (open in a browser)
 
@@ -48,18 +49,18 @@ the durable architecture lives in `SPEC.md`.
 
 ## Running (dev)
 
-Requirements: macOS 26+, Apple Silicon, Xcode 26+, CrossOver with a bottle
-named `Steam` (build one headlessly: `python3 Spike/lifecycle.py provision`).
+Requirements: macOS 26+, Apple Silicon, Xcode 26+, CrossOver (14-day trial
+works; the first-run assistant creates the bottle and installs Steam itself).
 
-1. `python3 Spike/lifecycle.py start` — Steam up in the bottle, CDP on :8081
-2. Build and launch the app — the bridge runs in-process; the app finds the
-   client, boots Steam's UI, and supervises from there
-3. Diagnostics: `python3 Spike/sevo.py doctor` · event log at
+1. Build and launch the app — first run walks through setup; after that the
+   app starts the bottled client with CDP on :8081, boots Steam's UI through
+   the in-process bridge, and supervises from there
+2. Diagnostics: `python3 Spike/sevo.py doctor` · event log at
    `~/Library/Logs/Sevoflurane.log` · `curl -X POST --data '<js>'
    http://127.0.0.1:8762/__eval` evaluates in the page
 
-Quitting the app stops nothing today (dev behavior); stop the client with
-`python3 Spike/lifecycle.py stop`.
+Quitting the app shuts the bottled client down with it — nothing from the
+bottle outlives Sevoflurane.
 
 ## Contributing
 

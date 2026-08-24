@@ -63,6 +63,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    private var quitTask: Task<Void, Never>?
+
+    /// Quitting Sevoflurane quits Steam: the bottle comes down first so no
+    /// Wine process (or its Dock icon) outlives the app.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard quitTask == nil else { return .terminateCancel }
+        quitTask = Task(name: "Quit teardown") {
+            await supervisor.shutdownForQuit()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     /// The context web view lives in an off-screen window, so AppKit always
     /// reports a visible window and its own reopen logic would never fire.
     func applicationShouldHandleReopen(_: NSApplication,
