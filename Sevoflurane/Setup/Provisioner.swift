@@ -153,12 +153,21 @@ final class Provisioner {
     /// still written because they are correct for the non-driver path an OSS
     /// Wine build may take.
     func configureBottle(named name: String) async {
-        activity = .working("Configuring for background use…")
+        // Leaves `activity` alone: the wizard's Continue button gates on
+        // `.done`, which this reassert must not overwrite.
         _ = await Self.runWine(bottle: name, args: [
             "reg", "add", #"HKCU\Software\Wine\Explorer"#,
             "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
-        activity = .idle
+    }
+
+    /// The wizard's whole sequence: install Steam, then apply the idempotent
+    /// bottle configuration the boot path also reasserts.
+    func provisionAndConfigure() async {
+        await provisionSteam()
+        if case .done = activity {
+            await configureBottle(named: SteamBottle.name)
+        }
     }
 
     func setOpenAtLogin(_ enabled: Bool) {

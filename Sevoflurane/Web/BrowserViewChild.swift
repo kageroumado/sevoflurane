@@ -53,7 +53,7 @@ final class BrowserViewChild: NSObject {
             webView.observe(\.title) { [weak self] view, _ in
                 MainActor.assumeIsolated {
                     guard let self, let title = view.title else { return }
-                    self.fire("set-title", "[\(Self.jsString(title))]")
+                    self.fire("set-title", "[\(JSLiteral.string(title))]")
                 }
             },
         ]
@@ -83,7 +83,7 @@ final class BrowserViewChild: NSObject {
 
     func postMessage(type: String, dataJSON: String) {
         webView.evaluateJavaScript(
-            "window.postMessage({type: \(Self.jsString(type)), data: \(dataJSON.isEmpty ? "null" : dataJSON)}, '*')",
+            "window.postMessage({type: \(JSLiteral.string(type)), data: \(dataJSON.isEmpty ? "null" : dataJSON)}, '*')",
         )
     }
 
@@ -98,7 +98,7 @@ final class BrowserViewChild: NSObject {
     /// Delivers an event to the shim's emitter for this view in the host page.
     private func fire(_ event: String, _ argsJSON: String) {
         hostPage.evaluateJavaScript(
-            "window.__sevoBV && __sevoBV[\(id)] && __sevoBV[\(id)](\(Self.jsString(event)), \(argsJSON))",
+            "window.__sevoBV && __sevoBV[\(id)] && __sevoBV[\(id)](\(JSLiteral.string(event)), \(argsJSON))",
         )
     }
 
@@ -133,14 +133,6 @@ final class BrowserViewChild: NSObject {
             "key": String(UInt(bitPattern: ObjectIdentifier(item).hashValue), radix: 36),
         ]
     }
-
-    private static func jsString(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        return "\"\(escaped)\""
-    }
 }
 
 extension BrowserViewChild: WKNavigationDelegate {
@@ -149,21 +141,11 @@ extension BrowserViewChild: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
     ) async
         -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url,
-              let scheme = url.scheme?.lowercased() else { return .allow }
-        switch scheme {
-        case "http", "https", "about", "blob", "data":
-            return .allow
-        case "steam":
-            host?.executeSteamURL(url)
-            return .cancel
-        default:
-            return .cancel
-        }
+        steamNavigationPolicy(for: navigationAction.request.url, host: host)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
-        let url = Self.jsString(webView.url?.absoluteString ?? "")
+        let url = JSLiteral.string(webView.url?.absoluteString ?? "")
         fire("start-request", "[\(url)]")
         fire("start-loading", "[\(url)]")
     }
@@ -171,8 +153,8 @@ extension BrowserViewChild: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
         fire(
             "finished-request",
-            "[\(Self.jsString(webView.url?.absoluteString ?? "")), "
-                + "\(Self.jsString(webView.title ?? ""))]",
+            "[\(JSLiteral.string(webView.url?.absoluteString ?? "")), "
+                + "\(JSLiteral.string(webView.title ?? ""))]",
         )
         fireHistoryChanged()
     }
@@ -194,8 +176,8 @@ extension BrowserViewChild: WKNavigationDelegate {
         fire(
             "load-error",
             "[\((error as NSError).code), "
-                + "\(Self.jsString(webView.url?.absoluteString ?? "")), "
-                + "\(Self.jsString(error.localizedDescription))]",
+                + "\(JSLiteral.string(webView.url?.absoluteString ?? "")), "
+                + "\(JSLiteral.string(error.localizedDescription))]",
         )
         fireHistoryChanged()
     }

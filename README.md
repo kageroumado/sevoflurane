@@ -35,7 +35,8 @@ full architecture — and the fidelity rules that keep it honest — is
   chrome, engine strategy, and the lsteamclient endgame
 - `Sevoflurane/` — the app (Swift 6): `Web/` hosts Steam's UI and windows,
   `Bridge/` is the in-process page↔client bridge, `Setup/` the first-run
-  assistant, `App/` supervision, logging, menu bar
+  assistant, `App/` supervision, logging, menu bar, `Support/` shared system
+  access (bottle paths, ports, subprocesses)
 - `Spike/` — Python reference implementations, all ported into the app
   (`bridge.py` → `Bridge/`, `lifecycle.py` → `Setup/Provisioner` +
   `App/ClientSupervisor`); `sevo.py` (diagnostics CLI) is the one still worth

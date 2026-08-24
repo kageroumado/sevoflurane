@@ -354,18 +354,12 @@ final class ClientSupervisor {
         case notAnswering(String)
     }
 
-    /// Wine binds the debug port to whichever loopback family it feels like on
-    /// a given run, so the reachable one is discovered rather than assumed.
     private nonisolated static func probeClient() async -> ClientState {
-        for hostName in ["127.0.0.1", "[::1]"] {
-            var request = URLRequest(url: URL(string: "http://\(hostName):\(BridgePorts.cdp)/json")!)
-            request.timeoutInterval = 3
-            guard let (data, _) = try? await URLSession.shared.data(for: request) else { continue }
-            struct Target: Decodable { let title: String }
-            let targets = (try? JSONDecoder().decode([Target].self, from: data)) ?? []
-            return targets.contains { $0.title == "SharedJSContext" } ? .up : .portWithoutContext
+        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
+            return .down
         }
-        return .down
+        return targets.contains { $0["title"] as? String == "SharedJSContext" }
+            ? .up : .portWithoutContext
     }
 
     /// One probe covers the whole chain the UI depends on: app page → bridge

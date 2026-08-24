@@ -201,12 +201,7 @@ struct SetupView: View {
         }
         step = .steam
         if provisioner.activity == .idle {
-            Task {
-                await provisioner.provisionSteam()
-                if case .done = provisioner.activity {
-                    await provisioner.configureBottle(named: SteamBottle.name)
-                }
-            }
+            Task { await provisioner.provisionAndConfigure() }
         }
     }
 }

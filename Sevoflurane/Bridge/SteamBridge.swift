@@ -455,7 +455,7 @@ actor SteamBridge {
     /// Evaluates an expression in the (one) connected page — the app's
     /// context page. This is the programmatic Web Inspector: the only other
     /// channel into the app's DOM is Safari's, by hand.
-    func pageEval(_ expr: String) async -> (ok: Bool, v: String) {
+    func evaluateInPage(_ expr: String) async -> (ok: Bool, v: String) {
         guard let session = newestPage.flatMap({ pages[$0] }) ?? pages.values.first else {
             return (false, "\"no page connected\"")
         }
@@ -488,7 +488,7 @@ actor SteamBridge {
         if request.method == "POST" {
             guard request.path == "/__eval" else { return .error(404, "Not Found") }
             let expr = String(data: request.body, encoding: .utf8) ?? ""
-            let result = await pageEval(expr)
+            let result = await evaluateInPage(expr)
             let body = #"{"ok":\#(result.ok),"v":\#(Self.jsonText(result.v) ?? "null")}"#
             return .ok(Data(body.utf8), type: "application/json")
         }

@@ -90,6 +90,9 @@ final class SteamWebHost {
         )
 
         let webView = makeWebView(configuration: configuration)
+        // The name deliberately mirrors the title of the real client's context
+        // page this window stands in for; it travels back to Steam through
+        // GetWindowRestoreDetails.
         let page = SteamWindow(
             webView: webView,
             role: .context,
@@ -146,25 +149,17 @@ final class SteamWebHost {
     }
 
     /// The context boots its window on no route at all, the same way a
-    /// `-silent` client does until its tray item is clicked.
+    /// `-silent` client does until its tray item is clicked. The route runs
+    /// through Steam's own navigator in this page — `ExecuteSteamURL` would
+    /// navigate the window the *bottle's* client owns instead.
     func openLibrary() {
-        navigate(.library)
-    }
-
-    /// Sends the desktop window to one of Steam's own routes.
-    ///
-    /// `SteamClient.URL.ExecuteSteamURL` would be the obvious lever, but it
-    /// runs inside the *bottle's* client and navigates the window that client
-    /// owns. Steam's navigator lives in this page, next to the window it
-    /// actually drives.
-    func navigate(_ route: SteamRoute) {
         context?.webView.evaluateJavaScript("""
         (function () {
           var window_ = window.SteamUIStore && SteamUIStore.WindowStore
             && SteamUIStore.WindowStore.MainWindowInstance;
           var nav = window_ && window_.Navigator;
-          if (!nav || typeof nav.\(route.navigatorFunction) !== "function") return false;
-          nav.\(route.navigatorFunction)();
+          if (!nav || typeof nav.Home !== "function") return false;
+          nav.Home();
           return true;
         })()
         """)
@@ -191,7 +186,7 @@ final class SteamWebHost {
     /// dialogs like About; the local path keeps it in this process. The round
     /// trip remains as fallback for URLs only the client resolves.
     func executeSteamURL(_ url: URL) {
-        let literal = Self.jsLiteral(url.absoluteString)
+        let literal = JSLiteral.string(url.absoluteString)
         Task(name: "Run \(url.absoluteString)") {
             let handled = await evaluateInContext(
                 "String(window.__sevoRunSteamURL ? __sevoRunSteamURL(\(literal)) : 0)",
@@ -240,7 +235,7 @@ final class SteamWebHost {
     /// document itself. WebKit hands us the chance to supply the web view; the
     /// window around it waits until the shim says which popup this is, because
     /// the name is the only thing that tells a context menu from the desktop.
-    fileprivate func adoptPopup(
+    func adoptPopup(
         configuration: WKWebViewConfiguration,
         features: WKWindowFeatures,
     ) -> WKWebView {
@@ -287,7 +282,7 @@ final class SteamWebHost {
         return CGFloat(number)
     }
 
-    fileprivate func window(for webView: WKWebView) -> SteamWindow? {
+    func window(for webView: WKWebView) -> SteamWindow? {
         if webView === context?.webView { return context }
         return popups[ObjectIdentifier(webView)]
     }
@@ -335,140 +330,7 @@ final class SteamWebHost {
         NSApp.setActivationPolicy(.accessory)
     }
 
-    fileprivate func setStatus(_ value: String) {
+    func setStatus(_ value: String) {
         status = value
-    }
-
-    private static func jsLiteral(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        return "\"\(escaped)\""
-    }
-}
-
-/// A web view whose first click counts.
-///
-/// A menu panel opens without key status, so every initial click in it is a
-/// "first mouse". WKWebView's default answer spends that click on making the
-/// panel key — Steam's menus then need one click to highlight and a second to
-/// activate. In a panel the click always belongs to the page.
-private final class SteamWebView: WKWebView {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        window is NSPanel || super.acceptsFirstMouse(for: event)
-    }
-}
-
-// MARK: - WebKit plumbing
-
-/// The WebKit delegates, kept off ``SteamWebHost`` so the observable state is
-/// not also an `NSObject` full of protocol conformances.
-@MainActor
-private final class SteamWebCoordinator: NSObject {
-    static let handlerName = "sevoWindow"
-
-    private weak var host: SteamWebHost?
-
-    init(host: SteamWebHost) {
-        self.host = host
-    }
-}
-
-extension SteamWebCoordinator: WKUIDelegate {
-    func webView(
-        _: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures,
-    ) -> WKWebView? {
-        // Steam's popup manager always opens about:blank and writes into it;
-        // a popup opened straight onto http(s) is an external link, and those
-        // belong in the user's browser, not in an orphan app window.
-        if let url = navigationAction.request.url,
-           url.scheme == "http" || url.scheme == "https" {
-            NSWorkspace.shared.open(url)
-            return nil
-        }
-        return host?.adoptPopup(configuration: configuration, features: windowFeatures)
-    }
-
-    func webViewDidClose(_ webView: WKWebView) {
-        host?.window(for: webView)?.detach()
-    }
-
-    /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
-    /// this (private) delegate method it answers a zero rect, which Steam's
-    /// menu placement reads as "the window fills nothing at the bottom of the
-    /// screen" and flips every flyout upward. The rect is the AppKit frame;
-    /// WebKit flips it to CSS coordinates itself (`convertToUserSpace`).
-    @objc(_webView:getWindowFrameWithCompletionHandler:)
-    func _webView(
-        _ webView: WKWebView,
-        getWindowFrameWithCompletionHandler completionHandler: @escaping (CGRect) -> Void,
-    ) {
-        completionHandler(host?.window(for: webView)?.appKitFrame ?? .zero)
-    }
-}
-
-extension SteamWebCoordinator: WKNavigationDelegate {
-    /// Steam's menus navigate to `steam://open/*` and expect the host to
-    /// intercept — CEF does; WKWebView would hand the unknown scheme to
-    /// LaunchServices, launching the real Mac Steam app. Everything that is
-    /// not part of the UI's own page traffic is cancelled, and `steam:` URLs
-    /// are routed back into the client.
-    func webView(
-        _: WKWebView,
-        decidePolicyFor navigationAction: WKNavigationAction,
-    ) async
-        -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url,
-              let scheme = url.scheme?.lowercased() else { return .allow }
-        switch scheme {
-        case "http", "https", "about", "blob", "data":
-            return .allow
-        case "steam":
-            host?.executeSteamURL(url)
-            return .cancel
-        default:
-            return .cancel
-        }
-    }
-
-    func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
-        guard host?.window(for: webView)?.role == .context else { return }
-        host?.setStatus("Steam UI booted — waiting for its window")
-    }
-
-    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
-        host?.setStatus("load failed: \(error.localizedDescription)")
-        EventLog.shared.log(.page, "page load failed: \(error.localizedDescription)")
-    }
-
-    func webView(
-        _: WKWebView,
-        didFailProvisionalNavigation _: WKNavigation!,
-        withError error: any Error,
-    ) {
-        host?.setStatus("bridge unreachable: \(error.localizedDescription)")
-        EventLog.shared.log(.bridge, "bridge unreachable: \(error.localizedDescription)")
-    }
-}
-
-extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
-    /// Every `SteamClient.Window` call arrives here. `message.webView` is the
-    /// window the call is about, which is why the shim posts through the
-    /// popup's own handler rather than the opener's: it identifies the target
-    /// without a handshake.
-    func userContentController(
-        _: WKUserContentController,
-        didReceive message: WKScriptMessage,
-    ) async -> (Any?, String?) {
-        guard let body = message.body as? [String: Any],
-              let function = body["fn"] as? String,
-              let webView = message.webView,
-              let window = host?.window(for: webView) else {
-            return (nil, nil)
-        }
-        return (window.perform(function, body["args"] as? [Any] ?? []), nil)
     }
 }
