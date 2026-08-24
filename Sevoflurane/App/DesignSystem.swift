@@ -19,20 +19,29 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// The primary action: solid accent that saturates on hover.
+/// The primary action: solid accent that saturates on hover. The hover state
+/// lives in an inner view — `@State` on the ButtonStyle itself has no view
+/// storage behind it.
 struct ProminentFillStyle: ButtonStyle {
-    @State private var isHovered = false
-
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                Color.accentColor.opacity(isHovered ? 1 : 0.9),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous),
-            )
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-            }
+        ProminentFill(configuration: configuration)
+    }
+
+    private struct ProminentFill: View {
+        let configuration: Configuration
+        @State private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .background(
+                    Color.accentColor.opacity(isHovered ? 1 : 0.9),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous),
+                )
+                .opacity(configuration.isPressed ? 0.7 : 1)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+                }
+        }
     }
 }
 
@@ -75,6 +84,25 @@ struct ChipButton: View {
     }
 }
 
+/// The visuals of a 28 pt circular icon control, shared by
+/// ``RoundIconButton`` and ``RoundSettingsLink``.
+struct RoundIcon: View {
+    let symbol: String
+    var isHovered = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 28, height: 28)
+            .background(
+                isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
+                in: Circle(),
+            )
+            .contentShape(Circle())
+    }
+}
+
 /// A 28 pt circular icon-only button for the footer's client controls.
 struct RoundIconButton: View {
     let symbol: String
@@ -96,20 +124,29 @@ struct RoundIconButton: View {
 
     @ViewBuilder private var button: some View {
         let core = Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .background(
-                    isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary),
-                    in: Circle(),
-                )
-                .contentShape(Circle())
+            RoundIcon(symbol: symbol, isHovered: isHovered)
         }
         if let shortcut {
             core.keyboardShortcut(shortcut)
         } else {
             core
         }
+    }
+}
+
+/// `SettingsLink` dressed as a ``RoundIconButton``.
+struct RoundSettingsLink: View {
+    @State private var isHovered = false
+
+    var body: some View {
+        SettingsLink {
+            RoundIcon(symbol: "gearshape", isHovered: isHovered)
+        }
+        .buttonStyle(PressableStyle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .help("Settings")
+        .accessibilityLabel("Settings")
     }
 }

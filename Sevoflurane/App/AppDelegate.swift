@@ -76,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    /// `steam://` links from browsers and other apps (CFBundleURLTypes).
+    /// The window comes up first so the routed page has somewhere to land.
+    func application(_: NSApplication, open urls: [URL]) {
+        host.showSteam()
+        for url in urls where url.scheme?.lowercased() == "steam" {
+            host.executeSteamURL(url)
+        }
+    }
+
     /// The context web view lives in an off-screen window, so AppKit always
     /// reports a visible window and its own reopen logic would never fire.
     func applicationShouldHandleReopen(

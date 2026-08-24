@@ -177,9 +177,21 @@ struct MenuBarView: View {
         let game: SteamWebHost.RecentGame
         let launch: () -> Void
         @State private var isHovered = false
+        /// Steam takes seconds to bring a game up with no signal back;
+        /// a timed spinner is the honest acknowledgment that the click
+        /// landed.
+        @State private var isLaunching = false
 
         var body: some View {
-            Button(action: launch) {
+            Button {
+                guard !isLaunching else { return }
+                launch()
+                withAnimation(.easeInOut(duration: 0.15)) { isLaunching = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(8))
+                    withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
+                }
+            } label: {
                 HStack(spacing: 8) {
                     AsyncImage(url: game.artURL) { image in
                         image.resizable().aspectRatio(contentMode: .fill)
@@ -192,10 +204,17 @@ struct MenuBarView: View {
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
                     Spacer(minLength: 0)
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.accentColor)
-                        .opacity(isHovered ? 1 : 0)
+                    if isLaunching {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.accentColor)
+                            .opacity(isHovered ? 1 : 0)
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
@@ -237,6 +256,7 @@ struct MenuBarView: View {
             }
             .help("Open the event log")
             Spacer(minLength: 0)
+            RoundSettingsLink()
             RoundIconButton(
                 symbol: "arrow.clockwise",
                 label: "Reload Steam UI",

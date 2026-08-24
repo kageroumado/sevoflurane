@@ -110,7 +110,7 @@ actor SteamBridge {
     }
 
     private nonisolated func log(_ category: EventLog.Category, _ message: String) {
-        EventLog.shared.enqueue(category, message)
+        EventLog.enqueue(category, message)
     }
 
     /// Wraps a connection's receive callbacks into one ordered stream.

@@ -8,8 +8,12 @@ struct SevofluraneApp: App {
         MenuBarExtra {
             MenuBarView(host: delegate.host, supervisor: delegate.supervisor)
         } label: {
-            Image(nsImage: MenuBarIcon.image)
+            Image(nsImage: MenuBarIcon.image(badged: delegate.supervisor.needsAttention))
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView(provisioner: delegate.provisioner)
+        }
     }
 }

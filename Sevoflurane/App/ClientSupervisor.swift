@@ -53,6 +53,15 @@ final class ClientSupervisor {
     private let host: SteamWebHost
     private let log = EventLog.shared
 
+    /// Whether the menu-bar glyph should carry the attention badge: the
+    /// states where nothing is healing itself and the user should look.
+    var needsAttention: Bool {
+        switch health {
+        case .degraded, .gaveUp: true
+        default: false
+        }
+    }
+
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var clientFailures = 0
     @ObservationIgnored private var pageFailures = 0
@@ -554,12 +563,12 @@ final class ClientSupervisor {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.terminationHandler = { finished in
-            EventLog.shared.enqueue(.client, "wine launcher exited (status \(finished.terminationStatus))")
+            EventLog.enqueue(.client, "wine launcher exited (status \(finished.terminationStatus))")
         }
         do {
             try process.run()
         } catch {
-            EventLog.shared.enqueue(
+            EventLog.enqueue(
                 .client,
                 "wine launcher failed to start: \(error.localizedDescription)",
             )

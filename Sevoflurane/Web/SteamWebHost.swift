@@ -25,7 +25,7 @@ final class SteamWebHost {
     private(set) var desktop: SteamWindow?
 
     /// The menu-bar mirror, refreshed when the desktop window comes up.
-    weak var menuMirror: SteamMenuMirror?
+    @ObservationIgnored weak var menuMirror: SteamMenuMirror?
 
     /// The most recently played installed games, for the menu-bar extra —
     /// the same list Steam's own tray menu leads with.
