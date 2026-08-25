@@ -20,6 +20,7 @@ final class EventLog {
         case page
         case window
         case supervisor
+        case setup
     }
 
     struct Entry: Identifiable, Equatable {
@@ -57,6 +58,11 @@ final class EventLog {
 
     func log(_ category: Category, _ message: String) {
         logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
+        // Mirrored as a signpost event so the app's own trail lines up
+        // against CPU and I/O in an Instruments recording.
+        PerfProbe.events.emitEvent(
+            "Log", "[\(category.rawValue, privacy: .public)] \(message, privacy: .public)",
+        )
         let entry = Entry(id: nextID, date: .now, category: category, message: message)
         nextID += 1
         recent.append(entry)

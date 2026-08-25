@@ -31,6 +31,22 @@ struct SetupView: View {
         }
         .frame(width: 680, height: 500)
         .task { await provisioner.refreshDetection() }
+        .overlay(alignment: .topTrailing) {
+            if provisioner.isDryRun { dryRunBadge }
+        }
+    }
+
+    /// Marks a harness run (`SetupDryRun.swift`) so a screenshot can never be
+    /// mistaken for a real provisioning pass.
+    private var dryRunBadge: some View {
+        Text("DRY RUN")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(.orange.opacity(0.15)))
+            .padding(10)
+            .help("Simulated onboarding — nothing on this machine changes.")
     }
 
     @ViewBuilder private var content: some View {

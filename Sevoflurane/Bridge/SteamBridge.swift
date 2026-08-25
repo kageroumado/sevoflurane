@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The Swift port of `Spike/bridge.py`: serves Steam's own UI bundle with the
 /// `SteamClient` shim injected, replays shim calls into the real
@@ -140,6 +141,8 @@ actor SteamBridge {
         if let cdp, await !cdp.isClosed { return cdp }
         if let cdpTask { return try await cdpTask.value }
         let task = Task { [weak self] () throws -> CDPClient in
+            let connect = PerfProbe.bridge.beginInterval("CDPConnect")
+            defer { PerfProbe.bridge.endInterval("CDPConnect", connect) }
             // Re-captured: the outer `weak self` is a mutable box, which a
             // @Sendable closure may not reference; its own capture is a copy.
             let client = CDPClient(onPush: { [weak self] payload in
@@ -308,6 +311,12 @@ actor SteamBridge {
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
               path.hasPrefix("SteamClient.") else { return }
+        let call = PerfProbe.bridge.beginInterval(
+            "SteamClientCall",
+            id: PerfProbe.bridge.makeSignpostID(),
+            "\(path, privacy: .public)",
+        )
+        defer { PerfProbe.bridge.endInterval("SteamClientCall", call) }
         var argsJS: [String] = []
         for argument in request["args"] as? [Any] ?? [] {
             if let marker = argument as? [String: Any],
@@ -494,7 +503,10 @@ actor SteamBridge {
         guard let encoded = Self.jsonText(message) else {
             return (false, "\"unencodable expression\"")
         }
-        return await withCheckedContinuation { continuation in
+        let eval = PerfProbe.bridge.beginInterval(
+            "PageEval", id: PerfProbe.bridge.makeSignpostID(),
+        )
+        let result: (ok: Bool, v: String) = await withCheckedContinuation { continuation in
             evalPending[eid] = continuation
             session.ws.send(text: encoded)
             evalTimeouts[eid] = Task {
@@ -502,6 +514,8 @@ actor SteamBridge {
                 self.expireEval(eid)
             }
         }
+        PerfProbe.bridge.endInterval("PageEval", eval, "ok=\(result.ok)")
+        return result
     }
 
     private func expireEval(_ eid: String) {
@@ -599,7 +613,7 @@ actor SteamBridge {
         }
         let file = SteamBottle.libraryCache
             .appendingPathComponent("\(appid)/library_600x900.jpg")
-        if let data = try? Data(contentsOf: file) {
+        if let data = try? Data(contentsOf: file, options: [.mappedIfSafe]) {
             return .ok(
                 data,
                 type: "image/jpeg",
@@ -615,6 +629,12 @@ actor SteamBridge {
     // MARK: - Helpers
 
     private nonisolated static func serveFile(under root: URL, path: String) -> HTTPResponse {
+        let serve = PerfProbe.bridge.beginInterval(
+            "ServeAsset",
+            id: PerfProbe.bridge.makeSignpostID(),
+            "\(path, privacy: .public)",
+        )
+        defer { PerfProbe.bridge.endInterval("ServeAsset", serve) }
         guard let decoded = path.removingPercentEncoding else {
             return .error(400, "Bad Request")
         }
@@ -622,7 +642,10 @@ actor SteamBridge {
         guard target.path.hasPrefix(root.standardizedFileURL.path + "/") else {
             return .error(403, "Forbidden")
         }
-        guard let data = try? Data(contentsOf: target) else {
+        // Mapped, not copied: Steam's UI chunks run to megabytes and the boot
+        // waterfall requests dozens of them; the bytes go straight from the
+        // page cache to the socket.
+        guard let data = try? Data(contentsOf: target, options: [.mappedIfSafe]) else {
             return .error(404, "Not Found")
         }
         return .ok(data, type: ContentType.forExtension(target.pathExtension))

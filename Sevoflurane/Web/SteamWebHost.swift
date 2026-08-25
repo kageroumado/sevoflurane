@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import WebKit
 
 /// Owns the web side of the app.
@@ -123,6 +124,7 @@ final class SteamWebHost {
         contextWindow = window
 
         status = "starting Steam"
+        PerfProbe.poi.emitEvent("PageBoot")
         EventLog.shared.log(.page, "booting the Steam UI from \(Self.uiURL.absoluteString)")
         webView.load(URLRequest(url: Self.uiURL))
     }
@@ -301,6 +303,7 @@ final class SteamWebHost {
         guard window.role == .desktop else { return }
         desktop = window
         status = "Steam is ready"
+        PerfProbe.poi.emitEvent("DesktopAdopted")
         EventLog.shared.log(.window, "desktop window adopted — Steam is ready")
         // Steam draws a Windows title bar because under CEF it owns a
         // borderless OS window. Hosted here its buttons duplicate the traffic

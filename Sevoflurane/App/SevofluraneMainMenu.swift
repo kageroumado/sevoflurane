@@ -20,6 +20,9 @@ enum SevofluraneMainMenu {
         appendNativeViewItems(to: mirror.menu(for: "View"))
         main.addItem(submenu(editMenu(), title: "Edit"))
         main.addItem(submenu(windowMenu(), title: "Window"))
+        #if DEBUG
+            main.addItem(submenu(debugMenu(), title: "Debug"))
+        #endif
         main.addItem(submenu(mirror.menu(for: "Help"), title: "Help"))
         NSApp.mainMenu = main
         NSApp.windowsMenu = main.item(withTitle: "Window")?.submenu
@@ -126,6 +129,29 @@ enum SevofluraneMainMenu {
         fullScreen.keyEquivalentModifierMask = [.command, .control]
         fullScreen.tag = SteamMenuMirror.nativeTag
     }
+
+    #if DEBUG
+        /// The onboarding harness (`SetupDryRun.swift`): one item per scenario,
+        /// each opening the wizard against that fixture machine.
+        private static func debugMenu() -> NSMenu {
+            let menu = NSMenu()
+            let dryRun = NSMenu()
+            let dryRunItem = NSMenuItem(
+                title: "Onboarding Dry Run", action: nil, keyEquivalent: "",
+            )
+            dryRunItem.submenu = dryRun
+            menu.addItem(dryRunItem)
+            for scenario in SetupScenario.allCases {
+                let item = dryRun.addItem(
+                    withTitle: scenario.title,
+                    action: #selector(AppDelegate.runOnboardingDryRun(_:)),
+                    keyEquivalent: "",
+                )
+                item.representedObject = scenario.rawValue
+            }
+            return menu
+        }
+    #endif
 
     private static func windowMenu() -> NSMenu {
         let menu = NSMenu()

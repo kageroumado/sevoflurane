@@ -1,4 +1,5 @@
 import AppKit
+import os
 import SwiftUI
 
 /// Application-level wiring that SwiftUI has no scene for: the menu bar, the
@@ -15,17 +16,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
-        // Up before provisioning gates so `sevo status` can see the app even
-        // while the setup wizard is waiting for the user.
-        controlServer.start()
+        PerfProbe.poi.emitEvent("Launch")
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
+        #if DEBUG
+            if let scenario = SetupScenario.fromLaunchEnvironment() {
+                // The onboarding harness: no control server (a live instance may
+                // own the port), no bridge, no client — nothing on the machine
+                // moves, and the wizard runs against the scenario fixture.
+                isDryRunBoot = true
+                EventLog.shared.log(
+                    .setup, "dry-run: onboarding harness booted (\(scenario.rawValue))",
+                )
+                presentDryRunWizard(scenario)
+                return
+            }
+        #endif
+        // Up before provisioning gates so `sevo status` can see the app even
+        // while the setup wizard is waiting for the user.
+        controlServer.start()
         Task {
             await provisioner.refreshDetection()
             if provisioner.needsSetup {
-                showSetupWizard()
+                showSetupWizard(provisioner: provisioner) { [weak self] in
+                    self?.closeSetupWindow()
+                    self?.startRunning()
+                }
             } else {
                 startRunning()
             }
@@ -46,12 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showSetupWizard() {
-        let view = SetupView(provisioner: provisioner) { [weak self] in
-            self?.setupWindow?.close()
-            self?.setupWindow = nil
-            self?.startRunning()
-        }
+    private func showSetupWizard(
+        provisioner: Provisioner, onFinished: @escaping () -> Void,
+    ) {
+        let view = SetupView(provisioner: provisioner, onFinished: onFinished)
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.title = "Welcome to Sevoflurane"
         window.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -63,6 +79,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
     }
 
+    private func closeSetupWindow() {
+        setupWindow?.close()
+        setupWindow = nil
+    }
+
+    #if DEBUG
+        /// Whether this process booted as the onboarding harness
+        /// (`SEVO_SETUP_DRY_RUN`) rather than as the real app.
+        private var isDryRunBoot = false
+
+        /// Retains the harness provisioner for the wizard's lifetime; the app's
+        /// own `provisioner` keeps driving Settings › Repair untouched.
+        private var dryRunProvisioner: Provisioner?
+
+        /// Debug ▸ Onboarding Dry Run — reopens the wizard against the chosen
+        /// scenario at any time, real machine untouched.
+        @objc
+        func runOnboardingDryRun(_ sender: NSMenuItem) {
+            guard let raw = sender.representedObject as? String,
+                  let scenario = SetupScenario(rawValue: raw) else { return }
+            presentDryRunWizard(scenario)
+        }
+
+        private func presentDryRunWizard(_ scenario: SetupScenario) {
+            closeSetupWindow()
+            let provisioner = Provisioner(
+                environment: DryRunSetupEnvironment(scenario: scenario),
+            )
+            dryRunProvisioner = provisioner
+            showSetupWizard(provisioner: provisioner) { [weak self] in
+                EventLog.shared.log(
+                    .setup,
+                    "dry-run: wizard finished — a real run would start the bridge, "
+                        + "page, and supervisor now",
+                )
+                self?.closeSetupWindow()
+                self?.dryRunProvisioner = nil
+            }
+        }
+    #endif
+
     /// The app lives in the menu bar; closing Steam's window is not quitting.
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
@@ -73,6 +130,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quitting Sevoflurane quits Steam: the bottle comes down first so no
     /// Wine process (or its Dock icon) outlives the app.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        #if DEBUG
+            // A harness boot never started the client — and the bottle it would
+            // tear down belongs to whatever real instance is running alongside.
+            if isDryRunBoot { return .terminateNow }
+        #endif
         guard quitTask == nil else { return .terminateCancel }
         quitTask = Task(name: "Quit teardown") {
             await supervisor.shutdownForQuit()

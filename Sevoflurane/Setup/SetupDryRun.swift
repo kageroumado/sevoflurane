@@ -1,0 +1,220 @@
+#if DEBUG
+    import Foundation
+
+    /// The onboarding test harness: fixture machines for the wizard to run
+    /// against without touching this one.
+    ///
+    /// Boot straight into a scenario with `SEVO_SETUP_DRY_RUN=<raw value>` (or the
+    /// `-setup-dry-run <raw value>` launch argument in an Xcode scheme), or open
+    /// one at any time from Debug ▸ Onboarding Dry Run in a debug build. Every
+    /// simulated action writes what the live environment would have run to
+    /// `~/Library/Logs/Sevoflurane.log` under the `setup` category, prefixed
+    /// `dry-run:` — the wizard's whole story is greppable afterward.
+    enum SetupScenario: String, CaseIterable {
+        /// Nothing installed: no Rosetta, no CrossOver, no bottles.
+        case freshMachine = "fresh-machine"
+        /// CrossOver installed but its 14-day trial ran out, unlicensed.
+        case trialExpired = "trial-expired"
+        /// Licensed CrossOver without Rosetta — exercises the Rosetta stage.
+        case noRosetta = "no-rosetta"
+        /// Licensed CrossOver, Rosetta present, no bottle yet — the happy path.
+        case licensedNoBottle = "licensed-no-bottle"
+        /// The bottle exists but Steam was never installed into it.
+        case bottleWithoutSteam = "bottle-without-steam"
+        /// The NSIS installer fails — exercises the wizard's failure surface.
+        case installerFails = "installer-fails"
+        /// Everything present: the wizard should never gate on this machine.
+        case provisioned
+
+        var title: String {
+            switch self {
+            case .freshMachine: "Fresh Machine"
+            case .trialExpired: "CrossOver Trial Expired"
+            case .noRosetta: "No Rosetta"
+            case .licensedNoBottle: "Licensed, No Bottle"
+            case .bottleWithoutSteam: "Bottle Without Steam"
+            case .installerFails: "Installer Fails"
+            case .provisioned: "Fully Provisioned"
+            }
+        }
+
+        /// The scenario the process was launched into, if any.
+        static func fromLaunchEnvironment() -> SetupScenario? {
+            let value = ProcessInfo.processInfo.environment["SEVO_SETUP_DRY_RUN"]
+                ?? UserDefaults.standard.string(forKey: "setup-dry-run")
+            return value.flatMap(SetupScenario.init(rawValue:))
+        }
+
+        static let licensedCrossOver = SetupDetection.CrossOver(
+            version: "26.3", licensed: true, expires: "2030/01/01", trialExpired: false,
+        )
+        private static let expiredCrossOver = SetupDetection.CrossOver(
+            version: "26.3", licensed: false, expires: nil, trialExpired: true,
+        )
+
+        private static func bottle(hasSteam: Bool) -> SetupDetection.Bottle {
+            SetupDetection.Bottle(
+                name: SteamBottle.name,
+                url: SteamBottle.bottlesRoot.appendingPathComponent(SteamBottle.name),
+                hasSteam: hasSteam,
+            )
+        }
+
+        var fixture: SetupDetection {
+            switch self {
+            case .freshMachine:
+                SetupDetection(
+                    rosetta: false, crossover: nil, bottles: [], managedEngineVersions: [],
+                )
+            case .trialExpired:
+                SetupDetection(
+                    rosetta: true, crossover: Self.expiredCrossOver, bottles: [],
+                    managedEngineVersions: [],
+                )
+            case .noRosetta:
+                SetupDetection(
+                    rosetta: false, crossover: Self.licensedCrossOver, bottles: [],
+                    managedEngineVersions: [],
+                )
+            case .licensedNoBottle, .installerFails:
+                SetupDetection(
+                    rosetta: true, crossover: Self.licensedCrossOver, bottles: [],
+                    managedEngineVersions: [],
+                )
+            case .bottleWithoutSteam:
+                SetupDetection(
+                    rosetta: true, crossover: Self.licensedCrossOver,
+                    bottles: [Self.bottle(hasSteam: false)], managedEngineVersions: [],
+                )
+            case .provisioned:
+                SetupDetection(
+                    rosetta: true, crossover: Self.licensedCrossOver,
+                    bottles: [Self.bottle(hasSteam: true)], managedEngineVersions: [],
+                )
+            }
+        }
+    }
+
+    /// A `SetupEnvironment` that never touches the machine: every action logs the
+    /// command the live environment would have run, waits long enough for the
+    /// wizard's progress states to be visible, and mutates the scenario fixture
+    /// the way the real action would mutate the machine.
+    @MainActor
+    final class DryRunSetupEnvironment: SetupEnvironment {
+        let isSimulation = true
+
+        private(set) var state: SetupDetection
+        private let scenario: SetupScenario
+        /// Per-stage think time; tests pass `.zero`.
+        private let stepDelay: Duration
+        private var loginItem = true
+        private var detectCount = 0
+
+        init(scenario: SetupScenario, stepDelay: Duration = .seconds(2)) {
+            self.scenario = scenario
+            self.stepDelay = stepDelay
+            state = scenario.fixture
+            log("scenario '\(scenario.rawValue)' — nothing on this machine will be touched")
+        }
+
+        func detect() async -> SetupDetection {
+            detectCount += 1
+            // "Check again" on the engine step deserves a way forward: a few
+            // re-checks in, the simulated user has bought or installed CrossOver.
+            if state.usableCrossOver == nil, detectCount >= 4 {
+                state = SetupDetection(
+                    rosetta: state.rosetta,
+                    crossover: SetupScenario.licensedCrossOver,
+                    bottles: state.bottles,
+                    managedEngineVersions: state.managedEngineVersions,
+                )
+                log("simulating a licensed CrossOver appearing on re-check #\(detectCount)")
+            }
+            log("detect #\(detectCount): rosetta=\(state.rosetta) "
+                + "crossover=\(state.crossover.map { "\($0.version) licensed=\($0.licensed)" } ?? "none") "
+                + "bottles=\(state.bottles.count) withSteam=\(state.steamBottles.count)")
+            return state
+        }
+
+        func installRosetta() async -> SetupCommandOutcome {
+            log("would run: softwareupdate --install-rosetta --agree-to-license")
+            await pause()
+            state = SetupDetection(
+                rosetta: true, crossover: state.crossover, bottles: state.bottles,
+                managedEngineVersions: state.managedEngineVersions,
+            )
+            return .success()
+        }
+
+        func createBottle(named name: String) async -> SetupCommandOutcome {
+            log("would run: cxbottle --bottle \(name) --create --template win10_64")
+            await pause()
+            state = SetupDetection(
+                rosetta: state.rosetta,
+                crossover: state.crossover,
+                bottles: state.bottles + [SetupDetection.Bottle(
+                    name: name,
+                    url: SteamBottle.bottlesRoot.appendingPathComponent(name),
+                    hasSteam: false,
+                )],
+                managedEngineVersions: state.managedEngineVersions,
+            )
+            return .success()
+        }
+
+        func downloadSteamInstaller(intoBottle name: String) async throws {
+            log("would download SteamSetup.exe from the Steam CDN "
+                + "into Bottles/\(name)/drive_c/")
+            await pause()
+        }
+
+        func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
+            guard scenario != .installerFails else {
+                log("simulating installer failure: wine --bottle \(name) "
+                    + #"C:\SteamSetup.exe /S → exit 1"#)
+                return .failure("simulated NSIS failure (scenario installer-fails)")
+            }
+            log(#"would run: wine --bottle \#(name) C:\SteamSetup.exe /S"#)
+            await pause()
+            return .success()
+        }
+
+        func updateSteamClient(inBottle name: String) async {
+            log("would run: wine --bottle \(name) steam.exe -forcesteamupdate "
+                + "-forcepackagedownload -exitsteam (the long download)")
+            await pause()
+            state = SetupDetection(
+                rosetta: state.rosetta,
+                crossover: state.crossover,
+                bottles: state.bottles.map {
+                    $0.name == name
+                        ? SetupDetection.Bottle(name: $0.name, url: $0.url, hasSteam: true)
+                        : $0
+                },
+                managedEngineVersions: state.managedEngineVersions,
+            )
+        }
+
+        func configureBottle(named name: String) async {
+            log(#"would run: wine --bottle \#(name) reg add HKCU\Software\Wine\Explorer "#
+                + "/v ShowSystray /t REG_SZ /d N /f")
+        }
+
+        func setOpenAtLogin(_ enabled: Bool) throws {
+            log("would \(enabled ? "register" : "unregister") the login item")
+            loginItem = enabled
+        }
+
+        var openAtLogin: Bool {
+            loginItem
+        }
+
+        private func log(_ message: String) {
+            EventLog.shared.log(.setup, "dry-run: \(message)")
+        }
+
+        private func pause() async {
+            try? await Task.sleep(for: stepDelay)
+        }
+    }
+#endif

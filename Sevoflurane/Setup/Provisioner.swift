@@ -1,12 +1,16 @@
 import Foundation
 import Observation
-import ServiceManagement
+import os
 
 /// The idempotent provisioning state machine behind the first-run assistant
 /// and Settings › Repair (`Docs/onboarding-spec.md`). Every stage is
 /// detect → perform → re-detect; quitting mid-setup and relaunching continues
 /// where it left off because detection, not stored progress, decides what
 /// still needs doing.
+///
+/// Policy lives here; the machine-touching effects live behind
+/// ``SetupEnvironment`` so the DEBUG onboarding harness can run the same flow
+/// against a fixture machine.
 @MainActor
 @Observable
 final class Provisioner {
@@ -20,6 +24,17 @@ final class Provisioner {
     private(set) var detection: SetupDetection?
     private(set) var activity: Activity = .idle
     private let log = EventLog.shared
+    private let environment: any SetupEnvironment
+
+    init(environment: (any SetupEnvironment)? = nil) {
+        self.environment = environment ?? LiveSetupEnvironment()
+    }
+
+    /// Whether effects are simulated — the wizard badges itself so a
+    /// screenshot can never be mistaken for a real run.
+    var isDryRun: Bool {
+        environment.isSimulation
+    }
 
     /// True when the app cannot reach a working library without the wizard:
     /// no usable engine, or no bottle with Steam in it.
@@ -29,26 +44,10 @@ final class Provisioner {
     }
 
     func refreshDetection() async {
-        detection = await SetupProbe.detect()
+        detection = await environment.detect()
     }
 
     // MARK: - Stage actions
-
-    /// `softwareupdate --install-rosetta` — Apple's own license prompt and
-    /// progress; nothing of ours to configure.
-    func installRosetta() async {
-        activity = .working("Installing Rosetta…")
-        let result = await Subprocess.run(
-            "/usr/sbin/softwareupdate",
-            ["--install-rosetta", "--agree-to-license"],
-            capture: .combined,
-            timeout: .seconds(600),
-        )
-        activity = result.status == 0
-            ? .idle
-            : .failed("Rosetta install failed: \(result.output.suffix(200))")
-        await refreshDetection()
-    }
 
     /// Creates the Steam bottle if missing, silent-installs the Steam
     /// bootstrapper, then runs the headless full-client update. Each stage is
@@ -60,65 +59,60 @@ final class Provisioner {
                 + "is not wired yet (release-plan R2.2); install CrossOver for now.")
             return
         }
+        let interval = PerfProbe.setup.beginInterval("Provision")
+        defer { PerfProbe.setup.endInterval("Provision", interval) }
         let bottleName = SteamBottle.name
         do {
-            try await createBottleIfMissing(bottleName, detection: detection)
+            try await installRosettaIfMissing()
+            try await createBottleIfMissing(bottleName)
             try await installBootstrapperIfMissing(inBottle: bottleName)
             try await updateClient(inBottle: bottleName)
             activity = .done
-            log.log(.client, "provision: Steam client present in bottle \(bottleName)")
+            log.log(.setup, "provision: Steam client present in bottle \(bottleName)")
         } catch {
             activity = .failed("\(error)")
-            log.log(.client, "provision failed: \(error)")
+            log.log(.setup, "provision failed: \(error)")
         }
     }
 
-    private func createBottleIfMissing(
-        _ bottleName: String,
-        detection: SetupDetection,
-    ) async throws {
-        guard !detection.bottles.contains(where: { $0.name == bottleName }) else { return }
+    /// The whole stack is x86_64; without Rosetta neither cxbottle nor the
+    /// client runs. `softwareupdate` shows Apple's own progress; nothing of
+    /// ours to configure.
+    private func installRosettaIfMissing() async throws {
+        guard detection?.rosetta == false else { return }
+        activity = .working("Installing Rosetta…")
+        log.log(.setup, "provision: installing Rosetta")
+        let result = await environment.installRosetta()
+        guard result.succeeded else {
+            throw ProvisionError("Rosetta install failed: \(result.output.suffix(200))")
+        }
+        await refreshDetection()
+    }
+
+    private func createBottleIfMissing(_ bottleName: String) async throws {
+        guard detection?.bottles.contains(where: { $0.name == bottleName }) != true else {
+            return
+        }
         activity = .working("Creating the Steam environment…")
-        log.log(.client, "provision: creating bottle \(bottleName) (win10_64)")
-        let create = await Subprocess.run(
-            SteamBottle.crossoverBin + "/cxbottle",
-            [
-                "--bottle",
-                bottleName,
-                "--create",
-                "--template",
-                "win10_64",
-                "--description",
-                "Sevoflurane Steam",
-            ],
-            capture: .combined,
-            timeout: .seconds(600),
-        )
-        guard create.status == 0 else {
+        log.log(.setup, "provision: creating bottle \(bottleName) (win10_64)")
+        let create = await environment.createBottle(named: bottleName)
+        guard create.succeeded else {
             throw ProvisionError("bottle creation failed: \(create.output.suffix(200))")
         }
+        await refreshDetection()
     }
 
     private func installBootstrapperIfMissing(inBottle bottleName: String) async throws {
-        let bottleURL = SteamBottle.bottlesRoot.appendingPathComponent(bottleName)
-        let steamDLL = SteamBottle.steamRoot(inBottle: bottleURL)
-            .appendingPathComponent("steamclient64.dll")
-        guard !FileManager.default.fileExists(atPath: steamDLL.path) else { return }
+        guard !steamPresent(inBottle: bottleName) else { return }
 
         activity = .working("Downloading the Steam installer…")
-        log.log(.client, "provision: downloading SteamSetup.exe")
-        let (temp, _) = try await URLSession.shared.download(from: Self.steamSetupURL)
-        let setup = bottleURL.appendingPathComponent("drive_c/SteamSetup.exe")
-        try? FileManager.default.removeItem(at: setup)
-        try FileManager.default.moveItem(at: temp, to: setup)
+        log.log(.setup, "provision: downloading SteamSetup.exe")
+        try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
         activity = .working("Installing Steam…")
-        log.log(.client, "provision: silent NSIS install")
-        let install = await Self.runWine(
-            bottle: bottleName,
-            args: [#"C:\SteamSetup.exe"#, "/S"],
-        )
-        guard install.status == 0 else {
+        log.log(.setup, "provision: silent NSIS install")
+        let install = await environment.runSteamInstaller(inBottle: bottleName)
+        guard install.succeeded else {
             throw ProvisionError("Steam installer failed: \(install.output.suffix(200))")
         }
     }
@@ -127,19 +121,10 @@ final class Provisioner {
     /// trick); doubles as the update pass on existing installs.
     private func updateClient(inBottle bottleName: String) async throws {
         activity = .working("Downloading Steam (this is the long step)…")
-        log.log(.client, "provision: headless client update")
-        _ = await Self.runWine(
-            bottle: bottleName,
-            args: [
-                SteamBottle.exeWindowsPath,
-                "-forcesteamupdate",
-                "-forcepackagedownload",
-                "-exitsteam",
-            ],
-            timeout: .seconds(1800),
-        )
+        log.log(.setup, "provision: headless client update")
+        await environment.updateSteamClient(inBottle: bottleName)
         await refreshDetection()
-        guard detectionHasSteam else {
+        guard steamPresent(inBottle: bottleName) else {
             throw ProvisionError("client update finished but steamclient64.dll is missing")
         }
     }
@@ -155,10 +140,7 @@ final class Provisioner {
     func configureBottle(named name: String) async {
         // Leaves `activity` alone: the wizard's Continue button gates on
         // `.done`, which this reassert must not overwrite.
-        _ = await Self.runWine(bottle: name, args: [
-            "reg", "add", #"HKCU\Software\Wine\Explorer"#,
-            "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
-        ])
+        await environment.configureBottle(named: name)
     }
 
     /// The wizard's whole sequence: install Steam, then apply the idempotent
@@ -172,46 +154,24 @@ final class Provisioner {
 
     func setOpenAtLogin(_ enabled: Bool) {
         do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            try environment.setOpenAtLogin(enabled)
         } catch {
-            log.log(.supervisor, "open-at-login change failed: \(error)")
+            log.log(.setup, "open-at-login change failed: \(error)")
         }
     }
 
     var openAtLogin: Bool {
-        SMAppService.mainApp.status == .enabled
+        environment.openAtLogin
     }
 
-    private var detectionHasSteam: Bool {
-        !(detection?.steamBottles.isEmpty ?? true)
+    private func steamPresent(inBottle bottleName: String) -> Bool {
+        detection?.bottles.first { $0.name == bottleName }?.hasSteam == true
     }
-
-    // MARK: - Process plumbing
 
     private struct ProvisionError: Error, CustomStringConvertible {
         let description: String
         init(_ description: String) {
             self.description = description
         }
-    }
-
-    private static let steamSetupURL =
-        URL(string: "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe")!
-
-    /// Wine's own chatter still comes back combined: provisioning quotes it
-    /// in failure messages, and these invocations are rare and bounded.
-    private nonisolated static func runWine(
-        bottle: String, args: [String], timeout: Duration = .seconds(600),
-    ) async -> (status: Int32?, output: String) {
-        await Subprocess.run(
-            SteamBottle.crossoverBin + "/wine",
-            ["--bottle", bottle, "--wait-children"] + args,
-            capture: .combined,
-            timeout: timeout,
-        )
     }
 }

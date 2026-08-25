@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import os
 
 /// Keeps the bottled Steam client alive so the app survives it.
 ///
@@ -170,7 +171,14 @@ final class ClientSupervisor {
 
     private func probe() async {
         if health == .paused || isRestarting || isQuitting { return }
+        let cycle = PerfProbe.supervisor.beginInterval("ProbeCycle")
+        await probeChain()
+        PerfProbe.supervisor.endInterval(
+            "ProbeCycle", cycle, "\(self.statusText, privacy: .public)",
+        )
+    }
 
+    private func probeChain() async {
         let wineWindows = observeWineWindows()
 
         let client = await ClientLifecycle.probeClient()
@@ -314,6 +322,9 @@ final class ClientSupervisor {
     ) {
         guard health != newHealth else { return }
         health = newHealth
+        if newHealth == .healthy {
+            PerfProbe.poi.emitEvent("Healthy")
+        }
         log.log(category, message)
     }
 
@@ -323,6 +334,8 @@ final class ClientSupervisor {
         guard !isRestarting, !isQuitting else { return }
         isRestarting = true
         defer { isRestarting = false }
+        let ladder = PerfProbe.supervisor.beginInterval("ClientRestart")
+        defer { PerfProbe.supervisor.endInterval("ClientRestart", ladder) }
 
         recentRestarts.removeAll { $0.timeIntervalSinceNow < -600 }
         guard recentRestarts.count < 3 else {
@@ -364,6 +377,8 @@ final class ClientSupervisor {
     /// a crash loop that survives *that* gets `gaveUp`: the machine needs a
     /// human.
     private func escalateCrashLoop() async {
+        let hygiene = PerfProbe.supervisor.beginInterval("CrashLoopHygiene")
+        defer { PerfProbe.supervisor.endInterval("CrashLoopHygiene", hygiene) }
         let dumps = ClientLifecycle.recentDumpCount()
         guard !hygieneTried else {
             transition(
@@ -406,6 +421,7 @@ final class ClientSupervisor {
             health = .restarting("waiting for the client (\(waited)s)")
             try? await Task.sleep(for: .seconds(3))
             if await ClientLifecycle.probeClient() == .up {
+                PerfProbe.poi.emitEvent("ClientBack", "up after ~\(waited)s")
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")
                 health = .restarting("reloading the UI")
                 lastPageRecovery = .now
@@ -515,5 +531,4 @@ final class ClientSupervisor {
         }
         return false
     }
-
 }
