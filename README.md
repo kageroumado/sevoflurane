@@ -56,7 +56,7 @@ Requirements: macOS 26+, Apple Silicon, Xcode 26+, CrossOver (14-day trial
 works; the first-run assistant creates the bottle and installs Steam itself).
 
 1. Build and launch the app — first run walks through setup; after that the
-   app starts the bottled client with CDP on :8081, boots Steam's UI through
+   app starts the bottled client with CDP on :8765, boots Steam's UI through
    the in-process bridge, and supervises from there
 2. Diagnostics: `sevo doctor` (below) · event log at
    `~/Library/Logs/Sevoflurane.log` · `sevo eval '<js>'` evaluates in the page
