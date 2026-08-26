@@ -19,12 +19,17 @@ nonisolated struct EngineManifest: Decodable, Sendable {
 
     static let url = URL(string: "https://kagerou.glass/sevoflurane/engine.json")!
 
+    /// Points the installer at another manifest — a `file://` one is how a
+    /// clean machine is validated without publishing anything. Set once at
+    /// process start, same contract as ``ClientLifecycle/log``.
+    nonisolated(unsafe) static var overrideURL: URL?
+
     var stable: Release? {
         channels["stable"]
     }
 
-    static func fetch(from url: URL = url) async throws -> EngineManifest {
-        let (data, _) = try await URLSession.shared.data(from: url)
+    static func fetch(from url: URL? = nil) async throws -> EngineManifest {
+        let (data, _) = try await URLSession.shared.data(from: url ?? overrideURL ?? Self.url)
         return try decode(data)
     }
 

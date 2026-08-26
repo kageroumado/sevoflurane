@@ -58,6 +58,14 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `steam in a differently named bottle still needs setup`() async {
+        let (provisioner, env) = makeProvisioner(.provisioned)
+        env.renameSteamBottle(to: "SomeOtherBottle")
+        await provisioner.refreshDetection()
+        #expect(provisioner.needsSetup)
+    }
+
+    @Test
     func `provisioned machine needs no setup`() async {
         let (provisioner, _) = makeProvisioner(.provisioned)
         await provisioner.refreshDetection()

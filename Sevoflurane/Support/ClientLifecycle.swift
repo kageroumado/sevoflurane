@@ -127,16 +127,6 @@ nonisolated enum ClientLifecycle {
     /// `@concurrent` so the spawn never runs on the calling actor.
     @concurrent
     static func launchClient() async {
-        // A managed engine's wrapper must be intact before every start: the
-        // client's self-updater replaces it with a fresh real exe, and an
-        // unwrapped webhelper renders black on OSS Wine.
-        if Engine.active != .crossover {
-            do {
-                try WebhelperWrapper.apply(from: Engine.active, toBottle: SteamBottle.root)
-            } catch {
-                log("webhelper wrapper reapply failed: \(error)")
-            }
-        }
         let process = Process()
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches
@@ -151,7 +141,7 @@ nonisolated enum ClientLifecycle {
                 "-cef-enable-debugging",
                 "-devtools-port",
                 String(BridgePorts.cdp),
-            ],
+            ] + Engine.active.cefArguments,
         )
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments

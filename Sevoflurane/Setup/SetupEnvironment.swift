@@ -120,7 +120,14 @@ final class LiveSetupEnvironment: SetupEnvironment {
             } catch {
                 return .failure("\(error)")
             }
-            return await runWine(bottle: name, args: ["wineboot", "-u"])
+            let boot = await runWine(bottle: name, args: ["wineboot", "-u"])
+            guard boot.succeeded else { return boot }
+            // A fresh prefix reports a pre-Windows-10 version, and Steam
+            // then installs its legacy CEF build instead of the modern one
+            // (measured on a clean machine: `bin/cef/cef.win7x64` and no
+            // `cef.win64`). This is the plain-Wine equivalent of the
+            // `win10_64` template CrossOver bottles are created from.
+            return await runWine(bottle: name, args: ["winecfg", "/v", "win10"])
         }
     }
 

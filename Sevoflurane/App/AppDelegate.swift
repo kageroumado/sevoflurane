@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        SetupLog.log = { EventLog.enqueue(.setup, $0) }
         PerfProbe.poi.emitEvent("Launch")
         gameLaunchWatch.onGameWindowUp = { [weak self] in
             self?.host.gameWindowDidAppear()

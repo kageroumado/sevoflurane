@@ -23,7 +23,6 @@ final class Provisioner {
 
     private(set) var detection: SetupDetection?
     private(set) var activity: Activity = .idle
-    private let log = EventLog.shared
     private let environment: any SetupEnvironment
 
     init(environment: (any SetupEnvironment)? = nil) {
@@ -37,10 +36,16 @@ final class Provisioner {
     }
 
     /// True when the app cannot reach a working library without the wizard:
-    /// no usable engine, or no bottle with Steam in it.
+    /// no usable engine, or no Steam in the bottle we actually drive.
+    ///
+    /// The bottle's *name* matters: every path below this — `SteamBottle.root`,
+    /// the launch lines, the kill ladder — addresses `SteamBottle.name`, so a
+    /// Steam sitting in some other bottle is not a provisioned machine. (The
+    /// multi-bottle picker that would adopt one is release-plan R2.3.)
     var needsSetup: Bool {
         guard let detection else { return false }
-        return !(detection.hasEngine && !detection.steamBottles.isEmpty)
+        let ours = detection.steamBottles.contains { $0.name == SteamBottle.name }
+        return !(detection.hasEngine && ours)
     }
 
     func refreshDetection() async {
@@ -64,10 +69,10 @@ final class Provisioner {
             try await installBootstrapperIfMissing(inBottle: bottleName)
             try await updateClient(inBottle: bottleName)
             activity = .done
-            log.log(.setup, "provision: Steam client present in bottle \(bottleName)")
+            SetupLog.log("provision: Steam client present in bottle \(bottleName)")
         } catch {
             activity = .failed("\(error)")
-            log.log(.setup, "provision failed: \(error)")
+            SetupLog.log("provision failed: \(error)")
         }
     }
 
@@ -77,7 +82,7 @@ final class Provisioner {
     private func installRosettaIfMissing() async throws {
         guard detection?.rosetta == false else { return }
         activity = .working("Installing Rosetta…")
-        log.log(.setup, "provision: installing Rosetta")
+        SetupLog.log("provision: installing Rosetta")
         let result = await environment.installRosetta()
         guard result.succeeded else {
             throw ProvisionError("Rosetta install failed: \(result.output.suffix(200))")
@@ -92,9 +97,9 @@ final class Provisioner {
         guard let detection, detection.usableCrossOver == nil else { return }
         if detection.managedEngineVersions.isEmpty {
             activity = .working("Installing the game engine…")
-            log.log(.setup, "provision: installing managed engine")
+            SetupLog.log("provision: installing managed engine")
             let result = await environment.installEngine { phase in
-                EventLog.enqueue(.setup, "engine install: \(phase)")
+                SetupLog.log("engine install: \(phase)")
             }
             guard result.succeeded else {
                 throw ProvisionError("engine install failed: \(result.output.suffix(200))")
@@ -115,7 +120,7 @@ final class Provisioner {
             return
         }
         activity = .working("Creating the Steam environment…")
-        log.log(.setup, "provision: creating bottle \(bottleName) (win10_64)")
+        SetupLog.log("provision: creating bottle \(bottleName) (win10_64)")
         let create = await environment.createBottle(named: bottleName)
         guard create.succeeded else {
             throw ProvisionError("bottle creation failed: \(create.output.suffix(200))")
@@ -127,11 +132,11 @@ final class Provisioner {
         guard !steamPresent(inBottle: bottleName) else { return }
 
         activity = .working("Downloading the Steam installer…")
-        log.log(.setup, "provision: downloading SteamSetup.exe")
+        SetupLog.log("provision: downloading SteamSetup.exe")
         try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
         activity = .working("Installing Steam…")
-        log.log(.setup, "provision: silent NSIS install")
+        SetupLog.log("provision: silent NSIS install")
         let install = await environment.runSteamInstaller(inBottle: bottleName)
         guard install.succeeded else {
             throw ProvisionError("Steam installer failed: \(install.output.suffix(200))")
@@ -142,7 +147,7 @@ final class Provisioner {
     /// trick); doubles as the update pass on existing installs.
     private func updateClient(inBottle bottleName: String) async throws {
         activity = .working("Downloading Steam (this is the long step)…")
-        log.log(.setup, "provision: headless client update")
+        SetupLog.log("provision: headless client update")
         await environment.updateSteamClient(inBottle: bottleName)
         await refreshDetection()
         guard steamPresent(inBottle: bottleName) else {
@@ -177,7 +182,7 @@ final class Provisioner {
         do {
             try environment.setOpenAtLogin(enabled)
         } catch {
-            log.log(.setup, "open-at-login change failed: \(error)")
+            SetupLog.log("open-at-login change failed: \(error)")
         }
     }
 

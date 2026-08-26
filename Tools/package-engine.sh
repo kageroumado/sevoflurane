@@ -12,7 +12,6 @@
 #               --gptk <dir> pointing at the mounted GPTk `lib/` directory.
 #               Apple's license allows non-commercial redistribution with the
 #               license text riding along; it is copied in as LICENSE.
-#   webhelper-wrapper.exe   compiled here from webhelper-wrapper/ (mingw-w64)
 #
 # --from-crossover copies dxvk/dxmt/d3dmetal payloads out of the local
 # CrossOver install instead of downloading. FOR LOCAL TESTING ONLY — never
@@ -54,10 +53,6 @@ ROOT="$WORK/$VERSION"
 mkdir -p "$ROOT"
 
 step() { print -P "%F{cyan}==>%f $1"; }
-
-step "webhelper wrapper (mingw-w64)"
-make -C "$TOOLS_DIR/webhelper-wrapper" >/dev/null
-cp "$TOOLS_DIR/webhelper-wrapper/webhelper-wrapper.exe" "$ROOT/"
 
 step "wine: $WINE_URL"
 curl -fsSL "$WINE_URL" -o "$WORK/wine.tar.xz"

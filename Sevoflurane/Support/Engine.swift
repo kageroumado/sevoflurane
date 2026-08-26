@@ -7,7 +7,7 @@ import Foundation
 /// the kill ladder — is engine-agnostic; the differences live entirely in how
 /// a wine invocation is assembled (`CrossOver's wrapper takes `--bottle`,
 /// plain WineHQ is driven by `WINEPREFIX`) and where bottles live on disk.
-nonisolated enum Engine: Equatable, Sendable {
+nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     case crossover
     /// A managed engine under ``managedRoot``, one directory per version
     /// (layout produced by `Tools/package-engine.sh`).
@@ -64,6 +64,13 @@ nonisolated enum Engine: Equatable, Sendable {
         return .crossover
     }
 
+    var description: String {
+        switch self {
+        case .crossover: "CrossOver"
+        case let .managed(version): "built-in \(version)"
+        }
+    }
+
     // MARK: - Paths
 
     /// The engine's own directory (the CrossOver tree, or the versioned
@@ -110,15 +117,24 @@ nonisolated enum Engine: Equatable, Sendable {
         }
     }
 
-    /// The compiled steamwebhelper wrapper that rides managed engines
-    /// (CEF renders black on OSS Wine without its flags); nil for CrossOver,
-    /// which carries the fix in its own Wine.
-    var webhelperWrapperURL: URL? {
+    /// CEF needs its GPU process disabled under plain Wine or the client's
+    /// windows render black. `steam.exe` forwards these to steamwebhelper
+    /// itself — `-cef-disable-gpu` expands to `--disable-gpu`,
+    /// `--disable-gpu-compositing` and `--in-process-gpu`, and
+    /// `-cef-disable-sandbox` to `--no-sandbox` (measured on a clean
+    /// machine). CrossOver's own wine already injects the same set, so it
+    /// needs nothing here.
+    ///
+    /// Passing them on Steam's own command line is what makes this durable:
+    /// the client's bootstrapper verifies and restores its files on every
+    /// start, so anything that patches steamwebhelper.exe is reverted before
+    /// it ever runs.
+    var cefArguments: [String] {
         switch self {
         case .crossover:
-            nil
+            []
         case .managed:
-            root.appendingPathComponent("webhelper-wrapper.exe")
+            ["-cef-disable-gpu", "-cef-disable-sandbox"]
         }
     }
 

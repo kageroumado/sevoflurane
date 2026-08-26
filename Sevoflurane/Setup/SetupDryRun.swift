@@ -136,6 +136,19 @@
             return state
         }
 
+        /// Renames the fixture's Steam-bearing bottle, so a test can pose the
+        /// "their Steam lives somewhere else" machine.
+        func renameSteamBottle(to name: String) {
+            state = SetupDetection(
+                rosetta: state.rosetta,
+                crossover: state.crossover,
+                bottles: state.bottles.map {
+                    SetupDetection.Bottle(name: name, url: $0.url, hasSteam: $0.hasSteam)
+                },
+                managedEngineVersions: state.managedEngineVersions,
+            )
+        }
+
         func installRosetta() async -> SetupCommandOutcome {
             log("would run: softwareupdate --install-rosetta --agree-to-license")
             await pause()
