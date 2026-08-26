@@ -89,6 +89,24 @@ struct BottleGraphicsTests {
     }
 
     @Test
+    func `a new variable lands above the trailing comment`() throws {
+        let edited = BottleGraphics.settingVariable("WINEDXVK", to: "1", inConf: conf)
+        let lines = edited.components(separatedBy: "\n")
+        let added = try #require(lines.firstIndex { $0.contains("WINEDXVK") })
+        let comment = try #require(lines.firstIndex { $0.contains(";;\"PROMPT\"") })
+        #expect(added < comment)
+    }
+
+    @Test
+    func `writes round-trip to the same file`() {
+        let toDXMT = BottleGraphics.settingVariable("CX_GRAPHICS_BACKEND", to: "dxmt", inConf: conf)
+        let back = BottleGraphics.settingVariable(
+            "CX_GRAPHICS_BACKEND", to: "", inConf: toDXMT,
+        )
+        #expect(back == conf)
+    }
+
+    @Test
     func `removing an absent variable changes nothing`() {
         #expect(BottleGraphics.settingVariable("WINEDXVK", to: nil, inConf: conf) == conf)
     }

@@ -159,8 +159,13 @@ nonisolated enum BottleGraphics {
         guard inSection else {
             return text + "\n[EnvironmentVariables]\n\"\(name)\" = \"\(value)\"\n"
         }
+        // Lands after the section's last real assignment: CrossOver parks
+        // commented-out examples at the end of the section, and appending
+        // below those scatters the file a little more on every write.
         var insertion = sectionEnd
-        while insertion > 0, lines[insertion - 1].trimmingCharacters(in: .whitespaces).isEmpty {
+        while insertion > 0 {
+            let line = lines[insertion - 1].trimmingCharacters(in: .whitespaces)
+            guard line.isEmpty || line.hasPrefix(";") else { break }
             insertion -= 1
         }
         lines.insert("\"\(name)\" = \"\(value)\"", at: insertion)

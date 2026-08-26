@@ -212,14 +212,93 @@ struct BottleCommand: AsyncParsableCommand {
         abstract: "CrossOver bottles and whether Steam is installed in each.",
     )
 
-    @Argument(help: "list") var verb: String = "list"
+    @Argument(help: "list | config") var verb: String = "list"
+    @Argument(help: "Config key: renderer | msync. Omit to print every key.")
+    var key: String?
+    @Argument(help: "New value. Omit to read the key.") var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
-        guard verb == "list" else {
-            Sevo.printError("bottle \(verb): not implemented yet (Docs/cli-mcp-spec.md)")
+        switch verb {
+        case "list":
+            try await list()
+        case "config":
+            try config()
+        default:
+            Sevo.printError("bottle \(verb): unknown verb (list | config)")
             throw SevoExit.badInvocation
         }
+    }
+
+    /// Reads or writes the graphics knobs the app's Settings › Graphics pane
+    /// drives, against the same store (`Sevoflurane/Support/BottleGraphics.swift`).
+    private func config() throws {
+        var selection = current()
+        guard let key else {
+            if asJSON {
+                print(Sevo.json([
+                    "renderer": selection.renderer.rawValue,
+                    "msync": selection.msync,
+                ], pretty: true))
+            } else {
+                print("renderer \(selection.renderer.rawValue)")
+                print("msync \(selection.msync)")
+            }
+            return
+        }
+        guard let value else {
+            switch key {
+            case "renderer": print(selection.renderer.rawValue)
+            case "msync": print(selection.msync)
+            default:
+                Sevo.printError("unknown key '\(key)' (renderer | msync)")
+                throw SevoExit.badInvocation
+            }
+            return
+        }
+        switch key {
+        case "renderer":
+            guard let renderer = Renderer(rawValue: value) else {
+                Sevo.printError("renderer must be one of: "
+                    + Renderer.allCases.map(\.rawValue).joined(separator: ", "))
+                throw SevoExit.badInvocation
+            }
+            selection.renderer = renderer
+        case "msync":
+            guard let flag = Bool(value) else {
+                Sevo.printError("msync must be true or false")
+                throw SevoExit.badInvocation
+            }
+            selection.msync = flag
+        default:
+            Sevo.printError("unknown key '\(key)' (renderer | msync)")
+            throw SevoExit.badInvocation
+        }
+        do {
+            try apply(selection)
+        } catch {
+            Sevo.printError("\(error)")
+            throw SevoExit.failed
+        }
+        print("\(key) \(value) — takes effect at the next game launch")
+    }
+
+    private func current() -> BottleGraphics.Selection {
+        Engine.active == .crossover
+            ? BottleGraphics.selection(forBottle: SteamBottle.root)
+            : BottleGraphics.managedSelection()
+    }
+
+    private func apply(_ selection: BottleGraphics.Selection) throws {
+        switch Engine.active {
+        case .crossover:
+            try BottleGraphics.apply(selection, toBottle: SteamBottle.root)
+        case .managed:
+            BottleGraphics.setManagedSelection(selection)
+        }
+    }
+
+    private func list() async throws {
         let bottles = await SetupProbe.detect().bottles
         if asJSON {
             let rows = bottles.map { ["name": $0.name, "steam": $0.hasSteam] as [String: Any] }
