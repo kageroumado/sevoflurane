@@ -69,8 +69,34 @@ final class SteamWebHost {
 
     @ObservationIgnored private var context: SteamWindow?
     @ObservationIgnored private var contextWindow: NSWindow?
+    @ObservationIgnored private var contextMoveObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var popups: [ObjectIdentifier: SteamWindow] = [:]
     @ObservationIgnored private var coordinator: SteamWebCoordinator?
+
+    private static let contextParkOrigin = CGPoint(x: -20_000, y: -20_000)
+
+    /// Every window the host owns, for `sevo` diagnostics
+    /// (control endpoint `GET /windows`).
+    func windowInventory() -> [[String: Any]] {
+        var rows: [[String: Any]] = []
+        if let contextWindow {
+            rows.append([
+                "name": "SharedJSContext",
+                "role": "context",
+                "frame": NSStringFromRect(contextWindow.frame),
+                "visible": contextWindow.isVisible,
+            ])
+        }
+        for popup in popups.values {
+            rows.append([
+                "name": popup.name,
+                "role": String(describing: popup.role),
+                "frame": NSStringFromRect(popup.appKitFrame),
+                "visible": popup.isWindowVisible,
+            ])
+        }
+        return rows
+    }
 
     // MARK: - Boot
 
@@ -107,21 +133,38 @@ final class SteamWebHost {
         // The context renders nothing, but WebKit only schedules a web view
         // that lives in a window, so it is parked off-screen.
         let window = NSWindow(
-            contentRect: NSRect(
-                x: -20_000,
-                y: -20_000,
-                width: 1280,
-                height: 800,
-            ),
+            contentRect: NSRect(origin: Self.contextParkOrigin, size: CGSize(width: 1280, height: 800)),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false,
         )
+        // A display-mode change (a game going fullscreen) makes the window
+        // server relocate off-screen windows onto a live screen, where this
+        // one showed as a bare white 1280×800 rectangle. Invisible and
+        // click-through, so even a brief surfacing shows nothing — and the
+        // move observer below puts it straight back.
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.ignoresMouseEvents = true
+        window.isExcludedFromWindowsMenu = true
+        window.collectionBehavior = [.stationary, .ignoresCycle]
         let container = NSView(frame: webView.frame)
         container.addSubview(webView)
         window.contentView = container
         window.orderBack(nil)
         contextWindow = window
+        contextMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: window, queue: .main,
+        ) { [weak window] _ in
+            MainActor.assumeIsolated {
+                guard let window, window.frame.origin != Self.contextParkOrigin else { return }
+                EventLog.shared.log(
+                    .window,
+                    "context window moved to \(window.frame.origin) (display change) — re-parking",
+                )
+                window.setFrameOrigin(Self.contextParkOrigin)
+            }
+        }
 
         status = "starting Steam"
         PerfProbe.poi.emitEvent("PageBoot")

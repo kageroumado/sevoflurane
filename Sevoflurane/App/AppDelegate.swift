@@ -10,7 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let bridge = SteamBridge()
     let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host)
-    private lazy var controlServer = ControlServer(supervisor: supervisor)
+    private let gameLaunchWatch = GameLaunchWatch()
+    private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)
     private var menuMirror: SteamMenuMirror?
     private var setupWindow: NSWindow?
 
@@ -55,6 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startRunning() {
         Task {
             await bridge.start()
+            await bridge.setGameLaunchHandler { [weak self] in
+                Task { @MainActor in self?.gameLaunchWatch.noteLaunchRequested() }
+            }
             host.bootstrap()
             supervisor.start()
             // Idempotent bottle config (tray suppression, …) — reasserted on

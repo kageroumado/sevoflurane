@@ -29,6 +29,14 @@ final class SteamWindow: NSObject {
         window?.frame ?? .zero
     }
 
+    /// Whether the hosting window is ordered in, for the `/windows` inventory.
+    /// A menu counts as visible only when faded in — it stays ordered in for
+    /// its whole life at alpha 0.
+    var isWindowVisible: Bool {
+        guard let window, window.isVisible else { return false }
+        return role != .menu || window.alphaValue > 0
+    }
+
     private var requestedSize: CGSize
     private var requestedOrigin: CGPoint?
     private var minimumSize: CGSize?
@@ -304,10 +312,25 @@ final class SteamWindow: NSObject {
     /// opens; it carries the size limits and creation flags that the standard
     /// window-features string has no room for.
     func adopt(name: String, parameters: String) {
-        guard window == nil else { return }
+        guard window == nil else {
+            // The 400ms orphan fallback won the race against Steam's real
+            // adoption: the window is built, but the identity should still
+            // land — the name is what `/windows` and menu parent lookups key
+            // on.
+            if self.name.isEmpty, !name.isEmpty {
+                self.name = name
+                EventLog.shared.log(.window, "late adoption: orphan popup is \(name)")
+            }
+            return
+        }
         if !name.isEmpty {
             self.name = name
             role = SteamWindowRole(popupName: name)
+        } else {
+            EventLog.shared.log(
+                .window,
+                "adopting orphan popup (\(Int(requestedSize.width))×\(Int(requestedSize.height)))",
+            )
         }
         let query = URLComponents(string: "about:blank?" + parameters)?
             .queryItems ?? []

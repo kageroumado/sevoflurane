@@ -104,14 +104,17 @@ final class EventLog {
             try? manager.removeItem(at: old)
             try? manager.moveItem(at: url, to: old)
         }
-        if !manager.fileExists(atPath: url.path) {
-            try? manager.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true,
-            )
-            manager.createFile(atPath: url.path, contents: nil)
-        }
-        handle = try? FileHandle(forWritingTo: url)
-        _ = try? handle?.seekToEnd()
+        try? manager.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+        )
+        // O_APPEND, not a one-time seek: several processes share this file
+        // (the app, a second harness instance, a test run), and a handle
+        // whose offset was fixed at open time overwrites whatever the others
+        // appended since. The kernel repositions an O_APPEND write to the
+        // real end every time.
+        let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { return }
+        handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     }
 }

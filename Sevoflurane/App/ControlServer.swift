@@ -9,10 +9,12 @@ import Foundation
 @MainActor
 final class ControlServer {
     private let supervisor: ClientSupervisor
+    private let host: SteamWebHost
     private var server: HTTPServer?
 
-    init(supervisor: ClientSupervisor) {
+    init(supervisor: ClientSupervisor, host: SteamWebHost) {
         self.supervisor = supervisor
+        self.host = host
     }
 
     func start() {
@@ -37,6 +39,8 @@ final class ControlServer {
             return status()
         case ("GET", "/log/tail"):
             return Self.logTail(query: request.query)
+        case ("GET", "/windows"):
+            return windows()
         case ("POST", "/client/restart"):
             supervisor.restartNow()
             return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
@@ -76,6 +80,15 @@ final class ControlServer {
             + #""detail":\#(JSLiteral.string(supervisor.statusText)),"#
             + #""needsAttention":\#(supervisor.needsAttention)}"#
         return Self.json(body)
+    }
+
+    /// Every window the app owns — the diagnostic for "what is this window
+    /// Sevoflurane put on my screen".
+    private func windows() -> HTTPResponse {
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: host.windowInventory(), options: [.sortedKeys],
+        ) else { return .error(500, "inventory failed") }
+        return .ok(data, type: "application/json")
     }
 
     private nonisolated static func logTail(query: String) -> HTTPResponse {

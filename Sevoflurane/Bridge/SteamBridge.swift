@@ -52,6 +52,15 @@ actor SteamBridge {
     private var newestPage: ObjectIdentifier?
     private let shim: String
 
+    /// Fired on `SteamClient.Apps.RunGame` — the one choke point every game
+    /// launch passes through (menu bar, library Play, `steam://run`). The app
+    /// uses it to arm ``GameLaunchWatch``.
+    private var onGameLaunch: (@Sendable () -> Void)?
+
+    func setGameLaunchHandler(_ handler: @escaping @Sendable () -> Void) {
+        onGameLaunch = handler
+    }
+
     init() {
         if let url = Bundle.main.url(forResource: "steamclient_shim", withExtension: "js"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
@@ -311,6 +320,9 @@ actor SteamBridge {
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
               path.hasPrefix("SteamClient.") else { return }
+        if path == "SteamClient.Apps.RunGame" {
+            onGameLaunch?()
+        }
         let call = PerfProbe.bridge.beginInterval(
             "SteamClientCall",
             id: PerfProbe.bridge.makeSignpostID(),
