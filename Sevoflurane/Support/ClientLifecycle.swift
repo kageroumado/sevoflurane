@@ -160,6 +160,47 @@ nonisolated enum ClientLifecycle {
         }
     }
 
+    // MARK: - Client window suppression
+
+    /// Hides any CEF popup window the bottled client has put on screen.
+    ///
+    /// The client's CEF windows exist to keep Steam's JS running — rendering
+    /// is this app's job, and the page mirrors every popup natively
+    /// (``SteamWebHost/adoptPopup(configuration:features:)``). The client
+    /// still shows its own window when it decides UI is needed — the
+    /// first-run login window above all, which OSS Wine paints as a black
+    /// rectangle. Each visible popup is put away through its own
+    /// `SteamClient.Window` binding, the same call the client uses to keep
+    /// the same window parked when signed in, so the popup's JS stays alive
+    /// and only the pixels go. `SharedJSContext` is never a candidate: popups
+    /// are the targets the popup manager opened onto `about:blank`.
+    ///
+    /// Returns the names of the windows it hid, for the caller's log.
+    static func hideVisibleClientPopups() async -> [String] {
+        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
+            return []
+        }
+        let script = """
+        (function () {
+          if (document.visibilityState !== "visible") return "";
+          if (!window.SteamClient || !SteamClient.Window
+              || !SteamClient.Window.HideWindow) return "";
+          SteamClient.Window.HideWindow();
+          return window.name || "unnamed popup";
+        })()
+        """
+        var hidden: [String] = []
+        for target in targets {
+            guard target["type"] as? String == "page",
+                  (target["url"] as? String)?.hasPrefix("about:blank") == true,
+                  let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init),
+                  let name = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
+                  !name.isEmpty else { continue }
+            hidden.append(name)
+        }
+        return hidden
+    }
+
     // MARK: - Crash-loop hygiene
 
     /// Fresh dumps in the client's `dumps/` folder — the crash-loop signature

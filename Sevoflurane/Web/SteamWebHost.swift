@@ -25,6 +25,13 @@ final class SteamWebHost {
     /// The desktop window, once Steam has opened it.
     private(set) var desktop: SteamWindow?
 
+    /// Whether the page is showing Steam's login window — the signed-out
+    /// state in which Steam's services legitimately never initialize until
+    /// the user acts. The supervisor holds its recovery ladder on this.
+    var isAwaitingSignIn: Bool {
+        popups.values.contains { $0.role == .login && $0.isWindowVisible }
+    }
+
     /// The menu-bar mirror, refreshed when the desktop window comes up.
     @ObservationIgnored weak var menuMirror: SteamMenuMirror?
 
@@ -452,6 +459,12 @@ final class SteamWebHost {
         // created after the desktop window, so anchoring on the desktop alone
         // reads an empty strip. Re-reading an unchanged strip is a no-op.
         menuMirror?.refresh()
+        // Popups with a standard title strip get the macOS chrome treatment
+        // too: Steam's own window buttons hidden, the strip reported as the
+        // drag surface.
+        if [.login, .controllerConfig, .auxiliary].contains(window.role) {
+            window.webView.evaluateJavaScript(SteamDesktopChrome.popupScript)
+        }
         guard window.role == .desktop else { return }
         desktop = window
         status = "Steam is ready"

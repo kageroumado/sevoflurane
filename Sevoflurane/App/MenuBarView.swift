@@ -75,6 +75,14 @@ struct MenuBarView: View {
                 tint: nil,
                 action: nil,
             )
+        case .waitingForSignIn:
+            HealthCard(
+                symbol: "person.crop.circle",
+                title: "Waiting for sign-in",
+                detail: "Sign in to Steam in the login window to finish setting up.",
+                tint: nil,
+                action: nil,
+            )
         case .degraded:
             HealthCard(
                 symbol: "exclamationmark.triangle.fill",
@@ -312,6 +320,7 @@ struct MenuBarView: View {
             switch supervisor.health {
             case .starting: ("Starting", .gray)
             case .healthy: ("Healthy", .green)
+            case .waitingForSignIn: ("Signed out", .gray)
             case .degraded: ("Degraded", .orange)
             case .restarting: ("Restarting", .accentColor)
             case .gaveUp: ("Stopped", .red)

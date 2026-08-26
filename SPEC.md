@@ -142,6 +142,10 @@ every popup, and the name is the classification: `SP Desktop`, `SP BPM`,
 `contextmenu_<n>`. Big Picture in particular wants a *real* title bar outside
 the content rather than the desktop window's overlay treatment — it is meant to
 run full screen, and the traffic lights otherwise sit on top of its own bar.
+Popups with the standard title strip (login, controller config, friends chat)
+get the desktop treatment via `SteamDesktopChrome.popupScript`: their strip is
+`.TitleBar.title-area` itself, so Steam's `.title-bar-actions` cluster is
+hidden and the strip's empty stretch is reported as the drag surface.
 
 **`steam://` must not escape.** Steam's menus navigate the window to
 `steam://open/about` and expect the host to intercept. WKWebView hands unknown
@@ -280,16 +284,23 @@ badge — CodeWeavers' position is definitive; no vendor ships macOS/Wine module
 
 ### Login
 
-First run: the real (Wine) login window is shown once — the only time translated UI
-is ever visible — or, stretch goal, a native QR flow driven through
-`SteamClient.Auth`. The session persists in the bottle; subsequent launches are
-`-silent` and invisible.
+Sign-in renders natively like every other window: the page runs the same
+signed-out flow the client does, opens `SP DesktopLoginWindow`, and that popup
+is adopted as a real `NSWindow`. The bottled client opens its own CEF login
+window too — under OSS Wine it paints as a black rectangle — so the supervisor
+hides every CEF popup the client puts on screen through the popup's own
+`SteamClient.Window` binding (`ClientLifecycle.hideVisibleClientPopups`): the
+client's CEF keeps Steam's JS running and renders nothing. While the login
+window is up, Steam's services legitimately stay uninitialized, so the
+supervisor holds in `waitingForSignIn` rather than escalating — a reload there
+detaches the login window mid-type. The session persists in the bottle;
+subsequent launches are `-silent` and invisible.
 
 ### Failure modes the supervisor must own
 
 - Client self-update restarts steamwebhelper → CDP targets vanish → reconnect loop
   with backoff, re-registration of all subscriptions.
-- Update/EULA/login dialogs can appear unbidden → detect (window enumeration via
+- Update/EULA dialogs can appear unbidden → detect (window enumeration via
   CDP target list + Wine process args) and surface a native "Steam needs attention"
   affordance that reveals the real window rather than leaving a zombie.
 - Valve churn on the JS surface: unversioned. Mitigation is institutional, not
@@ -356,10 +367,15 @@ automatically (`--cx-app` does not — it resolves inside `drive_c` only).
 **Dock reality check**: wine processes with windows (`steam.exe`,
 `steamwebhelper.exe`) register as Dock-visible apps. In normal operation the
 client is `-silent` and windowless so this only bites when Steam surfaces a
-window (first-run login, EULA). Post-hoc `lsappinfo setinfo … 
-ApplicationType=BackgroundOnly` sets the attribute but the Dock doesn't
-re-evaluate — not a fix. Open question: macdrv registry switch or accepting
-the icon during the rare "Steam needs attention" moments.
+window (first-run login, EULA). Both CrossOver's wine loader and the OSS one
+already carry `LSUIElement = 1` in an embedded `__TEXT,__info_plist`, so the
+Dock entry is not a packaging gap: winemac.drv calls
+`transformProcessToForeground:` when a window is shown, which promotes the
+process to a regular Dock app for the rest of its life. Hiding the window
+afterwards does not reverse it, and post-hoc `lsappinfo setinfo …
+ApplicationType=BackgroundOnly` sets the attribute without the Dock
+re-evaluating. In practice this is a first-run artifact — the client shows a
+window only when signed out — and it clears on the next client start.
 
 ### Engine strategy: CrossOver first, OSS fallback (researched 2026-08-09)
 

@@ -68,6 +68,7 @@ final class ControlServer {
         let state = switch supervisor.health {
         case .starting: "starting"
         case .healthy: "healthy"
+        case .waitingForSignIn: "waitingForSignIn"
         case .degraded: "degraded"
         case .restarting: "restarting"
         case .gaveUp: "gaveUp"

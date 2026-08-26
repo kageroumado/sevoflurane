@@ -22,12 +22,21 @@ actor CDPClient {
 
     /// Wine binds the debug port to whichever loopback family it feels like on
     /// a given run, so the reachable one is discovered rather than assumed.
+    ///
+    /// Every discovery opens a fresh connection, on a session of its own. A
+    /// pooled connection can predate the client: anything else listening on
+    /// the port (a wildcard-bound dev server on the same machine) accepts the
+    /// probe, and the shared pool then keeps every later probe glued to that
+    /// connection even once the client's own listener is up. An unpooled
+    /// connect always lands on the client's specific-address bind.
     static func discoverTargets(port: Int) async throws -> [[String: Any]] {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.finishTasksAndInvalidate() }
         for host in ["127.0.0.1", "[::1]"] {
             guard let url = URL(string: "http://\(host):\(port)/json") else { continue }
             var request = URLRequest(url: url)
             request.timeoutInterval = 3
-            guard let (data, _) = try? await URLSession.shared.data(for: request) else {
+            guard let (data, _) = try? await session.data(for: request) else {
                 continue
             }
             if let targets = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
@@ -43,13 +52,37 @@ actor CDPClient {
               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init) else {
             throw Failure.unreachable("no \(targetTitle) target (half-wedged client?)")
         }
+        try await connect(socketURL: socketURL)
+        _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
+    }
+
+    func connect(socketURL: URL) async throws {
         let socket = URLSession.shared.webSocketTask(with: socketURL)
         socket.maximumMessageSize = 64 * 1024 * 1024
         task = socket
         socket.resume()
         Task { await pump() }
         _ = try await send(method: "Runtime.enable", params: [:])
-        _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
+    }
+
+    func disconnect() {
+        markClosed()
+    }
+
+    /// One-shot evaluate against a specific target's debugger socket —
+    /// connect, evaluate, disconnect. For the client's popup targets; the
+    /// bridge's persistent connection stays on `SharedJSContext`.
+    static func evaluateOnce(socketURL: URL, _ expression: String) async throws -> String? {
+        let client = CDPClient(onPush: { _ in })
+        try await client.connect(socketURL: socketURL)
+        do {
+            let value = try await client.evaluate(expression)
+            await client.disconnect()
+            return value
+        } catch {
+            await client.disconnect()
+            throw error
+        }
     }
 
     /// Evaluates `expression` with `returnByValue` + `awaitPromise` and returns

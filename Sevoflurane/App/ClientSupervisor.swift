@@ -18,6 +18,10 @@ final class ClientSupervisor {
     enum Health: Equatable {
         case starting
         case healthy
+        /// Signed out with the login window up: Steam's services stay down
+        /// until the user signs in, so recovery is held — the machine is
+        /// waiting on a human, not wedged.
+        case waitingForSignIn
         /// Something is failing; the reason is shown in the menu bar.
         case degraded(String)
         /// Mid-restart; the phase is shown in the menu bar.
@@ -34,6 +38,7 @@ final class ClientSupervisor {
         switch health {
         case .starting: "checking the client…"
         case .healthy: "client healthy"
+        case .waitingForSignIn: "waiting for sign-in"
         case let .degraded(reason): reason
         case let .restarting(phase): "restarting: \(phase)"
         case let .gaveUp(reason): reason
@@ -65,6 +70,10 @@ final class ClientSupervisor {
     /// Whether the current crash loop already got its one hygiene pass
     /// (htmlcache purge + headless client repair) — the next stop is `gaveUp`.
     @ObservationIgnored private var hygieneTried = false
+    /// Whether the login window was up on a previous cycle. Its going away
+    /// with the services still down is the "the user just signed in" edge,
+    /// which needs the page reloaded rather than waited out.
+    @ObservationIgnored private var wasAwaitingSignIn = false
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
     /// Set once quit teardown begins; blocks every path that could relaunch
@@ -191,6 +200,19 @@ final class ClientSupervisor {
             log.log(.supervisor, "client recovered on its own")
         }
 
+        // The client renders nothing here — a CEF window it opened for
+        // itself (the first-run login window) is hidden as soon as it shows,
+        // and the page's native mirror of the same popup is what the user
+        // sees.
+        let hiddenPopups = await ClientLifecycle.hideVisibleClientPopups()
+        if !hiddenPopups.isEmpty {
+            log.log(
+                .client,
+                "hid the client's own CEF window: \(hiddenPopups.joined(separator: ", ")) "
+                    + "— the page renders these natively",
+            )
+        }
+
         switch await Self.probePage() {
         case .bridgeDown:
             transition(
@@ -219,6 +241,7 @@ final class ClientSupervisor {
             pageFailures = 0
             serviceRecoveryTried = false
             hygieneTried = false
+            wasAwaitingSignIn = false
             // steam.exe windows are VGUI dialogs (rescue/update/EULA) and
             // worth surfacing as a state; webhelper windows are leaked client
             // web UI (notification toasts) — logged on appearance, not a
@@ -285,6 +308,38 @@ final class ClientSupervisor {
     /// "Sign in to Steam") needs the full restart — a reload alone reattaches
     /// to the same dead session.
     private func recoverDeadServices(wineWindows: [WineWindowWatch.Window]) async {
+        if host.isAwaitingSignIn {
+            // A signed-out bottle's services never initialize until the user
+            // signs in — the login window being up means the machine is
+            // waiting on a human, not wedged. Holding the recovery clock
+            // keeps the reload/restart ladder from tearing the login window
+            // down mid-type, and gives services a fresh grace once sign-in
+            // completes.
+            wasAwaitingSignIn = true
+            lastPageRecovery = .now
+            serviceRecoveryTried = false
+            transition(
+                to: .waitingForSignIn,
+                logging: .supervisor,
+                "Steam services down with the login window up — waiting for sign-in",
+            )
+            return
+        }
+        if wasAwaitingSignIn {
+            // Sign-in just finished. A page that booted signed out never
+            // initializes its services in place — the client's own CEF
+            // reloads `SharedJSContext` at this point, and the page has to
+            // do the same. Without this the 90s grace below runs in full
+            // and the user watches Steam's spinner for a minute and a half
+            // before the reload that actually finishes the job.
+            wasAwaitingSignIn = false
+            log.log(.page, "signed in — reloading the UI so the page boots with a session")
+            lastPageRecovery = .now
+            pageFailures = 0
+            host.reload()
+            health = .starting
+            return
+        }
         guard Date.now.timeIntervalSince(lastPageRecovery) > 90 else {
             transition(
                 to: .degraded("waiting for Steam services…"),
