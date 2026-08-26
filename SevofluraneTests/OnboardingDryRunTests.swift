@@ -65,6 +65,17 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `fresh machine provisions through the built-in engine`() async {
+        let (provisioner, env) = makeProvisioner(.freshMachine)
+        await provisioner.refreshDetection()
+        #expect(provisioner.detection?.usableCrossOver == nil)
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.state.managedEngineVersions == ["dry-run-engine"])
+        #expect(env.state.steamBottles.count == 1)
+    }
+
+    @Test
     func `fresh machine blocks on the engine step until crossover appears`() async {
         let (provisioner, _) = makeProvisioner(.freshMachine)
         await provisioner.refreshDetection()

@@ -146,6 +146,19 @@
             return .success()
         }
 
+        func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome {
+            log("would download the managed engine from the stable manifest channel")
+            progress("Downloading the engine…")
+            await pause()
+            state = SetupDetection(
+                rosetta: state.rosetta,
+                crossover: state.crossover,
+                bottles: state.bottles,
+                managedEngineVersions: state.managedEngineVersions + ["dry-run-engine"],
+            )
+            return .success("dry-run-engine")
+        }
+
         func createBottle(named name: String) async -> SetupCommandOutcome {
             log("would run: cxbottle --bottle \(name) --create --template win10_64")
             await pause()

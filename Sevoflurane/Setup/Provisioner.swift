@@ -53,17 +53,13 @@ final class Provisioner {
     /// bootstrapper, then runs the headless full-client update. Each stage is
     /// skipped when detection says its product already exists.
     func provisionSteam() async {
-        guard let detection else { return }
-        guard detection.usableCrossOver != nil else {
-            activity = .failed("No usable engine — the built-in engine pipeline "
-                + "is not wired yet (release-plan R2.2); install CrossOver for now.")
-            return
-        }
+        guard detection != nil else { return }
         let interval = PerfProbe.setup.beginInterval("Provision")
         defer { PerfProbe.setup.endInterval("Provision", interval) }
         let bottleName = SteamBottle.name
         do {
             try await installRosettaIfMissing()
+            try await installEngineIfMissing()
             try await createBottleIfMissing(bottleName)
             try await installBootstrapperIfMissing(inBottle: bottleName)
             try await updateClient(inBottle: bottleName)
@@ -87,6 +83,31 @@ final class Provisioner {
             throw ProvisionError("Rosetta install failed: \(result.output.suffix(200))")
         }
         await refreshDetection()
+    }
+
+    /// A usable CrossOver wins outright; otherwise the managed engine is
+    /// downloaded from the manifest (release-plan R2.2) and every wine
+    /// invocation from here on routes through it.
+    private func installEngineIfMissing() async throws {
+        guard let detection, detection.usableCrossOver == nil else { return }
+        if detection.managedEngineVersions.isEmpty {
+            activity = .working("Installing the game engine…")
+            log.log(.setup, "provision: installing managed engine")
+            let result = await environment.installEngine { phase in
+                EventLog.enqueue(.setup, "engine install: \(phase)")
+            }
+            guard result.succeeded else {
+                throw ProvisionError("engine install failed: \(result.output.suffix(200))")
+            }
+            await refreshDetection()
+        }
+        // A dry run must never redirect the real process's wine invocations.
+        if let refreshed = self.detection, !environment.isSimulation {
+            Engine.active = Engine.resolve(from: refreshed)
+        }
+        guard self.detection?.hasEngine == true else {
+            throw ProvisionError("no usable engine after install")
+        }
     }
 
     private func createBottleIfMissing(_ bottleName: String) async throws {

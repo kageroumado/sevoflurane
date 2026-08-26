@@ -70,13 +70,13 @@ nonisolated enum Doctor {
             hint: "softwareupdate --install-rosetta", provisioning: true,
         ))
 
-        if let cx = d.crossover {
+        if let cx = d.crossover, d.usableCrossOver != nil || d.managedEngineVersions.isEmpty {
             let state = cx.licensed ? "licensed" : cx.trialExpired ? "TRIAL EXPIRED" : "trial"
             checks.append(Check(
                 id: "engine", ok: d.usableCrossOver != nil,
                 label: "CrossOver \(cx.version) (\(state))",
                 hint: "an expired trial cannot launch bottles — license CrossOver "
-                    + "or use the built-in engine (not shipped yet)",
+                    + "or install the built-in engine: sevo engine install",
                 provisioning: true,
             ))
         } else {
@@ -84,7 +84,7 @@ nonisolated enum Doctor {
                 id: "engine", ok: !d.managedEngineVersions.isEmpty,
                 label: d.managedEngineVersions.isEmpty
                     ? "engine" : "built-in engine \(d.managedEngineVersions.joined(separator: ", "))",
-                hint: "no CrossOver and no managed engine — install CrossOver",
+                hint: "no engine — install CrossOver, or run: sevo engine install",
                 provisioning: true,
             ))
         }

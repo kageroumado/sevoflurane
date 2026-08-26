@@ -17,7 +17,12 @@ protocol SetupEnvironment: AnyObject {
     /// `softwareupdate --install-rosetta --agree-to-license`.
     func installRosetta() async -> SetupCommandOutcome
 
-    /// `cxbottle --create --template win10_64`.
+    /// Downloads and installs the manifest's stable managed engine
+    /// (release-plan R2.2) — the path taken when no usable CrossOver exists.
+    func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome
+
+    /// `cxbottle --create --template win10_64` under CrossOver; a
+    /// `wineboot -u`-initialized prefix under a managed engine.
     func createBottle(named name: String) async -> SetupCommandOutcome
 
     /// Fetches SteamSetup.exe from the Steam CDN into the bottle's `drive_c`.
@@ -80,24 +85,47 @@ final class LiveSetupEnvironment: SetupEnvironment {
         )
     }
 
+    func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome {
+        do {
+            let release = try await EngineInstaller.stableRelease()
+            try await EngineInstaller.install(release, progress: progress)
+            return .success(release.version)
+        } catch {
+            return .failure("\(error)")
+        }
+    }
+
     func createBottle(named name: String) async -> SetupCommandOutcome {
-        await run(
-            SteamBottle.crossoverBin + "/cxbottle",
-            [
-                "--bottle",
-                name,
-                "--create",
-                "--template",
-                "win10_64",
-                "--description",
-                "Sevoflurane Steam",
-            ],
-            timeout: .seconds(600),
-        )
+        switch Engine.active {
+        case .crossover:
+            return await run(
+                SteamBottle.crossoverBin + "/cxbottle",
+                [
+                    "--bottle",
+                    name,
+                    "--create",
+                    "--template",
+                    "win10_64",
+                    "--description",
+                    "Sevoflurane Steam",
+                ],
+                timeout: .seconds(600),
+            )
+        case .managed:
+            let prefix = Engine.active.bottlesRoot.appendingPathComponent(name)
+            do {
+                try FileManager.default.createDirectory(
+                    at: prefix, withIntermediateDirectories: true,
+                )
+            } catch {
+                return .failure("\(error)")
+            }
+            return await runWine(bottle: name, args: ["wineboot", "-u"])
+        }
     }
 
     func downloadSteamInstaller(intoBottle name: String) async throws {
-        let bottleURL = SteamBottle.bottlesRoot.appendingPathComponent(name)
+        let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
         let (temp, _) = try await URLSession.shared.download(from: Self.steamSetupURL)
         let setup = bottleURL.appendingPathComponent("drive_c/SteamSetup.exe")
         try? FileManager.default.removeItem(at: setup)
@@ -145,18 +173,23 @@ final class LiveSetupEnvironment: SetupEnvironment {
     private nonisolated func runWine(
         bottle: String, args: [String], timeout: Duration = .seconds(600),
     ) async -> SetupCommandOutcome {
-        await run(
-            SteamBottle.crossoverBin + "/wine",
-            ["--bottle", bottle, "--wait-children"] + args,
+        let invocation = Engine.active.wineInvocation(
+            bottle: bottle, wait: .children, program: args,
+        )
+        return await run(
+            invocation.executable.path,
+            invocation.arguments,
+            environment: invocation.environment,
             timeout: timeout,
         )
     }
 
     private nonisolated func run(
-        _ path: String, _ arguments: [String], timeout: Duration,
+        _ path: String, _ arguments: [String],
+        environment: [String: String]? = nil, timeout: Duration,
     ) async -> SetupCommandOutcome {
         let result = await Subprocess.run(
-            path, arguments, capture: .combined, timeout: timeout,
+            path, arguments, environment: environment, capture: .combined, timeout: timeout,
         )
         return SetupCommandOutcome(status: result.status, output: result.output)
     }

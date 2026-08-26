@@ -7,15 +7,22 @@ import SwiftUI
 struct SettingsView: View {
     let provisioner: Provisioner
     @State private var openAtLogin = false
+    @State private var graphics = BottleGraphics.Selection(renderer: .auto, msync: true)
+    @State private var graphicsLoaded = false
 
     var body: some View {
         TabView {
             Tab("General", systemImage: "gear") { general }
+            Tab("Graphics", systemImage: "cpu") { graphicsPane }
             Tab("Repair", systemImage: "wrench.and.screwdriver") { repair }
             Tab("About", systemImage: "info.circle") { about }
         }
         .frame(width: 440)
-        .onAppear { openAtLogin = provisioner.openAtLogin }
+        .onAppear {
+            openAtLogin = provisioner.openAtLogin
+            graphics = Self.currentGraphics()
+            graphicsLoaded = true
+        }
     }
 
     private var general: some View {
@@ -36,6 +43,74 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// The renderers the active engine can actually switch between.
+    /// D3DMetal under the managed engine waits on clean-machine validation
+    /// (release-plan R2.4), so it is only offered under CrossOver.
+    private var availableRenderers: [Renderer] {
+        Engine.active == .crossover
+            ? Renderer.allCases
+            : [.auto, .dxmt, .dxvk, .wined3d]
+    }
+
+    private var graphicsPane: some View {
+        Form {
+            Section {
+                Picker("Game renderer", selection: $graphics.renderer) {
+                    ForEach(availableRenderers, id: \.self) { renderer in
+                        Text(renderer.label).tag(renderer)
+                    }
+                }
+                Text(graphics.renderer.detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Toggle(isOn: $graphics.msync) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enhanced synchronization (msync)")
+                        Text("Faster in most games. Turn off if a game deadlocks at launch.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+            } footer: {
+                Text("Steam's own interface never touches Direct3D — changes "
+                    + "take effect the next time a game starts.")
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: graphics) { _, selection in
+            guard graphicsLoaded else { return }
+            applyGraphics(selection)
+        }
+    }
+
+    private static func currentGraphics() -> BottleGraphics.Selection {
+        Engine.active == .crossover
+            ? BottleGraphics.selection(forBottle: SteamBottle.root)
+            : BottleGraphics.managedSelection()
+    }
+
+    private func applyGraphics(_ selection: BottleGraphics.Selection) {
+        switch Engine.active {
+        case .crossover:
+            do {
+                try BottleGraphics.apply(selection, toBottle: SteamBottle.root)
+                EventLog.shared.log(
+                    .setup,
+                    "graphics: renderer=\(selection.renderer.rawValue) msync=\(selection.msync)",
+                )
+            } catch {
+                EventLog.shared.log(.setup, "graphics change failed: \(error)")
+            }
+        case .managed:
+            BottleGraphics.setManagedSelection(selection)
+            EventLog.shared.log(
+                .setup,
+                "graphics: renderer=\(selection.renderer.rawValue) msync=\(selection.msync)",
+            )
+        }
     }
 
     private var repair: some View {

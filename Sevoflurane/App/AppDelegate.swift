@@ -43,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controlServer.start()
         Task {
             await provisioner.refreshDetection()
+            if let detection = provisioner.detection {
+                Engine.active = Engine.resolve(from: detection)
+            }
             if provisioner.needsSetup {
                 showSetupWizard(provisioner: provisioner) { [weak self] in
                     self?.closeSetupWindow()

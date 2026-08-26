@@ -53,9 +53,13 @@ let package = Package(
             sources: [
                 "Sevo",
                 "Sevoflurane/Bridge/CDPClient.swift",
+                "Sevoflurane/Setup/EngineInstaller.swift",
+                "Sevoflurane/Setup/EngineManifest.swift",
                 "Sevoflurane/Setup/SetupDetection.swift",
+                "Sevoflurane/Support/BottleGraphics.swift",
                 "Sevoflurane/Support/BridgePorts.swift",
                 "Sevoflurane/Support/ClientLifecycle.swift",
+                "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/JSLiteral.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
                 "Sevoflurane/Support/Subprocess.swift",

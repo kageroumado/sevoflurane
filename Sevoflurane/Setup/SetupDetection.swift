@@ -44,8 +44,7 @@ nonisolated struct SetupDetection: Sendable, Equatable {
 nonisolated enum SetupProbe {
     static let crossoverApp = URL(fileURLWithPath: "/Applications/CrossOver.app")
     static let crossoverBottles = SteamBottle.bottlesRoot
-    static let managedEngines = URL(fileURLWithPath: NSHomeDirectory())
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Engines")
+    static let managedEngines = Engine.managedRoot
     private static let license = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Preferences/com.codeweavers.CrossOver.license")
     private static let preferences = URL(fileURLWithPath: NSHomeDirectory())
@@ -126,14 +125,22 @@ nonisolated enum SetupProbe {
         return (licensed, expires)
     }
 
+    /// CrossOver's bottles (a `cxbottle.conf` marks a real one) plus the
+    /// managed engine's prefixes (a `drive_c` marks those). One list — the
+    /// wizard and doctor don't care which engine owns a bottle, only the URL.
     static func bottles() -> [SetupDetection.Bottle] {
+        bottles(under: crossoverBottles, marker: "cxbottle.conf")
+            + bottles(under: Engine.managedBottlesRoot, marker: "drive_c")
+    }
+
+    private static func bottles(under root: URL, marker: String) -> [SetupDetection.Bottle] {
         let manager = FileManager.default
-        guard let names = try? manager.contentsOfDirectory(atPath: crossoverBottles.path) else {
+        guard let names = try? manager.contentsOfDirectory(atPath: root.path) else {
             return []
         }
         return names.sorted().compactMap { name in
-            let url = crossoverBottles.appendingPathComponent(name)
-            guard manager.fileExists(atPath: url.appendingPathComponent("cxbottle.conf").path) else {
+            let url = root.appendingPathComponent(name)
+            guard manager.fileExists(atPath: url.appendingPathComponent(marker).path) else {
                 return nil
             }
             let steamDLL = SteamBottle.steamRoot(inBottle: url)

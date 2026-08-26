@@ -16,8 +16,15 @@ struct SetupView: View {
         case done
     }
 
+    private enum EngineChoice {
+        case builtIn
+        case crossover
+    }
+
     @State private var step: Step = .welcome
     @State private var openAtLogin = true
+    @State private var engineChoice: EngineChoice = .builtIn
+    @State private var whyCrossOver = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,30 +92,74 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
                 Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
-                    + "License it at codeweavers.com, or wait for the built-in engine.")
+                    + "License it at codeweavers.com, or use the built-in engine.")
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
-            GroupBox {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Built-in engine — coming in a later beta").font(.headline)
-                    Text("This build requires CrossOver (14-day free trial works). "
-                        + "The free built-in engine is on the roadmap; CrossOver also "
-                        + "carries game fixes months earlier and funds Wine development.")
+            engineOption(
+                .builtIn,
+                title: "Install the built-in engine (free, ~250 MB)",
+                detail: "Recommended. Downloads once; games render through Metal.",
+            )
+            engineOption(
+                .crossover,
+                title: "Use CrossOver ($74, 14-day free trial)",
+                detail: "Commercial engine by CodeWeavers with better game "
+                    + "compatibility and support.",
+            )
+            DisclosureGroup("Why CrossOver?", isExpanded: $whyCrossOver) {
+                Text("CodeWeavers employs the Wine developers; CrossOver carries "
+                    + "Steam- and game-specific fixes months before they reach "
+                    + "open-source Wine, and buying it funds Wine itself. The "
+                    + "built-in engine runs the same core code and is fine for "
+                    + "most titles — you can switch later in Settings without "
+                    + "redoing setup.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
+            .font(.callout)
+            if engineChoice == .crossover {
+                Link(
+                    "Get CrossOver at codeweavers.com",
+                    destination: URL(string: "https://www.codeweavers.com/crossover")!,
+                )
+                Button("Check again") {
+                    Task { await provisioner.refreshDetection() }
+                }
+            }
+        }
+    }
+
+    private func engineOption(
+        _ choice: EngineChoice, title: String, detail: String,
+    ) -> some View {
+        Button {
+            engineChoice = choice
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: engineChoice == choice
+                    ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(engineChoice == choice ? Color.accentColor : .secondary)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.headline)
+                    Text(detail)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                .padding(6)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
-            Link(
-                "Get CrossOver at codeweavers.com",
-                destination: URL(string: "https://www.codeweavers.com/crossover")!,
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(engineChoice == choice
+                        ? Color.accentColor.opacity(0.08) : Color.clear),
             )
-            Button("Check again") {
-                Task { await provisioner.refreshDetection() }
-            }
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
+        .buttonStyle(.plain)
     }
 
     private var steam: some View {
@@ -190,9 +241,10 @@ struct SetupView: View {
                 Button("Get Started") { advanceFromWelcome() }
                     .keyboardShortcut(.defaultAction)
             case .engine:
-                Button("Continue") { advanceFromWelcome() }
+                Button("Continue") { beginProvisioning() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(provisioner.detection?.usableCrossOver == nil)
+                    .disabled(engineChoice == .crossover
+                        && provisioner.detection?.usableCrossOver == nil)
             case .steam:
                 Button("Continue") { step = .options }
                     .keyboardShortcut(.defaultAction)
@@ -215,6 +267,10 @@ struct SetupView: View {
             step = .engine
             return
         }
+        beginProvisioning()
+    }
+
+    private func beginProvisioning() {
         step = .steam
         if provisioner.activity == .idle {
             Task { await provisioner.provisionAndConfigure() }

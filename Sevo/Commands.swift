@@ -123,7 +123,7 @@ struct StatusCommand: AsyncParsableCommand {
     }
 }
 
-// MARK: - engine / bottle (read-only for now)
+// MARK: - engine / bottle
 
 struct EngineCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -131,14 +131,58 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list") var verb: String = "list"
+    @Argument(help: "list | install") var verb: String = "list"
+    @Option(
+        name: .customLong("manifest"),
+        help: "Manifest URL override (default: the kagerou.glass manifest).",
+    ) var manifest: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
-        guard verb == "list" else {
-            Sevo.printError("engine \(verb): not implemented yet (Docs/onboarding-spec.md S1)")
+        switch verb {
+        case "list":
+            try await list()
+        case "install":
+            try await install()
+        default:
+            Sevo.printError("engine \(verb): unknown verb (list | install)")
             throw SevoExit.badInvocation
         }
+    }
+
+    /// Downloads and installs the manifest's stable release — the CLI face
+    /// of the wizard's built-in-engine stage (release-plan R2.2).
+    private func install() async throws {
+        let manifestURL = try manifest.map {
+            guard let url = URL(string: $0) else {
+                Sevo.printError("not a URL: \($0)")
+                throw SevoExit.badInvocation
+            }
+            return url
+        } ?? EngineManifest.url
+        do {
+            let fetched = try await EngineManifest.fetch(from: manifestURL)
+            guard let release = fetched.stable else {
+                Sevo.printError("manifest has no stable channel")
+                throw SevoExit.failed
+            }
+            guard !EngineInstaller.isInstalled(release) else {
+                print("engine \(release.version) already installed")
+                return
+            }
+            try await EngineInstaller.install(release) { phase in
+                FileHandle.standardError.write(Data((phase + "\n").utf8))
+            }
+            print("engine \(release.version) installed")
+        } catch let code as ExitCode {
+            throw code
+        } catch {
+            Sevo.printError("engine install failed: \(error)")
+            throw SevoExit.failed
+        }
+    }
+
+    private func list() async throws {
         let d = await SetupProbe.detect()
         var rows: [[String: Any]] = []
         if let cx = d.crossover {

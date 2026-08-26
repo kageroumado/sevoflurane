@@ -210,7 +210,8 @@ nonisolated enum ClientOps {
     private static func ensureProvisioned() async throws {
         let detection = await SetupProbe.detect()
         guard detection.hasEngine else {
-            throw Failure.unprovisioned("no usable engine (CrossOver missing or trial expired)")
+            throw Failure.unprovisioned(
+                "no usable engine — install CrossOver, or run: sevo engine install")
         }
         guard detection.bottles.first(where: { $0.name == SteamBottle.name })?.hasSteam == true else {
             throw Failure.unprovisioned(

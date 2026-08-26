@@ -4,15 +4,17 @@ import Foundation
 /// bottle lives on disk, the client's paths inside it, and the translation
 /// from the Windows paths Steam hands out to the macOS paths that exist.
 nonisolated enum SteamBottle {
-    /// The CrossOver bottle's name — also the last component of ``root``.
+    /// The bottle's name — also the last component of ``root``.
     static let name = "Steam"
 
     /// CrossOver's bottles directory, holding every bottle by name.
     static let bottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/CrossOver/Bottles")
 
-    /// The Steam bottle itself.
-    static let root = bottlesRoot.appendingPathComponent(name)
+    /// The Steam bottle itself, wherever the active engine keeps bottles.
+    static var root: URL {
+        Engine.active.bottlesRoot.appendingPathComponent(name)
+    }
 
     /// The client's install prefix inside a given bottle.
     static func steamRoot(inBottle bottle: URL) -> URL {
@@ -20,21 +22,40 @@ nonisolated enum SteamBottle {
     }
 
     /// The client's install prefix inside the Steam bottle.
-    static let steamRoot = steamRoot(inBottle: root)
+    static var steamRoot: URL {
+        steamRoot(inBottle: root)
+    }
+
     /// Steam's UI bundle, served by the bridge with the shim injected.
-    static let steamui = steamRoot.appendingPathComponent("steamui")
+    static var steamui: URL {
+        steamRoot.appendingPathComponent("steamui")
+    }
+
     /// Capsule art cache, served by the bridge's art endpoint.
-    static let libraryCache = steamRoot.appendingPathComponent("appcache/librarycache")
+    static var libraryCache: URL {
+        steamRoot.appendingPathComponent("appcache/librarycache")
+    }
 
     /// Crash and assert dumps the client drops when steamwebhelper dies;
     /// their arrival rate is the crash-loop signature.
-    static let dumps = steamRoot.appendingPathComponent("dumps")
+    static var dumps: URL {
+        steamRoot.appendingPathComponent("dumps")
+    }
+
     /// The client's Chromium profile cache. A corrupt one crash-loops the
     /// webhelper at startup; trashing it is the first hygiene rung.
-    static let htmlcache = root
-        .appendingPathComponent("drive_c/users/crossover/AppData/Local/Steam/htmlcache")
+    /// CrossOver bottles run as the `crossover` Windows user; plain Wine
+    /// prefixes as the macOS username.
+    static var htmlcache: URL {
+        let user = Engine.active == .crossover ? "crossover" : NSUserName()
+        return root.appendingPathComponent(
+            "drive_c/users/\(user)/AppData/Local/Steam/htmlcache")
+    }
+
     /// `steam.cfg` next to steam.exe — the update-pinning emergency brake.
-    static let steamCfg = steamRoot.appendingPathComponent("steam.cfg")
+    static var steamCfg: URL {
+        steamRoot.appendingPathComponent("steam.cfg")
+    }
 
     /// The client executable, as the Windows side names it.
     static let exeWindowsPath = #"C:\Program Files (x86)\Steam\Steam.exe"#

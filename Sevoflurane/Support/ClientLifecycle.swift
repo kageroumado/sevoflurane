@@ -61,9 +61,14 @@ nonisolated enum ClientLifecycle {
     }
 
     static func gracefulShutdown() async {
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name, wait: .none,
+            program: [SteamBottle.exeWindowsPath, "-shutdown"],
+        )
         _ = await Subprocess.run(
-            SteamBottle.crossoverBin + "/wine",
-            ["--bottle", SteamBottle.name, "--no-wait", SteamBottle.exeWindowsPath, "-shutdown"],
+            invocation.executable.path,
+            invocation.arguments,
+            environment: invocation.environment,
             capture: .none,
             timeout: .seconds(30),
         )
@@ -72,7 +77,7 @@ nonisolated enum ClientLifecycle {
     static func killWineserver() async {
         // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
         _ = await Subprocess.run(
-            SteamBottle.crossoverBin + "/wineserver",
+            Engine.active.wineserverURL.path,
             ["-k"],
             environment: ["WINEPREFIX": SteamBottle.root.path, "PATH": "/usr/bin"],
             capture: .none,
@@ -122,23 +127,37 @@ nonisolated enum ClientLifecycle {
     /// `@concurrent` so the spawn never runs on the calling actor.
     @concurrent
     static func launchClient() async {
+        // A managed engine's wrapper must be intact before every start: the
+        // client's self-updater replaces it with a fresh real exe, and an
+        // unwrapped webhelper renders black on OSS Wine.
+        if Engine.active != .crossover {
+            do {
+                try WebhelperWrapper.apply(from: Engine.active, toBottle: SteamBottle.root)
+            } catch {
+                log("webhelper wrapper reapply failed: \(error)")
+            }
+        }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches
         // a wedged webhelper by itself instead of parking a visible Wine
         // window (Docs/resilience-spec.md experiment #1, verified 2026-08-22).
-        process.arguments = [
-            "--bottle",
-            SteamBottle.name,
-            "--no-wait",
-            SteamBottle.exeWindowsPath,
-            "-silent",
-            "-nocrashdialog",
-            "-cef-enable-debugging",
-            "-devtools-port",
-            String(BridgePorts.cdp),
-        ]
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name, wait: .none,
+            program: [
+                SteamBottle.exeWindowsPath,
+                "-silent",
+                "-nocrashdialog",
+                "-cef-enable-debugging",
+                "-devtools-port",
+                String(BridgePorts.cdp),
+            ],
+        )
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        if let environment = invocation.environment {
+            process.environment = environment
+        }
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.terminationHandler = { finished in
@@ -178,12 +197,17 @@ nonisolated enum ClientLifecycle {
     /// full client package and exits without logging in. Only safe with the
     /// client stopped. Returns whether the updater exited cleanly.
     static func headlessUpdate() async -> Bool {
-        let result = await Subprocess.run(
-            SteamBottle.crossoverBin + "/wine",
-            [
-                "--bottle", SteamBottle.name, "--wait-children", SteamBottle.exeWindowsPath,
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name, wait: .children,
+            program: [
+                SteamBottle.exeWindowsPath,
                 "-forcesteamupdate", "-forcepackagedownload", "-exitsteam",
             ],
+        )
+        let result = await Subprocess.run(
+            invocation.executable.path,
+            invocation.arguments,
+            environment: invocation.environment,
             capture: .none,
             timeout: .seconds(600),
         )

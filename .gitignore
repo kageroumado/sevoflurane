@@ -49,3 +49,7 @@ __pycache__/
 
 ## Claude Code
 .claude/
+
+## Compiled engine payloads (built by Tools/package-engine.sh)
+Tools/webhelper-wrapper/webhelper-wrapper.exe
+sevo-engine-*.tar.xz
