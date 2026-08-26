@@ -353,7 +353,12 @@ final class ClientSupervisor {
 
         // The launcher can time out and *still* spawn a client later; a
         // steam.exe that survived everything above means launching now could
-        // stack a second instance on top of it.
+        // stack a second instance on top of it. This guard plus
+        // `isRestarting` is the entire double-start defense: restart
+        // generation tags were considered and dropped because
+        // `-nocrashdialog` removed Steam's own watchdog — the only other
+        // writer that could race a relaunch. If a double-start ever appears
+        // in the log again, tags are the next step.
         let leftovers = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe")
         guard leftovers.isEmpty else {
             transition(
