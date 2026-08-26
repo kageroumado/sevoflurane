@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         PerfProbe.poi.emitEvent("Launch")
+        gameLaunchWatch.onGameWindowUp = { [weak self] in
+            self?.host.gameWindowDidAppear()
+        }
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror

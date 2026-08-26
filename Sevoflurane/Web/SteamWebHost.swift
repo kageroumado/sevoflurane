@@ -67,6 +67,115 @@ final class SteamWebHost {
         )
     }
 
+    // MARK: - Launch status
+
+    /// A launch in flight, told by the client's own game-action events — the
+    /// signal the menu bar's spinner used to guess at with a timer.
+    struct GameLaunch: Equatable {
+        let appID: Int
+        var detail: String
+    }
+
+    private(set) var activeLaunch: GameLaunch?
+    @ObservationIgnored private var launchClear: Task<Void, Never>?
+
+    /// One `__gameAction` event from the context page's registrations
+    /// (``gameActionScript``). The trail also lands in the log, so a slow
+    /// launch explains itself after the fact.
+    func noteGameAction(phase: String, appID: String, task: String) {
+        switch phase {
+        case "start":
+            EventLog.shared.log(.client, "launch \(appID): \(task.isEmpty ? "begun" : task)")
+            setLaunch(GameLaunch(appID: Int(appID) ?? 0, detail: "Preparing…"), clearAfter: 180)
+        case "task":
+            guard !task.isEmpty, task != "None" else { return }
+            EventLog.shared.log(.client, "launch \(appID): \(task)")
+            let id = Int(appID) ?? activeLaunch?.appID ?? 0
+            setLaunch(GameLaunch(appID: id, detail: Self.launchTaskText(task)), clearAfter: 180)
+        case "end":
+            // The launch flow is done but the engine still has to put up its
+            // first window; GameLaunchWatch ends the story when it does.
+            EventLog.shared.log(.client, "launch flow finished — waiting for the game window")
+            if var launch = activeLaunch {
+                launch.detail = "Waiting for the game window…"
+                setLaunch(launch, clearAfter: 20)
+            }
+        default:
+            break
+        }
+    }
+
+    /// The game's first window is up (``GameLaunchWatch``) — story over.
+    func gameWindowDidAppear() {
+        guard activeLaunch != nil else { return }
+        launchClear?.cancel()
+        activeLaunch = nil
+    }
+
+    private func setLaunch(_ launch: GameLaunch, clearAfter seconds: Int) {
+        activeLaunch = launch
+        launchClear?.cancel()
+        launchClear = Task(name: "Launch status expiry") { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.activeLaunch = nil
+        }
+    }
+
+    /// Steam's launch-pipeline task names, in user words. `Show*` tasks are
+    /// the launch dialogs (EULA, launch options, playtime controls) — those
+    /// wait on the user, not the machine. Unknown names fall back to the raw
+    /// identifier spaced out: honest beats silent.
+    private static func launchTaskText(_ task: String) -> String {
+        switch task {
+        case "ProcessingInstallScript": "Running the install script…"
+        case "VerifyingFiles": "Verifying files…"
+        case "SynchronizingCloud": "Syncing cloud saves…"
+        case "SynchronizingControllerConfig": "Syncing controller config…"
+        case "ProcessingShaderCache": "Processing shaders…"
+        case "DownloadingWorkshop": "Updating Workshop items…"
+        case "KickingOtherSession": "Signing out another session…"
+        case "CreatingProcess", "Completed": "Starting the game…"
+        case "WaitingGameWindow": "Waiting for the game window…"
+        default:
+            task.hasPrefix("Show")
+                ? "Waiting for you in the Steam window…"
+                : task.reduce(into: "") { result, character in
+                    if character.isUppercase, !result.isEmpty { result.append(" ") }
+                    result.append(result.isEmpty ? character : Character(character.lowercased()))
+                } + "…"
+        }
+    }
+
+    /// Subscribes the context page to the client's game-action events; they
+    /// come back through the popup message handler as `__gameAction`.
+    /// Idempotent per page session, and a reload re-registers because the
+    /// desktop window is re-adopted.
+    private static let gameActionScript = """
+    (function () {
+      if (window.__sevoGameActions) return "already registered";
+      if (!window.SteamClient || !SteamClient.Apps
+          || !SteamClient.Apps.RegisterForGameActionStart) return "unavailable";
+      window.__sevoGameActions = true;
+      var post = function (args) {
+        try {
+          window.webkit.messageHandlers.sevoWindow
+            .postMessage({ fn: "__gameAction", args: args });
+        } catch (e) {}
+      };
+      SteamClient.Apps.RegisterForGameActionStart(function (id, appid, action) {
+        post(["start", String(appid), String(action || "")]);
+      });
+      SteamClient.Apps.RegisterForGameActionTaskChange(function (id, appid, task) {
+        post(["task", String(appid), String(task || "")]);
+      });
+      SteamClient.Apps.RegisterForGameActionEnd(function () {
+        post(["end", "", ""]);
+      });
+      return "registered";
+    })()
+    """
+
     @ObservationIgnored private var context: SteamWindow?
     @ObservationIgnored private var contextWindow: NSWindow?
     @ObservationIgnored private var contextMoveObserver: (any NSObjectProtocol)?
@@ -352,6 +461,10 @@ final class SteamWebHost {
         // borderless OS window. Hosted here its buttons duplicate the traffic
         // lights and its strip has nowhere for them to sit.
         window.webView.evaluateJavaScript(SteamDesktopChrome.script)
+        Task(name: "Register game-action events") {
+            let result = await evaluateInContext(Self.gameActionScript)
+            EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")
+        }
         refreshRecentGames()
         // A client started with -silent opens its window on no route at all.
         // Steam's tray item resolves that by asking for the library, and so

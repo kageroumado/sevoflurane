@@ -29,6 +29,10 @@ final class GameLaunchWatch {
 
     private var watch: Task<Void, Never>?
 
+    /// Fired when the game's first window is up — the host clears the
+    /// launch-status line on it.
+    var onGameWindowUp: (() -> Void)?
+
     /// Arms (or re-arms) the watch; called when the bridge sees `RunGame`.
     func noteLaunchRequested() {
         watch?.cancel()
@@ -46,6 +50,7 @@ final class GameLaunchWatch {
     }
 
     private func activate(_ game: (owner: String, pid: pid_t)) {
+        defer { onGameWindowUp?() }
         guard let app = NSRunningApplication(processIdentifier: game.pid) else {
             EventLog.shared.log(
                 .window, "game window up (\(game.owner)) but pid \(game.pid) has no app to activate",

@@ -286,6 +286,14 @@ final class SteamWindow: NSObject {
                url.scheme == "http" || url.scheme == "https" {
                 NSWorkspace.shared.open(url)
             }
+        case "__gameAction":
+            // The context page's game-action subscription reporting launch
+            // progress (SteamWebHost.gameActionScript).
+            host?.noteGameAction(
+                phase: string(args, 0),
+                appID: string(args, 1),
+                task: string(args, 2),
+            )
         case "__bv":
             performBrowserView(
                 id: Int(number(args, 0)),

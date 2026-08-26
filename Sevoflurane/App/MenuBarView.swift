@@ -27,6 +27,7 @@ struct MenuBarView: View {
         .fixedSize(horizontal: false, vertical: true)
         .animation(.smooth(duration: 0.3), value: supervisor.health)
         .animation(.smooth(duration: 0.3), value: host.recentGames)
+        .animation(.smooth(duration: 0.3), value: host.activeLaunch)
         .onAppear { host.refreshRecentGames() }
     }
 
@@ -166,7 +167,13 @@ struct MenuBarView: View {
                     .padding(.horizontal, 4)
                 VStack(spacing: 1) {
                     ForEach(host.recentGames) { game in
-                        GameRow(game: game) { host.launchGame(game) }
+                        GameRow(
+                            game: game,
+                            launchDetail: host.activeLaunch
+                                .flatMap { $0.appID == game.id ? $0.detail : nil },
+                        ) {
+                            host.launchGame(game)
+                        }
                     }
                 }
             }
@@ -175,11 +182,14 @@ struct MenuBarView: View {
 
     private struct GameRow: View {
         let game: SteamWebHost.RecentGame
+        /// What the client says it is doing right now for this app
+        /// (game-action events); `nil` outside a launch.
+        let launchDetail: String?
         let launch: () -> Void
         @State private var isHovered = false
-        /// Steam takes seconds to bring a game up with no signal back;
-        /// a timed spinner is the honest acknowledgment that the click
-        /// landed.
+        /// Instant acknowledgment for the click; the client's first
+        /// game-action event takes over from it, and it stands alone as an
+        /// 8s fallback if no events arrive.
         @State private var isLaunching = false
 
         var body: some View {
@@ -200,11 +210,20 @@ struct MenuBarView: View {
                     }
                     .frame(width: 27, height: 40)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    Text(game.name)
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(game.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                        if let launchDetail {
+                            Text(launchDetail)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
+                    }
                     Spacer(minLength: 0)
-                    if isLaunching {
+                    if isLaunching || launchDetail != nil {
                         ProgressView()
                             .controlSize(.small)
                             .scaleEffect(0.7)
