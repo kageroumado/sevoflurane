@@ -9,10 +9,11 @@ labels: bug
 **Environment report** — paste the output of:
 
 ```
-python3 Spike/sevo.py doctor --json
+sevo doctor --json
 ```
 
-(Once the `sevo` CLI ships in the app: `sevo doctor --json`.)
+(No `sevo` on your PATH? Build it from the repo with `swift build` and run
+`.build/debug/sevo doctor --json`.)
 
 **Event log** — attach `~/Library/Logs/Sevoflurane.log` (drag the file into
 this issue). It contains no account data.

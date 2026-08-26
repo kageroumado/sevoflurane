@@ -39,9 +39,10 @@ full architecture — and the fidelity rules that keep it honest — is
   access (bottle paths, ports, subprocesses)
 - `Sevo/` + `Package.swift` — the `sevo` CLI and MCP server (SwiftPM
   executable sharing the app's own lifecycle/CDP sources; `swift build`)
-- `Spike/` — Python reference implementations, all ported into the app
-  (`bridge.py` → `Bridge/`, `lifecycle.py` → `Setup/Provisioner` +
-  `App/ClientSupervisor`, `sevo.py` → `Sevo/`)
+- `Spike/` — Python probes and the standalone provisioning script:
+  `lifecycle.py` (headless bottle provisioning until `sevo setup` ships),
+  `cdp_probe.py` (evaluate JS in the bottle client), and the capture
+  probes SPEC.md cites as evidence
 - `Site/` — the landing page (not yet deployed)
 - `Mockups/` — self-contained HTML design mockups (open in a browser)
 

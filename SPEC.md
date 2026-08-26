@@ -24,7 +24,7 @@ means store, community, and friends come for free, since those are web too.
 | WebKit parses/runs Steam's whole bundle | one `ReferenceError`, nothing else |
 | A shim boots the app | React mounts; Steam's global stores initialize |
 | Shim must mirror the real client's *shape* | desktop client has no `System.Audio` (Deck-only); a catch-all Proxy makes the UI call methods that don't exist — injecting a shape snapshot cut errors 11 → 2 |
-| Calls, results **and live callbacks** round-trip | the bridge (`Bridge/SteamBridge`; reference: `Spike/bridge.py`) replays shim calls into the real SharedJSContext over CDP; callbacks stream back through a `Runtime.addBinding` push |
+| Calls, results **and live callbacks** round-trip | the bridge (`Bridge/SteamBridge`) replays shim calls into the real SharedJSContext over CDP; callbacks stream back through a `Runtime.addBinding` push |
 | Boot surface is small | 88 calls across 21 namespaces, captured by `Spike/probe_steamui.py proxy` |
 | The app is menu-bar-only | LSUIElement + `.accessory`; verified zero Dock presence while running |
 | **The whole UI renders** | Steam's desktop window — chrome, nav, account, and the full 291-game library with art and playtime — drawn by Steam's bundle from live client data, at `devicePixelRatio = 2` |

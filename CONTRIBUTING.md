@@ -13,9 +13,9 @@ project are almost always a violation of one of those rules.
 - `Sevoflurane/` — the app. `Web/` hosts Steam's UI and windows; `Bridge/`
   is the in-process page↔client bridge; `App/` is supervision, logging, and
   the menu bar.
-- `Spike/` — Python prototypes and probes. `lifecycle.py` (client
-  provisioning/lifecycle) and `sevo.py` (management CLI) still stand alone;
-  they are being absorbed into Swift.
+- `Spike/` — Python probes. `lifecycle.py` (headless bottle provisioning)
+  still stands alone until `sevo setup` ships; the management CLI is the
+  Swift `sevo` (`swift build`).
 - `Mockups/` — self-contained HTML mockups; open them in a browser.
 
 ## Building
@@ -44,6 +44,6 @@ headlessly).
 ## Reporting bugs
 
 Attach `~/Library/Logs/Sevoflurane.log` and the output of
-`python3 Spike/sevo.py doctor --json` (redact nothing — it contains no
-account data). If a game is involved, say which appid and whether it runs
+`sevo doctor --json` (build it with `swift build` → `.build/debug/sevo`;
+redact nothing — it contains no account data). If a game is involved, say which appid and whether it runs
 under plain CrossOver.

@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// The Swift port of `Spike/bridge.py`: serves Steam's own UI bundle with the
+/// The page↔client bridge: serves Steam's own UI bundle with the
 /// `SteamClient` shim injected, replays shim calls into the real
 /// `SharedJSContext` over CDP, relays the protobuf transport around CDP, and
 /// answers `/__eval`. One instance, owned by the app, running for its
