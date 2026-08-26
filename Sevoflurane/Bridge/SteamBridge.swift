@@ -145,6 +145,19 @@ actor SteamBridge {
     }
 
     // MARK: - CDP
+    /// The bottled client's cookie jar, for mirroring its authenticated web
+    /// session into the app's web views (``WebSessionCookies``). Nil when the
+    /// client isn't reachable — the caller renders signed out, same as before.
+    func clientCookies() async -> [SteamWebCookie]? {
+        guard let cdp = try? await ensureCDP() else { return nil }
+        do {
+            return try await cdp.cookies()
+        } catch {
+            log(.bridge, "cookie read failed: \(error)")
+            return nil
+        }
+    }
+
 
     private func ensureCDP() async throws -> CDPClient {
         if let cdp, await !cdp.isClosed { return cdp }

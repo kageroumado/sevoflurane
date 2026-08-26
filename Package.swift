@@ -62,6 +62,7 @@ let package = Package(
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/JSLiteral.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
+                "Sevoflurane/Support/SteamWebCookie.swift",
                 "Sevoflurane/Support/Subprocess.swift",
             ],
             swiftSettings: [

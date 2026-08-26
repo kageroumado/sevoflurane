@@ -75,6 +75,18 @@ actor CDPClient {
         }
     }
 
+    /// The client's whole CEF cookie jar. `Storage.getCookies` is a
+    /// browser-wide read that a page session answers too, so this reuses the
+    /// connection the bridge already holds instead of opening a second one.
+    func cookies() async throws -> [SteamWebCookie] {
+        let reply = try await send(method: "Storage.getCookies", params: [:])
+        let result = reply["result"] as? [String: Any]
+        guard let cookies = result?["cookies"] as? [[String: Any]] else {
+            throw Failure.badReply("Storage.getCookies")
+        }
+        return cookies.compactMap(SteamWebCookie.init(cdp:))
+    }
+
     private func send(method: String, params: [String: Any]) async throws -> [String: Any] {
         guard let task, !isClosed else { throw Failure.closed }
         nextID += 1

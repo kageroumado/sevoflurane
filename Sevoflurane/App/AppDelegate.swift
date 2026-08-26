@@ -67,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             host.bootstrap()
             supervisor.start()
+            // The client's own cookie jar is the app's web session (R5.1);
+            // mirrored once at start, refreshed per browser view.
+            WebSessionCookies.bridge = bridge
+            WebSessionCookies.refresh()
             // Idempotent bottle config (tray suppression, …) — reasserted on
             // every boot so a client update or registry rewrite can't
             // silently bring the Wine tray icon back.

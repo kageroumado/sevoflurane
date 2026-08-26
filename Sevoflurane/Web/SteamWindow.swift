@@ -523,12 +523,19 @@ final class SteamWindow: NSObject {
                 hostPage: webView,
                 host: host,
             )
+            // Steam is about to load a web property into this view; mirror
+            // the client's session first so it paints signed in.
+            WebSessionCookies.refresh()
             return
         }
         guard let view = browserViews[id] else { return }
         switch method {
         case "load":
-            view.load(string(args, 0))
+            let url = string(args, 0)
+            Task {
+                await WebSessionCookies.settled()
+                view.load(url)
+            }
         case "bounds":
             view.setBounds(
                 x: number(args, 0),
