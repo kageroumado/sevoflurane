@@ -326,12 +326,19 @@ tax paid forever. Two mitigations, in order of preference:
 
 ### App shape
 
-**Menu bar app** (like Steam's own tray behavior): `MenuBarExtra` with
-`.menuBarExtraStyle(.window)` — or NSStatusItem + `.accessory` activation policy —
-clicking the sevo-yellow glyph opens the library window. No Dock icon, no
-CrossOver in the Dock, nothing in the app switcher unless the window is open.
-Quitting the app (or the Mac sleeping into shutdown) triggers the supervisor's
-stop sequence, so in-bottle Steam never outlives the app as a zombie.
+**Menu bar app** (like Steam's own tray behavior): an `NSStatusItem` whose
+sevo-yellow glyph opens a non-activating panel. No Dock icon, no CrossOver in
+the Dock, nothing in the app switcher unless a window is open. Quitting the
+app (or the Mac sleeping into shutdown) triggers the supervisor's stop
+sequence, so in-bottle Steam never outlives the app as a zombie.
+
+**The AppKit lifecycle, not SwiftUI's.** A SwiftUI `App` owns the menu bar:
+on every transaction of its scene graph it rebuilds `NSApp.mainMenu` from its
+own model and discards every item it did not create. This app's menu bar is
+Steam's own strip mirrored into native menus, so the two cannot both hold the
+pen — `main.swift` shares the application, sets the delegate and runs.
+SwiftUI still draws the popover and the settings window, hosted in AppKit
+windows where its graph reaches nothing but its own views.
 
 ### The menu bar is the app; the Steam window is optional
 
@@ -372,6 +379,16 @@ may distribute it, so the user supplies their own copy: point the app at the
 Game Porting Toolkit disk image and it is installed into the managed engine,
 versions side by side, newest active.
 
+Two more knobs ride with the renderer, both from Apple's own documentation:
+`ROSETTA_ADVERTISE_AVX=1`, because Rosetta translates AVX either way but a
+growing number of titles read the cpuid and refuse to start without it, and
+`D3DM_ENABLE_METALFX=1`, which lets D3DMetal answer a game's DLSS calls with
+MetalFX. And because games read the adapter and either refuse to start or
+offer to install an NVIDIA driver, the bottle can be told to report a GeForce
+or a Radeon instead: one choice, written for every layer at once —
+`D3DM_VENDOR_ID` and friends for D3DMetal, `dxgi.custom*` for DXMT and DXVK,
+`VideoPciVendorID` in the registry for wined3d.
+
 Under CrossOver the same replacement is wanted and is reachable without
 touching their bundle. CrossOver's Perl launcher derives `CX_ROOT` from its
 own path and hands Wine
@@ -389,6 +406,23 @@ launcher whenever a version is pinned — CrossOver's own otherwise. Verified
 `Steam.exe` had Apple's newer `libd3dshared.dylib` and `D3DMetal.framework`
 mapped from our directory. Full trace in the research notes.
 
+
+### Which bottle, and what it costs
+
+A machine can carry several Steam bottles. The wizard asks which one is ours
+whenever the answer is ambiguous — more than one carries a Steam install, or
+the only one is not named `Steam` — and a new bottle takes a name of the
+user's choosing. The answer is stored in a defaults suite the app and `sevo`
+share, so the two faces can never drive different bottles.
+
+**Storage is accounted for and reclaimable.** Settings › Storage shows what
+each part occupies: games (from Steam's own `appmanifest` sizes, which the
+client already knows), the client without them, the caches Steam rebuilds,
+the bottle around it, and everything Sevoflurane itself downloaded. Uninstall
+stops the client, then removes app data always and the bottle only when asked,
+resets the preferences so a reinstall is a first run, and unregisters the
+login item. Everything goes to the Trash: the pane points at a games library,
+and a wrong click should cost a drag back rather than a re-download.
 
 ### Provisioning & lifecycle (verified end-to-end 2026-08-09, throwaway bottle)
 
