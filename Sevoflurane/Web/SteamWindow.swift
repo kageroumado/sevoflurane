@@ -308,6 +308,24 @@ final class SteamWindow: NSObject {
             if let target = SteamBottle.macURL(fromWindowsPath: string(args, 0)) {
                 NSWorkspace.shared.open(target)
             }
+        case "__browseScreenshots":
+            // Steam's own handler opens the bottle's explorer.exe. The first
+            // argument is the game id in both routes; the screenshot handle
+            // the app menu passes with it names a file, and the folder is
+            // what "show on disk" means.
+            if let folder = SteamBottle.screenshots(forApp: string(args, 0)) {
+                NSWorkspace.shared.open(folder)
+            }
+        case "__openSoundSettings":
+            // The bottle's microphone panel configures a Wine device nobody
+            // speaks into; the input this app records from is the Mac's.
+            if let panel = URL(
+                string: "x-apple.systempreferences:com.apple.Sound-Settings.extension",
+            ) {
+                NSWorkspace.shared.open(panel)
+            }
+        case "__openFileDialog":
+            return openFileDialog(options: args.first as? [String: Any] ?? [:])
         case "__openExternalURL":
             if let url = URL(string: string(args, 0)),
                url.scheme == "http" || url.scheme == "https" {
@@ -556,6 +574,28 @@ final class SteamWindow: NSObject {
         isClosed = true
         webView.evaluateJavaScript("window.close()")
         detach()
+    }
+
+    /// Steam's file picker, as an `NSOpenPanel`.
+    ///
+    /// Runs modally, which is what the caller expects: the client's own dialog
+    /// blocks the call until the user answers, and the awaiting UI treats a
+    /// cancel as `EResult.Cancelled` (25) rather than an empty path — an empty
+    /// one would be taken for a real answer and added as a shortcut.
+    private func openFileDialog(options: [String: Any]) -> Any? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = options["bChooseDirectory"] as? Bool ?? false
+        panel.canChooseFiles = !panel.canChooseDirectories
+        panel.allowsMultipleSelection = false
+        if let title = options["strTitle"] as? String { panel.message = title }
+        if let initial = options["strInitialFile"] as? String,
+           let url = SteamBottle.macURL(fromWindowsPath: initial) {
+            panel.directoryURL = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
+        }
+        guard panel.runModal() == .OK, let chosen = panel.url else {
+            return ["__sevoReject": ["result": 25]]
+        }
+        return SteamBottle.windowsPath(for: chosen)
     }
 
     // MARK: - Browser views

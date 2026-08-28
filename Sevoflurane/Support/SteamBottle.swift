@@ -5,7 +5,27 @@ import Foundation
 /// from the Windows paths Steam hands out to the macOS paths that exist.
 nonisolated enum SteamBottle {
     /// The bottle's name — also the last component of ``root``.
-    static let name = "Steam"
+    ///
+    /// A machine can carry several Steam bottles (CrossOver's own "Steam",
+    /// one from a previous experiment, one per engine); the wizard asks which
+    /// is ours when it finds more than one, and every path below follows the
+    /// answer. Both faces read it from the shared suite, so `sevo` and the app
+    /// never drive different bottles.
+    static var name: String {
+        Preferences.shared.string(forKey: nameKey) ?? defaultName
+    }
+
+    /// Names the bottle this installation drives. Takes effect for paths
+    /// computed after it returns, so the client is restarted around it.
+    static func choose(_ name: String) {
+        Preferences.shared.set(name, forKey: nameKey)
+    }
+
+    /// The name CrossOver's own Steam bottle carries, and what the wizard
+    /// creates when it makes one.
+    static let defaultName = "Steam"
+
+    private static let nameKey = "bottleName"
 
     /// CrossOver's bottles directory, holding every bottle by name.
     static let bottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
@@ -49,7 +69,8 @@ nonisolated enum SteamBottle {
     static var htmlcache: URL {
         let user = Engine.active == .crossover ? "crossover" : NSUserName()
         return root.appendingPathComponent(
-            "drive_c/users/\(user)/AppData/Local/Steam/htmlcache")
+            "drive_c/users/\(user)/AppData/Local/Steam/htmlcache",
+        )
     }
 
     /// `steam.cfg` next to steam.exe — the update-pinning emergency brake.
@@ -62,6 +83,42 @@ nonisolated enum SteamBottle {
 
     /// CrossOver's CLI tools (wine, wineserver, cxbottle).
     static let crossoverBin = "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin"
+
+    /// Where the client keeps one app's screenshots, or `nil` when the tree
+    /// does not exist yet.
+    ///
+    /// Steam writes them under the signed-in account —
+    /// `userdata/<account>/760/remote/<appid>/screenshots` — and creates
+    /// `760` only once a screenshot has been taken, so what opens is the
+    /// deepest directory that is actually there. More than one account can
+    /// have signed in on this machine; the one that has the app's folder
+    /// wins over one that only has the tree.
+    static func screenshots(forApp appID: String) -> URL? {
+        let accounts = (try? FileManager.default.contentsOfDirectory(
+            at: steamRoot.appendingPathComponent("userdata"),
+            includingPropertiesForKeys: nil,
+        )) ?? []
+        for suffix in ["760/remote/\(appID)/screenshots", "760/remote/\(appID)", "760/remote"] {
+            for account in accounts {
+                let candidate = account.appendingPathComponent(suffix)
+                if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            }
+        }
+        return nil
+    }
+
+    /// The Windows path for a macOS file, as the bottle sees it: inside the
+    /// bottle everything is on `C:`, and the rest of the Mac is reachable
+    /// through the `Z:` mapping of the filesystem root that every prefix has.
+    static func windowsPath(for url: URL) -> String {
+        let path = url.standardizedFileURL.path
+        let driveC = root.appendingPathComponent("drive_c").standardizedFileURL.path
+        if path == driveC || path.hasPrefix(driveC + "/") {
+            let rest = String(path.dropFirst(driveC.count))
+            return "C:" + rest.replacingOccurrences(of: "/", with: #"\"#)
+        }
+        return "Z:" + path.replacingOccurrences(of: "/", with: #"\"#)
+    }
 
     /// Translates the bottle's Windows paths into macOS paths.
     ///

@@ -13,17 +13,16 @@ project are almost always a violation of one of those rules.
 - `Sevoflurane/` — the app. `Web/` hosts Steam's UI and windows; `Bridge/`
   is the in-process page↔client bridge; `App/` is supervision, logging, and
   the menu bar.
-- `Spike/` — Python probes. `lifecycle.py` (headless bottle provisioning)
-  still stands alone until `sevo setup` ships; the management CLI is the
-  Swift `sevo` (`swift build`).
+- `Spike/` — scratch probes. Provisioning, CDP evaluation and client
+  lifecycle are the Swift `sevo` (`swift build`).
 - `Mockups/` — self-contained HTML mockups; open them in a browser.
 
 ## Building
 
 Xcode 26+, macOS 26+, Apple Silicon. Open `Sevoflurane.xcodeproj`, build the
 `Sevoflurane` scheme. To actually run against Steam you need a CrossOver
-bottle with Steam installed (`Spike/lifecycle.py provision` builds one
-headlessly).
+bottle with Steam installed (`sevo setup` builds one headlessly, and the
+app's first-run assistant does the same with a window around it).
 
 ## Rules of the road
 

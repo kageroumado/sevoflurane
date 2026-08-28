@@ -84,6 +84,15 @@ final class ClientSupervisor {
         self.host = host
     }
 
+    #if DEBUG
+        /// A supervisor that supervises nothing, fixed in one state — the
+        /// gallery draws every state side by side and starts no client.
+        convenience init(previewHealth: Health) {
+            self.init(host: SteamWebHost())
+            health = previewHealth
+        }
+    #endif
+
     func start() {
         guard loop == nil else { return }
         // The page the app just booted needs time to reach the bridge before

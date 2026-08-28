@@ -86,6 +86,22 @@ final class SteamWebHost {
     private(set) var activeLaunch: GameLaunch?
     @ObservationIgnored private var launchClear: Task<Void, Never>?
 
+    #if DEBUG
+        /// A host with a library and no client behind it, for the gallery.
+        /// Nothing here starts a page: the web views exist only after
+        /// ``bootstrap()``, which the gallery never calls.
+        static func preview(
+            games: [RecentGame] = [], launching: GameLaunch? = nil,
+            status: String = "Steam is ready",
+        ) -> SteamWebHost {
+            let host = SteamWebHost()
+            host.recentGames = games
+            host.activeLaunch = launching
+            host.status = status
+            return host
+        }
+    #endif
+
     /// One `__gameAction` event from the context page's registrations
     /// (``gameActionScript``). The trail also lands in the log, so a slow
     /// launch explains itself after the fact.

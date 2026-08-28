@@ -11,6 +11,7 @@ struct SetupView: View {
     private enum Step {
         case welcome
         case engine
+        case bottle
         case steam
         case options
         case done
@@ -25,6 +26,8 @@ struct SetupView: View {
     @State private var openAtLogin = true
     @State private var engineChoice: EngineChoice = .builtIn
     @State private var whyCrossOver = false
+    /// The bottle to adopt, or `nil` to build a fresh one.
+    @State private var bottleChoice: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,6 +63,7 @@ struct SetupView: View {
         switch step {
         case .welcome: welcome
         case .engine: engine
+        case .bottle: bottle
         case .steam: steam
         case .options: options
         case .done: done
@@ -162,6 +166,44 @@ struct SetupView: View {
         .buttonStyle(.plain)
     }
 
+    /// The Steam installations already on the machine. Only ever shown when
+    /// the answer is genuinely ambiguous — one bottle named the way we would
+    /// name it needs no question.
+    private var bottleCandidates: [SetupDetection.Bottle] {
+        provisioner.detection?.steamBottles ?? []
+    }
+
+    private var needsBottleChoice: Bool {
+        bottleCandidates.count > 1
+            || (bottleCandidates.first.map { $0.name != SteamBottle.defaultName } ?? false)
+    }
+
+    private var bottle: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Which Steam?")
+                .font(.system(size: 24, weight: .bold))
+            Text("This Mac already has Steam in more than one Windows bottle. "
+                + "Pick one and your games stay where they are; build a new "
+                + "one and Steam downloads again from scratch.")
+                .foregroundStyle(.secondary)
+            Picker("", selection: $bottleChoice) {
+                ForEach(bottleCandidates, id: \.name) { candidate in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(candidate.name)
+                        Text((candidate.url.path as NSString).abbreviatingWithTildeInPath)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .tag(String?.some(candidate.name))
+                }
+                Text("Build a new bottle named \(SteamBottle.defaultName)")
+                    .tag(String?.none)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+        }
+    }
+
     private var steam: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Setting up Steam")
@@ -241,10 +283,16 @@ struct SetupView: View {
                 Button("Get Started") { advanceFromWelcome() }
                     .keyboardShortcut(.defaultAction)
             case .engine:
-                Button("Continue") { beginProvisioning() }
+                Button("Continue") { advanceFromEngine() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(engineChoice == .crossover
                         && provisioner.detection?.usableCrossOver == nil)
+            case .bottle:
+                Button("Continue") {
+                    SteamBottle.choose(bottleChoice ?? SteamBottle.defaultName)
+                    beginProvisioning()
+                }
+                .keyboardShortcut(.defaultAction)
             case .steam:
                 Button("Continue") { step = .options }
                     .keyboardShortcut(.defaultAction)
@@ -267,7 +315,17 @@ struct SetupView: View {
             step = .engine
             return
         }
-        beginProvisioning()
+        advanceFromEngine()
+    }
+
+    private func advanceFromEngine() {
+        guard needsBottleChoice else {
+            beginProvisioning()
+            return
+        }
+        bottleChoice = bottleCandidates
+            .first { $0.name == SteamBottle.name }?.name ?? bottleCandidates.first?.name
+        step = .bottle
     }
 
     private func beginProvisioning() {

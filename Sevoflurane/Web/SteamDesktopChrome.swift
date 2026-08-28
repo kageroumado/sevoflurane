@@ -129,12 +129,12 @@ enum SteamDesktopChrome {
     static let popupScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-
+    
       var STYLE_ID = "sevo-macos-chrome";
       /* Steam's close/minimize cluster duplicates the traffic lights. Both
          class names are semantic and survive client builds. */
       var CSS = ".TitleBar.title-area .title-bar-actions { display: none !important; }";
-
+    
       function apply() {
         if (!document.head) return;
         var style = document.getElementById(STYLE_ID);
@@ -146,13 +146,13 @@ enum SteamDesktopChrome {
         }
         reportDragRegions();
       }
-
+    
       function rectOf(el) {
         var r = el.getBoundingClientRect();
         return [Math.round(r.left), Math.round(r.top),
                 Math.round(r.width), Math.round(r.height)];
       }
-
+    
       /* The strip's empty stretch is the drag surface — on the login window
          that is `.title-area-children`, which spans the strip minus the
          controls and renders nothing. A popup that fills it (chat tabs)
@@ -172,7 +172,7 @@ enum SteamDesktopChrome {
         }
         return out;
       }
-
+    
       var pending = 0;
       function reportDragRegions() {
         var handler = window.webkit && window.webkit.messageHandlers
@@ -180,18 +180,18 @@ enum SteamDesktopChrome {
         if (!handler) return;
         handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
       }
-
+    
       function schedule() {
         if (pending) return;
         pending = setTimeout(function () { pending = 0; apply(); }, 150);
       }
-
+    
       new MutationObserver(function () {
         if (document.head && !document.getElementById(STYLE_ID)) apply();
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-
+    
       window.__sevoChrome = { apply: apply };
       apply();
       return "installed";

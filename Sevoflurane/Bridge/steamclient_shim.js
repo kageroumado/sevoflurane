@@ -151,13 +151,46 @@
   var NATIVE_ROUTES = {
     "SteamClient.System.OpenLocalDirectoryInSystemExplorer": "__openLocalDirectory",
     "SteamClient.System.OpenInSystemBrowser": "__openExternalURL",
+    "SteamClient.System.OpenFileDialog": "__openFileDialog",
+    "SteamClient.Apps.BrowseScreenshotForApp": "__browseScreenshots",
+    "SteamClient.Screenshots.ShowScreenshotsOnDisk": "__browseScreenshots",
+    "SteamClient.Settings.OpenWindowsMicSettings": "__openSoundSettings",
+  };
+
+  /* Routes whose target is a path only the client knows: resolved here, where
+     the API lives, and then opened through the directory route above. */
+  var NATIVE_RESOLVERS = {
+    "SteamClient.InstallFolder.BrowseFilesInFolder": function (args) {
+      var index = args[0];
+      return window.SteamClient.InstallFolder.GetInstallFolders()
+        .then(function (folders) {
+          var hit = (folders || []).filter(function (f) {
+            return f.nFolderIndex === index;
+          })[0] || (folders || [])[index];
+          return hit && (hit.strFolderPath || hit.strDriveName);
+        });
+    },
   };
   function nativeRoute(path, args) {
-    var fn = NATIVE_ROUTES[path];
-    var handler = fn && window.webkit && window.webkit.messageHandlers
+    var handler = window.webkit && window.webkit.messageHandlers
       && window.webkit.messageHandlers.sevoWindow;
     if (!handler) return null;
-    return handler.postMessage({ fn: fn, args: Array.prototype.slice.call(args) });
+    var list = Array.prototype.slice.call(args);
+    var fn = NATIVE_ROUTES[path];
+    /* A route that answers `__sevoReject` is reporting the outcome the caller
+       catches rather than a value it can use — a cancelled file dialog. */
+    if (fn) {
+      return handler.postMessage({ fn: fn, args: list }).then(function (value) {
+        if (value && value.__sevoReject) return Promise.reject(value.__sevoReject);
+        return value;
+      });
+    }
+    var resolve = NATIVE_RESOLVERS[path];
+    if (!resolve) return null;
+    return Promise.resolve(resolve(list)).then(function (path_) {
+      if (!path_) return null;
+      return handler.postMessage({ fn: "__openLocalDirectory", args: [path_] });
+    });
   }
 
   /* steam:// URLs the UI itself can handle. The client broadcasts RunSteamURL

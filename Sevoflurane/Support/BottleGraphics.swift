@@ -191,7 +191,7 @@ nonisolated enum BottleGraphics {
     private static let msyncKey = "managedMsync"
 
     static func managedSelection() -> Selection {
-        let defaults = UserDefaults.standard
+        let defaults = Preferences.shared
         let renderer = defaults.string(forKey: rendererKey)
             .flatMap(Renderer.init(rawValue:)) ?? .dxmt
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true
@@ -199,7 +199,7 @@ nonisolated enum BottleGraphics {
     }
 
     static func setManagedSelection(_ selection: Selection) {
-        let defaults = UserDefaults.standard
+        let defaults = Preferences.shared
         defaults.set(selection.renderer.rawValue, forKey: rendererKey)
         defaults.set(selection.msync, forKey: msyncKey)
     }

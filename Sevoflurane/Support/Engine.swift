@@ -27,7 +27,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// first use (so the CLI needs no entry-point ceremony); the app reasserts
     /// it whenever a full detection lands. Resolution is idempotent, so a
     /// first-access race between callers is benign.
-    nonisolated(unsafe) private static var resolved: Engine?
+    private nonisolated(unsafe) static var resolved: Engine?
     static var active: Engine {
         get {
             if let resolved { return resolved }

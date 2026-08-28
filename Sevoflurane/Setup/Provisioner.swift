@@ -29,6 +29,17 @@ final class Provisioner {
         self.environment = environment ?? LiveSetupEnvironment()
     }
 
+    #if DEBUG
+        /// A provisioner frozen mid-story, for the gallery's Repair pane.
+        convenience init(previewActivity: Activity, detection: SetupDetection? = nil) {
+            self.init(environment: DryRunSetupEnvironment(
+                scenario: .provisioned, stepDelay: .zero,
+            ))
+            activity = previewActivity
+            self.detection = detection
+        }
+    #endif
+
     /// Whether effects are simulated — the wizard badges itself so a
     /// screenshot can never be mistaken for a real run.
     var isDryRun: Bool {

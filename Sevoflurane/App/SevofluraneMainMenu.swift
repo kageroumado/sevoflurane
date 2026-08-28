@@ -143,6 +143,11 @@ enum SevofluraneMainMenu {
         /// each opening the wizard against that fixture machine.
         private static func debugMenu() -> NSMenu {
             let menu = NSMenu()
+            menu.addItem(
+                withTitle: "UI Gallery",
+                action: #selector(AppDelegate.showGallery(_:)),
+                keyEquivalent: "",
+            )
             let dryRun = NSMenu()
             let dryRunItem = NSMenuItem(
                 title: "Onboarding Dry Run", action: nil, keyEquivalent: "",

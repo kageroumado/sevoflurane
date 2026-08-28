@@ -33,6 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SevofluraneMainMenu.install(mirror: mirror)
         menuBarPopover = MenuBarPopover(host: host, supervisor: supervisor)
         #if DEBUG
+            if GalleryWindow.wasRequestedAtLaunch {
+                // Nothing else starts: the gallery is fixtures all the way
+                // down, and a client coming up behind it would only compete
+                // for the ports.
+                isDryRunBoot = true
+                galleryWindow.show()
+                return
+            }
             if let scenario = SetupScenario.fromLaunchEnvironment() {
                 // The onboarding harness: no control server (a live instance may
                 // own the port), no bridge, no client — nothing on the machine
@@ -111,6 +119,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if DEBUG
+        private lazy var galleryWindow = GalleryWindow()
+
+        /// Debug ▸ UI Gallery — every surface in every state, no client.
+        @objc
+        func showGallery(_: Any?) {
+            galleryWindow.show()
+        }
+
         /// Whether this process booted as the onboarding harness
         /// (`SEVO_SETUP_DRY_RUN`) rather than as the real app.
         private var isDryRunBoot = false

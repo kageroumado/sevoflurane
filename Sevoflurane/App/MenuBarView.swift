@@ -148,7 +148,15 @@ struct MenuBarView: View {
     /// No heading: five pieces of box art under the app's own name need no
     /// label to say they are games.
     @ViewBuilder private var recentGames: some View {
-        if !host.recentGames.isEmpty {
+        if host.recentGames.isEmpty {
+            // A popover with nothing between the header and the button reads
+            // as a failure; a library with no installed games is not one.
+            Text("No games installed yet.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, Theme.Space.sm)
+        } else {
             VStack(spacing: 1) {
                 ForEach(host.recentGames) { game in
                     GameRow(

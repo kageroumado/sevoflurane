@@ -21,6 +21,9 @@
         case licensedNoBottle = "licensed-no-bottle"
         /// The bottle exists but Steam was never installed into it.
         case bottleWithoutSteam = "bottle-without-steam"
+        /// Several bottles already carry a Steam install — the one case where
+        /// the wizard has to ask which one is ours.
+        case multipleBottles = "multiple-bottles"
         /// The NSIS installer fails — exercises the wizard's failure surface.
         case installerFails = "installer-fails"
         /// Everything present: the wizard should never gate on this machine.
@@ -33,6 +36,7 @@
             case .noRosetta: "No Rosetta"
             case .licensedNoBottle: "Licensed, No Bottle"
             case .bottleWithoutSteam: "Bottle Without Steam"
+            case .multipleBottles: "Multiple Steam Bottles"
             case .installerFails: "Installer Fails"
             case .provisioned: "Fully Provisioned"
             }
@@ -52,10 +56,12 @@
             version: "26.3", licensed: false, expires: nil, trialExpired: true,
         )
 
-        private static func bottle(hasSteam: Bool) -> SetupDetection.Bottle {
+        private static func bottle(
+            named name: String = SteamBottle.defaultName, hasSteam: Bool,
+        ) -> SetupDetection.Bottle {
             SetupDetection.Bottle(
-                name: SteamBottle.name,
-                url: SteamBottle.bottlesRoot.appendingPathComponent(SteamBottle.name),
+                name: name,
+                url: SteamBottle.bottlesRoot.appendingPathComponent(name),
                 hasSteam: hasSteam,
             )
         }
@@ -85,6 +91,17 @@
                 SetupDetection(
                     rosetta: true, crossover: Self.licensedCrossOver,
                     bottles: [Self.bottle(hasSteam: false)], managedEngineVersions: [],
+                )
+            case .multipleBottles:
+                SetupDetection(
+                    rosetta: true, crossover: Self.licensedCrossOver,
+                    bottles: [
+                        Self.bottle(named: "Steam", hasSteam: true),
+                        Self.bottle(named: "Steam Beta", hasSteam: true),
+                        Self.bottle(named: "Games", hasSteam: true),
+                        Self.bottle(named: "Office", hasSteam: false),
+                    ],
+                    managedEngineVersions: [],
                 )
             case .provisioned:
                 SetupDetection(
