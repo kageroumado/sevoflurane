@@ -203,8 +203,25 @@ nonisolated enum BottleGraphics {
             "WINEDXVK", to: selection.renderer == .dxvk ? "1" : nil, inConf: text,
         )
         text = settingVariable("WINEMSYNC", to: selection.msync ? "1" : "0", inConf: text)
+        for (name, value) in Self.translationDefaults {
+            text = settingVariable(name, to: value, inConf: text)
+        }
         try Data(text.utf8).write(to: confURL(forBottle: bottle))
     }
+
+    /// Knobs Apple documents for the evaluation environment, and that a Steam
+    /// bottle wants on:
+    ///
+    /// - `ROSETTA_ADVERTISE_AVX` makes the translation layer publish AVX
+    ///   support to the game. Rosetta translates those instructions either
+    ///   way; without the advertisement a growing number of titles decide the
+    ///   CPU is too old and refuse to start.
+    /// - `D3DM_ENABLE_METALFX` lets D3DMetal answer a game's DLSS calls with
+    ///   MetalFX on macOS 26. It does nothing under the other renderers.
+    static let translationDefaults = [
+        "ROSETTA_ADVERTISE_AVX": "1",
+        "D3DM_ENABLE_METALFX": "1",
+    ]
 
     private static func confURL(forBottle bottle: URL) -> URL {
         bottle.appendingPathComponent("cxbottle.conf")

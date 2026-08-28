@@ -186,6 +186,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         if let overrides = graphics.renderer.managedDLLOverrides {
             env["WINEDLLOVERRIDES"] = overrides
         }
+        env.merge(BottleGraphics.translationDefaults) { current, _ in current }
         return env
     }
 }

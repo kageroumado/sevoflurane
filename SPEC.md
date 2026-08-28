@@ -367,12 +367,22 @@ and pressing play applies the renderer, restarts the client, and launches the
 game once services are back. The restart is the cost of the mechanism, and
 the user is told about it in advance rather than surprised by it.
 
-Apple's D3DMetal is the only layer that speaks Direct3D 12, and it is
-CrossOver-only today because the managed engine cannot redistribute it. The
-intended answer is the Whisky route: the user downloads Apple's Game Porting
-Toolkit themselves and points the app at the disk image, which copies
-D3DMetal into the managed engine — no redistribution, and the same layer
-CrossOver ships at `lib64/apple_gptk/external/D3DMetal.framework`.
+Apple's D3DMetal is the only layer that speaks Direct3D 12, and only Apple
+may distribute it, so the user supplies their own copy: point the app at the
+Game Porting Toolkit disk image and it is installed into the managed engine,
+versions side by side, newest active.
+
+Under CrossOver the same replacement is wanted and is reachable without
+touching their bundle. CrossOver's Perl launcher derives `CX_ROOT` from its
+own path and hands Wine
+`CX_APPLEGPTK_LIBD3DSHARED_PATH=$CX_ROOT/lib64/apple_gptk/external/libd3dshared.dylib`;
+`ntdll.so` dlopens that, and the dylib in turn dlopens
+`@rpath/D3DMetal.framework/D3DMetal` against `@loader_path` — so the
+framework is always the one beside the dylib that was loaded. A tree of
+symlinks mirroring CrossOver, with only `lib64/apple_gptk` pointed at a
+version we manage, therefore swaps D3DMetal wholesale: no edits to a signed
+bundle, no `DYLD_*` (stripped under their hardened runtime), no support
+burden on CodeWeavers. Full trace in the research notes.
 
 
 ### Provisioning & lifecycle (verified end-to-end 2026-08-09, throwaway bottle)
