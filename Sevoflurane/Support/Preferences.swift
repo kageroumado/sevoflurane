@@ -20,6 +20,14 @@ nonisolated enum Preferences {
     /// answers nil for the caller's own domain.
     private static let suiteName = "glass.kagerou.sevoflurane.shared"
 
+    /// Forgets every choice this app stored — the settings half of an
+    /// uninstall, so a reinstall starts as a first run rather than inheriting
+    /// a renderer, a bottle name and a pinned toolkit that no longer exist.
+    static func reset() {
+        shared.removePersistentDomain(forName: suiteName)
+        shared.synchronize()
+    }
+
     /// Keys that were written to the app's own domain before the suite
     /// existed, brought across the first time the suite is opened. Reading
     /// what the user last chose beats resetting them to the defaults.

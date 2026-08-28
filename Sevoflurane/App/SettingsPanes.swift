@@ -1,3 +1,4 @@
+import Propofol
 import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
@@ -211,6 +212,141 @@ private struct RendererHelp: View {
         }
         .padding(16)
         .frame(width: 380)
+    }
+}
+
+// MARK: - Storage
+
+struct StorageSettings: View {
+    let store: StorageStore
+    let provisioner: Provisioner
+    let highlighted: String?
+    @State private var confirmingUninstall = false
+    @State private var uninstallBottle = false
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(store.entries) { entry in
+                    if entry.id == "games", !store.games.isEmpty {
+                        DisclosureGroup { gameList } label: { row(entry) }
+                    } else {
+                        row(entry)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("On this Mac")
+                    Spacer()
+                    if store.isMeasuring { ProgressView().controlSize(.small) }
+                    Text(Self.size(store.total)).monospacedDigit().foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("Anything removed here goes to the Trash, so a wrong click "
+                    + "costs a drag back rather than a re-download.")
+            }
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Uninstall Sevoflurane").font(.headline)
+                        Text("Removes what this app installed. Your Steam account, "
+                            + "and anything you keep, are untouched.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
+                        .disabled(store.isUninstalling)
+                }
+                .highlightable(id: "storage.uninstall", highlighted: highlighted)
+            }
+        }
+        .formStyle(.grouped)
+        .task { await store.measure() }
+        .confirmationDialog(
+            "Uninstall Sevoflurane?",
+            isPresented: $confirmingUninstall,
+            titleVisibility: .visible,
+        ) {
+            Button("Move App Data to Trash", role: .destructive) {
+                uninstall(includingBottle: false)
+            }
+            Button("Also Move the Bottle and Games", role: .destructive) {
+                uninstall(includingBottle: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Steam is stopped first. App data means the engines, the toolkits "
+                + "and this app's settings. The bottle holds the Steam client and "
+                + "every installed game — \(Self.size(bottleBytes)) — and everything "
+                + "goes to the Trash either way.")
+        }
+    }
+
+    /// Sizes as Steam accounts for them, so a row here matches what the
+    /// client shows for the same game.
+    private var gameList: some View {
+        VStack(spacing: 4) {
+            ForEach(store.games) { game in
+                HStack {
+                    Text(game.name).lineLimit(1)
+                    Spacer(minLength: Theme.Space.md)
+                    Text(Self.size(game.bytes))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+            }
+        }
+        .padding(.leading, 28)
+        .padding(.vertical, 4)
+    }
+
+    private var bottleBytes: Int64 {
+        store.entries
+            .filter { ["bottle", "client", "games", "caches"].contains($0.id) }
+            .map { max(0, $0.bytes) }
+            .reduce(0, +)
+    }
+
+    private func uninstall(includingBottle: Bool) {
+        uninstallBottle = includingBottle
+        Task(name: "Uninstall") {
+            await store.uninstall(includingBottle: includingBottle, provisioner: provisioner)
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func row(_ entry: StorageInventory.Entry) -> some View {
+        HStack(spacing: Theme.Space.md) {
+            Image(systemName: entry.icon)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.name)
+                Text(entry.removal?.caution ?? entry.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Space.sm)
+            // A dash for both "not measured yet" and "nothing there":
+            // `ByteCountFormatter` says "Zero KB", which reads like a bug.
+            Text(entry.bytes <= 0 ? "—" : Self.size(entry.bytes))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            if entry.removal != nil {
+                Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
+                    .buttonStyle(.borderless)
+                    .disabled(entry.bytes <= 0)
+                    .help("Move \(entry.name.lowercased()) to the Trash")
+            }
+        }
+        .highlightable(id: "storage.\(entry.id)", highlighted: highlighted)
+    }
+
+    private static func size(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
 

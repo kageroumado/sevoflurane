@@ -12,7 +12,7 @@ struct SevoCommand: AsyncParsableCommand {
         version: Sevo.version,
         subcommands: [
             DoctorCommand.self, StatusCommand.self, SetupCommand.self,
-            EngineCommand.self, BottleCommand.self,
+            EngineCommand.self, BottleCommand.self, StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
             EvalCommand.self, CDPCommand.self, LogsCommand.self,
@@ -205,6 +205,61 @@ struct SetupCommand: AsyncParsableCommand {
             Sevo.printError("--engine must be builtin or crossover")
             throw SevoExit.badInvocation
         }
+    }
+}
+
+// MARK: - storage
+
+struct StorageCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "storage",
+        abstract: "What Sevoflurane and its bottle occupy on disk.",
+    )
+
+    @Flag(name: .customLong("games"), help: "List installed games instead of the summary.")
+    var listGames = false
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        if listGames {
+            let games = StorageInventory.installedGames()
+            if asJSON {
+                let rows = games.map {
+                    #"{"appid":\#($0.id),"name":\#(JSLiteral.string($0.name)),"bytes":\#($0.bytes)}"#
+                }
+                print("[\(rows.joined(separator: ","))]")
+                return
+            }
+            for game in games {
+                print("\(Self.size(game.bytes).padded(to: 10))  \(game.name)")
+            }
+            return
+        }
+        var sized: [(StorageInventory.Entry, Int64)] = []
+        for entry in StorageInventory.entries() {
+            await sized.append((entry, StorageInventory.size(of: entry)))
+        }
+        if asJSON {
+            let rows = sized.map {
+                #"{"id":\#(JSLiteral.string($0.0.id)),"bytes":\#($0.1)}"#
+            }
+            print("[\(rows.joined(separator: ","))]")
+            return
+        }
+        for (entry, bytes) in sized where bytes > 0 {
+            print("\(Self.size(bytes).padded(to: 10))  \(entry.name)")
+        }
+        print("\(Self.size(sized.map(\.1).reduce(0, +)).padded(to: 10))  total")
+    }
+
+    private static func size(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
+private extension String {
+    func padded(to width: Int) -> String {
+        count >= width ? self : String(repeating: " ", count: width - count) + self
     }
 }
 

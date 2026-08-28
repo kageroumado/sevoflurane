@@ -30,7 +30,9 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
 
     private func makeWindow() -> NSWindow {
         let controller = NSHostingController(
-            rootView: SettingsView(provisioner: provisioner, graphics: .live()),
+            rootView: SettingsView(
+                provisioner: provisioner, graphics: .live(), storage: .live(),
+            ),
         )
         let window = NSWindow(contentViewController: controller)
         window.title = "Settings"

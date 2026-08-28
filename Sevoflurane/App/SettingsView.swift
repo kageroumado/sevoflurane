@@ -12,6 +12,7 @@ import SwiftUI
 struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
+    let storage: StorageStore
     @State private var category: SettingsCategory = .general
     @State private var searchText = ""
     @State private var highlighted: String?
@@ -29,6 +30,7 @@ struct SettingsView: View {
                 category: category,
                 provisioner: provisioner,
                 graphics: graphics,
+                storage: storage,
                 highlighted: highlighted,
             )
         }
@@ -41,6 +43,7 @@ struct SettingsView: View {
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case general
     case graphics
+    case storage
     case repair
     case about
 
@@ -52,6 +55,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .graphics: "Graphics"
+        case .storage: "Storage"
         case .repair: "Repair"
         case .about: "About"
         }
@@ -61,6 +65,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape.fill"
         case .graphics: "cpu.fill"
+        case .storage: "internaldrive.fill"
         case .repair: "wrench.and.screwdriver.fill"
         case .about: "info.circle.fill"
         }
@@ -100,6 +105,22 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "msync", "sync", "synchronization", "performance",
                         "deadlock", "hang",
                     ],
+                ),
+            ]
+        case .storage:
+            [
+                SearchableSetting(
+                    id: "storage.games",
+                    title: "What is using space",
+                    keywords: [
+                        "storage", "space", "disk", "size", "games", "cache",
+                        "bottle", "engine", "clean", "free",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "storage.uninstall",
+                    title: "Uninstall Sevoflurane",
+                    keywords: ["uninstall", "remove", "delete", "reset", "clean"],
                 ),
             ]
         case .repair:
@@ -199,6 +220,7 @@ private struct SettingsPane: View {
     let category: SettingsCategory
     let provisioner: Provisioner
     let graphics: GraphicsStore
+    let storage: StorageStore
     let highlighted: String?
 
     var body: some View {
@@ -206,6 +228,10 @@ private struct SettingsPane: View {
             switch category {
             case .general: GeneralSettings(provisioner: provisioner, highlighted: highlighted)
             case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
+            case .storage:
+                StorageSettings(
+                    store: storage, provisioner: provisioner, highlighted: highlighted,
+                )
             case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)
             }

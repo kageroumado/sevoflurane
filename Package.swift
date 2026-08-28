@@ -68,6 +68,7 @@ let package = Package(
                 "Sevoflurane/Support/PerformanceProbes.swift",
                 "Sevoflurane/Support/Preferences.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
+                "Sevoflurane/Support/StorageInventory.swift",
                 "Sevoflurane/Support/SteamWebCookie.swift",
                 "Sevoflurane/Support/Subprocess.swift",
             ],

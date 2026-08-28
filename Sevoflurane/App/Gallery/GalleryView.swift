@@ -30,7 +30,9 @@
                     section("Settings") {
                         tile("Window") {
                             SettingsView(
-                                provisioner: Fixtures.settings, graphics: Fixtures.graphics,
+                                provisioner: Fixtures.settings,
+                                graphics: Fixtures.graphics,
+                                storage: Fixtures.storage,
                             )
                                 .frame(width: 720, height: 460)
                         }
@@ -193,6 +195,7 @@
         /// Fixed values in memory: the gallery draws the settings window, and
         /// drawing it must not rewrite the machine's bottle.
         static let graphics = GraphicsStore.preview()
+        static let storage = StorageStore.preview()
 
         private static func provisioner(_ activity: Provisioner.Activity) -> Provisioner {
             Provisioner(
