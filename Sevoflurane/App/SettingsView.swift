@@ -1,187 +1,228 @@
-import ServiceManagement
 import SwiftUI
 
-/// Settings: General (login item), Repair (the idempotent provisioner,
-/// re-run on demand), About. The wizard covers first run; this is
-/// everything after it.
+/// Settings: General (login item), Graphics (the bottle's renderer knobs),
+/// Repair (the idempotent provisioner, re-run on demand), About. The wizard
+/// covers first run; this is everything after it.
+///
+/// A searchable sidebar rather than a row of tabs, because the knobs that
+/// bring someone here are the ones they know by name — "msync", "renderer",
+/// "open at login" — and not by which pane happens to hold them. Searching
+/// lists the matching settings themselves; picking one opens its pane and
+/// flashes the row.
 struct SettingsView: View {
     let provisioner: Provisioner
-    @State private var openAtLogin = false
-    @State private var graphics = BottleGraphics.Selection(renderer: .auto, msync: true)
-    @State private var graphicsLoaded = false
+    @State private var category: SettingsCategory = .general
+    @State private var searchText = ""
+    @State private var highlighted: String?
 
     var body: some View {
-        TabView {
-            Tab("General", systemImage: "gear") { general }
-            Tab("Graphics", systemImage: "cpu") { graphicsPane }
-            Tab("Repair", systemImage: "wrench.and.screwdriver") { repair }
-            Tab("About", systemImage: "info.circle") { about }
-        }
-        .frame(width: 440)
-        .onAppear {
-            openAtLogin = provisioner.openAtLogin
-            graphics = Self.currentGraphics()
-            graphicsLoaded = true
-        }
-    }
-
-    private var general: some View {
-        Form {
-            Section {
-                Toggle(isOn: $openAtLogin) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Open at login")
-                        Text("Sevoflurane starts in the menu bar. No windows until you ask.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.switch)
-                .onChange(of: openAtLogin) { _, enabled in
-                    provisioner.setOpenAtLogin(enabled)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    /// The renderers the active engine can actually switch between.
-    /// D3DMetal under the managed engine waits on clean-machine validation
-    /// (release-plan R2.4), so it is only offered under CrossOver.
-    private var availableRenderers: [Renderer] {
-        Engine.active == .crossover
-            ? Renderer.allCases
-            : [.auto, .dxmt, .dxvk, .wined3d]
-    }
-
-    private var graphicsPane: some View {
-        Form {
-            Section {
-                Picker("Game renderer", selection: $graphics.renderer) {
-                    ForEach(availableRenderers, id: \.self) { renderer in
-                        Text(renderer.label).tag(renderer)
-                    }
-                }
-                Text(graphics.renderer.detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Toggle(isOn: $graphics.msync) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Enhanced synchronization (msync)")
-                        Text("Faster in most games. Turn off if a game deadlocks at launch.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.switch)
-            } footer: {
-                Text("Steam's own interface never touches Direct3D — changes "
-                    + "take effect the next time a game starts.")
-            }
-        }
-        .formStyle(.grouped)
-        .onChange(of: graphics) { _, selection in
-            guard graphicsLoaded else { return }
-            applyGraphics(selection)
-        }
-    }
-
-    private static func currentGraphics() -> BottleGraphics.Selection {
-        Engine.active == .crossover
-            ? BottleGraphics.selection(forBottle: SteamBottle.root)
-            : BottleGraphics.managedSelection()
-    }
-
-    private func applyGraphics(_ selection: BottleGraphics.Selection) {
-        switch Engine.active {
-        case .crossover:
-            do {
-                try BottleGraphics.apply(selection, toBottle: SteamBottle.root)
-                EventLog.shared.log(
-                    .setup,
-                    "graphics: renderer=\(selection.renderer.rawValue) msync=\(selection.msync)",
-                )
-            } catch {
-                EventLog.shared.log(.setup, "graphics change failed: \(error)")
-            }
-        case .managed:
-            BottleGraphics.setManagedSelection(selection)
-            EventLog.shared.log(
-                .setup,
-                "graphics: renderer=\(selection.renderer.rawValue) msync=\(selection.msync)",
+        NavigationSplitView {
+            SettingsSidebar(
+                category: $category,
+                searchText: $searchText,
+                highlighted: $highlighted,
+            )
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            SettingsPane(
+                category: category,
+                provisioner: provisioner,
+                highlighted: highlighted,
             )
         }
+        .navigationSplitViewStyle(.balanced)
+    }
+}
+
+// MARK: - Categories
+
+enum SettingsCategory: String, CaseIterable, Identifiable {
+    case general
+    case graphics
+    case repair
+    case about
+
+    var id: String {
+        rawValue
     }
 
-    private var repair: some View {
-        Form {
-            Section {
-                HStack(spacing: 10) {
-                    switch provisioner.activity {
-                    case let .working(phase):
-                        ProgressView().controlSize(.small)
-                        Text(phase)
-                    case let .failed(reason):
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text(reason).font(.callout)
-                    case .done:
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Steam is ready.")
-                    case .idle:
-                        Image(systemName: "checkmark.circle")
-                            .foregroundStyle(.secondary)
-                        Text("Nothing in progress.")
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .graphics: "Graphics"
+        case .repair: "Repair"
+        case .about: "About"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general: "gearshape.fill"
+        case .graphics: "cpu.fill"
+        case .repair: "wrench.and.screwdriver.fill"
+        case .about: "info.circle.fill"
+        }
+    }
+
+    /// What search matches on — one entry per row a pane can flash.
+    var searchableItems: [SearchableSetting] {
+        switch self {
+        case .general:
+            [SearchableSetting(
+                id: "general.openAtLogin",
+                title: "Open at login",
+                keywords: ["login", "startup", "start", "launch", "menu bar", "automatic"],
+            )]
+        case .graphics:
+            [
+                SearchableSetting(
+                    id: "graphics.renderer",
+                    title: "Game renderer",
+                    keywords: [
+                        "renderer", "graphics", "direct3d", "d3d", "d3dmetal",
+                        "dxmt", "dxvk", "wined3d", "gpu", "metal",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "graphics.msync",
+                    title: "Enhanced synchronization (msync)",
+                    keywords: [
+                        "msync", "sync", "synchronization", "performance",
+                        "deadlock", "hang",
+                    ],
+                ),
+            ]
+        case .repair:
+            [SearchableSetting(
+                id: "repair.run",
+                title: "Repair the installation",
+                keywords: [
+                    "repair", "reinstall", "fix", "setup", "provision",
+                    "broken", "engine", "bottle",
+                ],
+            )]
+        case .about:
+            [SearchableSetting(
+                id: "about.version",
+                title: "Version",
+                keywords: ["about", "version", "build", "github", "source", "kageroumado"],
+            )]
+        }
+    }
+}
+
+struct SearchableSetting: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let keywords: [String]
+
+    func matches(_ search: String) -> Bool {
+        let needle = search.lowercased()
+        return title.lowercased().contains(needle) || keywords.contains { $0.contains(needle) }
+    }
+}
+
+// MARK: - Sidebar
+
+private struct SettingsSidebar: View {
+    @Binding var category: SettingsCategory
+    @Binding var searchText: String
+    @Binding var highlighted: String?
+
+    private var results: [(category: SettingsCategory, items: [SearchableSetting])] {
+        SettingsCategory.allCases.compactMap { category in
+            let items = category.searchableItems.filter { $0.matches(searchText) }
+            return items.isEmpty ? nil : (category, items)
+        }
+    }
+
+    var body: some View {
+        List(selection: $category) {
+            if searchText.isEmpty {
+                ForEach(SettingsCategory.allCases) { category in
+                    Label {
+                        Text(category.title)
+                    } icon: {
+                        Image(systemName: category.icon)
+                            .foregroundStyle(Color.accentColor)
                     }
-                    Spacer()
-                    Button("Repair") {
-                        Task { await provisioner.provisionAndConfigure() }
-                    }
-                    .disabled(isWorking)
+                    .tag(category)
                 }
-            } footer: {
-                Text("Runs the same setup as first launch: anything present is "
-                    + "kept, anything missing or broken is reinstalled. Games "
-                    + "and saves are untouched.")
+            } else {
+                ForEach(results, id: \.category.id) { result in
+                    Section {
+                        ForEach(result.items) { item in
+                            Button { reveal(item, in: result.category) } label: {
+                                HStack {
+                                    Text(item.title).foregroundStyle(.primary)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        Label(result.category.title, systemImage: result.category.icon)
+                    }
+                }
             }
         }
-        .formStyle(.grouped)
-        .task { await provisioner.refreshDetection() }
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search Settings")
+        .navigationTitle("Settings")
+        .frame(minWidth: 190)
     }
 
-    private var isWorking: Bool {
-        if case .working = provisioner.activity { true } else { false }
-    }
-
-    private var about: some View {
-        VStack(spacing: 10) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 72, height: 72)
-            Text("Sevoflurane")
-                .font(.system(size: 18, weight: .bold))
-            Text("Steam for macOS, natively — version \(Self.version)")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 14) {
-                Link(
-                    "made by kageroumado \(Image(systemName: "arrow.up.right"))",
-                    destination: URL(string: "https://kagerou.glass")!,
-                )
-                Link(
-                    "GitHub \(Image(systemName: "arrow.up.right"))",
-                    destination: URL(string: "https://github.com/kageroumado/sevoflurane")!,
-                )
-            }
-            .font(.system(size: 12))
+    /// Opens the setting's pane and flashes its row, long enough to find with
+    /// the eye and short enough not to stay behind as decoration.
+    private func reveal(_ item: SearchableSetting, in category: SettingsCategory) {
+        self.category = category
+        highlighted = item.id
+        Task(name: "Clear settings highlight") {
+            try? await Task.sleep(for: .seconds(1.8))
+            highlighted = nil
         }
-        .padding(.vertical, 28)
-        .frame(maxWidth: .infinity)
     }
+}
 
-    private static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "dev"
+// MARK: - Panes
+
+private struct SettingsPane: View {
+    let category: SettingsCategory
+    let provisioner: Provisioner
+    let highlighted: String?
+
+    var body: some View {
+        Group {
+            switch category {
+            case .general: GeneralSettings(provisioner: provisioner, highlighted: highlighted)
+            case .graphics: GraphicsSettings(highlighted: highlighted)
+            case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
+            case .about: AboutSettings(highlighted: highlighted)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle(category.title)
+    }
+}
+
+/// Flashes a row the search sent the user to.
+private struct HighlightModifier: ViewModifier {
+    let id: String
+    let highlighted: String?
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(highlighted == id ? Color.accentColor.opacity(0.2) : .clear)
+                    .animation(.easeInOut(duration: 0.3), value: highlighted),
+            )
+    }
+}
+
+extension View {
+    func highlightable(id: String, highlighted: String?) -> some View {
+        modifier(HighlightModifier(id: id, highlighted: highlighted))
     }
 }

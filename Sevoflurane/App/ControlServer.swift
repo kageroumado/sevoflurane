@@ -41,6 +41,12 @@ final class ControlServer {
             return Self.logTail(query: request.query)
         case ("GET", "/windows"):
             return windows()
+        case ("POST", "/steam/show"):
+            host.showSteam()
+            return Self.json(#"{"ok":true,"note":"showing Steam; poll /windows"}"#)
+        case ("POST", "/steam/close"):
+            host.closeSteam()
+            return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
         case ("POST", "/client/restart"):
             supervisor.restartNow()
             return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)

@@ -49,4 +49,22 @@ enum SteamWindowRole {
     var isPanel: Bool {
         self == .menu || self == .keyboard
     }
+
+    /// Whether WebKit may mark this window's page hidden when the occlusion
+    /// service says it is covered — which stops animations, rAF, and the layer
+    /// commits behind them.
+    ///
+    /// On for the windows that are genuinely on screen and can genuinely be
+    /// covered: an obscured library should no more animate here than Steam's
+    /// own client animates one on Windows. Off for the two kinds that are
+    /// *always* judged occluded and would never run at all: the context page
+    /// is parked off-screen on purpose, and pop-up-level panels report as
+    /// occluded even while visible — their pages then never run their
+    /// fade-ins, and Steam's menu re-measure loop flickers the window.
+    var allowsOcclusionDetection: Bool {
+        switch self {
+        case .context, .menu, .keyboard: false
+        case .desktop, .bigPicture, .login, .controllerConfig, .auxiliary: true
+        }
+    }
 }

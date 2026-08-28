@@ -3,8 +3,13 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
+
+/* Begin PBXBuildFile section */
+		0B487987304107D0001CB276 /* Propofol in Frameworks */ = {isa = PBXBuildFile; productRef = 7B0000000000000000000002 /* Propofol */; };
+		0B487988304107D0001CB276 /* TiptoeGitHub in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000002 /* TiptoeGitHub */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		0B33EFE830290E6100182A68 /* PBXContainerItemProxy */ = {
@@ -50,17 +55,15 @@
 /* Begin PBXFrameworksBuildPhase section */
 		0B33EFD730290E5E00182A68 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
+				0B487988304107D0001CB276 /* TiptoeGitHub in Frameworks */,
+				0B487987304107D0001CB276 /* Propofol in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B33EFE430290E6100182A68 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -96,13 +99,13 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				0B33EFDC30290E5E00182A68 /* Sevoflurane */,
 			);
 			name = Sevoflurane;
 			packageProductDependencies = (
+				7B0000000000000000000002 /* Propofol */,
+				7A0000000000000000000002 /* TiptoeGitHub */,
 			);
 			productName = Sevoflurane;
 			productReference = 0B33EFDA30290E5E00182A68 /* Sevoflurane.app */;
@@ -125,8 +128,6 @@
 				0B33EFEA30290E6100182A68 /* SevofluraneTests */,
 			);
 			name = SevofluraneTests;
-			packageProductDependencies = (
-			);
 			productName = SevofluraneTests;
 			productReference = 0B33EFE730290E6100182A68 /* SevofluraneTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -159,6 +160,10 @@
 			);
 			mainGroup = 0B33EFD130290E5E00182A68;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */,
+				7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B33EFDB30290E5E00182A68 /* Products */;
 			projectDirPath = "";
@@ -173,34 +178,26 @@
 /* Begin PBXResourcesBuildPhase section */
 		0B33EFD830290E5E00182A68 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B33EFE530290E6100182A68 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0B33EFD630290E5E00182A68 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B33EFE330290E6100182A68 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -213,7 +210,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		0B33EFF930290E6100182A68 /* Debug */ = {
+		0B33EFF930290E6100182A68 /* Debug configuration for PBXProject "Sevoflurane" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -291,7 +288,7 @@
 			};
 			name = Debug;
 		};
-		0B33EFFA30290E6100182A68 /* Release */ = {
+		0B33EFFA30290E6100182A68 /* Release configuration for PBXProject "Sevoflurane" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -361,7 +358,7 @@
 			};
 			name = Release;
 		};
-		0B33EFFC30290E6100182A68 /* Debug */ = {
+		0B33EFFC30290E6100182A68 /* Debug configuration for PBXNativeTarget "Sevoflurane" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Sevoflurane;
@@ -394,7 +391,7 @@
 			};
 			name = Debug;
 		};
-		0B33EFFD30290E6100182A68 /* Release */ = {
+		0B33EFFD30290E6100182A68 /* Release configuration for PBXNativeTarget "Sevoflurane" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = Sevoflurane;
@@ -427,7 +424,7 @@
 			};
 			name = Release;
 		};
-		0B33EFFF30290E6100182A68 /* Debug */ = {
+		0B33EFFF30290E6100182A68 /* Debug configuration for PBXNativeTarget "SevofluraneTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -448,7 +445,7 @@
 			};
 			name = Debug;
 		};
-		0B33F00030290E6100182A68 /* Release */ = {
+		0B33F00030290E6100182A68 /* Release configuration for PBXNativeTarget "SevofluraneTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -475,31 +472,62 @@
 		0B33EFD530290E5E00182A68 /* Build configuration list for PBXProject "Sevoflurane" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0B33EFF930290E6100182A68 /* Debug */,
-				0B33EFFA30290E6100182A68 /* Release */,
+				0B33EFF930290E6100182A68 /* Debug configuration for PBXProject "Sevoflurane" */,
+				0B33EFFA30290E6100182A68 /* Release configuration for PBXProject "Sevoflurane" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		0B33EFFB30290E6100182A68 /* Build configuration list for PBXNativeTarget "Sevoflurane" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0B33EFFC30290E6100182A68 /* Debug */,
-				0B33EFFD30290E6100182A68 /* Release */,
+				0B33EFFC30290E6100182A68 /* Debug configuration for PBXNativeTarget "Sevoflurane" */,
+				0B33EFFD30290E6100182A68 /* Release configuration for PBXNativeTarget "Sevoflurane" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		0B33EFFE30290E6100182A68 /* Build configuration list for PBXNativeTarget "SevofluraneTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0B33EFFF30290E6100182A68 /* Debug */,
-				0B33F00030290E6100182A68 /* Release */,
+				0B33EFFF30290E6100182A68 /* Debug configuration for PBXNativeTarget "SevofluraneTests" */,
+				0B33F00030290E6100182A68 /* Release configuration for PBXNativeTarget "SevofluraneTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../propofol;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/artginzburg/Tiptoe";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.0;
+			};
+			traits = (
+				GitHubSupport,
+			);
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7A0000000000000000000002 /* TiptoeGitHub */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */;
+			productName = TiptoeGitHub;
+		};
+		7B0000000000000000000002 /* Propofol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */;
+			productName = Propofol;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0B33EFD230290E5E00182A68 /* Project object */;
 }

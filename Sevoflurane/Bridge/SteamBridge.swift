@@ -636,19 +636,38 @@ actor SteamBridge {
         guard !appid.isEmpty, appid.allSatisfy(\.isNumber) else {
             return .error(404, "Not Found")
         }
-        let file = SteamBottle.libraryCache
-            .appendingPathComponent("\(appid)/library_600x900.jpg")
-        if let data = try? Data(contentsOf: file, options: [.mappedIfSafe]) {
+        if let data = cachedCapsule(appid: String(appid)) {
             return .ok(
                 data,
                 type: "image/jpeg",
                 headers: [("Cache-Control", "max-age=86400")],
             )
         }
-        // Newer clients cache under content-hash filenames with no local
-        // name→asset index; the public CDN is the reliable fallback.
         return .redirect(to: "https://shared.steamstatic.com/store_item_assets/"
             + "steam/apps/\(appid)/library_600x900.jpg")
+    }
+
+    /// The vertical capsule from the client's own library cache.
+    ///
+    /// Two layouts coexist: the flat `<appid>/library_600x900.jpg` older
+    /// clients wrote, and the content-addressed
+    /// `<appid>/<sha1>/library_600x900.jpg` current ones write. The asset
+    /// keeps its name inside the hash directory, so one level of enumeration
+    /// finds it without a name→asset index. Worth the lookup because the CDN
+    /// serves no capsule at all for age-gated titles — an adult game shows a
+    /// blank tile if this misses.
+    private nonisolated static func cachedCapsule(appid: String) -> Data? {
+        let appDirectory = SteamBottle.libraryCache.appendingPathComponent(appid)
+        let flat = appDirectory.appendingPathComponent("library_600x900.jpg")
+        if let data = try? Data(contentsOf: flat, options: [.mappedIfSafe]) { return data }
+        let contents = try? FileManager.default.contentsOfDirectory(
+            at: appDirectory, includingPropertiesForKeys: [.isDirectoryKey],
+        )
+        for directory in contents ?? [] {
+            let nested = directory.appendingPathComponent("library_600x900.jpg")
+            if let data = try? Data(contentsOf: nested, options: [.mappedIfSafe]) { return data }
+        }
+        return nil
     }
 
     // MARK: - Helpers

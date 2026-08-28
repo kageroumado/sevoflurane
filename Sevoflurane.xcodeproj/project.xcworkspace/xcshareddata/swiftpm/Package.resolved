@@ -1,0 +1,33 @@
+{
+  "originHash" : "16cc24029cd686cddd35aca54b0ca5e34f96af80406ad165d73d3be3ad2b3289",
+  "pins" : [
+    {
+      "identity" : "appupdater",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mxcl/AppUpdater",
+      "state" : {
+        "revision" : "5898041575a7a8ed5d44e7d31251156b3d463677",
+        "version" : "4.1.1"
+      }
+    },
+    {
+      "identity" : "tiptoe",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/artginzburg/Tiptoe",
+      "state" : {
+        "revision" : "a48f105192e28ac2b16ae01d9de16dbb5ffc39c3",
+        "version" : "1.1.0"
+      }
+    },
+    {
+      "identity" : "version",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mxcl/Version",
+      "state" : {
+        "revision" : "3043fcd2a50375db76d89ff206a612471833d1c2",
+        "version" : "2.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}

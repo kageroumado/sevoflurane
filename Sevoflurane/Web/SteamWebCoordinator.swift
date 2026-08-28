@@ -110,6 +110,14 @@ extension SteamWebCoordinator: WKNavigationDelegate {
         host?.setStatus("bridge unreachable: \(error.localizedDescription)")
         EventLog.shared.log(.bridge, "bridge unreachable: \(error.localizedDescription)")
     }
+
+    /// The page's own process died. WebKit leaves the view blank and alive
+    /// rather than taking the app with it, so this is recoverable — but only
+    /// if someone recovers it, and nothing did before: a dead web process is
+    /// indistinguishable from a hung Steam UI from the outside.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        host?.webProcessDidTerminate(for: webView)
+    }
 }
 
 extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {

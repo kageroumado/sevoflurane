@@ -2,8 +2,9 @@ import AppKit
 import os
 import SwiftUI
 
-/// Application-level wiring that SwiftUI has no scene for: the menu bar, the
-/// activation policy, and the single ``SteamWebHost`` everything else reads.
+/// Application-level wiring: the menu bar, the menu-bar item, the activation
+/// policy, and the single ``SteamWebHost`` everything else reads. Created and
+/// installed by `main.swift`.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let host = SteamWebHost()
@@ -13,9 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let gameLaunchWatch = GameLaunchWatch()
     private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)
     private var menuMirror: SteamMenuMirror?
+    private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
+    private lazy var settingsWindow = SettingsWindow(provisioner: provisioner)
 
     func applicationDidFinishLaunching(_: Notification) {
+        // First, so a throw during the rest of startup is still recorded.
+        ExceptionWatch.install()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
         PerfProbe.poi.emitEvent("Launch")
@@ -26,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
+        menuBarPopover = MenuBarPopover(host: host, supervisor: supervisor)
         #if DEBUG
             if let scenario = SetupScenario.fromLaunchEnvironment() {
                 // The onboarding harness: no control server (a live instance may
@@ -77,6 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // silently bring the Wine tray icon back.
             await provisioner.configureBottle(named: SteamBottle.name)
         }
+        // Past the setup gate, so a machine still being provisioned never has
+        // its app swapped mid-wizard.
+        SilentUpdates.shared.start(
+            autoInstall: UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true,
+        )
     }
 
     private func showSetupWizard(
@@ -180,5 +191,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func reloadSteamUI(_: Any?) {
         host.reload()
+    }
+
+    /// The app's own settings — open at login, the graphics knobs, Repair.
+    /// Steam's settings are its own, and keep ⌘, in the mirrored Steam menu.
+    @objc
+    func showSettings(_: Any?) {
+        settingsWindow.show()
     }
 }

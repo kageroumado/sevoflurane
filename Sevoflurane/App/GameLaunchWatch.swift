@@ -66,8 +66,9 @@ final class GameLaunchWatch {
         )
     }
 
-    /// The first on-screen, normal-level window owned by a game process.
-    private static func firstGameWindow() -> (owner: String, pid: pid_t)? {
+    /// The first on-screen, normal-level window owned by a game process. Also the answer to
+    /// "is a game up right now?" — the updater's gate reads it that way.
+    static func firstGameWindow() -> (owner: String, pid: pid_t)? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
             as? [[String: Any]] else { return nil }

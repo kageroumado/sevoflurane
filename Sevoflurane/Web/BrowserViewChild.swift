@@ -48,10 +48,10 @@ final class BrowserViewChild: NSObject {
         // sync for those.
         observations = [
             webView.observe(\.url) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.fireHistoryChanged() }
+                onMainThread { self?.fireHistoryChanged() }
             },
             webView.observe(\.title) { [weak self] view, _ in
-                MainActor.assumeIsolated {
+                onMainThread {
                     guard let self, let title = view.title else { return }
                     self.fire("set-title", "[\(JSLiteral.string(title))]")
                 }

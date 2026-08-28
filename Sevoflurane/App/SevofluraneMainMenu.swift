@@ -2,9 +2,9 @@ import AppKit
 
 /// Builds the app's menu bar.
 ///
-/// A menu-bar-only app has no menu bar until one of Steam's windows promotes it
-/// to a regular app, and SwiftUI's default menu for a `MenuBarExtra` scene is
-/// the bare minimum. This is also the load-bearing half of hosting a web view:
+/// A menu-bar-only app has no menu bar until one of Steam's windows promotes
+/// it to a regular app. This is also the load-bearing half of hosting a web
+/// view:
 /// WebKit routes ⌘C, ⌘V and friends through the responder chain, so text
 /// editing anywhere in Steam's UI only works if an Edit menu claims those keys.
 enum SevofluraneMainMenu {
@@ -41,6 +41,14 @@ enum SevofluraneMainMenu {
         menu.addItem(
             withTitle: "About Sevoflurane",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: "",
+        )
+        menu.addItem(.separator())
+        // No ⌘, here: in this app that shortcut belongs to Steam ▸ Settings,
+        // which is the settings window a user of a Steam client means.
+        menu.addItem(
+            withTitle: "Sevoflurane Settings…",
+            action: #selector(AppDelegate.showSettings(_:)),
             keyEquivalent: "",
         )
         menu.addItem(.separator())

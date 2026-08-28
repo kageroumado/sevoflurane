@@ -21,6 +21,8 @@ final class EventLog {
         case window
         case supervisor
         case setup
+        case update
+        case app
     }
 
     struct Entry: Identifiable, Equatable {

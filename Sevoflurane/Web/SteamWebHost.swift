@@ -299,15 +299,84 @@ final class SteamWebHost {
         context?.webView.load(URLRequest(url: Self.uiURL))
     }
 
-    /// Brings Steam's window up, opening the library if the UI has not put a
-    /// window on screen yet.
+    /// Brings Steam's window up: showing the one that exists, rebuilding the
+    /// page when the user closed it, and otherwise asking the booting UI for
+    /// the library.
+    ///
+    /// Rebuilding is a page reload rather than a request for a new window,
+    /// because the window model is the client's: `UpdateDesiredWindows` is
+    /// driven by a native callback, and a window instance recreated by hand
+    /// never renders its popup (measured — the instance appears, its
+    /// `BrowserWindow` stays nil, and `SteamClient.UI.EnsureMainWindowCreated`
+    /// reaches the bottle's client, not this page). A reload boots the UI the
+    /// way it boots at launch, and the desktop window is adopted a second or
+    /// so later.
     func showSteam() {
         if let desktop {
             desktop.show(activating: true)
+            return
+        }
+        // Come forward now, while the user's click is still the reason for it.
+        // The rebuilt window does not exist for another couple of seconds, and
+        // by then cooperative activation no longer sees an event to attribute
+        // the request to: it declines, and the window arrives behind whatever
+        // was frontmost with its traffic lights gray.
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
+        NSApp.activate()
+        if desktopWasClosed {
+            reload()
         } else {
             openLibrary()
         }
     }
+
+    /// Ends the Steam UI from our side, the way the window's close button
+    /// does. Exposed so the control endpoint (and anything driving the app)
+    /// can put Steam away without a click.
+    func closeSteam() {
+        desktop?.close()
+    }
+
+    /// One page's web process is every page's web process — they share a
+    /// pool — so a single death is reported once per hosted view, fourteen
+    /// times over. The first report that matters does the recovery and the
+    /// rest are dropped; without this the reloads pile up inside each other
+    /// and the boot that follows has to be reloaded again.
+    ///
+    /// The context page is the whole of Steam's JavaScript and the desktop
+    /// window is rebuilt from it, so both take the same reload the supervisor
+    /// uses. Any other popup is Steam's to re-create: detaching tells its
+    /// popup manager the window is gone.
+    func webProcessDidTerminate(for webView: WKWebView) {
+        let window = self.window(for: webView)
+        switch window?.role {
+        case .context, .desktop, nil:
+            guard !isRecoveringFromWebProcessDeath else { return }
+            isRecoveringFromWebProcessDeath = true
+            EventLog.shared.log(
+                .page,
+                "web content process died (\(window?.name ?? "an unadopted page")) — rebuilding the UI",
+            )
+            reload()
+            // The flag normally clears when the desktop window is adopted; this
+            // is the backstop for a reload that never gets that far, so a
+            // second death is not ignored forever.
+            Task(name: "Web process recovery backstop") {
+                try? await Task.sleep(for: .seconds(30))
+                isRecoveringFromWebProcessDeath = false
+            }
+        default:
+            window?.detach()
+        }
+    }
+
+    private var isRecoveringFromWebProcessDeath = false
+
+    /// Whether the desktop window existed and the user closed it — the state
+    /// that separates "rebuild the page" from "the UI is still booting".
+    private var desktopWasClosed = false
 
     /// The context boots its window on no route at all, the same way a
     /// `-silent` client does until its tray item is clicked. The route runs
@@ -380,16 +449,23 @@ final class SteamWebHost {
         if webView.responds(to: Selector(("_setDrawsBackground:"))) {
             webView.setValue(false, forKey: "drawsBackground")
         }
-        // With occlusion detection on, WebKit marks pages hidden whenever the
-        // occlusion service says so — which it does for the off-screen context
-        // window (all of Steam's JS, timer-throttled) and for pop-up-level
-        // menu panels (whose pages then never run their fade-ins, and Steam's
-        // menu re-measure loop flickers the window). Visibility should follow
-        // plain window visibility here.
-        if webView.responds(to: Selector(("_setWindowOcclusionDetectionEnabled:"))) {
-            webView.setValue(false, forKey: "windowOcclusionDetectionEnabled")
-        }
+        // Off until a role says otherwise: every page starts life as an
+        // unnamed `about:blank` popup, and the two roles that must never be
+        // marked hidden — the parked context page and the pop-up-level panels
+        // — are exactly the ones the occlusion service would judge occluded
+        // immediately. `SteamWindow.applyOcclusionPolicy` turns it back on
+        // once the popup names itself.
+        SteamWebHost.setOcclusionDetection(false, on: webView)
         return webView
+    }
+
+    /// Lets WebKit stop rendering a page whose window is covered. Private on
+    /// `WKWebView`, so guarded by a `responds(to:)` check — a Steam release
+    /// cannot affect this, but a WebKit one could.
+    static func setOcclusionDetection(_ enabled: Bool, on webView: WKWebView) {
+        guard webView.responds(to: Selector(("_setWindowOcclusionDetectionEnabled:")))
+        else { return }
+        webView.setValue(enabled, forKey: "windowOcclusionDetectionEnabled")
     }
 
     /// Steam's popup manager calls `window.open` and then writes the popup's
@@ -467,6 +543,8 @@ final class SteamWebHost {
         }
         guard window.role == .desktop else { return }
         desktop = window
+        desktopWasClosed = false
+        isRecoveringFromWebProcessDeath = false
         status = "Steam is ready"
         PerfProbe.poi.emitEvent("DesktopAdopted")
         EventLog.shared.log(.window, "desktop window adopted — Steam is ready")
@@ -497,8 +575,19 @@ final class SteamWebHost {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
         guard window === desktop else { return }
         desktop = nil
+        desktopWasClosed = true
+        // Steam's context menus are per-window popups it creates lazily and
+        // then keeps: a dozen hidden web views accumulate behind one desktop
+        // window, and closing that window from our side leaves them orphaned
+        // (Steam only reaps them when it tears the window down itself). They
+        // belong to the page that just went, so they go with it — otherwise
+        // every close/open cycle strands another dozen.
+        for popup in popups.values where popup.role == .menu {
+            popup.detach()
+        }
+        menuMirror?.refresh()
         status = "Steam window closed"
-        EventLog.shared.log(.window, "desktop window closed")
+        EventLog.shared.log(.window, "desktop window closed — its page is gone")
         NSApp.setActivationPolicy(.accessory)
     }
 

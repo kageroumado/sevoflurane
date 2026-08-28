@@ -68,6 +68,13 @@ final class SteamWindow: NSObject {
 
     // MARK: - Window lifecycle
 
+    /// Lets a genuinely on-screen window stop rendering when it is covered.
+    /// Deferred until the popup names itself, because until then every page is
+    /// an anonymous `about:blank` and the safe default is to keep rendering.
+    private func applyOcclusionPolicy() {
+        SteamWebHost.setOcclusionDetection(role.allowsOcclusionDetection, on: webView)
+    }
+
     /// Builds the `NSWindow` for this popup's role.
     ///
     /// The window starts hidden: Steam renders into a popup only after it is
@@ -108,6 +115,10 @@ final class SteamWindow: NSObject {
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
+        // Steam's window model is the one that decides what exists: every
+        // window here is rebuilt from the page that opened it, so AppKit's
+        // own restoration has nothing to put back.
+        window.isRestorable = false
         applyRoleChrome(to: window)
 
         let container = SteamContentView(frame: content)
@@ -133,7 +144,10 @@ final class SteamWindow: NSObject {
                     size: window.frame.size,
                 ),
             )
-        } else if role == .desktop {
+        } else if role == .desktop, !window.setFrameUsingName(Self.desktopFrameName) {
+            // Centered only the first time: the desktop window is torn down
+            // and rebuilt on every close, and a window that forgets where the
+            // user put it is a window the user has to place again every time.
             window.center()
         }
         self.window = window
@@ -141,6 +155,9 @@ final class SteamWindow: NSObject {
             window.orderFront(nil)
         }
     }
+
+    /// Where the desktop window's frame is kept between the times it exists.
+    private static let desktopFrameName = "SteamDesktopWindow"
 
     /// The per-role window dressing: title bar treatment, background, level,
     /// and visibility behavior.
@@ -156,7 +173,7 @@ final class SteamWindow: NSObject {
             window.collectionBehavior.insert(.fullScreenPrimary)
             if role == .desktop {
                 window.title = "Steam"
-                window.setFrameAutosaveName("SteamDesktopWindow")
+                window.setFrameAutosaveName(Self.desktopFrameName)
                 // Steam's strip is 32pt tall; the bare titlebar's ~28pt sets
                 // the traffic lights slightly high against Steam's own row. An
                 // empty unified-compact toolbar is the supported way to ask
@@ -229,23 +246,33 @@ final class SteamWindow: NSObject {
             // A third argument carries the target monitor's scale factor,
             // because on Windows these are physical pixels. AppKit points are
             // already the page's own units, so it is dropped.
-            moveTo(x: number(args, 0), y: number(args, 1))
+            if let point = geometry(args, at: 0 ..< 2, from: function) {
+                moveTo(x: point[0], y: point[1])
+            }
         case "ResizeTo":
-            resizeTo(width: number(args, 0), height: number(args, 1))
+            if let size = geometry(args, at: 0 ..< 2, from: function) {
+                resizeTo(width: size[0], height: size[1])
+            }
         case "PositionWindowRelative":
-            positionRelative(
-                toWindowNamed: string(args, 0),
-                x: number(args, 1),
-                y: number(args, 2),
-                width: number(args, 3),
-                height: number(args, 4),
-            )
+            if let frame = geometry(args, at: 1 ..< 5, from: function) {
+                positionRelative(
+                    toWindowNamed: string(args, 0),
+                    x: frame[0],
+                    y: frame[1],
+                    width: frame[2],
+                    height: frame[3],
+                )
+            }
         case "SetMinSize":
-            minimumSize = CGSize(width: number(args, 0), height: number(args, 1))
-            window?.contentMinSize = minimumSize ?? .zero
+            if let size = geometry(args, at: 0 ..< 2, from: function) {
+                minimumSize = CGSize(width: size[0], height: size[1])
+                window?.contentMinSize = minimumSize ?? .zero
+            }
         case "SetMaxSize":
-            maximumSize = CGSize(width: number(args, 0), height: number(args, 1))
-            window?.contentMaxSize = maximumSize ?? .zero
+            if let size = geometry(args, at: 0 ..< 2, from: function) {
+                maximumSize = CGSize(width: size[0], height: size[1])
+                window?.contentMaxSize = maximumSize ?? .zero
+            }
         case "SetHideOnClose":
             hidesOnClose = args.first as? Bool ?? false
         case "SetWindowFlashing":
@@ -295,8 +322,10 @@ final class SteamWindow: NSObject {
                 task: string(args, 2),
             )
         case "__bv":
+            // An identity, not a measurement — read as an integer so a stray
+            // `NaN` cannot trap `Int(_:)` on the way in.
             performBrowserView(
-                id: Int(number(args, 0)),
+                id: (args.first as? NSNumber)?.intValue ?? 0,
                 method: string(args, 1),
                 args: Array(args.dropFirst(2)),
             )
@@ -334,6 +363,7 @@ final class SteamWindow: NSObject {
         if !name.isEmpty {
             self.name = name
             role = SteamWindowRole(popupName: name)
+            applyOcclusionPolicy()
         } else {
             EventLog.shared.log(
                 .window,
@@ -342,9 +372,11 @@ final class SteamWindow: NSObject {
         }
         let query = URLComponents(string: "about:blank?" + parameters)?
             .queryItems ?? []
+        /// `Double("nan")` and `Double("inf")` both parse, and these values
+        /// become window sizes — the same trap as the shim's numbers.
         func value(_ key: String) -> CGFloat? {
             guard let raw = query.first(where: { $0.name == key })?.value,
-                  let number = Double(raw) else { return nil }
+                  let number = Double(raw), number.isFinite else { return nil }
             return CGFloat(number)
         }
         if let width = value("minwidth"), let height = value("minheight") {
@@ -458,24 +490,45 @@ final class SteamWindow: NSObject {
     func show(activating: Bool) {
         realize()
         guard let window else { return }
-        if !role.isPanel, NSApp.activationPolicy() != .regular {
+        let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
+        if becameRegular {
             NSApp.setActivationPolicy(.regular)
         }
         if role == .menu {
             window.alphaValue = 1
             window.ignoresMouseEvents = false
         }
-        if activating {
-            if !role.isPanel { NSApp.activate() }
-            window.makeKeyAndOrderFront(nil)
-            // Until the web view is first responder, AppKit routes mouse-moved
-            // events elsewhere and the page sees no hover — the "menus only
-            // react after one click inside" symptom.
-            if !role.isPanel, window.firstResponder === window {
-                window.makeFirstResponder(webView)
-            }
-        } else {
+        guard activating else {
             window.orderFront(nil)
+            return
+        }
+        if becameRegular {
+            // Promotion from `.accessory` only takes effect once the run loop
+            // turns. Activating in the same pass is swallowed: the window
+            // comes up behind whatever was frontmost, its traffic lights stay
+            // gray, and clicking it does nothing because as far as the window
+            // server is concerned the app still isn't one that activates —
+            // only a Cmd-Tab away and back fixes it.
+            DispatchQueue.main.async { [weak self] in self?.activate(window) }
+        } else {
+            activate(window)
+        }
+    }
+
+    /// Brings the app and this window forward. `NSRunningApplication` backs up
+    /// `NSApp.activate()`, which cooperative activation can decline when the
+    /// request comes from a menu-bar popover rather than a window of ours.
+    private func activate(_ window: NSWindow) {
+        if !role.isPanel {
+            NSApp.activate()
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
+        }
+        window.makeKeyAndOrderFront(nil)
+        // Until the web view is first responder, AppKit routes mouse-moved
+        // events elsewhere and the page sees no hover — the "menus only
+        // react after one click inside" symptom.
+        if !role.isPanel, window.firstResponder === window {
+            window.makeFirstResponder(webView)
         }
     }
 
@@ -537,12 +590,12 @@ final class SteamWindow: NSObject {
                 view.load(url)
             }
         case "bounds":
-            view.setBounds(
-                x: number(args, 0),
-                y: number(args, 1),
-                width: number(args, 2),
-                height: number(args, 3),
-            )
+            // A browser view's frame reaches AppKit too, by way of `NSView`.
+            if let bounds = geometry(args, at: 0 ..< 4, from: "browser view bounds") {
+                view.setBounds(
+                    x: bounds[0], y: bounds[1], width: bounds[2], height: bounds[3],
+                )
+            }
         case "visible":
             view.setVisible(args.first as? Bool ?? false)
         case "reload":
@@ -603,9 +656,38 @@ final class SteamWindow: NSObject {
 
     // MARK: - Argument decoding
 
-    private func number(_ args: [Any], _ index: Int) -> CGFloat {
-        guard index < args.count, let value = args[index] as? NSNumber else { return 0 }
-        return CGFloat(value.doubleValue)
+    /// The named arguments as numbers AppKit can be given, or `nil` when any
+    /// of them is not.
+    ///
+    /// JavaScript numbers are doubles, so `NaN` and `Infinity` cross the shim
+    /// through `NSNumber` intact — and Steam produces them: a menu placed
+    /// against a window that has gone computes `menuLeft - parent.screenX`
+    /// against `undefined`. `-[NSWindow _reallySetFrame:]` *raises* on a
+    /// non-finite frame rather than ignoring it, and that exception unwinds
+    /// out of the Swift concurrency frame this shim call arrives on, which
+    /// skips the pop of the thread's executor-tracking record. The app then
+    /// segfaults on the next `@MainActor` isolation check — a different stack,
+    /// in WebKit, hours later. So a bad number is refused here, where the
+    /// blame still reads.
+    private func geometry(
+        _ args: [Any], at indices: Range<Int>, from function: String,
+    ) -> [CGFloat]? {
+        var values: [CGFloat] = []
+        for index in indices {
+            guard index < args.count,
+                  let raw = args[index] as? NSNumber,
+                  CGFloat(raw.doubleValue).isFinite
+            else {
+                EventLog.shared.log(
+                    .window,
+                    "ignoring \(function) for \(name.isEmpty ? "an unnamed popup" : name): "
+                        + "argument \(index) is not a finite number",
+                )
+                return nil
+            }
+            values.append(CGFloat(raw.doubleValue))
+        }
+        return values
     }
 
     private func string(_ args: [Any], _ index: Int) -> String {
@@ -631,10 +713,15 @@ final class SteamWindow: NSObject {
 
 extension SteamWindow: NSWindowDelegate {
     func windowShouldClose(_: NSWindow) -> Bool {
-        // The desktop window follows Steam's own tray behavior and the Mac
-        // convention for a menu-bar app: closing it puts the client away
-        // without ending the session.
-        guard role != .desktop, !hidesOnClose else {
+        // The desktop window ends when it is closed, and overrides Steam's
+        // `SetHideOnClose` to do it: its page is the whole library, which
+        // keeps a React tree animating and committing layer trees whether or
+        // not the window is on screen. Ordering it out would leave the app's
+        // most expensive surface running behind a window nobody can see —
+        // paid for in CPU the entire time the client is "away", and in a
+        // WebKit layer-commit path that has crashed the app twice from
+        // exactly that state. `SteamWebHost.showSteam` builds a new one.
+        guard role == .desktop || !hidesOnClose else {
             window?.orderOut(nil)
             host?.windowDidHide(self)
             return false
