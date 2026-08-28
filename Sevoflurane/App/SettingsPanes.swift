@@ -37,14 +37,26 @@ struct GraphicsSettings: View {
     let highlighted: String?
     @State private var graphics = BottleGraphics.Selection(renderer: .auto, msync: true)
     @State private var loaded = false
+    @State private var showingRendererHelp = false
 
     var body: some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Picker("Game renderer", selection: $graphics.renderer) {
-                        ForEach(availableRenderers, id: \.self) { renderer in
-                            Text(renderer.label).tag(renderer)
+                    HStack(spacing: 6) {
+                        Picker("Game renderer", selection: $graphics.renderer) {
+                            ForEach(availableRenderers, id: \.self) { renderer in
+                                Text(renderer.label).tag(renderer)
+                            }
+                        }
+                        Button { showingRendererHelp = true } label: {
+                            Image(systemName: "info.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("What each renderer is for")
+                        .accessibilityLabel("About the renderers")
+                        .popover(isPresented: $showingRendererHelp, arrowEdge: .bottom) {
+                            RendererHelp(available: availableRenderers)
                         }
                     }
                     Text(graphics.renderer.detail)
@@ -112,6 +124,37 @@ struct GraphicsSettings: View {
                 "graphics: renderer=\(selection.renderer.rawValue) msync=\(selection.msync)",
             )
         }
+    }
+}
+
+/// What the five renderers are, in the order someone would try them.
+private struct RendererHelp: View {
+    let available: [Renderer]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choosing a renderer")
+                .font(.headline)
+            Text("Each one translates the Windows graphics API a game speaks "
+                + "into Metal. A game that stutters or refuses to start is "
+                + "usually a game on the wrong one.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            ForEach(available, id: \.self) { renderer in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(renderer.label).font(.callout.weight(.semibold))
+                    Text(renderer.guidance)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("Changing this takes effect the next time a game starts.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 380)
     }
 }
 

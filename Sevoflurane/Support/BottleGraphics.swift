@@ -3,12 +3,12 @@ import Foundation
 /// The graphics translation layer games render through. Steam's own UI never
 /// touches Direct3D, so switching takes effect at the next game launch.
 nonisolated enum Renderer: String, CaseIterable, Sendable {
-    /// The engine picks (CrossOver's "Auto"); today that means D3DMetal
-    /// where available.
+    /// The engine picks per game from CrossOver's own database, falling
+    /// back to wined3d for a game it does not list.
     case auto
     /// Apple's Game Porting Toolkit layer: D3D11 + D3D12.
     case d3dmetal
-    /// DXMT: D3D11 straight to Metal (what CrossOver 26 bundles as 0.72).
+    /// DXMT: D3D10/11 straight to Metal (CrossOver 26 bundles 0.72).
     case dxmt
     /// DXVK: D3D9–11 over Vulkan/MoltenVK.
     case dxvk
@@ -32,6 +32,29 @@ nonisolated enum Renderer: String, CaseIterable, Sendable {
         case .dxmt: "Direct3D 11 straight to Metal."
         case .dxvk: "Direct3D 9–11 over Vulkan."
         case .wined3d: "Wine's own translation — the compatibility fallback."
+        }
+    }
+
+    /// When to reach for this one, for the Graphics pane's explainer.
+    /// Sourced from CodeWeavers' own toggle documentation and their ARM64
+    /// guidance; `Docs/engines-and-renderers.md` carries the dates.
+    var guidance: String {
+        switch self {
+        case .auto:
+            "Leave it here unless a game misbehaves. CrossOver's database has "
+                + "a per-game answer for most of them."
+        case .d3dmetal:
+            "The only option that speaks DirectX 12, and the one MetalFX "
+                + "upscaling needs. Best for recent, demanding titles."
+        case .dxmt:
+            "DirectX 11 with no Vulkan in between. Often the steadiest frame "
+                + "pacing, and the kinder option on an older Mac."
+        case .dxvk:
+            "DirectX 9 to 11 by way of Vulkan. Two translations deep — worth "
+                + "trying when a game refuses to draw on the Metal paths."
+        case .wined3d:
+            "Wine's own translation. Slow, and the most likely to render "
+                + "something at all: old and 2D games live here."
         }
     }
 
