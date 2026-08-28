@@ -84,6 +84,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
+                    id: "graphics.gpu",
+                    title: "Report the GPU as",
+                    keywords: [
+                        "gpu", "graphics card", "nvidia", "geforce", "amd", "radeon",
+                        "vendor", "driver", "outdated", "unsupported",
+                    ],
+                ),
+                SearchableSetting(
                     id: "graphics.msync",
                     title: "Enhanced synchronization (msync)",
                     keywords: [

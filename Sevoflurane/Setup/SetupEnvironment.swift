@@ -161,12 +161,21 @@ final class LiveSetupEnvironment: SetupEnvironment {
             "reg", "add", #"HKCU\Software\Wine\Explorer"#,
             "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
+        // Wine's own renderer reads the card from the registry rather than
+        // the environment, so the choice has to be written twice to be one
+        // choice.
+        for entry in BottleGraphics.currentSelection().gpu.wineD3DRegistry {
+            _ = await runWine(bottle: name, args: [
+                "reg", "add", #"HKCU\Software\Wine\Direct3D"#,
+                "/v", entry.value, "/t", "REG_DWORD", "/d", entry.data, "/f",
+            ])
+        }
         let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
         guard case let .managed(version) = Engine.active else {
             do {
-                try BottleGraphics.seedDefaultRenderer(forBottle: bottle)
+                try BottleGraphics.reassertDefaults(forBottle: bottle)
             } catch {
-                SetupLog.log("graphics default not seeded: \(error)")
+                SetupLog.log("graphics defaults not written: \(error)")
             }
             return
         }

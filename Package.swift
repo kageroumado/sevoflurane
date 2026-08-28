@@ -62,6 +62,7 @@ let package = Package(
                 "Sevoflurane/Support/ClientLifecycle.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
+                "Sevoflurane/Support/GPUIdentity.swift",
                 "Sevoflurane/Support/JSLiteral.swift",
                 "Sevoflurane/Support/PerformanceProbes.swift",
                 "Sevoflurane/Support/Preferences.swift",

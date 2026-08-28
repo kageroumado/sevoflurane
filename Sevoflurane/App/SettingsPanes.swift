@@ -68,6 +68,17 @@ struct GraphicsSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 .highlightable(id: "graphics.renderer", highlighted: highlighted)
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("Report the GPU as", selection: $graphics.gpu) {
+                        ForEach(GPUIdentity.allCases, id: \.self) { identity in
+                            Text(identity.label).tag(identity)
+                        }
+                    }
+                    Text(graphics.gpu.detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .highlightable(id: "graphics.gpu", highlighted: highlighted)
                 Toggle(isOn: $graphics.msync) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Enhanced synchronization (msync)")

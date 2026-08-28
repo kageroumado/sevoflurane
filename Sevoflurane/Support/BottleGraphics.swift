@@ -82,6 +82,8 @@ nonisolated enum BottleGraphics {
     struct Selection: Equatable, Sendable {
         var renderer: Renderer
         var msync: Bool
+        /// What the bottle tells a game its GPU is.
+        var gpu: GPUIdentity = .automatic
     }
 
     /// What the bottle is set to right now, whichever engine owns the store.
@@ -142,6 +144,7 @@ nonisolated enum BottleGraphics {
     }
 
     private static let overridesKey = "rendererOverrides"
+    private static let gpuKey = "SEVO_GPU_IDENTITY"
 
     // MARK: - CrossOver bottles (cxbottle.conf)
 
@@ -162,7 +165,11 @@ nonisolated enum BottleGraphics {
             } else {
                 .auto
             }
-        return Selection(renderer: renderer, msync: vars["WINEMSYNC"] != "0")
+        return Selection(
+            renderer: renderer,
+            msync: vars["WINEMSYNC"] != "0",
+            gpu: vars[gpuKey].flatMap(GPUIdentity.init(rawValue:)) ?? .automatic,
+        )
     }
 
     /// The renderer a bottle gets when nobody has chosen one.
@@ -175,18 +182,21 @@ nonisolated enum BottleGraphics {
     /// pick Automatic, which is written as an empty value and left alone.
     static let defaultRenderer = Renderer.d3dmetal
 
-    /// Writes ``defaultRenderer`` into a bottle that has never had a renderer
-    /// set. An explicit choice — including Automatic, stored as an empty
-    /// value — is left exactly as the user left it.
-    static func seedDefaultRenderer(forBottle bottle: URL) throws {
+    /// Brings a bottle's graphics settings up to what this app writes:
+    /// ``defaultRenderer`` when nothing was ever chosen, and in every case the
+    /// derived knobs — the translation defaults and the GPU the games are
+    /// told about — which an older bottle predates.
+    ///
+    /// A renderer already chosen, Automatic included (stored as an empty
+    /// value), is left exactly as the user left it.
+    static func reassertDefaults(forBottle bottle: URL) throws {
         let text = confText(forBottle: bottle)
-        guard !text.isEmpty,
-              environmentVariables(inConf: text)["CX_GRAPHICS_BACKEND"] == nil
-        else { return }
-        try apply(
-            Selection(renderer: defaultRenderer, msync: selection(forBottle: bottle).msync),
-            toBottle: bottle,
-        )
+        guard !text.isEmpty else { return }
+        var selection = selection(forBottle: bottle)
+        if environmentVariables(inConf: text)["CX_GRAPHICS_BACKEND"] == nil {
+            selection.renderer = defaultRenderer
+        }
+        try apply(selection, toBottle: bottle)
     }
 
     static func apply(_ selection: Selection, toBottle bottle: URL) throws {
@@ -205,6 +215,13 @@ nonisolated enum BottleGraphics {
         text = settingVariable("WINEMSYNC", to: selection.msync ? "1" : "0", inConf: text)
         for (name, value) in Self.translationDefaults {
             text = settingVariable(name, to: value, inConf: text)
+        }
+        // The choice itself is stored, and every layer's own variables are
+        // derived from it — reading five knobs back into one answer would
+        // guess where this simply knows.
+        text = settingVariable(gpuKey, to: selection.gpu.rawValue, inConf: text)
+        for (name, value) in selection.gpu.environment {
+            text = settingVariable(name, to: value.isEmpty ? nil : value, inConf: text)
         }
         try Data(text.utf8).write(to: confURL(forBottle: bottle))
     }
@@ -320,13 +337,15 @@ nonisolated enum BottleGraphics {
         let renderer = defaults.string(forKey: rendererKey)
             .flatMap(Renderer.init(rawValue:)) ?? .dxmt
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true
-        return Selection(renderer: renderer, msync: msync)
+        let gpu = defaults.string(forKey: gpuKey).flatMap(GPUIdentity.init(rawValue:))
+        return Selection(renderer: renderer, msync: msync, gpu: gpu ?? .automatic)
     }
 
     static func setManagedSelection(_ selection: Selection) {
         let defaults = Preferences.shared
         defaults.set(selection.renderer.rawValue, forKey: rendererKey)
         defaults.set(selection.msync, forKey: msyncKey)
+        defaults.set(selection.gpu.rawValue, forKey: gpuKey)
     }
 
     private struct GraphicsError: Error, CustomStringConvertible {

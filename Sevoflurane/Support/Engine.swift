@@ -187,6 +187,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             env["WINEDLLOVERRIDES"] = overrides
         }
         env.merge(BottleGraphics.translationDefaults) { current, _ in current }
+        env.merge(graphics.gpu.environment.filter { !$0.value.isEmpty }) { current, _ in current }
         return env
     }
 }
