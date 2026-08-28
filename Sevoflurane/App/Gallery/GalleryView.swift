@@ -190,7 +190,11 @@
         static let settings = provisioner(.idle)
 
         private static func provisioner(_ activity: Provisioner.Activity) -> Provisioner {
-            Provisioner(previewActivity: activity, detection: SetupScenario.provisioned.fixture)
+            Provisioner(
+                previewActivity: activity,
+                detection: SetupScenario.provisioned.fixture,
+                environment: DryRunSetupEnvironment(scenario: .provisioned, stepDelay: .zero),
+            )
         }
     }
 #endif

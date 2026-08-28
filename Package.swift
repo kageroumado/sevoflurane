@@ -50,6 +50,7 @@ let package = Package(
             sources: [
                 "Sevo",
                 "Sevoflurane/Bridge/CDPClient.swift",
+                "Sevoflurane/Setup/D3DMetalInstaller.swift",
                 "Sevoflurane/Setup/EngineInstaller.swift",
                 "Sevoflurane/Setup/EngineManifest.swift",
                 "Sevoflurane/Setup/Provisioner.swift",
@@ -60,8 +61,10 @@ let package = Package(
                 "Sevoflurane/Support/BridgePorts.swift",
                 "Sevoflurane/Support/ClientLifecycle.swift",
                 "Sevoflurane/Support/Engine.swift",
+                "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/JSLiteral.swift",
                 "Sevoflurane/Support/PerformanceProbes.swift",
+                "Sevoflurane/Support/Preferences.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
                 "Sevoflurane/Support/SteamWebCookie.swift",
                 "Sevoflurane/Support/Subprocess.swift",

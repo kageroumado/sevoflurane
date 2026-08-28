@@ -43,7 +43,13 @@ thing in place):
 | **DXVK** | Direct3D 9–11 through Vulkan and MoltenVK | A game refuses to draw on either Metal path, or needs Direct3D 9. |
 | **Automatic** | CrossOver's per-game database, falling back to Wine's own `wined3d` | You would rather trust their QA than choose. |
 
-CrossOver 26 carries D3DMetal 3.0 and DXMT 0.72 on top of Wine 11.
+CrossOver 26 carries D3DMetal 3.0 and DXMT 0.72 on top of Wine 11. The
+built-in engine cannot ship D3DMetal — only Apple may distribute it — so
+Settings › Graphics takes your own download of the
+[Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/)
+and installs it into the engine. Releases and betas sit side by side and the
+newest is used unless you pick another; toolkit 4 is where Direct3D 12 meets
+Metal 4.
 
 **Rosetta is on a clock.** macOS 27 is the last release that carries it;
 macOS 28 drops it in 2027, and everything above runs today as x86_64 under

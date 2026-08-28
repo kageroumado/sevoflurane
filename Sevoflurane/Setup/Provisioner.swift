@@ -30,11 +30,16 @@ final class Provisioner {
     }
 
     #if DEBUG
-        /// A provisioner frozen mid-story, for the gallery's Repair pane.
-        convenience init(previewActivity: Activity, detection: SetupDetection? = nil) {
-            self.init(environment: DryRunSetupEnvironment(
-                scenario: .provisioned, stepDelay: .zero,
-            ))
+        /// A provisioner frozen mid-story, for the gallery's Repair pane. The
+        /// environment comes from the caller so this file stays buildable
+        /// where the harness is not — the `sevo` target compiles it without
+        /// `SetupDryRun.swift`.
+        convenience init(
+            previewActivity: Activity,
+            detection: SetupDetection? = nil,
+            environment: any SetupEnvironment,
+        ) {
+            self.init(environment: environment)
             activity = previewActivity
             self.detection = detection
         }

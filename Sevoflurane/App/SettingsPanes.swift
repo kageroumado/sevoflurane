@@ -1,5 +1,6 @@
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - General
 
@@ -38,6 +39,9 @@ struct GraphicsSettings: View {
     @State private var graphics = BottleGraphics.Selection(renderer: .auto, msync: true)
     @State private var loaded = false
     @State private var showingRendererHelp = false
+    @State private var d3dMetalVersion: String?
+    @State private var d3dMetalError: String?
+    @State private var isAddingD3DMetal = false
 
     var body: some View {
         Form {
@@ -78,10 +82,14 @@ struct GraphicsSettings: View {
                 Text("Steam's own interface never touches Direct3D — changes "
                     + "take effect the next time a game starts.")
             }
+            if let managedEngine { d3dMetalSection(engine: managedEngine) }
         }
         .formStyle(.grouped)
         .onAppear {
             graphics = Self.current()
+            d3dMetalVersion = managedEngine.flatMap {
+                D3DMetalInstaller.active(inEngine: $0)?.version
+            }
             loaded = true
         }
         .onChange(of: graphics) { _, selection in
@@ -91,12 +99,88 @@ struct GraphicsSettings: View {
     }
 
     /// The renderers the active engine can actually switch between.
-    /// D3DMetal under the managed engine waits on clean-machine validation
-    /// (release-plan R2.4), so it is only offered under CrossOver.
+    /// CrossOver carries D3DMetal itself; a managed engine has it only once
+    /// the user has added their own copy of Apple's toolkit.
     private var availableRenderers: [Renderer] {
-        Engine.active == .crossover
-            ? Renderer.allCases
-            : [.auto, .dxmt, .dxvk, .wined3d]
+        if Engine.active == .crossover { return Renderer.allCases }
+        var renderers: [Renderer] = [.auto, .dxmt, .dxvk, .wined3d]
+        if managedEngine.map({ !D3DMetalInstaller.installed(inEngine: $0).isEmpty }) == true {
+            renderers.insert(.d3dmetal, at: 1)
+        }
+        return renderers
+    }
+
+    /// The managed engine's directory, when one is what we are running on.
+    private var managedEngine: URL? {
+        guard case let .managed(version) = Engine.active else { return nil }
+        return Engine.managedRoot.appendingPathComponent(version)
+    }
+
+    /// Apple's Game Porting Toolkit is not ours to ship, so a managed engine
+    /// gets D3DMetal from the user's own download — the arrangement Whisky
+    /// uses. Releases and betas install side by side; the newest is used
+    /// unless another is chosen here.
+    @ViewBuilder
+    private func d3dMetalSection(engine: URL) -> some View {
+        let installed = D3DMetalInstaller.installed(inEngine: engine)
+        Section {
+            if installed.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Add D3DMetal").font(.callout.weight(.semibold))
+                    Text("Direct3D 12 needs Apple's Game Porting Toolkit, which only "
+                        + "Apple may distribute. Download it from developer.apple.com "
+                        + "and point Sevoflurane at the disk image.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Picker("D3DMetal version", selection: $d3dMetalVersion) {
+                    ForEach(installed, id: \.version) { entry in
+                        Text(entry.version).tag(Optional(entry.version))
+                    }
+                }
+                .onChange(of: d3dMetalVersion) { _, chosen in
+                    guard let chosen,
+                          let entry = installed.first(where: { $0.version == chosen })
+                    else { return }
+                    try? D3DMetalInstaller.activate(entry, inEngine: engine)
+                }
+            }
+            HStack {
+                if let d3dMetalError {
+                    Text(d3dMetalError).font(.callout).foregroundStyle(.orange)
+                }
+                Spacer()
+                Button(installed.isEmpty ? "Choose Toolkit…" : "Add Another Version…") {
+                    addD3DMetal(engine: engine)
+                }
+                .disabled(isAddingD3DMetal)
+            }
+        } header: {
+            Text("Apple's Game Porting Toolkit")
+        }
+    }
+
+    private func addD3DMetal(engine: URL) {
+        let panel = NSOpenPanel()
+        panel.message = "Choose the Game Porting Toolkit disk image you downloaded."
+        panel.allowedContentTypes = [.diskImage]
+        panel.canChooseDirectories = true
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        isAddingD3DMetal = true
+        d3dMetalError = nil
+        Task(name: "Install D3DMetal") {
+            do {
+                let entry = try await D3DMetalInstaller.install(
+                    from: source, intoEngine: engine,
+                )
+                d3dMetalVersion = entry.version
+                EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the engine")
+            } catch {
+                d3dMetalError = "\(error)"
+            }
+            isAddingD3DMetal = false
+        }
     }
 
     private static func current() -> BottleGraphics.Selection {

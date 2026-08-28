@@ -161,13 +161,24 @@ final class LiveSetupEnvironment: SetupEnvironment {
             "reg", "add", #"HKCU\Software\Wine\Explorer"#,
             "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
-        guard Engine.active == .crossover else { return }
-        do {
-            try BottleGraphics.seedDefaultRenderer(
-                forBottle: Engine.active.bottlesRoot.appendingPathComponent(name),
-            )
-        } catch {
-            SetupLog.log("graphics default not seeded: \(error)")
+        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        guard case let .managed(version) = Engine.active else {
+            do {
+                try BottleGraphics.seedDefaultRenderer(forBottle: bottle)
+            } catch {
+                SetupLog.log("graphics default not seeded: \(error)")
+            }
+            return
+        }
+        // A managed engine keeps its renderers in the engine directory; the
+        // prefix needs the DLLs themselves for `n,b` to mean anything.
+        let staged = EngineRenderers.stage(
+            BottleGraphics.managedSelection().renderer,
+            engine: Engine.managedRoot.appendingPathComponent(version),
+            bottle: bottle,
+        )
+        if !staged.isEmpty {
+            SetupLog.log("staged \(staged.count) renderer DLLs into \(name)")
         }
     }
 

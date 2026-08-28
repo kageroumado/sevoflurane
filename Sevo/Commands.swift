@@ -216,7 +216,15 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list | install") var verb: String = "list"
+    @Argument(help: "list | install | d3dmetal") var verb: String = "list"
+    @Option(
+        name: .customLong("from"),
+        help: "For d3dmetal: Apple's Game Porting Toolkit disk image, volume, or folder.",
+    ) var from: String?
+    @Option(
+        name: .customLong("into"),
+        help: "For d3dmetal: which installed engine to add it to (default: the active one).",
+    ) var into: String?
     @Option(
         name: .customLong("manifest"),
         help: "Manifest URL override (default: the kagerou.glass manifest).",
@@ -229,9 +237,46 @@ struct EngineCommand: AsyncParsableCommand {
             try await list()
         case "install":
             try await install()
+        case "d3dmetal":
+            try await addD3DMetal()
         default:
-            Sevo.printError("engine \(verb): unknown verb (list | install)")
+            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal)")
             throw SevoExit.badInvocation
+        }
+    }
+
+    /// Adds Apple's D3DMetal to the managed engine from the user's own copy
+    /// of the Game Porting Toolkit — the CLI face of Settings › Graphics.
+    private func addD3DMetal() async throws {
+        var version = into
+        if version == nil, case let .managed(active) = Engine.active { version = active }
+        guard let version else {
+            Sevo.printError("no managed engine — pass --into <version>, or install one with: "
+                + "sevo engine install")
+            throw SevoExit.badInvocation
+        }
+        let engine = Engine.managedRoot.appendingPathComponent(version)
+        guard let from else {
+            let installed = D3DMetalInstaller.installed(inEngine: engine)
+            let active = D3DMetalInstaller.active(inEngine: engine)?.version
+            if installed.isEmpty {
+                print("no D3DMetal in engine \(version) — add one with: "
+                    + "sevo engine d3dmetal --from <Game Porting Toolkit dmg>")
+            }
+            for entry in installed {
+                print("\(entry.version)\(entry.version == active ? "  (active)" : "")")
+            }
+            return
+        }
+        do {
+            let entry = try await D3DMetalInstaller.install(
+                from: URL(fileURLWithPath: (from as NSString).expandingTildeInPath),
+                intoEngine: engine,
+            )
+            print("D3DMetal \(entry.version) installed into engine \(version)")
+        } catch {
+            Sevo.printError("\(error)")
+            throw SevoExit.failed
         }
     }
 
