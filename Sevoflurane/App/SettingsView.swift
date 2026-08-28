@@ -11,6 +11,7 @@ import SwiftUI
 /// flashes the row.
 struct SettingsView: View {
     let provisioner: Provisioner
+    let graphics: GraphicsStore
     @State private var category: SettingsCategory = .general
     @State private var searchText = ""
     @State private var highlighted: String?
@@ -27,6 +28,7 @@ struct SettingsView: View {
             SettingsPane(
                 category: category,
                 provisioner: provisioner,
+                graphics: graphics,
                 highlighted: highlighted,
             )
         }
@@ -196,13 +198,14 @@ private struct SettingsSidebar: View {
 private struct SettingsPane: View {
     let category: SettingsCategory
     let provisioner: Provisioner
+    let graphics: GraphicsStore
     let highlighted: String?
 
     var body: some View {
         Group {
             switch category {
             case .general: GeneralSettings(provisioner: provisioner, highlighted: highlighted)
-            case .graphics: GraphicsSettings(highlighted: highlighted)
+            case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
             case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)
             }
