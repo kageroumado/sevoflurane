@@ -12,23 +12,28 @@ final class GraphicsStore {
     private(set) var selection: BottleGraphics.Selection
     private(set) var d3dMetalVersions: [D3DMetalInstaller.Installed]
     private(set) var activeD3DMetal: String?
-    /// The managed engine's directory, when that is what is running. `nil`
-    /// under CrossOver, which carries its own D3DMetal.
-    let managedEngine: URL?
+    /// Where installed toolkits are kept for this engine: inside a managed
+    /// engine, or the shared store CrossOver is pointed at through the shadow
+    /// tree.
+    let toolkitStore: URL
+    /// Whether the engine brings a D3DMetal of its own, which the user's copy
+    /// then replaces rather than supplies.
+    let engineHasOwnD3DMetal: Bool
     private let isLive: Bool
 
     /// The store the app runs on: the bottle and the engine on disk.
     static func live() -> GraphicsStore {
-        let engine: URL? = if case let .managed(version) = Engine.active {
+        let store: URL = if case let .managed(version) = Engine.active {
             Engine.managedRoot.appendingPathComponent(version)
         } else {
-            nil
+            D3DMetalInstaller.sharedRoot
         }
         return GraphicsStore(
             selection: BottleGraphics.currentSelection(),
-            managedEngine: engine,
-            versions: engine.map(D3DMetalInstaller.installed) ?? [],
-            active: engine.flatMap { D3DMetalInstaller.active(inEngine: $0)?.version },
+            toolkitStore: store,
+            engineHasOwnD3DMetal: Engine.active == .crossover,
+            versions: D3DMetalInstaller.installed(inEngine: store),
+            active: D3DMetalInstaller.active(inEngine: store)?.version,
             isLive: true,
         )
     }
@@ -41,7 +46,8 @@ final class GraphicsStore {
                 selection: BottleGraphics.Selection(
                     renderer: .dxmt, msync: true, gpu: .automatic,
                 ),
-                managedEngine: engine,
+                toolkitStore: engine,
+                engineHasOwnD3DMetal: false,
                 versions: [
                     .init(version: "3.0", root: engine),
                     .init(version: "4.0 beta 2", root: engine),
@@ -54,13 +60,15 @@ final class GraphicsStore {
 
     private init(
         selection: BottleGraphics.Selection,
-        managedEngine: URL?,
+        toolkitStore: URL,
+        engineHasOwnD3DMetal: Bool,
         versions: [D3DMetalInstaller.Installed],
         active: String?,
         isLive: Bool,
     ) {
         self.selection = selection
-        self.managedEngine = managedEngine
+        self.toolkitStore = toolkitStore
+        self.engineHasOwnD3DMetal = engineHasOwnD3DMetal
         d3dMetalVersions = versions
         activeD3DMetal = active
         self.isLive = isLive
@@ -70,7 +78,7 @@ final class GraphicsStore {
     /// D3DMetal itself; a managed engine has it once the user has added their
     /// own copy of Apple's toolkit.
     var availableRenderers: [Renderer] {
-        guard managedEngine != nil else { return Renderer.allCases }
+        guard !engineHasOwnD3DMetal else { return Renderer.allCases }
         var renderers: [Renderer] = [.auto, .dxmt, .dxvk, .wined3d]
         if !d3dMetalVersions.isEmpty { renderers.insert(.d3dmetal, at: 1) }
         return renderers
@@ -92,22 +100,27 @@ final class GraphicsStore {
         }
     }
 
-    func chooseD3DMetal(version: String) {
+    /// `nil` means the engine's own — CrossOver's copy, with no shadow tree.
+    func chooseD3DMetal(version: String?) {
         activeD3DMetal = version
-        guard isLive, let managedEngine,
-              let entry = d3dMetalVersions.first(where: { $0.version == version })
-        else { return }
-        try? D3DMetalInstaller.activate(entry, inEngine: managedEngine)
+        guard isLive else { return }
+        guard let version, let entry = d3dMetalVersions.first(where: { $0.version == version })
+        else {
+            D3DMetalInstaller.choose(version: nil)
+            CrossOverShadow.remove()
+            return
+        }
+        try? D3DMetalInstaller.activate(entry, inEngine: toolkitStore)
     }
 
     /// Answers the failure, so the pane can show it.
     func installD3DMetal(from source: URL) async -> String? {
-        guard isLive, let managedEngine else { return nil }
+        guard isLive else { return nil }
         do {
             let entry = try await D3DMetalInstaller.install(
-                from: source, intoEngine: managedEngine,
+                from: source, intoEngine: toolkitStore,
             )
-            d3dMetalVersions = D3DMetalInstaller.installed(inEngine: managedEngine)
+            d3dMetalVersions = D3DMetalInstaller.installed(inEngine: toolkitStore)
             activeD3DMetal = entry.version
             EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the engine")
             return nil

@@ -60,6 +60,7 @@ let package = Package(
                 "Sevoflurane/Support/BottleGraphics.swift",
                 "Sevoflurane/Support/BridgePorts.swift",
                 "Sevoflurane/Support/ClientLifecycle.swift",
+                "Sevoflurane/Support/CrossOverShadow.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/GPUIdentity.swift",

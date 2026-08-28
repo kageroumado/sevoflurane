@@ -49,6 +49,11 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
+    /// Where toolkits live when they are not inside a managed engine — the
+    /// versions CrossOver can be pointed at through ``CrossOverShadow``.
+    static let sharedRoot = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Application Support/Sevoflurane/D3DMetal")
+
     // MARK: - What is installed
 
     static func installed(inEngine engine: URL) -> [Installed] {
@@ -78,6 +83,14 @@ nonisolated enum D3DMetalInstaller {
     /// paths Apple's own instructions assume (`ditto redist/lib/ .`).
     static func activate(_ installed: Installed, inEngine engine: URL) throws {
         let wineLib = engine.appendingPathComponent("wine/lib")
+        // A store that is not an engine has no Wine tree to populate: the
+        // shadow tree points at the version's own directory instead.
+        guard FileManager.default.fileExists(
+            atPath: engine.appendingPathComponent("wine").path,
+        ) else {
+            choose(version: installed.version)
+            return
+        }
         do {
             try copyContents(
                 of: installed.root.appendingPathComponent("lib/external"),
@@ -93,20 +106,26 @@ nonisolated enum D3DMetalInstaller {
         choose(version: installed.version)
     }
 
-    /// The version a game gets: the user's choice when it is still installed,
-    /// otherwise the newest.
+    /// The version a game gets: the user's choice when it is still
+    /// installed, otherwise the newest — unless they have asked for the
+    /// engine's own, which is a choice and not an absence.
     static func active(inEngine engine: URL) -> Installed? {
+        let chosen = Preferences.shared.string(forKey: versionKey)
+        if chosen == engineOwn { return nil }
         let available = installed(inEngine: engine)
-        if let chosen = Preferences.shared.string(forKey: versionKey),
-           let match = available.first(where: { $0.version == chosen }) {
+        if let chosen, let match = available.first(where: { $0.version == chosen }) {
             return match
         }
         return available.last
     }
 
+    /// `nil` asks for the engine's own copy — CrossOver's, or none at all.
     static func choose(version: String?) {
-        Preferences.shared.set(version, forKey: versionKey)
+        Preferences.shared.set(version ?? engineOwn, forKey: versionKey)
     }
+
+    /// Distinguishable from "never chosen", which still means "the newest".
+    private static let engineOwn = ""
 
     private static let versionKey = "d3dmetalVersion"
 

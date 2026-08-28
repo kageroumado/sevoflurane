@@ -382,7 +382,12 @@ framework is always the one beside the dylib that was loaded. A tree of
 symlinks mirroring CrossOver, with only `lib64/apple_gptk` pointed at a
 version we manage, therefore swaps D3DMetal wholesale: no edits to a signed
 bundle, no `DYLD_*` (stripped under their hardened runtime), no support
-burden on CodeWeavers. Full trace in the research notes.
+burden on CodeWeavers. `CrossOverShadow` builds that tree, stamps it with the
+CrossOver it mirrors so an update rebuilds it, and `Engine.wineURL` runs its
+launcher whenever a version is pinned — CrossOver's own otherwise. Verified
+2026-08-29 against the live client: with 4.0 beta 2 pinned, the running
+`Steam.exe` had Apple's newer `libd3dshared.dylib` and `D3DMetal.framework`
+mapped from our directory. Full trace in the research notes.
 
 
 ### Provisioning & lifecycle (verified end-to-end 2026-08-09, throwaway bottle)

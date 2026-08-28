@@ -96,7 +96,7 @@ struct GraphicsSettings: View {
                 Text("Steam's own interface never touches Direct3D — changes "
                     + "take effect the next time a game starts.")
             }
-            if store.managedEngine != nil { d3dMetalSection }
+            d3dMetalSection
         }
         .formStyle(.grouped)
     }
@@ -109,22 +109,23 @@ struct GraphicsSettings: View {
         Section {
             if store.d3dMetalVersions.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Add D3DMetal").font(.callout.weight(.semibold))
-                    Text("Direct3D 12 needs Apple's Game Porting Toolkit, which only "
+                    Text(store.engineHasOwnD3DMetal
+                        ? "Use a newer D3DMetal"
+                        : "Add D3DMetal")
+                        .font(.callout.weight(.semibold))
+                    Text(store.engineHasOwnD3DMetal
+                        ? "CrossOver ships the version it supports. Apple's newer "
+                        + "releases can be used instead — download one from "
+                        + "developer.apple.com and point Sevoflurane at the disk image. "
+                        + "Nothing inside CrossOver is modified."
+                        : "Direct3D 12 needs Apple's Game Porting Toolkit, which only "
                         + "Apple may distribute. Download it from developer.apple.com "
                         + "and point Sevoflurane at the disk image.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Picker("D3DMetal version", selection: Binding(
-                    get: { store.activeD3DMetal },
-                    set: { chosen in chosen.map(store.chooseD3DMetal) },
-                )) {
-                    ForEach(store.d3dMetalVersions, id: \.version) { entry in
-                        Text(entry.version).tag(Optional(entry.version))
-                    }
-                }
+                D3DMetalVersionPicker(store: store)
             }
             HStack {
                 if let d3dMetalError {
@@ -153,6 +154,31 @@ struct GraphicsSettings: View {
         Task(name: "Install D3DMetal") {
             d3dMetalError = await store.installD3DMetal(from: source)
             isAddingD3DMetal = false
+        }
+    }
+}
+
+/// The installed toolkit versions, plus the engine's own where it has one.
+/// An empty tag is that "own" case: a `String?` selection here crashed the
+/// compiler's IRGen, and a sentinel costs one line to read.
+private struct D3DMetalVersionPicker: View {
+    let store: GraphicsStore
+
+    private var selection: Binding<String> {
+        Binding(
+            get: { store.activeD3DMetal ?? "" },
+            set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
+        )
+    }
+
+    var body: some View {
+        Picker("D3DMetal version", selection: selection) {
+            if store.engineHasOwnD3DMetal {
+                Text("CrossOver's own").tag("")
+            }
+            ForEach(store.d3dMetalVersions, id: \.version) { entry in
+                Text(entry.version).tag(entry.version)
+            }
         }
     }
 }

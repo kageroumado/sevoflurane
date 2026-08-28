@@ -99,7 +99,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     var wineURL: URL {
         switch self {
         case .crossover:
-            return URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
+            // Through the shadow tree when the user has pinned a D3DMetal of
+            // their own, so CrossOver's launcher computes its graphics paths
+            // inside ours. Its own launcher otherwise, unchanged.
+            return CrossOverShadow.preparedLauncher()
+                ?? URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
         case .managed:
             let bin = root.appendingPathComponent("wine/bin")
             let wine64 = bin.appendingPathComponent("wine64")

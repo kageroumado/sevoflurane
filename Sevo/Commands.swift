@@ -222,6 +222,10 @@ struct EngineCommand: AsyncParsableCommand {
         help: "For d3dmetal: Apple's Game Porting Toolkit disk image, volume, or folder.",
     ) var from: String?
     @Option(
+        name: .customLong("use"),
+        help: "For d3dmetal: the version to run, or 'own' for the engine's own copy.",
+    ) var use: String?
+    @Option(
         name: .customLong("into"),
         help: "For d3dmetal: which installed engine to add it to (default: the active one).",
     ) var into: String?
@@ -248,24 +252,34 @@ struct EngineCommand: AsyncParsableCommand {
     /// Adds Apple's D3DMetal to the managed engine from the user's own copy
     /// of the Game Porting Toolkit — the CLI face of Settings › Graphics.
     private func addD3DMetal() async throws {
+        // Without `--into`, the toolkit goes wherever this engine keeps it:
+        // inside a managed engine, or the shared store that CrossOver is
+        // pointed at through the shadow tree.
         var version = into
         if version == nil, case let .managed(active) = Engine.active { version = active }
-        guard let version else {
-            Sevo.printError("no managed engine — pass --into <version>, or install one with: "
-                + "sevo engine install")
-            throw SevoExit.badInvocation
+        let engine = version.map(Engine.managedRoot.appendingPathComponent)
+            ?? D3DMetalInstaller.sharedRoot
+        let label = version ?? "CrossOver"
+        if let use {
+            D3DMetalInstaller.choose(version: use == "own" ? nil : use)
+            // Prepared now rather than during the next launch: choosing is
+            // the moment the user is waiting on this, not the moment a game is.
+            let launcher = CrossOverShadow.preparedLauncher()
+            print("D3DMetal for \(label): \(use == "own" ? "the engine's own" : use)"
+                + (launcher == nil ? "" : " (shadow tree ready)"))
+            return
         }
-        let engine = Engine.managedRoot.appendingPathComponent(version)
         guard let from else {
             let installed = D3DMetalInstaller.installed(inEngine: engine)
             let active = D3DMetalInstaller.active(inEngine: engine)?.version
             if installed.isEmpty {
-                print("no D3DMetal in engine \(version) — add one with: "
+                print("no D3DMetal installed for \(label) — add one with: "
                     + "sevo engine d3dmetal --from <Game Porting Toolkit dmg>")
             }
             for entry in installed {
                 print("\(entry.version)\(entry.version == active ? "  (active)" : "")")
             }
+            if active == nil, !installed.isEmpty { print("the engine's own  (active)") }
             return
         }
         do {
@@ -273,7 +287,7 @@ struct EngineCommand: AsyncParsableCommand {
                 from: URL(fileURLWithPath: (from as NSString).expandingTildeInPath),
                 intoEngine: engine,
             )
-            print("D3DMetal \(entry.version) installed into engine \(version)")
+            print("D3DMetal \(entry.version) installed for \(label)")
         } catch {
             Sevo.printError("\(error)")
             throw SevoExit.failed
