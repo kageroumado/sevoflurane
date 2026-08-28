@@ -106,6 +106,30 @@ nonisolated enum BottleGraphics {
         return Selection(renderer: renderer, msync: vars["WINEMSYNC"] != "0")
     }
 
+    /// The renderer a bottle gets when nobody has chosen one.
+    ///
+    /// Not CrossOver's "Automatic": that consults their per-game database and
+    /// falls back to **wined3d**, which is the slowest layer here and the one
+    /// a modern title is least likely to run on. A bottle whose whole purpose
+    /// is Steam is better served starting on D3DMetal — the only layer that
+    /// speaks Direct3D 12 — and a user who prefers the database can still
+    /// pick Automatic, which is written as an empty value and left alone.
+    static let defaultRenderer = Renderer.d3dmetal
+
+    /// Writes ``defaultRenderer`` into a bottle that has never had a renderer
+    /// set. An explicit choice — including Automatic, stored as an empty
+    /// value — is left exactly as the user left it.
+    static func seedDefaultRenderer(forBottle bottle: URL) throws {
+        let text = confText(forBottle: bottle)
+        guard !text.isEmpty,
+              environmentVariables(inConf: text)["CX_GRAPHICS_BACKEND"] == nil
+        else { return }
+        try apply(
+            Selection(renderer: defaultRenderer, msync: selection(forBottle: bottle).msync),
+            toBottle: bottle,
+        )
+    }
+
     static func apply(_ selection: Selection, toBottle bottle: URL) throws {
         var text = confText(forBottle: bottle)
         guard !text.isEmpty else {
@@ -215,6 +239,8 @@ nonisolated enum BottleGraphics {
 
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
+        // DXMT rather than ``defaultRenderer``: D3DMetal comes from Apple's
+        // Game Porting Toolkit, which the managed engine does not carry.
         let renderer = defaults.string(forKey: rendererKey)
             .flatMap(Renderer.init(rawValue:)) ?? .dxmt
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true

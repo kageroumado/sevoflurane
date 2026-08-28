@@ -29,6 +29,38 @@ opens. Every window Steam creates is adopted into a real `NSWindow`. The
 full architecture — and the fidelity rules that keep it honest — is
 `SPEC.md`.
 
+## Graphics, and the Rosetta clock
+
+A Windows game on a Mac needs its Direct3D calls translated into Metal, and
+which translator it gets is the single biggest lever on how it runs.
+Settings › Graphics picks one for the bottle (the (i) beside it says the same
+thing in place):
+
+| Renderer | What it is | Reach for it when |
+|---|---|---|
+| **D3DMetal** | Apple's Game Porting Toolkit — Direct3D 11 **and 12** | The default here, and the only option that speaks DirectX 12 or drives MetalFX upscaling. |
+| **DXMT** | Open-source Direct3D 10/11 straight to Metal ([3Shain/dxmt](https://github.com/3Shain/dxmt)) | DirectX 11 titles, especially on an older Mac; frame pacing is often steadier. |
+| **DXVK** | Direct3D 9–11 through Vulkan and MoltenVK | A game refuses to draw on either Metal path, or needs Direct3D 9. |
+| **Automatic** | CrossOver's per-game database, falling back to Wine's own `wined3d` | You would rather trust their QA than choose. |
+
+CrossOver 26 carries D3DMetal 3.0 and DXMT 0.72 on top of Wine 11.
+
+**Rosetta is on a clock.** macOS 27 is the last release that carries it;
+macOS 28 drops it in 2027, and everything above runs today as x86_64 under
+Rosetta. CodeWeavers' answer is native ARM64 Wine with
+[FEX](https://github.com/FEX-Emu/FEX) — their open-source x86 emulator — in
+Rosetta's place; the first Mac ARM64 preview shipped 31 July 2026, aimed at
+CrossOver 27 in early 2027.
+
+What that means here: Sevoflurane itself is native and emulates nothing, so
+whatever CrossOver makes the Steam client do, this app drives. The open
+question is game performance. Apple Silicon has a hardware total-store-order
+mode that the kernel switches on for Rosetta, and no ordinary process can ask
+for it, so FEX has to emulate x86 memory ordering in software — cheapest
+where threads are few, and games are not that. Correctness is expected;
+per-title speed is unmeasured until the builds are real.
+
+
 ## Layout
 
 - `SPEC.md` — the architecture: hosting Steam's UI, the bridge, native

@@ -161,6 +161,14 @@ final class LiveSetupEnvironment: SetupEnvironment {
             "reg", "add", #"HKCU\Software\Wine\Explorer"#,
             "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
+        guard Engine.active == .crossover else { return }
+        do {
+            try BottleGraphics.seedDefaultRenderer(
+                forBottle: Engine.active.bottlesRoot.appendingPathComponent(name),
+            )
+        } catch {
+            SetupLog.log("graphics default not seeded: \(error)")
+        }
     }
 
     func setOpenAtLogin(_ enabled: Bool) throws {
