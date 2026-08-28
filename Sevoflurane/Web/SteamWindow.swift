@@ -98,6 +98,18 @@ final class SteamWindow: NSObject {
                 backing: .buffered,
                 defer: false,
             )
+        case .auxiliary, .controllerConfig:
+            // Friends, notes, the configurator: Steam draws no title strip of
+            // its own in these, so overlaid traffic lights land on whatever
+            // the page put in its top-left corner — the friends window's own
+            // status control, for one. A plain titled window reserves the
+            // strip instead, and the page keeps every pixel it drew.
+            NSWindow(
+                contentRect: content,
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false,
+            )
         default:
             NSWindow(
                 contentRect: content,
@@ -159,11 +171,27 @@ final class SteamWindow: NSObject {
     /// Where the desktop window's frame is kept between the times it exists.
     private static let desktopFrameName = "SteamDesktopWindow"
 
+    /// Keeps an auxiliary window's title in step with its page.
+    private var titleObservation: NSKeyValueObservation?
+
     /// The per-role window dressing: title bar treatment, background, level,
     /// and visibility behavior.
     private func applyRoleChrome(to window: NSWindow) {
         switch role {
-        case .desktop, .login, .controllerConfig, .auxiliary:
+        case .auxiliary, .controllerConfig:
+            // The strip is real, so it says what the window is: Steam names
+            // its own popups through the document title.
+            window.titleVisibility = .visible
+            window.title = webView.title ?? "Steam"
+            window.backgroundColor = Self.steamBackground
+            window.collectionBehavior.insert(.fullScreenPrimary)
+            titleObservation = webView.observe(\.title) { [weak window] view, _ in
+                onMainThread {
+                    guard let title = view.title, !title.isEmpty else { return }
+                    window?.title = title
+                }
+            }
+        case .desktop, .login:
             // Steam draws its own title bar; the macOS one is reduced to the
             // traffic lights floating over it, and Steam's duplicate buttons
             // are hidden by the chrome script.

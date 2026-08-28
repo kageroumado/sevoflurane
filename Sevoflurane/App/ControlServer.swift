@@ -77,6 +77,7 @@ final class ControlServer {
         case .waitingForSignIn: "waitingForSignIn"
         case .degraded: "degraded"
         case .restarting: "restarting"
+        case .launching: "launching"
         case .gaveUp: "gaveUp"
         case .paused: "paused"
         }

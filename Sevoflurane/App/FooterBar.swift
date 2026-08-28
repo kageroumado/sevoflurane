@@ -89,6 +89,7 @@ private struct StatusChip: View {
         case .waitingForSignIn: ("Signed out", .gray)
         case .degraded: ("Degraded", .orange)
         case .restarting: ("Restarting", .accentColor)
+        case .launching: ("Starting", .accentColor)
         case .gaveUp: ("Stopped", .red)
         case .paused: ("Paused", .gray)
         }

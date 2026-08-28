@@ -155,9 +155,13 @@ final class Provisioner {
     }
 
     /// Bootstrapper → full client, no login needed (the lancache-prefill
-    /// trick); doubles as the update pass on existing installs.
+    /// trick). On a bottle that already has Steam this is the update pass —
+    /// `-forcesteamupdate -forcepackagedownload` brings a client of any age
+    /// up to current, which is why adoption and Repair both run it.
     private func updateClient(inBottle bottleName: String) async throws {
-        activity = .working("Downloading Steam (this is the long step)…")
+        activity = .working(steamPresent(inBottle: bottleName)
+            ? "Updating Steam…"
+            : "Downloading Steam (this is the long step)…")
         SetupLog.log("provision: headless client update")
         await environment.updateSteamClient(inBottle: bottleName)
         await refreshDetection()

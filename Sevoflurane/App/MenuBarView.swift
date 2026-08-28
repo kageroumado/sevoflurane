@@ -44,7 +44,9 @@ struct MenuBarView: View {
         let symbol: String
         let title: String
         let detail: String
-        /// Severity tint for the icon and the card's glass; `nil` reads neutral.
+        /// Severity color for the symbol. The card's glass stays neutral in
+        /// every state: a card that turns red carries the alarm twice, and the
+        /// popover is where the user comes to *fix* it.
         let tint: Color?
         let action: (label: String, run: () -> Void)?
     }
@@ -58,6 +60,14 @@ struct MenuBarView: View {
                 symbol: "hourglass",
                 title: "Starting up",
                 detail: supervisor.statusText,
+                tint: nil,
+                action: nil,
+            )
+        case let .launching(phase):
+            HealthCard(
+                symbol: "hourglass",
+                title: "Starting Steam",
+                detail: phase + " — the first launch takes a minute.",
                 tint: nil,
                 action: nil,
             )
@@ -134,7 +144,7 @@ struct MenuBarView: View {
                 }
             }
             .padding(Theme.Space.md)
-            .glassCard(tint: card.tint)
+            .glassCard()
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }

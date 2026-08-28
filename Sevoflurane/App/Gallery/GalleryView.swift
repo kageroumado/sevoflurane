@@ -179,8 +179,11 @@
         /// tile that advances leaves its neighbours where they were.
         static let wizards: [(scenario: SetupScenario, provisioner: Provisioner)] =
             SetupScenario.allCases.map { scenario in
+                // Paced, not instant: with no think time every stage
+                // completes between two frames and every scenario looks like
+                // a machine that was already provisioned.
                 (scenario, Provisioner(environment: DryRunSetupEnvironment(
-                    scenario: scenario, stepDelay: .zero,
+                    scenario: scenario, stepDelay: .milliseconds(900),
                 )))
             }
 

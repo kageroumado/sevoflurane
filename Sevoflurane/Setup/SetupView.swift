@@ -25,14 +25,14 @@ struct SetupView: View {
     @State private var step: Step = .welcome
     @State private var openAtLogin = true
     @State private var engineChoice: EngineChoice = .builtIn
-    @State private var whyCrossOver = false
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
+    @State private var newBottleName = SteamBottle.defaultName
 
     var body: some View {
         VStack(spacing: 0) {
             content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(.horizontal, 44)
                 .padding(.top, 28)
             footer
@@ -105,13 +105,12 @@ struct SetupView: View {
                 title: "Install the built-in engine (free, ~250 MB)",
                 detail: "Recommended. Downloads once; games render through Metal.",
             )
-            engineOption(
-                .crossover,
-                title: "Use CrossOver ($74, 14-day free trial)",
-                detail: "Commercial engine by CodeWeavers with better game "
-                    + "compatibility and support.",
-            )
-            DisclosureGroup("Why CrossOver?", isExpanded: $whyCrossOver) {
+            engineOption(.crossover, title: crossOverTitle, detail: crossOverDetail)
+            // Shown rather than disclosed: the step has room for it, and a
+            // chevron the size of a chevron is a poor place to keep the one
+            // paragraph that answers "why would I pay for this?".
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Why CrossOver?").font(.callout.weight(.semibold))
                 Text("CodeWeavers employs the Wine developers; CrossOver carries "
                     + "Steam- and game-specific fixes months before they reach "
                     + "open-source Wine, and buying it funds Wine itself. The "
@@ -120,10 +119,13 @@ struct SetupView: View {
                     + "redoing setup.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
             }
-            .font(.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.quaternary.opacity(0.5)),
+            )
             if engineChoice == .crossover {
                 Link(
                     "Get CrossOver at codeweavers.com",
@@ -134,6 +136,23 @@ struct SetupView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// What the CrossOver option is worth saying: a licensed copy on the
+    /// machine is a free choice, and quoting a price at someone who has
+    /// already paid reads as a sales pitch.
+    private var crossOverTitle: String {
+        guard let crossover = provisioner.detection?.crossover else {
+            return "Use CrossOver ($74, 14-day free trial)"
+        }
+        if crossover.licensed { return "Use CrossOver \(crossover.version) (already licensed)" }
+        if crossover.trialExpired { return "Use CrossOver ($74 — this Mac's trial has ended)" }
+        return "Use CrossOver \(crossover.version) (trial, $74 to keep)"
+    }
+
+    private var crossOverDetail: String {
+        "Commercial engine by CodeWeavers with better game compatibility and support."
     }
 
     private func engineOption(
@@ -196,19 +215,63 @@ struct SetupView: View {
                     }
                     .tag(String?.some(candidate.name))
                 }
-                Text("Build a new bottle named \(SteamBottle.defaultName)")
+                Text("Build a new bottle")
                     .tag(String?.none)
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
+            if bottleChoice == nil { newBottleField }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var newBottleField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("Bottle name", text: $newBottleName)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 260)
+            if let objection = newBottleObjection {
+                Text(objection).font(.caption).foregroundStyle(.orange)
+            } else {
+                Text("Its folder is named this, next to your other bottles.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.leading, 20)
+    }
+
+    /// Why the typed name cannot be used, if it cannot. A bottle is a
+    /// directory, and one that already exists belongs to whatever put it
+    /// there — installing Steam into it is not ours to decide.
+    private var newBottleObjection: String? {
+        let name = newBottleName.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty { return "Give the bottle a name." }
+        if name.contains("/") || name.contains(":") {
+            return "A bottle name cannot contain / or :."
+        }
+        if provisioner.detection?.bottles.contains(where: { $0.name == name }) == true {
+            return "A bottle named “\(name)” already exists."
+        }
+        return nil
+    }
+
+    /// Whether the bottle being set up already carries a Steam install —
+    /// adoption checks and updates a client instead of downloading one, and
+    /// telling someone their installed Steam is being downloaded is a lie
+    /// they will watch for minutes.
+    private var isAdoptingSteam: Bool {
+        provisioner.detection?.steamBottles.contains { $0.name == SteamBottle.name } == true
     }
 
     private var steam: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Setting up Steam")
+            Text(isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam")
                 .font(.system(size: 24, weight: .bold))
-            Text("Downloading and installing the Steam client. This is the longest "
+            Text(isAdoptingSteam
+                ? "Checking the client in this bottle and bringing it up to date. "
+                + "An old install can take a few minutes to catch up."
+                : "Downloading and installing the Steam client. This is the longest "
                 + "step — a few minutes on most connections.")
                 .foregroundStyle(.secondary)
             GroupBox {
@@ -237,6 +300,7 @@ struct SetupView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var options: some View {
@@ -252,9 +316,13 @@ struct SetupView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                // The label takes the width so the switch sits at the window's
+                // trailing edge, where every other switch in the app sits.
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var done: some View {
@@ -265,11 +333,15 @@ struct SetupView: View {
                 .foregroundStyle(.green)
             Text("Ready to play")
                 .font(.system(size: 26, weight: .bold))
-            Text("Your library lives in the menu bar — the yellow glyph, top right. "
-                + "Steam's sign-in window opens next if you aren't signed in yet.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
+            (
+                Text("Your library lives in the menu bar, behind ")
+                    + Text(Image(nsImage: MenuBarIcon.image(badged: false)))
+                    + Text(" at the top right. Steam's sign-in window opens next "
+                        + "if you aren't signed in yet.")
+            )
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 420)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -289,10 +361,13 @@ struct SetupView: View {
                         && provisioner.detection?.usableCrossOver == nil)
             case .bottle:
                 Button("Continue") {
-                    SteamBottle.choose(bottleChoice ?? SteamBottle.defaultName)
+                    SteamBottle.choose(
+                        bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces),
+                    )
                     beginProvisioning()
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(bottleChoice == nil && newBottleObjection != nil)
             case .steam:
                 Button("Continue") { step = .options }
                     .keyboardShortcut(.defaultAction)

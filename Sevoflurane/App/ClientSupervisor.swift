@@ -26,6 +26,11 @@ final class ClientSupervisor {
         case degraded(String)
         /// Mid-restart; the phase is shown in the menu bar.
         case restarting(String)
+        /// The client has not been up yet in this session. Wine takes tens of
+        /// seconds to bring the client's CDP endpoint up, and this app is on
+        /// screen in one — a first launch that is merely slow must not read
+        /// as a fault, and must not be "recovered" from.
+        case launching(String)
         /// Repeated restarts failed — the client is crash-looping and another
         /// launch would only stack crash dumps. Manual restarts only.
         case gaveUp(String)
@@ -34,6 +39,10 @@ final class ClientSupervisor {
 
     private(set) var health: Health = .starting
 
+    /// Whether the client has answered at all since the app started. Until it
+    /// has, every failure is the first launch still happening.
+    @ObservationIgnored private var hasSeenClientUp = false
+
     var statusText: String {
         switch health {
         case .starting: "checking the client…"
@@ -41,6 +50,7 @@ final class ClientSupervisor {
         case .waitingForSignIn: "waiting for sign-in"
         case let .degraded(reason): reason
         case let .restarting(phase): "restarting: \(phase)"
+        case let .launching(phase): phase
         case let .gaveUp(reason): reason
         case .paused: "auto-restart paused"
         }
@@ -205,6 +215,7 @@ final class ClientSupervisor {
             return
         }
         clientFailures = 0
+        hasSeenClientUp = true
         if case .gaveUp = health {
             log.log(.supervisor, "client recovered on its own")
         }
@@ -306,8 +317,10 @@ final class ClientSupervisor {
         if clientFailures >= 2 || !wineWindows.isEmpty {
             await restartClient(reason: wineWindows.isEmpty ? reason
                 : reason + " with a Wine dialog up — Steam's own watchdog likely fired")
-        } else {
+        } else if hasSeenClientUp {
             transition(to: .degraded(reason), logging: .client, reason)
+        } else {
+            health = .launching("starting Steam…")
         }
     }
 
@@ -480,19 +493,25 @@ final class ClientSupervisor {
                 : "headless client repair did not exit cleanly",
         )
         guard !isQuitting else { return }
-        health = .restarting("launching the client")
+        health = progress("launching the client")
         await ClientLifecycle.launchClient()
         await awaitClientUp()
     }
 
+    /// The same phase, told as a first launch or as a recovery depending on
+    /// whether this session has ever had a working client.
+    private func progress(_ phase: String) -> Health {
+        hasSeenClientUp ? .restarting(phase) : .launching(phase)
+    }
+
     private func awaitClientUp() async {
         for waited in stride(from: 3, through: 180, by: 3) {
-            health = .restarting("waiting for the client (\(waited)s)")
+            health = progress("waiting for the client (\(waited)s)")
             try? await Task.sleep(for: .seconds(3))
             if await ClientLifecycle.probeClient() == .up {
                 PerfProbe.poi.emitEvent("ClientBack", "up after ~\(waited)s")
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")
-                health = .restarting("reloading the UI")
+                health = progress("reloading the UI")
                 lastPageRecovery = .now
                 pageFailures = 0
                 host.reload()
