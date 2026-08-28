@@ -145,6 +145,7 @@ actor SteamBridge {
     }
 
     // MARK: - CDP
+
     /// The bottled client's cookie jar, for mirroring its authenticated web
     /// session into the app's web views (``WebSessionCookies``). Nil when the
     /// client isn't reachable — the caller renders signed out, same as before.
@@ -157,7 +158,6 @@ actor SteamBridge {
             return nil
         }
     }
-
 
     private func ensureCDP() async throws -> CDPClient {
         if let cdp, await !cdp.isClosed { return cdp }
@@ -583,15 +583,17 @@ actor SteamBridge {
     /// CLIENT_SESSION, …), fetched live because CLIENT_SESSION and the
     /// transport ports change on every client restart.
     ///
-    /// SILENT_STARTUP is dropped: the bottle client is launched with -silent
-    /// so it stays out of the way, and that flag creates the desktop window
-    /// Hidden — the window this page exists to show.
+    /// SILENT_STARTUP is kept — the bottle client is launched with `-silent`
+    /// and the page is told the same, so Steam's UI creates its desktop
+    /// window Hidden and leaves it that way. This app is a menu-bar app: the
+    /// window belongs on screen when someone asks for it, and `showSteam`
+    /// routes and shows it then.
     private func liveSearch() async throws -> String {
         let cdp = try await ensureCDP()
         let search = try await cdp.evaluate("location.search") ?? ""
         let kept = search.trimmingCharacters(in: CharacterSet(charactersIn: "?"))
             .components(separatedBy: "&")
-            .filter { !$0.isEmpty && !$0.hasPrefix("SILENT_STARTUP=") }
+            .filter { !$0.isEmpty }
         return "?" + kept.joined(separator: "&")
     }
 

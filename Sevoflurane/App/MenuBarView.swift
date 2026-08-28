@@ -173,8 +173,18 @@ struct MenuBarView: View {
                         game: game,
                         launchDetail: host.activeLaunch
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
+                        pinned: BottleGraphics.overrides()[game.id]?.renderer,
+                        setPin: { renderer in
+                            BottleGraphics.setOverride(
+                                renderer.map {
+                                    BottleGraphics.Override(renderer: $0, name: game.name)
+                                },
+                                forApp: game.id,
+                                named: game.name,
+                            )
+                        },
                     ) {
-                        host.launchGame(game)
+                        Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
                     }
                 }
             }
@@ -186,6 +196,9 @@ struct MenuBarView: View {
         /// What the client says it is doing right now for this app
         /// (game-action events); `nil` outside a launch.
         let launchDetail: String?
+        /// The renderer this game is pinned to, if any.
+        let pinned: Renderer?
+        let setPin: (Renderer?) -> Void
         let launch: () -> Void
         @State private var isHovered = false
         /// Instant acknowledgment for the click; the client's first
@@ -215,6 +228,14 @@ struct MenuBarView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .transition(.opacity)
+                        } else if let restartFor {
+                            // The renderer comes from the environment Steam
+                            // was started in, so a pinned game needs a new
+                            // one. Better said before the click than after.
+                            Text("\(restartFor.label) — restarts Steam first")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
                     Spacer(minLength: Theme.Space.sm)
@@ -236,6 +257,24 @@ struct MenuBarView: View {
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
+            .contextMenu {
+                Picker("Renderer", selection: pinBinding) {
+                    Text("Bottle default").tag(Renderer?.none)
+                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                        Text(renderer.label).tag(Renderer?.some(renderer))
+                    }
+                }
+            }
+        }
+
+        /// What the pin menu reads and writes.
+        private var pinBinding: Binding<Renderer?> {
+            Binding(get: { pinned }, set: { setPin($0) })
+        }
+
+        /// The renderer this launch would have to restart the client for.
+        private var restartFor: Renderer? {
+            BottleGraphics.rendererNeedingRestart(forApp: game.id)
         }
 
         private var capsuleArt: some View {

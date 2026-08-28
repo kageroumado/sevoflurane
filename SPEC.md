@@ -333,6 +333,48 @@ CrossOver in the Dock, nothing in the app switcher unless the window is open.
 Quitting the app (or the Mac sleeping into shutdown) triggers the supervisor's
 stop sequence, so in-bottle Steam never outlives the app as a zombie.
 
+### The menu bar is the app; the Steam window is optional
+
+Most sessions never need Steam's window. What a person actually wants from a
+Steam that lives in the menu bar is a launcher and their friends — so the
+window is created hidden at boot (the page keeps `SILENT_STARTUP`, as a
+`-silent` client does) and is routed and shown the first time someone asks
+for it.
+
+Two surfaces follow from that, and both are wanted:
+
+**Friends and chat in the popover.** Steam's friends list and chat are
+ordinary popups of the same UI we already host, so they can open as their
+own native windows from the menu bar without the desktop window existing.
+The popover's row says what is waiting — "Friends · 1 new message" rather
+than a bare "Friends" — and the menu-bar glyph carries a dot while anything
+is unread, the same badge the supervisor uses for attention.
+
+**Notifications belong to macOS.** Steam's own toasts are Windows-side UI
+drawn inside the client; they must be suppressed there and re-posted through
+`UNUserNotificationCenter`, so a message or a download finishing arrives in
+Notification Center like any other app's, with the app's icon and a click
+that opens the right surface. A Windows toast drawn over a Mac desktop is
+exactly the kind of leak this app exists to remove.
+
+### Per-game renderers
+
+A game's graphics translation layer comes from the environment of the process
+tree Steam already lives in, so it cannot be changed for one game while the
+client runs. Games can still be *pinned* to a renderer: the pin is stored per
+app id, the menu-bar row says "DXVK — restarts Steam first" before the click,
+and pressing play applies the renderer, restarts the client, and launches the
+game once services are back. The restart is the cost of the mechanism, and
+the user is told about it in advance rather than surprised by it.
+
+Apple's D3DMetal is the only layer that speaks Direct3D 12, and it is
+CrossOver-only today because the managed engine cannot redistribute it. The
+intended answer is the Whisky route: the user downloads Apple's Game Porting
+Toolkit themselves and points the app at the disk image, which copies
+D3DMetal into the managed engine — no redistribution, and the same layer
+CrossOver ships at `lib64/apple_gptk/external/D3DMetal.framework`.
+
+
 ### Provisioning & lifecycle (verified end-to-end 2026-08-09, throwaway bottle)
 
 The whole cycle was executed in a scratch bottle (`SevoTest`) and works without

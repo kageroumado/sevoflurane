@@ -2,7 +2,7 @@ import Foundation
 
 /// The graphics translation layer games render through. Steam's own UI never
 /// touches Direct3D, so switching takes effect at the next game launch.
-nonisolated enum Renderer: String, CaseIterable, Sendable {
+nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     /// The engine picks per game from CrossOver's own database, falling
     /// back to wined3d for a game it does not list.
     case auto
@@ -83,6 +83,65 @@ nonisolated enum BottleGraphics {
         var renderer: Renderer
         var msync: Bool
     }
+
+    /// What the bottle is set to right now, whichever engine owns the store.
+    static func currentSelection() -> Selection {
+        Engine.active == .crossover
+            ? selection(forBottle: SteamBottle.root)
+            : managedSelection()
+    }
+
+    /// Writes a selection wherever the active engine keeps it.
+    static func applyToActiveEngine(_ selection: Selection) throws {
+        if Engine.active == .crossover {
+            try apply(selection, toBottle: SteamBottle.root)
+        } else {
+            setManagedSelection(selection)
+        }
+    }
+
+    // MARK: - Per-game overrides
+
+    /// A game that wants a renderer of its own, and the name to show for it.
+    struct Override: Codable, Equatable, Sendable {
+        var renderer: Renderer
+        var name: String
+    }
+
+    /// Games pinned to a renderer, by Steam app id.
+    ///
+    /// The bottle's renderer reaches a game through the environment of the
+    /// process tree Steam already lives in, so a game cannot be given its own
+    /// without restarting the client first. That is what the menu bar warns
+    /// about before it launches one.
+    static func overrides() -> [Int: Override] {
+        guard let data = Preferences.shared.data(forKey: overridesKey),
+              let stored = try? JSONDecoder().decode([String: Override].self, from: data)
+        else { return [:] }
+        return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
+            Int(key).map { ($0, value) }
+        })
+    }
+
+    static func setOverride(_ override: Override?, forApp appID: Int, named name: String) {
+        var stored = overrides()
+        stored[appID] = override.map { Override(renderer: $0.renderer, name: name) }
+        let encodable = Dictionary(
+            uniqueKeysWithValues: stored.map { (String($0.key), $0.value) },
+        )
+        guard let data = try? JSONEncoder().encode(encodable) else { return }
+        Preferences.shared.set(data, forKey: overridesKey)
+    }
+
+    /// The renderer this game must run under, when that is not what the
+    /// bottle is set to — the client has to be restarted to change it.
+    static func rendererNeedingRestart(forApp appID: Int) -> Renderer? {
+        guard let wanted = overrides()[appID]?.renderer,
+              wanted != currentSelection().renderer else { return nil }
+        return wanted
+    }
+
+    private static let overridesKey = "rendererOverrides"
 
     // MARK: - CrossOver bottles (cxbottle.conf)
 

@@ -58,7 +58,12 @@ question is game performance. Apple Silicon has a hardware total-store-order
 mode that the kernel switches on for Rosetta, and no ordinary process can ask
 for it, so FEX has to emulate x86 memory ordering in software — cheapest
 where threads are few, and games are not that. Correctness is expected;
-per-title speed is unmeasured until the builds are real.
+per-title speed is unmeasured until the builds are real — unless Apple opens
+that switch to more than Rosetta, which would close most of the gap at once.
+
+DXVK upstream is alive (2.7.1, with commits through 2026); on a Mac what you
+actually run is CrossOver's own build or [Gcenx/DXVK-macOS](https://github.com/Gcenx/DXVK-macOS),
+whose ceiling is MoltenVK's Vulkan extension coverage rather than DXVK itself.
 
 
 ## Layout

@@ -130,6 +130,44 @@ final class ClientSupervisor {
         }
     }
 
+    /// Starts a game, restarting the client first when that game is pinned to
+    /// a renderer the running session does not have.
+    ///
+    /// The renderer reaches a game through the environment of the process
+    /// tree Steam already lives in, so there is no way to change it for one
+    /// game without a new tree. The menu bar says so before the click; this
+    /// is the click.
+    func launch(_ game: SteamWebHost.RecentGame) async {
+        guard let wanted = BottleGraphics.rendererNeedingRestart(forApp: game.id) else {
+            host.launchGame(game)
+            return
+        }
+        log.log(
+            .client,
+            "\(game.name) is pinned to \(wanted.label) — restarting the client for it",
+        )
+        do {
+            try BottleGraphics.applyToActiveEngine(
+                BottleGraphics.Selection(
+                    renderer: wanted, msync: BottleGraphics.currentSelection().msync,
+                ),
+            )
+        } catch {
+            log.log(.client, "could not set \(wanted.label) for \(game.name): \(error)")
+            host.launchGame(game)
+            return
+        }
+        recentRestarts.removeAll()
+        hygieneTried = false
+        await restartClient(reason: "launching \(game.name) on \(wanted.label)")
+        // The client is up and the page reloaded; Steam's own services need a
+        // moment more before a launch request means anything.
+        for _ in 0 ..< 40 where health != .healthy {
+            try? await Task.sleep(for: .seconds(3))
+        }
+        host.launchGame(game)
+    }
+
     /// The menu-bar button: restarts unconditionally, with a fresh crash-loop
     /// budget — the user asking is what distinguishes "try again" from a loop.
     func restartNow() {

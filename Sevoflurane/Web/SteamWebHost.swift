@@ -329,6 +329,16 @@ final class SteamWebHost {
     /// so later.
     func showSteam() {
         if let desktop {
+            // The window exists from the moment Steam's UI boots, but on no
+            // route — a `-silent` client is the same until its tray item is
+            // clicked. Routing it is what fills it, and it happens the first
+            // time someone actually asks for the window rather than at
+            // launch: a menu-bar app that puts a window on screen at login
+            // is not a menu-bar app.
+            if !hasRoutedDesktop {
+                hasRoutedDesktop = true
+                openLibrary()
+            }
             desktop.show(activating: true)
             return
         }
@@ -393,6 +403,10 @@ final class SteamWebHost {
     /// Whether the desktop window existed and the user closed it — the state
     /// that separates "rebuild the page" from "the UI is still booting".
     private var desktopWasClosed = false
+
+    /// Whether this desktop window has been sent to a route yet. A freshly
+    /// adopted one renders nothing until it is.
+    private var hasRoutedDesktop = false
 
     /// The context boots its window on no route at all, the same way a
     /// `-silent` client does until its tray item is clicked. The route runs
@@ -560,6 +574,7 @@ final class SteamWebHost {
         guard window.role == .desktop else { return }
         desktop = window
         desktopWasClosed = false
+        hasRoutedDesktop = false
         isRecoveringFromWebProcessDeath = false
         status = "Steam is ready"
         PerfProbe.poi.emitEvent("DesktopAdopted")
@@ -573,13 +588,6 @@ final class SteamWebHost {
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")
         }
         refreshRecentGames()
-        // A client started with -silent opens its window on no route at all.
-        // Steam's tray item resolves that by asking for the library, and so
-        // does the first thing the user sees here.
-        Task(name: "Open library") {
-            try? await Task.sleep(for: .seconds(1))
-            openLibrary()
-        }
     }
 
     func windowDidHide(_ window: SteamWindow) {
