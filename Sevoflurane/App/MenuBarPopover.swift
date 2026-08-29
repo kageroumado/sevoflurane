@@ -12,6 +12,7 @@ import SwiftUI
 final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let host: SteamWebHost
     private let supervisor: ClientSupervisor
+    private let notifications: SteamNotifications
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: PopoverPanel?
     private var escapeMonitor: Any?
@@ -23,9 +24,14 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     /// that window are the second half of a dismissal, not a request.
     private var closedAt = ContinuousClock.now
 
-    init(host: SteamWebHost, supervisor: ClientSupervisor) {
+    init(
+        host: SteamWebHost,
+        supervisor: ClientSupervisor,
+        notifications: SteamNotifications,
+    ) {
         self.host = host
         self.supervisor = supervisor
+        self.notifications = notifications
         super.init()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggle)
@@ -33,11 +39,19 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         trackIcon()
     }
 
-    /// Draws the glyph, and redraws it whenever the supervisor's verdict
-    /// changes — the badge is the only thing the item says on its own.
+    /// Draws the glyph, and redraws it whenever what it has to say changes —
+    /// the badge is the only thing the item says on its own.
+    ///
+    /// One dot, two reasons: the client needs a hand, or a conversation is
+    /// waiting. They do not compete, because the dot means the same thing
+    /// either way — open the popover, something is in it — and the popover
+    /// says which. A second badge for the second reason would be two marks on
+    /// an 18-point glyph saying one thing.
     private func trackIcon() {
         withObservationTracking {
-            statusItem.button?.image = MenuBarIcon.image(badged: supervisor.needsAttention)
+            statusItem.button?.image = MenuBarIcon.image(
+                badged: supervisor.needsAttention || host.unreadChats > 0,
+            )
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self?.trackIcon() }
@@ -113,7 +127,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         background.layer?.masksToBounds = true
 
         let content = NSHostingView(
-            rootView: MenuBarView(host: host, supervisor: supervisor),
+            rootView: MenuBarView(
+                host: host, supervisor: supervisor, notifications: notifications,
+            ),
         )
         content.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(content)

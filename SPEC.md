@@ -348,21 +348,71 @@ window is created hidden at boot (the page keeps `SILENT_STARTUP`, as a
 `-silent` client does) and is routed and shown the first time someone asks
 for it.
 
-Two surfaces follow from that, and both are wanted:
+Two surfaces follow from that, and both are built.
 
-**Friends and chat in the popover.** Steam's friends list and chat are
-ordinary popups of the same UI we already host, so they can open as their
-own native windows from the menu bar without the desktop window existing.
+**Friends and chat in the popover.** Steam's friends list and every chat are
+ordinary popups of the same UI we already host, so they open as their own
+native windows from the menu bar with the desktop window still hidden —
+`friendslist_uid0` and `chat_ChatWindow_<n>_uid0`, each with a real title bar
+carrying the page's own title ("Friends List", or whoever the chat is with).
 The popover's row says what is waiting — "Friends · 1 new message" rather
 than a bare "Friends" — and the menu-bar glyph carries a dot while anything
-is unread, the same badge the supervisor uses for attention.
+is unread, the same badge the supervisor uses for attention. One dot, two
+reasons: it means "open the popover", and the popover says which.
 
-**Notifications belong to macOS.** Steam's own toasts are Windows-side UI
-drawn inside the client; they must be suppressed there and re-posted through
-`UNUserNotificationCenter`, so a message or a download finishing arrives in
-Notification Center like any other app's, with the app's icon and a click
-that opens the right surface. A Windows toast drawn over a Mac desktop is
-exactly the kind of leak this app exists to remove.
+The count is Steam's own. Its friends UI posts the number of conversations
+with unread messages to the client on every change, for the client's own tray
+badge (`SteamClient.WebChat.SetNumChatsWithUnreadPriorityMessages`), and the
+shim taps that call on its way through — so the menu bar is pushed the number
+exactly when it changes and nothing has to ask. Clicking the row opens the
+friends list, or, with messages waiting, the oldest of them, which is what
+Steam's own tray badge does.
+
+**Notifications belong to macOS.** Steam's toasts are not drawn inside the
+desktop window: each one opens its own borderless popup,
+`notificationtoasts_<id>_desktop`, which under CEF is a Windows toast in the
+corner of the screen and here was adopted as an ordinary auxiliary window —
+so a friend's message put a 283×102 panel, traffic lights and all, at the
+bottom-left of the Mac desktop while the Steam window was hidden. Exactly the
+kind of leak this app exists to remove.
+
+The popup is therefore its own window role, and that role is never shown. It
+is still built and still parked off-screen, because its page has to run:
+Steam renders the toast into it, ticks its dismissal timer, and drains its
+own toast queue on schedule, and nothing downstream can tell the window was
+never on screen. Suppression is that refusal and nothing more — no Steam
+setting is rewritten, no component is prevented from mounting. Geometry calls
+are refused for the same reason a parked window takes none: Steam moves the
+toast once per animation frame while it slides in, every call carrying a
+`NaN` for an x it computes against a screen edge it cannot measure here.
+
+What the user sees instead is posted through `UNUserNotificationCenter`. The
+page subscribes to the same value Steam's own toast component reads
+(`NotificationStore.CurrentToastSubscribableValue`), so exactly the
+notifications Steam would have shown arrive — and the user's own Steam
+notification settings, which are applied upstream of that value, are honored
+without this app knowing they exist. The payload is deserialized by Steam's
+per-type descriptor, so the schema cannot drift from the client's: a friend
+message carries the sender's persona, the message, the sender's SteamID and
+their avatar's URL. Identities only the page can resolve are resolved there
+(an account id to a persona, an app id to a game's name); the words are
+written natively. Clicking the notification opens that friend's chat window —
+again with no desktop window involved.
+
+Steam's table runs to 64 notification types and most carry a payload only
+Steam's own component can render, so the ones this app writes out are the
+ones whose payload names itself: messages, group-chat messages, a friend
+coming online or into a game, and a download finishing. The rest are logged
+and dropped, because a banner that can only say "Steam" is worse than none.
+
+**Where the permission is asked for.** An app that shows no window on first
+run has nowhere honest to raise the system alert at launch, and asking before
+there is anything to show asks the user to weigh a permission they have no
+reason to have thought about. So nothing is asked until Steam actually
+produces a notification: that first one is held, the menu-bar dot goes up for
+it, and the popover the user opens to see why carries the row that offers the
+switch. The prompt is raised by their click on it, and never by the app on
+its own.
 
 ### Per-game renderers
 

@@ -1,6 +1,7 @@
 #if DEBUG
     import Propofol
     import SwiftUI
+    import UserNotifications
 
     /// Every surface in every state, side by side, with no client and no
     /// bottle behind any of it — the visual pass this app could otherwise
@@ -20,9 +21,13 @@
                     section("Menu bar popover") {
                         ForEach(Fixtures.popovers, id: \.label) { fixture in
                             tile(fixture.label) {
-                                MenuBarView(host: fixture.host, supervisor: fixture.supervisor)
-                                    .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
-                                    .background(.background, in: Theme.cardShape)
+                                MenuBarView(
+                                    host: fixture.host,
+                                    supervisor: fixture.supervisor,
+                                    notifications: fixture.notifications,
+                                )
+                                .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
+                                .background(.background, in: Theme.cardShape)
                             }
                         }
                     }
@@ -34,7 +39,7 @@
                                 graphics: Fixtures.graphics,
                                 storage: Fixtures.storage,
                             )
-                                .frame(width: 720, height: 460)
+                            .frame(width: 720, height: 460)
                         }
                     }
 
@@ -99,6 +104,9 @@
             let label: String
             let host: SteamWebHost
             let supervisor: ClientSupervisor
+            /// Notifications are a popover state too — nothing else in the
+            /// app draws the permission card.
+            var notifications: SteamNotifications = .preview()
         }
 
         struct Pane {
@@ -166,6 +174,28 @@
                     launching: .init(appID: 1_245_620, detail: "Preparing…"),
                 ),
                 supervisor: ClientSupervisor(previewHealth: .healthy),
+            ),
+            Popover(
+                label: "One message waiting",
+                host: .preview(games: games, unreadChats: 1),
+                supervisor: ClientSupervisor(previewHealth: .healthy),
+            ),
+            Popover(
+                label: "Several conversations waiting",
+                host: .preview(games: games, unreadChats: 4),
+                supervisor: ClientSupervisor(previewHealth: .healthy),
+            ),
+            Popover(
+                label: "Notifications not asked for yet",
+                host: .preview(games: games, unreadChats: 1),
+                supervisor: ClientSupervisor(previewHealth: .healthy),
+                notifications: .preview(authorization: .notDetermined, unasked: true),
+            ),
+            Popover(
+                label: "Notifications refused",
+                host: .preview(games: games, unreadChats: 2),
+                supervisor: ClientSupervisor(previewHealth: .healthy),
+                notifications: .preview(authorization: .denied),
             ),
         ]
 

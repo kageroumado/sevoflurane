@@ -157,6 +157,14 @@
     "SteamClient.Settings.OpenWindowsMicSettings": "__openSoundSettings",
   };
 
+  /* Calls the host wants to *see*, which still reach the client. Steam's
+     friends UI posts its unread-conversation count on every change, for the
+     client's own tray badge; tapping it here is how the menu bar learns what
+     is waiting without anything asking. */
+  var NATIVE_TAPS = {
+    "SteamClient.WebChat.SetNumChatsWithUnreadPriorityMessages": "__unreadChats",
+  };
+
   /* Routes whose target is a path only the client knows: resolved here, where
      the API lives, and then opened through the directory route above. */
   var NATIVE_RESOLVERS = {
@@ -171,6 +179,17 @@
         });
     },
   };
+  function nativeTap(path, args) {
+    var fn = NATIVE_TAPS[path];
+    if (!fn) return;
+    var handler = window.webkit && window.webkit.messageHandlers
+      && window.webkit.messageHandlers.sevoWindow;
+    if (!handler) return;
+    try {
+      handler.postMessage({ fn: fn, args: Array.prototype.slice.call(args) });
+    } catch (e) {}
+  }
+
   function nativeRoute(path, args) {
     var handler = window.webkit && window.webkit.messageHandlers
       && window.webkit.messageHandlers.sevoWindow;
@@ -218,6 +237,7 @@
     var fn = function () {
       var routed = nativeRoute(path, arguments);
       if (routed) return routed;
+      nativeTap(path, arguments);
       var entry;
       if (path === "SteamClient.URL.RegisterForRunSteamURL"
           && typeof arguments[1] === "function") {

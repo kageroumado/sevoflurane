@@ -1,6 +1,7 @@
 import AppKit
 import Propofol
 import SwiftUI
+import UserNotifications
 
 /// The menu-bar extra: what Steam's own tray menu shows — recent games first,
 /// then the client controls.
@@ -13,12 +14,15 @@ import SwiftUI
 struct MenuBarView: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
+    let notifications: SteamNotifications
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             PopoverHeader("Sevoflurane")
             healthCard
             recentGames
+            friendsRow
+            notificationPermissionCard
             openSteamButton
             FooterBar(host: host, supervisor: supervisor)
         }
@@ -30,6 +34,8 @@ struct MenuBarView: View {
         .animation(.smooth(duration: 0.3), value: supervisor.health)
         .animation(.smooth(duration: 0.3), value: host.recentGames)
         .animation(.smooth(duration: 0.3), value: host.activeLaunch)
+        .animation(.smooth(duration: 0.3), value: host.unreadChats)
+        .animation(.smooth(duration: 0.3), value: notifications.hasUnaskedNotifications)
         .onAppear {
             host.refreshRecentGames()
             SilentUpdates.shared.refresh()
@@ -306,6 +312,116 @@ struct MenuBarView: View {
                     .opacity(isHovered ? 1 : 0)
                     .scaleEffect(isHovered ? 1 : 0.7)
             }
+        }
+    }
+
+    // MARK: - Friends
+
+    /// The other half of what a menu-bar Steam is for. It says what is
+    /// waiting rather than a bare "Friends", and clicking it opens the
+    /// friends list — or, with messages waiting, the oldest of them — as its
+    /// own window. Steam's desktop window is never involved.
+    private var friendsRow: some View {
+        FriendsRow(unreadChats: host.unreadChats) { host.openFriends() }
+    }
+
+    /// Built like a game row so the two read as one column: the same leading
+    /// inset, the same hover fill, the same vertical rhythm.
+    private struct FriendsRow: View {
+        let unreadChats: Int
+        let open: () -> Void
+        @State private var isHovered = false
+
+        var body: some View {
+            Button(action: open) {
+                HStack(spacing: Theme.Space.md) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 13))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(unreadChats > 0 ? Color.accentColor : Color.secondary)
+                        .frame(width: 27)
+                    // The count is in the words. A badge beside them would
+                    // say the same number twice, which is the one thing this
+                    // popover's rows never do.
+                    Text(MenuBarView.friendsLabel(unreadChats: unreadChats))
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Spacer(minLength: Theme.Space.sm)
+                }
+                .padding(.vertical, Theme.Space.xs)
+                .contentShape(Theme.innerShape)
+            }
+            .buttonStyle(PressableStyle())
+            .background(
+                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+            )
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+            .keyboardShortcut("f")
+        }
+    }
+
+    /// "Friends", or what is waiting in it. The count is conversations, not
+    /// messages — it is the number Steam itself posts to the client for its
+    /// own tray badge, and a conversation is what a click opens.
+    static func friendsLabel(unreadChats: Int) -> String {
+        switch unreadChats {
+        case 0: "Friends"
+        case 1: "Friends · 1 new message"
+        default: "Friends · \(unreadChats) new messages"
+        }
+    }
+
+    // MARK: - Notification permission
+
+    /// Where the app asks to post notifications.
+    ///
+    /// An app with no window on first run has nowhere honest to raise the
+    /// system alert at launch, and asking before there is anything to show
+    /// asks for a permission the user has no reason to weigh yet. So nothing
+    /// is asked until Steam actually produces a notification: the first one
+    /// is held, the menu-bar dot goes up for it, and this row is what the
+    /// user finds when they open the popover to see why. The prompt is then
+    /// raised by their click on it.
+    @ViewBuilder private var notificationPermissionCard: some View {
+        if notifications.hasUnaskedNotifications || notifications.authorization == .denied {
+            let denied = notifications.authorization == .denied
+            HStack(spacing: Theme.Space.md) {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 18))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(denied ? "Notifications are off" : "Steam has something to tell you")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(
+                        denied
+                            ? "Turn Sevoflurane back on in System Settings to get messages here."
+                            : "Let Sevoflurane post Steam's messages to Notification Center.",
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button(denied ? "Open Settings" : "Turn On") {
+                    if denied {
+                        notifications.openSystemSettings()
+                    } else {
+                        Task(name: "Ask for notification permission") {
+                            await notifications.requestAuthorization()
+                        }
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.small)
+                .foregroundStyle(Theme.onAccent)
+            }
+            .padding(Theme.Space.md)
+            .glassCard()
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }
 

@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let bridge = SteamBridge()
     let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host)
+    let notifications = SteamNotifications()
     private let gameLaunchWatch = GameLaunchWatch()
     private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)
     private var menuMirror: SteamMenuMirror?
@@ -31,7 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
-        menuBarPopover = MenuBarPopover(host: host, supervisor: supervisor)
+        // Before the gallery and dry-run gates return: setting the delegate
+        // is what lets a click on a notification that woke the app be
+        // delivered at all, and reading the permission raises no prompt.
+        notifications.host = host
+        host.notifications = notifications
+        notifications.start()
+        menuBarPopover = MenuBarPopover(
+            host: host, supervisor: supervisor, notifications: notifications,
+        )
         #if DEBUG
             if GalleryWindow.wasRequestedAtLaunch {
                 // Nothing else starts: the gallery is fixtures all the way

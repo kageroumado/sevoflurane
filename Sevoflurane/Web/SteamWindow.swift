@@ -85,9 +85,45 @@ final class SteamWindow: NSObject {
         guard window == nil, role != .context else { return }
 
         let content = NSRect(origin: .zero, size: requestedSize)
-        let window: NSWindow = switch role {
+        let window = makeWindow(content: content)
+        window.delegate = self
+        window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
+        // Steam's window model is the one that decides what exists: every
+        // window here is rebuilt from the page that opened it, so AppKit's
+        // own restoration has nothing to put back.
+        window.isRestorable = false
+        applyRoleChrome(to: window)
+        window.contentView = makeContentView(content: content)
+
+        if let minimumSize { window.contentMinSize = minimumSize }
+        if let maximumSize { window.contentMaxSize = maximumSize }
+        place(window)
+        self.window = window
+        if role == .menu {
+            window.orderFront(nil)
+        } else if role == .toast {
+            park(window)
+        }
+    }
+
+    /// The bare `NSWindow` for this popup's role, before any dressing.
+    private func makeWindow(content: NSRect) -> NSWindow {
+        switch role {
         case .menu, .keyboard:
             SteamPanel(contentRect: content)
+        case .toast:
+            // Borderless and never ordered in. It exists because WebKit only
+            // schedules a web view that lives in a window, and the toast's
+            // page has to run: it renders, starts its dismissal timer, and
+            // drains Steam's toast queue. The Mac side of the notification is
+            // posted from `SteamNotifications`.
+            NSWindow(
+                contentRect: content,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false,
+            )
         case .bigPicture:
             // BPM draws its own top bar flush with the content, leaving no
             // strip for overlaid traffic lights, so the title bar stays a real
@@ -98,12 +134,13 @@ final class SteamWindow: NSObject {
                 backing: .buffered,
                 defer: false,
             )
-        case .auxiliary, .controllerConfig:
-            // Friends, notes, the configurator: Steam draws no title strip of
-            // its own in these, so overlaid traffic lights land on whatever
-            // the page put in its top-left corner — the friends window's own
-            // status control, for one. A plain titled window reserves the
-            // strip instead, and the page keeps every pixel it drew.
+        case .auxiliary, .controllerConfig, .friends, .chat:
+            // Friends, chat, notes, the configurator: Steam draws no title
+            // strip of its own in these, so overlaid traffic lights land on
+            // whatever the page put in its top-left corner — the friends
+            // window's own status control, for one. A plain titled window
+            // reserves the strip instead, and the page keeps every pixel it
+            // drew.
             NSWindow(
                 contentRect: content,
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -124,15 +161,10 @@ final class SteamWindow: NSObject {
                 defer: false,
             )
         }
-        window.delegate = self
-        window.isReleasedWhenClosed = false
-        window.tabbingMode = .disallowed
-        // Steam's window model is the one that decides what exists: every
-        // window here is rebuilt from the page that opened it, so AppKit's
-        // own restoration has nothing to put back.
-        window.isRestorable = false
-        applyRoleChrome(to: window)
+    }
 
+    /// The view the page is hosted in.
+    private func makeContentView(content: NSRect) -> NSView {
         let container = SteamContentView(frame: content)
         container.owner = self
         // Every window relays: WKWebView's own tracking is key-window gated,
@@ -143,11 +175,12 @@ final class SteamWindow: NSObject {
         webView.frame = container.bounds
         webView.autoresizingMask = [.width, .height]
         container.addSubview(webView)
-        window.contentView = container
+        return container
+    }
 
-        if let minimumSize { window.contentMinSize = minimumSize }
-        if let maximumSize { window.contentMaxSize = maximumSize }
-
+    /// Puts a freshly built window where Steam asked for it, or where the
+    /// user last left it.
+    private func place(_ window: NSWindow) {
         if let requestedOrigin {
             window.setFrameOrigin(
                 SteamScreenSpace.appKitOrigin(
@@ -162,10 +195,38 @@ final class SteamWindow: NSObject {
             // user put it is a window the user has to place again every time.
             window.center()
         }
-        self.window = window
-        if role == .menu {
-            window.orderFront(nil)
-        }
+    }
+
+    /// Keeps a toast's page alive without ever putting it on screen: it is
+    /// invisible, click-through, out of every window list, and parked off
+    /// every display. WebKit schedules it because it lives in a window, which
+    /// is all its dismissal timer needs.
+    private func park(_ window: NSWindow) {
+        window.setFrameOrigin(Self.toastParkOrigin)
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.ignoresMouseEvents = true
+        window.isExcludedFromWindowsMenu = true
+        window.collectionBehavior = [.stationary, .ignoresCycle]
+        window.orderBack(nil)
+    }
+
+    /// Where a toast's page is kept while it renders: off every screen, the
+    /// same park the context page uses.
+    private static let toastParkOrigin = CGPoint(x: -20_000, y: -20_000)
+
+    /// Whether this window's position is the app's to decide rather than
+    /// Steam's.
+    ///
+    /// A toast is parked off every display for its whole life, so a move is
+    /// meaningless — and Steam issues them per animation frame while the
+    /// toast slides in, every one of them carrying `NaN` for the x it
+    /// computes against a screen edge it cannot measure here. Refusing them
+    /// by role rather than by value keeps the non-finite guard for the case
+    /// it was written for (a menu against a window that has gone) instead of
+    /// making it a log of an animation.
+    private var isParked: Bool {
+        role == .toast
     }
 
     /// Where the desktop window's frame is kept between the times it exists.
@@ -178,9 +239,10 @@ final class SteamWindow: NSObject {
     /// and visibility behavior.
     private func applyRoleChrome(to window: NSWindow) {
         switch role {
-        case .auxiliary, .controllerConfig:
+        case .auxiliary, .controllerConfig, .friends, .chat:
             // The strip is real, so it says what the window is: Steam names
-            // its own popups through the document title.
+            // its own popups through the document title — "Friends List", or
+            // the name of whoever a chat window is with.
             window.titleVisibility = .visible
             window.title = webView.title ?? "Steam"
             window.backgroundColor = Self.steamBackground
@@ -236,7 +298,7 @@ final class SteamWindow: NSObject {
             window.level = .floating
             window.hidesOnDeactivate = false
             webView.underPageBackgroundColor = .clear
-        case .context:
+        case .context, .toast:
             break
         }
     }
@@ -274,7 +336,7 @@ final class SteamWindow: NSObject {
             // A third argument carries the target monitor's scale factor,
             // because on Windows these are physical pixels. AppKit points are
             // already the page's own units, so it is dropped.
-            if let point = geometry(args, at: 0 ..< 2, from: function) {
+            if !isParked, let point = geometry(args, at: 0 ..< 2, from: function) {
                 moveTo(x: point[0], y: point[1])
             }
         case "ResizeTo":
@@ -282,7 +344,7 @@ final class SteamWindow: NSObject {
                 resizeTo(width: size[0], height: size[1])
             }
         case "PositionWindowRelative":
-            if let frame = geometry(args, at: 1 ..< 5, from: function) {
+            if !isParked, let frame = geometry(args, at: 1 ..< 5, from: function) {
                 positionRelative(
                     toWindowNamed: string(args, 0),
                     x: frame[0],
@@ -359,6 +421,14 @@ final class SteamWindow: NSObject {
                url.scheme == "http" || url.scheme == "https" {
                 NSWorkspace.shared.open(url)
             }
+        case "__steamNotification":
+            // The context page's toast subscription
+            // (SteamWebHost.notificationScript), one decoded notification.
+            host?.noteSteamNotification(json: string(args, 0))
+        case "__unreadChats":
+            // Tapped out of Steam's own unread-count post to the client
+            // (the shim's NATIVE_TAPS).
+            host?.noteUnreadChats((args.first as? NSNumber)?.intValue ?? 0)
         case "__gameAction":
             // The context page's game-action subscription reporting launch
             // progress (SteamWebHost.gameActionScript).
@@ -535,6 +605,11 @@ final class SteamWindow: NSObject {
 
     func show(activating: Bool) {
         realize()
+        // Steam asks for its toast to be shown the moment the page renders
+        // one. Refusing here is the whole of the suppression: the popup still
+        // exists and still runs, so Steam's own queue drains on schedule and
+        // nothing downstream can tell it was never on screen.
+        guard role.isShowable else { return }
         guard let window else { return }
         let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
         if becameRegular {
