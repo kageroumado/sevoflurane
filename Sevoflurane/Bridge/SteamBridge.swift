@@ -159,6 +159,13 @@ actor SteamBridge {
         }
     }
 
+    /// Brings the connection to the client up, and answers once it is — so a
+    /// page is never booted into a bridge that cannot yet reach the client.
+    @discardableResult
+    func waitForClientConnection() async -> Bool {
+        await (try? ensureCDP()) != nil
+    }
+
     private func ensureCDP() async throws -> CDPClient {
         if let cdp, await !cdp.isClosed { return cdp }
         if let cdpTask { return try await cdpTask.value }

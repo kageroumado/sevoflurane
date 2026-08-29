@@ -70,10 +70,13 @@ struct MenuBarView: View {
                 action: nil,
             )
         case let .launching(phase):
+            // The phase says which startup this is; the card must not, because
+            // it draws for a session's first launch and for the wait after a
+            // restart alike.
             HealthCard(
                 symbol: "hourglass",
                 title: "Starting Steam",
-                detail: phase + " — the first launch takes a minute.",
+                detail: phase,
                 tint: nil,
                 action: nil,
             )

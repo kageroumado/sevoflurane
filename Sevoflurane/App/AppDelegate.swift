@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let host = SteamWebHost()
     let bridge = SteamBridge()
     let provisioner = Provisioner()
-    lazy var supervisor = ClientSupervisor(host: host)
+    lazy var supervisor = ClientSupervisor(host: host, bridge: bridge)
     let notifications = SteamNotifications()
     private let gameLaunchWatch = GameLaunchWatch()
     private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)

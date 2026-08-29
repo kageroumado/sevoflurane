@@ -26,10 +26,10 @@ final class ClientSupervisor {
         case degraded(String)
         /// Mid-restart; the phase is shown in the menu bar.
         case restarting(String)
-        /// The client has not been up yet in this session. Wine takes tens of
-        /// seconds to bring the client's CDP endpoint up, and this app is on
-        /// screen in one — a first launch that is merely slow must not read
-        /// as a fault, and must not be "recovered" from.
+        /// A startup in progress. Wine takes tens of seconds to bring the
+        /// client's CDP endpoint up and Steam's stores take longer still, and
+        /// this app is on screen throughout — a launch that is merely slow
+        /// must not read as a fault, and must not be "recovered" from.
         case launching(String)
         /// Repeated restarts failed — the client is crash-looping and another
         /// launch would only stack crash dumps. Manual restarts only.
@@ -57,6 +57,8 @@ final class ClientSupervisor {
     }
 
     private let host: SteamWebHost
+    /// Asked for its connection to the client before a page is booted into it.
+    private let bridge: SteamBridge?
     private let log = EventLog.shared
 
     /// Whether the menu-bar glyph should carry the attention badge: the
@@ -90,8 +92,9 @@ final class ClientSupervisor {
     /// the client mid-teardown.
     @ObservationIgnored private var isQuitting = false
 
-    init(host: SteamWebHost) {
+    init(host: SteamWebHost, bridge: SteamBridge? = nil) {
         self.host = host
+        self.bridge = bridge
     }
 
     #if DEBUG
@@ -358,7 +361,7 @@ final class ClientSupervisor {
         } else if hasSeenClientUp {
             transition(to: .degraded(reason), logging: .client, reason)
         } else {
-            health = .launching("starting Steam…")
+            health = .launching("the client is coming up — a first launch takes a minute.")
         }
     }
 
@@ -401,8 +404,13 @@ final class ClientSupervisor {
             return
         }
         guard Date.now.timeIntervalSince(lastPageRecovery) > 90 else {
+            // Not a fault: the page is up and Steam's stores are still
+            // filling. Reporting it as degraded put an orange "Steam is
+            // struggling" and a menu-bar dot in front of the user for the
+            // whole grace, which is what a first run looks like from the
+            // outside — the one thing `.launching` exists to prevent.
             transition(
-                to: .degraded("waiting for Steam services…"),
+                to: progress("waiting for Steam's services…"),
                 logging: .page,
                 "page up, Steam services not initialized yet",
             )
@@ -550,6 +558,14 @@ final class ClientSupervisor {
                 PerfProbe.poi.emitEvent("ClientBack", "up after ~\(waited)s")
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")
                 health = progress("reloading the UI")
+                // The connection first, then the page: a CDP endpoint that
+                // lists SharedJSContext is not yet a bridge that can reach it,
+                // and a page booted into an unconnected bridge makes its first
+                // calls into nothing. It is not the whole story: the
+                // client's own services are still ~40s out at this point, and
+                // the page booted here does not get them — `recoverDeadServices`
+                // is what recovers from that.
+                await bridge?.waitForClientConnection()
                 lastPageRecovery = .now
                 pageFailures = 0
                 host.reload()
