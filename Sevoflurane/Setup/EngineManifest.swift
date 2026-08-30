@@ -17,7 +17,7 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     let schema: Int
     let channels: [String: Release]
 
-    static let url = URL(string: "https://kagerou.glass/sevoflurane/engine.json")!
+    static let url = URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json")!
 
     /// Points the installer at another manifest — a `file://` one is how a
     /// clean machine is validated without publishing anything. Set once at

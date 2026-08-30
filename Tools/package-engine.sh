@@ -128,7 +128,7 @@ SIZE=$(stat -f%z "$TARBALL")
 print -P "%F{green}done:%f $TARBALL"
 cat <<EOF
 
-engine.json entry (schema 1, hosted at kagerou.glass/sevoflurane/engine.json):
+engine.json entry (upload both to the "engine" release on GitHub):
 
 {
   "schema": 1,
@@ -136,7 +136,7 @@ engine.json entry (schema 1, hosted at kagerou.glass/sevoflurane/engine.json):
     "stable": {
       "version": "$VERSION",
       "minAppVersion": "0.1.0",
-      "url": "https://github.com/kageroumado/sevoflurane/releases/download/engine-$VERSION/sevo-engine-$VERSION.tar.xz",
+      "url": "https://github.com/kageroumado/sevoflurane/releases/download/engine/sevo-engine-$VERSION.tar.xz",
       "sha256": "$SHA256",
       "sizeBytes": $SIZE,
       "notes": ""

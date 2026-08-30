@@ -41,6 +41,7 @@ struct GraphicsSettings: View {
     @State private var showingRendererHelp = false
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
+    @State private var downloadTask: Task<Void, Never>?
 
     /// Edits go through the store, which decides whether they reach a bottle.
     private var graphics: Binding<BottleGraphics.Selection> {
@@ -116,31 +117,50 @@ struct GraphicsSettings: View {
                         .font(.callout.weight(.semibold))
                     Text(store.engineHasOwnD3DMetal
                         ? "CrossOver ships the version it supports. Apple's newer "
-                        + "releases can be used instead — download one from "
-                        + "developer.apple.com and point Sevoflurane at the disk image. "
-                        + "Nothing inside CrossOver is modified."
+                        + "releases can be used instead."
                         : "Direct3D 12 needs Apple's Game Porting Toolkit, which only "
-                        + "Apple may distribute. Download it from developer.apple.com "
-                        + "and point Sevoflurane at the disk image.")
+                        + "Apple may distribute.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             } else {
                 D3DMetalVersionPicker(store: store)
             }
+            if store.isWatchingDownload {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for the download to finish…")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Cancel") {
+                        downloadTask?.cancel()
+                        downloadTask = nil
+                    }
+                }
+            }
             HStack {
                 if let d3dMetalError {
                     Text(d3dMetalError).font(.callout).foregroundStyle(.orange)
                 }
                 Spacer()
+                Button("Download from Apple…") { downloadD3DMetal() }
+                    .disabled(isAddingD3DMetal || store.isWatchingDownload)
                 Button(store.d3dMetalVersions.isEmpty
-                    ? "Choose Toolkit…" : "Add Another Version…") {
+                    ? "Choose Disk Image…" : "Add Another Version…") {
                         addD3DMetal()
                     }
-                    .disabled(isAddingD3DMetal)
+                    .disabled(isAddingD3DMetal || store.isWatchingDownload)
             }
         } header: {
             Text("Apple's Game Porting Toolkit")
+        }
+    }
+
+    private func downloadD3DMetal() {
+        d3dMetalError = nil
+        downloadTask = Task(name: "Download D3DMetal") {
+            d3dMetalError = await store.downloadAndInstallD3DMetal()
+            downloadTask = nil
         }
     }
 
