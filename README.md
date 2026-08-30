@@ -25,9 +25,7 @@ needs a `SteamClient` binding; Sevoflurane serves that bundle into native
 WKWebViews with a shim whose calls are replayed into the client's real
 `SharedJSContext` over the Chrome DevTools Protocol, and whose protobuf
 transport is relayed around CDP through a socket the client's own context
-opens. Every window Steam creates is adopted into a real `NSWindow`. The
-full architecture — and the fidelity rules that keep it honest — is
-`SPEC.md`.
+opens. Every window Steam creates is adopted into a real `NSWindow`.
 
 ## Graphics, and the Rosetta clock
 
@@ -74,8 +72,6 @@ whose ceiling is MoltenVK's Vulkan extension coverage rather than DXVK itself.
 
 ## Layout
 
-- `SPEC.md` — the architecture: hosting Steam's UI, the bridge, native
-  chrome, engine strategy, and the lsteamclient endgame
 - `Sevoflurane/` — the app (Swift 6): `Web/` hosts Steam's UI and windows,
   `Bridge/` is the in-process page↔client bridge, `Setup/` the first-run
   assistant, `App/` supervision, logging, menu bar, `Support/` shared system
@@ -83,14 +79,8 @@ whose ceiling is MoltenVK's Vulkan extension coverage rather than DXVK itself.
 - `Sevo/` + `Package.swift` — the `sevo` CLI and MCP server (SwiftPM
   executable sharing the app's own lifecycle/CDP sources; `swift build`)
 - `Spike/` — scratch probes kept only while they still answer a question the
-  Swift tools cannot; provisioning, CDP and the boot surface all live in
-  `sevo` now
+  Swift tools cannot
 - `Site/` — the landing page (not yet deployed)
-- `Mockups/` — self-contained HTML design mockups (open in a browser)
-
-`Docs/` and `HANDOFF.md` are untracked local working notes (investigations
-with machine-specific evidence, session handoffs, the living release plan);
-the durable architecture lives in `SPEC.md`.
 
 ## Running (dev)
 
@@ -144,8 +134,8 @@ server's environment.
 
 ## Contributing
 
-See `CONTRIBUTING.md` — start with SPEC.md's fidelity rules; most non-obvious
-bugs here are a violation of one of them.
+See `CONTRIBUTING.md` — start with the fidelity rules; most non-obvious bugs
+here are a violation of one of them.
 
 ## License
 
