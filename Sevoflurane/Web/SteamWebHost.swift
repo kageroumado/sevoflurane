@@ -773,11 +773,10 @@ final class SteamWebHost {
         // created after the desktop window, so anchoring on the desktop alone
         // reads an empty strip. Re-reading an unchanged strip is a no-op.
         menuMirror?.refresh()
-        // Popups with a standard title strip get the macOS chrome treatment
-        // too: Steam's own window buttons hidden, the strip reported as the
-        // drag surface.
-        if window.role == .login || window.role.hasNativeTitleBar {
+        if window.role == .login {
             window.webView.evaluateJavaScript(SteamDesktopChrome.popupScript)
+        } else if window.role.hasNativeTitleBar {
+            window.webView.evaluateJavaScript(SteamDesktopChrome.nativeTitleBarScript)
         }
         guard window.role == .desktop else { return }
         desktop = window

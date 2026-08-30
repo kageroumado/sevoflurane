@@ -122,19 +122,16 @@ enum SteamDesktopChrome {
     })()
     """
 
-    /// The same treatment for popup windows (login, controller config,
-    /// friends chat…), whose strip has a different shape: there
-    /// `.TitleBar.title-area` is the entire title bar, and Steam's window
-    /// buttons live in its `.title-bar-actions` cluster.
+    /// The login window: traffic lights are overlaid on Steam's strip, so
+    /// only its close/minimize buttons are hidden, and the strip's empty
+    /// stretch is reported as a drag surface.
     static let popupScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-    
+
       var STYLE_ID = "sevo-macos-chrome";
-      /* Steam's close/minimize cluster duplicates the traffic lights. Both
-         class names are semantic and survive client builds. */
       var CSS = ".TitleBar.title-area .title-bar-actions { display: none !important; }";
-    
+
       function apply() {
         if (!document.head) return;
         var style = document.getElementById(STYLE_ID);
@@ -146,19 +143,18 @@ enum SteamDesktopChrome {
         }
         reportDragRegions();
       }
-    
+
       function rectOf(el) {
         var r = el.getBoundingClientRect();
         return [Math.round(r.left), Math.round(r.top),
                 Math.round(r.width), Math.round(r.height)];
       }
-    
+
       /* The strip's empty stretch is the drag surface — on the login window
          that is `.title-area-children`, which spans the strip minus the
-         controls and renders nothing. A popup that fills it (chat tabs)
-         keeps its clicks. `.title-area-highlight` never qualifies: it is a
-         full-width visual overlay, and reporting it would turn everything
-         under it into a drag handle. */
+         controls and renders nothing. `.title-area-highlight` never qualifies:
+         it is a full-width visual overlay, and reporting it would turn
+         everything under it into a drag handle. */
       function dragRegions() {
         var out = [];
         var area = document.querySelector(".TitleBar.title-area");
@@ -172,7 +168,7 @@ enum SteamDesktopChrome {
         }
         return out;
       }
-    
+
       var pending = 0;
       function reportDragRegions() {
         var handler = window.webkit && window.webkit.messageHandlers
@@ -180,18 +176,57 @@ enum SteamDesktopChrome {
         if (!handler) return;
         handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
       }
-    
+
       function schedule() {
         if (pending) return;
         pending = setTimeout(function () { pending = 0; apply(); }, 150);
       }
-    
+
       new MutationObserver(function () {
         if (document.head && !document.getElementById(STYLE_ID)) apply();
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-    
+
+      window.__sevoChrome = { apply: apply };
+      apply();
+      return "installed";
+    })()
+    """
+
+    /// Windows with a native macOS title bar (friends, chat, controller
+    /// config, auxiliary): the entire Steam title strip is hidden so the
+    /// native title bar is the only chrome.
+    static let nativeTitleBarScript = """
+    (function () {
+      if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
+
+      var STYLE_ID = "sevo-macos-chrome";
+      var CSS = ".TitleBar.title-area { display: none !important; }";
+
+      function apply() {
+        if (!document.head) return;
+        var style = document.getElementById(STYLE_ID);
+        if (!style) {
+          style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = CSS;
+          document.head.appendChild(style);
+        }
+      }
+
+      function schedule() {
+        if (window.__sevoChromePending) return;
+        window.__sevoChromePending = setTimeout(function () {
+          window.__sevoChromePending = 0; apply();
+        }, 150);
+      }
+
+      new MutationObserver(function () {
+        if (document.head && !document.getElementById(STYLE_ID)) apply();
+        else schedule();
+      }).observe(document, { childList: true, subtree: true });
+
       window.__sevoChrome = { apply: apply };
       apply();
       return "installed";

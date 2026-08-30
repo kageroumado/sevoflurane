@@ -166,6 +166,23 @@ actor SteamBridge {
         await (try? ensureCDP()) != nil
     }
 
+    /// Polls the client's own SharedJSContext until `GetServicesInitialized()`
+    /// returns true. Steam's UI checks services once at boot; a page booted
+    /// before they are ready never picks them up, so the supervisor waits here
+    /// instead of booting into a 90-second grace that always ends in a reload.
+    func waitForClientServices(timeout: Duration = .seconds(120)) async -> Bool {
+        guard let cdp = try? await ensureCDP() else { return false }
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            let result = try? await cdp.evaluate(
+                "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))"
+            )
+            if result?.contains("true") == true { return true }
+            try? await Task.sleep(for: .seconds(3))
+        }
+        return false
+    }
+
     private func ensureCDP() async throws -> CDPClient {
         if let cdp, await !cdp.isClosed { return cdp }
         if let cdpTask { return try await cdpTask.value }

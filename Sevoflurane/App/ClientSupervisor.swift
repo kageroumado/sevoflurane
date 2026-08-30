@@ -557,15 +557,15 @@ final class ClientSupervisor {
             if await ClientLifecycle.probeClient() == .up {
                 PerfProbe.poi.emitEvent("ClientBack", "up after ~\(waited)s")
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")
-                health = progress("reloading the UI")
-                // The connection first, then the page: a CDP endpoint that
-                // lists SharedJSContext is not yet a bridge that can reach it,
-                // and a page booted into an unconnected bridge makes its first
-                // calls into nothing. It is not the whole story: the
-                // client's own services are still ~40s out at this point, and
-                // the page booted here does not get them — `recoverDeadServices`
-                // is what recovers from that.
+                health = progress("connecting to the client")
                 await bridge?.waitForClientConnection()
+                health = progress("waiting for Steam's services…")
+                let servicesReady = await bridge?.waitForClientServices() ?? false
+                if servicesReady {
+                    log.log(.client, "client services ready — booting the page with a live session")
+                } else {
+                    log.log(.client, "client services did not arrive in time — booting the page anyway")
+                }
                 lastPageRecovery = .now
                 pageFailures = 0
                 host.reload()
