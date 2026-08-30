@@ -2,8 +2,8 @@
   "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
     "linear-gradient" : [
-      "display-p3:0.13000,0.10000,0.03200,1.00000",
-      "display-p3:0.03000,0.02100,0.00600,1.00000"
+      "display-p3:0.13348,0.11405,0.06956,1.00000",
+      "display-p3:0.06589,0.05299,0.00000,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -12,7 +12,7 @@
       },
       "stop" : {
         "x" : 0.5,
-        "y" : 0.85
+        "y" : 0.7
       }
     }
   },
@@ -21,48 +21,125 @@
       "blur-material" : null,
       "layers" : [
         {
-          "image-name" : "v_glow.svg",
-          "name" : "glow"
+          "image-name" : "01-concentration-dial.png",
+          "name" : "01-concentration-dial",
+          "position" : {
+            "scale" : 0.35,
+            "translation-in-points" : [
+              68,
+              -154.6646875
+            ]
+          }
         }
       ],
-      "lighting" : "individual",
-      "name" : "Glow",
       "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.4
+        "kind" : "layer-color",
+        "opacity" : 1
       },
       "specular" : false,
       "translucency" : {
-        "enabled" : true,
-        "value" : 0.18
+        "enabled" : false,
+        "value" : 0.5
       }
     },
     {
-      "blur-material" : null,
+      "blend-mode" : "normal",
+      "blur-material" : 1,
       "layers" : [
         {
           "glass" : true,
           "hidden" : false,
-          "image-name" : "v_waves.svg",
-          "name" : "waves"
+          "image-name" : "02-outlet-valve.png",
+          "name" : "02-outlet-valve",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              -98.30156249999999,
+              266
+            ]
+          }
         }
       ],
       "lighting" : "individual",
-      "name" : "Vapor",
+      "name" : "Group",
+      "opacity" : 1,
       "shadow" : {
         "kind" : "layer-color",
-        "opacity" : 0.8
+        "opacity" : 0.98
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.07
+      }
+    },
+    {
+      "blur-material" : 1,
+      "layers" : [
+        {
+          "image-name" : "03-outlet-hose.png",
+          "name" : "03-outlet-hose",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -348,
+              256
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.04
+      }
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "04-vaporizer-casing.png",
+          "name" : "04-vaporizer-casing",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              28.9765625,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "v_glow.svg",
+          "name" : "glow",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              -40
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 1
       },
       "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.28
+        "value" : 0.5
       }
     }
   ],
   "supported-platforms" : {
-    "squares" : [
-      "macOS"
-    ]
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
   }
 }
