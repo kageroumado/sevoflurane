@@ -163,7 +163,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */,
-				7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */,
+				7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B33EFDB30290E5E00182A68 /* Products */;
@@ -516,14 +516,15 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../propofol;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
+		7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kageroumado/propofol.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
 		7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/artginzburg/Tiptoe";
@@ -545,7 +546,7 @@
 		};
 		7B0000000000000000000002 /* Propofol */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7B0000000000000000000001 /* XCLocalSwiftPackageReference "../propofol" */;
+			package = 7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */;
 			productName = Propofol;
 		};
 /* End XCSwiftPackageProductDependency section */
