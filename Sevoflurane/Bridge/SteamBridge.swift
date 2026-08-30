@@ -673,25 +673,39 @@ actor SteamBridge {
             + "steam/apps/\(appid)/library_600x900.jpg")
     }
 
+    /// The names the vertical capsule is written under. Older clients wrote
+    /// `library_600x900.jpg`; current ones write `library_capsule.jpg`. Both
+    /// hold the same 2:3 art and one library mixes them freely — 117 of 680
+    /// cached capsules on the machine this was found on carry the newer name.
+    private nonisolated static let capsuleNames = [
+        "library_600x900.jpg", "library_capsule.jpg",
+    ]
+
     /// The vertical capsule from the client's own library cache.
     ///
-    /// Two layouts coexist: the flat `<appid>/library_600x900.jpg` older
-    /// clients wrote, and the content-addressed
-    /// `<appid>/<sha1>/library_600x900.jpg` current ones write. The asset
-    /// keeps its name inside the hash directory, so one level of enumeration
-    /// finds it without a name→asset index. Worth the lookup because the CDN
-    /// serves no capsule at all for age-gated titles — an adult game shows a
-    /// blank tile if this misses.
+    /// Two layouts coexist: the flat `<appid>/<name>` older clients wrote, and
+    /// the content-addressed `<appid>/<sha1>/<name>` current ones write. The
+    /// asset keeps its name inside the hash directory, so one level of
+    /// enumeration finds it without a name→asset index. Both ``capsuleNames``
+    /// are tried in each layout. Worth the lookup because the CDN serves no
+    /// capsule at all for age-gated titles — an adult game shows a blank tile
+    /// if this misses.
     private nonisolated static func cachedCapsule(appid: String) -> Data? {
         let appDirectory = SteamBottle.libraryCache.appendingPathComponent(appid)
-        let flat = appDirectory.appendingPathComponent("library_600x900.jpg")
-        if let data = try? Data(contentsOf: flat, options: [.mappedIfSafe]) { return data }
+        for name in capsuleNames {
+            let flat = appDirectory.appendingPathComponent(name)
+            if let data = try? Data(contentsOf: flat, options: [.mappedIfSafe]) { return data }
+        }
         let contents = try? FileManager.default.contentsOfDirectory(
             at: appDirectory, includingPropertiesForKeys: [.isDirectoryKey],
         )
         for directory in contents ?? [] {
-            let nested = directory.appendingPathComponent("library_600x900.jpg")
-            if let data = try? Data(contentsOf: nested, options: [.mappedIfSafe]) { return data }
+            for name in capsuleNames {
+                let nested = directory.appendingPathComponent(name)
+                if let data = try? Data(contentsOf: nested, options: [.mappedIfSafe]) {
+                    return data
+                }
+            }
         }
         return nil
     }

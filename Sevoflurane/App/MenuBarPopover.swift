@@ -71,6 +71,15 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     }
 
     private func open() {
+        // The panel — and the SwiftUI view inside it — is made once and then
+        // reused, so the view's `onAppear` fires only on the very first open.
+        // At that point Steam's `appStore` is usually still empty: services
+        // come up a few seconds after the desktop window is adopted, and an
+        // empty answer is indistinguishable from "unchanged" to the refresh's
+        // own guard. Left alone the popover reads "No games installed yet."
+        // for the rest of the session. Asking on every open costs one page
+        // evaluation and always reflects the library as it stands.
+        host.refreshRecentGames()
         let panel = panel ?? makePanel()
         self.panel = panel
         position(panel)
