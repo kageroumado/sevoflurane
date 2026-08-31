@@ -107,11 +107,18 @@ nonisolated enum ClientLifecycle {
         guard !existing.isEmpty else { return }
         log("bottle processes running (pids \(existing)) — shutting them down")
         phase("stopping the client")
-        await gracefulShutdown()
+        // `steam.exe -shutdown` only means anything to a live client. When the
+        // client has already crashed (the usual reason for a restart), asking
+        // a corpse to shut down and then waiting 30 s for it is pure stall —
+        // the leftover wineserver/winedevice never answer a client shutdown.
+        // Skip straight to the force rung, which brings them down in seconds.
         var clean = false
-        for _ in 0 ..< gracePolls {
-            if await bottleProcessIDs().isEmpty { clean = true; break }
-            try? await Task.sleep(for: .seconds(2))
+        if await clientProcessAlive() {
+            await gracefulShutdown()
+            for _ in 0 ..< gracePolls {
+                if await bottleProcessIDs().isEmpty { clean = true; break }
+                try? await Task.sleep(for: .seconds(2))
+            }
         }
         if !clean {
             phase("force-killing wine")

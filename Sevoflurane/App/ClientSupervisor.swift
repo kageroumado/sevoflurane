@@ -527,8 +527,12 @@ final class ClientSupervisor {
         clientFailures = 0
         log.log(.supervisor, "restarting client: \(reason)")
 
+        // Take the dead client's frozen windows off screen now, rather than
+        // leaving a dimmed, unresponsive library up for the whole teardown.
+        host.dismissWindows()
+
         health = .restarting("checking for a running client")
-        await ClientLifecycle.stopAll(gracePolls: 15) { phase in
+        await ClientLifecycle.stopAll(gracePolls: 8) { phase in
             health = .restarting(phase)
         }
 

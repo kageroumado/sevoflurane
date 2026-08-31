@@ -649,6 +649,22 @@ final class SteamWebHost {
         context?.webView.load(URLRequest(url: Self.uiURL))
     }
 
+    /// Clears the windows a dead client left on screen — its library is frozen
+    /// and dimmed once nothing is behind it, and leaving it up for the length
+    /// of a restart is the "stuck, dimmed Steam window" the user sees. The
+    /// fresh client adopts its own windows when it boots; the context page
+    /// stays, so this is lighter than a full reload.
+    func dismissWindows() {
+        guard desktop != nil || !popups.isEmpty else { return }
+        for popup in popups.values {
+            popup.detach()
+        }
+        popups.removeAll()
+        desktop = nil
+        desktopWasClosed = true
+        status = "reconnecting"
+    }
+
     /// Brings Steam's window up: showing the one that exists, rebuilding the
     /// page when the user closed it, and otherwise asking the booting UI for
     /// the library.
