@@ -24,6 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExceptionWatch.install()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
+        // The defaults key exists because `open` (the only launch path that
+        // gets a real Aqua session) strips the environment.
+        if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
+            ?? Preferences.shared.string(forKey: "engineManifestOverride"),
+            let url = URL(string: manifest)
+        {
+            EngineManifest.overrideURL = url
+            EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
+        }
         PerfProbe.poi.emitEvent("Launch")
         gameLaunchWatch.onGameWindowUp = { [weak self] in
             self?.host.gameWindowDidAppear()
@@ -73,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if provisioner.needsSetup {
                 showSetupWizard(provisioner: provisioner) { [weak self] in
                     self?.closeSetupWindow()
-                    self?.startRunning()
+                    self?.finishOnboarding()
                 }
             } else {
                 startRunning()
@@ -81,9 +90,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The wizard's finish button. The runtime usually started when
+    /// provisioning completed — the client booted behind the wizard, so the
+    /// window the button promises already exists: sign-in if Steam is
+    /// waiting for one, the library otherwise.
+    private func finishOnboarding() {
+        guard isRuntimeStarted else {
+            startRunning()
+            return
+        }
+        host.releaseWindowHold()
+        if !host.isAwaitingSignIn {
+            host.showSteam()
+        }
+        startSilentUpdates()
+    }
+
+    private var isRuntimeStarted = false
+
     /// Bridge listeners must be up before the web view's first load 302s
     /// through them.
-    private func startRunning() {
+    private func startRunning(holdingWindows: Bool = false) {
+        guard !isRuntimeStarted else { return }
+        isRuntimeStarted = true
+        if holdingWindows {
+            host.holdWindows()
+        }
         Task {
             await bridge.start()
             await bridge.setGameLaunchHandler { [weak self] in
@@ -100,8 +132,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // silently bring the Wine tray icon back.
             await provisioner.configureBottle(named: SteamBottle.name)
         }
-        // Past the setup gate, so a machine still being provisioned never has
-        // its app swapped mid-wizard.
+        // Past the setup gate, so a machine still being provisioned never
+        // has its app swapped mid-wizard — a preloading runtime defers this
+        // to the wizard's finish.
+        if !holdingWindows {
+            startSilentUpdates()
+        }
+    }
+
+    private func startSilentUpdates() {
         SilentUpdates.shared.start(
             autoInstall: UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true,
         )
@@ -110,7 +149,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSetupWizard(
         provisioner: Provisioner, onFinished: @escaping () -> Void,
     ) {
-        let view = SetupView(provisioner: provisioner, onFinished: onFinished)
+        let view = SetupView(
+            provisioner: provisioner,
+            onFinished: onFinished,
+            signInPending: { [weak self] in self?.supervisor.health == .waitingForSignIn },
+            onProvisioned: { [weak self] in
+                // A dry-run wizard "provisions" fixtures; nothing real may start.
+                guard !provisioner.isDryRun else { return }
+                self?.startRunning(holdingWindows: true)
+            },
+        )
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.title = "Welcome to Sevoflurane"
         window.styleMask = [.titled, .closable, .fullSizeContentView]

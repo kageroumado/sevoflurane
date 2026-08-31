@@ -21,7 +21,8 @@ nonisolated struct EngineManifest: Decodable, Sendable {
 
     /// Points the installer at another manifest — a `file://` one is how a
     /// clean machine is validated without publishing anything. Set once at
-    /// process start, same contract as ``ClientLifecycle/log``.
+    /// process start, same contract as ``ClientLifecycle/log`` — by
+    /// `sevo setup --manifest`, or `SEVO_ENGINE_MANIFEST` in the app.
     nonisolated(unsafe) static var overrideURL: URL?
 
     var stable: Release? {

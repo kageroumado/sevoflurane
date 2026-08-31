@@ -24,10 +24,12 @@ nonisolated enum EngineInstaller {
     }
 
     /// Download → sha256 verify → extract → atomic move into place.
-    /// Idempotent: an already-installed version returns immediately.
+    /// Idempotent: an already-installed version returns immediately. The
+    /// fraction is the download's progress against the manifest's declared
+    /// size, or `nil` for the phases with no measurable whole.
     static func install(
         _ release: EngineManifest.Release,
-        progress: @Sendable (String) -> Void = { _ in },
+        progress: @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws {
         guard !isInstalled(release) else { return }
         let manager = FileManager.default
@@ -36,18 +38,20 @@ nonisolated enum EngineInstaller {
         try manager.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? manager.removeItem(at: staging) }
 
-        progress("Downloading the engine (~\(release.sizeBytes / 1_000_000) MB)…")
-        let (downloaded, _) = try await URLSession.shared.download(from: release.url)
         let tarball = staging.appendingPathComponent("engine.tar.xz")
-        try manager.moveItem(at: downloaded, to: tarball)
+        try await download(
+            release, to: tarball,
+            label: "Downloading the engine (~\(release.sizeBytes / 1_000_000) MB)…",
+            progress: progress,
+        )
 
-        progress("Verifying…")
+        progress("Verifying…", nil)
         let digest = try sha256(of: tarball)
         guard digest == release.sha256.lowercased() else {
             throw InstallError("engine tarball hash mismatch: \(digest)")
         }
 
-        progress("Installing…")
+        progress("Installing…", nil)
         let extracted = staging.appendingPathComponent("extracted")
         try manager.createDirectory(at: extracted, withIntermediateDirectories: true)
         let untar = await Subprocess.run(
@@ -69,6 +73,35 @@ nonisolated enum EngineInstaller {
             at: extracted.appendingPathComponent(release.version),
             to: Engine.managedRoot.appendingPathComponent(release.version),
         )
+    }
+
+    /// Streams the tarball to disk, reporting the fraction received against
+    /// the manifest's declared size every few MB. `URLSession.download`'s
+    /// progress lives on a delegate; this stays structured instead.
+    private static func download(
+        _ release: EngineManifest.Release, to tarball: URL,
+        label: String, progress: @Sendable (String, Double?) -> Void,
+    ) async throws {
+        progress(label, 0)
+        let (bytes, _) = try await URLSession.shared.bytes(from: release.url)
+        FileManager.default.createFile(atPath: tarball.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: tarball)
+        defer { try? handle.close() }
+        var buffer = Data(capacity: 1 << 20)
+        var received: Int64 = 0
+        var reported: Int64 = 0
+        for try await byte in bytes {
+            buffer.append(byte)
+            guard buffer.count >= 1 << 20 else { continue }
+            try handle.write(contentsOf: buffer)
+            received += Int64(buffer.count)
+            buffer.removeAll(keepingCapacity: true)
+            if received - reported >= 4 << 20 {
+                reported = received
+                progress(label, min(1, Double(received) / Double(release.sizeBytes)))
+            }
+        }
+        try handle.write(contentsOf: buffer)
     }
 
     /// Streaming SHA-256 — engine tarballs are hundreds of MB.

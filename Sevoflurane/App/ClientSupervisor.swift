@@ -622,7 +622,27 @@ final class ClientSupervisor {
                 health = progress("connecting to the client")
                 await bridge?.waitForClientConnection()
                 health = progress("waiting for Steam's services…")
+                // The client's first-run login window goes up during this
+                // wait — as OSS Wine's black rectangle. The regular probe
+                // cycle (and its popup sweep) only resumes after the page
+                // boots, so without a sweep of its own the rectangle sits
+                // on screen for the whole services grace (measured: over a
+                // minute on a fresh bottle).
+                let sweep = Task(name: "Login window sweep") {
+                    while !Task.isCancelled {
+                        let hidden = await ClientLifecycle.hideVisibleClientPopups()
+                        if !hidden.isEmpty {
+                            EventLog.enqueue(
+                                .client,
+                                "hid the client's own CEF window during startup: "
+                                    + hidden.joined(separator: ", "),
+                            )
+                        }
+                        try? await Task.sleep(for: .seconds(2))
+                    }
+                }
                 let servicesReady = await bridge?.waitForClientServices() ?? false
+                sweep.cancel()
                 if servicesReady {
                     log.log(.client, "client services ready — booting the page with a live session")
                 } else {

@@ -19,7 +19,10 @@ protocol SetupEnvironment: AnyObject {
 
     /// Downloads and installs the manifest's stable managed engine
     /// (release-plan R2.2) — the path taken when no usable CrossOver exists.
-    func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome
+    /// The fraction is download progress, or `nil` where none is measurable.
+    func installEngine(
+        progress: @Sendable (String, Double?) -> Void,
+    ) async -> SetupCommandOutcome
 
     /// `cxbottle --create --template win10_64` under CrossOver; a
     /// `wineboot -u`-initialized prefix under a managed engine.
@@ -85,7 +88,9 @@ final class LiveSetupEnvironment: SetupEnvironment {
         )
     }
 
-    func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome {
+    func installEngine(
+        progress: @Sendable (String, Double?) -> Void,
+    ) async -> SetupCommandOutcome {
         do {
             let release = try await EngineInstaller.stableRelease()
             try await EngineInstaller.install(release, progress: progress)

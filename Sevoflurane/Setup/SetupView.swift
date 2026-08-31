@@ -7,6 +7,13 @@ import SwiftUI
 struct SetupView: View {
     @Bindable var provisioner: Provisioner
     let onFinished: () -> Void
+    /// Reports whether Steam is sitting at its sign-in window, so the final
+    /// button can say what clicking it will actually show.
+    var signInPending: () -> Bool = { false }
+    /// Fired once when provisioning completes, so the app can start the
+    /// client behind the wizard — by the last page the window is already
+    /// loaded and the finish button shows it instantly.
+    var onProvisioned: () -> Void = {}
 
     private enum Step {
         case welcome
@@ -38,10 +45,14 @@ struct SetupView: View {
                 .padding(.top, 28)
             footer
                 .padding(.horizontal, 44)
+                .padding(.top, 16)
                 .padding(.bottom, 28)
         }
-        .frame(width: 680, height: 500)
+        .frame(width: 680, height: step == .graphics ? 640 : 500)
         .task { await provisioner.refreshDetection() }
+        .onChange(of: provisioner.activity) { _, activity in
+            if activity == .done { onProvisioned() }
+        }
         .overlay(alignment: .topTrailing) {
             if provisioner.isDryRun { dryRunBadge }
         }
@@ -164,6 +175,7 @@ struct SetupView: View {
                 Button("Check again") {
                     Task { await provisioner.refreshDetection() }
                 }
+                .buttonStyle(.glass)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -305,23 +317,39 @@ struct SetupView: View {
                 + "step — a few minutes on most connections.")
                 .foregroundStyle(.secondary)
             GroupBox {
-                HStack(spacing: 10) {
-                    switch provisioner.activity {
-                    case let .working(phase):
-                        ProgressView().controlSize(.small)
-                        Text(phase)
-                    case let .failed(reason):
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text(reason).font(.callout)
-                    case .done:
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Steam is ready.")
-                    case .idle:
-                        Text("Ready to start.")
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        switch provisioner.activity {
+                        case let .working(phase):
+                            ProgressView().controlSize(.small)
+                            Text(phase)
+                        case let .failed(reason):
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(reason).font(.callout)
+                        case .done:
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Steam is ready.")
+                        case .idle:
+                            Text("Ready to start.")
+                        }
+                        Spacer()
+                        if case .failed = provisioner.activity {
+                            Button("Try Again") {
+                                Task { await provisioner.retry() }
+                            }
+                            .buttonStyle(.glass)
+                        }
                     }
-                    Spacer()
+                    if case .working = provisioner.activity,
+                        let stage = provisioner.stage
+                    {
+                        ProgressView(value: overallProgress(stage))
+                        Text(stageCaption(stage))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(8)
             }
@@ -331,6 +359,21 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The overall bar: completed stages plus the current stage's own
+    /// fraction, over the fixed sequence length.
+    private func overallProgress(_ stage: Provisioner.Stage) -> Double {
+        (Double(stage.index - 1) + (provisioner.stageFraction ?? 0))
+            / Double(Provisioner.Stage.count)
+    }
+
+    private func stageCaption(_ stage: Provisioner.Stage) -> String {
+        var caption = "Step \(stage.index) of \(Provisioner.Stage.count)"
+        if let fraction = provisioner.stageFraction {
+            caption += " — \(Int(fraction * 100))% downloaded"
+        }
+        return caption
     }
 
     private var options: some View {
@@ -366,8 +409,9 @@ struct SetupView: View {
             (
                 Text("Your library lives in the menu bar, behind ")
                     + Text(Image(nsImage: MenuBarIcon.image(badged: false)))
-                    + Text(" at the top right. Steam's sign-in window opens next "
-                        + "if you aren't signed in yet.")
+                    + Text(signInPending()
+                        ? " at the top right. Steam is ready — sign in and your library opens."
+                        : " at the top right.")
             )
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
@@ -414,10 +458,14 @@ struct SetupView: View {
                 }
                 .keyboardShortcut(.defaultAction)
             case .done:
-                Button("Open My Library") { onFinished() }
-                    .keyboardShortcut(.defaultAction)
+                Button(signInPending() ? "Log In to Steam" : "Open My Library") {
+                    onFinished()
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
     }
 
     private func advanceFromWelcome() {

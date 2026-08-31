@@ -176,10 +176,14 @@
             return .success()
         }
 
-        func installEngine(progress: @Sendable (String) -> Void) async -> SetupCommandOutcome {
+        func installEngine(
+            progress: @Sendable (String, Double?) -> Void,
+        ) async -> SetupCommandOutcome {
             log("would download the managed engine from the stable manifest channel")
-            progress("Downloading the engine…")
-            await pause()
+            for step in 1...4 {
+                progress("Downloading the engine…", Double(step) / 4)
+                await pause()
+            }
             state = SetupDetection(
                 rosetta: state.rosetta,
                 crossover: state.crossover,

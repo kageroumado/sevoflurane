@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import os
 
 /// `sevo` — one management surface, three consumers: us (testing and
 /// debugging), terminal-comfortable end users, and AI agents (via `sevo mcp`
@@ -369,7 +370,13 @@ struct EngineCommand: AsyncParsableCommand {
                 print("engine \(release.version) already installed")
                 return
             }
-            try await EngineInstaller.install(release) { phase in
+            let printed = OSAllocatedUnfairLock(initialState: "")
+            try await EngineInstaller.install(release) { phase, _ in
+                let repeated = printed.withLock { last in
+                    defer { last = phase }
+                    return last == phase
+                }
+                guard !repeated else { return }
                 FileHandle.standardError.write(Data((phase + "\n").utf8))
             }
             print("engine \(release.version) installed")

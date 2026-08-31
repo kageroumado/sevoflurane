@@ -624,6 +624,11 @@ final class SteamWindow: NSObject {
 
     // MARK: - Visibility
 
+    /// Whether a Steam-driven show arrived while the host was holding
+    /// windows (the onboarding wizard still up). The window is built and
+    /// ready; ``SteamWebHost/releaseWindowHold()`` replays the show.
+    private(set) var showWasDeferredByHold = false
+
     func show(activating: Bool) {
         realize()
         // Steam asks for its toast to be shown the moment the page renders
@@ -632,6 +637,11 @@ final class SteamWindow: NSObject {
         // nothing downstream can tell it was never on screen.
         guard role.isShowable else { return }
         guard let window else { return }
+        if role == .login, host?.isHoldingWindows == true {
+            showWasDeferredByHold = true
+            return
+        }
+        showWasDeferredByHold = false
         let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
         if becameRegular {
             NSApp.setActivationPolicy(.regular)
@@ -681,6 +691,7 @@ final class SteamWindow: NSObject {
     /// menu failed to appear" — the state flips back and a 30ms-delayed
     /// effect hides the window. That loop was the supernav blink.
     private func hide() {
+        showWasDeferredByHold = false
         guard let window else { return }
         if role == .menu {
             window.alphaValue = 0

@@ -21,8 +21,20 @@ final class Provisioner {
         case done
     }
 
+    /// Where a run is in the fixed stage sequence, for the wizard's overall
+    /// progress bar. Stages that detection skips flash past; the count stays
+    /// honest because the sequence itself never changes.
+    struct Stage: Equatable {
+        let index: Int
+        static let count = 5
+    }
+
     private(set) var detection: SetupDetection?
     private(set) var activity: Activity = .idle
+    private(set) var stage: Stage?
+    /// Progress within the current stage (the engine download), or `nil`
+    /// where none is measurable.
+    private(set) var stageFraction: Double?
     private let environment: any SetupEnvironment
 
     init(environment: (any SetupEnvironment)? = nil) {
@@ -90,6 +102,23 @@ final class Provisioner {
             activity = .failed("\(error)")
             SetupLog.log("provision failed: \(error)")
         }
+        stage = nil
+        stageFraction = nil
+    }
+
+    /// Re-runs a failed provisioning pass. Detection decides what still needs
+    /// doing, so only the stage that failed (and those after it) run again.
+    func retry() async {
+        guard case .failed = activity else { return }
+        activity = .idle
+        await refreshDetection()
+        await provisionAndConfigure()
+    }
+
+    private func beginStage(_ index: Int, _ phase: String) {
+        stage = Stage(index: index)
+        stageFraction = nil
+        activity = .working(phase)
     }
 
     /// The whole stack is x86_64; without Rosetta neither cxbottle nor the
@@ -97,7 +126,7 @@ final class Provisioner {
     /// ours to configure.
     private func installRosettaIfMissing() async throws {
         guard detection?.rosetta == false else { return }
-        activity = .working("Installing Rosetta…")
+        beginStage(1, "Installing Rosetta…")
         SetupLog.log("provision: installing Rosetta")
         let result = await environment.installRosetta()
         guard result.succeeded else {
@@ -112,10 +141,16 @@ final class Provisioner {
     private func installEngineIfMissing() async throws {
         guard let detection, detection.usableCrossOver == nil else { return }
         if detection.managedEngineVersions.isEmpty {
-            activity = .working("Installing the game engine…")
+            beginStage(2, "Installing the game engine…")
             SetupLog.log("provision: installing managed engine")
-            let result = await environment.installEngine { phase in
-                SetupLog.log("engine install: \(phase)")
+            let result = await environment.installEngine { phase, fraction in
+                Task { @MainActor [weak self] in
+                    if self?.activity != .working(phase) {
+                        SetupLog.log("engine install: \(phase)")
+                        self?.activity = .working(phase)
+                    }
+                    self?.stageFraction = fraction
+                }
             }
             guard result.succeeded else {
                 throw ProvisionError("engine install failed: \(result.output.suffix(200))")
@@ -135,7 +170,7 @@ final class Provisioner {
         guard detection?.bottles.contains(where: { $0.name == bottleName }) != true else {
             return
         }
-        activity = .working("Creating the Steam environment…")
+        beginStage(3, "Creating the Steam environment…")
         SetupLog.log("provision: creating bottle \(bottleName) (win10_64)")
         let create = await environment.createBottle(named: bottleName)
         guard create.succeeded else {
@@ -147,7 +182,7 @@ final class Provisioner {
     private func installBootstrapperIfMissing(inBottle bottleName: String) async throws {
         guard !steamPresent(inBottle: bottleName) else { return }
 
-        activity = .working("Downloading the Steam installer…")
+        beginStage(4, "Downloading the Steam installer…")
         SetupLog.log("provision: downloading SteamSetup.exe")
         try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
@@ -164,15 +199,43 @@ final class Provisioner {
     /// `-forcesteamupdate -forcepackagedownload` brings a client of any age
     /// up to current, which is why adoption and Repair both run it.
     private func updateClient(inBottle bottleName: String) async throws {
-        activity = .working(steamPresent(inBottle: bottleName)
+        beginStage(5, steamPresent(inBottle: bottleName)
             ? "Updating Steam…"
             : "Downloading Steam (this is the long step)…")
-        SetupLog.log("provision: headless client update")
-        await environment.updateSteamClient(inBottle: bottleName)
-        await refreshDetection()
+        // The CDN's bootstrapper is old enough that its first update replaces
+        // the updater itself, and the new updater then wants the separate
+        // win64 client package. One pass leaves that package for the user's
+        // first launch to download (measured: 235 MB and ~80 s of updater
+        // window); looping until the win64 manifest lands absorbs it here,
+        // where "Updating Steam…" is already on screen.
+        for pass in 1 ... 3 {
+            if pass > 1 {
+                SetupLog.log("provision: updater replaced itself — update pass \(pass)")
+                activity = .working("Updating Steam…")
+            } else {
+                SetupLog.log("provision: headless client update")
+            }
+            await environment.updateSteamClient(inBottle: bottleName)
+            await refreshDetection()
+            if clientFullyUpdated(inBottle: bottleName) { return }
+        }
         guard steamPresent(inBottle: bottleName) else {
             throw ProvisionError("client update finished but steamclient64.dll is missing")
         }
+    }
+
+    /// Whether the bottle's client is current enough that a launch goes
+    /// straight through: the win64 package manifest is what the self-updated
+    /// updater installs last. A dry run has no bottle on disk to ask.
+    private func clientFullyUpdated(inBottle name: String) -> Bool {
+        guard !environment.isSimulation else {
+            return steamPresent(inBottle: name)
+        }
+        guard steamPresent(inBottle: name) else { return false }
+        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        let manifest = SteamBottle.steamRoot(inBottle: bottle)
+            .appendingPathComponent("package/steam_client_win64.installed")
+        return FileManager.default.fileExists(atPath: manifest.path)
     }
 
     /// Applies the idempotent bottle configuration every adoption gets —

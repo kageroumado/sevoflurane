@@ -29,6 +29,10 @@ final class GPTkDownload: NSObject {
             case installing
             case installed(version: String)
             case failed(String)
+
+            var isFailure: Bool {
+                if case .failed = self { true } else { false }
+            }
         }
     }
 
@@ -66,12 +70,47 @@ final class GPTkDownload: NSObject {
 
     @ObservationIgnored private(set) lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
+        // Sign-in is the flow's whole friction, so the moment the toolkit
+        // links exist (Apple's list renders after load, and only once the
+        // session is authenticated) they are clicked for the user. The
+        // duplicate guard in `decideDestinationUsing` keeps a re-render's
+        // re-click from downloading a file twice.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: Self.autoDownloadScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true,
+        ))
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = self
         view.allowsBackForwardNavigationGestures = true
         view.load(URLRequest(url: Self.pageURL))
         return view
     }()
+
+    /// Clicks every toolkit DMG link as it appears, so the user only has to
+    /// finish Apple's sign-in. A MutationObserver rather than a load hook:
+    /// the download list is rendered by the page's own scripts well after
+    /// `didFinish`, and again after the sign-in redirect.
+    private static let autoDownloadScript = """
+    (function () {
+      if (window.__sevoGPTkAutoDownload) { return; }
+      window.__sevoGPTkAutoDownload = true;
+      const clicked = new Set();
+      const sweep = () => {
+        for (const link of document.querySelectorAll("a[href]")) {
+          const href = link.href;
+          if (!/\\.dmg(?:$|[?#])/i.test(href)) { continue; }
+          if (!/game.{0,3}porting.{0,3}toolkit/i.test(href)) { continue; }
+          if (clicked.has(href)) { continue; }
+          clicked.add(href);
+          link.click();
+        }
+      };
+      new MutationObserver(sweep)
+        .observe(document.documentElement, { childList: true, subtree: true });
+      sweep();
+    })();
+    """
 
     /// Whether a downloaded file looks like a toolkit DMG rather than some
     /// other file the user might grab from the developer site.
@@ -117,6 +156,13 @@ extension GPTkDownload: WKDownloadDelegate {
         guard Self.isToolkitDMG(suggestedFilename) else {
             // Not a toolkit; let the browser's normal download take it to
             // ~/Downloads rather than pull it into our temp dir.
+            return nil
+        }
+        guard !items.contains(where: {
+            $0.filename == suggestedFilename && !$0.phase.isFailure
+        }) else {
+            // The auto-click and a manual click can both start the same
+            // file; the second copy is refused here.
             return nil
         }
         let directory = FileManager.default.temporaryDirectory

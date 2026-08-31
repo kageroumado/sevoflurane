@@ -29,7 +29,27 @@ final class SteamWebHost {
     /// state in which Steam's services legitimately never initialize until
     /// the user acts. The supervisor holds its recovery ladder on this.
     var isAwaitingSignIn: Bool {
-        popups.values.contains { $0.role == .login && $0.isWindowVisible }
+        popups.values.contains {
+            $0.role == .login && ($0.isWindowVisible || $0.showWasDeferredByHold)
+        }
+    }
+
+    /// While true, a login window Steam asks to show stays built but off
+    /// screen — the onboarding wizard is still up, and the wizard's finish
+    /// button is the moment the user asked for a window.
+    private(set) var isHoldingWindows = false
+
+    func holdWindows() {
+        isHoldingWindows = true
+    }
+
+    /// Lifts the hold and replays the show a login window deferred under it.
+    func releaseWindowHold() {
+        guard isHoldingWindows else { return }
+        isHoldingWindows = false
+        for popup in popups.values where popup.showWasDeferredByHold {
+            popup.show(activating: true)
+        }
     }
 
     /// The menu-bar mirror, refreshed when the desktop window comes up.
