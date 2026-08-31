@@ -161,6 +161,16 @@ final class LiveSetupEnvironment: SetupEnvironment {
             "reg", "add", #"HKCU\Software\Wine\Explorer"#,
             "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
         ])
+        // winebus's SDL backend, with no video subsystem to wait on, polls
+        // every millisecond forever — measured 2.6 % CPU and ~1,200 wakeups/s
+        // in winedevice.exe at idle under Rosetta; zero with the backend off.
+        // Controllers keep the IOHID backend, and Steam Input reads raw HID
+        // anyway — the same default Proton ships (hidraw first,
+        // PROTON_PREFER_SDL to opt back in).
+        _ = await runWine(bottle: name, args: [
+            "reg", "add", #"HKLM\System\CurrentControlSet\Services\winebus"#,
+            "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",
+        ])
         // Wine's own renderer reads the card from the registry rather than
         // the environment, so the choice has to be written twice to be one
         // choice.
