@@ -87,28 +87,64 @@ final class GPTkDownload: NSObject {
         return view
     }()
 
-    /// Clicks every toolkit DMG link as it appears, so the user only has to
-    /// finish Apple's sign-in. A MutationObserver rather than a load hook:
-    /// the download list is rendered by the page's own scripts well after
+    /// Clicks the newest release and newest beta toolkit DMGs, so the user
+    /// only has to finish Apple's sign-in. The list renders incrementally
+    /// (oldest versions can land first — an eager sweep once grabbed 1.0),
+    /// so picks happen only after the DOM has been quiet for a beat, and a
+    /// beta older than the release is skipped. A MutationObserver rather
+    /// than a load hook: the page's own scripts render the list well after
     /// `didFinish`, and again after the sign-in redirect.
     private static let autoDownloadScript = """
     (function () {
       if (window.__sevoGPTkAutoDownload) { return; }
       window.__sevoGPTkAutoDownload = true;
       const clicked = new Set();
-      const sweep = () => {
+      const parse = (href) => {
+        const name = decodeURIComponent(href);
+        const m = name.match(
+          /game.{0,3}porting.{0,3}toolkit.{0,3}(\\d+(?:\\.\\d+)*)(?:.{0,3}beta.{0,3}(\\d+))?/i);
+        if (!m) { return null; }
+        return { version: m[1].split(".").map(Number), beta: m[2] ? Number(m[2]) : null };
+      };
+      const newer = (a, b) => {
+        const len = Math.max(a.version.length, b.version.length);
+        for (let i = 0; i < len; i += 1) {
+          const x = a.version[i] || 0;
+          const y = b.version[i] || 0;
+          if (x !== y) { return x > y; }
+        }
+        return (a.beta || 0) > (b.beta || 0);
+      };
+      const pickAndClick = () => {
+        let release = null;
+        let beta = null;
         for (const link of document.querySelectorAll("a[href]")) {
           const href = link.href;
           if (!/\\.dmg(?:$|[?#])/i.test(href)) { continue; }
-          if (!/game.{0,3}porting.{0,3}toolkit/i.test(href)) { continue; }
-          if (clicked.has(href)) { continue; }
-          clicked.add(href);
-          link.click();
+          const parsed = parse(href);
+          if (!parsed) { continue; }
+          const candidate = { link, href, ...parsed };
+          if (candidate.beta === null) {
+            if (!release || newer(candidate, release)) { release = candidate; }
+          } else if (!beta || newer(candidate, beta)) {
+            beta = candidate;
+          }
+        }
+        if (beta && release && !newer(beta, release)) { beta = null; }
+        for (const pick of [release, beta]) {
+          if (!pick || clicked.has(pick.href)) { continue; }
+          clicked.add(pick.href);
+          pick.link.click();
         }
       };
-      new MutationObserver(sweep)
+      let settle = null;
+      const arm = () => {
+        if (settle) { clearTimeout(settle); }
+        settle = setTimeout(pickAndClick, 1200);
+      };
+      new MutationObserver(arm)
         .observe(document.documentElement, { childList: true, subtree: true });
-      sweep();
+      arm();
     })();
     """
 

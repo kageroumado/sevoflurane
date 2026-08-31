@@ -199,7 +199,12 @@ final class SteamWindow: NSObject {
     /// Puts a freshly built window where Steam asked for it, or where the
     /// user last left it.
     private func place(_ window: NSWindow) {
-        if let requestedOrigin {
+        if role == .login {
+            // Steam centers its login window against its own screen model,
+            // which lands bottom-left here. A sign-in dialog belongs in the
+            // middle of the screen, wherever Steam thinks it put it.
+            window.center()
+        } else if let requestedOrigin {
             window.setFrameOrigin(
                 SteamScreenSpace.appKitOrigin(
                     steamX: requestedOrigin.x,

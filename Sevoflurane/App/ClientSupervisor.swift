@@ -92,6 +92,9 @@ final class ClientSupervisor {
     /// with the services still down is the "the user just signed in" edge,
     /// which needs the page reloaded rather than waited out.
     @ObservationIgnored private var wasAwaitingSignIn = false
+    /// Set when sign-in completes so the library opens by itself the moment
+    /// everything is healthy.
+    @ObservationIgnored private var showLibraryOnHealthy = false
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
     /// Set once quit teardown begins; blocks every path that could relaunch
@@ -345,6 +348,11 @@ final class ClientSupervisor {
                     logging: .supervisor,
                     "healthy: client, bridge, page, and Steam services all up",
                 )
+                if becameHealthy, showLibraryOnHealthy {
+                    showLibraryOnHealthy = false
+                    log.log(.supervisor, "sign-in finished — opening the library")
+                    host.showSteam()
+                }
                 // Explorer exists to suppress right after the client comes
                 // up; afterwards an occasional sweep catches a respawn
                 // (whether a game launch respawns it is an open watch item).
@@ -454,9 +462,29 @@ final class ClientSupervisor {
             // and the user watches Steam's spinner for a minute and a half
             // before the reload that actually finishes the job.
             wasAwaitingSignIn = false
-            log.log(.page, "signed in — reloading the UI so the page boots with a session")
             lastPageRecovery = .now
             pageFailures = 0
+            // The library opens by itself once everything is up: sign-in
+            // ending in silence reads as a crash.
+            showLibraryOnHealthy = true
+            let promoted = Self.promotedBottleApps()
+            if !promoted.isEmpty {
+                // Showing the login window made winemac.drv promote its
+                // process into the Dock, permanently — a Steam-iconed "wine"
+                // that does nothing when clicked. The only way out is for
+                // the promoted processes to exit; a signed-in client never
+                // shows a window, so the restarted one stays out of the
+                // Dock. (TransformProcessType on another process is procNotFound;
+                // there is no demotion API.)
+                log.log(
+                    .client,
+                    "signed in — restarting the client to shed the Wine Dock icon "
+                        + "(promoted pids \(promoted.map(\.processIdentifier)))",
+                )
+                await restartClient(reason: "finishing sign-in")
+                return
+            }
+            log.log(.page, "signed in — reloading the UI so the page boots with a session")
             host.reload()
             health = .starting
             return
@@ -698,6 +726,18 @@ final class ClientSupervisor {
         }
         guard reply.ok else { return .notAnswering(reply.v ?? "eval failed") }
         return .answering(servicesUp: reply.v?.contains("true") == true)
+    }
+
+    /// The bottle processes winemac.drv promoted into the Dock — matched by
+    /// executable path under the managed engines or CrossOver, never by
+    /// name (a name match once caught Microsoft Teams).
+    private static func promotedBottleApps() -> [NSRunningApplication] {
+        let roots = [Engine.managedRoot.path, SetupProbe.crossoverApp.path]
+        return NSWorkspace.shared.runningApplications.filter { app in
+            guard app.activationPolicy == .regular,
+                  let path = app.executableURL?.path else { return false }
+            return roots.contains { path.hasPrefix($0) }
+        }
     }
 
     // MARK: - Wine tray suppression

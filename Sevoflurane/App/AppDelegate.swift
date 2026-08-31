@@ -168,6 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        // Again, once SwiftUI has sized the content: the first center ran
+        // against the hosting controller's placeholder frame, and the window
+        // then grew from a corner (seen bottom-left and top-right).
+        DispatchQueue.main.async { window.center() }
     }
 
     private func closeSetupWindow() {
