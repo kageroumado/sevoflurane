@@ -113,6 +113,26 @@ final class GraphicsStore {
         try? D3DMetalInstaller.activate(entry, inEngine: toolkitStore)
     }
 
+    /// Trashes an installed toolkit version. The newest remaining one (or
+    /// the engine's own copy, where the engine has one) takes over when the
+    /// removed version was active.
+    func removeD3DMetal(version: String) {
+        guard isLive,
+              let entry = d3dMetalVersions.first(where: { $0.version == version })
+        else { return }
+        do {
+            try FileManager.default.trashItem(at: entry.root, resultingItemURL: nil)
+        } catch {
+            EventLog.shared.log(.setup, "D3DMetal \(version) removal failed: \(error)")
+            return
+        }
+        d3dMetalVersions = D3DMetalInstaller.installed(inEngine: toolkitStore)
+        EventLog.shared.log(.setup, "D3DMetal \(version) moved to the Trash")
+        if activeD3DMetal == version {
+            chooseD3DMetal(version: d3dMetalVersions.last?.version)
+        }
+    }
+
     /// Answers the failure, so the pane can show it.
     func installD3DMetal(from source: URL) async -> String? {
         guard isLive else { return nil }

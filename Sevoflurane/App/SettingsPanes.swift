@@ -41,6 +41,7 @@ struct GraphicsSettings: View {
     @State private var showingRendererHelp = false
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
+    @State private var confirmingD3DMetalRemoval = false
     @State private var showingGPTkDownload = false
     @State private var gptk = GPTkDownload()
 
@@ -132,6 +133,26 @@ struct GraphicsSettings: View {
                     Text(d3dMetalError).font(.callout).foregroundStyle(.orange)
                 }
                 Spacer()
+                if let removable = removableD3DMetal {
+                    Button("Remove \(removable)…", role: .destructive) {
+                        confirmingD3DMetalRemoval = true
+                    }
+                    .disabled(isAddingD3DMetal)
+                    .confirmationDialog(
+                        "Remove D3DMetal \(removable)?",
+                        isPresented: $confirmingD3DMetalRemoval,
+                        titleVisibility: .visible,
+                    ) {
+                        Button("Move to Trash", role: .destructive) {
+                            store.removeD3DMetal(version: removable)
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Games pinned to it fall back to the newest "
+                            + "remaining version. It goes to the Trash, so a "
+                            + "wrong click is recoverable.")
+                    }
+                }
                 Button("Download from Apple…") { showingGPTkDownload = true }
                     .disabled(isAddingD3DMetal)
                 Button(store.d3dMetalVersions.isEmpty
@@ -144,6 +165,15 @@ struct GraphicsSettings: View {
             Text("Apple's Game Porting Toolkit")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
+    }
+
+    /// The selected version, when it is one of ours to remove — the engine's
+    /// own CrossOver copy is not.
+    private var removableD3DMetal: String? {
+        guard let active = store.activeD3DMetal,
+              store.d3dMetalVersions.contains(where: { $0.version == active })
+        else { return nil }
+        return active
     }
 
     /// Apple's own download page, in-app: the user signs in and downloads the

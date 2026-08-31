@@ -63,7 +63,20 @@ final class GPTkDownload: NSObject {
         items.contains { $0.phase == .downloading || $0.phase == .installing }
     }
 
+    /// Where the automatic pick-and-download stands, for the panel's
+    /// overlay: `searching` covers the page from sign-in until versions are
+    /// chosen; `manual` is the fallback when nothing parseable stabilized.
+    enum AutoPhase {
+        case idle
+        case searching
+        case downloading
+        case manual
+    }
+
+    private(set) var autoPhase: AutoPhase = .idle
+
     private var nextID = 0
+    private var startedDownloads: Set<String> = []
     private var destinations: [ObjectIdentifier: URL] = [:]
     private var itemIDs: [ObjectIdentifier: Int] = [:]
     private var observations: [ObjectIdentifier: NSKeyValueObservation] = [:]
@@ -80,6 +93,9 @@ final class GPTkDownload: NSObject {
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true,
         ))
+        // Weakly, or the content controller's strong handler reference
+        // cycles back through the web view.
+        configuration.userContentController.add(WeakMessageHandler(self), name: "gptk")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = self
         view.allowsBackForwardNavigationGestures = true
@@ -87,24 +103,36 @@ final class GPTkDownload: NSObject {
         return view
     }()
 
-    /// Clicks the newest release and newest beta toolkit DMGs, so the user
-    /// only has to finish Apple's sign-in. The list renders incrementally
-    /// (oldest versions can land first — an eager sweep once grabbed 1.0),
-    /// so picks happen only after the DOM has been quiet for a beat, and a
-    /// beta older than the release is skipped. A MutationObserver rather
-    /// than a load hook: the page's own scripts render the list well after
-    /// `didFinish`, and again after the sign-in redirect.
+    /// Reports the newest release and newest beta toolkit DMGs to Swift,
+    /// which downloads them directly — clicking two links in one tick made
+    /// the second navigation cancel the first before it could become a
+    /// download (measured: only the last click's file arrived). Hard-won
+    /// parsing rules, from the live anchor list: versions parse from the
+    /// *filename* segment only (a row's path can say 1.1 while its file is
+    /// 2.1); "Evaluation environment for Windows games" is the same product
+    /// under Apple's alternate name; and the list renders incrementally (an
+    /// eager sweep once grabbed 1.0, a debounced one 2.1), so picks wait
+    /// until the parsed candidate set has been stable for three seconds.
+    /// "list" fires when the signed-in download table first exists, "none"
+    /// when it stabilizes with nothing parseable — the panel's overlay and
+    /// fallback hint key off those.
     private static let autoDownloadScript = """
     (function () {
       if (window.__sevoGPTkAutoDownload) { return; }
       window.__sevoGPTkAutoDownload = true;
-      const clicked = new Set();
+      const post = (message) => {
+        try { window.webkit.messageHandlers.gptk.postMessage(message); } catch (e) {}
+      };
       const parse = (href) => {
-        const name = decodeURIComponent(href);
-        const m = name.match(
-          /game.{0,3}porting.{0,3}toolkit.{0,3}(\\d+(?:\\.\\d+)*)(?:.{0,3}beta.{0,3}(\\d+))?/i);
+        const file = decodeURIComponent(href).split("/").pop() || "";
+        const m = file.match(
+          /^(?:game[_ ]?porting[_ ]?toolkit|evaluation[_ ]environment[_ ]for[_ ]windows[_ ]games)[_ ]*(\\d+(?:\\.\\d+)*)(?:[_ ]*beta[_ ]*(\\d+))?\\.dmg$/i);
         if (!m) { return null; }
-        return { version: m[1].split(".").map(Number), beta: m[2] ? Number(m[2]) : null };
+        return {
+          key: m[1] + (m[2] ? "b" + m[2] : ""),
+          version: m[1].split(".").map(Number),
+          beta: m[2] ? Number(m[2]) : null,
+        };
       };
       const newer = (a, b) => {
         const len = Math.max(a.version.length, b.version.length);
@@ -115,36 +143,62 @@ final class GPTkDownload: NSObject {
         }
         return (a.beta || 0) > (b.beta || 0);
       };
-      const pickAndClick = () => {
+      const scan = () => {
+        const found = [];
+        let listUp = false;
+        for (const link of document.querySelectorAll("a[href]")) {
+          if (link.href.includes("download.developer.apple.com")) { listUp = true; }
+          const parsed = parse(link.href);
+          if (parsed) { found.push({ href: link.href, ...parsed }); }
+        }
+        return { found, listUp };
+      };
+      const picks = (found) => {
         let release = null;
         let beta = null;
-        for (const link of document.querySelectorAll("a[href]")) {
-          const href = link.href;
-          if (!/\\.dmg(?:$|[?#])/i.test(href)) { continue; }
-          const parsed = parse(href);
-          if (!parsed) { continue; }
-          const candidate = { link, href, ...parsed };
-          if (candidate.beta === null) {
-            if (!release || newer(candidate, release)) { release = candidate; }
-          } else if (!beta || newer(candidate, beta)) {
-            beta = candidate;
+        for (const c of found) {
+          if (c.beta === null) {
+            if (!release || newer(c, release)) { release = c; }
+          } else if (!beta || newer(c, beta)) {
+            beta = c;
           }
         }
         if (beta && release && !newer(beta, release)) { beta = null; }
-        for (const pick of [release, beta]) {
-          if (!pick || clicked.has(pick.href)) { continue; }
-          clicked.add(pick.href);
-          pick.link.click();
+        return [release, beta].filter(Boolean);
+      };
+      let announcedList = false;
+      let reportedKeys = "";
+      let lastSignature = "";
+      let stableSince = 0;
+      setInterval(() => {
+        const { found, listUp } = scan();
+        if (listUp && !announcedList) {
+          announcedList = true;
+          post({ type: "list" });
         }
-      };
-      let settle = null;
-      const arm = () => {
-        if (settle) { clearTimeout(settle); }
-        settle = setTimeout(pickAndClick, 1200);
-      };
-      new MutationObserver(arm)
-        .observe(document.documentElement, { childList: true, subtree: true });
-      arm();
+        if (!listUp) { return; }
+        const signature = found.map((c) => c.key).sort().join(",");
+        const now = Date.now();
+        if (signature !== lastSignature) {
+          lastSignature = signature;
+          stableSince = now;
+          return;
+        }
+        if (now - stableSince < 3000) { return; }
+        if (found.length === 0) {
+          if (reportedKeys !== "none") {
+            reportedKeys = "none";
+            post({ type: "none" });
+          }
+          return;
+        }
+        const chosen = picks(found);
+        const keys = chosen.map((c) => c.key).sort().join(",");
+        if (keys !== reportedKeys) {
+          reportedKeys = keys;
+          post({ type: "picks", urls: chosen.map((c) => c.href) });
+        }
+      }, 1000);
     })();
     """
 
@@ -152,9 +206,54 @@ final class GPTkDownload: NSObject {
     /// other file the user might grab from the developer site.
     private static func isToolkitDMG(_ filename: String) -> Bool {
         let lower = filename.lowercased()
-        return lower.hasSuffix(".dmg")
-            && lower.contains("porting")
-            && lower.contains("game")
+        guard lower.hasSuffix(".dmg") else { return false }
+        // Apple serves the same product under both names — several rows'
+        // DMGs are "Evaluation_environment_for_Windows_games_X.Y.dmg".
+        return (lower.contains("game") && lower.contains("porting"))
+            || (lower.contains("evaluation") && lower.contains("windows"))
+    }
+}
+
+/// Breaks the retain cycle `GPTkDownload → WKWebView → userContentController
+/// → handler`: the controller holds this proxy strongly, the target weakly.
+private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
+    private weak var target: (any WKScriptMessageHandler)?
+
+    init(_ target: any WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(
+        _ controller: WKUserContentController, didReceive message: WKScriptMessage,
+    ) {
+        target?.userContentController(controller, didReceive: message)
+    }
+}
+
+extension GPTkDownload: WKScriptMessageHandler {
+    func userContentController(
+        _: WKUserContentController, didReceive message: WKScriptMessage,
+    ) {
+        guard let body = message.body as? [String: Any],
+              let type = body["type"] as? String else { return }
+        switch type {
+        case "list":
+            if autoPhase == .idle { autoPhase = .searching }
+        case "none":
+            if autoPhase == .searching { autoPhase = .manual }
+        case "picks":
+            guard let urls = body["urls"] as? [String] else { return }
+            for raw in urls where !startedDownloads.contains(raw) {
+                guard let url = URL(string: raw) else { continue }
+                startedDownloads.insert(raw)
+                webView.startDownload(using: URLRequest(url: url)) { [weak self] download in
+                    download.delegate = self
+                }
+            }
+            if !urls.isEmpty { autoPhase = .downloading }
+        default:
+            break
+        }
     }
 }
 

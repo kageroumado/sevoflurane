@@ -27,11 +27,15 @@ struct GPTkDownloadPanel: View {
 
     private var instructions: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
-            Text("Sign in with your Apple ID, then download the release toolkit "
-                + "(and the beta, for DirectX 12). Both install here automatically — "
-                + "you don't need to leave the app or open Downloads.")
+            Image(systemName: download.autoPhase == .manual
+                ? "hand.point.up.left" : "info.circle")
+                .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
+            Text(download.autoPhase == .manual
+                ? "The versions couldn't be picked automatically — click "
+                + "Download on the release and beta you want. They still "
+                + "install here by themselves."
+                : "Sign in with your Apple ID; the newest release and beta "
+                + "toolkits then download and install here automatically.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -44,6 +48,8 @@ struct GPTkDownloadPanel: View {
             .overlay {
                 if !download.pageLoaded {
                     ProgressView().controlSize(.large)
+                } else if download.autoPhase == .searching {
+                    searchingOverlay
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -51,6 +57,19 @@ struct GPTkDownloadPanel: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(.quaternary),
             )
+    }
+
+    /// Covers the download table while versions are being chosen, so the
+    /// signed-in moment reads as "working", never "now what do I click".
+    private var searchingOverlay: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            VStack(spacing: 10) {
+                ProgressView().controlSize(.large)
+                Text("Finding the latest versions…")
+                    .font(.callout.weight(.medium))
+            }
+        }
     }
 
     private var itemList: some View {
