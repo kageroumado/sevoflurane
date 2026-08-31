@@ -64,6 +64,23 @@ cp -R "$WINE_RES" "$ROOT/wine"
 [[ -x "$ROOT/wine/bin/wine64" || -x "$ROOT/wine/bin/wine" ]] \
     || { echo "wine binary missing after extract" >&2; exit 1; }
 
+step "game category: tagging the wine loader for native Game Mode"
+# A Wine game's window belongs to the loader process; tagging it
+# public.app-category.games (+GCSupportsGameMode) lets macOS engage Game Mode
+# on its own when the game is full screen — no gamepolicyctl, no entitlement.
+# Only the loaders host game windows; wineserver never does.
+if ! python3 -c 'import lief' 2>/dev/null; then
+    print -P "%F{yellow}   installing LIEF (packaging-time only)…%f"
+    python3 -m pip install --quiet lief \
+        || { echo "LIEF needed to tag the loader (pip install lief)" >&2; exit 1; }
+fi
+for loader in wine wine64 wineloader wine-preloader wine64-preloader; do
+    bin="$ROOT/wine/bin/$loader"
+    [[ -f "$bin" && ! -L "$bin" ]] || continue
+    python3 "$TOOLS_DIR/embed-game-category.py" "$bin"
+    codesign -f -s - "$bin"
+done
+
 if [[ $FROM_CROSSOVER -eq 1 ]]; then
     step "dxmt/dxvk/d3dmetal from local CrossOver (LOCAL TESTING ONLY)"
     mkdir -p "$ROOT/dxmt" "$ROOT/dxvk" "$ROOT/d3dmetal"

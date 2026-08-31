@@ -363,7 +363,13 @@ final class ClientSupervisor {
     /// Appearance and disappearance are each logged once.
     private func observeWineWindows() async -> [WineWindowWatch.Window] {
         let scan = await WineWindowWatch.scan()
-        gameIsUp = scan.gameWindowUp
+        if scan.gameWindowUp != gameIsUp {
+            gameIsUp = scan.gameWindowUp
+            // The launch watch turns Game Mode on the moment the window
+            // appears; this scan is the authoritative edge for games it
+            // missed and for the exit.
+            scan.gameWindowUp ? GameModeSession.gameDidAppear() : GameModeSession.gameDidExit()
+        }
         let wineWindows = scan.wineWindows
         if !wineWindows.isEmpty, !wineWindowsVisible {
             wineWindowsVisible = true

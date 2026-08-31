@@ -188,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         guard quitTask == nil else { return .terminateCancel }
         quitTask = Task(name: "Quit teardown") {
+            await GameModeSession.restoreForQuit()
             await supervisor.shutdownForQuit()
             sender.reply(toApplicationShouldTerminate: true)
         }

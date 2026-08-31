@@ -46,6 +46,7 @@ final class GameLaunchWatch {
 
     private func activate(_ game: (owner: String, pid: pid_t)) {
         defer { onGameWindowUp?() }
+        GameModeSession.gameDidAppear()
         guard let app = NSRunningApplication(processIdentifier: game.pid) else {
             EventLog.shared.log(
                 .window, "game window up (\(game.owner)) but pid \(game.pid) has no app to activate",
