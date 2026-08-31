@@ -69,9 +69,9 @@ burns a few percent of a core forever — idle CPU is a fraction of a naive
 setup. It gets out of the game's way while you play.
 
 **You don't need CrossOver.** A bundled open-source engine (Wine + DXMT + DXVK,
-with a one-click Game Porting Toolkit download for D3DMetal) means the free
-path works on a clean Mac. Web login persists, so the store and community
-render signed in.
+with Apple's Game Porting Toolkit for D3DMetal fetched in-app through Apple's
+own sign-in — no browser trip) means the free path works on a clean Mac. Web
+login persists, so the store and community render signed in.
 
 **It's scriptable.** [`sevo`](#sevo--the-cli) manages and heals Steam from the
 terminal, and the same verbs are an [MCP server](#mcp-ask-your-agent-to-fix-your-steam)

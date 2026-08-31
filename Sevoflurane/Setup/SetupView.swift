@@ -13,6 +13,7 @@ struct SetupView: View {
         case engine
         case bottle
         case steam
+        case graphics
         case options
         case done
     }
@@ -65,9 +66,38 @@ struct SetupView: View {
         case .engine: engine
         case .bottle: bottle
         case .steam: steam
+        case .graphics: graphics
         case .options: options
         case .done: done
         }
+    }
+
+    /// The managed engine can't ship Apple's D3DMetal, so this step offers to
+    /// fetch it — in-app, through Apple's own sign-in. Skippable: DXMT is the
+    /// default renderer and covers most DirectX 11 titles. CrossOver brings
+    /// its own D3DMetal, so this step never shows for it.
+    @State private var graphicsStore: GraphicsStore?
+    @State private var gptk = GPTkDownload()
+
+    private var usesManagedEngine: Bool {
+        if case .managed = Engine.active { true } else { false }
+    }
+
+    @ViewBuilder private var graphics: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("DirectX 12 games (optional)")
+                .font(.system(size: 24, weight: .bold))
+            Text("Apple's Game Porting Toolkit adds D3DMetal — the only renderer "
+                + "that runs DirectX 12, which most modern games use. It's a free "
+                + "download from Apple; the built-in engine can't include it directly.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            GPTkDownloadPanel(
+                download: gptk,
+                install: { url in await graphicsStore?.installD3DMetal(from: url) },
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var welcome: some View {
@@ -369,9 +399,14 @@ struct SetupView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(bottleChoice == nil && newBottleObjection != nil)
             case .steam:
-                Button("Continue") { step = .options }
+                Button("Continue") { advanceFromSteam() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(provisioner.activity != .done)
+            case .graphics:
+                Button(graphicsStore?.d3dMetalVersions.isEmpty == false
+                    ? "Continue" : "Skip for now") { step = .options }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(gptk.isBusy)
             case .options:
                 Button("Finish") {
                     provisioner.setOpenAtLogin(openAtLogin)
@@ -408,5 +443,16 @@ struct SetupView: View {
         if provisioner.activity == .idle {
             Task { await provisioner.provisionAndConfigure() }
         }
+    }
+
+    /// After provisioning: the managed engine needs D3DMetal added for DX12,
+    /// so offer it; CrossOver brings its own, so go straight to preferences.
+    private func advanceFromSteam() {
+        guard usesManagedEngine, !provisioner.isDryRun else {
+            step = .options
+            return
+        }
+        if graphicsStore == nil { graphicsStore = GraphicsStore.live() }
+        step = .graphics
     }
 }

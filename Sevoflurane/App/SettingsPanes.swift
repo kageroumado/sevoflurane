@@ -41,7 +41,8 @@ struct GraphicsSettings: View {
     @State private var showingRendererHelp = false
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
-    @State private var downloadTask: Task<Void, Never>?
+    @State private var showingGPTkDownload = false
+    @State private var gptk = GPTkDownload()
 
     /// Edits go through the store, which decides whether they reach a bottle.
     private var graphics: Binding<BottleGraphics.Selection> {
@@ -126,42 +127,44 @@ struct GraphicsSettings: View {
             } else {
                 D3DMetalVersionPicker(store: store)
             }
-            if store.isWatchingDownload {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for the download to finish…")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Cancel") {
-                        downloadTask?.cancel()
-                        downloadTask = nil
-                    }
-                }
-            }
             HStack {
                 if let d3dMetalError {
                     Text(d3dMetalError).font(.callout).foregroundStyle(.orange)
                 }
                 Spacer()
-                Button("Download from Apple…") { downloadD3DMetal() }
-                    .disabled(isAddingD3DMetal || store.isWatchingDownload)
+                Button("Download from Apple…") { showingGPTkDownload = true }
+                    .disabled(isAddingD3DMetal)
                 Button(store.d3dMetalVersions.isEmpty
                     ? "Choose Disk Image…" : "Add Another Version…") {
                         addD3DMetal()
                     }
-                    .disabled(isAddingD3DMetal || store.isWatchingDownload)
+                    .disabled(isAddingD3DMetal)
             }
         } header: {
             Text("Apple's Game Porting Toolkit")
         }
+        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
-    private func downloadD3DMetal() {
-        d3dMetalError = nil
-        downloadTask = Task(name: "Download D3DMetal") {
-            d3dMetalError = await store.downloadAndInstallD3DMetal()
-            downloadTask = nil
+    /// Apple's own download page, in-app: the user signs in and downloads the
+    /// release and beta toolkits, which install straight into the engine.
+    private var gptkDownloadSheet: some View {
+        VStack(spacing: 0) {
+            GPTkDownloadPanel(
+                download: gptk,
+                install: { url in await store.installD3DMetal(from: url) },
+            )
+            .padding(16)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { showingGPTkDownload = false }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(gptk.isBusy)
+            }
+            .padding(16)
         }
+        .frame(width: 760, height: 620)
     }
 
     private func addD3DMetal() {

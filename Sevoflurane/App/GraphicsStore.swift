@@ -113,24 +113,6 @@ final class GraphicsStore {
         try? D3DMetalInstaller.activate(entry, inEngine: toolkitStore)
     }
 
-    private(set) var isWatchingDownload = false
-
-    /// Opens Apple's download page, watches `~/Downloads` for the DMG, and
-    /// installs it. Answers the failure, so the pane can show it.
-    func downloadAndInstallD3DMetal() async -> String? {
-        guard isLive else { return nil }
-        isWatchingDownload = true
-        defer { isWatchingDownload = false }
-        do {
-            let dmg = try await D3DMetalInstaller.watchForDownload()
-            return await installD3DMetal(from: dmg)
-        } catch is CancellationError {
-            return nil
-        } catch {
-            return "\(error)"
-        }
-    }
-
     /// Answers the failure, so the pane can show it.
     func installD3DMetal(from source: URL) async -> String? {
         guard isLive else { return nil }

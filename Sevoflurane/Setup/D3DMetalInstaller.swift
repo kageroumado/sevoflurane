@@ -130,49 +130,6 @@ nonisolated enum D3DMetalInstaller {
 
     private static let versionKey = "d3dmetalVersion"
 
-    // MARK: - Downloading
-
-    static let downloadPageURL = URL(
-        string: "https://developer.apple.com/download/all/?q=game%20porting%20toolkit"
-    )!
-
-    /// Opens Apple's download page and watches `~/Downloads` for the GPTk DMG
-    /// to appear. Returns its URL once the download is complete.
-    @concurrent
-    static func watchForDownload(timeout: Duration = .seconds(600)) async throws -> URL {
-        let downloads = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads")
-        let existing = Set(gptkDMGs(in: downloads).map(\.lastPathComponent))
-
-        await MainActor.run {
-            NSWorkspace.shared.open(downloadPageURL)
-        }
-
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            try await Task.sleep(for: .seconds(3))
-            try Task.checkCancellation()
-            let candidates = gptkDMGs(in: downloads)
-                .filter { !existing.contains($0.lastPathComponent) }
-            guard let found = candidates.first else { continue }
-            let size = (try? FileManager.default.attributesOfItem(
-                atPath: found.path
-            )[.size] as? UInt64) ?? 0
-            if size > 0 { return found }
-        }
-        throw InstallError.attachFailed("timed out waiting for the toolkit download")
-    }
-
-    private static func gptkDMGs(in directory: URL) -> [URL] {
-        (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.fileSizeKey]
-        ))?.filter {
-            $0.pathExtension.lowercased() == "dmg"
-                && $0.lastPathComponent.localizedCaseInsensitiveContains("game")
-                && $0.lastPathComponent.localizedCaseInsensitiveContains("porting")
-        } ?? []
-    }
-
     // MARK: - Installing
 
     /// Copies D3DMetal out of `source` — a Game Porting Toolkit disk image, a
