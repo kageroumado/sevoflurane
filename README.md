@@ -66,7 +66,9 @@ takes the whole bottle down with it.
 views are torn down when it's closed, the supervisor idles instead of polling,
 and provisioning disables Wine's SDL controller-polling loop that otherwise
 burns a few percent of a core forever — idle CPU is a fraction of a naive
-setup. It gets out of the game's way while you play.
+setup. It honors macOS **Low Power Mode** and **Reduce Motion**, easing Steam's
+animated library (which otherwise renders at 60fps whether you're looking or
+not) to match. It gets out of the game's way while you play.
 
 **You don't need CrossOver.** A bundled open-source engine (Wine + DXMT + DXVK,
 with Apple's Game Porting Toolkit for D3DMetal fetched in-app through Apple's
