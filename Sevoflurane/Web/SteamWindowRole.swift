@@ -78,9 +78,19 @@ enum SteamWindowRole {
     /// corner.
     var hasNativeTitleBar: Bool {
         switch self {
-        case .auxiliary, .controllerConfig, .friends, .chat: true
+        case .auxiliary, .controllerConfig, .chat: true
         default: false
         }
+    }
+
+    /// Whether the page's own title strip is the FriendsUI one: a 24pt focus
+    /// bar (teal-to-blue while the window is focused) over a dark header. The
+    /// macOS title bar goes transparent and the traffic lights float on that
+    /// bar, as they do on the desktop's strip; the chrome script grows the bar
+    /// to title-bar height and moves the header's content out from under
+    /// the lights.
+    var hasSteamFocusBar: Bool {
+        self == .friends
     }
 
     /// Whether this window may ever be put on screen.

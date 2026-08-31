@@ -147,13 +147,12 @@ final class SteamWindow: NSObject {
                 backing: .buffered,
                 defer: false,
             )
-        case .auxiliary, .controllerConfig, .friends, .chat:
-            // Friends, chat, notes, the configurator: Steam draws no title
-            // strip of its own in these, so overlaid traffic lights land on
-            // whatever the page put in its top-left corner — the friends
-            // window's own status control, for one. A plain titled window
-            // reserves the strip instead, and the page keeps every pixel it
-            // drew.
+        case .auxiliary, .controllerConfig, .chat:
+            // Chat, notes, the configurator: Steam draws no title strip of
+            // its own in these, so overlaid traffic lights would land on
+            // whatever the page put in its top-left corner. A plain titled
+            // window reserves the strip instead, and the page keeps every
+            // pixel it drew.
             NSWindow(
                 contentRect: content,
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -253,10 +252,13 @@ final class SteamWindow: NSObject {
     private func applyRoleChrome(to window: NSWindow) {
         switch role {
         case .auxiliary, .controllerConfig, .friends, .chat:
-            // The strip is real, so it says what the window is: Steam names
-            // its own popups through the document title — "Friends List", or
-            // the name of whoever a chat window is with.
-            window.titleVisibility = .visible
+            // Steam names its own popups through the document title —
+            // "Friends List", or the name of whoever a chat window is with.
+            // On the windows with a real strip that title is drawn in it; the
+            // friends window shows Steam's focus bar instead and keeps the
+            // title for Mission Control and the Window menu.
+            window.titleVisibility = role.hasSteamFocusBar ? .hidden : .visible
+            window.titlebarAppearsTransparent = role.hasSteamFocusBar
             window.title = webView.title ?? "Steam"
             window.backgroundColor = Self.steamBackground
             window.collectionBehavior.insert(.fullScreenPrimary)

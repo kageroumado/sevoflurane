@@ -126,6 +126,16 @@ nonisolated enum ClientLifecycle {
     /// by half a minute, so CDP polling — not the launcher exiting — decides
     /// whether the client is up. The exit is still logged for the trail.
     /// `@concurrent` so the spawn never runs on the calling actor.
+    /// Extra `steam.exe` arguments from `SEVO_STEAM_ARGS` in the app's
+    /// environment, whitespace-separated — an experiment knob (`-nojoy`,
+    /// `-noshaders`, `-cef-*`) that reaches the client through the
+    /// supervisor's own launch path.
+    static var extraClientArguments: [String] {
+        (ProcessInfo.processInfo.environment["SEVO_STEAM_ARGS"] ?? "")
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+    }
+
     @concurrent
     static func launchClient() async {
         let process = Process()
@@ -142,7 +152,7 @@ nonisolated enum ClientLifecycle {
                 "-cef-enable-debugging",
                 "-devtools-port",
                 String(BridgePorts.cdp),
-            ] + Engine.active.cefArguments,
+            ] + Engine.active.cefArguments + extraClientArguments,
         )
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments

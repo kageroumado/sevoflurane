@@ -197,6 +197,74 @@ enum SteamDesktopChrome {
     /// Windows with a native macOS title bar (friends, chat, controller
     /// config, auxiliary): the entire Steam title strip is hidden so the
     /// native title bar is the only chrome.
+    /// The friends window: Steam's strip is `.TitleBar.title-area`, absolutely
+    /// positioned over the dark header, and its first child is the focus bar
+    /// — 24px, teal-to-blue while the window is focused. The bar becomes the
+    /// title bar: grown to the macOS title-bar height, Steam's window buttons
+    /// removed, and the header padded by the same height so the avatar and
+    /// status control move out from under the traffic lights. The bar's
+    /// stretch right of the traffic lights is the window's drag handle.
+    static let friendsChromeScript = """
+    (function () {
+      if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
+
+      var STYLE_ID = "sevo-macos-chrome";
+      var BAR = 28;              /* the macOS title bar */
+      var TRAFFIC_LIGHTS = 80;   /* the strip the buttons and their margin occupy */
+      var CSS = [
+        ".TitleBar.title-area { display: block !important; }",
+        ".title-area-highlight, .singleWindowFocusBar { height: " + BAR + "px !important; }",
+        ".title-bar-actions.window-controls { display: none !important; }",
+        "div:has(> .TitleBar.title-area) { box-sizing: content-box !important; padding-top: " + BAR + "px !important; }"
+      ].join("\\n");
+
+      function apply() {
+        if (!document.head) return;
+        var style = document.getElementById(STYLE_ID);
+        if (!style) {
+          style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = CSS;
+          document.head.appendChild(style);
+        }
+        reportDragRegions();
+      }
+
+      function dragRegions() {
+        var bar = document.querySelector(".TitleBar.title-area > .title-area-highlight");
+        if (!bar) return [];
+        var r = bar.getBoundingClientRect();
+        var left = Math.round(r.left) + TRAFFIC_LIGHTS;
+        var width = Math.round(r.width) - TRAFFIC_LIGHTS;
+        if (width <= 0) return [];
+        return [[left, Math.round(r.top), width, Math.round(r.height)]];
+      }
+
+      var pending = 0;
+      function reportDragRegions() {
+        var handler = window.webkit && window.webkit.messageHandlers
+          && window.webkit.messageHandlers.sevoWindow;
+        if (!handler) return;
+        handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
+      }
+
+      function schedule() {
+        if (pending) return;
+        pending = setTimeout(function () { pending = 0; apply(); }, 150);
+      }
+
+      new MutationObserver(function () {
+        if (document.head && !document.getElementById(STYLE_ID)) apply();
+        else schedule();
+      }).observe(document, { childList: true, subtree: true });
+      window.addEventListener("resize", schedule);
+
+      window.__sevoChrome = { apply: apply };
+      apply();
+      return "installed";
+    })()
+    """
+
     static let nativeTitleBarScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
