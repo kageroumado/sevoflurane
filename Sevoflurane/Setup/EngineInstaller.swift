@@ -29,7 +29,7 @@ nonisolated enum EngineInstaller {
     /// size, or `nil` for the phases with no measurable whole.
     static func install(
         _ release: EngineManifest.Release,
-        progress: @Sendable (String, Double?) -> Void = { _, _ in },
+        progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws {
         guard !isInstalled(release) else { return }
         let manager = FileManager.default
@@ -75,33 +75,56 @@ nonisolated enum EngineInstaller {
         )
     }
 
-    /// Streams the tarball to disk, reporting the fraction received against
-    /// the manifest's declared size every few MB. `URLSession.download`'s
-    /// progress lives on a delegate; this stays structured instead.
+    /// Downloads the tarball with real progress: a plain download task whose
+    /// `Progress` is observed, the same shape the GPTk panel uses. (An
+    /// `AsyncBytes` loop was tried and crawled — per-byte iteration costs an
+    /// await per byte, minutes for a tarball a plain download moves in
+    /// seconds.) The temp file must be moved inside the completion handler —
+    /// URLSession deletes it when the handler returns.
     private static func download(
         _ release: EngineManifest.Release, to tarball: URL,
-        label: String, progress: @Sendable (String, Double?) -> Void,
+        label: String, progress: @escaping @Sendable (String, Double?) -> Void,
     ) async throws {
         progress(label, 0)
-        let (bytes, _) = try await URLSession.shared.bytes(from: release.url)
-        FileManager.default.createFile(atPath: tarball.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: tarball)
-        defer { try? handle.close() }
-        var buffer = Data(capacity: 1 << 20)
-        var received: Int64 = 0
-        var reported: Int64 = 0
-        for try await byte in bytes {
-            buffer.append(byte)
-            guard buffer.count >= 1 << 20 else { continue }
-            try handle.write(contentsOf: buffer)
-            received += Int64(buffer.count)
-            buffer.removeAll(keepingCapacity: true)
-            if received - reported >= 4 << 20 {
-                reported = received
-                progress(label, min(1, Double(received) / Double(release.sizeBytes)))
-            }
+        let declaredBytes = release.sizeBytes
+        // Keeps the KVO observation alive until the completion handler runs —
+        // the handler captures the box, the box holds the observation.
+        final class ObservationBox: @unchecked Sendable {
+            var observation: NSKeyValueObservation?
         }
-        try handle.write(contentsOf: buffer)
+        let box = ObservationBox()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            let task = URLSession.shared.downloadTask(with: release.url) { temp, _, error in
+                box.observation?.invalidate()
+                box.observation = nil
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let temp else {
+                    continuation.resume(throwing: InstallError("engine download produced no file"))
+                    return
+                }
+                do {
+                    try FileManager.default.moveItem(at: temp, to: tarball)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+            nonisolated(unsafe) var lastReported = 0.0
+            box.observation = task.progress.observe(\.fractionCompleted) { taskProgress, _ in
+                // The response may not carry a length; the manifest's
+                // declared size stands in.
+                let fraction = taskProgress.totalUnitCount > 0
+                    ? taskProgress.fractionCompleted
+                    : Double(taskProgress.completedUnitCount) / Double(declaredBytes)
+                guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
+                lastReported = fraction
+                progress(label, min(1, fraction))
+            }
+            task.resume()
+        }
     }
 
     /// Streaming SHA-256 — engine tarballs are hundreds of MB.

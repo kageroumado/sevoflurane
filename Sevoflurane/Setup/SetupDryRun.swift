@@ -177,7 +177,7 @@
         }
 
         func installEngine(
-            progress: @Sendable (String, Double?) -> Void,
+            progress: @escaping @Sendable (String, Double?) -> Void,
         ) async -> SetupCommandOutcome {
             log("would download the managed engine from the stable manifest channel")
             for step in 1...4 {
