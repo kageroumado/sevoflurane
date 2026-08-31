@@ -37,6 +37,12 @@ final class SteamWindow: NSObject {
         return role != .menu || window.alphaValue > 0
     }
 
+    /// Whether an AppKit window is this popup's, for hit-testing an event's
+    /// window against the popup inventory.
+    func ownsWindow(_ candidate: NSWindow) -> Bool {
+        window === candidate
+    }
+
     private var requestedSize: CGSize
     private var requestedOrigin: CGPoint?
     private var minimumSize: CGSize?

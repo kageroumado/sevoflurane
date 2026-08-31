@@ -244,6 +244,22 @@ final class SteamWebHost {
             return
         }
         notifications?.post(notification)
+        // The bottle's hidden twin UI renders the same toast as a CEF window
+        // of its own (`notificationtoasts_N_desktop`), bottom-right on the
+        // real desktop. The supervisor's sweep would catch it eventually;
+        // catching it on the event is what keeps it from ever being seen.
+        Task(name: "Hide client toast twin") {
+            for delay in [500, 1_500, 3_000] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                let hidden = await ClientLifecycle.hideVisibleClientPopups()
+                if !hidden.isEmpty {
+                    EventLog.shared.log(
+                        .client, "hid the client's toast twin: \(hidden.joined(separator: ", "))",
+                    )
+                    return
+                }
+            }
+        }
     }
 
     /// The unread count Steam posts to the client, tapped on its way through
@@ -553,6 +569,7 @@ final class SteamWebHost {
     /// already running and the window can be handed over immediately.
     func bootstrap() {
         guard context == nil else { return }
+        installMenuDismissalGuard()
 
         let coordinator = SteamWebCoordinator(host: self)
         self.coordinator = coordinator
@@ -1294,6 +1311,56 @@ final class SteamWebHost {
     func windowDidHide(_ window: SteamWindow) {
         guard window === desktop else { return }
         NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Menu dismissal guard
+
+    /// Steam dismisses its own menus, mostly. The notifications popover is
+    /// the exception: on Windows it closes when its window loses focus, and
+    /// here it never has focus to lose, so no click anywhere would ever close
+    /// it. The guard restores the universal rule — a press outside a visible
+    /// menu closes it — while giving Steam first right of refusal: a real
+    /// context menu is gone well inside the grace period, and only a
+    /// survivor is closed from this side.
+    private func installMenuDismissalGuard() {
+        menuDismissalMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown],
+        ) { [weak self] event in
+            MainActor.assumeIsolated { self?.notePressOutsideMenus(event) }
+            return event
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main,
+        ) { _ in
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.closeMenusSurviving(after: .milliseconds(300)) }
+            }
+        }
+    }
+
+    @ObservationIgnored private var menuDismissalMonitor: Any?
+
+    private func notePressOutsideMenus(_ event: NSEvent) {
+        let visibleMenus = popups.values.filter { $0.role == .menu && $0.isWindowVisible }
+        guard !visibleMenus.isEmpty else { return }
+        if let pressed = event.window, visibleMenus.contains(where: { $0.ownsWindow(pressed) }) {
+            return
+        }
+        closeMenusSurviving(after: .milliseconds(300))
+    }
+
+    private func closeMenusSurviving(after grace: Duration) {
+        Task(name: "Close stubborn menus") { [weak self] in
+            try? await Task.sleep(for: grace)
+            guard let self else { return }
+            for menu in popups.values where menu.role == .menu && menu.isWindowVisible {
+                EventLog.shared.log(
+                    .window,
+                    "menu \(menu.name) survived an outside press — closing it here",
+                )
+                menu.close()
+            }
+        }
     }
 
     func windowDidClose(_ window: SteamWindow) {

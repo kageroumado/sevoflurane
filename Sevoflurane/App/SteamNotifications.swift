@@ -191,7 +191,12 @@ final class SteamNotifications {
         let content = UNMutableNotificationContent()
         content.title = presentation.title
         content.body = presentation.body
-        content.sound = .default
+        // Silent on purpose: these mirror Steam's own toasts, which the
+        // client delivers without sound, and a mirror that adds a sound of
+        // its own is louder than the thing it mirrors. (Steam's sound
+        // preference isn't readably exposed to the context page; if it ever
+        // is, honor it here.)
+        content.sound = nil
         content.userInfo = presentation.route.userInfo
         // Steam sends a new notification per message; grouping them by who
         // they are from is what makes a conversation read as one thread in
@@ -208,6 +213,16 @@ final class SteamNotifications {
             )
         } catch {
             EventLog.shared.log(.app, "could not post notification \(notification.id): \(error)")
+            return
+        }
+        if presentation.isTransient {
+            // Presence is a moment, not a record: the banner shows, and
+            // nothing lingers in Notification Center saying who was online
+            // at 3pm. UserNotifications has no transient flag, so the
+            // delivered notification is withdrawn once the banner has had
+            // its time on screen.
+            try? await Task.sleep(for: .seconds(8))
+            center.removeDeliveredNotifications(withIdentifiers: [notification.id])
         }
     }
 
@@ -300,6 +315,9 @@ final class SteamNotifications {
         let title: String
         let body: String
         let route: Route
+        /// Shown as a banner, then withdrawn from Notification Center —
+        /// presence has no value as a record.
+        var isTransient = false
 
         init?(_ notification: SteamNotification) {
             let person = notification.title
@@ -314,11 +332,13 @@ final class SteamNotifications {
                 title = person
                 body = "is playing \(notification.gameName)"
                 route = .chat(accountID: notification.accountID)
+                isTransient = true
             case 4:
                 guard !person.isEmpty else { return nil }
                 title = person
                 body = "is now online"
                 route = .chat(accountID: notification.accountID)
+                isTransient = true
             case 8:
                 guard !person.isEmpty else { return nil }
                 title = person
@@ -356,7 +376,7 @@ final class SteamNotifications {
             _: UNUserNotificationCenter,
             willPresent _: UNNotification,
         ) async -> UNNotificationPresentationOptions {
-            [.banner, .sound, .list]
+            [.banner, .list]
         }
 
         func userNotificationCenter(
