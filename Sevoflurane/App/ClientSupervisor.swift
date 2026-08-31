@@ -72,6 +72,12 @@ final class ClientSupervisor {
 
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var clientFailures = 0
+    /// When the current run of consecutive client-probe failures began; the
+    /// restart decision needs a duration, not just a count.
+    @ObservationIgnored private var firstClientFailure = Date.distantPast
+    /// A game window is on screen (from the probe's window scan).
+    @ObservationIgnored private var gameIsUp = false
+    @ObservationIgnored private var probeCycleCount = 0
     @ObservationIgnored private var pageFailures = 0
     @ObservationIgnored private var isRestarting = false
     @ObservationIgnored private var recentRestarts: [Date] = []
@@ -115,10 +121,20 @@ final class ClientSupervisor {
         loop = Task(name: "Client supervision") { [weak self] in
             while !Task.isCancelled {
                 await self?.probe()
-                let interval: Duration = self?.health == .healthy ? .seconds(8) : .seconds(3)
+                let interval = self?.probeInterval ?? .seconds(8)
                 try? await Task.sleep(for: interval)
             }
         }
+    }
+
+    /// The probe cadence: quick while converging or recovering, relaxed
+    /// while healthy, and near-dormant while a game has the machine — the
+    /// game is the workload the whole app exists for, and a supervisor that
+    /// scans windows and opens DevTools sessions every eight seconds during
+    /// play is taking CPU from it.
+    private var probeInterval: Duration {
+        guard health == .healthy else { return .seconds(3) }
+        return gameIsUp ? .seconds(60) : .seconds(8)
     }
 
     func togglePaused() {
@@ -240,6 +256,7 @@ final class ClientSupervisor {
 
     private func probe() async {
         if health == .paused || isRestarting || isQuitting { return }
+        probeCycleCount += 1
         let cycle = PerfProbe.supervisor.beginInterval("ProbeCycle")
         await probeChain()
         PerfProbe.supervisor.endInterval(
@@ -268,14 +285,18 @@ final class ClientSupervisor {
         // The client renders nothing here — a CEF window it opened for
         // itself (the first-run login window) is hidden as soon as it shows,
         // and the page's native mirror of the same popup is what the user
-        // sees.
-        let hiddenPopups = await ClientLifecycle.hideVisibleClientPopups()
-        if !hiddenPopups.isEmpty {
-            log.log(
-                .client,
-                "hid the client's own CEF window: \(hiddenPopups.joined(separator: ", ")) "
-                    + "— the page renders these natively",
-            )
+        // sees. The sweep opens a DevTools session per CEF popup target, so
+        // it runs every cycle only while converging; a healthy steady state
+        // sweeps every eighth cycle, and a running game suspends it.
+        if !gameIsUp, health != .healthy || probeCycleCount.isMultiple(of: 8) {
+            let hiddenPopups = await ClientLifecycle.hideVisibleClientPopups()
+            if !hiddenPopups.isEmpty {
+                log.log(
+                    .client,
+                    "hid the client's own CEF window: \(hiddenPopups.joined(separator: ", ")) "
+                        + "— the page renders these natively",
+                )
+            }
         }
 
         switch await Self.probePage() {
@@ -318,12 +339,18 @@ final class ClientSupervisor {
                     "everything probes healthy but a steam.exe dialog is up — reporting, not acting",
                 )
             } else {
+                let becameHealthy = health != .healthy
                 transition(
                     to: .healthy,
                     logging: .supervisor,
                     "healthy: client, bridge, page, and Steam services all up",
                 )
-                Task(name: "Wine tray suppression") { await Self.suppressWineTray() }
+                // Explorer exists to suppress right after the client comes
+                // up; afterwards an occasional sweep catches a respawn
+                // (whether a game launch respawns it is an open watch item).
+                if !gameIsUp, becameHealthy || probeCycleCount.isMultiple(of: 8) {
+                    Task(name: "Wine tray suppression") { await Self.suppressWineTray() }
+                }
             }
         }
     }
@@ -335,7 +362,9 @@ final class ClientSupervisor {
     /// reported and left alone (an update or EULA prompt may be legit).
     /// Appearance and disappearance are each logged once.
     private func observeWineWindows() async -> [WineWindowWatch.Window] {
-        let wineWindows = await WineWindowWatch.visibleWineWindows()
+        let scan = await WineWindowWatch.scan()
+        gameIsUp = scan.gameWindowUp
+        let wineWindows = scan.wineWindows
         if !wineWindows.isEmpty, !wineWindowsVisible {
             wineWindowsVisible = true
             log.log(
@@ -358,10 +387,29 @@ final class ClientSupervisor {
             ? "CDP is up but lists no SharedJSContext — half-wedged client"
             : "CDP unreachable — client down"
         clientFailures += 1
+        if clientFailures == 1 { firstClientFailure = .now }
         if case .gaveUp = health { return }
-        if clientFailures >= 2 || !wineWindows.isEmpty {
-            await restartClient(reason: wineWindows.isEmpty ? reason
-                : reason + " with a Wine dialog up — Steam's own watchdog likely fired")
+        // A dead process is down; a mute DevTools server on a live process is
+        // slow until it has been mute for half a minute. This app's own log
+        // holds three restarts whose only evidence was two 3-second `/json`
+        // timeouts against a swapped-out CEF — each one a two-minute outage
+        // the user paid for a probe's impatience.
+        let processAlive = await ClientLifecycle.clientProcessAlive()
+        let deadLongEnough = clientFailures >= 3
+            && Date.now.timeIntervalSince(firstClientFailure) >= 30
+        if !wineWindows.isEmpty, hasSeenClientUp {
+            await restartClient(
+                reason: reason + " with a Wine dialog up — Steam's own watchdog likely fired",
+            )
+        } else if !processAlive || deadLongEnough {
+            let cause = if processAlive {
+                reason + " for \(Int(Date.now.timeIntervalSince(firstClientFailure)))s"
+            } else if hasSeenClientUp {
+                "the client process is gone"
+            } else {
+                "starting the client"
+            }
+            await restartClient(reason: cause)
         } else if hasSeenClientUp {
             transition(to: .degraded(reason), logging: .client, reason)
         } else {

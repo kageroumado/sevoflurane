@@ -54,26 +54,58 @@ enum WebSessionCookies {
 
     /// Copies the client's Steam-domain cookies into the default website data
     /// store, replacing what was there. Returns how many landed.
+    /// What the last pass wrote into WebKit, so the next pass writes only
+    /// the difference. Each `setCookie` is a round trip to the network
+    /// process, and the mirror sits on every browser view's load path — 46
+    /// serial round trips per Store open was the measured critical path
+    /// under load. The store itself persists on disk, so the first pass
+    /// after launch re-applies everything once and settles.
+    private static var lastApplied: [String: SteamWebCookie] = [:]
+
     @discardableResult
     static func syncNow() async -> Int {
-        // One CDP read plus one network-process round trip per cookie, all
-        // before a browser view may load: the interval is that critical path.
+        // One CDP read plus one network-process round trip per changed
+        // cookie, all before a browser view may load: the interval is that
+        // critical path.
         let mirror = PerfProbe.bridge.beginInterval("CookieMirror")
         guard let bridge, let raw = await bridge.clientCookies() else {
             PerfProbe.bridge.endInterval("CookieMirror", mirror, "applied=0")
             return 0
         }
+        let fresh = raw.filter { isSteamDomain($0.domain) }
+        let delta = changedCookies(in: fresh, since: lastApplied)
         let store = WKWebsiteDataStore.default().httpCookieStore
         var applied = 0
-        for cookie in raw.compactMap(httpCookie) {
-            await store.setCookie(cookie)
+        for cookie in delta {
+            guard let httpCookie = httpCookie(from: cookie) else { continue }
+            await store.setCookie(httpCookie)
+            lastApplied[identity(of: cookie)] = cookie
             applied += 1
         }
-        PerfProbe.bridge.endInterval("CookieMirror", mirror, "applied=\(applied, privacy: .public)")
+        PerfProbe.bridge.endInterval(
+            "CookieMirror", mirror,
+            "applied=\(applied, privacy: .public),unchanged=\(fresh.count - delta.count, privacy: .public)",
+        )
         if applied > 0 {
-            EventLog.shared.log(.page, "web session: \(applied) client cookies mirrored")
+            EventLog.shared.log(
+                .page,
+                "web session: \(applied) client cookies mirrored (\(fresh.count - delta.count) unchanged)",
+            )
         }
         return applied
+    }
+
+    nonisolated static func identity(of cookie: SteamWebCookie) -> String {
+        "\(cookie.domain)|\(cookie.path)|\(cookie.name)"
+    }
+
+    /// The cookies whose value differs from what a previous pass applied.
+    /// Client-side deletions are not mirrored: a stale extra cookie in
+    /// WebKit is harmless, and the store's own expiry retires it.
+    nonisolated static func changedCookies(
+        in cookies: [SteamWebCookie], since applied: [String: SteamWebCookie],
+    ) -> [SteamWebCookie] {
+        cookies.filter { applied[identity(of: $0)] != $0 }
     }
 
     static func isSteamDomain(_ domain: String) -> Bool {

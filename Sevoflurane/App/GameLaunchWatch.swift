@@ -20,12 +20,7 @@ final class GameLaunchWatch {
     /// Steam's dialogs surface under `steam.exe`/`steamwebhelper.exe`
     /// (`WineWindowWatch`), and the game window's owner is the game's own
     /// exe name.
-    private static let infrastructureOwners: Set<String> = [
-        "steam.exe", "steamwebhelper.exe", "steamservice.exe",
-        "steamerrorreporter.exe", "steamerrorreporter64.exe",
-        "explorer.exe", "conhost.exe", "tabtip.exe",
-        "gameoverlayui.exe", "gameoverlayui64.exe",
-    ]
+    private static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
 
     private var watch: Task<Void, Never>?
 

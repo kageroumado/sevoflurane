@@ -30,32 +30,54 @@ nonisolated enum WineWindowWatch {
         "steam.exe", "steamwebhelper.exe", "wine64-preloader", "wine-preloader",
     ]
 
+    /// Wine's plumbing: an on-screen `.exe` window owned by none of these is
+    /// a game. `GameLaunchWatch` uses the same set to spot a launch's first
+    /// window.
+    static let gameInfrastructureOwners: Set<String> = [
+        "steam.exe", "steamwebhelper.exe", "steamservice.exe",
+        "steamerrorreporter.exe", "steamerrorreporter64.exe",
+        "explorer.exe", "conhost.exe", "tabtip.exe",
+        "gameoverlayui.exe", "gameoverlayui64.exe",
+    ]
+
+    /// One pass over the window list: the anomalous Wine windows, and
+    /// whether a game's window is up.
+    struct Scan: Sendable {
+        let wineWindows: [Window]
+        let gameWindowUp: Bool
+    }
+
     /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
     /// to the window server, which answers in its own time on a busy host —
     /// on the main thread that time would be a UI stall every probe cycle.
     @concurrent
-    static func visibleWineWindows() async -> [Window] {
-        let scan = PerfProbe.system.beginInterval("WineWindowScan")
-        defer { PerfProbe.system.endInterval("WineWindowScan", scan) }
+    static func scan() async -> Scan {
+        let interval = PerfProbe.system.beginInterval("WineWindowScan")
+        defer { PerfProbe.system.endInterval("WineWindowScan", interval) }
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
-            as? [[String: Any]] else { return [] }
-        return list.compactMap { entry in
-            guard let owner = entry[kCGWindowOwnerName as String] as? String,
-                  wineOwners.contains(owner.lowercased()),
-                  entry[kCGWindowLayer as String] as? Int == 0,
-                  let pid = entry[kCGWindowOwnerPID as String] as? pid_t,
-                  let bounds = entry[kCGWindowBounds as String] as? [String: Any] else {
-                return nil
+            as? [[String: Any]] else { return Scan(wineWindows: [], gameWindowUp: false) }
+        var wineWindows: [Window] = []
+        var gameWindowUp = false
+        for entry in list {
+            guard entry[kCGWindowLayer as String] as? Int == 0,
+                  let owner = entry[kCGWindowOwnerName as String] as? String,
+                  let pid = entry[kCGWindowOwnerPID as String] as? pid_t else { continue }
+            let name = owner.lowercased()
+            if name.hasSuffix(".exe"), !gameInfrastructureOwners.contains(name) {
+                gameWindowUp = true
             }
-            return Window(
+            guard wineOwners.contains(name),
+                  let bounds = entry[kCGWindowBounds as String] as? [String: Any] else { continue }
+            wineWindows.append(Window(
                 owner: owner,
                 pid: pid,
                 title: entry[kCGWindowName as String] as? String,
                 width: (bounds["Width"] as? NSNumber)?.intValue ?? 0,
                 height: (bounds["Height"] as? NSNumber)?.intValue ?? 0,
-            )
+            ))
         }
+        return Scan(wineWindows: wineWindows, gameWindowUp: gameWindowUp)
     }
 
     static func describe(_ windows: [Window]) -> String {

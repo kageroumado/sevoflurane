@@ -29,12 +29,24 @@ nonisolated enum ClientLifecycle {
         case down
     }
 
+    /// A generous timeout: under memory pressure a Rosetta CEF answers
+    /// `/json` slowly, and a slow answer must read as "slow", never as
+    /// "down" — a false "down" costs a two-minute full restart.
     static func probeClient() async -> ClientState {
-        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
-            return .down
-        }
+        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp, timeout: 10)
+        else { return .down }
         return targets.contains { $0["title"] as? String == "SharedJSContext" }
             ? .up : .portWithoutContext
+    }
+
+    /// Whether the bottle's client process exists at all, told by command
+    /// line (`Steam.exe -silent` is this app's own launch line; the Mac
+    /// Steam client is `steam_osx` and cannot match). Cheap on purpose —
+    /// one `pgrep`, no per-pid `lsof` scoping — because it runs on the
+    /// probe's failure path to separate "CDP is slow" from "nothing is
+    /// running".
+    static func clientProcessAlive() async -> Bool {
+        await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).status == 0
     }
 
     // MARK: - Processes

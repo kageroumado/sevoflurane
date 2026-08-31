@@ -30,13 +30,13 @@ actor CDPClient {
     /// probe, and the shared pool then keeps every later probe glued to that
     /// connection even once the client's own listener is up. An unpooled
     /// connect always lands on the client's specific-address bind.
-    static func discoverTargets(port: Int) async throws -> [[String: Any]] {
+    static func discoverTargets(port: Int, timeout: TimeInterval = 3) async throws -> [[String: Any]] {
         let session = URLSession(configuration: .ephemeral)
         defer { session.finishTasksAndInvalidate() }
         for host in ["127.0.0.1", "[::1]"] {
             guard let url = URL(string: "http://\(host):\(port)/json") else { continue }
             var request = URLRequest(url: url)
-            request.timeoutInterval = 3
+            request.timeoutInterval = timeout
             guard let (data, _) = try? await session.data(for: request) else {
                 continue
             }
