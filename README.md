@@ -27,6 +27,59 @@ WKWebViews with a shim whose calls are replayed into the client's real
 transport is relayed around CDP through a socket the client's own context
 opens. Every window Steam creates is adopted into a real `NSWindow`.
 
+## What you get that a bare bottle doesn't
+
+Running Steam in CrossOver by hand gives you a Windows window in a box. This
+rebuilds the whole experience as a Mac app:
+
+**It looks and behaves like a Mac app.**
+- Steam's UI renders in real `NSWindow`s — Retina-sharp, native traffic
+  lights, Mission Control, full-screen, the works. No Windows chrome.
+- The real **macOS menu bar** drives Steam's menus. Friends and chat open as
+  native windows (the friends window even wears Steam's own title-bar gradient
+  as its title bar).
+- It lives in the **menu bar**: a popover with your recent games, one-click
+  launch, and the friends list — Steam's big desktop window never has to
+  appear at all.
+- No Wine windows, no stray Dock icons, no watchdog dialogs, and the word
+  "bottle" never shows up.
+
+**Notifications are real macOS notifications.** Steam's toasts are turned into
+native banners — with the sender's avatar, click-through straight to the chat,
+and your Steam notification settings honored untouched. Presence ("X is
+online") shows and then quietly withdraws itself instead of piling up in
+Notification Center; the duplicate Windows toast Steam draws in the corner is
+suppressed before you see it.
+
+**Game Mode turns on by itself.** Launch a game and macOS Game Mode engages —
+the app is a games-category bundle, and the bundled engine's Wine loader is
+tagged as a game too, so a full-screen title gets Game Mode's scheduling and
+lower input latency with nothing to configure. (Where Xcode's tools are
+present, it's forced on for the session as well.)
+
+**It heals itself.** A supervisor watches the bottled client and recovers the
+notorious `steamwebhelper` hangs — restart ladder, crash-loop hygiene, cache
+repair — automatically, without you ever seeing the failure. Quitting the app
+takes the whole bottle down with it.
+
+**It runs light.** The bridge bypasses heavyweight paths, the window's web
+views are torn down when it's closed, the supervisor idles instead of polling,
+and provisioning disables Wine's SDL controller-polling loop that otherwise
+burns a few percent of a core forever — idle CPU is a fraction of a naive
+setup. It gets out of the game's way while you play.
+
+**You don't need CrossOver.** A bundled open-source engine (Wine + DXMT + DXVK,
+with a one-click Game Porting Toolkit download for D3DMetal) means the free
+path works on a clean Mac. Web login persists, so the store and community
+render signed in.
+
+**It's scriptable.** [`sevo`](#sevo--the-cli) manages and heals Steam from the
+terminal, and the same verbs are an [MCP server](#mcp-ask-your-agent-to-fix-your-steam)
+— so you can literally ask an AI agent to install a game or fix a stuck
+download. Settings covers a **graphics-backend picker**, **storage
+breakdown**, and a **clean uninstall**; updates install themselves but never
+mid-game.
+
 ## Graphics, and the Rosetta clock
 
 A Windows game on a Mac needs its Direct3D calls translated into Metal, and
