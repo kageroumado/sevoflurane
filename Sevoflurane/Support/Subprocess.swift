@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The one subprocess runner: runs a tool to completion and SIGKILLs it at
 /// the deadline. A `nil` status means the process never launched.
@@ -31,6 +32,11 @@ enum Subprocess {
         capture: Capture = .stdout,
         timeout: Duration = .seconds(20),
     ) async -> (status: Int32?, output: String) {
+        let tool = URL(fileURLWithPath: path).lastPathComponent
+        let interval = PerfProbe.system.beginInterval(
+            "Subprocess", id: PerfProbe.system.makeSignpostID(), "\(tool, privacy: .public)",
+        )
+        defer { PerfProbe.system.endInterval("Subprocess", interval, "\(tool, privacy: .public)") }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments

@@ -72,7 +72,20 @@ final class SteamWindow: NSObject {
     /// Deferred until the popup names itself, because until then every page is
     /// an anonymous `about:blank` and the safe default is to keep rendering.
     private func applyOcclusionPolicy() {
-        SteamWebHost.setOcclusionDetection(role.allowsOcclusionDetection, on: webView)
+        SteamWebHost.setOcclusionDetection(
+            role.allowsOcclusionDetection && !occlusionDetectionSuspended, on: webView,
+        )
+    }
+
+    /// While suspended, the page stays visible to WebKit even when the window
+    /// is covered. A profile scenario needs its animation frames to keep
+    /// coming regardless of what sits in front of the window; nothing else
+    /// should ask for this.
+    private var occlusionDetectionSuspended = false
+
+    func suspendOcclusionDetection(_ suspended: Bool) {
+        occlusionDetectionSuspended = suspended
+        applyOcclusionPolicy()
     }
 
     /// Builds the `NSWindow` for this popup's role.
@@ -708,6 +721,20 @@ final class SteamWindow: NSObject {
     /// page. Here each one is a child web view over the window's own web view,
     /// placed by the same bounds Steam computes.
     private var browserViews: [Int: BrowserViewChild] = [:]
+
+    /// Whether the desktop's native Store BrowserView has reached a settled
+    /// visible state. This is deliberately a WebKit lifecycle signal rather
+    /// than a Steam DOM selector, which changes frequently across Steam UI
+    /// releases.
+    var hasSettledStoreBrowserView: Bool {
+        browserViews.values.contains {
+            $0.isSettledAndVisible && $0.loadedHost?.contains("store.steampowered.com") == true
+        }
+    }
+
+    var browserViewStatuses: [BrowserViewChild.Status] {
+        browserViews.values.map(\.status).sorted { $0.id < $1.id }
+    }
 
     private func performBrowserView(id: Int, method: String, args: [Any]) {
         if method == "create" {

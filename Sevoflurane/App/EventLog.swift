@@ -71,16 +71,13 @@ final class EventLog {
         if recent.count > Self.recentLimit {
             recent.removeFirst(recent.count - Self.recentLimit)
         }
-        append(entry)
+        let line = "\(stamp.string(from: entry.date)) [\(entry.category.rawValue)] \(entry.message)\n"
+        Self.file.append(line)
     }
 
     private static let recentLimit = 100
-    /// Rotation threshold; one boot's worth of transitions is a few KB, so
-    /// this only ever trips after months of unattended running.
-    private static let rotateOverBytes = 5_000_000
 
     @ObservationIgnored private var nextID = 0
-    @ObservationIgnored private var handle: FileHandle?
     @ObservationIgnored private let logger = Logger(
         subsystem: "glass.kagerou.sevoflurane", category: "events",
     )
@@ -91,15 +88,37 @@ final class EventLog {
         return formatter
     }()
 
-    private func append(_ entry: Entry) {
-        if handle == nil { openFile() }
-        let line = "\(stamp.string(from: entry.date)) [\(entry.category.rawValue)] \(entry.message)\n"
-        try? handle?.write(contentsOf: Data(line.utf8))
+    private nonisolated static let file = LogFile(url: fileURL)
+}
+
+/// The on-disk log, written from a utility queue. A `write(2)` waits on the
+/// disk, and while a game installs or the compressor swaps, the disk answers
+/// in tens of milliseconds — on the main thread every log line would be a
+/// UI stall of that length.
+private final nonisolated class LogFile: Sendable {
+    /// Rotation threshold; one boot's worth of transitions is a few KB, so
+    /// this only ever trips after months of unattended running.
+    private static let rotateOverBytes = 5_000_000
+
+    private let url: URL
+    private let queue: DispatchQueue
+    /// Confined to `queue`.
+    nonisolated(unsafe) private var handle: FileHandle?
+
+    init(url: URL) {
+        self.url = url
+        queue = DispatchQueue(label: "sevo.eventlog.file", qos: .utility)
+    }
+
+    func append(_ line: String) {
+        queue.async { [self] in
+            if handle == nil { openFile() }
+            try? handle?.write(contentsOf: Data(line.utf8))
+        }
     }
 
     private func openFile() {
         let manager = FileManager.default
-        let url = Self.fileURL
         if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
            size > Self.rotateOverBytes {
             let old = url.deletingPathExtension().appendingPathExtension("old.log")

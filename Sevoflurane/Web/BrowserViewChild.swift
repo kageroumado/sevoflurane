@@ -1,4 +1,5 @@
 import AppKit
+import os
 import WebKit
 
 /// One embedded web page (store, community, profile) living as a native child
@@ -7,7 +8,35 @@ import WebKit
 /// web login in the store survives app restarts.
 @MainActor
 final class BrowserViewChild: NSObject {
+    struct Status: Encodable {
+        let id: Int
+        let visible: Bool
+        let url: String?
+        let isLoading: Bool
+        let frame: String
+    }
+
     let webView: WKWebView
+
+    /// The native readiness signal for a Steam BrowserView: it is on screen,
+    /// has a concrete URL, and WebKit has no outstanding top-level load.
+    var isSettledAndVisible: Bool {
+        !webView.isHidden && webView.url != nil && !webView.isLoading
+    }
+
+    var loadedHost: String? {
+        webView.url?.host?.lowercased()
+    }
+
+    var status: Status {
+        Status(
+            id: id,
+            visible: !webView.isHidden,
+            url: webView.url?.absoluteString,
+            isLoading: webView.isLoading,
+            frame: NSStringFromRect(webView.frame),
+        )
+    }
 
     private let id: Int
     /// The hosting window's page, where the shim's event sink lives.
@@ -60,6 +89,28 @@ final class BrowserViewChild: NSObject {
     }
 
     private var observations: [NSKeyValueObservation] = []
+
+    /// The open `BrowserViewLoad` interval: provisional start to finish or
+    /// failure of the top-level load. A navigation that replaces one in
+    /// flight closes the first as `superseded`.
+    private var loadInterval: OSSignpostIntervalState?
+
+    private func beginLoadInterval(host: String) {
+        endLoadInterval(outcome: "superseded")
+        loadInterval = PerfProbe.bridge.beginInterval(
+            "BrowserViewLoad", id: PerfProbe.bridge.makeSignpostID(),
+            "view=\(self.id, privacy: .public),host=\(host, privacy: .public)",
+        )
+    }
+
+    private func endLoadInterval(outcome: String) {
+        guard let loadInterval else { return }
+        self.loadInterval = nil
+        PerfProbe.bridge.endInterval(
+            "BrowserViewLoad", loadInterval,
+            "view=\(self.id, privacy: .public),outcome=\(outcome, privacy: .public)",
+        )
+    }
 
     func load(_ urlString: String) {
         guard let url = URL(string: urlString) else { return }
@@ -146,11 +197,13 @@ extension BrowserViewChild: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
         let url = JSLiteral.string(webView.url?.absoluteString ?? "")
+        beginLoadInterval(host: webView.url?.host ?? "")
         fire("start-request", "[\(url)]")
         fire("start-loading", "[\(url)]")
     }
 
     func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
+        endLoadInterval(outcome: "finished")
         fire(
             "finished-request",
             "[\(JSLiteral.string(webView.url?.absoluteString ?? "")), "
@@ -172,6 +225,7 @@ extension BrowserViewChild: WKNavigationDelegate {
     }
 
     private func loadError(_ webView: WKWebView, _ error: any Error) {
+        endLoadInterval(outcome: "failed code=\((error as NSError).code)")
         EventLog.shared.log(.page, "browser view load failed: \(error.localizedDescription)")
         fire(
             "load-error",

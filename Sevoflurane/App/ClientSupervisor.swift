@@ -248,9 +248,13 @@ final class ClientSupervisor {
     }
 
     private func probeChain() async {
-        let wineWindows = observeWineWindows()
+        let wineWindows = await observeWineWindows()
 
+        let clientProbe = PerfProbe.supervisor.beginInterval("ClientProbe")
         let client = await ClientLifecycle.probeClient()
+        PerfProbe.supervisor.endInterval(
+            "ClientProbe", clientProbe, "\(String(describing: client), privacy: .public)",
+        )
         guard client == .up else {
             await handleClientDown(client, wineWindows: wineWindows)
             return
@@ -330,8 +334,8 @@ final class ClientSupervisor {
     /// skips the usual second-confirmation cycle; on its own it is
     /// reported and left alone (an update or EULA prompt may be legit).
     /// Appearance and disappearance are each logged once.
-    private func observeWineWindows() -> [WineWindowWatch.Window] {
-        let wineWindows = WineWindowWatch.visibleWineWindows()
+    private func observeWineWindows() async -> [WineWindowWatch.Window] {
+        let wineWindows = await WineWindowWatch.visibleWineWindows()
         if !wineWindows.isEmpty, !wineWindowsVisible {
             wineWindowsVisible = true
             log.log(

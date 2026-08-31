@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import os
 
 /// Detects visible windows belonging to the bottle's Wine processes.
 ///
@@ -15,7 +16,7 @@ import Foundation
 /// permission. Window titles need Screen Recording and are used only when
 /// present.
 nonisolated enum WineWindowWatch {
-    struct Window: Equatable {
+    struct Window: Equatable, Sendable {
         let owner: String
         let pid: pid_t
         let title: String?
@@ -29,7 +30,13 @@ nonisolated enum WineWindowWatch {
         "steam.exe", "steamwebhelper.exe", "wine64-preloader", "wine-preloader",
     ]
 
-    static func visibleWineWindows() -> [Window] {
+    /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
+    /// to the window server, which answers in its own time on a busy host —
+    /// on the main thread that time would be a UI stall every probe cycle.
+    @concurrent
+    static func visibleWineWindows() async -> [Window] {
+        let scan = PerfProbe.system.beginInterval("WineWindowScan")
+        defer { PerfProbe.system.endInterval("WineWindowScan", scan) }
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
             as? [[String: Any]] else { return [] }

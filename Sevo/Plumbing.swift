@@ -51,6 +51,20 @@ nonisolated enum AppControl {
         await request(path, method: "POST", timeout: timeout)
     }
 
+    /// A POST whose failure body matters: the status code and the body
+    /// come back together, or nil when the app did not answer at all.
+    static func postReply(_ path: String, timeout: TimeInterval = 10) async -> (status: Int, body: Data)? {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return nil }
+        return (http.statusCode, data)
+    }
+
     private static func request(
         _ path: String, method: String, timeout: TimeInterval,
     ) async -> Data? {
@@ -61,7 +75,8 @@ nonisolated enum AppControl {
         request.httpMethod = method
         request.timeoutInterval = timeout
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode < 500 else {
+              let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else {
             return nil
         }
         return data

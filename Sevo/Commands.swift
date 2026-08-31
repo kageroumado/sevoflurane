@@ -15,7 +15,7 @@ struct SevoCommand: AsyncParsableCommand {
             EngineCommand.self, BottleCommand.self, StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
-            EvalCommand.self, CDPCommand.self, LogsCommand.self,
+            EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
     )
@@ -844,6 +844,55 @@ struct DownloadsCommand: AsyncParsableCommand {
 }
 
 // MARK: - debug channels
+
+struct BenchmarkCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "benchmark",
+        abstract: "Run Sevoflurane's opt-in Library, Store, and Friends profile scenario.",
+    )
+
+    @Option(name: .long, help: "Warm iterations per target (1...10).") var iterations = 5
+    @Option(name: .long, help: "One target: library, store, or friends.") var target: String?
+    @Option(
+        name: .long,
+        help: "Busy threads standing in for a running game while the scenario is timed.",
+    ) var load = 0
+    @Option(
+        name: .long,
+        help: "Scheduling class of the load threads: background, utility, default, or userInitiated.",
+    ) var qos = "default"
+
+    func run() async throws {
+        let count = min(max(iterations, 1), 10)
+        if let target, !["library", "store", "friends"].contains(target) {
+            Sevo.printError("benchmark target must be library, store, or friends")
+            throw SevoExit.badInvocation
+        }
+        guard ["background", "utility", "default", "userInitiated"].contains(qos) else {
+            Sevo.printError("qos must be background, utility, default, or userInitiated")
+            throw SevoExit.badInvocation
+        }
+        let path = "/benchmark/smoke?iterations=\(count)&load=\(max(load, 0))&qos=\(qos)"
+            + (target.map { "&target=\($0)" } ?? "")
+        // Worst case is every step timing out: three targets, 12 s each,
+        // plus the run's own setup.
+        let timeout = TimeInterval(30 + count * (target == nil ? 3 : 1) * 15)
+        guard let reply = await AppControl.postReply(path, timeout: timeout) else {
+            Sevo.printError("benchmark unavailable — is Sevoflurane running?")
+            throw SevoExit.unreachable
+        }
+        let text = String(decoding: reply.body, as: UTF8.self)
+        guard (200 ..< 300).contains(reply.status) else {
+            Sevo.printError(
+                reply.status == 403
+                    ? "benchmarks are off — launch Sevoflurane with SEVO_ENABLE_BENCHMARKS=1"
+                    : "benchmark failed (\(reply.status)): \(text)",
+            )
+            throw SevoExit.unreachable
+        }
+        print(text)
+    }
+}
 
 struct EvalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

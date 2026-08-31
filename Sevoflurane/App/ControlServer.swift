@@ -41,12 +41,26 @@ final class ControlServer {
             return Self.logTail(query: request.query)
         case ("GET", "/windows"):
             return windows()
+        case ("GET", "/benchmark/browser-views"):
+            return Self.json(host.storeBrowserViewStatuses())
         case ("POST", "/steam/show"):
             host.showSteam()
             return Self.json(#"{"ok":true,"note":"showing Steam; poll /windows"}"#)
         case ("POST", "/steam/close"):
             host.closeSteam()
             return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
+        case ("POST", "/benchmark/smoke"):
+            guard ProcessInfo.processInfo.environment["SEVO_ENABLE_BENCHMARKS"] == "1" else {
+                return .error(403, "set SEVO_ENABLE_BENCHMARKS=1 before launching Sevoflurane")
+            }
+            do {
+                let report = try await host.runSmokeBenchmark(
+                    options: SteamWebHost.BenchmarkOptions(query: request.query),
+                )
+                return Self.json(report)
+            } catch {
+                return .error(409, error.localizedDescription)
+            }
         case ("POST", "/client/restart"):
             supervisor.restartNow()
             return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
@@ -118,4 +132,14 @@ final class ControlServer {
     private nonisolated static func json(_ body: String) -> HTTPResponse {
         .ok(Data(body.utf8), type: "application/json")
     }
+
+    private nonisolated static func json(_ value: some Encodable) -> HTTPResponse {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value) else {
+            return .error(500, "could not encode response")
+        }
+        return .ok(data, type: "application/json")
+    }
+
 }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import WebKit
 
 /// Mirrors the bottled client's authenticated web session into the app's
@@ -55,13 +56,20 @@ enum WebSessionCookies {
     /// store, replacing what was there. Returns how many landed.
     @discardableResult
     static func syncNow() async -> Int {
-        guard let bridge, let raw = await bridge.clientCookies() else { return 0 }
+        // One CDP read plus one network-process round trip per cookie, all
+        // before a browser view may load: the interval is that critical path.
+        let mirror = PerfProbe.bridge.beginInterval("CookieMirror")
+        guard let bridge, let raw = await bridge.clientCookies() else {
+            PerfProbe.bridge.endInterval("CookieMirror", mirror, "applied=0")
+            return 0
+        }
         let store = WKWebsiteDataStore.default().httpCookieStore
         var applied = 0
         for cookie in raw.compactMap(httpCookie) {
             await store.setCookie(cookie)
             applied += 1
         }
+        PerfProbe.bridge.endInterval("CookieMirror", mirror, "applied=\(applied, privacy: .public)")
         if applied > 0 {
             EventLog.shared.log(.page, "web session: \(applied) client cookies mirrored")
         }

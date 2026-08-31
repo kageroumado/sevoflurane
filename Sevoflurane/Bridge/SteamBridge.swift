@@ -563,7 +563,7 @@ actor SteamBridge {
                 self.expireEval(eid)
             }
         }
-        PerfProbe.bridge.endInterval("PageEval", eval, "ok=\(result.ok)")
+        PerfProbe.bridge.endInterval("PageEval", eval, "eval=\(eid),ok=\(result.ok)")
         return result
     }
 

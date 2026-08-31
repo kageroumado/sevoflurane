@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The mechanics of the bottled client's life: probing, launching, and the
 /// kill ladder. Policy lives with the callers — the app's ``ClientSupervisor``
@@ -180,6 +181,12 @@ nonisolated enum ClientLifecycle {
         guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
             return []
         }
+        // One DevTools session per popup target, in series — the interval
+        // is what a busy CEF turns that into.
+        let hide = PerfProbe.supervisor.beginInterval(
+            "PopupHide", "targets=\(targets.count, privacy: .public)",
+        )
+        defer { PerfProbe.supervisor.endInterval("PopupHide", hide) }
         let script = """
         (function () {
           if (document.visibilityState !== "visible") return "";

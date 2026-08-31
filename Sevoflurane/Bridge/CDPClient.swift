@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// One connection to the bottled client's `SharedJSContext` over the Chrome
 /// DevTools Protocol: `evaluate()` plus the `__sevo` binding's push events.
@@ -61,9 +62,21 @@ actor CDPClient {
         socket.maximumMessageSize = 64 * 1024 * 1024
         task = socket
         socket.resume()
+        // Pushes are delivered on their own task, in order, so the receive
+        // loop never waits on the bridge: a reply to a pending call must not
+        // queue behind a push whose handler is busy elsewhere.
+        let (pushes, pushContinuation) = AsyncStream.makeStream(of: String.self)
+        pushSink = pushContinuation
+        Task { [onPush] in
+            for await payload in pushes {
+                await onPush(payload)
+            }
+        }
         Task { await pump() }
         _ = try await send(method: "Runtime.enable", params: [:])
     }
+
+    private var pushSink: AsyncStream<String>.Continuation?
 
     func disconnect() {
         markClosed()
@@ -129,6 +142,10 @@ actor CDPClient {
         guard let text = String(data: data, encoding: .utf8) else {
             throw Failure.badReply("unencodable request")
         }
+        let call = PerfProbe.bridge.beginInterval(
+            "CDPCall", id: PerfProbe.bridge.makeSignpostID(), "\(method, privacy: .public)",
+        )
+        defer { PerfProbe.bridge.endInterval("CDPCall", call, "\(method, privacy: .public)") }
         let raw: String? = try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
             task.send(.string(text)) { error in
@@ -171,7 +188,7 @@ actor CDPClient {
                       let params = reply["params"] as? [String: Any],
                       params["name"] as? String == "__sevo",
                       let payload = params["payload"] as? String {
-                await onPush(payload)
+                pushSink?.yield(payload)
             }
         }
     }
@@ -182,6 +199,8 @@ actor CDPClient {
             continuation.resume(throwing: Failure.closed)
         }
         pending.removeAll()
+        pushSink?.finish()
+        pushSink = nil
         task?.cancel()
         task = nil
     }
