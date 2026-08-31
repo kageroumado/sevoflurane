@@ -13,6 +13,8 @@ struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
+    /// Stood down by the Storage pane's uninstall; `nil` in previews.
+    var supervisor: ClientSupervisor?
     @State private var category: SettingsCategory = .general
     @State private var searchText = ""
     @State private var highlighted: String?
@@ -32,6 +34,7 @@ struct SettingsView: View {
                 graphics: graphics,
                 storage: storage,
                 highlighted: highlighted,
+                supervisor: supervisor,
             )
         }
         .navigationSplitViewStyle(.balanced)
@@ -222,6 +225,7 @@ private struct SettingsPane: View {
     let graphics: GraphicsStore
     let storage: StorageStore
     let highlighted: String?
+    var supervisor: ClientSupervisor?
 
     var body: some View {
         Group {
@@ -231,6 +235,7 @@ private struct SettingsPane: View {
             case .storage:
                 StorageSettings(
                     store: storage, provisioner: provisioner, highlighted: highlighted,
+                    supervisor: supervisor,
                 )
             case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)

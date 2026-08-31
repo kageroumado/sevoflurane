@@ -78,12 +78,23 @@ final class StorageStore {
     }
 
     /// Everything this app made, and optionally the bottle it made it in.
-    func uninstall(includingBottle: Bool, provisioner: Provisioner) async {
+    /// The caller quits the app when this returns — the bundle is already in
+    /// the Trash by then.
+    func uninstall(
+        includingBottle: Bool, provisioner: Provisioner, supervisor: ClientSupervisor?,
+    ) async {
         guard isLive, !isUninstalling else { return }
         isUninstalling = true
         defer { isUninstalling = false }
-        // The bottle cannot be taken while wine still holds files open in it.
-        await ClientLifecycle.stopAll(gracePolls: 15)
+        // Supervision stands down before anything stops: the restart ladder
+        // reads a stopped client as a crash and relaunches Steam into the
+        // bottle being trashed. The quit path already does the whole
+        // sequence — loop down, then every bottle process.
+        if let supervisor {
+            await supervisor.shutdownForQuit()
+        } else {
+            await ClientLifecycle.stopAll(gracePolls: 15)
+        }
         let ours = ["engines", "toolkits", "shadow", "logs"]
         let bottleOnly = ["bottle", "client", "games", "caches"]
         for entry in entries where ours.contains(entry.id)
@@ -93,8 +104,23 @@ final class StorageStore {
         if includingBottle {
             try? FileManager.default.trashItem(at: SteamBottle.root, resultingItemURL: nil)
         }
+        // The web session (the GPTk page's Apple sign-in) and the app's own
+        // caches live outside the inventory's roots.
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let library = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library")
+            for path in ["WebKit/\(bundleID)", "Caches/\(bundleID)", "HTTPStorages/\(bundleID)"] {
+                try? FileManager.default.trashItem(
+                    at: library.appendingPathComponent(path), resultingItemURL: nil,
+                )
+            }
+        }
         try? provisioner.setOpenAtLogin(false)
         Preferences.reset()
         entries = StorageInventory.entries()
+        // Last, so everything the app would need to run again is already
+        // gone: the bundle itself. The running process keeps its image; the
+        // caller's terminate ends it.
+        try? FileManager.default.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
     }
 }

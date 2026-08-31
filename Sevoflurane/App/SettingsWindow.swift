@@ -9,9 +9,11 @@ import SwiftUI
 @MainActor
 final class SettingsWindow: NSObject, NSToolbarDelegate {
     private let provisioner: Provisioner
+    private weak var supervisor: ClientSupervisor?
     private var window: NSWindow?
 
-    init(provisioner: Provisioner) {
+    init(provisioner: Provisioner, supervisor: ClientSupervisor? = nil) {
+        self.supervisor = supervisor
         self.provisioner = provisioner
     }
 
@@ -32,6 +34,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         let controller = NSHostingController(
             rootView: SettingsView(
                 provisioner: provisioner, graphics: .live(), storage: .live(),
+                supervisor: supervisor,
             ),
         )
         let window = NSWindow(contentViewController: controller)

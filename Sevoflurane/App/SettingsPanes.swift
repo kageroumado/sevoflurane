@@ -244,6 +244,8 @@ struct StorageSettings: View {
     let store: StorageStore
     let provisioner: Provisioner
     let highlighted: String?
+    /// The supervisor to stand down before the wipe; `nil` in previews.
+    var supervisor: ClientSupervisor?
     @State private var confirmingUninstall = false
     @State private var uninstallBottle = false
 
@@ -302,7 +304,8 @@ struct StorageSettings: View {
             Text("Steam is stopped first. App data means the engines, the toolkits "
                 + "and this app's settings. The bottle holds the Steam client and "
                 + "every installed game — \(Self.size(bottleBytes)) — and everything "
-                + "goes to the Trash either way.")
+                + "goes to the Trash either way. When it finishes, the app moves "
+                + "itself to the Trash and quits.")
         }
     }
 
@@ -335,7 +338,10 @@ struct StorageSettings: View {
     private func uninstall(includingBottle: Bool) {
         uninstallBottle = includingBottle
         Task(name: "Uninstall") {
-            await store.uninstall(includingBottle: includingBottle, provisioner: provisioner)
+            await store.uninstall(
+                includingBottle: includingBottle, provisioner: provisioner,
+                supervisor: supervisor,
+            )
             NSApp.terminate(nil)
         }
     }
