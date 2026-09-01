@@ -441,5 +441,18 @@ struct MenuBarView: View {
         }
         .buttonStyle(ProminentFillStyle())
         .keyboardShortcut("o")
+        .disabled(!canOpenSteam)
+        .opacity(canOpenSteam ? 1 : 0.5)
+    }
+
+    /// Whether a click on Open Steam would actually put Steam on screen.
+    /// While the client is coming up, restarting, or crash-looped, the
+    /// health card above already says what's happening — an enabled button
+    /// under it would promise a window that can't appear.
+    private var canOpenSteam: Bool {
+        switch supervisor.health {
+        case .starting, .launching, .restarting, .gaveUp: false
+        case .healthy, .waitingForSignIn, .degraded, .paused: true
+        }
     }
 }
