@@ -136,11 +136,36 @@ nonisolated enum BottleGraphics {
     }
 
     /// The renderer this game must run under, when that is not what the
-    /// bottle is set to — the client has to be restarted to change it.
+    /// running client can give it. Games inherit the client's environment,
+    /// so a per-game pin and a changed bottle default both mean a restart —
+    /// the comparison is against what the client *booted* with, never the
+    /// stored selection.
     static func rendererNeedingRestart(forApp appID: Int) -> Renderer? {
-        guard let wanted = overrides()[appID]?.renderer,
-              wanted != currentSelection().renderer else { return nil }
-        return wanted
+        let wanted = overrides()[appID]?.renderer ?? currentSelection().renderer
+        let booted = bootedSelection()?.renderer ?? currentSelection().renderer
+        return wanted == booted ? nil : wanted
+    }
+
+    // MARK: - What the client booted with
+
+    private static let bootedKey = "bootedGraphics"
+
+    /// Called at every client spawn: the selection games will actually
+    /// inherit, whatever Settings says later.
+    static func recordBootedSelection() {
+        let selection = currentSelection()
+        Preferences.shared.set(
+            "\(selection.renderer.rawValue)|\(selection.msync ? "1" : "0")",
+            forKey: bootedKey,
+        )
+    }
+
+    static func bootedSelection() -> (renderer: Renderer, msync: Bool)? {
+        guard let stored = Preferences.shared.string(forKey: bootedKey) else { return nil }
+        let parts = stored.split(separator: "|")
+        guard let renderer = parts.first.flatMap({ Renderer(rawValue: String($0)) })
+        else { return nil }
+        return (renderer, parts.count > 1 && parts[1] == "1")
     }
 
     private static let overridesKey = "rendererOverrides"

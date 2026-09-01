@@ -293,6 +293,7 @@ private struct CopyButton: View {
 
 struct GraphicsSettings: View {
     let store: GraphicsStore
+    var steam: SteamActions?
     let highlighted: String?
     @State private var showingRendererHelp = false
     @State private var d3dMetalError: String?
@@ -342,9 +343,25 @@ struct GraphicsSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 .highlightable(id: "graphics.gpu", highlighted: highlighted)
+                if let booted = BottleGraphics.bootedSelection()?.renderer,
+                   booted != store.selection.renderer {
+                    HStack {
+                        Text("Steam is running on \(booted.label) — games get "
+                            + "\(store.selection.renderer.label) once it restarts. "
+                            + "Launching from the menu bar restarts it by itself.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        if let steam {
+                            Button("Restart Steam") { steam.restartClient() }
+                        }
+                    }
+                }
             } footer: {
-                Text("Steam's own interface never touches Direct3D — changes "
-                    + "take effect the next time a game starts.")
+                Text("Steam's own interface never touches Direct3D — games "
+                    + "inherit the client's setup, so a change lands with the "
+                    + "next Steam restart.")
             }
             d3dMetalSection
         }

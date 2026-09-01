@@ -228,6 +228,9 @@ nonisolated enum ClientLifecycle {
         }
         do {
             try process.run()
+            // Games inherit this environment; remember what it was so a
+            // later selection change knows a restart is owed.
+            BottleGraphics.recordBootedSelection()
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
         }

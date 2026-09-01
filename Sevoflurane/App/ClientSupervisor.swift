@@ -564,7 +564,7 @@ final class ClientSupervisor {
         host.dismissWindows()
 
         health = .restarting("checking for a running client")
-        await ClientLifecycle.stopAll(gracePolls: 8) { phase in
+        await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true) { phase in
             health = .restarting(phase)
         }
 

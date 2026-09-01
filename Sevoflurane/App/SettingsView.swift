@@ -315,7 +315,8 @@ private struct SettingsPane: View {
                     provisioner: provisioner, store: storage, steam: steam,
                     highlighted: highlighted, supervisor: supervisor,
                 )
-            case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
+            case .graphics:
+                GraphicsSettings(store: graphics, steam: steam, highlighted: highlighted)
             case .engine:
                 EngineSettings(
                     store: engine, graphics: graphics, compatibility: compatibility,
