@@ -7,11 +7,26 @@ import UniformTypeIdentifiers
 
 struct GeneralSettings: View {
     let provisioner: Provisioner
+    let store: StorageStore
     let highlighted: String?
+    /// The supervisor to stand down before an uninstall; `nil` in previews.
+    var supervisor: ClientSupervisor?
     @State private var openAtLogin = false
     @State private var cliInstalled = false
     @State private var cliBusy = false
     @State private var cliError: String?
+    @State private var agents: [AgentRow] = []
+    @State private var confirmingUninstall = false
+
+    /// One detected AI assistant: its registration state, and the in-flight
+    /// and failure state of the last flip.
+    private struct AgentRow: Identifiable {
+        let harness: AgentIntegration.Harness
+        var registered: Bool
+        var busy = false
+        var error: String?
+        var id: String { harness.id }
+    }
 
     var body: some View {
         Form {
@@ -31,48 +46,231 @@ struct GeneralSettings: View {
                 .highlightable(id: "general.openAtLogin", highlighted: highlighted)
             }
             Section {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Command-line tool")
-                        Text(cliInstalled
-                            ? "Installed at /usr/local/bin/sevo. Claude apps are "
-                            + "connected over MCP where found; point any other "
-                            + "agent at \u{201C}\(AgentIntegration.manualCommand)\u{201D}."
-                            : "Puts sevo on your PATH and connects Claude to "
-                            + "Steam over MCP. Asks for an administrator "
-                            + "password once.")
+                cliRow
+                if cliInstalled {
+                    if agents.isEmpty {
+                        Text("No supported AI assistants detected.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                        if let cliError {
-                            Text(cliError).font(.callout).foregroundStyle(.orange)
+                    } else {
+                        ForEach($agents) { $row in
+                            agentRow($row)
                         }
                     }
-                    Spacer()
-                    Button(cliInstalled ? "Remove" : "Install…") {
-                        cliBusy = true
-                        Task {
-                            if cliInstalled {
-                                await AgentIntegration.remove()
-                                cliError = nil
-                            } else {
-                                cliError = await AgentIntegration.install()
-                            }
-                            cliInstalled = AgentIntegration.isCLIInstalled
-                            cliBusy = false
-                        }
-                    }
-                    .disabled(cliBusy)
+                    manualCommandRow
                 }
-                .highlightable(id: "general.cli", highlighted: highlighted)
             } header: {
                 Text("Automation")
+            } footer: {
+                if cliInstalled {
+                    Text("Each switch writes one entry into that assistant's "
+                        + "own configuration and nothing else; turning it off "
+                        + "removes exactly that entry.")
+                }
             }
+            uninstallSection
         }
         .formStyle(.grouped)
         .onAppear {
             openAtLogin = provisioner.openAtLogin
             cliInstalled = AgentIntegration.isCLIInstalled
+            refreshAgents()
         }
+        .task { await store.measure() }
+    }
+
+    // MARK: - Automation
+
+    private var cliRow: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Command-line tool")
+                Text(cliInstalled
+                    ? "Installed at /usr/local/bin/sevo — a link into the "
+                    + "app, so updates never ask again. Connect assistants "
+                    + "below."
+                    : "Puts sevo on your PATH so AI assistants can drive "
+                    + "Steam over MCP. Asks for an administrator password "
+                    + "once.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let cliError {
+                    Text(cliError).font(.callout).foregroundStyle(.orange)
+                }
+            }
+            Spacer()
+            if cliBusy {
+                ProgressView().controlSize(.small)
+            }
+            Button(cliInstalled ? "Remove" : "Install…") {
+                cliBusy = true
+                Task {
+                    if cliInstalled {
+                        await AgentIntegration.remove()
+                        cliError = nil
+                    } else {
+                        cliError = await AgentIntegration.installCLI()
+                    }
+                    cliInstalled = AgentIntegration.isCLIInstalled
+                    refreshAgents()
+                    cliBusy = false
+                }
+            }
+            .disabled(cliBusy)
+        }
+        .highlightable(id: "general.cli", highlighted: highlighted)
+    }
+
+    private func agentRow(_ row: Binding<AgentRow>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: Theme.Space.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.wrappedValue.harness.displayName)
+                    Text(row.wrappedValue.harness.configDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if row.wrappedValue.busy {
+                    ProgressView().controlSize(.small)
+                }
+                Toggle("", isOn: Binding(
+                    get: { row.wrappedValue.registered },
+                    set: { enabled in flip(row, to: enabled) },
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(row.wrappedValue.busy)
+            }
+            if let error = row.wrappedValue.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .highlightable(id: "general.agents", highlighted: highlighted)
+    }
+
+    /// For every agent that speaks MCP but isn't in the list: the command,
+    /// ready to paste.
+    private var manualCommandRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Anything else that speaks MCP")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: Theme.Space.sm) {
+                Text(AgentIntegration.manualCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                CopyButton(text: AgentIntegration.manualCommand)
+            }
+            .padding(Theme.Space.sm)
+            .background(.quaternary.opacity(0.6), in: Theme.innerShape)
+        }
+    }
+
+    private func flip(_ row: Binding<AgentRow>, to enabled: Bool) {
+        row.wrappedValue.busy = true
+        row.wrappedValue.error = nil
+        let harness = row.wrappedValue.harness
+        Task(name: "\(enabled ? "Connect" : "Disconnect") \(harness.displayName)") {
+            let failure = enabled
+                ? await AgentIntegration.register(harness)
+                : await AgentIntegration.unregister(harness)
+            row.wrappedValue.error = failure
+            row.wrappedValue.registered = AgentIntegration.isRegistered(harness)
+            row.wrappedValue.busy = false
+        }
+    }
+
+    private func refreshAgents() {
+        agents = AgentIntegration.detectedHarnesses.map {
+            AgentRow(harness: $0, registered: AgentIntegration.isRegistered($0))
+        }
+    }
+
+    // MARK: - Uninstall
+
+    private var uninstallSection: some View {
+        Section {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Uninstall Sevoflurane").font(.headline)
+                    Text("Removes what this app installed — the sevo command "
+                        + "and its assistant connections included. Your Steam "
+                        + "account, and anything you keep, are untouched.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
+                    .disabled(store.isUninstalling)
+            }
+            .highlightable(id: "general.uninstall", highlighted: highlighted)
+        }
+        .confirmationDialog(
+            "Uninstall Sevoflurane?",
+            isPresented: $confirmingUninstall,
+            titleVisibility: .visible,
+        ) {
+            Button("Move App Data to Trash", role: .destructive) {
+                uninstall(includingBottle: false)
+            }
+            Button("Also Move the Bottle and Games", role: .destructive) {
+                uninstall(includingBottle: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Steam is stopped first. App data means the engines, the toolkits "
+                + "and this app's settings. The bottle holds the Steam client and "
+                + "every installed game — \(StorageSettings.size(bottleBytes)) — and everything "
+                + "goes to the Trash either way. When it finishes, the app moves "
+                + "itself to the Trash and quits.")
+        }
+    }
+
+    private var bottleBytes: Int64 {
+        store.entries
+            .filter { ["bottle", "client", "games", "caches"].contains($0.id) }
+            .map { max(0, $0.bytes) }
+            .reduce(0, +)
+    }
+
+    private func uninstall(includingBottle: Bool) {
+        Task(name: "Uninstall") {
+            await store.uninstall(
+                includingBottle: includingBottle, provisioner: provisioner,
+                supervisor: supervisor,
+            )
+            NSApp.terminate(nil)
+        }
+    }
+}
+
+/// A borderless copy button that flips to a checkmark for a moment after
+/// copying.
+private struct CopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                withAnimation(.easeInOut(duration: 0.3)) { copied = false }
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .foregroundStyle(copied ? Color.green : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy")
     }
 }
 
@@ -311,16 +509,150 @@ private struct RendererHelp: View {
     }
 }
 
+// MARK: - Compatibility
+
+/// The winetricks territory, made legible: the dependencies games commonly
+/// miss as one-click installs, the bottle's DLL overrides, and a door to
+/// Wine's own configuration window.
+struct CompatibilitySettings: View {
+    let store: CompatibilityStore
+    let highlighted: String?
+    @State private var newOverrideDLL = ""
+    @State private var newOverrideMode = BottleDependencies.overrideModes[0]
+
+    var body: some View {
+        Form {
+            dependenciesSection
+            wineToolsSection
+            overridesSection
+        }
+        .formStyle(.grouped)
+        .onAppear { store.refresh() }
+    }
+
+    private var dependenciesSection: some View {
+        Section {
+            ForEach(store.rows) { row in
+                dependencyRow(row)
+            }
+        } header: {
+            Text("Pieces some games are missing")
+        } footer: {
+            Text("Steam installs most of what a game declares it needs; these "
+                + "cover the rest — the same set CrossOver bundles into its "
+                + "Steam bottles. Installing one that's already present is "
+                + "harmless.")
+        }
+        .highlightable(id: "compatibility.dependencies", highlighted: highlighted)
+    }
+
+    private func dependencyRow(_ row: CompatibilityStore.DependencyRow) -> some View {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.dependency.name)
+                Text(row.busy ? (row.phase ?? "working…") : row.dependency.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = row.error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: Theme.Space.sm)
+            if row.busy {
+                ProgressView().controlSize(.small)
+            } else if row.installed {
+                Label("Installed", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                    .labelStyle(.titleAndIcon)
+            } else {
+                Button("Install \(row.dependency.download)") {
+                    store.install(row.id)
+                }
+            }
+        }
+    }
+
+    private var wineToolsSection: some View {
+        Section {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Wine configuration")
+                    Text("The engine's own settings window: Windows version, "
+                        + "per-application overrides, drives, audio.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Open…") { store.openWineConfiguration() }
+            }
+            .highlightable(id: "compatibility.winecfg", highlighted: highlighted)
+        } header: {
+            Text("Advanced")
+        }
+    }
+
+    private var overridesSection: some View {
+        Section {
+            ForEach(store.overrides) { override in
+                HStack(spacing: Theme.Space.md) {
+                    Text(override.dll)
+                        .font(.system(.body, design: .monospaced))
+                    Spacer()
+                    Text(override.mode)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        store.removeOverride(override)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove the \(override.dll) override")
+                }
+            }
+            HStack(spacing: Theme.Space.md) {
+                TextField("DLL name (e.g. dinput8)", text: $newOverrideDLL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                Picker("", selection: $newOverrideMode) {
+                    ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
+                        Text(mode).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 140)
+                Button("Add") {
+                    store.setOverride(dll: newOverrideDLL, mode: newOverrideMode)
+                    newOverrideDLL = ""
+                }
+                .disabled(newOverrideDLL.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let error = store.overrideError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
+        } header: {
+            Text("DLL overrides")
+        } footer: {
+            Text("Which copy of a system DLL games get: the one installed in "
+                + "the bottle (native), Wine's own (builtin), or both in "
+                + "order. A game that wants a DLL Wine half-implements — a "
+                + "guide will usually name it — gets it as native. Takes "
+                + "effect the next time a game starts.")
+        }
+        .highlightable(id: "compatibility.overrides", highlighted: highlighted)
+    }
+}
+
 // MARK: - Storage
 
 struct StorageSettings: View {
     let store: StorageStore
-    let provisioner: Provisioner
     let highlighted: String?
-    /// The supervisor to stand down before the wipe; `nil` in previews.
-    var supervisor: ClientSupervisor?
-    @State private var confirmingUninstall = false
-    @State private var uninstallBottle = false
 
     var body: some View {
         Form {
@@ -341,45 +673,12 @@ struct StorageSettings: View {
                 }
             } footer: {
                 Text("Anything removed here goes to the Trash, so a wrong click "
-                    + "costs a drag back rather than a re-download.")
-            }
-            Section {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Uninstall Sevoflurane").font(.headline)
-                        Text("Removes what this app installed. Your Steam account, "
-                            + "and anything you keep, are untouched.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
-                        .disabled(store.isUninstalling)
-                }
-                .highlightable(id: "storage.uninstall", highlighted: highlighted)
+                    + "costs a drag back rather than a re-download. Uninstalling "
+                    + "the app itself lives in General.")
             }
         }
         .formStyle(.grouped)
         .task { await store.measure() }
-        .confirmationDialog(
-            "Uninstall Sevoflurane?",
-            isPresented: $confirmingUninstall,
-            titleVisibility: .visible,
-        ) {
-            Button("Move App Data to Trash", role: .destructive) {
-                uninstall(includingBottle: false)
-            }
-            Button("Also Move the Bottle and Games", role: .destructive) {
-                uninstall(includingBottle: true)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Steam is stopped first. App data means the engines, the toolkits "
-                + "and this app's settings. The bottle holds the Steam client and "
-                + "every installed game — \(Self.size(bottleBytes)) — and everything "
-                + "goes to the Trash either way. When it finishes, the app moves "
-                + "itself to the Trash and quits.")
-        }
     }
 
     /// Sizes as Steam accounts for them, so a row here matches what the
@@ -399,24 +698,6 @@ struct StorageSettings: View {
         }
         .padding(.leading, 28)
         .padding(.vertical, 4)
-    }
-
-    private var bottleBytes: Int64 {
-        store.entries
-            .filter { ["bottle", "client", "games", "caches"].contains($0.id) }
-            .map { max(0, $0.bytes) }
-            .reduce(0, +)
-    }
-
-    private func uninstall(includingBottle: Bool) {
-        uninstallBottle = includingBottle
-        Task(name: "Uninstall") {
-            await store.uninstall(
-                includingBottle: includingBottle, provisioner: provisioner,
-                supervisor: supervisor,
-            )
-            NSApp.terminate(nil)
-        }
     }
 
     private func row(_ entry: StorageInventory.Entry) -> some View {
@@ -447,7 +728,7 @@ struct StorageSettings: View {
         .highlightable(id: "storage.\(entry.id)", highlighted: highlighted)
     }
 
-    private static func size(_ bytes: Int64) -> String {
+    fileprivate static func size(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

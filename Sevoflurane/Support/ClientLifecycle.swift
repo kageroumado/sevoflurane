@@ -281,6 +281,60 @@ nonisolated enum ClientLifecycle {
         return result.status == 0
     }
 
+    // MARK: - Arbitrary programs
+
+    /// Runs one Windows program inside the Steam bottle to completion — a
+    /// dependency installer, a `reg` edit — through the same engine
+    /// invocation as the client itself, so the renderer environment and
+    /// msync ride along. The program shares the bottle with a running
+    /// client; `stopAll` and the supervisor's restart ladder would take it
+    /// down with the client, so long installers are best run while Steam
+    /// is healthy or stopped.
+    @discardableResult
+    static func runInBottle(
+        _ program: [String],
+        timeout: Duration = .seconds(600),
+    ) async -> (status: Int32?, output: String) {
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name, wait: .children, program: program,
+        )
+        return await Subprocess.run(
+            invocation.executable.path,
+            invocation.arguments,
+            environment: invocation.environment,
+            capture: .combined,
+            timeout: timeout,
+        )
+    }
+
+    /// Starts one windowed Windows program inside the Steam bottle — winecfg,
+    /// the control panel — and returns as soon as it's spawned, because a
+    /// window the user is going to interact with has no useful exit to wait
+    /// for. `@concurrent` so the spawn never runs on the calling actor.
+    @concurrent
+    static func launchInBottle(_ program: [String]) async {
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name, wait: .none, program: program,
+        )
+        let process = Process()
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        if let environment = invocation.environment {
+            process.environment = environment
+        }
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let name = program.first ?? "?"
+        process.terminationHandler = { finished in
+            log("\(name) exited (status \(finished.terminationStatus))")
+        }
+        do {
+            try process.run()
+        } catch {
+            log("\(name) failed to start: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Update pinning
 
     /// Whether `steam.cfg` currently inhibits the client's self-updater.

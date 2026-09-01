@@ -13,7 +13,8 @@ struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
-    /// Stood down by the Storage pane's uninstall; `nil` in previews.
+    var compatibility: CompatibilityStore = .live()
+    /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
     @State private var category: SettingsCategory = .general
     @State private var searchText = ""
@@ -33,6 +34,7 @@ struct SettingsView: View {
                 provisioner: provisioner,
                 graphics: graphics,
                 storage: storage,
+                compatibility: compatibility,
                 highlighted: highlighted,
                 supervisor: supervisor,
             )
@@ -46,6 +48,7 @@ struct SettingsView: View {
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case general
     case graphics
+    case compatibility
     case storage
     case repair
     case about
@@ -58,6 +61,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .graphics: "Graphics"
+        case .compatibility: "Compatibility"
         case .storage: "Storage"
         case .repair: "Repair"
         case .about: "About"
@@ -68,6 +72,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape.fill"
         case .graphics: "cpu.fill"
+        case .compatibility: "puzzlepiece.extension.fill"
         case .storage: "internaldrive.fill"
         case .repair: "wrench.and.screwdriver.fill"
         case .about: "info.circle.fill"
@@ -78,11 +83,31 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     var searchableItems: [SearchableSetting] {
         switch self {
         case .general:
-            [SearchableSetting(
-                id: "general.openAtLogin",
-                title: "Open at login",
-                keywords: ["login", "startup", "start", "launch", "menu bar", "automatic"],
-            )]
+            [
+                SearchableSetting(
+                    id: "general.openAtLogin",
+                    title: "Open at login",
+                    keywords: ["login", "startup", "start", "launch", "menu bar", "automatic"],
+                ),
+                SearchableSetting(
+                    id: "general.cli",
+                    title: "Command-line tool",
+                    keywords: ["cli", "sevo", "command", "terminal", "path"],
+                ),
+                SearchableSetting(
+                    id: "general.agents",
+                    title: "AI assistants (MCP)",
+                    keywords: [
+                        "mcp", "agent", "assistant", "ai", "claude", "codex",
+                        "chatgpt", "hermes", "automation",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "general.uninstall",
+                    title: "Uninstall Sevoflurane",
+                    keywords: ["uninstall", "remove", "delete", "reset", "clean"],
+                ),
+            ]
         case .graphics:
             [
                 SearchableSetting(
@@ -110,6 +135,29 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
             ]
+        case .compatibility:
+            [
+                SearchableSetting(
+                    id: "compatibility.dependencies",
+                    title: "Missing game dependencies",
+                    keywords: [
+                        "dependency", "vcruntime", "msvcp140", "vcredist", "vc++",
+                        "redist", "fonts", "corefonts", "directx", "d3dx9",
+                        "xaudio", "xact", "japanese", "chinese", "korean",
+                        "winetricks", "missing", "dll",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "compatibility.winecfg",
+                    title: "Wine configuration",
+                    keywords: ["wine", "winecfg", "windows version", "configuration"],
+                ),
+                SearchableSetting(
+                    id: "compatibility.overrides",
+                    title: "DLL overrides",
+                    keywords: ["dll", "override", "native", "builtin", "library"],
+                ),
+            ]
         case .storage:
             [
                 SearchableSetting(
@@ -119,11 +167,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "storage", "space", "disk", "size", "games", "cache",
                         "bottle", "engine", "clean", "free",
                     ],
-                ),
-                SearchableSetting(
-                    id: "storage.uninstall",
-                    title: "Uninstall Sevoflurane",
-                    keywords: ["uninstall", "remove", "delete", "reset", "clean"],
                 ),
             ]
         case .repair:
@@ -224,19 +267,22 @@ private struct SettingsPane: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
+    let compatibility: CompatibilityStore
     let highlighted: String?
     var supervisor: ClientSupervisor?
 
     var body: some View {
         Group {
             switch category {
-            case .general: GeneralSettings(provisioner: provisioner, highlighted: highlighted)
-            case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
-            case .storage:
-                StorageSettings(
-                    store: storage, provisioner: provisioner, highlighted: highlighted,
+            case .general:
+                GeneralSettings(
+                    provisioner: provisioner, store: storage, highlighted: highlighted,
                     supervisor: supervisor,
                 )
+            case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
+            case .compatibility:
+                CompatibilitySettings(store: compatibility, highlighted: highlighted)
+            case .storage: StorageSettings(store: storage, highlighted: highlighted)
             case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)
             }

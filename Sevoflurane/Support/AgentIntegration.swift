@@ -4,14 +4,18 @@ import Foundation
 /// Puts the bundled `sevo` on PATH and registers its MCP server with the AI
 /// agents present on this machine (`Docs/release-readiness.md` §D). Always
 /// explicit opt-in — the wizard's Options toggle or Settings › General —
-/// and nothing is written for an agent that isn't installed; agents with no
-/// stable config surface get shown the command instead.
+/// and each agent is its own switch: nothing is written for an agent that
+/// isn't installed, and agents with no stable config surface get shown the
+/// command instead.
 @MainActor
 enum AgentIntegration {
-    static let symlinkPath = "/usr/local/bin/sevo"
+    nonisolated static let symlinkPath = "/usr/local/bin/sevo"
 
     /// What a user pastes into any other agent's MCP configuration.
-    static let manualCommand = "\(symlinkPath) mcp"
+    nonisolated static let manualCommand = "\(symlinkPath) mcp"
+
+    /// The name the server registers under everywhere.
+    nonisolated static let serverName = "sevo"
 
     static var bundledCLI: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
@@ -25,11 +29,14 @@ enum AgentIntegration {
         return FileManager.default.fileExists(atPath: destination)
     }
 
+    // MARK: - The CLI symlink
+
     /// Symlinks the CLI into `/usr/local/bin` (root-owned on a stock
-    /// machine, so this asks for an administrator password once) and
-    /// registers the MCP server with every agent found. Answers a failure
-    /// description, or `nil` when the link landed.
-    static func install() async -> String? {
+    /// machine, so this asks for an administrator password once). A symlink
+    /// rather than a copy so app updates never need the password again: the
+    /// link's target is the bundle path, which outlives any one version.
+    /// Answers a failure description, or `nil` when the link landed.
+    static func installCLI() async -> String? {
         let cli = bundledCLI.path
         guard FileManager.default.fileExists(atPath: cli) else {
             return "the bundled sevo binary is missing"
@@ -39,15 +46,27 @@ enum AgentIntegration {
             return failure
         }
         EventLog.enqueue(.app, "sevo CLI installed at \(symlinkPath)")
-        await registerAgents()
         return nil
     }
 
-    /// Unregisters the agents and takes the symlink away. The uninstall
+    /// The wizard's one-checkbox path: the symlink, then every agent found.
+    static func install() async -> String? {
+        if let failure = await installCLI() {
+            return failure
+        }
+        for harness in Harness.allCases where isDetected(harness) {
+            _ = await register(harness)
+        }
+        return nil
+    }
+
+    /// Unregisters every agent and takes the symlink away. The uninstall
     /// flow passes `allowAdminPrompt: false` — a second password dialog
     /// mid-uninstall is worse than reporting a leftover link.
     static func remove(allowAdminPrompt: Bool = true) async {
-        await unregisterAgents()
+        for harness in Harness.allCases where isRegistered(harness) {
+            _ = await unregister(harness)
+        }
         guard FileManager.default.fileExists(atPath: symlinkPath)
             || (try? FileManager.default.destinationOfSymbolicLink(atPath: symlinkPath)) != nil
         else { return }
@@ -64,24 +83,134 @@ enum AgentIntegration {
         }
     }
 
-    // MARK: - Agents
+    // MARK: - Harnesses
 
-    private static func registerAgents() async {
-        await registerClaudeCode()
-        registerClaudeDesktop()
+    /// The agents Sevoflurane can register its MCP server with — one row,
+    /// one switch each in Settings › General.
+    enum Harness: String, CaseIterable, Identifiable {
+        case claudeCode
+        case claudeDesktop
+        case codex
+        case hermes
+
+        nonisolated var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .claudeCode: "Claude Code"
+            case .claudeDesktop: "Claude Desktop"
+            case .codex: "Codex / ChatGPT"
+            case .hermes: "Hermes"
+            }
+        }
+
+        /// Where the switch writes — the fine print under each row.
+        var configDescription: String {
+            switch self {
+            case .claudeCode: "registered with the claude CLI (user scope)"
+            case .claudeDesktop: "~/Library/Application Support/Claude/claude_desktop_config.json"
+            case .codex: "~/.codex/config.toml, via the codex CLI"
+            case .hermes: "~/.hermes/config.yaml"
+            }
+        }
     }
 
-    private static func unregisterAgents() async {
-        if let claude = claudeBinary {
-            _ = await Subprocess.run(
-                claude, ["mcp", "remove", "--scope", "user", "sevo"],
-                capture: .combined, timeout: .seconds(30),
+    static func isDetected(_ harness: Harness) -> Bool {
+        switch harness {
+        case .claudeCode:
+            claudeBinary != nil
+        case .claudeDesktop:
+            FileManager.default.fileExists(atPath: claudeDesktopDirectory.path)
+        case .codex:
+            codexBinary != nil
+        case .hermes:
+            FileManager.default.fileExists(atPath: hermesDirectory.path)
+        }
+    }
+
+    static var detectedHarnesses: [Harness] {
+        Harness.allCases.filter(isDetected)
+    }
+
+    /// Whether the agent's config carries the sevo server right now — read
+    /// from the config itself, so state written by an earlier run, another
+    /// copy of the app, or the user's own hand all count.
+    static func isRegistered(_ harness: Harness) -> Bool {
+        switch harness {
+        case .claudeCode:
+            jsonServers(at: claudeCodeConfig)?[serverName] != nil
+        case .claudeDesktop:
+            jsonServers(at: claudeDesktopConfig)?[serverName] != nil
+        case .codex:
+            fileText(codexConfig).map(codexHasServer(in:)) ?? false
+        case .hermes:
+            fileText(hermesConfig).map(hermesHasServer(in:)) ?? false
+        }
+    }
+
+    /// Registers the server with one agent. Answers a failure description
+    /// for the row to show, or `nil` on success.
+    static func register(_ harness: Harness) async -> String? {
+        let failure: String?
+        switch harness {
+        case .claudeCode: failure = await registerClaudeCode()
+        case .claudeDesktop: failure = registerClaudeDesktop()
+        case .codex: failure = await registerCodex()
+        case .hermes: failure = registerHermes()
+        }
+        if failure == nil {
+            EventLog.enqueue(.app, "sevo MCP registered with \(harness.displayName)")
+        } else {
+            EventLog.enqueue(
+                .app, "\(harness.displayName) MCP registration failed: \(failure ?? "")",
             )
         }
-        editClaudeDesktopConfig { servers in
-            servers.removeValue(forKey: "sevo")
+        return failure
+    }
+
+    /// Removes the server from one agent's config, leaving everything else
+    /// in it untouched. Answers a failure description, or `nil`.
+    static func unregister(_ harness: Harness) async -> String? {
+        switch harness {
+        case .claudeCode:
+            guard let claude = claudeBinary else { return nil }
+            let result = await Subprocess.run(
+                claude, ["mcp", "remove", "--scope", "user", serverName],
+                capture: .combined, timeout: .seconds(30),
+            )
+            // "not found" is the state we wanted; only a live refusal counts.
+            if result.status != 0, isRegistered(.claudeCode) {
+                return String(result.output.suffix(120))
+            }
+            return nil
+        case .claudeDesktop:
+            return editJSONServers(at: claudeDesktopConfig, requireExisting: true) { servers in
+                servers.removeValue(forKey: serverName)
+            }
+        case .codex:
+            guard let codex = codexBinary else { return nil }
+            let result = await Subprocess.run(
+                codex, ["mcp", "remove", serverName],
+                capture: .combined, timeout: .seconds(30),
+            )
+            if result.status != 0, isRegistered(.codex) {
+                return String(result.output.suffix(120))
+            }
+            return nil
+        case .hermes:
+            guard let text = fileText(hermesConfig) else { return nil }
+            let updated = removingHermesServer(from: text)
+            guard updated != text else { return nil }
+            do {
+                try updated.write(to: hermesConfig, atomically: true, encoding: .utf8)
+                return nil
+            } catch {
+                return "couldn't write ~/.hermes/config.yaml: \(error.localizedDescription)"
+            }
         }
     }
+
+    // MARK: - Claude Code
 
     private static var claudeBinary: String? {
         let home = NSHomeDirectory()
@@ -93,49 +222,244 @@ enum AgentIntegration {
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    private static func registerClaudeCode() async {
-        guard let claude = claudeBinary else { return }
+    /// User-scope servers live in `~/.claude.json` — read for state, but
+    /// written only through the claude CLI, which owns that file.
+    private static var claudeCodeConfig: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude.json")
+    }
+
+    private static func registerClaudeCode() async -> String? {
+        guard let claude = claudeBinary else { return "claude not found" }
         let result = await Subprocess.run(
-            claude, ["mcp", "add", "--scope", "user", "sevo", symlinkPath, "mcp"],
+            claude, ["mcp", "add", "--scope", "user", serverName, symlinkPath, "mcp"],
             capture: .combined, timeout: .seconds(30),
         )
         if result.status == 0 || result.output.contains("already exists") {
-            EventLog.enqueue(.app, "sevo MCP registered with Claude Code")
-        } else {
-            EventLog.enqueue(.app, "Claude Code MCP registration failed: \(result.output.suffix(120))")
+            return nil
         }
+        return String(result.output.suffix(120))
     }
 
-    /// Merges the server into Claude Desktop's config, preserving every key
-    /// that isn't ours. Only when the app's directory already exists.
-    private static func registerClaudeDesktop() {
-        let wrote = editClaudeDesktopConfig { servers in
-            servers["sevo"] = ["command": symlinkPath, "args": ["mcp"]]
-        }
-        if wrote {
-            EventLog.enqueue(.app, "sevo MCP registered with Claude Desktop")
-        }
-    }
+    // MARK: - Claude Desktop
 
-    @discardableResult
-    private static func editClaudeDesktopConfig(
-        _ edit: (inout [String: Any]) -> Void,
-    ) -> Bool {
-        let directory = FileManager.default.homeDirectoryForCurrentUser
+    private static var claudeDesktopDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Claude")
-        guard FileManager.default.fileExists(atPath: directory.path) else { return false }
-        let config = directory.appendingPathComponent("claude_desktop_config.json")
-        var root = (try? JSONSerialization.jsonObject(
-            with: Data(contentsOf: config))) as? [String: Any] ?? [:]
+    }
+
+    private static var claudeDesktopConfig: URL {
+        claudeDesktopDirectory.appendingPathComponent("claude_desktop_config.json")
+    }
+
+    private static func registerClaudeDesktop() -> String? {
+        editJSONServers(at: claudeDesktopConfig, requireExisting: false) { servers in
+            servers[serverName] = ["command": symlinkPath, "args": ["mcp"]]
+        }
+    }
+
+    /// Merges an edit into a `{"mcpServers": {...}}` config, preserving every
+    /// key that isn't ours. A file that exists but doesn't parse is left
+    /// alone — writing would replace the user's whole config with ours.
+    private static func editJSONServers(
+        at config: URL,
+        requireExisting: Bool,
+        _ edit: (inout [String: Any]) -> Void,
+    ) -> String? {
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: config) {
+            guard let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else {
+                return "\(config.lastPathComponent) isn't valid JSON — not modified"
+            }
+            root = parsed
+        } else if requireExisting {
+            return nil
+        }
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
         edit(&servers)
         root["mcpServers"] = servers
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else { return false }
-        return (try? data.write(to: config)) != nil
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: root, options: [.prettyPrinted, .sortedKeys],
+            )
+            try data.write(to: config)
+            return nil
+        } catch {
+            return "couldn't write \(config.lastPathComponent): \(error.localizedDescription)"
+        }
     }
 
-    // MARK: - Privileged execution
+    private static func jsonServers(at config: URL) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: config),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return nil }
+        return root["mcpServers"] as? [String: Any]
+    }
+
+    // MARK: - Codex / ChatGPT
+
+    /// The Codex CLI and the ChatGPT desktop app share `~/.codex/config.toml`,
+    /// and the app bundles the CLI — so registration goes through
+    /// `codex mcp add`, which parses the TOML properly, whichever is present.
+    private static var codexBinary: String? {
+        let home = NSHomeDirectory()
+        return [
+            "/opt/homebrew/bin/codex",
+            "/usr/local/bin/codex",
+            home + "/.local/bin/codex",
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+        ].first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private static var codexConfig: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/config.toml")
+    }
+
+    nonisolated static func codexHasServer(in toml: String) -> Bool {
+        toml.components(separatedBy: "\n").contains {
+            $0.trimmingCharacters(in: .whitespaces) == "[mcp_servers.\(serverName)]"
+        }
+    }
+
+    private static func registerCodex() async -> String? {
+        guard let codex = codexBinary else { return "codex not found" }
+        let result = await Subprocess.run(
+            codex, ["mcp", "add", serverName, "--", symlinkPath, "mcp"],
+            capture: .combined, timeout: .seconds(30),
+        )
+        if result.status == 0 || isRegistered(.codex) {
+            return nil
+        }
+        return String(result.output.suffix(120))
+    }
+
+    // MARK: - Hermes
+
+    /// Hermes (NousResearch/hermes-agent) reads `~/.hermes/config.yaml`, and
+    /// its CLI has no verb for adding an arbitrary stdio server — so the
+    /// entry is spliced in as a marker-bounded block, with line-scoped
+    /// surgery rather than a parse/serialize round-trip (which would reorder
+    /// and reformat the user's whole file). Removal is recognizer-based, so
+    /// user content survives even a damaged marker block.
+    private static var hermesDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".hermes")
+    }
+
+    private static var hermesConfig: URL {
+        hermesDirectory.appendingPathComponent("config.yaml")
+    }
+
+    nonisolated private static let hermesMarkerStart = "# >>> sevo (managed)"
+    nonisolated private static let hermesMarkerEnd = "# <<< sevo"
+
+    private static func registerHermes() -> String? {
+        let existing = fileText(hermesConfig) ?? ""
+        guard let updated = addingHermesServer(to: existing) else {
+            return "couldn't find a safe place in ~/.hermes/config.yaml — add "
+                + "\u{201C}\(manualCommand)\u{201D} under mcp_servers yourself"
+        }
+        guard updated != existing else { return nil }
+        do {
+            try updated.write(to: hermesConfig, atomically: true, encoding: .utf8)
+            return nil
+        } catch {
+            return "couldn't write ~/.hermes/config.yaml: \(error.localizedDescription)"
+        }
+    }
+
+    nonisolated static func hermesHasServer(in yaml: String) -> Bool {
+        let active = yaml.components(separatedBy: "\n").filter {
+            !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#")
+        }
+        return active.contains { $0.trimmingCharacters(in: .whitespaces) == "\(serverName):" }
+            && active.contains { $0.contains(symlinkPath) }
+    }
+
+    /// Our `mcp_servers` entry at the given child indent, markers included.
+    nonisolated private static func hermesBlock(indent: String) -> String {
+        """
+        \(indent)\(hermesMarkerStart)
+        \(indent)\(serverName):
+        \(indent)  command: "\(symlinkPath)"
+        \(indent)  args: ["mcp"]
+        \(indent)\(hermesMarkerEnd)
+        """
+    }
+
+    /// The config with our server spliced in, or `nil` when there is no safe
+    /// place to put it. Pure text-in, text-out for testability.
+    nonisolated static func addingHermesServer(to text: String) -> String? {
+        if hermesHasServer(in: text) { return text }
+        // A stale block (the entry edited or half-removed) is taken out
+        // first, then reinstalled fresh through the same paths as a clean
+        // config.
+        let cleaned = text.contains(hermesMarkerStart)
+            ? removingHermesServer(from: text) : text
+        var lines = cleaned.components(separatedBy: "\n")
+
+        if let empty = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == "mcp_servers: {}" && !$0.hasPrefix(" ")
+        }) {
+            // Exact-line match only: a nested/indented `mcp_servers: {}`
+            // belongs to something else and must never be rewritten.
+            lines[empty] = "mcp_servers:\n" + hermesBlock(indent: "  ")
+            return lines.joined(separator: "\n")
+        }
+        if let key = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == "mcp_servers:" && !$0.hasPrefix(" ")
+        }) {
+            // A populated map: our block joins it at whatever indent its
+            // existing children use.
+            let child = lines[(key + 1)...].first {
+                let trimmed = $0.trimmingCharacters(in: .whitespaces)
+                return !trimmed.isEmpty && !trimmed.hasPrefix("#")
+            }
+            guard let child, child.hasPrefix(" ") else { return nil }
+            let indent = String(child.prefix { $0 == " " })
+            lines.insert(hermesBlock(indent: indent), at: key + 1)
+            return lines.joined(separator: "\n")
+        }
+        // No top-level mcp_servers map yet: append one.
+        let body = cleaned.isEmpty || cleaned == "\n" ? "" : cleaned.hasSuffix("\n") ? cleaned : cleaned + "\n"
+        return body + "mcp_servers:\n" + hermesBlock(indent: "  ") + "\n"
+    }
+
+    /// Removes our managed block. Bounded by both markers when they're
+    /// intact; when the end marker was deleted, only lines recognizably ours
+    /// are removed and removal stops at the first foreign line. An
+    /// `mcp_servers:` line left genuinely childless is restored to
+    /// `mcp_servers: {}` so the file stays valid YAML.
+    nonisolated static func removingHermesServer(from text: String) -> String {
+        var kept: [String] = []
+        var inBlock = false
+        for line in text.components(separatedBy: "\n") {
+            if line.contains(hermesMarkerStart) { inBlock = true; continue }
+            if line.contains(hermesMarkerEnd) { inBlock = false; continue }
+            if inBlock {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                let isOurs = trimmed == "\(serverName):"
+                    || trimmed.hasPrefix("command:") && trimmed.contains(symlinkPath)
+                    || trimmed == "args: [\"mcp\"]"
+                    || trimmed.isEmpty
+                if isOurs { continue }
+                inBlock = false
+            }
+            kept.append(line)
+        }
+        for index in kept.indices where kept[index] == "mcp_servers:" {
+            let next = index + 1 < kept.count ? kept[index + 1] : ""
+            if next.isEmpty || !next.hasPrefix(" ") { kept[index] = "mcp_servers: {}" }
+        }
+        return kept.joined(separator: "\n")
+    }
+
+    // MARK: - Shared plumbing
+
+    private static func fileText(_ url: URL) -> String? {
+        try? String(contentsOf: url, encoding: .utf8)
+    }
 
     /// `do shell script … with administrator privileges` — the standard
     /// "install command line tool" authorization dialog. Answers a failure

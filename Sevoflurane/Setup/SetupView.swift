@@ -399,8 +399,10 @@ struct SetupView: View {
                 VStack(alignment: .leading) {
                     Text("Install the sevo command").font(.headline)
                     Text("Puts the sevo command-line tool on your PATH and "
-                        + "connects Claude to Steam over MCP where it's "
-                        + "installed. Asks for an administrator password once.")
+                        + "connects your AI assistants — Claude, Codex, Hermes — "
+                        + "to Steam over MCP where they're installed. Asks for "
+                        + "an administrator password once; every connection has "
+                        + "its own switch in Settings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

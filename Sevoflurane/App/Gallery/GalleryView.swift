@@ -38,6 +38,7 @@
                                 provisioner: Fixtures.settings,
                                 graphics: Fixtures.graphics,
                                 storage: Fixtures.storage,
+                                compatibility: .preview(),
                             )
                             .frame(width: 720, height: 460)
                         }

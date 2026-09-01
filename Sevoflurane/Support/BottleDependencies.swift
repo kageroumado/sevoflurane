@@ -1,0 +1,370 @@
+import Foundation
+
+/// The Windows pieces games assume are present and a fresh prefix lacks —
+/// CrossOver's own Steam bottle recipe ("Game Launcher Dependencies",
+/// c4.21822 in its profile database) distilled, plus the two heavyweights
+/// older games ask for. Every install is silent and idempotent: downloads go
+/// to the bottle's own temp, installers run inside the bottle through the
+/// same engine invocation as the client, and "installed" is judged by what
+/// landed on disk rather than by exit codes.
+nonisolated enum BottleDependencies {
+    struct Dependency: Identifiable, Sendable, Equatable {
+        let id: String
+        let name: String
+        /// The symptom this fixes — how a user recognizes they need it.
+        let detail: String
+        /// Rough download size, for the row's fine print.
+        let download: String
+    }
+
+    static let catalog: [Dependency] = [
+        Dependency(
+            id: "corefonts", name: "Core fonts",
+            detail: "Blank labels or squares where text should be, in "
+                + "launchers and older games.",
+            download: "4 MB",
+        ),
+        Dependency(
+            id: "vcredist", name: "Visual C++ runtime (2015–2022)",
+            detail: "\u{201C}VCRUNTIME140.dll was not found\u{201D} or "
+                + "\u{201C}MSVCP140.dll is missing\u{201D} at launch.",
+            download: "38 MB",
+        ),
+        Dependency(
+            id: "d3dcompiler", name: "Direct3D shader compiler",
+            detail: "Shader errors, black rendering, or a crash the moment "
+                + "a Direct3D game compiles its shaders.",
+            download: "8 MB",
+        ),
+        Dependency(
+            id: "directx2010", name: "DirectX runtimes (June 2010)",
+            detail: "A d3dx9_43.dll error, or silence from games built on "
+                + "the old XAudio and XACT audio stacks.",
+            download: "96 MB",
+        ),
+        Dependency(
+            id: "cjkfonts", name: "Japanese, Chinese & Korean fonts",
+            detail: "Squares where Japanese, Chinese or Korean text should "
+                + "be. Source Han Sans, all four regions.",
+            download: "220 MB",
+        ),
+    ]
+
+    // MARK: - Detection
+
+    static func isInstalled(_ dependency: Dependency) -> Bool {
+        switch dependency.id {
+        case "corefonts":
+            fontsDirectoryContains(prefix: "arial.ttf")
+        case "vcredist":
+            hasRealDLL("vcruntime140.dll")
+        case "d3dcompiler":
+            hasRealDLL("d3dcompiler_47.dll")
+        case "directx2010":
+            hasRealDLL("d3dx9_43.dll")
+        case "cjkfonts":
+            fontsDirectoryContains(prefix: "sourcehansans")
+        default:
+            false
+        }
+    }
+
+    private static var driveC: URL { SteamBottle.root.appendingPathComponent("drive_c") }
+    private static var fontsDirectory: URL { driveC.appendingPathComponent("windows/Fonts") }
+    private static var system32: URL { driveC.appendingPathComponent("windows/system32") }
+    private static var syswow64: URL { driveC.appendingPathComponent("windows/syswow64") }
+    /// Downloads and extractions, inside the bottle so installers can see
+    /// them at a plain `C:` path.
+    private static var scratch: URL { driveC.appendingPathComponent("windows/temp/sevo-deps") }
+    private static let scratchWindowsPath = #"C:\windows\temp\sevo-deps"#
+
+    private static func fontsDirectoryContains(prefix: String) -> Bool {
+        let names = (try? FileManager.default
+            .contentsOfDirectory(atPath: fontsDirectory.path)) ?? []
+        return names.contains { $0.lowercased().hasPrefix(prefix) }
+    }
+
+    /// A DLL that exists and is the genuine article. Wine stamps its
+    /// stand-in PE files near the DOS header — "Wine placeholder DLL"
+    /// (CrossOver) or "Wine builtin DLL" (upstream) — so a fresh prefix's
+    /// fake file doesn't read as an installed redistributable.
+    private static func hasRealDLL(_ name: String) -> Bool {
+        let url = system32.appendingPathComponent(name)
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 0x200), !data.isEmpty else { return false }
+        let markers = ["Wine placeholder DLL", "Wine builtin DLL"]
+        return !markers.contains { data.range(of: Data($0.utf8)) != nil }
+    }
+
+    // MARK: - Install
+
+    /// Installs one catalog entry, narrating stages through `phase`.
+    /// Answers a failure description, or `nil` when the pieces landed.
+    @concurrent
+    static func install(
+        _ id: String, phase: @escaping @Sendable (String) -> Void,
+    ) async -> String? {
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        do {
+            switch id {
+            case "corefonts": try await installCoreFonts(phase: phase)
+            case "vcredist": try await installVCRedist(phase: phase)
+            case "d3dcompiler": try await installD3DCompiler(phase: phase)
+            case "directx2010": try await installDirectX2010(phase: phase)
+            case "cjkfonts": try await installCJKFonts(phase: phase)
+            default: return "unknown dependency \(id)"
+            }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private struct InstallFailure: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// The eleven classic self-extracting font archives, from the mirror
+    /// winetricks uses. Each extracts with the `/T: /C /Q` flags CrossOver's
+    /// profile records, then the faces are copied into the bottle's Fonts —
+    /// Wine registers everything it finds there on its own.
+    private static func installCoreFonts(phase: @Sendable (String) -> Void) async throws {
+        let archives = [
+            "andale32.exe", "arial32.exe", "arialb32.exe", "comic32.exe",
+            "courie32.exe", "georgi32.exe", "impact32.exe", "times32.exe",
+            "trebuc32.exe", "verdan32.exe", "webdin32.exe",
+        ]
+        let extracted = scratch.appendingPathComponent("fonts")
+        for (index, archive) in archives.enumerated() {
+            phase("downloading fonts (\(index + 1) of \(archives.count))")
+            let file = try await download(
+                "https://github.com/pushcx/corefonts/raw/master/\(archive)", as: archive,
+            )
+            let result = await ClientLifecycle.runInBottle([
+                SteamBottle.windowsPath(for: file),
+                "/T:\(scratchWindowsPath)\\fonts", "/C", "/Q",
+            ], timeout: .seconds(120))
+            guard result.status == 0 else {
+                throw InstallFailure(message: "\(archive) refused to extract")
+            }
+        }
+        phase("installing fonts")
+        try copyFonts(from: extracted, matching: ["ttf", "ttc"])
+    }
+
+    /// Microsoft's evergreen 14.x redistributable, both architectures, run
+    /// with its documented silent flags, then the 140-family DLL overrides so
+    /// the installed files actually win over Wine's builtins.
+    private static func installVCRedist(phase: @Sendable (String) -> Void) async throws {
+        for arch in ["x64", "x86"] {
+            phase("downloading VC++ (\(arch))")
+            let installer = try await download(
+                "https://aka.ms/vs/17/release/vc_redist.\(arch).exe",
+                as: "vc_redist.\(arch).exe",
+            )
+            phase("installing VC++ (\(arch))")
+            let result = await ClientLifecycle.runInBottle([
+                SteamBottle.windowsPath(for: installer),
+                "/install", "/quiet", "/norestart",
+            ])
+            // 1638: a newer version is already installed. 3010: success,
+            // wants a reboot it won't get and doesn't need.
+            guard let status = result.status, [0, 1638, 3010].contains(Int(status)) else {
+                throw InstallFailure(message: "vc_redist.\(arch).exe failed "
+                    + "(\(result.status.map(String.init) ?? "no exit"))")
+            }
+        }
+        phase("setting DLL overrides")
+        let family = [
+            "concrt140", "msvcp140", "msvcp140_1", "msvcp140_2",
+            "msvcp140_atomic_wait", "msvcp140_codecvt_ids", "vcamp140",
+            "vccorlib140", "vcomp140", "vcruntime140", "vcruntime140_1",
+        ]
+        try await importOverrides(family.map { ($0, "native,builtin") })
+    }
+
+    /// The two fxc2 builds of d3dcompiler_47, copied straight over Wine's
+    /// stand-ins — CrossOver's own trick, and with the fake file gone no
+    /// registry override is needed.
+    private static func installD3DCompiler(phase: @Sendable (String) -> Void) async throws {
+        phase("downloading d3dcompiler_47")
+        let x64 = try await download(
+            "https://github.com/mozilla/fxc2/raw/master/dll/d3dcompiler_47.dll",
+            as: "d3dcompiler_47.dll",
+        )
+        let x86 = try await download(
+            "https://github.com/mozilla/fxc2/raw/master/dll/d3dcompiler_47_32.dll",
+            as: "d3dcompiler_47_32.dll",
+        )
+        phase("installing d3dcompiler_47")
+        try replaceFile(at: system32.appendingPathComponent("d3dcompiler_47.dll"), with: x64)
+        try replaceFile(at: syswow64.appendingPathComponent("d3dcompiler_47.dll"), with: x86)
+    }
+
+    /// The last classic DirectX redistributable: self-extracts, then its own
+    /// DXSETUP lays down d3dx9, XAudio, XACT and X3DAudio for both
+    /// architectures.
+    private static func installDirectX2010(phase: @Sendable (String) -> Void) async throws {
+        phase("downloading DirectX redistributable")
+        let redist = try await download(
+            "https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe",
+            as: "directx_Jun2010_redist.exe",
+        )
+        phase("extracting")
+        let extract = await ClientLifecycle.runInBottle([
+            SteamBottle.windowsPath(for: redist),
+            "/Q", "/T:\(scratchWindowsPath)\\dx",
+        ], timeout: .seconds(300))
+        guard extract.status == 0 else {
+            throw InstallFailure(message: "the redistributable refused to extract")
+        }
+        phase("running DXSETUP")
+        let setup = await ClientLifecycle.runInBottle([
+            "\(scratchWindowsPath)\\dx\\DXSETUP.exe", "/silent",
+        ], timeout: .seconds(900))
+        guard setup.status == 0 else {
+            throw InstallFailure(message: "DXSETUP failed "
+                + "(\(setup.status.map(String.init) ?? "no exit"))")
+        }
+    }
+
+    /// Source Han Sans, the four regional builds CrossOver's Asian-fonts
+    /// component ships, from Adobe's pinned release.
+    private static func installCJKFonts(phase: @Sendable (String) -> Void) async throws {
+        let regions = ["J", "SC", "TC", "K"]
+        for (index, region) in regions.enumerated() {
+            phase("downloading fonts (\(index + 1) of \(regions.count))")
+            let zip = try await download(
+                "https://github.com/adobe-fonts/source-han-sans/releases/download/2.004R/SourceHanSans\(region).zip",
+                as: "SourceHanSans\(region).zip",
+            )
+            phase("installing fonts (\(index + 1) of \(regions.count))")
+            let result = await Subprocess.run(
+                "/usr/bin/unzip",
+                ["-jo", zip.path, "*.otf", "-d", fontsDirectory.path],
+                capture: .combined, timeout: .seconds(300),
+            )
+            guard result.status == 0 else {
+                throw InstallFailure(message: "SourceHanSans\(region).zip refused to unzip")
+            }
+            try? FileManager.default.removeItem(at: zip)
+        }
+    }
+
+    // MARK: - DLL overrides
+
+    struct Override: Identifiable, Sendable, Equatable {
+        let dll: String
+        let mode: String
+        var id: String { dll }
+    }
+
+    /// The load-order modes Wine accepts, in the order someone reaches for
+    /// them.
+    static let overrideModes = ["native,builtin", "native", "builtin", "disabled"]
+
+    /// The bottle's global overrides, read from `user.reg`. The file lags
+    /// wineserver's in-memory registry by a few seconds after a write, so
+    /// callers that just wrote should trust what they wrote.
+    static func overrides() -> [Override] {
+        let file = SteamBottle.root.appendingPathComponent("user.reg")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        var found: [Override] = []
+        var inSection = false
+        for line in text.components(separatedBy: "\n") {
+            if line.hasPrefix("[") {
+                inSection = line.hasPrefix(#"[Software\\Wine\\DllOverrides]"#)
+                continue
+            }
+            guard inSection, line.hasPrefix("\"") else { continue }
+            let parts = line.components(separatedBy: "\"=\"")
+            guard parts.count == 2 else { continue }
+            let dll = String(parts[0].dropFirst())
+            let mode = String(parts[1].dropLast(parts[1].hasSuffix("\"") ? 1 : 0))
+            found.append(Override(dll: dll, mode: mode.isEmpty ? "disabled" : mode))
+        }
+        return found.sorted { $0.dll < $1.dll }
+    }
+
+    static func setOverride(dll: String, mode: String) async -> String? {
+        let result = await ClientLifecycle.runInBottle([
+            "reg", "add", #"HKCU\Software\Wine\DllOverrides"#,
+            "/v", dll, "/d", mode == "disabled" ? "" : mode, "/f",
+        ], timeout: .seconds(60))
+        return result.status == 0 ? nil : "reg add failed: \(result.output.suffix(120))"
+    }
+
+    static func removeOverride(dll: String) async -> String? {
+        let result = await ClientLifecycle.runInBottle([
+            "reg", "delete", #"HKCU\Software\Wine\DllOverrides"#,
+            "/v", dll, "/f",
+        ], timeout: .seconds(60))
+        return result.status == 0 ? nil : "reg delete failed: \(result.output.suffix(120))"
+    }
+
+    // MARK: - Plumbing
+
+    private static func download(_ url: String, as name: String) async throws -> URL {
+        try FileManager.default.createDirectory(
+            at: scratch, withIntermediateDirectories: true,
+        )
+        guard let source = URL(string: url) else {
+            throw InstallFailure(message: "bad URL \(url)")
+        }
+        let (temp, response) = try await URLSession.shared.download(from: source)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw InstallFailure(message: "\(name): HTTP \(http.statusCode)")
+        }
+        let destination = scratch.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: temp, to: destination)
+        return destination
+    }
+
+    private static func replaceFile(at destination: URL, with source: URL) throws {
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.copyItem(at: source, to: destination)
+    }
+
+    private static func copyFonts(from directory: URL, matching extensions: [String]) throws {
+        let names = (try? FileManager.default
+            .contentsOfDirectory(atPath: directory.path)) ?? []
+        let faces = names.filter { name in
+            extensions.contains { name.lowercased().hasSuffix(".\($0)") }
+        }
+        guard !faces.isEmpty else {
+            throw InstallFailure(message: "no font files came out of the archives")
+        }
+        try FileManager.default.createDirectory(
+            at: fontsDirectory, withIntermediateDirectories: true,
+        )
+        for face in faces {
+            try replaceFile(
+                at: fontsDirectory.appendingPathComponent(face),
+                with: directory.appendingPathComponent(face),
+            )
+        }
+    }
+
+    /// One `regedit /S` import for a batch of overrides — eleven `reg add`
+    /// spawns collapsed into one.
+    private static func importOverrides(_ entries: [(dll: String, mode: String)]) async throws {
+        let body = entries.map { "\"\($0.dll)\"=\"\($0.mode)\"" }.joined(separator: "\n")
+        let regFile = scratch.appendingPathComponent("overrides.reg")
+        let contents = """
+        Windows Registry Editor Version 5.00
+
+        [HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]
+        \(body)
+        """
+        try contents.write(to: regFile, atomically: true, encoding: .utf8)
+        let result = await ClientLifecycle.runInBottle([
+            "regedit", "/S", SteamBottle.windowsPath(for: regFile),
+        ], timeout: .seconds(60))
+        guard result.status == 0 else {
+            throw InstallFailure(message: "regedit refused the overrides import")
+        }
+    }
+}

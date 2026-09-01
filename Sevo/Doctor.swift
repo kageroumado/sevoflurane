@@ -152,6 +152,19 @@ nonisolated enum Doctor {
             ))
         }
 
+        // Only when the symlink exists at all: a machine that never installed
+        // the CLI is healthy, not broken.
+        if let destination = try? FileManager.default
+            .destinationOfSymbolicLink(atPath: "/usr/local/bin/sevo") {
+            checks.append(Check(
+                id: "cli-link", ok: FileManager.default.fileExists(atPath: destination),
+                label: "sevo symlink → \(destination)",
+                hint: "the app moved since the CLI was installed — reinstall it "
+                    + "from Sevoflurane's Settings › General",
+                provisioning: false,
+            ))
+        }
+
         // A single boot legitimately drops 1–2 asserts (HANDOFF 2026-08-21),
         // and a supervised restart cycle can reach 3; five in ten minutes is
         // the actual loop signature.
