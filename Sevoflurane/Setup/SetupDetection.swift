@@ -129,8 +129,11 @@ nonisolated enum SetupProbe {
     /// managed engine's prefixes (a `drive_c` marks those). One list — the
     /// wizard and doctor don't care which engine owns a bottle, only the URL.
     static func bottles() -> [SetupDetection.Bottle] {
+        // system.reg is written at the end of `wineboot -u`, so a prefix
+        // whose boot died halfway reads as "no bottle" and gets rebuilt —
+        // `drive_c` appears first and let a corpse pass detection.
         bottles(under: crossoverBottles, marker: "cxbottle.conf")
-            + bottles(under: Engine.managedBottlesRoot, marker: "drive_c")
+            + bottles(under: Engine.managedBottlesRoot, marker: "system.reg")
     }
 
     private static func bottles(under root: URL, marker: String) -> [SetupDetection.Bottle] {

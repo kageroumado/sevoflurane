@@ -30,6 +30,7 @@
 		0BAA000000000000000A0001 /* Exceptions for "Sevoflurane" folder in "Sevoflurane" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				default.profraw,
 				Info.plist,
 			);
 			target = 0B33EFD930290E5E00182A68 /* Sevoflurane */;

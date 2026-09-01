@@ -117,7 +117,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host.holdWindows()
         }
         Task {
-            await bridge.start()
+            guard await bridge.start() else {
+                // Almost always a second copy of the app holding the ports
+                // (watched happen: a tester copy plus the installed one) —
+                // a half-alive instance is worse than saying so.
+                let alert = NSAlert()
+                alert.messageText = "Sevoflurane is already running"
+                alert.informativeText = "Another copy of Sevoflurane has the "
+                    + "app's ports — possibly from a different location. Quit "
+                    + "the other copy, then open this one again."
+                alert.runModal()
+                NSApp.terminate(nil)
+                return
+            }
             await bridge.setGameLaunchHandler { [weak self] in
                 Task { @MainActor in self?.gameLaunchWatch.noteLaunchRequested() }
             }

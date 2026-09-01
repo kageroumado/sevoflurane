@@ -115,6 +115,7 @@ final class StorageStore {
                 )
             }
         }
+        await AgentIntegration.remove(allowAdminPrompt: false)
         try? provisioner.setOpenAtLogin(false)
         Preferences.reset()
         entries = StorageInventory.entries()

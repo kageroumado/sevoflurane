@@ -130,7 +130,14 @@ final class Provisioner {
         SetupLog.log("provision: installing Rosetta")
         let result = await environment.installRosetta()
         guard result.succeeded else {
-            throw ProvisionError("Rosetta install failed: \(result.output.suffix(200))")
+            // A standard (non-administrator) macOS account can be refused
+            // here; the one honest exit is naming the command an admin can
+            // run, in the wizard instead of a forum.
+            throw ProvisionError(
+                "Rosetta install failed: \(result.output.suffix(200)). "
+                    + "If this account isn't an administrator, run "
+                    + "\"softwareupdate --install-rosetta --agree-to-license\" "
+                    + "in Terminal as one, then Try Again.")
         }
         await refreshDetection()
     }

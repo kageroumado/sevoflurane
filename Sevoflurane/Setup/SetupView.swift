@@ -32,6 +32,7 @@ struct SetupView: View {
 
     @State private var step: Step = .welcome
     @State private var openAtLogin = true
+    @State private var connectAgents = false
     @State private var engineChoice: EngineChoice = .builtIn
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
@@ -394,6 +395,18 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
+            Toggle(isOn: $connectAgents) {
+                VStack(alignment: .leading) {
+                    Text("Install the sevo command").font(.headline)
+                    Text("Puts the sevo command-line tool on your PATH and "
+                        + "connects Claude to Steam over MCP where it's "
+                        + "installed. Asks for an administrator password once.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -454,6 +467,13 @@ struct SetupView: View {
             case .options:
                 Button("Finish") {
                     provisioner.setOpenAtLogin(openAtLogin)
+                    if connectAgents, !provisioner.isDryRun {
+                        Task {
+                            if let failure = await AgentIntegration.install() {
+                                EventLog.shared.log(.app, "sevo CLI install: \(failure)")
+                            }
+                        }
+                    }
                     step = .done
                 }
                 .keyboardShortcut(.defaultAction)

@@ -9,6 +9,9 @@ struct GeneralSettings: View {
     let provisioner: Provisioner
     let highlighted: String?
     @State private var openAtLogin = false
+    @State private var cliInstalled = false
+    @State private var cliBusy = false
+    @State private var cliError: String?
 
     var body: some View {
         Form {
@@ -27,9 +30,49 @@ struct GeneralSettings: View {
                 }
                 .highlightable(id: "general.openAtLogin", highlighted: highlighted)
             }
+            Section {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Command-line tool")
+                        Text(cliInstalled
+                            ? "Installed at /usr/local/bin/sevo. Claude apps are "
+                            + "connected over MCP where found; point any other "
+                            + "agent at \u{201C}\(AgentIntegration.manualCommand)\u{201D}."
+                            : "Puts sevo on your PATH and connects Claude to "
+                            + "Steam over MCP. Asks for an administrator "
+                            + "password once.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        if let cliError {
+                            Text(cliError).font(.callout).foregroundStyle(.orange)
+                        }
+                    }
+                    Spacer()
+                    Button(cliInstalled ? "Remove" : "Install…") {
+                        cliBusy = true
+                        Task {
+                            if cliInstalled {
+                                await AgentIntegration.remove()
+                                cliError = nil
+                            } else {
+                                cliError = await AgentIntegration.install()
+                            }
+                            cliInstalled = AgentIntegration.isCLIInstalled
+                            cliBusy = false
+                        }
+                    }
+                    .disabled(cliBusy)
+                }
+                .highlightable(id: "general.cli", highlighted: highlighted)
+            } header: {
+                Text("Automation")
+            }
         }
         .formStyle(.grouped)
-        .onAppear { openAtLogin = provisioner.openAtLogin }
+        .onAppear {
+            openAtLogin = provisioner.openAtLogin
+            cliInstalled = AgentIntegration.isCLIInstalled
+        }
     }
 }
 

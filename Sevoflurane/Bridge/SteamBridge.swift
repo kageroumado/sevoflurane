@@ -76,7 +76,11 @@ actor SteamBridge {
 
     // MARK: - Lifecycle
 
-    func start() {
+    /// Answers whether the listeners came up — a bind failure almost
+    /// always means another copy of the app owns the ports, and the caller
+    /// must say so instead of running half-alive.
+    @discardableResult
+    func start() -> Bool {
         if shim.isEmpty {
             log(.bridge, "steamclient_shim.js missing from the app bundle — UI cannot boot")
         }
@@ -120,7 +124,9 @@ actor SteamBridge {
             )
         } catch {
             log(.bridge, "bridge failed to start: \(error.localizedDescription)")
+            return false
         }
+        return true
     }
 
     private nonisolated func log(_ category: EventLog.Category, _ message: String) {

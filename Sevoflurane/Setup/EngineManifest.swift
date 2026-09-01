@@ -30,7 +30,22 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     }
 
     static func fetch(from url: URL? = nil) async throws -> EngineManifest {
-        let (data, _) = try await URLSession.shared.data(from: url ?? overrideURL ?? Self.url)
+        if let url {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return try decode(data)
+        }
+        if let overrideURL {
+            // The override is test-rig plumbing (a defaults key or env var),
+            // and a rig's stale file:// target must not brick Repair on a
+            // machine that could reach the real manifest fine.
+            do {
+                let (data, _) = try await URLSession.shared.data(from: overrideURL)
+                return try decode(data)
+            } catch {
+                SetupLog.log("engine manifest override unreachable (\(error)) — using the release manifest")
+            }
+        }
+        let (data, _) = try await URLSession.shared.data(from: Self.url)
         return try decode(data)
     }
 
