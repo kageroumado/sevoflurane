@@ -16,6 +16,15 @@ nonisolated enum ClientLifecycle {
         "wineserver",
     ]
 
+    /// The client's own processes — what a client-only stop takes down,
+    /// leaving the booted Windows (wineserver, services, device hosts)
+    /// resident the way CrossOver keeps its fake machine warm.
+    static let steamProcessNames = [
+        "steam.exe",
+        "steamwebhelper",
+        "steamservice",
+    ]
+
     /// Where lifecycle events go: the app points this at ``EventLog``, the
     /// CLI at stderr. Set once at process start, before any lifecycle call.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = {
@@ -54,8 +63,12 @@ nonisolated enum ClientLifecycle {
     /// PIDs of the bottle's processes, matched by name and then scoped by open
     /// files inside the bottle so other bottles' wine processes are untouched.
     static func bottleProcessIDs(matching name: String? = nil) async -> [pid_t] {
+        await bottleProcessIDs(matchingAnyOf: name.map { [$0] } ?? processNames)
+    }
+
+    static func bottleProcessIDs(matchingAnyOf names: [String]) async -> [pid_t] {
         var candidates: Set<pid_t> = []
-        for processName in name.map({ [$0] }) ?? processNames {
+        for processName in names {
             let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
             for token in out.split(whereSeparator: \.isNewline) {
                 if let pid = pid_t(token.trimmingCharacters(in: .whitespaces)) {
@@ -134,6 +147,47 @@ nonisolated enum ClientLifecycle {
     /// `wineserver -k`, then signals, each rung only for what the previous
     /// one left alive. `gracePolls` bounds the graceful rung at 2 s per
     /// poll — a restart can afford 30 s of patience, quit cannot.
+    /// Stops Steam and leaves Windows booted: wineserver, services and the
+    /// device hosts stay resident, so the next client start skips the
+    /// machine boot entirely. The callers decide when Windows itself must
+    /// go instead (`stopAll`): a different engine's wineserver, an msync
+    /// change (sync primitives are negotiated with the server), a quit.
+    static func stopClient(
+        gracePolls: Int,
+        phase: (String) -> Void = { _ in },
+    ) async {
+        let existing = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+        guard !existing.isEmpty else { return }
+        log("stopping the client — Windows stays up (pids \(existing))")
+        phase("stopping the client")
+        let stopBegan = ContinuousClock.now
+        if await clientProcessAlive() {
+            await gracefulShutdown()
+        }
+        for _ in 0 ..< gracePolls {
+            _ = await hideVisibleClientPopups()
+            if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
+                log("stop audit: client-only graceful exit in "
+                    + "\(stopBegan.duration(to: .now).components.seconds)s")
+                return
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        phase("force-quitting Steam")
+        var survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+        log("stop audit: client-only stop forcing after "
+            + "\(stopBegan.duration(to: .now).components.seconds)s (pids \(survivors))")
+        for pid in survivors {
+            kill(pid, SIGTERM)
+        }
+        try? await Task.sleep(for: .seconds(2))
+        survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+        for pid in survivors {
+            kill(pid, SIGKILL)
+        }
+        try? await Task.sleep(for: .seconds(1))
+    }
+
     static func stopAll(
         gracePolls: Int,
         hidingPopups: Bool = false,

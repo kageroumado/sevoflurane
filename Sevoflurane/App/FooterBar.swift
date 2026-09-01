@@ -51,6 +51,12 @@ struct FooterBar: View {
                     Button("Restart Steam Client", systemImage: "arrow.triangle.2.circlepath") {
                         supervisor.restartNow()
                     }
+                    // Steam restarts leave the fake Windows booted; this is
+                    // the full machine reboot for when Windows itself is
+                    // suspect.
+                    Button("Restart Windows", systemImage: "power.circle") {
+                        supervisor.restartWindowsNow()
+                    }
                     Divider()
                     Button("Open Event Log", systemImage: "doc.text") {
                         NSWorkspace.shared.open(EventLog.fileURL)

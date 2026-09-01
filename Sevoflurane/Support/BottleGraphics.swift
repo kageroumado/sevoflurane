@@ -156,11 +156,14 @@ nonisolated enum BottleGraphics {
     private static let bootedKey = "bootedGraphics"
 
     /// Called at every client spawn: the selection games will actually
-    /// inherit, whatever Settings says later.
+    /// inherit, whatever Settings says later — plus the engine whose
+    /// wineserver is now booted, which is what decides whether a later
+    /// restart can leave Windows running.
     static func recordBootedSelection() {
         let selection = currentSelection()
         Preferences.shared.set(
-            "\(selection.renderer.rawValue)|\(selection.msync ? "1" : "0")",
+            "\(selection.renderer.rawValue)|\(selection.msync ? "1" : "0")"
+                + "|\(Engine.active.root.path)",
             forKey: bootedKey,
         )
     }
@@ -171,6 +174,14 @@ nonisolated enum BottleGraphics {
         guard let renderer = parts.first.flatMap({ Renderer(rawValue: String($0)) })
         else { return nil }
         return (renderer, parts.count > 1 && parts[1] == "1")
+    }
+
+    /// The engine root the running wineserver was booted from.
+    static func bootedEngineRoot() -> String? {
+        guard let stored = Preferences.shared.string(forKey: bootedKey) else { return nil }
+        let parts = stored.split(separator: "|", maxSplits: 2)
+        guard parts.count > 2 else { return nil }
+        return String(parts[2])
     }
 
     private static let overridesKey = "rendererOverrides"

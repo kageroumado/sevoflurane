@@ -203,6 +203,19 @@ final class ClientSupervisor {
         }
     }
 
+    /// The heavier menu-bar restart: the whole fake Windows comes down and
+    /// boots fresh — for when the machine itself is suspect, not just Steam.
+    func restartWindowsNow() {
+        recentRestarts.removeAll()
+        hygieneTried = false
+        Task(name: "Manual Windows restart") {
+            await restartClient(
+                reason: "manual Windows restart from the menu bar",
+                fullWindows: true,
+            )
+        }
+    }
+
     /// Whether the restart ladder is mid-flight — control verbs that would
     /// race it (`sevo client stop`) refuse instead of interleaving.
     var isBusyRestarting: Bool {
@@ -554,7 +567,7 @@ final class ClientSupervisor {
 
     // MARK: - Restart ladder
 
-    private func restartClient(reason: String) async {
+    private func restartClient(reason: String, fullWindows: Bool = false) async {
         guard !isRestarting, !isQuitting else { return }
         isRestarting = true
         defer { isRestarting = false }
@@ -575,8 +588,23 @@ final class ClientSupervisor {
         host.dismissWindows()
 
         health = .restarting("checking for a running client")
-        await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true) { phase in
-            health = .restarting(phase)
+        // Windows stays booted through a plain client restart — the ~20s
+        // machine boot is the biggest slice of a restart, and the resident
+        // wineserver only has to go when the next launch actually needs a
+        // different one: another engine's, or new sync primitives (esync/
+        // msync are negotiated with the server at spawn).
+        let windowsCanStay = !fullWindows
+            && BottleGraphics.bootedEngineRoot() == Engine.active.root.path
+            && BottleGraphics.bootedSelection()?.msync
+            == BottleGraphics.currentSelection().msync
+        if windowsCanStay {
+            await ClientLifecycle.stopClient(gracePolls: 10) { phase in
+                health = .restarting(phase)
+            }
+        } else {
+            await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true) { phase in
+                health = .restarting(phase)
+            }
         }
 
         // The launcher can time out and *still* spawn a client later; a
