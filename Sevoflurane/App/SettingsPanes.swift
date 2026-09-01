@@ -375,33 +375,50 @@ struct GraphicsSettings: View {
     private var d3dMetalSection: some View {
         Section {
             if !store.engineHasOwnD3DMetal {
-                // Measured 2026-09-01: GPTk's libraries are winelib builds
-                // against Apple's Wine, and the built-in engine's
-                // wine-staging refuses to load them however they're staged.
-                Text("Direct3D 12 isn't available on the built-in engine — "
-                    + "Apple's toolkit only runs on the Wine it was built "
-                    + "against. The CrossOver engine carries D3DMetal; DX12 "
-                    + "games need it.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                d3dMetalControls
+                gptkEngineRow
             }
+            d3dMetalControls
         } header: {
             Text("Apple's Game Porting Toolkit")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
+    /// D3DMetal is ABI-locked to the Wine it was built against (measured
+    /// 2026-09-01: wine-staging refuses its libraries however staged), and
+    /// the Wine it targets — Gcenx's game-porting-toolkit build — can't run
+    /// the modern Steam client (steamwebhelper crash-loops; also measured).
+    /// The DX12 engine waits for a wine-crossover-lineage base that hosts
+    /// both; the installer scaffolding is ready for that payload.
+    private var gptkEngineRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Direct3D 12 on the built-in engine")
+                .font(.callout.weight(.semibold))
+            Text("In progress: D3DMetal only loads on the Wine it was built "
+                + "against, and that Wine can't run today's Steam client. A "
+                + "base that hosts both is being built; until then DX12 games "
+                + "need the CrossOver engine. Toolkits added below are kept "
+                + "and used the moment it lands.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private var d3dMetalControls: some View {
         Group {
             if store.d3dMetalVersions.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Use a newer D3DMetal")
+                    Text(store.engineHasOwnD3DMetal
+                        ? "Use a newer D3DMetal"
+                        : "Add D3DMetal")
                         .font(.callout.weight(.semibold))
-                    Text("CrossOver ships the version it supports. Apple's newer "
-                        + "releases can be used instead.")
+                    Text(store.engineHasOwnD3DMetal
+                        ? "CrossOver ships the version it supports. Apple's newer "
+                        + "releases can be used instead."
+                        : "The DX12 engine overlays Apple's toolkit, which only "
+                        + "Apple may distribute — download it here or add a "
+                        + "disk image.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

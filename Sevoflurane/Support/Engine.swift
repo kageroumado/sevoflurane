@@ -114,14 +114,52 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// The stored choice as a runnable engine, or `nil` when nothing is
     /// stored or the chosen engine isn't on disk (managed chosen but never
-    /// installed, a deleted app) — those fall to policy.
+    /// installed, a deleted app) — those fall to policy. "Managed" follows
+    /// the renderer: with a wine-staging engine and a GPTk engine both
+    /// installed, choosing D3DMetal boots the one that can host it.
     static func preferred() -> Engine? {
         switch Preferences.shared.string(forKey: preferenceKey) {
         case "crossover": .crossover
         case "crossover-preview": .crossoverPreview
         case "managed":
-            SetupProbe.managedEngineVersions().last.map { .managed(version: $0) }
+            managedEngine(hosting: BottleGraphics.managedSelection().renderer)
         default: nil
+        }
+    }
+
+    /// The installed managed engine that can host `renderer` — the newest
+    /// among those that declare it, the newest overall otherwise (an engine
+    /// that predates the declaration hosts the classic staging set).
+    static func managedEngine(hosting renderer: Renderer) -> Engine? {
+        let candidates = SetupProbe.managedEngineVersions()
+            .map { Engine.managed(version: $0) }
+        return candidates.last { $0.supportedRenderers.contains(renderer) }
+            ?? candidates.last
+    }
+
+    /// Forgets the resolved engine so the next access re-reads preferences
+    /// and disk — the renderer selection is part of managed resolution, so
+    /// its writers call this.
+    static func refreshResolution() {
+        resolved = nil
+    }
+
+    /// What this engine can render through. CrossOver hosts everything; a
+    /// managed engine declares its set in `engine-info.json` ("renderers"),
+    /// and one that predates the field is the classic wine-staging build
+    /// with the DXMT/DXVK payloads.
+    var supportedRenderers: [Renderer] {
+        switch self {
+        case .crossover, .crossoverPreview:
+            return Renderer.allCases
+        case .managed:
+            let info = root.appendingPathComponent("engine-info.json")
+            if let data = try? Data(contentsOf: info),
+               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+               let declared = object["renderers"] as? [String] {
+                return declared.compactMap(Renderer.init(rawValue:))
+            }
+            return [.auto, .dxmt, .dxvk, .wined3d]
         }
     }
 

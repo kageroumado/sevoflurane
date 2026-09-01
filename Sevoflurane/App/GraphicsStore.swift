@@ -74,16 +74,50 @@ final class GraphicsStore {
         self.isLive = isLive
     }
 
-    /// The renderers this engine can switch between. CrossOver carries
-    /// D3DMetal itself. The built-in engine cannot host it at all: GPTk's
-    /// libraries are winelib builds against Apple's Wine, and wine-staging
-    /// refuses to load them — measured 2026-09-01, `dxgi.dll not found`
-    /// with the toolkit fully staged. DX12 on a managed engine waits for an
-    /// engine built from a Wine that D3DMetal targets.
+    /// The renderers the machine can switch between. CrossOver carries
+    /// everything; managed engines pool what each declares — choosing a
+    /// renderer boots whichever installed engine hosts it (D3DMetal is
+    /// ABI-locked to the GPTk Wine, DXMT/DXVK to wine-staging).
     var availableRenderers: [Renderer] {
-        engineHasOwnD3DMetal
-            ? Renderer.allCases
-            : [.auto, .dxmt, .dxvk, .wined3d]
+        guard !engineHasOwnD3DMetal else { return Renderer.allCases }
+        let hosted = SetupProbe.managedEngineVersions()
+            .flatMap { Engine.managed(version: $0).supportedRenderers }
+        return Renderer.allCases.filter(Set(hosted).contains)
+    }
+
+    // MARK: - The DX12 engine
+
+    private(set) var gptkEngineInstalled = GPTkEngineInstaller.isInstalled
+    private(set) var gptkEnginePhase: String?
+    private(set) var gptkEngineFraction: Double?
+    private(set) var gptkEngineError: String?
+
+    /// Downloads Gcenx's game-porting-toolkit Wine and overlays the active
+    /// D3DMetal toolkit onto it — the engine the D3DMetal renderer boots.
+    func installGPTkEngine() {
+        guard isLive, gptkEnginePhase == nil else { return }
+        guard let toolkit = D3DMetalInstaller.active(inEngine: toolkitStore) else {
+            gptkEngineError = "add a D3DMetal toolkit below first"
+            return
+        }
+        gptkEngineError = nil
+        gptkEnginePhase = "starting"
+        Task(name: "Install DX12 engine") { [weak self] in
+            do {
+                try await GPTkEngineInstaller.install(overlaying: toolkit) { phase, fraction in
+                    DispatchQueue.main.async {
+                        self?.gptkEnginePhase = phase
+                        self?.gptkEngineFraction = fraction
+                    }
+                }
+                EventLog.enqueue(.setup, "DX12 engine \(GPTkEngineInstaller.version) installed")
+            } catch {
+                self?.gptkEngineError = "\(error)"
+            }
+            self?.gptkEnginePhase = nil
+            self?.gptkEngineFraction = nil
+            self?.gptkEngineInstalled = GPTkEngineInstaller.isInstalled
+        }
     }
 
     func update(_ selection: BottleGraphics.Selection) {

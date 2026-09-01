@@ -19,6 +19,24 @@ nonisolated enum EngineRenderers {
         _ renderer: Renderer, engine: URL, bottle: URL,
     ) -> [String] {
         let manager = FileManager.default
+        if isGPTkFlavor(engine) {
+            // The GPTk engine's canonical tree is already D3DMetal (the
+            // overlay is part of its install); the bottle only needs the
+            // MetalFX bridge pair, which Apple's Read Me puts in system32.
+            guard renderer == .d3dmetal else { return [] }
+            let source = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
+            let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
+            var staged: [String] = []
+            for name in ["nvngx.dll", "nvapi64.dll"] {
+                let dll = source.appendingPathComponent(name)
+                guard manager.fileExists(atPath: dll.path) else { continue }
+                let target = system32.appendingPathComponent(name)
+                try? manager.removeItem(at: target)
+                guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
+                staged.append(name)
+            }
+            return staged
+        }
         let canonical = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
         let originals = engine.appendingPathComponent("wine/lib/wine/x86_64-windows-original")
         guard manager.fileExists(atPath: canonical.path) else { return [] }
@@ -83,6 +101,14 @@ nonisolated enum EngineRenderers {
                 try? manager.removeItem(at: staged)
             }
         }
+    }
+
+    private static func isGPTkFlavor(_ engine: URL) -> Bool {
+        let info = engine.appendingPathComponent("engine-info.json")
+        guard let data = try? Data(contentsOf: info),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return false }
+        return object["flavor"] as? String == "gptk"
     }
 
     private static func payloadDirectories(engine: URL) -> [URL] {

@@ -68,10 +68,10 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         case .dxmt:
             "d3d10core,d3d11,dxgi=n,b"
         case .d3dmetal:
-            // Exactly GPTk's PE set — d3d12 is the point of choosing it;
-            // without it in the override, Wine's builtin d3d12 wins load
-            // order and reports "DX12 not supported".
-            "d3d10,d3d11,d3d12,dxgi=n,b"
+            // The GPTk engine's canonical builtins ARE D3DMetal (Apple's
+            // libraries overlaid onto Gcenx's game-porting-toolkit Wine),
+            // so builtin resolution is already correct.
+            nil
         case .auto, .wined3d:
             nil
         }
@@ -376,6 +376,10 @@ nonisolated enum BottleGraphics {
         defaults.set(selection.renderer.rawValue, forKey: rendererKey)
         defaults.set(selection.msync, forKey: msyncKey)
         defaults.set(selection.gpu.rawValue, forKey: gpuKey)
+        // The renderer is part of managed-engine resolution — D3DMetal
+        // boots the GPTk engine, DXMT the wine-staging one — so the next
+        // client start re-picks the wine.
+        Engine.refreshResolution()
     }
 
     private struct GraphicsError: Error, CustomStringConvertible {
