@@ -100,36 +100,49 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         active = engine
     }
 
-    /// The stored form of the choice. Managed is stored version-agnostically
-    /// — "the built-in engine", whichever version is newest — so an engine
-    /// update keeps the choice working instead of pinning a directory that
-    /// no longer exists.
+    /// The stored form of the choice. A managed engine is stored by its
+    /// directory name (`managed:<version>`), so the Engine pane can pick any
+    /// installed build — a Gcenx release, a sevo-wine candidate, a hand-built
+    /// experiment — and that exact one boots. `managed` alone is "whichever
+    /// built-in engine fits", the form a not-yet-installed choice takes.
     var preferenceValue: String {
         switch self {
         case .crossover: "crossover"
         case .crossoverPreview: "crossover-preview"
-        case .managed: "managed"
+        case let .managed(version):
+            version.isEmpty ? "managed" : "managed:\(version)"
         }
     }
 
+    private static let managedPrefix = "managed:"
+
     /// The stored choice as a runnable engine, or `nil` when nothing is
     /// stored or the chosen engine isn't on disk (managed chosen but never
-    /// installed, a deleted app) — those fall to policy. "Managed" follows
+    /// installed, a deleted app) — those fall to policy. A named managed
+    /// engine wins as long as its directory exists; a bare `managed`, or a
+    /// name whose directory is gone (an engine update replaced it), follows
     /// the renderer: with a wine-staging engine and a GPTk engine both
     /// installed, choosing D3DMetal boots the one that can host it.
     static func preferred() -> Engine? {
-        switch Preferences.shared.string(forKey: preferenceKey) {
-        case "crossover": .crossover
-        case "crossover-preview": .crossoverPreview
-        case "managed":
-            managedEngine(hosting: BottleGraphics.managedSelection().renderer)
-        default: nil
+        guard let stored = Preferences.shared.string(forKey: preferenceKey) else { return nil }
+        switch stored {
+        case "crossover": return .crossover
+        case "crossover-preview": return .crossoverPreview
+        case "managed": return managedEngine(hosting: BottleGraphics.managedSelection().renderer)
+        default:
+            guard stored.hasPrefix(managedPrefix) else { return nil }
+            let named = Engine.managed(version: String(stored.dropFirst(managedPrefix.count)))
+            return named.existsOnDisk
+                ? named
+                : managedEngine(hosting: BottleGraphics.managedSelection().renderer)
         }
     }
 
     /// The installed managed engine that can host `renderer` — the newest
     /// among those that declare it, the newest overall otherwise (an engine
     /// that predates the declaration hosts the classic staging set).
+    /// "Newest" is the last directory name in sort order, so this is only
+    /// the fallback for an unnamed choice; a named engine is exact.
     static func managedEngine(hosting renderer: Renderer) -> Engine? {
         let candidates = SetupProbe.managedEngineVersions()
             .map { Engine.managed(version: $0) }
@@ -167,7 +180,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// not — provisioning reads this to know an install is wanted even with
     /// a usable CrossOver on the machine.
     static var preferenceWantsManaged: Bool {
-        Preferences.shared.string(forKey: preferenceKey) == "managed"
+        Preferences.shared.string(forKey: preferenceKey)?.hasPrefix("managed") == true
     }
 
     /// Whether the engine's own binaries are still where the choice left
