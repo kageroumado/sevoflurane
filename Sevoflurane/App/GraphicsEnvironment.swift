@@ -19,8 +19,8 @@ protocol GraphicsEnvironment: AnyObject {
     /// then replaces rather than supplies.
     var engineHasOwnD3DMetal: Bool { get }
 
-    /// What the installed engines between them can host. Each renderer is
-    /// ABI-locked to an engine, so a renderer nothing hosts cannot be offered.
+    /// What the installed engines between them can host, as each declares in
+    /// its `engine-info.json`; a renderer nothing hosts cannot be offered.
     func hostedRenderers() -> [Renderer]
 
     func currentSelection() -> BottleGraphics.Selection

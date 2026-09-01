@@ -42,9 +42,10 @@ final class GraphicsStore {
     }
 
     /// The renderers the machine can switch between. CrossOver carries
-    /// everything; managed engines pool what each declares — choosing a
-    /// renderer boots whichever installed engine hosts it (D3DMetal is
-    /// ABI-locked to the GPTk Wine, DXMT/DXVK to wine-staging).
+    /// everything; managed engines pool what each declares in its
+    /// `engine-info.json`, and choosing a renderer boots an installed engine
+    /// that hosts it (D3DMetal needs the `__wine_unix_call` export that only
+    /// Sevoflurane's own engine carries).
     var availableRenderers: [Renderer] {
         guard !engineHasOwnD3DMetal else { return Renderer.allCases }
         return Renderer.allCases.filter(Set(environment.hostedRenderers()).contains)

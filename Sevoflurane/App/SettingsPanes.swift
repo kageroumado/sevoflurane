@@ -385,7 +385,7 @@ struct GraphicsSettings: View {
     /// unless another is chosen here.
     private var d3dMetalSection: some View {
         Section {
-            if !store.engineHasOwnD3DMetal {
+            if !store.engineHasOwnD3DMetal, !store.availableRenderers.contains(.d3dmetal) {
                 gptkEngineRow
             }
             d3dMetalControls
@@ -395,21 +395,18 @@ struct GraphicsSettings: View {
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
-    /// D3DMetal is ABI-locked to the Wine it was built against (measured
-    /// 2026-09-01: wine-staging refuses its libraries however staged), and
-    /// the Wine it targets — Gcenx's game-porting-toolkit build — can't run
-    /// the modern Steam client (steamwebhelper crash-loops; also measured).
-    /// The DX12 engine waits for a wine-crossover-lineage base that hosts
-    /// both; the installer scaffolding is ready for that payload.
+    /// Shown when no installed built-in engine can host D3DMetal. Apple's
+    /// toolkit needs one ntdll export (`__wine_unix_call`) that stock
+    /// wine-staging builds lack; Sevoflurane's own engine carries it, so the
+    /// remedy is an engine update, and toolkits added meanwhile are kept.
     private var gptkEngineRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Direct3D 12 on the built-in engine")
+            Text("Direct3D 12 needs a newer built-in engine")
                 .font(.callout.weight(.semibold))
-            Text("In progress: D3DMetal only loads on the Wine it was built "
-                + "against, and that Wine can't run today's Steam client. A "
-                + "base that hosts both is being built; until then DX12 games "
-                + "need the CrossOver engine. Toolkits added below are kept "
-                + "and used the moment it lands.")
+            Text("The built-in engine you have can't load Apple's toolkit. "
+                + "Sevoflurane's own engine can — switch to it in "
+                + "Settings › Engine, and D3DMetal appears in the renderer "
+                + "list. Toolkits added below are kept either way.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
