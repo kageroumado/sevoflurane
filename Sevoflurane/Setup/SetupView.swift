@@ -144,6 +144,7 @@ struct SetupView: View {
             GPTkDownloadPanel(
                 download: gptk,
                 install: { url in await graphicsStore?.installD3DMetal(from: url) },
+                isSimulated: provisioner.isDryRun,
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)

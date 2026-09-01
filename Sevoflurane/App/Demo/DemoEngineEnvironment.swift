@@ -33,7 +33,38 @@
                 case .bottleWithoutSteam: "A bottle without Steam"
                 }
             }
+
+            /// The machine the engine list is built from. It has to agree with
+            /// what this environment reports as active and installed —
+            /// ``EngineStore`` builds its options from detection and its
+            /// bottles from the environment, so a fixture that disagreed with
+            /// itself would show an engine named twice, once as a label and
+            /// once as a raw description.
+            var detection: SetupDetection {
+                switch self {
+                case .crossOverAndBuiltIn:
+                    SetupDetection(
+                        rosetta: true,
+                        crossover: SetupScenario.licensedCrossOver,
+                        bottles: [],
+                        managedEngineVersions: [DemoEngineEnvironment.builtInVersion],
+                    )
+                case .builtInOnly, .bottleWithoutSteam:
+                    SetupDetection(
+                        rosetta: true, crossover: nil, bottles: [],
+                        managedEngineVersions: [DemoEngineEnvironment.builtInVersion],
+                    )
+                case .noEngineYet:
+                    SetupDetection(
+                        rosetta: true, crossover: nil, bottles: [],
+                        managedEngineVersions: [],
+                    )
+                }
+            }
         }
+
+        /// The managed engine every scenario that has one reports.
+        static let builtInVersion = "wine-staging-10.14"
 
         let isSimulation = true
 
@@ -45,7 +76,7 @@
         init(scenario: Scenario) {
             self.scenario = scenario
             let crossover = Engine.crossover
-            let builtIn = Engine.managed(version: "wine-staging-10.14")
+            let builtIn = Engine.managed(version: Self.builtInVersion)
             switch scenario {
             case .crossOverAndBuiltIn:
                 activeEngine = crossover

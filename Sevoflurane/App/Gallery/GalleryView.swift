@@ -408,7 +408,15 @@
         /// so a tile that starts a switch leaves its neighbours alone.
         static let enginePanes: [EnginePane] =
             DemoEngineEnvironment.Scenario.allCases.map { scenario in
-                let provisioner = provisioner(.idle)
+                let provisioner = Provisioner(
+                    previewActivity: .idle,
+                    detection: scenario.detection,
+                    environment: DryRunSetupEnvironment(
+                        scenario: .provisioned,
+                        stepDelay: .milliseconds(900),
+                        detection: scenario.detection,
+                    ),
+                )
                 return EnginePane(
                     scenario: scenario,
                     provisioner: provisioner,

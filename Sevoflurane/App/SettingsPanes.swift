@@ -502,6 +502,7 @@ struct GraphicsSettings: View {
             GPTkDownloadPanel(
                 download: gptk,
                 install: { url in await store.installD3DMetal(from: url) },
+                isSimulated: store.isSimulated,
             )
             .padding(16)
             Divider()

@@ -242,10 +242,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let storage = StorageStore(
                 environment: DemoStorageEnvironment(scenario: DemoMode.storage),
             )
+            // Its own provisioner, on the engine scenario's machine: the pane
+            // builds its engine list from detection, and the assistant's
+            // machine is a different one.
+            let engineScenario = DemoMode.engine
             let engine = EngineStore(
-                provisioner: provisioner,
+                provisioner: Provisioner(
+                    environment: DryRunSetupEnvironment(
+                        scenario: .provisioned, detection: engineScenario.detection,
+                    ),
+                ),
                 supervisor: nil,
-                environment: DemoEngineEnvironment(scenario: DemoMode.engine),
+                environment: DemoEngineEnvironment(scenario: engineScenario),
             )
             let compatibility = CompatibilityStore(
                 environment: DemoCompatibilityEnvironment(scenario: DemoMode.compatibility),

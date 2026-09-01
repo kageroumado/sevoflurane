@@ -12,17 +12,50 @@ struct GPTkDownloadPanel: View {
     let install: @MainActor (URL) async -> String?
     /// Called with each version as it lands, so the caller can refresh.
     var onInstalled: (@MainActor (String) -> Void)?
+    /// Stands the web view down. A simulated run must not put Apple's real
+    /// sign-in page in front of anyone: it is a live page asking for real
+    /// credentials, and nothing about a demo makes that safe to show.
+    var isSimulated = false
 
     var body: some View {
         VStack(spacing: 12) {
-            instructions
-            webView
-            if !download.items.isEmpty { itemList }
+            if isSimulated {
+                simulatedStandIn
+            } else {
+                instructions
+                webView
+                if !download.items.isEmpty { itemList }
+            }
         }
         .onAppear {
+            guard !isSimulated else { return }
             download.install = install
             download.onInstalled = onInstalled
         }
+    }
+
+    /// What sits where Apple's page would be, so the step still reads as
+    /// itself in a screenshot without reaching Apple.
+    private var simulatedStandIn: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "person.badge.key")
+                .font(.system(size: 28))
+                .foregroundStyle(.secondary)
+            Text("Apple's sign-in page appears here")
+                .font(.callout.weight(.semibold))
+            Text("A real run signs in with your Apple ID and downloads the "
+                + "toolkit. This one loads nothing.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.quaternary.opacity(0.4)),
+        )
     }
 
     private var instructions: some View {

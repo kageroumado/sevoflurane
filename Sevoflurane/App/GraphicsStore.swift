@@ -29,6 +29,12 @@ final class GraphicsStore {
         environment.toolkitStore
     }
 
+    /// Whether this store's effects are simulated. The pane reads it to stand
+    /// Apple's real download page down.
+    var isSimulated: Bool {
+        environment.isSimulation
+    }
+
     /// Whether the engine brings a D3DMetal of its own, which the user's copy
     /// then replaces rather than supplies.
     var engineHasOwnD3DMetal: Bool {

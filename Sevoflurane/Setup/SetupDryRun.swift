@@ -124,10 +124,18 @@
         private var loginItem = true
         private var detectCount = 0
 
-        init(scenario: SetupScenario, stepDelay: Duration = .seconds(2)) {
+        init(
+            scenario: SetupScenario,
+            stepDelay: Duration = .seconds(2),
+            detection: SetupDetection? = nil,
+        ) {
             self.scenario = scenario
             self.stepDelay = stepDelay
-            state = scenario.fixture
+            // A caller that has its own machine in mind passes it: the Engine
+            // pane builds its list from detection and its bottles from
+            // ``DemoEngineEnvironment``, and a re-detect that reverted to the
+            // scenario's fixture would make those two disagree.
+            state = detection ?? scenario.fixture
             log("scenario '\(scenario.rawValue)' — nothing on this machine will be touched")
         }
 
