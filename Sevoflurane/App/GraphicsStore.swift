@@ -75,13 +75,15 @@ final class GraphicsStore {
     }
 
     /// The renderers this engine can switch between. CrossOver carries
-    /// D3DMetal itself; a managed engine has it once the user has added their
-    /// own copy of Apple's toolkit.
+    /// D3DMetal itself. The built-in engine cannot host it at all: GPTk's
+    /// libraries are winelib builds against Apple's Wine, and wine-staging
+    /// refuses to load them — measured 2026-09-01, `dxgi.dll not found`
+    /// with the toolkit fully staged. DX12 on a managed engine waits for an
+    /// engine built from a Wine that D3DMetal targets.
     var availableRenderers: [Renderer] {
-        guard !engineHasOwnD3DMetal else { return Renderer.allCases }
-        var renderers: [Renderer] = [.auto, .dxmt, .dxvk, .wined3d]
-        if !d3dMetalVersions.isEmpty { renderers.insert(.d3dmetal, at: 1) }
-        return renderers
+        engineHasOwnD3DMetal
+            ? Renderer.allCases
+            : [.auto, .dxmt, .dxvk, .wined3d]
     }
 
     func update(_ selection: BottleGraphics.Selection) {

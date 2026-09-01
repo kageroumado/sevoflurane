@@ -374,17 +374,34 @@ struct GraphicsSettings: View {
     /// unless another is chosen here.
     private var d3dMetalSection: some View {
         Section {
+            if !store.engineHasOwnD3DMetal {
+                // Measured 2026-09-01: GPTk's libraries are winelib builds
+                // against Apple's Wine, and the built-in engine's
+                // wine-staging refuses to load them however they're staged.
+                Text("Direct3D 12 isn't available on the built-in engine — "
+                    + "Apple's toolkit only runs on the Wine it was built "
+                    + "against. The CrossOver engine carries D3DMetal; DX12 "
+                    + "games need it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                d3dMetalControls
+            }
+        } header: {
+            Text("Apple's Game Porting Toolkit")
+        }
+        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
+    }
+
+    @ViewBuilder private var d3dMetalControls: some View {
+        Group {
             if store.d3dMetalVersions.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.engineHasOwnD3DMetal
-                        ? "Use a newer D3DMetal"
-                        : "Add D3DMetal")
+                    Text("Use a newer D3DMetal")
                         .font(.callout.weight(.semibold))
-                    Text(store.engineHasOwnD3DMetal
-                        ? "CrossOver ships the version it supports. Apple's newer "
-                        + "releases can be used instead."
-                        : "Direct3D 12 needs Apple's Game Porting Toolkit, which only "
-                        + "Apple may distribute.")
+                    Text("CrossOver ships the version it supports. Apple's newer "
+                        + "releases can be used instead.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -424,10 +441,7 @@ struct GraphicsSettings: View {
                     }
                     .disabled(isAddingD3DMetal)
             }
-        } header: {
-            Text("Apple's Game Porting Toolkit")
         }
-        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
     /// The selected version, when it is one of ours to remove — the engine's

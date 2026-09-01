@@ -136,6 +136,17 @@ final class LiveSetupEnvironment: SetupEnvironment {
         }
     }
 
+    /// Whether a registry file already carries the given `"name"=value`
+    /// line. A plain text scan: the hive files are flat `"key"="value"`
+    /// dumps, and a false negative only costs one redundant `reg add`.
+    private nonisolated func registry(
+        of bottle: URL, file: String, contains needle: String,
+    ) -> Bool {
+        let url = bottle.appendingPathComponent(file)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return false }
+        return text.contains(needle)
+    }
+
     func downloadSteamInstaller(intoBottle name: String) async throws {
         let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
         let (temp, _) = try await URLSession.shared.download(from: Self.steamSetupURL)
@@ -162,24 +173,43 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     func configureBottle(named name: String) async {
-        _ = await runWine(bottle: name, args: [
-            "reg", "add", #"HKCU\Software\Wine\Explorer"#,
-            "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
-        ])
+        // Each write is skipped when the value already sits in the hive —
+        // a `reg add` against a booting client can hang on the registry for
+        // the whole subprocess timeout (three wedged start.exe were caught
+        // doing exactly that, 2026-09-01), and every boot after the first
+        // has nothing to write anyway.
+        let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
+        if !registry(
+            of: bottleURL, file: "user.reg", contains: #""ShowSystray"="N""#,
+        ) {
+            _ = await runWine(bottle: name, args: [
+                "reg", "add", #"HKCU\Software\Wine\Explorer"#,
+                "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
+            ])
+        }
         // winebus's SDL backend, with no video subsystem to wait on, polls
         // every millisecond forever — measured 2.6 % CPU and ~1,200 wakeups/s
         // in winedevice.exe at idle under Rosetta; zero with the backend off.
         // Controllers keep the IOHID backend, and Steam Input reads raw HID
         // anyway — the same default Proton ships (hidraw first,
         // PROTON_PREFER_SDL to opt back in).
-        _ = await runWine(bottle: name, args: [
-            "reg", "add", #"HKLM\System\CurrentControlSet\Services\winebus"#,
-            "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",
-        ])
+        if !registry(
+            of: bottleURL, file: "system.reg", contains: #""Enable SDL"=dword:00000000"#,
+        ) {
+            _ = await runWine(bottle: name, args: [
+                "reg", "add", #"HKLM\System\CurrentControlSet\Services\winebus"#,
+                "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",
+            ])
+        }
         // Wine's own renderer reads the card from the registry rather than
         // the environment, so the choice has to be written twice to be one
         // choice.
         for entry in BottleGraphics.currentSelection().gpu.wineD3DRegistry {
+            if let dword = UInt32(entry.data),
+               registry(
+                   of: bottleURL, file: "user.reg",
+                   contains: String(format: "\"%@\"=dword:%08x", entry.value, dword),
+               ) { continue }
             _ = await runWine(bottle: name, args: [
                 "reg", "add", #"HKCU\Software\Wine\Direct3D"#,
                 "/v", entry.value, "/t", "REG_DWORD", "/d", entry.data, "/f",

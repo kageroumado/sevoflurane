@@ -1,33 +1,99 @@
 import Foundation
 
-/// Puts a managed engine's renderer DLLs where Wine can load them.
+/// Puts a managed engine's renderer DLLs where Wine will actually load them:
+/// over the canonical builtins in `lib/wine/x86_64-windows`.
 ///
-/// `WINEDLLOVERRIDES=d3d11=n,b` asks for the *native* DLL first, and native
-/// means a real Windows DLL inside the prefix. CrossOver stages its own; a
-/// managed engine keeps them in the engine directory, so they are copied into
-/// the prefix whenever the renderer is asserted — which is every boot, since
-/// the pass is idempotent.
+/// The payloads (DXMT's "builtin" release, DXVK-macOS "builtin", GPTk's
+/// D3DMetal) are winelib builds carrying Wine's builtin signature — and Wine
+/// resolves a builtin DLL to its canonical tree copy no matter what sits in
+/// `system32`. Staging them there was measured to load Wine's own vkd3d
+/// d3d12 with D3DMetal fully installed ("DirectX 12 is not supported",
+/// 2026-09-01). So activation swaps the canonical copies instead, keeping
+/// each displaced original beside the tree for the swap back.
 nonisolated enum EngineRenderers {
-    /// Copies the selected renderer's DLLs into `bottle`'s system32, and
-    /// answers what it staged. Wine's own translation needs nothing staged.
+    /// Asserts the selected renderer in `engine`'s Wine tree and clears the
+    /// old system32 staging out of `bottle`. Answers what it placed.
+    /// Idempotent; runs on every boot.
     @discardableResult
     static func stage(
         _ renderer: Renderer, engine: URL, bottle: URL,
     ) -> [String] {
-        guard let source = libraries(for: renderer, engine: engine) else { return [] }
-        let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
         let manager = FileManager.default
-        guard let dlls = try? manager.contentsOfDirectory(
-            at: source, includingPropertiesForKeys: nil,
-        ).filter({ $0.pathExtension.lowercased() == "dll" }) else { return [] }
+        let canonical = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
+        let originals = engine.appendingPathComponent("wine/lib/wine/x86_64-windows-original")
+        guard manager.fileExists(atPath: canonical.path) else { return [] }
+
+        restoreOriginals(into: canonical, from: originals)
+        sweepStagedCopies(engine: engine, bottle: bottle)
+
+        guard let source = libraries(for: renderer, engine: engine),
+              let dlls = try? manager.contentsOfDirectory(
+                  at: source, includingPropertiesForKeys: nil,
+              ).filter({ $0.pathExtension.lowercased() == "dll" })
+        else { return [] }
+
         var staged: [String] = []
         for dll in dlls {
-            let target = system32.appendingPathComponent(dll.lastPathComponent)
+            let name = dll.lastPathComponent
+            let target = canonical.appendingPathComponent(name)
+            let keep = originals.appendingPathComponent(name)
+            if manager.fileExists(atPath: target.path),
+               !manager.fileExists(atPath: keep.path) {
+                try? manager.createDirectory(
+                    at: originals, withIntermediateDirectories: true,
+                )
+                try? manager.copyItem(at: target, to: keep)
+            }
             try? manager.removeItem(at: target)
             guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
-            staged.append(dll.lastPathComponent)
+            staged.append(name)
         }
         return staged
+    }
+
+    /// Puts Wine's own builtins back, so each activation starts from the
+    /// stock tree rather than the previous renderer's leftovers.
+    private static func restoreOriginals(into canonical: URL, from originals: URL) {
+        let manager = FileManager.default
+        let kept = (try? manager.contentsOfDirectory(
+            at: originals, includingPropertiesForKeys: nil,
+        )) ?? []
+        for original in kept {
+            let target = canonical.appendingPathComponent(original.lastPathComponent)
+            try? manager.removeItem(at: target)
+            try? manager.copyItem(at: original, to: target)
+        }
+    }
+
+    /// Removes the copies an earlier build staged into the bottle's
+    /// system32 — Wine ignored them, but they'd shadow the truth in any
+    /// audit. Only a byte-identical match to a payload file is removed;
+    /// anything else in system32 is someone's own.
+    private static func sweepStagedCopies(engine: URL, bottle: URL) {
+        let manager = FileManager.default
+        let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
+        for payload in payloadDirectories(engine: engine) {
+            let dlls = (try? manager.contentsOfDirectory(
+                at: payload, includingPropertiesForKeys: nil,
+            ))?.filter { $0.pathExtension.lowercased() == "dll" } ?? []
+            for dll in dlls {
+                let staged = system32.appendingPathComponent(dll.lastPathComponent)
+                guard manager.contentsEqual(atPath: staged.path, andPath: dll.path)
+                else { continue }
+                try? manager.removeItem(at: staged)
+            }
+        }
+    }
+
+    private static func payloadDirectories(engine: URL) -> [URL] {
+        var directories = [
+            engine.appendingPathComponent("dxmt"),
+            engine.appendingPathComponent("dxvk"),
+        ]
+        for toolkit in D3DMetalInstaller.installed(inEngine: engine) {
+            directories.append(D3DMetalInstaller.windowsLibraries(of: toolkit))
+        }
+        return directories
     }
 
     /// Where a renderer's Windows DLLs live inside a managed engine.
