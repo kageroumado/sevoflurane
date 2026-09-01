@@ -137,10 +137,16 @@ final class ClientSupervisor {
     /// while healthy, and near-dormant while a game has the machine — the
     /// game is the workload the whole app exists for, and a supervisor that
     /// scans windows and opens DevTools sessions every eight seconds during
-    /// play is taking CPU from it.
+    /// play is taking CPU from it. `.starting` is the page-just-reloaded
+    /// convergence window: the healthy transition rides a probe tick, so a
+    /// second-by-second cadence there is seconds off every boot audit
+    /// (`probeClient` is one HTTP `/json` fetch — no DevTools session).
     private var probeInterval: Duration {
-        guard health == .healthy else { return .seconds(3) }
-        return gameIsUp ? .seconds(60) : .seconds(8)
+        switch health {
+        case .healthy: gameIsUp ? .seconds(60) : .seconds(8)
+        case .starting: .seconds(1)
+        default: .seconds(3)
+        }
     }
 
     func togglePaused() {
@@ -686,9 +692,16 @@ final class ClientSupervisor {
     }
 
     private func awaitClientUp() async {
-        for waited in stride(from: 3, through: 180, by: 3) {
+        // 3s strides while Wine and the bootstrapper cannot possibly be done,
+        // then second-by-second: CDP arrives at an arbitrary moment past
+        // ~15s, and each stride of slack is a second on every boot audit
+        // (`probeClient` is one HTTP `/json` fetch, cheap at this rate).
+        var waited = 0
+        while waited < 180 {
+            let stride = waited < 15 ? 3 : 1
             health = progress("waiting for the client (\(waited)s)")
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(stride))
+            waited += stride
             // A Wine window with CDP still dead this far in is Steam saying
             // something instead of starting — the gptk-wine wedge sat in
             // this loop for the full 180s, three times over, before the
