@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 struct GeneralSettings: View {
     let provisioner: Provisioner
     let store: StorageStore
+    var steam: SteamActions?
     let highlighted: String?
     /// The supervisor to stand down before an uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
@@ -44,6 +45,20 @@ struct GeneralSettings: View {
                     provisioner.setOpenAtLogin(enabled)
                 }
                 .highlightable(id: "general.openAtLogin", highlighted: highlighted)
+                if let steam {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Steam's own settings")
+                            Text("Interface, downloads, controller — everything "
+                                + "the client keeps for itself.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Open…") { steam.openSteamSettings() }
+                    }
+                    .highlightable(id: "general.steamSettings", highlighted: highlighted)
+                }
             }
             Section {
                 cliRow
@@ -503,6 +518,7 @@ private struct RendererHelp: View {
 
 struct StorageSettings: View {
     let store: StorageStore
+    var steam: SteamActions?
     let highlighted: String?
 
     var body: some View {
@@ -514,6 +530,22 @@ struct StorageSettings: View {
                     } else {
                         row(entry)
                     }
+                }
+                if store.needsClientRestart, let steam {
+                    HStack {
+                        Text("Steam sees linked and unlinked games after a restart.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Restart Steam") {
+                            store.applyPendingLinks()
+                            steam.restartClient()
+                            store.acknowledgeRestart()
+                        }
+                    }
+                }
+                if let error = store.linkError {
+                    Text(error).font(.callout).foregroundStyle(.orange)
                 }
             } header: {
                 HStack {
@@ -527,6 +559,7 @@ struct StorageSettings: View {
                     + "costs a drag back rather than a re-download. Uninstalling "
                     + "the app itself lives in General.")
             }
+            sharingSection
         }
         .formStyle(.grouped)
         .task { await store.measure() }
@@ -537,18 +570,97 @@ struct StorageSettings: View {
     private var gameList: some View {
         VStack(spacing: 4) {
             ForEach(store.games) { game in
-                HStack {
-                    Text(game.name).lineLimit(1)
-                    Spacer(minLength: Theme.Space.md)
-                    Text(Self.size(game.bytes))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .font(.callout)
+                gameRow(game)
             }
         }
         .padding(.leading, 28)
         .padding(.vertical, 4)
+    }
+
+    private func gameRow(_ game: StorageInventory.Game) -> some View {
+        let linked = store.linkedGames.contains(game.id)
+        return HStack {
+            Text(game.name).lineLimit(1)
+            if linked {
+                Image(systemName: "link")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help("Shared from another bottle — one copy on disk")
+            }
+            Spacer(minLength: Theme.Space.md)
+            Text(Self.size(game.bytes))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            if steam != nil || linked {
+                Button {
+                    if linked {
+                        store.unlink(game)
+                    } else {
+                        steam?.uninstall(game.id)
+                    }
+                } label: {
+                    Image(systemName: linked ? "link.badge.minus" : "trash")
+                }
+                .buttonStyle(.borderless)
+                .help(linked
+                    ? "Remove the link — the files stay in their own bottle"
+                    : "Uninstall through Steam (it asks first)")
+            }
+        }
+        .font(.callout)
+    }
+
+    /// Games installed in other bottles, one Link away from playable here.
+    @ViewBuilder private var sharingSection: some View {
+        if !store.linkable.isEmpty || !store.pendingLinks.isEmpty {
+            Section {
+                ForEach(store.pendingLinks) { candidate in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(candidate.name).lineLimit(1)
+                            Text("linked — appears when Steam restarts")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.Space.md)
+                        Image(systemName: "link")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            store.cancelPendingLink(candidate)
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Undo the link")
+                    }
+                    .font(.callout)
+                }
+                ForEach(store.linkable) { candidate in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(candidate.name).lineLimit(1)
+                            Text("in \u{201C}\(candidate.sourceBottle)\u{201D} — \(candidate.sourceEngine)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.Space.md)
+                        Text(Self.size(candidate.bytes))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        Button("Link") { store.link(candidate) }
+                    }
+                    .font(.callout)
+                }
+            } header: {
+                Text("In your other bottles")
+            } footer: {
+                Text("Linking shares a game's files from another bottle — one "
+                    + "copy on disk, no second download. Steam verifies them on "
+                    + "first launch; save files stay per-bottle.")
+            }
+            .highlightable(id: "storage.sharing", highlighted: highlighted)
+        }
     }
 
     private func row(_ entry: StorageInventory.Entry) -> some View {

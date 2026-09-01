@@ -17,7 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
-    private lazy var settingsWindow = SettingsWindow(provisioner: provisioner, supervisor: supervisor)
+    private lazy var settingsWindow = SettingsWindow(
+        provisioner: provisioner, supervisor: supervisor, host: host,
+    )
 
     func applicationDidFinishLaunching(_: Notification) {
         // First, so a throw during the rest of startup is still recorded.

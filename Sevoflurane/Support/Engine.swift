@@ -289,6 +289,16 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             "PATH": wineURL.deletingLastPathComponent().path + ":/usr/bin:/bin",
             "WINEDEBUG": "-all",
         ]
+        // Keeps Steam's own processes out of the Dock: winemac.drv promotes
+        // any wine process that shows a window, steamwebhelper flashes one
+        // on every boot, and there is no demotion API — so the promotion
+        // itself is interposed away (Tools/dock-shim). Games keep the real
+        // call. Ships inside the engine; an engine without it just gets the
+        // Dock icon back.
+        let dockShim = root.appendingPathComponent("libsevodockshim.dylib")
+        if FileManager.default.fileExists(atPath: dockShim.path) {
+            env["DYLD_INSERT_LIBRARIES"] = dockShim.path
+        }
         let graphics = BottleGraphics.managedSelection()
         if graphics.msync {
             // The Whisky-documented quirk: msync must ride with esync or

@@ -125,6 +125,13 @@ else
     fi
 fi
 
+step "dock shim"
+# Keeps Steam's own processes out of the Dock; see Tools/dock-shim.
+clang -arch x86_64 -dynamiclib -framework ApplicationServices \
+    -o "$ROOT/libsevodockshim.dylib" \
+    "$(dirname "$0")/dock-shim/sevo_dock_shim.c"
+codesign -s - -f "$ROOT/libsevodockshim.dylib"
+
 step "engine-info.json"
 cat > "$ROOT/engine-info.json" <<EOF
 {

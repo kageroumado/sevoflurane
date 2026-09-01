@@ -21,6 +21,10 @@ final class SteamWindow: NSObject {
 
     private var window: NSWindow?
 
+    /// The backing window, for app-level policy decisions that must exclude
+    /// it (a hiding window still reads as visible for a beat).
+    var nsWindow: NSWindow? { window }
+
     /// The hosting window's AppKit frame, for WebKit's window-frame delegate.
     /// Steam's menu placement flips a flyout upward when `window.screenY` says
     /// there is no room below, and WebKit answers that DOM API with a zero

@@ -10,6 +10,7 @@ import SwiftUI
 final class SettingsWindow: NSObject, NSToolbarDelegate {
     private let provisioner: Provisioner
     private weak var supervisor: ClientSupervisor?
+    private weak var host: SteamWebHost?
     private var window: NSWindow?
     /// One engine store for the app's lifetime, not one per window: an
     /// engine switch outlives a closed Settings window, and reopening must
@@ -18,12 +19,19 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         provisioner: provisioner, supervisor: supervisor,
     )
 
-    init(provisioner: Provisioner, supervisor: ClientSupervisor? = nil) {
+    init(
+        provisioner: Provisioner, supervisor: ClientSupervisor? = nil,
+        host: SteamWebHost? = nil,
+    ) {
         self.supervisor = supervisor
         self.provisioner = provisioner
+        self.host = host
     }
 
     func show() {
+        // Settings is a real window: while it's up the app has a Dock tile
+        // and an active menu bar, like any app with a window on screen.
+        ActivationPolicy.becomeRegular()
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate()
@@ -37,10 +45,26 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     }
 
     private func makeWindow() -> NSWindow {
+        let steam = host.map { host in
+            SteamActions(
+                openSteamSettings: { [weak host] in
+                    // The settings window needs the client's UI up to open
+                    // over; showSteam brings both forward.
+                    host?.showSteam()
+                    host?.executeSteamURL(URL(string: "steam://open/settings")!)
+                },
+                uninstall: { [weak host] appID in
+                    host?.showSteam()
+                    host?.executeSteamURL(URL(string: "steam://uninstall/\(appID)")!)
+                },
+                restartClient: { [weak supervisor] in supervisor?.restartNow() },
+            )
+        }
         let controller = NSHostingController(
             rootView: SettingsView(
                 provisioner: provisioner, graphics: .live(), storage: .live(),
                 engine: engineStore,
+                steam: steam,
                 supervisor: supervisor,
             ),
         )
@@ -63,8 +87,11 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         window.isRestorable = false
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main,
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.window = nil }
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                self?.window = nil
+                ActivationPolicy.recedeIfLastWindow(closing: window)
+            }
         }
         return window
     }

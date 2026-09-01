@@ -9,12 +9,26 @@ import SwiftUI
 /// "open at login" — and not by which pane happens to hold them. Searching
 /// lists the matching settings themselves; picking one opens its pane and
 /// flashes the row.
+/// What Settings can ask of the running Steam client — injected by the
+/// window so the panes stay host-free, and absent in the gallery, whose
+/// tiles must never uninstall anything.
+@MainActor
+struct SteamActions {
+    /// Brings Steam up and opens its own settings window.
+    var openSteamSettings: () -> Void
+    /// The client's uninstall flow for one app; its confirmation dialog
+    /// arrives as a native window.
+    var uninstall: (_ appID: Int) -> Void
+    var restartClient: () -> Void
+}
+
 struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
     let engine: EngineStore
     var compatibility: CompatibilityStore = .live()
+    var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
     @State private var category: SettingsCategory = .general
@@ -37,6 +51,7 @@ struct SettingsView: View {
                 storage: storage,
                 engine: engine,
                 compatibility: compatibility,
+                steam: steam,
                 highlighted: highlighted,
                 supervisor: supervisor,
             )
@@ -87,6 +102,11 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     id: "general.openAtLogin",
                     title: "Open at login",
                     keywords: ["login", "startup", "start", "launch", "menu bar", "automatic"],
+                ),
+                SearchableSetting(
+                    id: "general.steamSettings",
+                    title: "Steam's own settings",
+                    keywords: ["steam", "settings", "downloads", "controller", "interface"],
                 ),
                 SearchableSetting(
                     id: "general.cli",
@@ -180,7 +200,15 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     title: "What is using space",
                     keywords: [
                         "storage", "space", "disk", "size", "games", "cache",
-                        "bottle", "engine", "clean", "free",
+                        "bottle", "engine", "clean", "free", "uninstall game",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "storage.sharing",
+                    title: "Share games between bottles",
+                    keywords: [
+                        "share", "link", "symlink", "bottle", "games",
+                        "redownload", "copy",
                     ],
                 ),
             ]
@@ -275,6 +303,7 @@ private struct SettingsPane: View {
     let storage: StorageStore
     let engine: EngineStore
     let compatibility: CompatibilityStore
+    let steam: SteamActions?
     let highlighted: String?
     var supervisor: ClientSupervisor?
 
@@ -283,8 +312,8 @@ private struct SettingsPane: View {
             switch category {
             case .general:
                 GeneralSettings(
-                    provisioner: provisioner, store: storage, highlighted: highlighted,
-                    supervisor: supervisor,
+                    provisioner: provisioner, store: storage, steam: steam,
+                    highlighted: highlighted, supervisor: supervisor,
                 )
             case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
             case .engine:
@@ -292,7 +321,8 @@ private struct SettingsPane: View {
                     store: engine, graphics: graphics, compatibility: compatibility,
                     provisioner: provisioner, highlighted: highlighted,
                 )
-            case .storage: StorageSettings(store: storage, highlighted: highlighted)
+            case .storage:
+                StorageSettings(store: storage, steam: steam, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)
             }
         }

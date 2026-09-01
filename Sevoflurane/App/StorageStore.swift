@@ -56,12 +56,95 @@ final class StorageStore {
         guard isLive, !isMeasuring else { return }
         isMeasuring = true
         defer { isMeasuring = false }
-        games = StorageInventory.installedGames()
+        refreshSharing()
         for index in entries.indices {
             let bytes = await StorageInventory.size(of: entries[index])
             guard index < entries.count else { return }
             entries[index].bytes = bytes
         }
+    }
+
+    // MARK: - Shared game files
+
+    /// Games in other bottles the active one could link.
+    private(set) var linkable: [SharedGames.Candidate] = []
+    /// Links whose files are in place but whose manifest waits for the
+    /// restart — Steam's library watcher wobbles visibly at a manifest
+    /// landing mid-session, so it lands on the way down instead.
+    private(set) var pendingLinks: [SharedGames.Candidate] = []
+    /// The installed games that are links into another bottle.
+    private(set) var linkedGames: Set<Int> = []
+    /// A link or unlink landed; Steam reads manifests at startup, so the
+    /// change is invisible until the client restarts.
+    private(set) var needsClientRestart = false
+    private(set) var linkError: String?
+
+    func link(_ candidate: SharedGames.Candidate) {
+        guard isLive, !pendingLinks.contains(candidate) else { return }
+        do {
+            try SharedGames.linkGameFiles(candidate)
+            linkError = nil
+            pendingLinks.append(candidate)
+            needsClientRestart = true
+            EventLog.shared.log(
+                .setup,
+                "linked \(candidate.name) files from \(candidate.sourceEngine)'s "
+                    + "\u{201C}\(candidate.sourceBottle)\u{201D} — manifest lands at restart",
+            )
+        } catch {
+            linkError = "couldn't link \(candidate.name): \(error.localizedDescription)"
+        }
+        refreshSharing()
+    }
+
+    /// Backs a pending link out before it ever reached Steam.
+    func cancelPendingLink(_ candidate: SharedGames.Candidate) {
+        guard isLive else { return }
+        try? SharedGames.removePendingLink(candidate)
+        pendingLinks.removeAll { $0 == candidate }
+        if pendingLinks.isEmpty { needsClientRestart = false }
+        refreshSharing()
+    }
+
+    /// Writes the pending manifests — called right before the restart that
+    /// makes Steam read them, so the mid-session watcher window is seconds.
+    func applyPendingLinks() {
+        guard isLive else { return }
+        for candidate in pendingLinks {
+            do {
+                try SharedGames.writeManifest(candidate)
+                EventLog.shared.log(.setup, "manifest written for \(candidate.name)")
+            } catch {
+                linkError = "couldn't finish linking \(candidate.name): "
+                    + error.localizedDescription
+            }
+        }
+        pendingLinks.removeAll()
+        refreshSharing()
+    }
+
+    func unlink(_ game: StorageInventory.Game) {
+        guard isLive else { return }
+        do {
+            try SharedGames.unlink(appID: game.id)
+            linkError = nil
+            needsClientRestart = true
+            EventLog.shared.log(.setup, "removed the link for \(game.name)")
+        } catch {
+            linkError = "couldn't remove the link: \(error.localizedDescription)"
+        }
+        refreshSharing()
+    }
+
+    func acknowledgeRestart() {
+        needsClientRestart = false
+    }
+
+    private func refreshSharing() {
+        games = StorageInventory.installedGames()
+        linkedGames = Set(games.map(\.id).filter { SharedGames.isLinked(appID: $0) })
+        let pending = Set(pendingLinks.map(\.appID))
+        linkable = SharedGames.linkable().filter { !pending.contains($0.appID) }
     }
 
     func reclaim(_ entry: StorageInventory.Entry) {

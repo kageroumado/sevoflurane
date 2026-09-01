@@ -1348,7 +1348,7 @@ final class SteamWebHost {
 
     func windowDidHide(_ window: SteamWindow) {
         guard window === desktop else { return }
-        NSApp.setActivationPolicy(.accessory)
+        ActivationPolicy.recedeIfLastWindow(closing: window.nsWindow)
     }
 
     // MARK: - Menu dismissal guard
@@ -1513,7 +1513,7 @@ final class SteamWebHost {
         menuMirror?.refresh()
         status = "Steam window closed"
         EventLog.shared.log(.window, "desktop window closed — its page is gone")
-        NSApp.setActivationPolicy(.accessory)
+        ActivationPolicy.recedeIfLastWindow(closing: nil)
     }
 
     func setStatus(_ value: String) {
