@@ -14,9 +14,11 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     case nvidia
     case amd
 
+    /// The `.nvidia` and `.amd` labels are also the card name written into the
+    /// bottle for a game to read, so they are the real product names.
     var label: String {
         switch self {
-        case .automatic: "Apple (accurate)"
+        case .automatic: "Apple (recommended)"
         case .nvidia: "NVIDIA GeForce RTX 4070"
         case .amd: "AMD Radeon RX 7800 XT"
         }
@@ -25,14 +27,15 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     var detail: String {
         switch self {
         case .automatic:
-            "What the Mac actually has. Some games read this, decide the card "
-                + "is unknown, and offer to install a driver."
+            "The truth: your Mac's own chip. A few games read this, decide "
+                + "they don't recognise the card, and offer to install a "
+                + "Windows driver — pick one of the others if that happens."
         case .nvidia:
-            "For games that check for a known card, or that only offer their "
-                + "best settings to a GeForce."
+            "Pretends you have a GeForce. For games that insist on a card "
+                + "they know, or that keep their best settings for NVIDIA."
         case .amd:
-            "The other card games recognise. Worth trying when a game "
-                + "misbehaves specifically on NVIDIA."
+            "Pretends you have a Radeon. Worth trying when a game misbehaves "
+                + "specifically on NVIDIA."
         }
     }
 

@@ -17,7 +17,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     var label: String {
         switch self {
-        case .auto: "Automatic"
+        case .auto: "Automatic (recommended)"
         case .d3dmetal: "D3DMetal"
         case .dxmt: "DXMT"
         case .dxvk: "DXVK"
@@ -27,11 +27,11 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     var detail: String {
         switch self {
-        case .auto: "The engine picks the best layer per game."
-        case .d3dmetal: "Apple's Game Porting Toolkit — D3D11 and D3D12."
-        case .dxmt: "Direct3D 11 straight to Metal."
-        case .dxvk: "Direct3D 9–11 over Vulkan."
-        case .wined3d: "Wine's own translation — the compatibility fallback."
+        case .auto: "A per-game choice made for you. Leave it here."
+        case .d3dmetal: "Apple's own. The only one that handles DirectX 12."
+        case .dxmt: "DirectX 11, translated straight to Metal."
+        case .dxvk: "DirectX 9 to 11, by way of Vulkan."
+        case .wined3d: "The slow, safe one that draws almost anything."
         }
     }
 

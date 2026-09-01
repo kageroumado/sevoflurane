@@ -214,11 +214,13 @@ struct GeneralSettings: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Uninstall Sevoflurane").font(.headline)
-                    Text("Removes what this app installed — the sevo command "
-                        + "and its assistant connections included. Your Steam "
-                        + "account, and anything you keep, are untouched.")
+                    Text("Removes what this app installed, the sevo command "
+                        + "and its assistant connections included, and then "
+                        + "removes the app. Your Steam account and everything "
+                        + "in the cloud stay as they are.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
@@ -231,19 +233,24 @@ struct GeneralSettings: View {
             isPresented: $confirmingUninstall,
             titleVisibility: .visible,
         ) {
-            Button("Move App Data to Trash", role: .destructive) {
+            Button("Uninstall, Keep Games", role: .destructive) {
                 uninstall(includingBottle: false)
             }
-            Button("Also Move the Bottle and Games", role: .destructive) {
+            Button("Uninstall Everything", role: .destructive) {
                 uninstall(includingBottle: true)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Steam is stopped first. App data means the engines, the toolkits "
-                + "and this app's settings. The bottle holds the Steam client and "
-                + "every installed game — \(StorageSettings.size(bottleBytes)) — and everything "
-                + "goes to the Trash either way. When it finishes, the app moves "
-                + "itself to the Trash and quits.")
+            Text("Steam is closed first, and everything goes to the Trash rather "
+                + "than being deleted, so a change of mind costs a drag back.\n\n"
+                + "Keeping your games removes the engines, the toolkits and this "
+                + "app's settings, and leaves Steam and its "
+                + "\(StorageSettings.size(bottleBytes)) of games where they are.\n\n"
+                + "Uninstalling everything takes that "
+                + "\(StorageSettings.size(bottleBytes)) too — you would download "
+                + "the games again from Steam.\n\n"
+                + "Either way, Sevoflurane moves itself to the Trash and quits "
+                + "when it finishes.")
         }
     }
 
@@ -333,7 +340,7 @@ struct GraphicsSettings: View {
                 }
                 .highlightable(id: "graphics.renderer", highlighted: highlighted)
                 VStack(alignment: .leading, spacing: 4) {
-                    Picker("Report the GPU as", selection: graphics.gpu) {
+                    Picker("Tell games your graphics card is", selection: graphics.gpu) {
                         ForEach(GPUIdentity.allCases, id: \.self) { identity in
                             Text(identity.label).tag(identity)
                         }
@@ -358,10 +365,14 @@ struct GraphicsSettings: View {
                         }
                     }
                 }
+            } header: {
+                Text("How games are drawn")
             } footer: {
-                Text("Steam's own interface never touches Direct3D — games "
-                    + "inherit the client's setup, so a change lands with the "
-                    + "next Steam restart.")
+                Text("A renderer turns the Windows drawing instructions a game "
+                    + "sends into ones your Mac's graphics chip understands. "
+                    + "Steam's own window doesn't use one — games inherit "
+                    + "whatever the client started with, so a change here "
+                    + "lands with the next Steam restart.")
             }
             d3dMetalSection
         }
@@ -410,25 +421,39 @@ struct GraphicsSettings: View {
             if store.d3dMetalVersions.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.engineHasOwnD3DMetal
-                        ? "Use a newer D3DMetal"
-                        : "Add D3DMetal")
+                        ? "Use a newer toolkit than CrossOver's"
+                        : "Add the toolkit to play DirectX 12 games")
                         .font(.callout.weight(.semibold))
                     Text(store.engineHasOwnD3DMetal
-                        ? "CrossOver ships the version it supports. Apple's newer "
-                        + "releases can be used instead."
-                        : "The DX12 engine overlays Apple's toolkit, which only "
-                        + "Apple may distribute — download it here or add a "
-                        + "disk image.")
+                        ? "CrossOver includes the version it supports. If Apple "
+                        + "has released a newer one, you can add it here and use "
+                        + "that instead."
+                        : "The newest games use DirectX 12, and only Apple's own "
+                        + "toolkit can translate it. Apple doesn't let anyone else "
+                        + "hand it out, so it comes from your own download — it's "
+                        + "free, and it's one file.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 D3DMetalVersionPicker(store: store)
             }
-            HStack {
-                if let d3dMetalError {
-                    Text(d3dMetalError).font(.callout).foregroundStyle(.orange)
+            if isAddingD3DMetal {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Opening the disk image and copying the toolkit in…")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
                 }
+            }
+            if let d3dMetalError {
+                Label(d3dMetalError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
                 Spacer()
                 if let removable = removableD3DMetal {
                     Button("Remove \(removable)…", role: .destructive) {
@@ -450,10 +475,10 @@ struct GraphicsSettings: View {
                             + "wrong click is recoverable.")
                     }
                 }
-                Button("Download from Apple…") { showingGPTkDownload = true }
+                Button("Get It from Apple…") { showingGPTkDownload = true }
                     .disabled(isAddingD3DMetal)
                 Button(store.d3dMetalVersions.isEmpty
-                    ? "Choose Disk Image…" : "Add Another Version…") {
+                    ? "Choose a Downloaded File…" : "Add Another Version…") {
                         addD3DMetal()
                     }
                     .disabled(isAddingD3DMetal)
@@ -539,11 +564,14 @@ private struct RendererHelp: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choosing a renderer")
                 .font(.headline)
-            Text("Each one translates the Windows graphics API a game speaks "
-                + "into Metal. A game that stutters or refuses to start is "
-                + "usually a game on the wrong one.")
+            Text("Every Windows game draws through DirectX. Each of these "
+                + "turns DirectX into Metal, the language your Mac's graphics "
+                + "chip speaks, and each does it differently. A game that "
+                + "stutters or refuses to start is usually a game on the "
+                + "wrong one.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ForEach(available, id: \.self) { renderer in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(renderer.label).font(.callout.weight(.semibold))
@@ -757,9 +785,10 @@ struct RepairSettings: View {
             Section {
                 RepairRow(provisioner: provisioner, highlighted: highlighted)
             } footer: {
-                Text("Runs the same setup as first launch: anything present is "
-                    + "kept, anything missing or broken is reinstalled. Games "
-                    + "and saves are untouched.")
+                Text("Repair runs first-launch setup again: whatever is still "
+                    + "there is left alone, and only what is missing or broken "
+                    + "gets reinstalled. Your games, saves and Steam account "
+                    + "are not touched.")
             }
         }
         .formStyle(.grouped)

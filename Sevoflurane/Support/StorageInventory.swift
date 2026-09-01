@@ -43,7 +43,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "games",
                 name: "Games",
-                detail: "Everything Steam has installed in this bottle.",
+                detail: "Every game Steam has installed on this Mac.",
                 icon: "gamecontroller",
                 url: steam.appendingPathComponent("steamapps"),
                 bytes: -1,
@@ -70,7 +70,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "bottle",
                 name: "Windows environment",
-                detail: "The bottle around Steam: the fake drive and its registry.",
+                detail: "The pretend Windows drive Steam runs inside.",
                 icon: "externaldrive",
                 url: bottle,
                 bytes: -1,
@@ -79,7 +79,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "engines",
                 name: "Built-in engines",
-                detail: "Wine builds Sevoflurane downloaded.",
+                detail: "The Windows translator Sevoflurane downloaded.",
                 icon: "gearshape.2",
                 url: support.appendingPathComponent("Engines"),
                 bytes: -1,
@@ -88,7 +88,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "toolkits",
                 name: "Apple's Game Porting Toolkit",
-                detail: "D3DMetal versions you added.",
+                detail: "The DirectX 12 translator versions you added.",
                 icon: "cpu",
                 url: support.appendingPathComponent("D3DMetal"),
                 bytes: -1,
@@ -96,8 +96,8 @@ nonisolated enum StorageInventory {
             ),
             Entry(
                 id: "shadow",
-                name: "CrossOver shadow tree",
-                detail: "Symbolic links that point CrossOver at your D3DMetal.",
+                name: "CrossOver links",
+                detail: "Shortcuts that point CrossOver at the toolkit you added.",
                 icon: "link",
                 url: CrossOverShadow.root,
                 bytes: -1,
