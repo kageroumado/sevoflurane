@@ -11,9 +11,9 @@ import Foundation
 /// 2026-09-01). So activation swaps the canonical copies instead, keeping
 /// each displaced original beside the tree for the swap back.
 nonisolated enum EngineRenderers {
-    /// Asserts the selected renderer in `engine`'s Wine tree and clears the
-    /// old system32 staging out of `bottle`. Answers what it placed.
-    /// Idempotent; runs on every boot.
+    /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
+    /// `bottle`'s system32 holds a file for each renderer DLL. Answers what
+    /// it placed. Idempotent; runs on every boot.
     @discardableResult
     static func stage(
         _ renderer: Renderer, engine: URL, bottle: URL,
@@ -42,7 +42,6 @@ nonisolated enum EngineRenderers {
         guard manager.fileExists(atPath: canonical.path) else { return [] }
 
         restoreOriginals(into: canonical, from: originals)
-        sweepStagedCopies(engine: engine, bottle: bottle)
 
         guard let source = libraries(for: renderer, engine: engine),
               let dlls = try? manager.contentsOfDirectory(
@@ -66,6 +65,7 @@ nonisolated enum EngineRenderers {
             guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
             staged.append(name)
         }
+        ensureLoaderFiles(canonical: canonical, engine: engine, bottle: bottle)
         return staged
     }
 
@@ -83,23 +83,31 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Removes the copies an earlier build staged into the bottle's
-    /// system32 — Wine ignored them, but they'd shadow the truth in any
-    /// audit. Only a byte-identical match to a payload file is removed;
-    /// anything else in system32 is someone's own.
-    private static func sweepStagedCopies(engine: URL, bottle: URL) {
+    /// Guarantees every renderer DLL has a file in the bottle's `system32`.
+    ///
+    /// Wine loads a builtin only when a file of that name exists there
+    /// (`find_builtin_without_file` refuses outside prefix bootstrap), and
+    /// resolves any Wine-signed file it finds to the canonical tree copy — so
+    /// the file's job is purely to exist, and the tree's own copy fills it.
+    /// Without this, a game importing dxgi.dll dies at load with
+    /// STATUS_DLL_NOT_FOUND (0xC0000135) before drawing anything.
+    private static func ensureLoaderFiles(canonical: URL, engine: URL, bottle: URL) {
         let manager = FileManager.default
         let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
+        guard manager.fileExists(atPath: system32.path) else { return }
+        var names = Set<String>()
         for payload in payloadDirectories(engine: engine) {
             let dlls = (try? manager.contentsOfDirectory(
                 at: payload, includingPropertiesForKeys: nil,
             ))?.filter { $0.pathExtension.lowercased() == "dll" } ?? []
-            for dll in dlls {
-                let staged = system32.appendingPathComponent(dll.lastPathComponent)
-                guard manager.contentsEqual(atPath: staged.path, andPath: dll.path)
-                else { continue }
-                try? manager.removeItem(at: staged)
-            }
+            names.formUnion(dlls.map(\.lastPathComponent))
+        }
+        for name in names {
+            let target = system32.appendingPathComponent(name)
+            let source = canonical.appendingPathComponent(name)
+            guard !manager.fileExists(atPath: target.path),
+                  manager.fileExists(atPath: source.path) else { continue }
+            try? manager.copyItem(at: source, to: target)
         }
     }
 
