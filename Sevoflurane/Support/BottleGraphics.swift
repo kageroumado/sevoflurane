@@ -65,8 +65,13 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         switch self {
         case .dxvk:
             "d3d9,d3d10core,d3d11,dxgi=n,b"
-        case .dxmt, .d3dmetal:
+        case .dxmt:
             "d3d10core,d3d11,dxgi=n,b"
+        case .d3dmetal:
+            // Exactly GPTk's PE set — d3d12 is the point of choosing it;
+            // without it in the override, Wine's builtin d3d12 wins load
+            // order and reports "DX12 not supported".
+            "d3d10,d3d11,d3d12,dxgi=n,b"
         case .auto, .wined3d:
             nil
         }
