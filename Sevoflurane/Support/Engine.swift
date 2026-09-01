@@ -9,9 +9,23 @@ import Foundation
 /// plain WineHQ is driven by `WINEPREFIX`) and where bottles live on disk.
 nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     case crossover
+    /// CodeWeavers' preview app, installed alongside stable CrossOver. It
+    /// keeps its own bottle directory when it has made one; adopting stable
+    /// bottles is an opt-in inside Preview's UI, never something this app
+    /// migrates.
+    case crossoverPreview
     /// A managed engine under ``managedRoot``, one directory per version
     /// (layout produced by `Tools/package-engine.sh`).
     case managed(version: String)
+
+    /// Both CodeWeavers apps: bottles carry `cxbottle.conf`, invocations
+    /// take `--bottle`, and the Windows user inside is `crossover`.
+    var isCrossOver: Bool {
+        switch self {
+        case .crossover, .crossoverPreview: true
+        case .managed: false
+        }
+    }
 
     /// Managed engines, one directory per version:
     /// `wine/` (WineHQ tree), `dxvk/`, `dxmt/`, `d3dmetal/`,
@@ -38,9 +52,14 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         set { resolved = newValue }
     }
 
-    /// CrossOver first (its Steam/CEF fixes exist in no OSS binary — SPEC
-    /// "Engine strategy"), newest managed engine otherwise.
+    /// The user's explicit choice first (Settings › Engine, validated
+    /// against what's actually on disk); otherwise CrossOver (its Steam/CEF
+    /// fixes exist in no OSS binary — SPEC "Engine strategy"), then the
+    /// newest managed engine.
     static func resolve(from detection: SetupDetection) -> Engine {
+        if let chosen = preferred(), chosen.existsOnDisk {
+            return chosen
+        }
         if detection.usableCrossOver != nil {
             return .crossover
         }
@@ -51,8 +70,12 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     }
 
     /// The synchronous subset of ``SetupProbe/detect()`` that decides the
-    /// engine: CrossOver's license state and the managed-engine directory.
+    /// engine: the stored choice, CrossOver's license state, the
+    /// managed-engine directory.
     private static func resolveFromDisk() -> Engine {
+        if let chosen = preferred(), chosen.existsOnDisk {
+            return chosen
+        }
         let usableCrossOver = SetupProbe.crossoverInfo()
             .map { $0.licensed || !$0.trialExpired } ?? false
         if usableCrossOver {
@@ -64,33 +87,115 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         return .crossover
     }
 
+    // MARK: - The stored choice
+
+    private static let preferenceKey = "engine"
+
+    /// Names this engine as the one every invocation routes through, now and
+    /// on every future launch. Both faces read the shared suite, so `sevo`
+    /// and the app never drive different engines. The client is restarted
+    /// around it, like a bottle change.
+    static func choose(_ engine: Engine) {
+        Preferences.shared.set(engine.preferenceValue, forKey: preferenceKey)
+        active = engine
+    }
+
+    /// The stored form of the choice. Managed is stored version-agnostically
+    /// — "the built-in engine", whichever version is newest — so an engine
+    /// update keeps the choice working instead of pinning a directory that
+    /// no longer exists.
+    var preferenceValue: String {
+        switch self {
+        case .crossover: "crossover"
+        case .crossoverPreview: "crossover-preview"
+        case .managed: "managed"
+        }
+    }
+
+    /// The stored choice as a runnable engine, or `nil` when nothing is
+    /// stored or the chosen engine isn't on disk (managed chosen but never
+    /// installed, a deleted app) — those fall to policy.
+    static func preferred() -> Engine? {
+        switch Preferences.shared.string(forKey: preferenceKey) {
+        case "crossover": .crossover
+        case "crossover-preview": .crossoverPreview
+        case "managed":
+            SetupProbe.managedEngineVersions().last.map { .managed(version: $0) }
+        default: nil
+        }
+    }
+
+    /// Whether the stored choice asks for the built-in engine, installed or
+    /// not — provisioning reads this to know an install is wanted even with
+    /// a usable CrossOver on the machine.
+    static var preferenceWantsManaged: Bool {
+        Preferences.shared.string(forKey: preferenceKey) == "managed"
+    }
+
+    /// Whether the engine's own binaries are still where the choice left
+    /// them — a stored choice pointing at a deleted app must lose to policy.
+    var existsOnDisk: Bool {
+        switch self {
+        case .crossover, .crossoverPreview:
+            crossoverBin.map { FileManager.default.fileExists(atPath: $0) } ?? false
+        case .managed:
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("wine/bin").path)
+        }
+    }
+
     var description: String {
         switch self {
         case .crossover: "CrossOver"
-        case let .managed(version): "built-in \(version)"
+        case .crossoverPreview: "CrossOver Preview"
+        case let .managed(version):
+            version.isEmpty ? "the built-in engine" : "built-in \(version)"
         }
     }
 
     // MARK: - Paths
 
+    /// The CodeWeavers app this engine runs out of; `nil` for managed.
+    var crossoverApp: URL? {
+        switch self {
+        case .crossover: URL(fileURLWithPath: "/Applications/CrossOver.app")
+        case .crossoverPreview: URL(fileURLWithPath: "/Applications/CrossOver Preview.app")
+        case .managed: nil
+        }
+    }
+
+    /// The CLI tools (wine, wineserver, cxbottle) inside that app.
+    var crossoverBin: String? {
+        crossoverApp.map { $0.path + "/Contents/SharedSupport/CrossOver/bin" }
+    }
+
     /// The engine's own directory (the CrossOver tree, or the versioned
     /// managed directory).
     var root: URL {
         switch self {
-        case .crossover:
-            URL(fileURLWithPath: SteamBottle.crossoverBin).deletingLastPathComponent()
+        case .crossover, .crossoverPreview:
+            URL(fileURLWithPath: crossoverBin ?? "").deletingLastPathComponent()
         case let .managed(version):
             Self.managedRoot.appendingPathComponent(version)
         }
     }
 
+    /// Preview's own bottle directory, which it creates the first time it
+    /// makes (or adopts) a bottle of its own.
+    static let previewBottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Application Support/CrossOver Preview/Bottles")
+
     /// Where this engine's bottles live. CrossOver bottles stay in
     /// CrossOver's directory so the user's existing installation is adopted,
-    /// never migrated.
+    /// never migrated; Preview reads its own directory when one exists and
+    /// the shared one otherwise.
     var bottlesRoot: URL {
         switch self {
         case .crossover:
             SteamBottle.bottlesRoot
+        case .crossoverPreview:
+            FileManager.default.fileExists(atPath: Self.previewBottlesRoot.path)
+                ? Self.previewBottlesRoot : SteamBottle.bottlesRoot
         case .managed:
             Self.managedBottlesRoot
         }
@@ -103,7 +208,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             // their own, so CrossOver's launcher computes its graphics paths
             // inside ours. Its own launcher otherwise, unchanged.
             return CrossOverShadow.preparedLauncher()
-                ?? URL(fileURLWithPath: SteamBottle.crossoverBin + "/wine")
+                ?? URL(fileURLWithPath: (crossoverBin ?? "") + "/wine")
+        case .crossoverPreview:
+            // The shadow tree mirrors the stable app only; Preview runs its
+            // own launcher untouched.
+            return URL(fileURLWithPath: (crossoverBin ?? "") + "/wine")
         case .managed:
             let bin = root.appendingPathComponent("wine/bin")
             let wine64 = bin.appendingPathComponent("wine64")
@@ -114,8 +223,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     var wineserverURL: URL {
         switch self {
-        case .crossover:
-            URL(fileURLWithPath: SteamBottle.crossoverBin + "/wineserver")
+        case .crossover, .crossoverPreview:
+            URL(fileURLWithPath: (crossoverBin ?? "") + "/wineserver")
         case .managed:
             root.appendingPathComponent("wine/bin/wineserver")
         }
@@ -135,7 +244,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// it ever runs.
     var cefArguments: [String] {
         switch self {
-        case .crossover:
+        case .crossover, .crossoverPreview:
             []
         case .managed:
             ["-cef-disable-gpu", "-cef-disable-sandbox"]
@@ -160,7 +269,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         bottle: String, wait: Wait, program: [String],
     ) -> (executable: URL, arguments: [String], environment: [String: String]?) {
         switch self {
-        case .crossover:
+        case .crossover, .crossoverPreview:
             let flag = switch wait {
             case .none: "--no-wait"
             case .children: "--wait-children"

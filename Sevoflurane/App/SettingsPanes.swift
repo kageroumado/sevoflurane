@@ -327,16 +327,6 @@ struct GraphicsSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 .highlightable(id: "graphics.gpu", highlighted: highlighted)
-                Toggle(isOn: graphics.msync) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Enhanced synchronization (msync)")
-                        Text("Faster in most games. Turn off if a game deadlocks at launch.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.switch)
-                .highlightable(id: "graphics.msync", highlighted: highlighted)
             } footer: {
                 Text("Steam's own interface never touches Direct3D — changes "
                     + "take effect the next time a game starts.")
@@ -509,145 +499,6 @@ private struct RendererHelp: View {
     }
 }
 
-// MARK: - Compatibility
-
-/// The winetricks territory, made legible: the dependencies games commonly
-/// miss as one-click installs, the bottle's DLL overrides, and a door to
-/// Wine's own configuration window.
-struct CompatibilitySettings: View {
-    let store: CompatibilityStore
-    let highlighted: String?
-    @State private var newOverrideDLL = ""
-    @State private var newOverrideMode = BottleDependencies.overrideModes[0]
-
-    var body: some View {
-        Form {
-            dependenciesSection
-            wineToolsSection
-            overridesSection
-        }
-        .formStyle(.grouped)
-        .onAppear { store.refresh() }
-    }
-
-    private var dependenciesSection: some View {
-        Section {
-            ForEach(store.rows) { row in
-                dependencyRow(row)
-            }
-        } header: {
-            Text("Pieces some games are missing")
-        } footer: {
-            Text("Steam installs most of what a game declares it needs; these "
-                + "cover the rest — the same set CrossOver bundles into its "
-                + "Steam bottles. Installing one that's already present is "
-                + "harmless.")
-        }
-        .highlightable(id: "compatibility.dependencies", highlighted: highlighted)
-    }
-
-    private func dependencyRow(_ row: CompatibilityStore.DependencyRow) -> some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.dependency.name)
-                Text(row.busy ? (row.phase ?? "working…") : row.dependency.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let error = row.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: Theme.Space.sm)
-            if row.busy {
-                ProgressView().controlSize(.small)
-            } else if row.installed {
-                Label("Installed", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .labelStyle(.titleAndIcon)
-            } else {
-                Button("Install \(row.dependency.download)") {
-                    store.install(row.id)
-                }
-            }
-        }
-    }
-
-    private var wineToolsSection: some View {
-        Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Wine configuration")
-                    Text("The engine's own settings window: Windows version, "
-                        + "per-application overrides, drives, audio.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Open…") { store.openWineConfiguration() }
-            }
-            .highlightable(id: "compatibility.winecfg", highlighted: highlighted)
-        } header: {
-            Text("Advanced")
-        }
-    }
-
-    private var overridesSection: some View {
-        Section {
-            ForEach(store.overrides) { override in
-                HStack(spacing: Theme.Space.md) {
-                    Text(override.dll)
-                        .font(.system(.body, design: .monospaced))
-                    Spacer()
-                    Text(override.mode)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        store.removeOverride(override)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Remove the \(override.dll) override")
-                }
-            }
-            HStack(spacing: Theme.Space.md) {
-                TextField("DLL name (e.g. dinput8)", text: $newOverrideDLL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                Picker("", selection: $newOverrideMode) {
-                    ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
-                        Text(mode).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 140)
-                Button("Add") {
-                    store.setOverride(dll: newOverrideDLL, mode: newOverrideMode)
-                    newOverrideDLL = ""
-                }
-                .disabled(newOverrideDLL.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if let error = store.overrideError {
-                Text(error).font(.caption).foregroundStyle(.orange)
-            }
-        } header: {
-            Text("DLL overrides")
-        } footer: {
-            Text("Which copy of a system DLL games get: the one installed in "
-                + "the bottle (native), Wine's own (builtin), or both in "
-                + "order. A game that wants a DLL Wine half-implements — a "
-                + "guide will usually name it — gets it as native. Takes "
-                + "effect the next time a game starts.")
-        }
-        .highlightable(id: "compatibility.overrides", highlighted: highlighted)
-    }
-}
-
 // MARK: - Storage
 
 struct StorageSettings: View {
@@ -733,8 +584,10 @@ struct StorageSettings: View {
     }
 }
 
-// MARK: - Repair
+// MARK: - Repair (gallery tile)
 
+/// The gallery's Repair tile — the same `RepairRow` the Engine pane embeds,
+/// wrapped in its own Form so it stands alone.
 struct RepairSettings: View {
     let provisioner: Provisioner
     let highlighted: String?
@@ -742,17 +595,7 @@ struct RepairSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 10) {
-                    activity
-                    Spacer()
-                    Button("Repair") {
-                        Task(name: "Repair the installation") {
-                            await provisioner.provisionAndConfigure()
-                        }
-                    }
-                    .disabled(isWorking)
-                }
-                .highlightable(id: "repair.run", highlighted: highlighted)
+                RepairRow(provisioner: provisioner, highlighted: highlighted)
             } footer: {
                 Text("Runs the same setup as first launch: anything present is "
                     + "kept, anything missing or broken is reinstalled. Games "
@@ -760,32 +603,6 @@ struct RepairSettings: View {
             }
         }
         .formStyle(.grouped)
-        .task { await provisioner.refreshDetection() }
-    }
-
-    @ViewBuilder
-    private var activity: some View {
-        switch provisioner.activity {
-        case let .working(phase):
-            ProgressView().controlSize(.small)
-            Text(phase)
-        case let .failed(reason):
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(reason).font(.callout)
-        case .done:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text("Steam is ready.")
-        case .idle:
-            Image(systemName: "checkmark.circle")
-                .foregroundStyle(.secondary)
-            Text("Nothing in progress.")
-        }
-    }
-
-    private var isWorking: Bool {
-        if case .working = provisioner.activity { true } else { false }
     }
 }
 

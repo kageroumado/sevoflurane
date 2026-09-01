@@ -13,6 +13,7 @@ struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
+    let engine: EngineStore
     var compatibility: CompatibilityStore = .live()
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
@@ -34,6 +35,7 @@ struct SettingsView: View {
                 provisioner: provisioner,
                 graphics: graphics,
                 storage: storage,
+                engine: engine,
                 compatibility: compatibility,
                 highlighted: highlighted,
                 supervisor: supervisor,
@@ -48,9 +50,8 @@ struct SettingsView: View {
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case general
     case graphics
-    case compatibility
+    case engine
     case storage
-    case repair
     case about
 
     var id: String {
@@ -61,9 +62,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .graphics: "Graphics"
-        case .compatibility: "Compatibility"
+        case .engine: "Engine"
         case .storage: "Storage"
-        case .repair: "Repair"
         case .about: "About"
         }
     }
@@ -72,9 +72,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape.fill"
         case .graphics: "cpu.fill"
-        case .compatibility: "puzzlepiece.extension.fill"
+        case .engine: "wrench.and.screwdriver.fill"
         case .storage: "internaldrive.fill"
-        case .repair: "wrench.and.screwdriver.fill"
         case .about: "info.circle.fill"
         }
     }
@@ -126,19 +125,27 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "vendor", "driver", "outdated", "unsupported",
                     ],
                 ),
+            ]
+        case .engine:
+            [
                 SearchableSetting(
-                    id: "graphics.msync",
+                    id: "engine.selection",
+                    title: "Wine engine & bottle",
+                    keywords: [
+                        "engine", "wine", "crossover", "preview", "bottle",
+                        "prefix", "built-in", "builtin", "switch",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "engine.msync",
                     title: "Enhanced synchronization (msync)",
                     keywords: [
                         "msync", "sync", "synchronization", "performance",
-                        "deadlock", "hang",
+                        "deadlock", "hang", "esync",
                     ],
                 ),
-            ]
-        case .compatibility:
-            [
                 SearchableSetting(
-                    id: "compatibility.dependencies",
+                    id: "engine.dependencies",
                     title: "Missing game dependencies",
                     keywords: [
                         "dependency", "vcruntime", "msvcp140", "vcredist", "vc++",
@@ -148,14 +155,22 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "compatibility.winecfg",
+                    id: "engine.winecfg",
                     title: "Wine configuration",
                     keywords: ["wine", "winecfg", "windows version", "configuration"],
                 ),
                 SearchableSetting(
-                    id: "compatibility.overrides",
+                    id: "engine.overrides",
                     title: "DLL overrides",
                     keywords: ["dll", "override", "native", "builtin", "library"],
+                ),
+                SearchableSetting(
+                    id: "engine.repair",
+                    title: "Repair the installation",
+                    keywords: [
+                        "repair", "reinstall", "fix", "setup", "provision",
+                        "broken",
+                    ],
                 ),
             ]
         case .storage:
@@ -169,15 +184,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
             ]
-        case .repair:
-            [SearchableSetting(
-                id: "repair.run",
-                title: "Repair the installation",
-                keywords: [
-                    "repair", "reinstall", "fix", "setup", "provision",
-                    "broken", "engine", "bottle",
-                ],
-            )]
         case .about:
             [SearchableSetting(
                 id: "about.version",
@@ -267,6 +273,7 @@ private struct SettingsPane: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
     let storage: StorageStore
+    let engine: EngineStore
     let compatibility: CompatibilityStore
     let highlighted: String?
     var supervisor: ClientSupervisor?
@@ -280,10 +287,12 @@ private struct SettingsPane: View {
                     supervisor: supervisor,
                 )
             case .graphics: GraphicsSettings(store: graphics, highlighted: highlighted)
-            case .compatibility:
-                CompatibilitySettings(store: compatibility, highlighted: highlighted)
+            case .engine:
+                EngineSettings(
+                    store: engine, graphics: graphics, compatibility: compatibility,
+                    provisioner: provisioner, highlighted: highlighted,
+                )
             case .storage: StorageSettings(store: storage, highlighted: highlighted)
-            case .repair: RepairSettings(provisioner: provisioner, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)
             }
         }

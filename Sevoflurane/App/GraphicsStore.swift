@@ -31,7 +31,7 @@ final class GraphicsStore {
         return GraphicsStore(
             selection: BottleGraphics.currentSelection(),
             toolkitStore: store,
-            engineHasOwnD3DMetal: Engine.active == .crossover,
+            engineHasOwnD3DMetal: Engine.active.isCrossOver,
             versions: D3DMetalInstaller.installed(inEngine: store),
             active: D3DMetalInstaller.active(inEngine: store)?.version,
             isLive: true,

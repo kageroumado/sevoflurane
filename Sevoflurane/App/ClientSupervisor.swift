@@ -214,7 +214,11 @@ final class ClientSupervisor {
             health = .paused
             log.log(.supervisor, "auto-restart paused (sevo client stop)")
         }
-        await ClientLifecycle.stopAll(gracePolls: 15)
+        // A deliberate stop should look like one: the app's own library
+        // window comes down first (left up it freezes dimmed over the whole
+        // stop), and the client's shutdown dialog is hidden as it exits.
+        host.dismissWindows()
+        await ClientLifecycle.stopAll(gracePolls: 15, hidingPopups: true)
         log.log(.supervisor, "client stopped (sevo)")
     }
 

@@ -102,9 +102,9 @@ final class LiveSetupEnvironment: SetupEnvironment {
 
     func createBottle(named name: String) async -> SetupCommandOutcome {
         switch Engine.active {
-        case .crossover:
+        case .crossover, .crossoverPreview:
             return await run(
-                SteamBottle.crossoverBin + "/cxbottle",
+                (Engine.active.crossoverBin ?? "") + "/cxbottle",
                 [
                     "--bottle",
                     name,

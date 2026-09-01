@@ -71,9 +71,22 @@ final class Provisioner {
     /// Steam sitting in some other bottle is not a provisioned machine. (The
     /// multi-bottle picker that would adopt one is release-plan R2.3.)
     var needsSetup: Bool {
-        guard let detection else { return false }
-        let ours = detection.steamBottles.contains { $0.name == SteamBottle.name }
-        return !(detection.hasEngine && ours)
+        guard detection != nil else { return false }
+        let ours = bottleRecord(named: SteamBottle.name)?.hasSteam == true
+        return !(detection?.hasEngine == true && ours)
+    }
+
+    /// The record for `name` under the *active engine's* bottle root. A
+    /// CrossOver bottle and a managed prefix can share a name, and only the
+    /// active engine's one counts — matching by name alone let CrossOver's
+    /// "Steam" satisfy a managed-engine check and skip provisioning
+    /// entirely.
+    private func bottleRecord(named name: String) -> SetupDetection.Bottle? {
+        detection?.bottles.first {
+            $0.name == name
+                && $0.url.deletingLastPathComponent().standardizedFileURL
+                == Engine.active.bottlesRoot.standardizedFileURL
+        }
     }
 
     func refreshDetection() async {
@@ -142,12 +155,15 @@ final class Provisioner {
         await refreshDetection()
     }
 
-    /// A usable CrossOver wins outright; otherwise the managed engine is
-    /// downloaded from the manifest (release-plan R2.2) and every wine
-    /// invocation from here on routes through it.
+    /// The managed engine is downloaded from the manifest (release-plan
+    /// R2.2) when nothing else can run Steam — or when the stored engine
+    /// choice asks for it despite a usable CrossOver, which is how the
+    /// Engine pane's "Built-in engine (downloads on switch)" option lands.
     private func installEngineIfMissing() async throws {
-        guard let detection, detection.usableCrossOver == nil else { return }
-        if detection.managedEngineVersions.isEmpty {
+        guard let detection else { return }
+        let managedWanted = detection.usableCrossOver == nil
+            || Engine.preferenceWantsManaged
+        if managedWanted, detection.managedEngineVersions.isEmpty {
             beginStage(2, "Installing the game engine…")
             SetupLog.log("provision: installing managed engine")
             let result = await environment.installEngine { phase, fraction in
@@ -174,7 +190,7 @@ final class Provisioner {
     }
 
     private func createBottleIfMissing(_ bottleName: String) async throws {
-        guard detection?.bottles.contains(where: { $0.name == bottleName }) != true else {
+        guard bottleRecord(named: bottleName) == nil else {
             return
         }
         beginStage(3, "Creating the Steam environment…")
@@ -214,8 +230,11 @@ final class Provisioner {
         // win64 client package. One pass leaves that package for the user's
         // first launch to download (measured: 235 MB and ~80 s of updater
         // window); looping until the win64 manifest lands absorbs it here,
-        // where "Updating Steam…" is already on screen.
-        for pass in 1 ... 3 {
+        // where "Updating Steam…" is already on screen. Passes continue
+        // while each one moves bytes into `package/` — a fixed cap of 3
+        // gave up mid-download on a real switch (2026-09-01).
+        var lastPayload = packagePayloadBytes(inBottle: bottleName)
+        for pass in 1 ... 6 {
             if pass > 1 {
                 SetupLog.log("provision: updater replaced itself — update pass \(pass)")
                 activity = .working("Updating Steam…")
@@ -225,9 +244,42 @@ final class Provisioner {
             await environment.updateSteamClient(inBottle: bottleName)
             await refreshDetection()
             if clientFullyUpdated(inBottle: bottleName) { return }
+            let payload = packagePayloadBytes(inBottle: bottleName)
+            if payload == lastPayload, pass > 1 { break }
+            lastPayload = payload
         }
-        guard steamPresent(inBottle: bottleName) else {
+        guard steamPresent(inBottle: bottleName)
+            || FileManager.default.fileExists(atPath: steamExePath(inBottle: bottleName))
+        else {
             throw ProvisionError("client update finished but steamclient64.dll is missing")
+        }
+        // The tree is there with packages staged: the client's own
+        // bootstrapper applies them on its first launch (observed live —
+        // the supervisor's start after a switch finished exactly this
+        // state), so an incomplete headless pass is a note, never a wall.
+        SetupLog.log("provision: update incomplete after the headless passes — "
+            + "the client applies the staged packages at first launch")
+    }
+
+    private func steamExePath(inBottle name: String) -> String {
+        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        return SteamBottle.steamRoot(inBottle: bottle)
+            .appendingPathComponent("Steam.exe").path
+    }
+
+    /// Bytes sitting in the client's `package/` staging directory — the
+    /// updater's visible progress between self-replacements.
+    private func packagePayloadBytes(inBottle name: String) -> Int64 {
+        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        let package = SteamBottle.steamRoot(inBottle: bottle)
+            .appendingPathComponent("package")
+        let names = (try? FileManager.default
+            .contentsOfDirectory(atPath: package.path)) ?? []
+        return names.reduce(Int64(0)) { total, name in
+            let path = package.appendingPathComponent(name).path
+            let size = (try? FileManager.default
+                .attributesOfItem(atPath: path))?[.size] as? Int64 ?? 0
+            return total + size
         }
     }
 
@@ -281,7 +333,7 @@ final class Provisioner {
     }
 
     private func steamPresent(inBottle bottleName: String) -> Bool {
-        detection?.bottles.first { $0.name == bottleName }?.hasSteam == true
+        bottleRecord(named: bottleName)?.hasSteam == true
     }
 
     private struct ProvisionError: Error, CustomStringConvertible {

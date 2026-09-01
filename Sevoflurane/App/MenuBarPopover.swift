@@ -16,6 +16,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: PopoverPanel?
     private var escapeMonitor: Any?
+    /// Re-asks for the recent games while the popover is on screen.
+    private var refreshLoop: Task<Void, Never>?
 
     /// When the panel last closed. A click on the status item while the
     /// popover is open resigns the panel's key state *before* the button's
@@ -80,6 +82,18 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         // for the rest of the session. Asking on every open costs one page
         // evaluation and always reflects the library as it stands.
         host.refreshRecentGames()
+        // And keep asking while the popover stays up: someone who leaves it
+        // open across an install or a play session should watch the list
+        // move, not have to close and reopen it. One page evaluation per
+        // tick, cancelled the moment the popover closes.
+        refreshLoop?.cancel()
+        refreshLoop = Task(name: "Popover games refresh") { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                self?.host.refreshRecentGames()
+            }
+        }
         let panel = panel ?? makePanel()
         self.panel = panel
         position(panel)
@@ -94,6 +108,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
     private func close() {
         panel?.orderOut(nil)
+        refreshLoop?.cancel()
+        refreshLoop = nil
         if let escapeMonitor {
             NSEvent.removeMonitor(escapeMonitor)
             self.escapeMonitor = nil

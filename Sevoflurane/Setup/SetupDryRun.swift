@@ -56,12 +56,16 @@
             version: "26.3", licensed: false, expires: nil, trialExpired: true,
         )
 
+        /// Fixture bottles sit under the *active engine's* root — the
+        /// provisioner scopes bottle matching to it, and a dry run never
+        /// changes `Engine.active`, so this is the one root its checks
+        /// accept whatever engine the host machine happens to run.
         private static func bottle(
             named name: String = SteamBottle.defaultName, hasSteam: Bool,
         ) -> SetupDetection.Bottle {
             SetupDetection.Bottle(
                 name: name,
-                url: SteamBottle.bottlesRoot.appendingPathComponent(name),
+                url: Engine.active.bottlesRoot.appendingPathComponent(name),
                 hasSteam: hasSteam,
             )
         }
@@ -201,7 +205,7 @@
                 crossover: state.crossover,
                 bottles: state.bottles + [SetupDetection.Bottle(
                     name: name,
-                    url: SteamBottle.bottlesRoot.appendingPathComponent(name),
+                    url: Engine.active.bottlesRoot.appendingPathComponent(name),
                     hasSteam: false,
                 )],
                 managedEngineVersions: state.managedEngineVersions,

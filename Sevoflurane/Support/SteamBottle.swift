@@ -67,7 +67,7 @@ nonisolated enum SteamBottle {
     /// CrossOver bottles run as the `crossover` Windows user; plain Wine
     /// prefixes as the macOS username.
     static var htmlcache: URL {
-        let user = Engine.active == .crossover ? "crossover" : NSUserName()
+        let user = Engine.active.isCrossOver ? "crossover" : NSUserName()
         return root.appendingPathComponent(
             "drive_c/users/\(user)/AppData/Local/Steam/htmlcache",
         )

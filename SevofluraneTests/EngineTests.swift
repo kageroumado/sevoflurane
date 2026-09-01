@@ -111,3 +111,23 @@ struct BottleGraphicsTests {
         #expect(BottleGraphics.settingVariable("WINEDXVK", to: nil, inConf: conf) == conf)
     }
 }
+
+/// The engine choice as it persists in the shared suite.
+struct EnginePreferenceTests {
+    @Test
+    func `preference values are stable and version-agnostic`() {
+        #expect(Engine.crossover.preferenceValue == "crossover")
+        #expect(Engine.crossoverPreview.preferenceValue == "crossover-preview")
+        // Managed drops the version: an engine update must not orphan the
+        // stored choice.
+        #expect(Engine.managed(version: "wine11.16-dxmt0.80-r1").preferenceValue == "managed")
+        #expect(Engine.managed(version: "").preferenceValue == "managed")
+    }
+
+    @Test
+    func `crossover family shares bottle conventions`() {
+        #expect(Engine.crossover.isCrossOver)
+        #expect(Engine.crossoverPreview.isCrossOver)
+        #expect(!Engine.managed(version: "x").isCrossOver)
+    }
+}

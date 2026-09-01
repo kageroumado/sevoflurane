@@ -23,6 +23,9 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     let crossover: CrossOver?
     let bottles: [Bottle]
     let managedEngineVersions: [String]
+    /// CodeWeavers' preview app, when installed alongside stable. It shares
+    /// the license, so usability follows the same rule.
+    var crossoverPreview: CrossOver? = nil
 
     /// The bottle setup would adopt, when exactly one candidate exists.
     var steamBottles: [Bottle] {
@@ -36,13 +39,23 @@ nonisolated struct SetupDetection: Sendable, Equatable {
         return crossover
     }
 
+    var usableCrossOverPreview: CrossOver? {
+        guard let crossoverPreview,
+              crossoverPreview.licensed || !crossoverPreview.trialExpired else {
+            return nil
+        }
+        return crossoverPreview
+    }
+
     var hasEngine: Bool {
-        usableCrossOver != nil || !managedEngineVersions.isEmpty
+        usableCrossOver != nil || usableCrossOverPreview != nil
+            || !managedEngineVersions.isEmpty
     }
 }
 
 nonisolated enum SetupProbe {
     static let crossoverApp = URL(fileURLWithPath: "/Applications/CrossOver.app")
+    static let crossoverPreviewApp = URL(fileURLWithPath: "/Applications/CrossOver Preview.app")
     static let crossoverBottles = SteamBottle.bottlesRoot
     static let managedEngines = Engine.managedRoot
     private static let license = URL(fileURLWithPath: NSHomeDirectory())
@@ -57,6 +70,7 @@ nonisolated enum SetupProbe {
             crossover: crossoverInfo(),
             bottles: bottles(),
             managedEngineVersions: managedEngineVersions(),
+            crossoverPreview: crossoverInfo(at: crossoverPreviewApp),
         )
     }
 
@@ -80,8 +94,12 @@ nonisolated enum SetupProbe {
     /// The license is a plain INI (`[crossmac] … expires=YYYY/MM/DD` +
     /// `[license] id=…`); licensed = an id is present and any expiry is in
     /// the future. Trial state comes from FirstRunDate in the preferences.
-    static func crossoverInfo() -> SetupDetection.CrossOver? {
-        let infoPlist = crossoverApp.appendingPathComponent("Contents/Info.plist")
+    /// The Preview app carries its own version but shares the license and
+    /// first-run record, so both apps read the same two files.
+    static func crossoverInfo(
+        at app: URL = crossoverApp,
+    ) -> SetupDetection.CrossOver? {
+        let infoPlist = app.appendingPathComponent("Contents/Info.plist")
         guard let data = try? Data(contentsOf: infoPlist),
               let info = try? PropertyListSerialization.propertyList(from: data, format: nil)
               as? [String: Any] else { return nil }
@@ -133,7 +151,16 @@ nonisolated enum SetupProbe {
         // whose boot died halfway reads as "no bottle" and gets rebuilt —
         // `drive_c` appears first and let a corpse pass detection.
         bottles(under: crossoverBottles, marker: "cxbottle.conf")
+            + bottles(under: Engine.previewBottlesRoot, marker: "cxbottle.conf")
             + bottles(under: Engine.managedBottlesRoot, marker: "system.reg")
+    }
+
+    /// The bottles the given engine can actually drive — its own root only.
+    static func bottles(for engine: Engine) -> [SetupDetection.Bottle] {
+        bottles(
+            under: engine.bottlesRoot,
+            marker: engine.isCrossOver ? "cxbottle.conf" : "system.reg",
+        )
     }
 
     private static func bottles(under root: URL, marker: String) -> [SetupDetection.Bottle] {

@@ -11,6 +11,12 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private let provisioner: Provisioner
     private weak var supervisor: ClientSupervisor?
     private var window: NSWindow?
+    /// One engine store for the app's lifetime, not one per window: an
+    /// engine switch outlives a closed Settings window, and reopening must
+    /// show the switch still running rather than offer a second one.
+    private lazy var engineStore = EngineStore(
+        provisioner: provisioner, supervisor: supervisor,
+    )
 
     init(provisioner: Provisioner, supervisor: ClientSupervisor? = nil) {
         self.supervisor = supervisor
@@ -34,6 +40,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         let controller = NSHostingController(
             rootView: SettingsView(
                 provisioner: provisioner, graphics: .live(), storage: .live(),
+                engine: engineStore,
                 supervisor: supervisor,
             ),
         )

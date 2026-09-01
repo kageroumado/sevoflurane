@@ -88,14 +88,14 @@ nonisolated enum BottleGraphics {
 
     /// What the bottle is set to right now, whichever engine owns the store.
     static func currentSelection() -> Selection {
-        Engine.active == .crossover
+        Engine.active.isCrossOver
             ? selection(forBottle: SteamBottle.root)
             : managedSelection()
     }
 
     /// Writes a selection wherever the active engine keeps it.
     static func applyToActiveEngine(_ selection: Selection) throws {
-        if Engine.active == .crossover {
+        if Engine.active.isCrossOver {
             try apply(selection, toBottle: SteamBottle.root)
         } else {
             setManagedSelection(selection)

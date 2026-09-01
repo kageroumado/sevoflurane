@@ -74,6 +74,12 @@ nonisolated enum ClientLifecycle {
     }
 
     static func gracefulShutdown() async {
+        // The quiet path first: StartShutdown in the client's own JS context.
+        // `steam.exe -shutdown` spawns a second client instance to deliver
+        // the message, and that instance flashes windows on its way through —
+        // the noise a user watching an engine switch reported. The spawn
+        // stays as the fallback for a client whose CDP is gone.
+        if await shutdownOverCDP() { return }
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
             program: [SteamBottle.exeWindowsPath, "-shutdown"],
@@ -85,6 +91,32 @@ nonisolated enum ClientLifecycle {
             capture: .none,
             timeout: .seconds(30),
         )
+    }
+
+    /// Asks the running client to exit via `SteamClient.User.StartShutdown`
+    /// in SharedJSContext. Answers whether the ask was delivered.
+    private static func shutdownOverCDP() async -> Bool {
+        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
+            return false
+        }
+        let script = """
+        (function () {
+          if (!window.SteamClient || !SteamClient.User
+              || !SteamClient.User.StartShutdown) return "";
+          SteamClient.User.StartShutdown(false);
+          return "ok";
+        })()
+        """
+        for target in targets where (target["title"] as? String) == "SharedJSContext" {
+            guard let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init)
+            else { continue }
+            if let reply = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
+               reply == "ok" {
+                log("client asked to shut down over CDP")
+                return true
+            }
+        }
+        return false
     }
 
     static func killWineserver() async {
@@ -102,7 +134,11 @@ nonisolated enum ClientLifecycle {
     /// `wineserver -k`, then signals, each rung only for what the previous
     /// one left alive. `gracePolls` bounds the graceful rung at 2 s per
     /// poll — a restart can afford 30 s of patience, quit cannot.
-    static func stopAll(gracePolls: Int, phase: (String) -> Void = { _ in }) async {
+    static func stopAll(
+        gracePolls: Int,
+        hidingPopups: Bool = false,
+        phase: (String) -> Void = { _ in },
+    ) async {
         let existing = await bottleProcessIDs()
         guard !existing.isEmpty else { return }
         log("bottle processes running (pids \(existing)) — shutting them down")
@@ -116,6 +152,13 @@ nonisolated enum ClientLifecycle {
         if await clientProcessAlive() {
             await gracefulShutdown()
             for _ in 0 ..< gracePolls {
+                if hidingPopups {
+                    // The client shows its "Shutting down Steam…" dialog on
+                    // the way out; hiding it each poll keeps a deliberate
+                    // stop (an engine switch, `sevo client stop`) from
+                    // narrating itself in Wine windows.
+                    _ = await hideVisibleClientPopups()
+                }
                 if await bottleProcessIDs().isEmpty { clean = true; break }
                 try? await Task.sleep(for: .seconds(2))
             }

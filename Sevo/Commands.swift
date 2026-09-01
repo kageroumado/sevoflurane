@@ -490,14 +490,14 @@ struct BottleCommand: AsyncParsableCommand {
     }
 
     private func current() -> BottleGraphics.Selection {
-        Engine.active == .crossover
+        Engine.active.isCrossOver
             ? BottleGraphics.selection(forBottle: SteamBottle.root)
             : BottleGraphics.managedSelection()
     }
 
     private func apply(_ selection: BottleGraphics.Selection) throws {
         switch Engine.active {
-        case .crossover:
+        case .crossover, .crossoverPreview:
             try BottleGraphics.apply(selection, toBottle: SteamBottle.root)
         case .managed:
             BottleGraphics.setManagedSelection(selection)
