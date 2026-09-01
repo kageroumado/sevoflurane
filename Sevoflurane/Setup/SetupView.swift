@@ -5,7 +5,7 @@ import SwiftUI
 /// the user only chooses when the choice costs money (CrossOver) or is
 /// genuinely ambiguous.
 struct SetupView: View {
-    @Bindable var provisioner: Provisioner
+    let provisioner: Provisioner
     let onFinished: () -> Void
     /// Reports whether Steam is sitting at its sign-in window, so the final
     /// button can say what clicking it will actually show.
@@ -14,8 +14,12 @@ struct SetupView: View {
     /// client behind the wizard — by the last page the window is already
     /// loaded and the finish button shows it instantly.
     var onProvisioned: () -> Void = {}
+    /// Where the graphics step's store comes from. A simulated run supplies
+    /// one with no engine behind it, which is what lets that step be walked
+    /// at all: without it a dry run has to skip past it.
+    var makeGraphics: (() -> GraphicsStore)?
 
-    private enum Step {
+    enum Step: String, CaseIterable {
         case welcome
         case engine
         case bottle
@@ -23,6 +27,18 @@ struct SetupView: View {
         case graphics
         case options
         case done
+
+        var title: String {
+            switch self {
+            case .welcome: "Welcome"
+            case .engine: "Choose an engine"
+            case .bottle: "Choose a Steam"
+            case .steam: "Installing Steam"
+            case .graphics: "DirectX 12 games"
+            case .options: "Preferences"
+            case .done: "Ready to play"
+            }
+        }
     }
 
     private enum EngineChoice {
@@ -30,13 +46,34 @@ struct SetupView: View {
         case crossover
     }
 
-    @State private var step: Step = .welcome
+    @State private var step: Step
     @State private var openAtLogin = true
     @State private var connectAgents = false
     @State private var engineChoice: EngineChoice = .builtIn
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
     @State private var newBottleName = SteamBottle.defaultName
+
+    /// A real run always opens on the welcome. The gallery draws every step at
+    /// once, and each tile starts on the one it is there to show.
+    init(
+        provisioner: Provisioner,
+        startingAt step: Step = .welcome,
+        signInPending: @escaping () -> Bool = { false },
+        onProvisioned: @escaping () -> Void = {},
+        makeGraphics: (() -> GraphicsStore)? = nil,
+        onFinished: @escaping () -> Void,
+    ) {
+        self.provisioner = provisioner
+        self.signInPending = signInPending
+        self.onProvisioned = onProvisioned
+        self.makeGraphics = makeGraphics
+        self.onFinished = onFinished
+        _step = State(initialValue: step)
+        // Opening straight onto the graphics step skips the transition that
+        // would otherwise build the store, so build it here instead.
+        _graphicsStore = State(initialValue: step == .graphics ? makeGraphics?() : nil)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,21 +92,21 @@ struct SetupView: View {
             if activity == .done { onProvisioned() }
         }
         .overlay(alignment: .topTrailing) {
-            if provisioner.isDryRun { dryRunBadge }
+            if provisioner.isDryRun { demoBadge }
         }
     }
 
-    /// Marks a harness run (`SetupDryRun.swift`) so a screenshot can never be
-    /// mistaken for a real provisioning pass.
-    private var dryRunBadge: some View {
-        Text("DRY RUN")
+    /// Marks a simulated run (`SetupDryRun.swift`) so a screenshot can never
+    /// be mistaken for a real provisioning pass.
+    private var demoBadge: some View {
+        Text("DEMO")
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(.orange)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(Capsule().fill(.orange.opacity(0.15)))
             .padding(10)
-            .help("Simulated onboarding — nothing on this machine changes.")
+            .help("Simulated setup — nothing on this Mac changes.")
     }
 
     @ViewBuilder private var content: some View {
@@ -134,7 +171,10 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("One thing to install")
                 .font(.system(size: 24, weight: .bold))
-            Text("Sevoflurane needs a compatibility layer to run Steam's Windows catalog on your Mac.")
+            Text("Steam's games are built for Windows. To play them, your Mac "
+                + "needs a translator that turns what a game asks Windows for "
+                + "into something macOS understands. Which translator is the "
+                + "only decision in this setup.")
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
                 Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
@@ -144,21 +184,22 @@ struct SetupView: View {
             }
             engineOption(
                 .builtIn,
-                title: "Install the built-in engine (free, ~250 MB)",
-                detail: "Recommended. Downloads once; games render through Metal.",
+                title: "Built-in engine — free, about 250 MB (recommended)",
+                detail: "A one-time download. This is Wine, the open-source "
+                    + "Windows translator, and it runs most games well.",
             )
             engineOption(.crossover, title: crossOverTitle, detail: crossOverDetail)
             // Shown rather than disclosed: the step has room for it, and a
             // chevron the size of a chevron is a poor place to keep the one
             // paragraph that answers "why would I pay for this?".
             VStack(alignment: .leading, spacing: 4) {
-                Text("Why CrossOver?").font(.callout.weight(.semibold))
-                Text("CodeWeavers employs the Wine developers; CrossOver carries "
-                    + "Steam- and game-specific fixes months before they reach "
-                    + "open-source Wine, and buying it funds Wine itself. The "
-                    + "built-in engine runs the same core code and is fine for "
-                    + "most titles — you can switch later in Settings without "
-                    + "redoing setup.")
+                Text("Why pay for CrossOver?").font(.callout.weight(.semibold))
+                Text("CodeWeavers pays the developers who build Wine — the "
+                    + "translator under both options — so CrossOver gets their "
+                    + "Steam and per-game fixes months before the free version "
+                    + "does. The built-in engine is the same project without "
+                    + "those extras, and it is enough for most games. You can "
+                    + "switch later in Settings without redoing this setup.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -195,7 +236,8 @@ struct SetupView: View {
     }
 
     private var crossOverDetail: String {
-        "Commercial engine by CodeWeavers with better game compatibility and support."
+        "The paid version of the same translator, with fixes for specific "
+            + "games and a support team behind it."
     }
 
     private func engineOption(
@@ -244,9 +286,11 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Which Steam?")
                 .font(.system(size: 24, weight: .bold))
-            Text("This Mac already has Steam in more than one Windows bottle. "
-                + "Pick one and your games stay where they are; build a new "
-                + "one and Steam downloads again from scratch.")
+            Text("This Mac already has Steam installed more than once. Each "
+                + "copy sits in its own pretend Windows drive — a bottle — "
+                + "with its own games and settings. Pick one and its games "
+                + "stay exactly where they are; start a new one and Steam "
+                + "downloads from scratch.")
                 .foregroundStyle(.secondary)
             Picker("", selection: $bottleChoice) {
                 ForEach(bottleCandidates, id: \.name) { candidate in
@@ -258,7 +302,7 @@ struct SetupView: View {
                     }
                     .tag(String?.some(candidate.name))
                 }
-                Text("Build a new bottle")
+                Text("Start a new one")
                     .tag(String?.none)
             }
             .pickerStyle(.radioGroup)
@@ -276,7 +320,7 @@ struct SetupView: View {
             if let objection = newBottleObjection {
                 Text(objection).font(.caption).foregroundStyle(.orange)
             } else {
-                Text("Its folder is named this, next to your other bottles.")
+                Text("The new bottle's folder takes this name, alongside the others.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -291,10 +335,10 @@ struct SetupView: View {
         let name = newBottleName.trimmingCharacters(in: .whitespaces)
         if name.isEmpty { return "Give the bottle a name." }
         if name.contains("/") || name.contains(":") {
-            return "A bottle name cannot contain / or :."
+            return "Use a name without / or : in it."
         }
         if provisioner.detection?.bottles.contains(where: { $0.name == name }) == true {
-            return "A bottle named “\(name)” already exists."
+            return "There is already a bottle named “\(name)”. Pick another name."
         }
         return nil
     }
@@ -312,14 +356,14 @@ struct SetupView: View {
             Text(isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam")
                 .font(.system(size: 24, weight: .bold))
             Text(isAdoptingSteam
-                ? "Checking the client in this bottle and bringing it up to date. "
-                + "An old install can take a few minutes to catch up."
+                ? "Checking the Steam already installed here and bringing it up "
+                + "to date. An old copy can take a few minutes to catch up."
                 : "Downloading and installing the Steam client. This is the longest "
                 + "step — a few minutes on most connections.")
                 .foregroundStyle(.secondary)
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
                         switch provisioner.activity {
                         case let .working(phase):
                             ProgressView().controlSize(.small)
@@ -327,13 +371,19 @@ struct SetupView: View {
                         case let .failed(reason):
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
-                            Text(reason).font(.callout)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Setup stopped before Steam was installed.")
+                                Text(reason)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         case .done:
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                             Text("Steam is ready.")
                         case .idle:
-                            Text("Ready to start.")
+                            Text("Starting…")
                         }
                         Spacer()
                         if case .failed = provisioner.activity {
@@ -354,8 +404,11 @@ struct SetupView: View {
                 }
                 .padding(8)
             }
-            Text("You can close this window — setup continues in the menu bar and "
-                + "picks up where it left off if interrupted.")
+            Text(hasFailed
+                ? "Trying again keeps whatever already downloaded, so a second "
+                + "attempt is usually much shorter than the first."
+                : "You can close this window — setup carries on in the menu bar, "
+                + "and picks up where it left off if it is interrupted.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -436,6 +489,10 @@ struct SetupView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var hasFailed: Bool {
+        if case .failed = provisioner.activity { true } else { false }
+    }
+
     private var footer: some View {
         HStack {
             Spacer()
@@ -467,7 +524,7 @@ struct SetupView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(gptk.isBusy)
             case .options:
-                Button("Finish") {
+                Button("Continue") {
                     provisioner.setOpenAtLogin(openAtLogin)
                     if connectAgents, !provisioner.isDryRun {
                         Task {
@@ -518,11 +575,13 @@ struct SetupView: View {
     /// After provisioning: the managed engine needs D3DMetal added for DX12,
     /// so offer it; CrossOver brings its own, so go straight to preferences.
     private func advanceFromSteam() {
-        guard usesManagedEngine, !provisioner.isDryRun else {
+        guard usesManagedEngine, makeGraphics != nil || !provisioner.isDryRun else {
             step = .options
             return
         }
-        if graphicsStore == nil { graphicsStore = GraphicsStore.live() }
+        if graphicsStore == nil {
+            graphicsStore = makeGraphics?() ?? GraphicsStore()
+        }
         step = .graphics
     }
 }

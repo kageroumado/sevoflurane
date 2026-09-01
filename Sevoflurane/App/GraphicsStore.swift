@@ -4,74 +4,35 @@ import Foundation
 ///
 /// The pane used to call ``BottleGraphics`` directly, which made it a live
 /// wire: the gallery draws every surface, and drawing the settings window
-/// there meant a stray click rewrote the machine's real bottle. A preview
-/// store keeps the same shape in memory and touches nothing.
+/// there meant a stray click rewrote the machine's real bottle. Everything
+/// that reaches an engine or a bottle now goes through ``GraphicsEnvironment``,
+/// so a simulated one keeps the same shape in memory and touches nothing.
 @MainActor
 @Observable
 final class GraphicsStore {
     private(set) var selection: BottleGraphics.Selection
     private(set) var d3dMetalVersions: [D3DMetalInstaller.Installed]
     private(set) var activeD3DMetal: String?
-    /// Where installed toolkits are kept for this engine: inside a managed
-    /// engine, or the shared store CrossOver is pointed at through the shadow
-    /// tree.
-    let toolkitStore: URL
-    /// Whether the engine brings a D3DMetal of its own, which the user's copy
-    /// then replaces rather than supplies.
-    let engineHasOwnD3DMetal: Bool
-    private let isLive: Bool
+    private let environment: any GraphicsEnvironment
 
-    /// The store the app runs on: the bottle and the engine on disk.
-    static func live() -> GraphicsStore {
-        let store: URL = if case let .managed(version) = Engine.active {
-            Engine.managedRoot.appendingPathComponent(version)
-        } else {
-            D3DMetalInstaller.sharedRoot
-        }
-        return GraphicsStore(
-            selection: BottleGraphics.currentSelection(),
-            toolkitStore: store,
-            engineHasOwnD3DMetal: Engine.active.isCrossOver,
-            versions: D3DMetalInstaller.installed(inEngine: store),
-            active: D3DMetalInstaller.active(inEngine: store)?.version,
-            isLive: true,
-        )
+    init(environment: (any GraphicsEnvironment)? = nil) {
+        let environment = environment ?? LiveGraphicsEnvironment()
+        self.environment = environment
+        selection = environment.currentSelection()
+        d3dMetalVersions = environment.installedToolkits()
+        activeD3DMetal = environment.activeToolkit()?.version
+        gptkEngineInstalled = environment.dx12EngineInstalled
     }
 
-    #if DEBUG
-        /// A store for the gallery: fixed values, no disk behind them.
-        static func preview() -> GraphicsStore {
-            let engine = URL(fileURLWithPath: "/preview/engine")
-            return GraphicsStore(
-                selection: BottleGraphics.Selection(
-                    renderer: .dxmt, msync: true, gpu: .automatic,
-                ),
-                toolkitStore: engine,
-                engineHasOwnD3DMetal: false,
-                versions: [
-                    .init(version: "3.0", root: engine),
-                    .init(version: "4.0 beta 2", root: engine),
-                ],
-                active: "4.0 beta 2",
-                isLive: false,
-            )
-        }
-    #endif
+    /// Where installed toolkits are kept for this engine.
+    var toolkitStore: URL {
+        environment.toolkitStore
+    }
 
-    private init(
-        selection: BottleGraphics.Selection,
-        toolkitStore: URL,
-        engineHasOwnD3DMetal: Bool,
-        versions: [D3DMetalInstaller.Installed],
-        active: String?,
-        isLive: Bool,
-    ) {
-        self.selection = selection
-        self.toolkitStore = toolkitStore
-        self.engineHasOwnD3DMetal = engineHasOwnD3DMetal
-        d3dMetalVersions = versions
-        activeD3DMetal = active
-        self.isLive = isLive
+    /// Whether the engine brings a D3DMetal of its own, which the user's copy
+    /// then replaces rather than supplies.
+    var engineHasOwnD3DMetal: Bool {
+        environment.engineHasOwnD3DMetal
     }
 
     /// The renderers the machine can switch between. CrossOver carries
@@ -80,14 +41,12 @@ final class GraphicsStore {
     /// ABI-locked to the GPTk Wine, DXMT/DXVK to wine-staging).
     var availableRenderers: [Renderer] {
         guard !engineHasOwnD3DMetal else { return Renderer.allCases }
-        let hosted = SetupProbe.managedEngineVersions()
-            .flatMap { Engine.managed(version: $0).supportedRenderers }
-        return Renderer.allCases.filter(Set(hosted).contains)
+        return Renderer.allCases.filter(Set(environment.hostedRenderers()).contains)
     }
 
     // MARK: - The DX12 engine
 
-    private(set) var gptkEngineInstalled = GPTkEngineInstaller.isInstalled
+    private(set) var gptkEngineInstalled = false
     private(set) var gptkEnginePhase: String?
     private(set) var gptkEngineFraction: Double?
     private(set) var gptkEngineError: String?
@@ -95,37 +54,38 @@ final class GraphicsStore {
     /// Downloads Gcenx's game-porting-toolkit Wine and overlays the active
     /// D3DMetal toolkit onto it — the engine the D3DMetal renderer boots.
     func installGPTkEngine() {
-        guard isLive, gptkEnginePhase == nil else { return }
-        guard let toolkit = D3DMetalInstaller.active(inEngine: toolkitStore) else {
+        guard gptkEnginePhase == nil else { return }
+        guard let toolkit = environment.activeToolkit() else {
             gptkEngineError = "add a D3DMetal toolkit below first"
             return
         }
+        let version = environment.dx12EngineVersion
         gptkEngineError = nil
         gptkEnginePhase = "starting"
         Task(name: "Install DX12 engine") { [weak self] in
+            guard let self else { return }
             do {
-                try await GPTkEngineInstaller.install(overlaying: toolkit) { phase, fraction in
+                try await environment.installDX12Engine(overlaying: toolkit) { phase, fraction in
                     DispatchQueue.main.async {
-                        self?.gptkEnginePhase = phase
-                        self?.gptkEngineFraction = fraction
+                        self.gptkEnginePhase = phase
+                        self.gptkEngineFraction = fraction
                     }
                 }
-                EventLog.enqueue(.setup, "DX12 engine \(GPTkEngineInstaller.version) installed")
+                EventLog.enqueue(.setup, "DX12 engine \(version) installed")
             } catch {
-                self?.gptkEngineError = "\(error)"
+                gptkEngineError = "\(error)"
             }
-            self?.gptkEnginePhase = nil
-            self?.gptkEngineFraction = nil
-            self?.gptkEngineInstalled = GPTkEngineInstaller.isInstalled
+            gptkEnginePhase = nil
+            gptkEngineFraction = nil
+            gptkEngineInstalled = environment.dx12EngineInstalled
         }
     }
 
     func update(_ selection: BottleGraphics.Selection) {
         guard selection != self.selection else { return }
         self.selection = selection
-        guard isLive else { return }
         do {
-            try BottleGraphics.applyToActiveEngine(selection)
+            try environment.apply(selection)
             EventLog.shared.log(
                 .setup,
                 "graphics: renderer=\(selection.renderer.rawValue) "
@@ -139,30 +99,26 @@ final class GraphicsStore {
     /// `nil` means the engine's own — CrossOver's copy, with no shadow tree.
     func chooseD3DMetal(version: String?) {
         activeD3DMetal = version
-        guard isLive else { return }
-        guard let version, let entry = d3dMetalVersions.first(where: { $0.version == version })
-        else {
-            D3DMetalInstaller.choose(version: nil)
-            CrossOverShadow.remove()
-            return
+        do {
+            try environment.chooseToolkit(version: version)
+        } catch {
+            EventLog.shared.log(.setup, "D3DMetal version change failed: \(error)")
         }
-        try? D3DMetalInstaller.activate(entry, inEngine: toolkitStore)
     }
 
     /// Trashes an installed toolkit version. The newest remaining one (or
     /// the engine's own copy, where the engine has one) takes over when the
     /// removed version was active.
     func removeD3DMetal(version: String) {
-        guard isLive,
-              let entry = d3dMetalVersions.first(where: { $0.version == version })
+        guard let entry = d3dMetalVersions.first(where: { $0.version == version })
         else { return }
         do {
-            try FileManager.default.trashItem(at: entry.root, resultingItemURL: nil)
+            try environment.removeToolkit(entry)
         } catch {
             EventLog.shared.log(.setup, "D3DMetal \(version) removal failed: \(error)")
             return
         }
-        d3dMetalVersions = D3DMetalInstaller.installed(inEngine: toolkitStore)
+        d3dMetalVersions = environment.installedToolkits()
         EventLog.shared.log(.setup, "D3DMetal \(version) moved to the Trash")
         if activeD3DMetal == version {
             chooseD3DMetal(version: d3dMetalVersions.last?.version)
@@ -171,12 +127,9 @@ final class GraphicsStore {
 
     /// Answers the failure, so the pane can show it.
     func installD3DMetal(from source: URL) async -> String? {
-        guard isLive else { return nil }
         do {
-            let entry = try await D3DMetalInstaller.install(
-                from: source, intoEngine: toolkitStore,
-            )
-            d3dMetalVersions = D3DMetalInstaller.installed(inEngine: toolkitStore)
+            let entry = try await environment.installToolkit(from: source)
+            d3dMetalVersions = environment.installedToolkits()
             activeD3DMetal = entry.version
             EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the engine")
             return nil

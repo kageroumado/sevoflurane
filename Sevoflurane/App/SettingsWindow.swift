@@ -12,20 +12,40 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private weak var supervisor: ClientSupervisor?
     private weak var host: SteamWebHost?
     private var window: NSWindow?
+    private let makeGraphics: () -> GraphicsStore
+    private let makeStorage: () -> StorageStore
     /// One engine store for the app's lifetime, not one per window: an
     /// engine switch outlives a closed Settings window, and reopening must
     /// show the switch still running rather than offer a second one.
-    private lazy var engineStore = EngineStore(
-        provisioner: provisioner, supervisor: supervisor,
-    )
+    private lazy var engineStore = makeEngine()
+    private let makeEngine: () -> EngineStore
+    private let makeCompatibility: () -> CompatibilityStore
+    /// Kept alongside the engine store: an install running in the
+    /// dependencies section must survive the window closing over it.
+    private lazy var compatibilityStore = makeCompatibility()
 
+    /// The graphics and storage stores are made per window, because those
+    /// panes read the machine as they appear; the engine store is made once.
+    /// A simulated build hands over closures that answer with the same
+    /// in-memory stores every time, so what was changed in one visit to
+    /// Settings is still there on the next.
     init(
         provisioner: Provisioner, supervisor: ClientSupervisor? = nil,
         host: SteamWebHost? = nil,
+        graphics: @escaping () -> GraphicsStore = { GraphicsStore() },
+        storage: @escaping () -> StorageStore = { StorageStore() },
+        engine: (() -> EngineStore)? = nil,
+        compatibility: @escaping () -> CompatibilityStore = { CompatibilityStore() },
     ) {
         self.supervisor = supervisor
         self.provisioner = provisioner
         self.host = host
+        makeGraphics = graphics
+        makeStorage = storage
+        makeCompatibility = compatibility
+        makeEngine = engine ?? {
+            EngineStore(provisioner: provisioner, supervisor: supervisor)
+        }
     }
 
     func show() {
@@ -62,8 +82,11 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         }
         let controller = NSHostingController(
             rootView: SettingsView(
-                provisioner: provisioner, graphics: .live(), storage: .live(),
+                provisioner: provisioner,
+                graphics: makeGraphics(),
+                storage: makeStorage(),
                 engine: engineStore,
+                compatibility: compatibilityStore,
                 steam: steam,
                 supervisor: supervisor,
             ),

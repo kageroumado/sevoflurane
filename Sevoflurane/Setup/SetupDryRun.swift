@@ -4,12 +4,12 @@
     /// The onboarding test harness: fixture machines for the wizard to run
     /// against without touching this one.
     ///
-    /// Boot straight into a scenario with `SEVO_SETUP_DRY_RUN=<raw value>` (or the
-    /// `-setup-dry-run <raw value>` launch argument in an Xcode scheme), or open
-    /// one at any time from Debug ▸ Onboarding Dry Run in a debug build. Every
-    /// simulated action writes what the live environment would have run to
-    /// `~/Library/Logs/Sevoflurane.log` under the `setup` category, prefixed
-    /// `dry-run:` — the wizard's whole story is greppable afterward.
+    /// Boot straight into one with `SEVO_DEMO=<raw value>` (see ``DemoMode``),
+    /// or open one at any time from Debug ▸ Onboarding Dry Run in a debug
+    /// build. Every simulated action writes what the live environment would
+    /// have run to `~/Library/Logs/Sevoflurane.log` under the `setup`
+    /// category, prefixed `dry-run:` — the wizard's whole story is greppable
+    /// afterward.
     enum SetupScenario: String, CaseIterable {
         /// Nothing installed: no Rosetta, no CrossOver, no bottles.
         case freshMachine = "fresh-machine"
@@ -40,13 +40,6 @@
             case .installerFails: "Installer Fails"
             case .provisioned: "Fully Provisioned"
             }
-        }
-
-        /// The scenario the process was launched into, if any.
-        static func fromLaunchEnvironment() -> SetupScenario? {
-            let value = ProcessInfo.processInfo.environment["SEVO_SETUP_DRY_RUN"]
-                ?? UserDefaults.standard.string(forKey: "setup-dry-run")
-            return value.flatMap(SetupScenario.init(rawValue:))
         }
 
         static let licensedCrossOver = SetupDetection.CrossOver(

@@ -27,7 +27,7 @@ struct SettingsView: View {
     let graphics: GraphicsStore
     let storage: StorageStore
     let engine: EngineStore
-    var compatibility: CompatibilityStore = .live()
+    var compatibility = CompatibilityStore()
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?

@@ -30,16 +30,20 @@ final class EngineStore {
 
     private let provisioner: Provisioner
     private weak var supervisor: ClientSupervisor?
-    private let isLive: Bool
+    private let environment: any EngineEnvironment
 
-    init(provisioner: Provisioner, supervisor: ClientSupervisor?, isLive: Bool = true) {
+    init(
+        provisioner: Provisioner,
+        supervisor: ClientSupervisor?,
+        environment: (any EngineEnvironment)? = nil,
+    ) {
         self.provisioner = provisioner
         self.supervisor = supervisor
-        self.isLive = isLive
+        self.environment = environment ?? LiveEngineEnvironment()
     }
 
-    var activeEngine: Engine { Engine.active }
-    var activeBottle: String { SteamBottle.name }
+    var activeEngine: Engine { environment.activeEngine }
+    var activeBottle: String { environment.activeBottle }
 
     /// Whether the staged pair differs from what's running.
     var hasChanges: Bool {
@@ -108,8 +112,7 @@ final class EngineStore {
     }
 
     private func refreshBottles(resetChoice: Bool) {
-        guard isLive else { return }
-        bottles = SetupProbe.bottles(for: stagedEngine)
+        bottles = environment.bottles(for: stagedEngine)
         guard resetChoice else { return }
         // Landing on a new engine, prefer its Steam bottle, then its first
         // bottle, then the name a fresh provision would create.
@@ -122,7 +125,7 @@ final class EngineStore {
     /// the new bottle is missing, start Steam again. Provisioning progress
     /// narrates through `provisioner.activity`, same as Repair.
     func apply() {
-        guard isLive, hasChanges, !isSwitching else { return }
+        guard hasChanges, !isSwitching else { return }
         let engine = stagedEngine
         let bottle = stagedBottle.trimmingCharacters(in: .whitespaces)
         guard !bottle.isEmpty, !bottle.contains("/") else {
@@ -134,9 +137,8 @@ final class EngineStore {
         Task(name: "Switch to \(engine) / \(bottle)") { [weak self] in
             guard let self else { return }
             switchPhase = "Stopping Steam…"
-            await supervisor?.stopForControl()
-            Engine.choose(engine)
-            SteamBottle.choose(bottle)
+            await environment.stopClient(supervisor: supervisor)
+            environment.choose(engine: engine, bottle: bottle)
             EventLog.enqueue(.app, "switched to \(engine), bottle \(bottle)")
             switchPhase = "Checking the new environment…"
             await provisioner.refreshDetection()
@@ -158,7 +160,7 @@ final class EngineStore {
                 await provisioner.configureBottle(named: bottle)
             }
             switchPhase = "Starting Steam…"
-            supervisor?.startForControl()
+            environment.startClient(supervisor: supervisor)
             switchPhase = nil
             isSwitching = false
             await refresh()

@@ -17,9 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
-    private lazy var settingsWindow = SettingsWindow(
+    private lazy var liveSettingsWindow = SettingsWindow(
         provisioner: provisioner, supervisor: supervisor, host: host,
     )
+
+    /// The settings window the gear and ⌘, open. A demo boot points this at
+    /// one built on simulated stores instead.
+    private var settingsWindow: SettingsWindow {
+        #if DEBUG
+            demoSettingsWindow ?? liveSettingsWindow
+        #else
+            liveSettingsWindow
+        #endif
+    }
 
     func applicationDidFinishLaunching(_: Notification) {
         // First, so a throw during the rest of startup is still recorded.
@@ -57,19 +67,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Nothing else starts: the gallery is fixtures all the way
                 // down, and a client coming up behind it would only compete
                 // for the ports.
-                isDryRunBoot = true
+                isSimulatedBoot = true
                 galleryWindow.show()
                 return
             }
-            if let scenario = SetupScenario.fromLaunchEnvironment() {
-                // The onboarding harness: no control server (a live instance may
-                // own the port), no bridge, no client — nothing on the machine
-                // moves, and the wizard runs against the scenario fixture.
-                isDryRunBoot = true
+            if DemoMode.isOn {
+                // No control server (a live instance may own the port), no
+                // bridge, no client — nothing on the machine moves, and the
+                // assistant and every Settings pane run against fixtures.
+                isSimulatedBoot = true
                 EventLog.shared.log(
-                    .setup, "dry-run: onboarding harness booted (\(scenario.rawValue))",
+                    .setup,
+                    "demo: booted on '\(DemoMode.setup.rawValue)' — "
+                        + "nothing on this Mac will be touched",
                 )
-                presentDryRunWizard(scenario)
+                startDemo()
                 return
             }
         #endif
@@ -161,17 +173,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSetupWizard(
-        provisioner: Provisioner, onFinished: @escaping () -> Void,
+        provisioner: Provisioner,
+        graphics: (() -> GraphicsStore)? = nil,
+        onFinished: @escaping () -> Void,
     ) {
         let view = SetupView(
             provisioner: provisioner,
-            onFinished: onFinished,
             signInPending: { [weak self] in self?.supervisor.health == .waitingForSignIn },
             onProvisioned: { [weak self] in
                 // A dry-run wizard "provisions" fixtures; nothing real may start.
                 guard !provisioner.isDryRun else { return }
                 self?.startRunning(holdingWindows: true)
             },
+            makeGraphics: graphics,
+            onFinished: onFinished,
         )
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.title = "Welcome to Sevoflurane"
@@ -202,13 +217,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             galleryWindow.show()
         }
 
-        /// Whether this process booted as the onboarding harness
-        /// (`SEVO_SETUP_DRY_RUN`) rather than as the real app.
-        private var isDryRunBoot = false
+        /// Whether this process booted simulated (``DemoMode``, or a gallery
+        /// launch) rather than as the real app.
+        private var isSimulatedBoot = false
 
         /// Retains the harness provisioner for the wizard's lifetime; the app's
         /// own `provisioner` keeps driving Settings › Repair untouched.
         private var dryRunProvisioner: Provisioner?
+
+        /// Built once for a demo boot and kept, so what was changed in one
+        /// visit to Settings is still there on the next.
+        private var demoSettingsWindow: SettingsWindow?
+
+        /// The whole app on fixtures: the assistant walks the chosen machine,
+        /// and finishing it opens Settings on the chosen panes.
+        private func startDemo() {
+            let provisioner = Provisioner(
+                environment: DryRunSetupEnvironment(scenario: DemoMode.setup),
+            )
+            dryRunProvisioner = provisioner
+            let graphics = GraphicsStore(
+                environment: DemoGraphicsEnvironment(scenario: DemoMode.graphics),
+            )
+            let storage = StorageStore(
+                environment: DemoStorageEnvironment(scenario: DemoMode.storage),
+            )
+            let engine = EngineStore(
+                provisioner: provisioner,
+                supervisor: nil,
+                environment: DemoEngineEnvironment(scenario: DemoMode.engine),
+            )
+            let compatibility = CompatibilityStore(
+                environment: DemoCompatibilityEnvironment(scenario: DemoMode.compatibility),
+            )
+            // No supervisor and no host: a demo boot started neither, and the
+            // Engine pane's switch must not reach for the client that a real
+            // instance alongside this one owns.
+            demoSettingsWindow = SettingsWindow(
+                provisioner: provisioner,
+                graphics: { graphics },
+                storage: { storage },
+                engine: { engine },
+                compatibility: { compatibility },
+            )
+            showSetupWizard(provisioner: provisioner, graphics: { graphics }) { [weak self] in
+                self?.closeSetupWindow()
+                self?.demoSettingsWindow?.show()
+            }
+        }
 
         /// Debug ▸ Onboarding Dry Run — reopens the wizard against the chosen
         /// scenario at any time, real machine untouched.
@@ -250,7 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
             // A harness boot never started the client — and the bottle it would
             // tear down belongs to whatever real instance is running alongside.
-            if isDryRunBoot { return .terminateNow }
+            if isSimulatedBoot { return .terminateNow }
         #endif
         guard quitTask == nil else { return .terminateCancel }
         quitTask = Task(name: "Quit teardown") {

@@ -8,9 +8,10 @@
     /// only do by provisioning a machine into each state in turn.
     ///
     /// Opened with `-SEVO_GALLERY 1` (or `SEVO_GALLERY=1`), or from
-    /// Debug ▸ UI Gallery. The wizard tiles run the same fixtures as the
-    /// onboarding dry run, so what shows here is what a real machine in that
-    /// state would show.
+    /// Debug ▸ UI Gallery. Every tile runs the same simulated environments
+    /// ``DemoMode`` boots the app on, so what shows here is what a real
+    /// machine in that state would show — and `SEVO_DEMO=1` is how to walk
+    /// one of these states as the app rather than look at it.
     struct GalleryView: View {
         var body: some View {
             ScrollView {
@@ -32,28 +33,98 @@
                         }
                     }
 
-                    section("Settings") {
+                    section("Settings — the whole window", minimum: 740) {
                         tile("Window") {
                             SettingsView(
                                 provisioner: Fixtures.settings,
                                 graphics: Fixtures.graphics,
                                 storage: Fixtures.storage,
-                                engine: EngineStore(
-                                    provisioner: Fixtures.settings, supervisor: nil,
-                                    isLive: false,
-                                ),
-                                compatibility: .preview(),
+                                engine: Fixtures.engine,
+                                compatibility: Fixtures.compatibility,
                             )
                             .frame(width: 720, height: 460)
                         }
                     }
 
-                    section("Repair") {
+                    section("Settings — General") {
+                        tile("Open at login, the CLI, uninstall") {
+                            GeneralSettings(
+                                provisioner: Fixtures.settings,
+                                store: Fixtures.storage,
+                                highlighted: nil,
+                            )
+                            .frame(width: 460, height: 620)
+                        }
+                    }
+
+                    section("Settings — Graphics", minimum: 480) {
+                        ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
+                            tile(pane.scenario.title) {
+                                // Tall enough for the toolkit section below
+                                // the fold: a tile that clips the state it
+                                // exists to show is worse than no tile.
+                                GraphicsSettings(store: pane.store, highlighted: nil)
+                                    .frame(width: 460, height: 620)
+                            }
+                        }
+                    }
+
+                    section("Settings — Storage", minimum: 480) {
+                        ForEach(Fixtures.storagePanes, id: \.scenario) { pane in
+                            tile(pane.scenario.title) {
+                                StorageSettings(store: pane.store, highlighted: nil)
+                                    .frame(width: 460, height: 620)
+                            }
+                        }
+                    }
+
+                    // Each engine tile draws the whole pane, because the
+                    // sections answer one question together — the switch at
+                    // the top is what makes the ones below it apply to a
+                    // different bottle.
+                    section("Settings — Engine", minimum: 500) {
+                        ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
+                            tile(pane.scenario.title) {
+                                EngineSettings(
+                                    store: pane.store,
+                                    graphics: Fixtures.graphics,
+                                    compatibility: Fixtures.compatibility,
+                                    provisioner: pane.provisioner,
+                                    highlighted: nil,
+                                )
+                                .frame(width: 480, height: 820)
+                            }
+                        }
+                    }
+
+                    section("Settings — Engine, dependencies", minimum: 500) {
+                        ForEach(Fixtures.compatibilityPanes, id: \.scenario) { pane in
+                            tile(pane.scenario.title) {
+                                EngineSettings(
+                                    store: Fixtures.engine,
+                                    graphics: Fixtures.graphics,
+                                    compatibility: pane.store,
+                                    provisioner: Fixtures.settings,
+                                    highlighted: nil,
+                                )
+                                .frame(width: 480, height: 820)
+                            }
+                        }
+                    }
+
+                    section("Settings — Repair") {
                         ForEach(Fixtures.repairs, id: \.label) { pane in
                             tile(pane.label) {
                                 RepairSettings(provisioner: pane.provisioner, highlighted: nil)
-                                    .frame(width: 420, height: 190)
+                                    .frame(width: 420, height: 210)
                             }
+                        }
+                    }
+
+                    section("Settings — About") {
+                        tile("About") {
+                            AboutSettings(highlighted: nil)
+                                .frame(width: 420, height: 230)
                         }
                     }
 
@@ -61,13 +132,18 @@
                     // that size: a scaled-down tile is a picture of the UI
                     // rather than the UI, and this gallery exists to be
                     // clicked through.
-                    section("First-run assistant", minimum: 700) {
-                        ForEach(Fixtures.wizards, id: \.scenario) { wizard in
-                            tile(wizard.scenario.title) {
-                                SetupView(provisioner: wizard.provisioner, onFinished: {})
-                                    .frame(width: 680, height: 500)
-                                    .background(.background, in: Theme.cardShape)
-                                    .clipShape(Theme.cardShape)
+                    section("First-run assistant — every step", minimum: 700) {
+                        ForEach(Fixtures.wizardSteps, id: \.step) { entry in
+                            tile(entry.step.title) {
+                                wizard(entry.provisioner, startingAt: entry.step)
+                            }
+                        }
+                    }
+
+                    section("First-run assistant — every machine", minimum: 700) {
+                        ForEach(Fixtures.wizards, id: \.scenario) { entry in
+                            tile(entry.scenario.title) {
+                                wizard(entry.provisioner, startingAt: .welcome)
                             }
                         }
                     }
@@ -75,6 +151,20 @@
                 .padding(Theme.Space.xl)
             }
             .frame(minWidth: 1200, minHeight: 900)
+        }
+
+        private func wizard(
+            _ provisioner: Provisioner, startingAt step: SetupView.Step,
+        ) -> some View {
+            SetupView(
+                provisioner: provisioner,
+                startingAt: step,
+                makeGraphics: { Fixtures.wizardGraphics },
+                onFinished: {},
+            )
+            .frame(width: 680, height: step == .graphics ? 640 : 500)
+                .background(.background, in: Theme.cardShape)
+                .clipShape(Theme.cardShape)
         }
 
         private func section(
@@ -117,6 +207,28 @@
         struct Pane {
             let label: String
             let provisioner: Provisioner
+        }
+
+        struct GraphicsPane {
+            let scenario: DemoGraphicsEnvironment.Scenario
+            let store: GraphicsStore
+        }
+
+        struct EnginePane {
+            let scenario: DemoEngineEnvironment.Scenario
+            /// Its own, so a tile that starts a switch narrates only itself.
+            let provisioner: Provisioner
+            let store: EngineStore
+        }
+
+        struct CompatibilityPane {
+            let scenario: DemoCompatibilityEnvironment.Scenario
+            let store: CompatibilityStore
+        }
+
+        struct StoragePane {
+            let scenario: DemoStorageEnvironment.Scenario
+            let store: StorageStore
         }
 
         static let games: [SteamWebHost.RecentGame] = [
@@ -226,11 +338,96 @@
                 )))
             }
 
+        /// Every step of the assistant at once, on the machine that reaches
+        /// each of them: the bottle question only exists where more than one
+        /// Steam was found, and the install step only reads as an install on
+        /// a machine that still has one to do.
+        static let wizardSteps: [(step: SetupView.Step, provisioner: Provisioner)] =
+            SetupView.Step.allCases.map { step in
+                let scenario: SetupScenario = switch step {
+                case .welcome, .engine: .freshMachine
+                case .bottle: .multipleBottles
+                case .steam: .licensedNoBottle
+                case .graphics, .options, .done: .provisioned
+                }
+                return (step, Provisioner(
+                    previewActivity: step == .steam ? .working("Downloading Steam…") : .idle,
+                    detection: scenario.fixture,
+                    environment: DryRunSetupEnvironment(
+                        scenario: scenario, stepDelay: .milliseconds(900),
+                    ),
+                ))
+            }
+
         static let settings = provisioner(.idle)
         /// Fixed values in memory: the gallery draws the settings window, and
         /// drawing it must not rewrite the machine's bottle.
-        static let graphics = GraphicsStore.preview()
-        static let storage = StorageStore.preview()
+        static let graphics = GraphicsStore(
+            environment: DemoGraphicsEnvironment(scenario: .builtInWithToolkit),
+        )
+        static let storage = StorageStore(
+            environment: DemoStorageEnvironment(scenario: .library),
+        )
+        /// The wizard's own graphics step reads a store too — a separate one,
+        /// so a toolkit added in a wizard tile doesn't appear in the Graphics
+        /// pane tiles beside it.
+        static let wizardGraphics = GraphicsStore(
+            environment: DemoGraphicsEnvironment(scenario: .builtInNoToolkit),
+        )
+        static let engine = EngineStore(
+            provisioner: settings, supervisor: nil,
+            environment: DemoEngineEnvironment(scenario: .crossOverAndBuiltIn),
+        )
+        static let compatibility = CompatibilityStore(
+            environment: DemoCompatibilityEnvironment(scenario: .partlyInstalled),
+        )
+
+        static let graphicsPanes: [GraphicsPane] =
+            DemoGraphicsEnvironment.Scenario.allCases.map { scenario in
+                GraphicsPane(
+                    scenario: scenario,
+                    store: GraphicsStore(
+                        environment: DemoGraphicsEnvironment(
+                            scenario: scenario, stepDelay: .milliseconds(900),
+                        ),
+                    ),
+                )
+            }
+
+        static let storagePanes: [StoragePane] =
+            DemoStorageEnvironment.Scenario.allCases.map { scenario in
+                StoragePane(
+                    scenario: scenario,
+                    store: StorageStore(
+                        environment: DemoStorageEnvironment(scenario: scenario),
+                    ),
+                )
+            }
+
+        /// One engine pane per fixture machine, each on its own provisioner
+        /// so a tile that starts a switch leaves its neighbours alone.
+        static let enginePanes: [EnginePane] =
+            DemoEngineEnvironment.Scenario.allCases.map { scenario in
+                let provisioner = provisioner(.idle)
+                return EnginePane(
+                    scenario: scenario,
+                    provisioner: provisioner,
+                    store: EngineStore(
+                        provisioner: provisioner, supervisor: nil,
+                        environment: DemoEngineEnvironment(scenario: scenario),
+                    ),
+                )
+            }
+
+        static let compatibilityPanes: [CompatibilityPane] =
+            DemoCompatibilityEnvironment.Scenario.allCases.map { scenario in
+                CompatibilityPane(
+                    scenario: scenario,
+                    store: CompatibilityStore(
+                        environment: DemoCompatibilityEnvironment(scenario: scenario),
+                    ),
+                )
+            }
 
         private static func provisioner(_ activity: Provisioner.Activity) -> Provisioner {
             Provisioner(
