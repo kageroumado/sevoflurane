@@ -97,6 +97,9 @@ final class ClientSupervisor {
     @ObservationIgnored private var showLibraryOnHealthy = false
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
+    /// When the current client launch began, for the boot-audit line at the
+    /// healthy transition.
+    @ObservationIgnored private var clientStartedAt: ContinuousClock.Instant?
     /// Set once quit teardown begins; blocks every path that could relaunch
     /// the client mid-teardown.
     @ObservationIgnored private var isQuitting = false
@@ -218,7 +221,7 @@ final class ClientSupervisor {
         // window comes down first (left up it freezes dimmed over the whole
         // stop), and the client's shutdown dialog is hidden as it exits.
         host.dismissWindows()
-        await ClientLifecycle.stopAll(gracePolls: 15, hidingPopups: true)
+        await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
         log.log(.supervisor, "client stopped (sevo)")
     }
 
@@ -249,7 +252,7 @@ final class ClientSupervisor {
         loop?.cancel()
         loop = nil
         log.log(.supervisor, "quit: bringing the bottle down")
-        await ClientLifecycle.stopAll(gracePolls: 3)
+        await ClientLifecycle.stopAll(gracePolls: 8)
         let survivors = await ClientLifecycle.bottleProcessIDs()
         log.log(
             .supervisor,
@@ -352,6 +355,14 @@ final class ClientSupervisor {
                     logging: .supervisor,
                     "healthy: client, bridge, page, and Steam services all up",
                 )
+                if becameHealthy, let began = clientStartedAt {
+                    clientStartedAt = nil
+                    log.log(
+                        .supervisor,
+                        "boot audit: \(began.duration(to: .now).components.seconds)s "
+                            + "from launch to healthy",
+                    )
+                }
                 if becameHealthy, showLibraryOnHealthy {
                     showLibraryOnHealthy = false
                     log.log(.supervisor, "sign-in finished — opening the library")
@@ -564,7 +575,7 @@ final class ClientSupervisor {
         host.dismissWindows()
 
         health = .restarting("checking for a running client")
-        await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true) { phase in
+        await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true) { phase in
             health = .restarting(phase)
         }
 
@@ -589,6 +600,7 @@ final class ClientSupervisor {
 
         health = .restarting("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
+        clientStartedAt = .now
         await ClientLifecycle.launchClient()
         await awaitClientUp()
     }
@@ -618,7 +630,7 @@ final class ClientSupervisor {
                 + "running the hygiene pass: htmlcache purge + headless client repair",
         )
         health = .restarting("crash loop: stopping the client")
-        await ClientLifecycle.stopAll(gracePolls: 15) { phase in
+        await ClientLifecycle.stopAll(gracePolls: 10) { phase in
             health = .restarting(phase)
         }
         guard !isQuitting else { return }
@@ -634,6 +646,7 @@ final class ClientSupervisor {
         )
         guard !isQuitting else { return }
         health = progress("launching the client")
+        clientStartedAt = .now
         await ClientLifecycle.launchClient()
         await awaitClientUp()
     }
@@ -648,6 +661,25 @@ final class ClientSupervisor {
         for waited in stride(from: 3, through: 180, by: 3) {
             health = progress("waiting for the client (\(waited)s)")
             try? await Task.sleep(for: .seconds(3))
+            // A Wine window with CDP still dead this far in is Steam saying
+            // something instead of starting — the gptk-wine wedge sat in
+            // this loop for the full 180s, three times over, before the
+            // probe cycle could see it. Only once the session has had a
+            // working client: a first-ever boot may legitimately show the
+            // updater for minutes while it applies staged packages.
+            if waited >= 24, waited % 6 == 0, hasSeenClientUp {
+                let scan = await WineWindowWatch.scan()
+                if !scan.wineWindows.isEmpty {
+                    log.log(
+                        .client,
+                        "boot audit: wedged — "
+                            + WineWindowWatch.describe(scan.wineWindows)
+                            + " up with CDP dead after \(waited)s; handing back "
+                            + "to the probe cycle",
+                    )
+                    return
+                }
+            }
             if await ClientLifecycle.probeClient() == .up {
                 PerfProbe.poi.emitEvent("ClientBack", "up after ~\(waited)s")
                 log.log(.client, "client is back — CDP + SharedJSContext up after ~\(waited)s")

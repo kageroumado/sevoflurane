@@ -148,9 +148,13 @@ nonisolated enum ClientLifecycle {
         // a corpse to shut down and then waiting 30 s for it is pure stall —
         // the leftover wineserver/winedevice never answer a client shutdown.
         // Skip straight to the force rung, which brings them down in seconds.
+        let stopBegan = ContinuousClock.now
         var clean = false
         if await clientProcessAlive() {
             await gracefulShutdown()
+            // One-second polls: a healthy client exits in 2–6 s, and a quit
+            // with nothing to upload should be over in ten — the poll count
+            // is the whole grace budget in seconds.
             for _ in 0 ..< gracePolls {
                 if hidingPopups {
                     // The client shows its "Shutting down Steam…" dialog on
@@ -160,28 +164,34 @@ nonisolated enum ClientLifecycle {
                     _ = await hideVisibleClientPopups()
                 }
                 if await bottleProcessIDs().isEmpty { clean = true; break }
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
-        if !clean {
-            phase("force-killing wine")
-            log("graceful shutdown timed out — wineserver -k")
-            await killWineserver()
-            try? await Task.sleep(for: .seconds(3))
-            var survivors = await bottleProcessIDs()
-            if !survivors.isEmpty {
-                log("signalling survivors (pids \(survivors))")
-                for pid in survivors {
-                    kill(pid, SIGTERM)
-                }
-                try? await Task.sleep(for: .seconds(3))
-                survivors = await bottleProcessIDs()
-                for pid in survivors {
-                    kill(pid, SIGKILL)
-                }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+        if clean {
+            log("stop audit: graceful exit in "
+                + "\(stopBegan.duration(to: .now).components.seconds)s")
+            return
+        }
+        phase("force-killing wine")
+        log("stop audit: graceful shutdown timed out after "
+            + "\(stopBegan.duration(to: .now).components.seconds)s — wineserver -k")
+        await killWineserver()
+        try? await Task.sleep(for: .seconds(3))
+        var survivors = await bottleProcessIDs()
+        if !survivors.isEmpty {
+            log("signalling survivors (pids \(survivors))")
+            for pid in survivors {
+                kill(pid, SIGTERM)
+            }
+            try? await Task.sleep(for: .seconds(3))
+            survivors = await bottleProcessIDs()
+            for pid in survivors {
+                kill(pid, SIGKILL)
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        log("stop audit: forced down in "
+            + "\(stopBegan.duration(to: .now).components.seconds)s")
     }
 
     /// Fire and forget: the wine launcher regularly outlives its useful work
@@ -218,7 +228,13 @@ nonisolated enum ClientLifecycle {
         )
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments
-        if let environment = invocation.environment {
+        if var environment = invocation.environment {
+            // The shim keeps Steam's own processes from putting windows on
+            // screen at all (each attempt is chronicled to
+            // Sevoflurane-windows.log); everything meaningful is mirrored
+            // natively. Supervised launches only — winecfg and games order
+            // their windows normally.
+            environment["SEVO_SUPPRESS_WINDOWS"] = "1"
             process.environment = environment
         }
         process.standardOutput = FileHandle.nullDevice
@@ -317,10 +333,12 @@ nonisolated enum ClientLifecycle {
                 "-forcesteamupdate", "-forcepackagedownload", "-exitsteam",
             ],
         )
+        var environment = invocation.environment
+        environment?["SEVO_SUPPRESS_WINDOWS"] = "1"
         let result = await Subprocess.run(
             invocation.executable.path,
             invocation.arguments,
-            environment: invocation.environment,
+            environment: environment,
             capture: .none,
             timeout: .seconds(600),
         )

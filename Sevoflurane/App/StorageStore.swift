@@ -176,7 +176,7 @@ final class StorageStore {
         if let supervisor {
             await supervisor.shutdownForQuit()
         } else {
-            await ClientLifecycle.stopAll(gracePolls: 15)
+            await ClientLifecycle.stopAll(gracePolls: 10)
         }
         let ours = ["engines", "toolkits", "shadow", "logs"]
         let bottleOnly = ["bottle", "client", "games", "caches"]
