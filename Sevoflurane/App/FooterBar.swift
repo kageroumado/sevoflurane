@@ -13,12 +13,21 @@ struct FooterBar: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
 
+    /// The label box every capsule in the bar is built around. A glass capsule sizes to its label,
+    /// so the label is where sameness has to be imposed: the glyph buttons draw their symbol in
+    /// this box and the two text chips are pinned to its height, which is what keeps the status
+    /// chip from sitting a few points shorter than the gear beside it.
+    static let labelBox: CGFloat = 16
+
     var body: some View {
         // One `GlassEffectContainer` over the whole bar at one control size: glass sampled per
         // control picks up whatever sits behind that spot, which is what made the status chips
         // and the glyph buttons look like different materials.
-        GlassEffectContainer(spacing: Theme.Space.sm) {
-            HStack(spacing: Theme.Space.sm) {
+        // Tight spacing and small controls, because the width is the binding constraint: five
+        // capsules share a 320-point popover and two of them grow on hover into a switch and its
+        // name. Loosening either one costs a label its last characters.
+        GlassEffectContainer(spacing: Theme.Space.xs) {
+            HStack(spacing: Theme.Space.xs) {
                 StatusChip(host: host, supervisor: supervisor)
                 UpdateChip()
                 Spacer(minLength: 0)
@@ -34,7 +43,7 @@ struct FooterBar: View {
                     .accessibilityLabel("Quit")
             }
             .buttonStyle(.glass)
-            .controlSize(.large)
+            .controlSize(.small)
         }
     }
 
@@ -71,32 +80,36 @@ struct FooterBar: View {
             .accessibilityLabel("More actions")
     }
 
-    /// A glyph for the bottom-bar utility controls, pinned to a fixed square so every glass
+    /// A glyph for the bottom-bar utility controls, pinned to the shared label box so every glass
     /// capsule comes out the same size regardless of glyph proportions.
     private func utilityIcon(_ name: String) -> some View {
         Image(systemName: name)
-            .frame(width: 16, height: 16)
+            .frame(width: Self.labelBox, height: Self.labelBox)
     }
 }
 
 // MARK: - Status chip
 
-/// The footer's status atom: a health dot and one word at rest; on hover it flips into the
-/// auto-restart switch, so the setting costs no space.
+/// The footer's status atom: a health dot and the state of the Steam client at rest; on hover it
+/// flips into the auto-restart switch, so the setting costs no space.
 private struct StatusChip: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
     @State private var isHovered = false
 
+    /// Every label that reports the client's run state names Steam, because the dot alone says
+    /// only "good" and nothing in the footer says what it is good about. The three that skip the
+    /// name report something else: the Steam account, this app's own switch, and the restart it is
+    /// in the middle of.
     private var status: (word: String, color: Color) {
         switch supervisor.health {
-        case .starting: ("Starting", .gray)
-        case .healthy: ("Healthy", .green)
+        case .starting: ("Steam starting", .gray)
+        case .healthy: ("Steam running", .green)
         case .waitingForSignIn: ("Signed out", .gray)
-        case .degraded: ("Degraded", .orange)
+        case .degraded: ("Steam wedged", .orange)
         case .restarting: ("Restarting", .accentColor)
-        case .launching: ("Starting", .accentColor)
-        case .gaveUp: ("Stopped", .red)
+        case .launching: ("Steam starting", .accentColor)
+        case .gaveUp: ("Steam stopped", .red)
         case .paused: ("Paused", .gray)
         }
     }
@@ -124,6 +137,10 @@ private struct StatusChip: View {
             }
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.secondary)
+            // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
+            // the width its label asks for and the bar is sized to afford it.
+            .fixedSize()
+            .frame(height: FooterBar.labelBox)
         }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
@@ -203,6 +220,8 @@ private struct UpdateChip: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize()
+                .frame(height: FooterBar.labelBox)
             }
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
