@@ -340,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _: NSApplication,
         hasVisibleWindows _: Bool,
     ) -> Bool {
+        EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — showing Steam")
         host.showSteam()
         return true
     }

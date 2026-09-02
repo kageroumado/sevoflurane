@@ -252,6 +252,7 @@ final class SteamNotifications {
         case .friends:
             host?.openFriends()
         case .steam:
+            EventLog.shared.log(.window, "notification click routed to Steam — showing Steam")
             host?.showSteam()
         }
     }

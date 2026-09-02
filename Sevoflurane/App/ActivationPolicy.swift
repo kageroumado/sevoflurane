@@ -13,14 +13,23 @@ enum ActivationPolicy {
         }
     }
 
-    /// Back to accessory when `closing` was the last visible window; panels
-    /// (the popover, Steam's menu mirrors) never count as windows here.
+    /// Back to accessory when `closing` was the last window a person can
+    /// see. Panels (the popover, Steam's menu mirrors) never count, and
+    /// neither do the windows that are ordered in but not on any screen or
+    /// at alpha 0: the parked context page, parked toasts, faded menus.
     static func recedeIfLastWindow(closing: NSWindow?) {
         let stillUp = NSApp.windows.contains { window in
-            window !== closing && window.isVisible && !(window is NSPanel)
+            window !== closing && window.isVisible && window.alphaValue > 0
+                && !(window is NSPanel) && window.isOnSomeScreen
         }
         if !stillUp {
             NSApp.setActivationPolicy(.accessory)
         }
+    }
+}
+
+private extension NSWindow {
+    var isOnSomeScreen: Bool {
+        NSScreen.screens.contains { $0.frame.intersects(frame) }
     }
 }

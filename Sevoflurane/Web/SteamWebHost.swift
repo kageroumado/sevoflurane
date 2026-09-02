@@ -241,7 +241,21 @@ final class SteamWebHost {
         runInContext(Self.chatScript(accountID: id), describedAs: "chat with \(accountID)")
     }
 
+    /// The last press or key in one of this app's windows, and the last time
+    /// something asked for a chat or the friends list on the user's behalf
+    /// (menu bar, notification click, `steam://` link). A chat window Steam
+    /// shows with neither in the recent past is one it opened for an
+    /// incoming message.
+    @ObservationIgnored private var lastUserInteraction: ContinuousClock.Instant = .now - .seconds(3600)
+    @ObservationIgnored private var lastChatRequest: ContinuousClock.Instant = .now - .seconds(3600)
+
+    var chatShowIsUnasked: Bool {
+        let now = ContinuousClock.now
+        return now - lastUserInteraction > .seconds(3) && now - lastChatRequest > .seconds(8)
+    }
+
     private func runInContext(_ script: String, describedAs what: String) {
+        lastChatRequest = .now
         // The window comes forward with the app, the way any window opened
         // from a menu-bar item does. Cooperative activation declines a
         // request it cannot attribute to an event, so this happens now,
@@ -1362,9 +1376,12 @@ final class SteamWebHost {
     /// survivor is closed from this side.
     private func installMenuDismissalGuard() {
         menuDismissalMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown],
+            matching: [.leftMouseDown, .rightMouseDown, .keyDown],
         ) { [weak self] event in
-            MainActor.assumeIsolated { self?.notePressOutsideMenus(event) }
+            MainActor.assumeIsolated {
+                self?.lastUserInteraction = .now
+                if event.type != .keyDown { self?.notePressOutsideMenus(event) }
+            }
             return event
         }
         NotificationCenter.default.addObserver(

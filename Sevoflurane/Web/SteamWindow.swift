@@ -357,7 +357,10 @@ final class SteamWindow: NSObject {
         case "Close":
             close()
         case "Minimize":
-            window?.miniaturize(nil)
+            // Steam minimizes the chat it just opened for a message so it
+            // flashes in the taskbar; miniaturizing a window that was never
+            // shown would put a phantom in the Dock instead.
+            if !heldForNotification { window?.miniaturize(nil) }
         case "ToggleMaximize":
             window?.zoom(nil)
         case "ToggleFullScreen":
@@ -638,6 +641,10 @@ final class SteamWindow: NSObject {
     /// ready; ``SteamWebHost/releaseWindowHold()`` replays the show.
     private(set) var showWasDeferredByHold = false
 
+    /// A chat window Steam opened for an incoming message, kept built and off
+    /// screen until something the user did asks for it.
+    private(set) var heldForNotification = false
+
     func show(activating: Bool) {
         realize()
         // Steam asks for its toast to be shown the moment the page renders
@@ -651,6 +658,23 @@ final class SteamWindow: NSObject {
             return
         }
         showWasDeferredByHold = false
+        if role == .chat, !window.isVisible, host?.chatShowIsUnasked == true {
+            // Steam opens a chat the moment a message arrives, the way it
+            // does on Windows to flash it in the taskbar. Here the message is
+            // already a notification, and a window popping up unasked would
+            // mark it read the moment its page turned visible. With no press
+            // in this app and no request for a chat behind the show, the
+            // window stays built and hidden until one comes — the
+            // notification click, or the friends list. Nothing else happens
+            // for it either: no Dock icon, and no minimize or move of a
+            // window nobody has seen.
+            heldForNotification = true
+            EventLog.shared.log(
+                .window, "chat window \(name) opened by an incoming message — left to the notification",
+            )
+            return
+        }
+        heldForNotification = false
         let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
         if becameRegular {
             NSApp.setActivationPolicy(.regular)
