@@ -475,19 +475,25 @@ struct SetupView: View {
                 .foregroundStyle(.green)
             Text("Ready to play")
                 .font(.system(size: 26, weight: .bold))
-            (
-                Text("Your library lives in the menu bar, behind ")
-                    + Text(Image(nsImage: MenuBarIcon.image(badged: false)))
-                    + Text(signInPending()
-                        ? " at the top right. Steam is ready — sign in and your library opens."
-                        : " at the top right.")
-            )
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 420)
+            doneCaption
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Where to find the app once setup closes, with the menu-bar glyph itself set into the
+    /// sentence so the eye has something to match against the menu bar.
+    private var doneCaption: Text {
+        let icon = Image(nsImage: MenuBarIcon.image(badged: false))
+        if signInPending() {
+            return Text(
+                "Your library lives in the menu bar, behind \(icon) at the top right. Steam is ready — sign in and your library opens.",
+            )
+        }
+        return Text("Your library lives in the menu bar, behind \(icon) at the top right.")
     }
 
     private var hasFailed: Bool {
