@@ -29,7 +29,9 @@ fail() { print -r -- "FAIL  $1"; print -r -- "      $2"; FAILED=$((FAILED + 1)) 
 note() { print -r -- "      $1" }
 
 # JavaScript in the app's own context page — the friends UI the user sees.
-page() { "$SEVO" eval "$1" 2>&1 }
+# `sevo eval` prints the bridge's JSON value, so a string arrives in quotes;
+# the quotes come off so answers compare as words, the way `sevo cdp` prints.
+page() { "$SEVO" eval "$1" 2>&1 | sed -E 's/^"(.*)"$/\1/' }
 # JavaScript in the bottled client's SharedJSContext — its own second copy.
 client() { "$SEVO" cdp "$1" 2>&1 }
 
