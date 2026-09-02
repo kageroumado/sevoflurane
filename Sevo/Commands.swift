@@ -85,12 +85,14 @@ struct StatusCommand: AsyncParsableCommand {
     func run() async throws {
         let snapshot = await Doctor.snapshot()
         let d = snapshot.detection
-        let engine = if let cx = d.crossover {
-            "CrossOver \(cx.version)"
-        } else if let managed = d.managedEngineVersions.last {
-            "builtin \(managed)"
-        } else {
+        // The engine in use, which is a choice, and only "NONE" when there is
+        // nothing on disk to choose from.
+        let engine = if d.crossover == nil, d.managedEngineVersions.isEmpty {
             "NONE"
+        } else if case .crossover = Engine.active, let cx = d.crossover {
+            "CrossOver \(cx.version)"
+        } else {
+            Engine.active.description
         }
         let steamOK = d.bottles.first { $0.name == SteamBottle.name }?.hasSteam == true
         let client = switch snapshot.clientState {
