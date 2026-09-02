@@ -19,6 +19,38 @@ Xcode 26+, macOS 26+, Apple Silicon. Open `Sevoflurane.xcodeproj`, build the
 bottle with Steam installed (`sevo setup` builds one headlessly, and the
 app's first-run assistant does the same with a window around it).
 
+## Simulating a Steam event
+
+Most of what this app reacts to arrives from Steam and needs a friend on the
+other end. Both halves of that can be driven instead.
+
+**Without a client.** The decisions are values, so the tests need no bottle,
+no window, and no sleep: `UnaskedChatPolicy` takes its clock as an argument
+and answers whether a chat window Steam is showing was asked for;
+`SteamNotification` decodes the payload the context page posts, and
+`SteamNotifications.Presentation` turns it into words and a route. Drive
+those directly — `SevofluraneTests/IncomingChatTests.swift` is the worked
+example. Running the tests launches the app, because they link against it,
+so the app returns immediately when `XCTestConfigurationFilePath` is in its
+environment: a test run starts no bridge, no supervisor, and no client.
+
+**Against a running client**, `Tools/chat-scenarios.sh` synthesizes an
+arriving message through Steam's own objects — no second account. It calls
+`UIStore.ShowAndOrActivateChat(context, chat, false)`, which is exactly what
+Steam's `IncomingMessage` handler calls, and pushes a notification payload
+into the context page's `__steamNotification` handler, which is where the
+`NotificationStore` subscription delivers. It asserts through
+`:8764/windows` and `:8764/log/tail`, prints PASS/FAIL per scenario, and
+restarts nothing.
+
+The three endpoints behind it are the general tools: `GET :8764/windows`
+lists every window the app owns with its role and whether it is visible,
+`GET :8764/log/tail?n=N` is the log without a file path, and
+`POST :8764/chat/open?accountid=N` makes the call a clicked notification
+makes. `sevo eval` runs JavaScript in the app's context page; `sevo cdp`
+runs it in the bottled client's own `SharedJSContext`, which is a second
+copy of the same UI and reacts to the same events.
+
 ## Fidelity rules
 
 The non-obvious bugs in this project are almost always a violation of one of

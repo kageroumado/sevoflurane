@@ -46,6 +46,16 @@ final class ControlServer {
         case ("POST", "/steam/show"):
             host.showSteam()
             return Self.json(#"{"ok":true,"note":"showing Steam; poll /windows"}"#)
+        case ("POST", "/chat/open"):
+            // The call a clicked notification makes, reachable from outside
+            // so `Tools/chat-scenarios.sh` can drive the asked path without
+            // a friend and a real banner to click.
+            let accountID = Self.value(of: "accountid", in: request.query)
+            guard let id = UInt32(accountID) else {
+                return .error(400, "pass ?accountid=<32-bit account id>")
+            }
+            host.openChat(accountID: String(id))
+            return Self.json(#"{"ok":true,"note":"opening the chat; poll /windows"}"#)
         case ("POST", "/steam/close"):
             host.closeSteam()
             return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
@@ -111,6 +121,15 @@ final class ControlServer {
             withJSONObject: host.windowInventory(), options: [.sortedKeys],
         ) else { return .error(500, "inventory failed") }
         return .ok(data, type: "application/json")
+    }
+
+    /// One query parameter's value, or the empty string.
+    private nonisolated static func value(of name: String, in query: String) -> String {
+        for pair in query.components(separatedBy: "&") {
+            let parts = pair.components(separatedBy: "=")
+            if parts.count == 2, parts[0] == name { return parts[1] }
+        }
+        return ""
     }
 
     private nonisolated static func logTail(query: String) -> HTTPResponse {

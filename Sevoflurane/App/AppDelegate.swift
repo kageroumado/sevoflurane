@@ -32,6 +32,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_: Notification) {
+        #if DEBUG
+            // The unit tests link against this binary, so running them
+            // launches the app. Anything started here would boot the bottle,
+            // take the ports off a copy the user is running, and stage into
+            // their Steam install — from a test that only wanted to call a
+            // function. Before everything, so a test run leaves nothing at
+            // all behind it.
+            if Self.isHostingTests {
+                isSimulatedBoot = true
+                return
+            }
+        #endif
         // First, so a throw during the rest of startup is still recorded.
         ExceptionWatch.install()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
@@ -217,9 +229,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             galleryWindow.show()
         }
 
-        /// Whether this process booted simulated (``DemoMode``, or a gallery
-        /// launch) rather than as the real app.
+        /// Whether this process booted simulated (``DemoMode``, a gallery
+        /// launch, or a test run) rather than as the real app.
         private var isSimulatedBoot = false
+
+        /// Whether this process is the unit tests' host. `xctest` puts its
+        /// configuration path in the environment of the process it loads the
+        /// bundle into, which is this one.
+        private static var isHostingTests: Bool {
+            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        }
 
         /// Retains the harness provisioner for the wizard's lifetime; the app's
         /// own `provisioner` keeps driving Settings › Repair untouched.
