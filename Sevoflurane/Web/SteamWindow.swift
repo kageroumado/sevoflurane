@@ -710,6 +710,34 @@ final class SteamWindow: NSObject {
         }
     }
 
+    /// Hides a menu the way Steam hides one itself: through the menu instance
+    /// this popup renders for. The instance's owner window draws a full-size
+    /// `ContextMenuMouseOverlay` for as long as it counts the menu as active;
+    /// closing the popup from this side leaves that overlay up, and every
+    /// click in the owner window dies on it. Answers whether an instance was
+    /// found to hide.
+    func hideThroughSteam() async -> Bool {
+        let script = """
+        (function () {
+          var el = document.querySelector('div[tabindex="0"]') || document.body;
+          var key = Object.keys(el).filter(function (k) {
+            return k.indexOf("__reactFiber") === 0;
+          })[0];
+          var node = key ? el[key] : null;
+          for (var i = 0; node && i < 12; i++) {
+            var props = node.memoizedProps;
+            if (props && props.instance && typeof props.instance.Hide === "function") {
+              props.instance.Hide();
+              return true;
+            }
+            node = node.return;
+          }
+          return false;
+        })()
+        """
+        return ((try? await webView.evaluateJavaScript(script)) as? Bool) ?? false
+    }
+
     /// Ends the popup from our side. Closing the `NSWindow` alone would leave
     /// Steam's popup manager holding a window it still believes is open, so the
     /// browsing context is closed too and the page's own teardown follows.

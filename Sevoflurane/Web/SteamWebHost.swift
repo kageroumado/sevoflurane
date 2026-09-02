@@ -1487,6 +1487,20 @@ final class SteamWebHost {
             try? await Task.sleep(for: grace)
             guard let self else { return }
             for menu in popups.values where menu.role == .menu && menu.isWindowVisible {
+                // Steam's own dismissal first: it takes the owner window's
+                // click-catching overlay down with the menu. Closing the
+                // window from here is the fallback for a menu whose page no
+                // longer answers.
+                if await menu.hideThroughSteam() {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                guard menu.isWindowVisible else {
+                    EventLog.shared.log(
+                        .window,
+                        "menu \(menu.name) survived an outside press — dismissed through Steam",
+                    )
+                    continue
+                }
                 EventLog.shared.log(
                     .window,
                     "menu \(menu.name) survived an outside press — closing it here",
