@@ -353,6 +353,32 @@ nonisolated enum ClientLifecycle {
         return hidden
     }
 
+    /// Refuses the bottled client's own friends UI the chat window it opens
+    /// for an incoming message — see ``SteamChatAutoOpen``.
+    ///
+    /// The client runs a second copy of the UI this app hosts, and it reacts
+    /// to a message the same way: it opens a CEF chat window, on the Wine
+    /// desktop, in front of whatever the user was doing. Hiding it after the
+    /// fact is what the popup sweep is for; refusing it is better, and the
+    /// refusal is the same one the app's page installs on itself.
+    ///
+    /// Answers what the script answered, for the caller's log.
+    static func refuseChatAutoOpen(attempts: Int = 10) async -> String {
+        for attempt in 1 ... max(1, attempts) {
+            if let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp),
+               let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
+               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init),
+               let answer = try? await CDPClient.evaluateOnce(
+                   socketURL: socketURL, SteamChatAutoOpen.refusalScript,
+               ),
+               SteamChatAutoOpen.settled.contains(answer) {
+                return answer
+            }
+            if attempt < attempts { try? await Task.sleep(for: .seconds(1)) }
+        }
+        return "the client's own friends UI never appeared"
+    }
+
     // MARK: - Crash-loop hygiene
 
     /// Fresh dumps in the client's `dumps/` folder — the crash-loop signature

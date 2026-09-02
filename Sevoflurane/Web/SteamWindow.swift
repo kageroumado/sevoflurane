@@ -659,15 +659,13 @@ final class SteamWindow: NSObject {
         }
         showWasDeferredByHold = false
         if role == .chat, !window.isVisible, host?.chatShowIsUnasked == true {
-            // Steam opens a chat the moment a message arrives, the way it
-            // does on Windows to flash it in the taskbar. Here the message is
-            // already a notification, and a window popping up unasked would
-            // mark it read the moment its page turned visible. With no press
-            // in this app and no request for a chat behind the show, the
-            // window stays built and hidden until one comes — the
-            // notification click, or the friends list. Nothing else happens
-            // for it either: no Dock icon, and no minimize or move of a
-            // window nobody has seen.
+            // The backstop behind ``SteamChatAutoOpen``, which refuses Steam
+            // the auto-open in the first place. A show that still arrives with
+            // no press in this app and no request for a chat behind it is one
+            // Steam decided on, so the window stays built and hidden until
+            // something asks — the notification click, or the friends list.
+            // Nothing else happens for it either: no Dock icon, and no
+            // minimize or move of a window nobody has seen.
             heldForNotification = true
             EventLog.shared.log(
                 .window, "chat window \(name) opened by an incoming message — left to the notification",

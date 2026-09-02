@@ -241,21 +241,16 @@ final class SteamWebHost {
         runInContext(Self.chatScript(accountID: id), describedAs: "chat with \(accountID)")
     }
 
-    /// The last press or key in one of this app's windows, and the last time
-    /// something asked for a chat or the friends list on the user's behalf
-    /// (menu bar, notification click, `steam://` link). A chat window Steam
-    /// shows with neither in the recent past is one it opened for an
-    /// incoming message.
-    @ObservationIgnored private var lastUserInteraction: ContinuousClock.Instant = .now - .seconds(3600)
-    @ObservationIgnored private var lastChatRequest: ContinuousClock.Instant = .now - .seconds(3600)
+    /// What the host has seen of the user, for telling a chat window Steam
+    /// opened for an incoming message from one it opened for a click.
+    @ObservationIgnored private var chatPolicy = UnaskedChatPolicy(startingAt: .now)
 
     var chatShowIsUnasked: Bool {
-        let now = ContinuousClock.now
-        return now - lastUserInteraction > .seconds(3) && now - lastChatRequest > .seconds(8)
+        chatPolicy.showIsUnasked(at: .now)
     }
 
     private func runInContext(_ script: String, describedAs what: String) {
-        lastChatRequest = .now
+        chatPolicy.noteChatRequest(at: .now)
         // The window comes forward with the app, the way any window opened
         // from a menu-bar item does. Cooperative activation declines a
         // request it cannot attribute to an event, so this happens now,
@@ -282,15 +277,20 @@ final class SteamWebHost {
         // of its own (`notificationtoasts_N_desktop`), bottom-right on the
         // real desktop. The supervisor's sweep would catch it eventually;
         // catching it on the event is what keeps it from ever being seen.
+        //
+        // Every delay sweeps, because one notification can raise more than
+        // one window and they do not appear together: the toast is up within
+        // a second, and a chat window the twin opens behind it takes several
+        // more. Stopping at the first hit left that one on screen until the
+        // supervisor's next pass.
         Task(name: "Hide client toast twin") {
-            for delay in [500, 1_500, 3_000] {
+            for delay in [500, 1_500, 3_000, 6_000] {
                 try? await Task.sleep(for: .milliseconds(delay))
                 let hidden = await ClientLifecycle.hideVisibleClientPopups()
                 if !hidden.isEmpty {
                     EventLog.shared.log(
                         .client, "hid the client's toast twin: \(hidden.joined(separator: ", "))",
                     )
-                    return
                 }
             }
         }
@@ -419,23 +419,45 @@ final class SteamWebHost {
     })()
     """
 
-    /// Registers the notification subscription, retrying while Steam's own
-    /// stores are still coming up. Steam sends no "the UI is ready" signal,
-    /// and `NotificationStore` is a global the bundle assigns partway through
-    /// boot — the same gap ``SteamMenuMirror`` retries across.
-    private func registerForNotifications() {
-        Task(name: "Register Steam notifications") {
+    /// Installs the scripts the context page needs standing: the notification
+    /// subscription, and the refusal of the chat window Steam opens for an
+    /// incoming message.
+    ///
+    /// Both reach for a global the bundle assigns partway through boot, and
+    /// Steam sends no "the UI is ready" signal, so each is retried until it
+    /// answers with one of the outcomes that means it is in place — the same
+    /// gap ``SteamMenuMirror`` retries across. The bottled client runs a
+    /// second copy of the friends UI, which opens a CEF chat window of its
+    /// own, so the refusal goes to that one too.
+    private func installContextScripts() {
+        install(
+            Self.notificationScript,
+            describedAs: "Steam notifications",
+            settledAt: ["registered", "already registered"],
+        )
+        install(
+            SteamChatAutoOpen.refusalScript,
+            describedAs: "unasked chat windows",
+            settledAt: SteamChatAutoOpen.settled,
+        )
+        Task(name: "Refuse unasked chat windows in the client") {
+            let result = await ClientLifecycle.refuseChatAutoOpen()
+            EventLog.shared.log(.client, "unasked chat windows in the client: \(result)")
+        }
+    }
+
+    private func install(
+        _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
+    ) {
+        Task(name: "Install \(what)") {
             for _ in 1 ... 10 {
-                let result = await evaluateInContext(Self.notificationScript)
-                if result == "registered" || result == "already registered" {
-                    EventLog.shared.log(.app, "Steam notifications: \(result ?? "")")
+                if let result = await evaluateInContext(script), outcomes.contains(result) {
+                    EventLog.shared.log(.app, "\(what): \(result)")
                     return
                 }
                 try? await Task.sleep(for: .seconds(1))
             }
-            EventLog.shared.log(
-                .app, "Steam notifications: NotificationStore never appeared",
-            )
+            EventLog.shared.log(.app, "\(what): Steam's own globals never appeared")
         }
     }
 
@@ -1356,7 +1378,7 @@ final class SteamWebHost {
             let result = await evaluateInContext(Self.gameActionScript)
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")
         }
-        registerForNotifications()
+        installContextScripts()
         refreshRecentGames()
     }
 
@@ -1379,7 +1401,7 @@ final class SteamWebHost {
             matching: [.leftMouseDown, .rightMouseDown, .keyDown],
         ) { [weak self] event in
             MainActor.assumeIsolated {
-                self?.lastUserInteraction = .now
+                self?.chatPolicy.noteUserInteraction(at: .now)
                 if event.type != .keyDown { self?.notePressOutsideMenus(event) }
             }
             return event
