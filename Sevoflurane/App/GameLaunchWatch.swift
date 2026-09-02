@@ -16,10 +16,10 @@ final class GameLaunchWatch {
     private static let armedFor: Duration = .seconds(180)
     private static let pollEvery: Duration = .seconds(1)
 
-    /// Window owners that are the client's own plumbing, never the game.
+    /// Windows programs that are the client's own plumbing, never the game.
     /// Steam's dialogs surface under `steam.exe`/`steamwebhelper.exe`
-    /// (`WineWindowWatch`), and the game window's owner is the game's own
-    /// exe name.
+    /// (`WineWindowWatch`), and the game's window belongs to the game's own
+    /// exe.
     private static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
 
     private var watch: Task<Void, Never>?
@@ -72,9 +72,10 @@ final class GameLaunchWatch {
             guard entry[kCGWindowLayer as String] as? Int == 0,
                   let owner = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t else { continue }
-            let name = owner.lowercased()
-            guard name.hasSuffix(".exe"), !infrastructureOwners.contains(name) else { continue }
-            return (owner, pid)
+            guard let name = WineWindowWatch.program(owner: owner, pid: pid),
+                  name.hasSuffix(".exe"),
+                  !infrastructureOwners.contains(name) else { continue }
+            return (name, pid)
         }
         return nil
     }

@@ -88,10 +88,10 @@ nonisolated enum ClientLifecycle {
 
     static func gracefulShutdown() async {
         // The quiet path first: StartShutdown in the client's own JS context.
-        // `steam.exe -shutdown` spawns a second client instance to deliver
-        // the message, and that instance flashes windows on its way through —
-        // the noise a user watching an engine switch reported. The spawn
-        // stays as the fallback for a client whose CDP is gone.
+        // `steam.exe -shutdown` spawns a whole second client instance just to
+        // deliver the message — seconds of bottle work to say one word. The
+        // spawn is the fallback for a client whose CDP is gone, and it goes
+        // through the same suppressed environment as every other spawn.
         if await shutdownOverCDP() { return }
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
@@ -282,13 +282,7 @@ nonisolated enum ClientLifecycle {
         )
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments
-        if var environment = invocation.environment {
-            // The shim keeps Steam's own processes from putting windows on
-            // screen at all (each attempt is chronicled to
-            // Sevoflurane-windows.log); everything meaningful is mirrored
-            // natively. Supervised launches only — winecfg and games order
-            // their windows normally.
-            environment["SEVO_SUPPRESS_WINDOWS"] = "1"
+        if let environment = invocation.environment {
             process.environment = environment
         }
         process.standardOutput = FileHandle.nullDevice
@@ -413,12 +407,10 @@ nonisolated enum ClientLifecycle {
                 "-forcesteamupdate", "-forcepackagedownload", "-exitsteam",
             ],
         )
-        var environment = invocation.environment
-        environment?["SEVO_SUPPRESS_WINDOWS"] = "1"
         let result = await Subprocess.run(
             invocation.executable.path,
             invocation.arguments,
-            environment: environment,
+            environment: invocation.environment,
             capture: .none,
             timeout: .seconds(600),
         )

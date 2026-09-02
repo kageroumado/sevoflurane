@@ -340,15 +340,20 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             "PATH": wineURL.deletingLastPathComponent().path + ":/usr/bin:/bin",
             "WINEDEBUG": "-all",
         ]
-        // Keeps Steam's own processes out of the Dock: winemac.drv promotes
-        // any wine process that shows a window, steamwebhelper flashes one
-        // on every boot, and there is no demotion API — so the promotion
-        // itself is interposed away (Tools/dock-shim). Games keep the real
-        // call. Ships inside the engine; an engine without it just gets the
-        // Dock icon back.
+        // Keeps Steam's own processes out of the Dock and off the screen:
+        // winemac.drv promotes any wine process that shows a window, and
+        // there is no demotion API — so the promotion and the window
+        // ordering are both taken away from Steam's infrastructure
+        // (Tools/dock-shim). The shim decides per process by the Windows exe
+        // name, so a game keeps the Dock promotion and orders its windows
+        // normally; the suppression flag rides on every managed spawn
+        // because a spawn that forgets it is a bare Wine window on screen.
+        // Ships inside the engine; an engine without it just gets the Dock
+        // icon and the windows back.
         let dockShim = root.appendingPathComponent("libsevodockshim.dylib")
         if FileManager.default.fileExists(atPath: dockShim.path) {
             env["DYLD_INSERT_LIBRARIES"] = dockShim.path
+            env["SEVO_SUPPRESS_WINDOWS"] = "1"
         }
         let graphics = BottleGraphics.managedSelection()
         if graphics.msync {

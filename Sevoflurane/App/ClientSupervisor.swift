@@ -271,7 +271,11 @@ final class ClientSupervisor {
         loop?.cancel()
         loop = nil
         log.log(.supervisor, "quit: bringing the bottle down")
-        await ClientLifecycle.stopAll(gracePolls: 8)
+        // The last thing a user sees of this app is the teardown, so the
+        // popup sweep runs here too: the client puts up "Shutting down
+        // Steam…" on its way out, and a quit is the one moment nothing else
+        // is left to hide it.
+        await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
         let survivors = await ClientLifecycle.bottleProcessIDs()
         log.log(
             .supervisor,
