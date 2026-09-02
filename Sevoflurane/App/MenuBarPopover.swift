@@ -142,28 +142,20 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
         // The popover's own background: the view hierarchy inside draws cards
         // on top of it and never a backing surface of its own.
-        let background = NSVisualEffectView()
-        background.material = .popover
-        background.blendingMode = .behindWindow
-        background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = Theme.Radius.card
-        background.layer?.cornerCurve = .continuous
-        background.layer?.masksToBounds = true
+        //
+        // Glass rather than an `NSVisualEffectView`: the vibrancy materials
+        // blur what is behind the window into a gray wash, while glass carries
+        // the wallpaper's color and light through — the ground every other
+        // menu-bar popover on macOS 26 stands on.
+        let background = NSGlassEffectView()
+        background.cornerRadius = Theme.Radius.card
 
         let content = NSHostingView(
             rootView: MenuBarView(
                 host: host, supervisor: supervisor, notifications: notifications,
             ),
         )
-        content.translatesAutoresizingMaskIntoConstraints = false
-        background.addSubview(content)
-        NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: background.topAnchor),
-            content.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            content.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-        ])
+        background.contentView = content
         panel.contentView = background
         return panel
     }
