@@ -88,8 +88,16 @@ nonisolated enum BottleGraphics {
         var renderer: Renderer
         var msync: Bool
         /// What the bottle tells a game its GPU is.
-        var gpu: GPUIdentity = .automatic
+        var gpu: GPUIdentity = defaultGPU
     }
+
+    /// The card a bottle claims when nobody has chosen one.
+    ///
+    /// A GeForce rather than the Apple chip: a game that recognizes the
+    /// vendor picks its normal settings and skips its driver-install prompt,
+    /// and the card ``GPUEquivalence`` matches is one of about the machine's
+    /// real speed, so nothing is promised that the Mac cannot deliver.
+    static let defaultGPU = GPUIdentity.nvidia
 
     /// What the bottle is set to right now, whichever engine owns the store.
     static func currentSelection() -> Selection {
@@ -186,6 +194,7 @@ nonisolated enum BottleGraphics {
 
     private static let overridesKey = "rendererOverrides"
     private static let gpuKey = "SEVO_GPU_IDENTITY"
+    private static let gpuAdoptedKey = "gpuIdentityDefaultAdopted"
 
     // MARK: - CrossOver bottles (cxbottle.conf)
 
@@ -209,7 +218,7 @@ nonisolated enum BottleGraphics {
         return Selection(
             renderer: renderer,
             msync: vars["WINEMSYNC"] != "0",
-            gpu: vars[gpuKey].flatMap(GPUIdentity.init(rawValue:)) ?? .automatic,
+            gpu: vars[gpuKey].flatMap(GPUIdentity.init(rawValue:)) ?? defaultGPU,
         )
     }
 
@@ -238,6 +247,30 @@ nonisolated enum BottleGraphics {
             selection.renderer = defaultRenderer
         }
         try apply(selection, toBottle: bottle)
+    }
+
+    /// Moves a bottle still reporting the Apple chip onto the recommended
+    /// card, once.
+    ///
+    /// Every bottle this app sets up carries `SEVO_GPU_IDENTITY`, written
+    /// whether or not anyone opened the picker, so an absent key cannot tell
+    /// a real choice from a default that has since changed. One pass over the
+    /// stored value settles it: a bottle sitting where the old default left
+    /// it moves to ``defaultGPU``, and a bottle put back on the Apple chip
+    /// after this pass stays there.
+    static func adoptDefaultGPU(forBottle bottle: URL) {
+        let defaults = Preferences.shared
+        guard !defaults.bool(forKey: gpuAdoptedKey) else { return }
+        defaults.set(true, forKey: gpuAdoptedKey)
+        var managed = managedSelection()
+        if managed.gpu == .automatic {
+            managed.gpu = defaultGPU
+            setManagedSelection(managed)
+        }
+        var bottled = selection(forBottle: bottle)
+        guard bottled.gpu == .automatic else { return }
+        bottled.gpu = defaultGPU
+        try? apply(bottled, toBottle: bottle)
     }
 
     static func apply(_ selection: Selection, toBottle bottle: URL) throws {
@@ -379,7 +412,7 @@ nonisolated enum BottleGraphics {
             .flatMap(Renderer.init(rawValue:)) ?? .dxmt
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true
         let gpu = defaults.string(forKey: gpuKey).flatMap(GPUIdentity.init(rawValue:))
-        return Selection(renderer: renderer, msync: msync, gpu: gpu ?? .automatic)
+        return Selection(renderer: renderer, msync: msync, gpu: gpu ?? defaultGPU)
     }
 
     static func setManagedSelection(_ selection: Selection) {

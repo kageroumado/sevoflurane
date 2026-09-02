@@ -216,6 +216,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
             ])
         }
         let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        BottleGraphics.adoptDefaultGPU(forBottle: bottle)
         guard case let .managed(version) = Engine.active else {
             do {
                 try BottleGraphics.reassertDefaults(forBottle: bottle)
