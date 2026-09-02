@@ -63,6 +63,9 @@ static int is_steam_infrastructure(void) {
         "gldriverquery.exe", "gldriverquery64.exe",
         "vulkandriverquery.exe", "vulkandriverquery64.exe",
         "hardwareupdater.exe", "steamsysinfo.exe",
+        // Wine's own prefix update, run once when an engine is new to the
+        // bottle: its wait dialog has no controls and nothing to answer.
+        "wineboot.exe",
     };
     const char *exe = exe_name();
     for (unsigned i = 0; i < sizeof(quiet) / sizeof(quiet[0]); i++) {
