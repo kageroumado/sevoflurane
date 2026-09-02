@@ -197,3 +197,258 @@ struct GPUIdentityEnvironmentTests {
         #expect(BottleGraphics.defaultGPU == .nvidia)
     }
 }
+
+/// DXVK reads a file rather than the environment, and its parser is strict in
+/// two ways that a plainly written file gets wrong. These tests read the file
+/// the way DXVK will, rather than matching it against a string.
+struct DXVKConfigFileTests {
+    /// DXVK's line parser, transcribed from
+    /// `DXVK-macOS/src/util/config/config.cpp:824-869`.
+    private func parse(_ file: String) -> [String: String] {
+        var options: [String: String] = [:]
+        for line in file.split(separator: "\n", omittingEmptySubsequences: false) {
+            let characters = Array(line)
+            var index = 0
+            func isWhitespace(_ character: Character) -> Bool {
+                character == " " || character == "\t" || character == "\r"
+            }
+            func isValidKeyCharacter(_ character: Character) -> Bool {
+                ("0"..."9").contains(character)
+                    || ("A"..."Z").contains(character)
+                    || ("a"..."z").contains(character)
+                    || character == "." || character == "_"
+            }
+            func skipWhitespace() {
+                while index < characters.count, isWhitespace(characters[index]) { index += 1 }
+            }
+            skipWhitespace()
+            var key = ""
+            while index < characters.count, isValidKeyCharacter(characters[index]) {
+                key.append(characters[index])
+                index += 1
+            }
+            skipWhitespace()
+            guard index < characters.count, characters[index] == "=" else { continue }
+            index += 1
+            skipWhitespace()
+            var value = ""
+            var insideString = false
+            while index < characters.count {
+                if !insideString, isWhitespace(characters[index]) { break }
+                if characters[index] == "\"" {
+                    insideString.toggle()
+                } else {
+                    value.append(characters[index])
+                }
+                index += 1
+            }
+            options[key] = value
+        }
+        return options
+    }
+
+    /// `parsePciId` from `DXVK-macOS/src/dxgi/dxgi_options.cpp:7-27`, which
+    /// answers -1 for anything that is not exactly four hex characters.
+    private func parsePciID(_ text: String) -> Int32? {
+        guard text.count == 4 else { return nil }
+        return text.reduce(Int32(0)) { total, character in
+            guard let total, let digit = character.hexDigitValue else { return nil }
+            return total * 16 + Int32(digit)
+        }
+    }
+
+    @Test
+    func `the file DXVK reads carries the whole card`() throws {
+        let file = try #require(GPUIdentity.nvidia.dxvkConfigFile)
+        let options = parse(file)
+        let card = try #require(GPUIdentity.nvidia.card)
+        #expect(parsePciID(try #require(options["dxgi.customVendorId"])) == Int32(card.vendorID))
+        #expect(parsePciID(try #require(options["dxgi.customDeviceId"])) == Int32(card.deviceID))
+        #expect(options["dxgi.customDeviceDesc"] == card.name)
+        #expect(options["dxgi.maxDeviceMemory"] == String(card.videoMemoryMB))
+    }
+
+    /// The name has a space in it, and an unquoted value ends at the first
+    /// one — the failure that reached DXMT as `customDeviceDesc = "NVIDIA"`.
+    @Test
+    func `the card's whole name survives the parser`() throws {
+        let options = parse(try #require(GPUIdentity.nvidia.dxvkConfigFile))
+        #expect(options["dxgi.customDeviceDesc"]?.contains(" ") == true)
+    }
+
+    /// A `[name]` line would gate everything below it on the running
+    /// executable's name, and the comment line has to fall through the key
+    /// parser rather than become an option.
+    @Test
+    func `the file has no section header and no stray options`() throws {
+        let file = try #require(GPUIdentity.amd.dxvkConfigFile)
+        #expect(file.contains("[") == false)
+        #expect(parse(file).count == 4)
+        #expect(file.hasPrefix("#"))
+    }
+
+    @Test
+    func `reporting the Apple chip means no file at all`() {
+        #expect(GPUIdentity.automatic.dxvkConfigFile == nil)
+        #expect(GPUIdentity.automatic.environment["DXVK_CONFIG_FILE"] == "")
+    }
+
+    @Test
+    func `every renderer is pointed at the same file`() {
+        #expect(GPUIdentity.nvidia.environment["DXVK_CONFIG_FILE"] == #"C:\windows\dxvk.conf"#)
+        #expect(GPUIdentity.amd.environment["DXVK_CONFIG_FILE"] == #"C:\windows\dxvk.conf"#)
+    }
+
+    @Test
+    func `the bottle gains the file with a card and loses it without one`() throws {
+        let bottle = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sevo-dxvk-\(UUID().uuidString)")
+        let windows = bottle.appendingPathComponent("drive_c/windows")
+        try FileManager.default.createDirectory(at: windows, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: bottle) }
+        let file = windows.appendingPathComponent("dxvk.conf")
+
+        GPUIdentity.nvidia.writeInto(bottle)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        let written = try String(contentsOf: file, encoding: .utf8)
+        #expect(parse(written)["dxgi.customDeviceDesc"] == GPUIdentity.nvidia.card?.name)
+
+        GPUIdentity.automatic.writeInto(bottle)
+        #expect(FileManager.default.fileExists(atPath: file.path) == false)
+    }
+
+    /// A path with no prefix under it is left alone rather than grown a
+    /// `drive_c` of its own.
+    @Test
+    func `a path that is not a bottle gets nothing`() throws {
+        let stranger = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sevo-not-a-bottle-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: stranger) }
+        GPUIdentity.nvidia.writeInto(stranger)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: stranger.appendingPathComponent("drive_c").path,
+            ) == false,
+        )
+    }
+}
+
+private extension GPUIdentity {
+    func writeInto(_ bottle: URL) {
+        GPUIdentity.writeDXVKConfig(self, intoBottle: bottle)
+    }
+}
+
+/// Wine's own renderer reads the card from the prefix's registry, so the
+/// choice is only real once the prefix has it. These cover the file that
+/// carries it there, which is written the moment the picker moves.
+struct WineD3DRegistryTests {
+    private func makeBottle() throws -> URL {
+        let bottle = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sevo-registry-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: bottle.appendingPathComponent("drive_c/windows"),
+            withIntermediateDirectories: true,
+        )
+        return bottle
+    }
+
+    private func queuedWrite(in bottle: URL) throws -> String {
+        let file = bottle.appendingPathComponent("drive_c/windows/sevo-gpu.reg")
+        let data = try Data(contentsOf: file)
+        #expect(data.prefix(2) == Data([0xFF, 0xFE]))
+        return try #require(String(data: data, encoding: .utf16))
+    }
+
+    @Test
+    func `a card is written as the two values wined3d reads`() throws {
+        let file = GPUIdentity.nvidia.wineD3DRegistryFile
+        let card = try #require(GPUIdentity.nvidia.card)
+        #expect(file.hasPrefix("Windows Registry Editor Version 5.00"))
+        #expect(file.contains(#"[HKEY_CURRENT_USER\Software\Wine\Direct3D]"#))
+        #expect(file.contains(String(format: #""VideoPciVendorID"=dword:%08x"#, card.vendorID)))
+        #expect(file.contains(String(format: #""VideoPciDeviceID"=dword:%08x"#, card.deviceID)))
+        #expect(file.contains("\r\n"))
+    }
+
+    /// Writing nothing would leave the bottle claiming the card it was moved
+    /// off, so the Apple chip is spelled as a deletion.
+    @Test
+    func `the Apple chip takes the two values away`() {
+        let file = GPUIdentity.automatic.wineD3DRegistryFile
+        #expect(file.contains(#""VideoPciVendorID"=-"#))
+        #expect(file.contains(#""VideoPciDeviceID"=-"#))
+        #expect(file.contains("dword") == false)
+    }
+
+    @Test
+    func `the bottle has the write the moment the picker moves`() throws {
+        let bottle = try makeBottle()
+        defer { try? FileManager.default.removeItem(at: bottle) }
+        for identity in [GPUIdentity.nvidia, .amd, .automatic, .nvidia] {
+            GPUIdentity.writeWineD3DRegistry(identity, intoBottle: bottle)
+            #expect(try queuedWrite(in: bottle) == identity.wineD3DRegistryFile)
+        }
+    }
+
+    /// The store's own entry point, with the prefix already holding the answer
+    /// so no import is spawned — what is being checked is that the file lands
+    /// during the call rather than at some later boot.
+    @Test
+    func `applying a selection leaves the write in the bottle`() throws {
+        let bottle = try makeBottle()
+        defer { try? FileManager.default.removeItem(at: bottle) }
+        try Data("[EnvironmentVariables]\n".utf8)
+            .write(to: bottle.appendingPathComponent("cxbottle.conf"))
+        let card = try #require(GPUIdentity.amd.card)
+        try Data(
+            [
+                String(format: #""VideoPciVendorID"=dword:%08x"#, card.vendorID),
+                String(format: #""VideoPciDeviceID"=dword:%08x"#, card.deviceID),
+            ].joined(separator: "\n").utf8,
+        ).write(to: bottle.appendingPathComponent("user.reg"))
+
+        try BottleGraphics.apply(
+            BottleGraphics.Selection(renderer: .dxvk, msync: true, gpu: .amd),
+            toBottle: bottle,
+        )
+        #expect(try queuedWrite(in: bottle) == GPUIdentity.amd.wineD3DRegistryFile)
+    }
+
+    @Test
+    func `a prefix already holding the card needs no import`() throws {
+        let bottle = try makeBottle()
+        defer { try? FileManager.default.removeItem(at: bottle) }
+        let card = try #require(GPUIdentity.nvidia.card)
+        let user = bottle.appendingPathComponent("user.reg")
+
+        #expect(BottleGraphics.registryHolds(.nvidia, inBottle: bottle) == false)
+        // No values at all is what the Apple chip looks like in a prefix.
+        #expect(BottleGraphics.registryHolds(.automatic, inBottle: bottle))
+
+        try Data(
+            String(format: #""VideoPciVendorID"=dword:%08x"#, card.vendorID).utf8,
+        ).write(to: user)
+        #expect(BottleGraphics.registryHolds(.nvidia, inBottle: bottle) == false)
+
+        try Data(
+            [
+                String(format: #""VideoPciVendorID"=dword:%08x"#, card.vendorID),
+                String(format: #""VideoPciDeviceID"=dword:%08x"#, card.deviceID),
+            ].joined(separator: "\n").utf8,
+        ).write(to: user)
+        #expect(BottleGraphics.registryHolds(.nvidia, inBottle: bottle))
+        #expect(BottleGraphics.registryHolds(.amd, inBottle: bottle) == false)
+        #expect(BottleGraphics.registryHolds(.automatic, inBottle: bottle) == false)
+    }
+
+    @Test
+    func `a path that is not a bottle gets no write`() throws {
+        let stranger = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sevo-not-a-bottle-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: stranger) }
+        #expect(GPUIdentity.writeWineD3DRegistry(.nvidia, intoBottle: stranger) == nil)
+    }
+}

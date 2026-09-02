@@ -297,7 +297,59 @@ nonisolated enum BottleGraphics {
         for (name, value) in selection.gpu.environment {
             text = settingVariable(name, to: value.isEmpty ? nil : value, inConf: text)
         }
+        // DXVK takes its share of the same choice as a file, because this one
+        // reads no config string from the environment.
+        GPUIdentity.writeDXVKConfig(selection.gpu, intoBottle: bottle)
         try Data(text.utf8).write(to: confURL(forBottle: bottle))
+        carryGPUToRegistry(selection.gpu, intoBottle: bottle)
+    }
+
+    // MARK: - The prefix's own copy of the choice
+
+    /// Carries the card into the prefix's registry at the moment it is chosen.
+    ///
+    /// Wine's own renderer reads the card from `HKCU\Software\Wine\Direct3D`
+    /// rather than from the launch environment, so a choice that has not
+    /// reached the registry has not reached that renderer. `regedit` imports
+    /// the file through the engine's own wine, which reaches a prefix that is
+    /// already running and starts one for a bottle that is down.
+    /// `Process.run()` returns at the spawn, so the caller pays a fork.
+    ///
+    /// The file lands in the bottle whether or not the import does, and
+    /// ``SetupEnvironment`` writes the same two values at the next app start,
+    /// so a spawn that fails costs the choice a restart rather than losing it.
+    private static func carryGPUToRegistry(_ identity: GPUIdentity, intoBottle bottle: URL) {
+        guard GPUIdentity.writeWineD3DRegistry(identity, intoBottle: bottle) != nil,
+              !registryHolds(identity, inBottle: bottle)
+        else { return }
+        let invocation = Engine.active.wineInvocation(
+            bottle: bottle.lastPathComponent, wait: .children,
+            program: ["regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath],
+        )
+        let process = Process()
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        if let environment = invocation.environment {
+            process.environment = environment
+        }
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+    }
+
+    /// Whether the prefix already says what this choice says, so a bottle that
+    /// is right pays no spawn. The Apple chip is the absence of both values.
+    static func registryHolds(_ identity: GPUIdentity, inBottle bottle: URL) -> Bool {
+        let text = (try? String(
+            contentsOf: bottle.appendingPathComponent("user.reg"), encoding: .utf8,
+        )) ?? ""
+        let entries = identity.wineD3DRegistry
+        guard !entries.isEmpty else {
+            return !text.contains("\"VideoPciVendorID\"") && !text.contains("\"VideoPciDeviceID\"")
+        }
+        return entries.allSatisfy { entry in
+            text.contains(String(format: "\"%@\"=dword:%08x", entry.value, UInt32(entry.data) ?? 0))
+        }
     }
 
     /// Knobs Apple documents for the evaluation environment, and that a Steam
@@ -420,6 +472,10 @@ nonisolated enum BottleGraphics {
         defaults.set(selection.renderer.rawValue, forKey: rendererKey)
         defaults.set(selection.msync, forKey: msyncKey)
         defaults.set(selection.gpu.rawValue, forKey: gpuKey)
+        // After the store, because the launch environment a spawn inherits is
+        // derived from it.
+        GPUIdentity.writeDXVKConfig(selection.gpu, intoBottle: SteamBottle.root)
+        carryGPUToRegistry(selection.gpu, intoBottle: SteamBottle.root)
         // The renderer is part of managed-engine resolution — D3DMetal
         // boots the GPTk engine, DXMT the wine-staging one — so the next
         // client start re-picks the wine.

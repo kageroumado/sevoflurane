@@ -203,20 +203,21 @@ final class LiveSetupEnvironment: SetupEnvironment {
         }
         // Wine's own renderer reads the card from the registry rather than
         // the environment, so the choice has to be written twice to be one
-        // choice.
-        for entry in BottleGraphics.currentSelection().gpu.wineD3DRegistry {
-            if let dword = UInt32(entry.data),
-               registry(
-                   of: bottleURL, file: "user.reg",
-                   contains: String(format: "\"%@\"=dword:%08x", entry.value, dword),
-               ) { continue }
+        // choice. The picker carries it into the prefix as it moves; this is
+        // the pass that catches a bottle whose import never landed, and it
+        // imports the same file so both routes say the same thing.
+        let gpu = BottleGraphics.currentSelection().gpu
+        if !BottleGraphics.registryHolds(gpu, inBottle: bottleURL),
+           GPUIdentity.writeWineD3DRegistry(gpu, intoBottle: bottleURL) != nil {
             _ = await runWine(bottle: name, args: [
-                "reg", "add", #"HKCU\Software\Wine\Direct3D"#,
-                "/v", entry.value, "/t", "REG_DWORD", "/d", entry.data, "/f",
+                "regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath,
             ])
         }
         let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
         BottleGraphics.adoptDefaultGPU(forBottle: bottle)
+        // A bottle nobody has opened the picker for still needs DXVK's file:
+        // the other layers read the launch environment, DXVK reads only this.
+        GPUIdentity.writeDXVKConfig(BottleGraphics.currentSelection().gpu, intoBottle: bottle)
         guard case let .managed(version) = Engine.active else {
             do {
                 try BottleGraphics.reassertDefaults(forBottle: bottle)
