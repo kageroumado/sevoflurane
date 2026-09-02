@@ -395,19 +395,21 @@ struct GraphicsSettings: View {
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
-    /// Shown when no installed built-in engine can host D3DMetal. Apple's
-    /// toolkit runs on CrossOver's Wine only: it calls pthread from PE code
-    /// (upstream Wine 10+ points GS at the TEB there), and CrossOver adds a
-    /// libd3dshared-aware syscall dispatcher and a winemac.drv presenter.
-    /// Toolkits added meanwhile are kept for the engine that gains them.
+    /// Shown when no installed engine declares D3DMetal. Apple's toolkit
+    /// calls pthread from PE code, so it needs a Wine that keeps GS on the
+    /// thread's own data while PE code runs: CrossOver's does, and the
+    /// built-in engine does from `sevo-r1d` on (the `ntdll-macos-gsbase-
+    /// pthread` patch). Toolkits added meanwhile are kept for the engine that
+    /// gains them.
     private var gptkEngineRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Direct3D 12 needs the CrossOver engine for now")
+            Text("Direct3D 12 needs an engine that hosts Apple's toolkit")
                 .font(.callout.weight(.semibold))
-            Text("Apple's Direct3D 12 toolkit only runs inside CrossOver's "
-                + "Wine today. Sevoflurane's own engine runs DirectX 9 to 11 "
-                + "games; for a DirectX 12 game, pick CrossOver in "
-                + "Settings › Engine. Toolkits added below are kept either way.")
+            Text("Apple's Direct3D 12 toolkit runs on Sevoflurane's newest "
+                + "built-in engine and on CrossOver. This engine runs DirectX 9 "
+                + "to 11 games; for a DirectX 12 game, update the built-in engine "
+                + "or pick CrossOver in Settings › Engine. Toolkits added below "
+                + "are kept either way.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

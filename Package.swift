@@ -61,6 +61,7 @@ let package = Package(
                 "Spike",
                 "Tools",
                 "sevo-engine-sevo-r1c-wine11.16.tar.xz",
+                "sevo-engine-sevo-r1d-wine11.16.tar.xz",
                 "sevo-engine-wine11.16-dxmt0.80-r1.tar.xz",
             ],
             sources: [
