@@ -120,12 +120,16 @@ struct SteamNotificationPresentationTests {
         accountID: String = "37871103",
         gameName: String = "",
         appID: String = "",
+        sound: Bool? = nil,
     ) throws -> SteamNotification {
+        // `sound` is omitted rather than defaulted, so the payload an older
+        // page builds is exercised too.
+        let soundField = sound.map { ",\"sound\":\($0)" } ?? ""
         let json = """
         {"kind":\(kind),"source":\(source),"id":"\(id)","title":"\(title)",
          "body":"\(body)","icon":"https://avatars.steamstatic.com/x_medium.jpg",
          "steamid":"76561198035136831","accountid":"\(accountID)",
-         "appid":"\(appID)","gameName":"\(gameName)"}
+         "appid":"\(appID)","gameName":"\(gameName)"\(soundField)}
         """
         return try JSONDecoder().decode(
             SteamNotification.self, from: Data(json.utf8),
@@ -182,6 +186,48 @@ struct SteamNotificationPresentationTests {
     }
 
     @Test
+    func `a message sounds when Steam's setting says it should`() throws {
+        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi", sound: true)
+        let presentation = try #require(SteamNotifications.Presentation(notification))
+        #expect(presentation.isSounded)
+    }
+
+    @Test
+    func `a message stays silent when Steam's setting says silent`() throws {
+        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi", sound: false)
+        let presentation = try #require(SteamNotifications.Presentation(notification))
+        #expect(!presentation.isSounded)
+    }
+
+    @Test
+    func `a payload with no answer about sound is silent`() throws {
+        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi")
+        #expect(notification.playsSound == nil)
+        let presentation = try #require(SteamNotifications.Presentation(notification))
+        #expect(!presentation.isSounded)
+    }
+
+    @Test
+    func `a group message carries the chat room's own sound setting`() throws {
+        let loud = try Self.payload(kind: 9, title: "Game Night", body: "Mika: hey", sound: true)
+        #expect(try #require(SteamNotifications.Presentation(loud)).isSounded)
+        let quiet = try Self.payload(kind: 9, title: "Game Night", body: "Mika: hey", sound: false)
+        #expect(try !#require(SteamNotifications.Presentation(quiet)).isSounded)
+    }
+
+    @Test
+    func `the kinds whose sound Steam still plays stay silent here`() throws {
+        // Presence keeps its own chime in the page, so the banner adds none —
+        // saying `sound: true` for one of these changes nothing.
+        for kind in [1, 3, 4] {
+            let notification = try Self.payload(
+                kind: kind, title: "Mika", gameName: "Half-Life", sound: true,
+            )
+            #expect(try !#require(SteamNotifications.Presentation(notification)).isSounded)
+        }
+    }
+
+    @Test
     func `a click routes back to the chat it came from`() {
         let route = SteamNotifications.Route.chat(accountID: "37871103")
         #expect(SteamNotifications.Route(userInfo: route.userInfo) == route)
@@ -224,9 +270,26 @@ struct SteamNotificationPostingTests {
     }
 }
 
-/// The refusal itself: one script, installed in both copies of the friends
-/// UI, whose answers the retry loops compare against.
+/// The refusals themselves: two scripts, each installed in both copies of the
+/// friends UI, whose answers the retry loops compare against.
 struct SteamChatAutoOpenTests {
+    @Test
+    func `the sound refusal names the three sounds a message makes`() {
+        let script = SteamMessageSound.refusalScript
+        #expect(script.contains("PlayAudioURL"))
+        for file in SteamMessageSound.refusedFiles {
+            #expect(script.contains(file))
+        }
+        // The friend-join and friend-online chimes go through the same
+        // method and are not ours to take over.
+        #expect(!script.contains("ui_steam_smoother_friend_join"))
+    }
+
+    @Test
+    func `both refusals settle on the same two answers`() {
+        #expect(SteamMessageSound.settled == SteamChatAutoOpen.settled)
+    }
+
     @Test
     func `the refusal names the one method that gates the auto-open`() {
         #expect(SteamChatAutoOpen.refusalScript.contains("BShowIncomingChatMessages"))

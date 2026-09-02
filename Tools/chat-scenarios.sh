@@ -101,6 +101,31 @@ else
          "BShowIncomingChatMessages() answered '$ANSWER', wanted 'false'"
 fi
 
+# The refusal is behavioral, not a flag: asking the manager to play the
+# message chime has to come back with no playback object. Nothing sounds —
+# that is the point of the assertion.
+SOUND_PROBE='(function () {
+  var audio = window.g_FriendsUIApp.AudioPlaybackManager;
+  var url = "https://cdn.example/public/sounds/webui/ui_steam_message_old_smooth.m4a";
+  return String(audio.PlayAudioURL(url));
+})()'
+
+ANSWER=$(page "$SOUND_PROBE")
+if [[ $ANSWER == undefined ]]; then
+    pass "the app's friends UI plays no sound of its own for a message"
+else
+    fail "the app's friends UI plays no sound of its own for a message" \
+         "PlayAudioURL answered '$ANSWER', wanted 'undefined'"
+fi
+
+ANSWER=$(client "$SOUND_PROBE")
+if [[ $ANSWER == undefined ]]; then
+    pass "the client's own friends UI plays none either"
+else
+    fail "the client's own friends UI plays none either" \
+         "PlayAudioURL answered '$ANSWER', wanted 'undefined'"
+fi
+
 # ------------------------------- 2. Steam's own show for a message opens nothing
 
 # The exact call Steam's IncomingMessage handler makes, with the refusal

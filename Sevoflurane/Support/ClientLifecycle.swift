@@ -347,25 +347,26 @@ nonisolated enum ClientLifecycle {
         return hidden
     }
 
-    /// Refuses the bottled client's own friends UI the chat window it opens
-    /// for an incoming message — see ``SteamChatAutoOpen``.
+    /// Runs one of the app's standing scripts in the bottled client's own
+    /// friends UI, retrying until it answers that it is in place.
     ///
     /// The client runs a second copy of the UI this app hosts, and it reacts
-    /// to a message the same way: it opens a CEF chat window, on the Wine
-    /// desktop, in front of whatever the user was doing. Hiding it after the
-    /// fact is what the popup sweep is for; refusing it is better, and the
-    /// refusal is the same one the app's page installs on itself.
+    /// to every event the same way: it opens a CEF chat window for an arriving
+    /// message, on the Wine desktop in front of whatever the user was doing,
+    /// and it plays Steam's message chime out of a page nobody can see. So
+    /// both refusals — ``SteamChatAutoOpen`` and ``SteamMessageSound`` — go to
+    /// that copy as well as to the app's own page.
     ///
     /// Answers what the script answered, for the caller's log.
-    static func refuseChatAutoOpen(attempts: Int = 10) async -> String {
+    static func installInClientUI(
+        _ script: String, settledAt outcomes: Set<String>, attempts: Int = 10,
+    ) async -> String {
         for attempt in 1 ... max(1, attempts) {
             if let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp),
                let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
                let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init),
-               let answer = try? await CDPClient.evaluateOnce(
-                   socketURL: socketURL, SteamChatAutoOpen.refusalScript,
-               ),
-               SteamChatAutoOpen.settled.contains(answer) {
+               let answer = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
+               outcomes.contains(answer) {
                 return answer
             }
             if attempt < attempts { try? await Task.sleep(for: .seconds(1)) }

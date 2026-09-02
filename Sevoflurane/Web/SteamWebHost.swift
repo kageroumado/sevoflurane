@@ -391,7 +391,27 @@ final class SteamWebHost {
           return (app && app.display_name) || "";
         } catch (e) { return ""; }
       }
-    
+
+      /* Steam's own answer to "does this make a sound", asked here because
+         only the page can ask it: a friend's message honors the per-friend
+         override on top of Friends & Chat's bSounds_PlayMessage, and a group
+         message reads bSounds_PlayChatRoomNotification. Steam's own playback
+         is refused (SteamMessageSound) and the Mac's notification carries the
+         sound instead, so this is the setting reaching the surface that now
+         makes the noise. */
+      function playsSound(kind, id) {
+        try {
+          var app = window.g_FriendsUIApp;
+          if (kind === 9) return !!app.BPlayChatRoomNotificationSound();
+          if (kind !== 8) return false;
+          var player = window.friendStore.GetPlayer(Number(id));
+          if (player && typeof player.BPlayMessageSound === "function") {
+            return !!player.BPlayMessageSound();
+          }
+          return !!app.SettingsStore.FriendsSettings.bSounds_PlayMessage;
+        } catch (e) { return false; }
+      }
+
       store.CurrentToastSubscribableValue.Subscribe(function (toast) {
         if (!toast) return;
         var data = toast.data;
@@ -410,6 +430,7 @@ final class SteamWebHost {
         out.accountid = out.steamid ? accountID(out.steamid) : "";
         if (!out.title && out.steamid) out.title = persona(out.steamid);
         if (!out.gameName && out.appid) out.gameName = appName(out.appid);
+        out.sound = playsSound(out.kind, out.accountid);
         try {
           window.webkit.messageHandlers.sevoWindow.postMessage(
             { fn: "__steamNotification", args: [JSON.stringify(out)] });
@@ -440,9 +461,29 @@ final class SteamWebHost {
             describedAs: "unasked chat windows",
             settledAt: SteamChatAutoOpen.settled,
         )
-        Task(name: "Refuse unasked chat windows in the client") {
-            let result = await ClientLifecycle.refuseChatAutoOpen()
-            EventLog.shared.log(.client, "unasked chat windows in the client: \(result)")
+        install(
+            SteamMessageSound.refusalScript,
+            describedAs: "Steam's own message sound",
+            settledAt: SteamMessageSound.settled,
+        )
+        installInClient(
+            SteamChatAutoOpen.refusalScript,
+            describedAs: "unasked chat windows",
+            settledAt: SteamChatAutoOpen.settled,
+        )
+        installInClient(
+            SteamMessageSound.refusalScript,
+            describedAs: "Steam's own message sound",
+            settledAt: SteamMessageSound.settled,
+        )
+    }
+
+    private func installInClient(
+        _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
+    ) {
+        Task(name: "Install \(what) in the client") {
+            let result = await ClientLifecycle.installInClientUI(script, settledAt: outcomes)
+            EventLog.shared.log(.client, "\(what) in the client: \(result)")
         }
     }
 

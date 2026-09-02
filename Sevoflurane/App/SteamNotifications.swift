@@ -28,6 +28,12 @@ struct SteamNotification: Decodable, Equatable, Sendable {
     var accountID: String
     var appID: String
     var gameName: String
+    /// Steam's own sound setting for this notification, answered in the page
+    /// where it lives: the per-friend override over Friends & Chat's "play a
+    /// sound when I receive a message" for a message, the chat-room switch
+    /// for a group's. Absent from a payload an older page built, which reads
+    /// as the silence that was the behavior then.
+    var playsSound: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -40,6 +46,7 @@ struct SteamNotification: Decodable, Equatable, Sendable {
         case accountID = "accountid"
         case appID = "appid"
         case gameName
+        case playsSound = "sound"
     }
 }
 
@@ -191,12 +198,15 @@ final class SteamNotifications {
         let content = UNMutableNotificationContent()
         content.title = presentation.title
         content.body = presentation.body
-        // Silent on purpose: these mirror Steam's own toasts, which the
-        // client delivers without sound, and a mirror that adds a sound of
-        // its own is louder than the thing it mirrors. (Steam's sound
-        // preference isn't readably exposed to the context page; if it ever
-        // is, honor it here.)
-        content.sound = nil
+        // A message makes one sound, and on a Mac it is the notification's:
+        // the volume, the Do Not Disturb schedule and the per-app switch are
+        // all the system's there. Steam plays its own chime from the page for
+        // exactly these, which ``SteamMessageSound`` refuses, and the setting
+        // behind it — Friends & Chat's "play a sound when I receive a
+        // message", and any per-friend override on top — is what decides here
+        // instead. Everything else stays silent: nothing on this side has
+        // taken over the sound for it.
+        content.sound = presentation.isSounded ? .default : nil
         content.userInfo = presentation.route.userInfo
         // Steam sends a new notification per message; grouping them by who
         // they are from is what makes a conversation read as one thread in
@@ -319,6 +329,10 @@ final class SteamNotifications {
         /// Shown as a banner, then withdrawn from Notification Center —
         /// presence has no value as a record.
         var isTransient = false
+        /// Whether the banner makes a sound. True only where Steam's own
+        /// chime has been taken over — an arriving message — and only when
+        /// Steam's setting for that sender says so.
+        var isSounded = false
 
         init?(_ notification: SteamNotification) {
             let person = notification.title
@@ -345,6 +359,7 @@ final class SteamNotifications {
                 title = person
                 body = notification.body
                 route = .chat(accountID: notification.accountID)
+                isSounded = notification.playsSound ?? false
             case 9:
                 guard !person.isEmpty else { return nil }
                 title = person
@@ -354,6 +369,7 @@ final class SteamNotifications {
                 // verified against a live client. The friends list is where
                 // every conversation is reachable from.
                 route = .friends
+                isSounded = notification.playsSound ?? false
             default:
                 return nil
             }
