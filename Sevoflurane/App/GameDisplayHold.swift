@@ -1,0 +1,45 @@
+import Foundation
+import IOKit.pwr_mgt
+
+/// Keeps the display awake while a game is running.
+///
+/// A Wine game never counts as user activity to macOS, so the display sleeps
+/// on the idle timer even while the game renders. When it does, the game's
+/// Metal present has nowhere to go and the render thread blocks on it: the
+/// game freezes on whatever frame it had, its log stops, and it stays that
+/// way until the panel comes back. Measured with Subnautica 2 on D3DMetal —
+/// ten minutes frozen with the display off, every shader thread parked.
+///
+/// The hold is a power-management assertion against display sleep, taken
+/// when a game's window appears and released when the last one is gone or
+/// the app quits. System sleep is left to the user's settings.
+@MainActor
+enum GameDisplayHold {
+    private static var assertion: IOPMAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
+
+    /// A game's window is up. Idempotent.
+    static func gameDidAppear() {
+        guard assertion == IOPMAssertionID(kIOPMNullAssertionID) else { return }
+        var id = IOPMAssertionID(kIOPMNullAssertionID)
+        let status = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Sevoflurane: a game is running" as CFString,
+            &id,
+        )
+        guard status == kIOReturnSuccess else {
+            EventLog.shared.log(.app, "display hold refused: IOReturn \(status)")
+            return
+        }
+        assertion = id
+        EventLog.shared.log(.app, "display held awake for the running game")
+    }
+
+    /// No game window remains.
+    static func gameDidExit() {
+        guard assertion != IOPMAssertionID(kIOPMNullAssertionID) else { return }
+        IOPMAssertionRelease(assertion)
+        assertion = IOPMAssertionID(kIOPMNullAssertionID)
+        EventLog.shared.log(.app, "display hold released")
+    }
+}

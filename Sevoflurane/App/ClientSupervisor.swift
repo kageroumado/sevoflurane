@@ -414,7 +414,13 @@ final class ClientSupervisor {
             // The launch watch turns Game Mode on the moment the window
             // appears; this scan is the authoritative edge for games it
             // missed and for the exit.
-            scan.gameWindowUp ? GameModeSession.gameDidAppear() : GameModeSession.gameDidExit()
+            if scan.gameWindowUp {
+                GameModeSession.gameDidAppear()
+                GameDisplayHold.gameDidAppear()
+            } else {
+                GameModeSession.gameDidExit()
+                GameDisplayHold.gameDidExit()
+            }
         }
         let wineWindows = scan.wineWindows
         if !wineWindows.isEmpty, !wineWindowsVisible {
