@@ -26,6 +26,7 @@ let package = Package(
             exclude: [
                 "CONTRIBUTING.md",
                 "DELETE-CANDIDATES.md",
+                "default.profraw",
                 "Docs",
                 "HANDOFF.md",
                 "LICENSE",
