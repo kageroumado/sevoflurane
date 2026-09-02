@@ -10,10 +10,14 @@
 //    bottle spawn, in Engine.environment), NSWindow ordering is swizzled:
 //    infrastructure processes cannot put a window on screen at all — the
 //    app mirrors everything meaningful natively over CDP, and the
-//    supervisor narrates failures in its own UI. Every suppressed window is
-//    chronicled to ~/Library/Logs/Sevoflurane-windows.log with who/what/when
-//    — the audit trail for "what tried to appear and why". A game's windows
-//    reach the original implementation and order normally.
+//    supervisor narrates failures in its own UI. A game's windows reach the
+//    original implementation and order normally.
+//
+//    Every window is chronicled to ~/Library/Logs/Sevoflurane-windows.log
+//    with who/what/when, `suppressed` or `passed` — the audit trail for
+//    "what tried to appear, and what actually did". A bottle window nobody
+//    can account for is named there by its exe, which is the only way to
+//    tell a game's window from wine's own tooling turning up unasked.
 //
 // Both levers ask "is this Steam's own infrastructure?" at call time, never
 // at load time: wine rewrites argv to the Windows command line long after
@@ -53,6 +57,12 @@ static int is_steam_infrastructure(void) {
         "steamwebhelper.exe", "steam.exe", "steamservice.exe",
         "steamerrorreporter.exe", "steamerrorreporter64.exe",
         "explorer.exe", "SteamSetup.exe",
+        // Steam's boot-time probes. Each orders a window it needs only as a
+        // GL/Vulkan context or a PyInstaller stub: the hardware updater's
+        // is 1914x960, the shape of a flash across the whole screen.
+        "gldriverquery.exe", "gldriverquery64.exe",
+        "vulkandriverquery.exe", "vulkandriverquery64.exe",
+        "hardwareupdater.exe", "steamsysinfo.exe",
     };
     const char *exe = exe_name();
     for (unsigned i = 0; i < sizeof(quiet) / sizeof(quiet[0]); i++) {
@@ -158,12 +168,23 @@ static void forward_to_super(id self, SEL selector, void *first, void *second) {
         &target, selector, first, second);
 }
 
+// A window that reaches the screen from inside the bottle is chronicled too.
+// The infrastructure list names the processes whose windows are Sevoflurane's
+// to mirror; anything else — a game, and wine's own tooling — orders normally,
+// and `passed` is what names it in the log when one turns up on screen that
+// nobody expected. The line costs an fopen per ordering call, which a window
+// asks for when it is shown, not per frame.
+static void allow(id self, SEL selector, void *first, void *second) {
+    chronicle("passed", self);
+    forward_to_super(self, selector, first, second);
+}
+
 static void sevo_order_window(id self, SEL _cmd, long place, long other) {
     if (suppressing()) {
         chronicle("suppressed", self);
         return;
     }
-    forward_to_super(self, _cmd, (void *)place, (void *)other);
+    allow(self, _cmd, (void *)place, (void *)other);
 }
 
 static void sevo_order_front(id self, SEL _cmd, id sender) {
@@ -171,7 +192,7 @@ static void sevo_order_front(id self, SEL _cmd, id sender) {
         chronicle("suppressed", self);
         return;
     }
-    forward_to_super(self, _cmd, sender, NULL);
+    allow(self, _cmd, sender, NULL);
 }
 
 static void sevo_order_regardless(id self, SEL _cmd) {
@@ -179,7 +200,7 @@ static void sevo_order_regardless(id self, SEL _cmd) {
         chronicle("suppressed", self);
         return;
     }
-    forward_to_super(self, _cmd, NULL, NULL);
+    allow(self, _cmd, NULL, NULL);
 }
 
 // `-[WineWindow makeKeyAndOrderFront:]` is winemac.drv's own override, so
@@ -190,7 +211,7 @@ static void sevo_order_regardless(id self, SEL _cmd) {
 static IMP original_key_and_order_front;
 
 static void sevo_key_and_order_front(id self, SEL _cmd, id sender) {
-    if (suppressing()) chronicle("asked", self);
+    chronicle(suppressing() ? "asked" : "passed", self);
     ((void (*)(id, SEL, id))original_key_and_order_front)(self, _cmd, sender);
 }
 
