@@ -22,7 +22,7 @@ let package = Package(
             path: ".",
             // Everything in the repo that is not one of `sources` below. The two
             // `sevo-engine-*.tar.xz` payloads are named for the engine revision they carry, so a
-            // fresh `Tools/package-engine.sh` run adds a name this list has to learn.
+            // fresh engine build (`methylpentynol/build-macos/package-engine.sh`) adds a name this list has to learn.
             exclude: [
                 "CONTRIBUTING.md",
                 "DELETE-CANDIDATES.md",

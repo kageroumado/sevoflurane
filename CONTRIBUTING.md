@@ -143,13 +143,12 @@ Mach service for the prefix until the client restarts.
 - **Window chronicle** `~/Library/Logs/Sevoflurane-windows.log`: every window
   a bottle process tried to show, with time, exe, class, title, size, and
   whether the shim suppressed it (`armed` / `suppressed` / `passed <exe>`).
-- **The shim** (`Tools/dock-shim/sevo_dock_shim.c`, built into the engine
-  directory as `libsevodockshim.dylib`, wired by `Engine.environment` with
-  `SEVO_SUPPRESS_WINDOWS=1`): no Dock promotion and no windows for Steam's
-  infrastructure processes. Rebuild: `clang -arch x86_64 -dynamiclib
-  -framework ApplicationServices -o <engine>/libsevodockshim.dylib
-  Tools/dock-shim/sevo_dock_shim.c`, then ad-hoc codesign. It ships inside
-  the engine tarball.
+- **The shim** (`methylpentynol/build-macos/dock-shim/sevo_dock_shim.c`,
+  built into the engine directory as `libsevodockshim.dylib`, wired by
+  `Engine.environment` with `SEVO_SUPPRESS_WINDOWS=1`): no Dock promotion
+  and no windows for Steam's infrastructure processes. It ships inside the
+  engine tarball; the build command is in that repository's
+  `build-macos/README.md`.
 - **Steam's own logs are the phase map** for anything inside the client, in
   the bottle's `Program Files (x86)/Steam/logs/`: `bootstrap_log.txt`
   (updater), `webhelper.txt` (CEF spawns), `steamui_login.txt` (login state

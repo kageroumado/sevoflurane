@@ -2,7 +2,7 @@ import Foundation
 
 /// The managed-engine version manifest (`Docs/onboarding-spec.md` S1,
 /// schema 1): a static JSON at a URL we control, pointing at engine tarballs
-/// on GitHub Releases. `Tools/package-engine.sh` emits entries; rollback is
+/// on GitHub Releases. `methylpentynol/build-macos/package-engine.sh` emits entries; rollback is
 /// pointing the manifest at the previous entry.
 nonisolated struct EngineManifest: Decodable, Sendable {
     struct Release: Decodable, Sendable, Equatable {

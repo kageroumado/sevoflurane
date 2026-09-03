@@ -235,7 +235,7 @@ nonisolated enum EngineRenderers {
     }
 
     /// Where a renderer's Windows DLLs live inside a managed engine.
-    /// `Tools/package-engine.sh` builds `dxmt/` and `dxvk/`; D3DMetal's are
+    /// The engine's `package-engine.sh` places `dxmt/` and `dxvk/`; D3DMetal's are
     /// the picked toolkit's own, the pair to the `libd3dshared` its macOS
     /// half put in the tree.
     private static func libraries(

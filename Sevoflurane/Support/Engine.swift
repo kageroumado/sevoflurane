@@ -15,7 +15,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// migrates.
     case crossoverPreview
     /// A managed engine under ``managedRoot``, one directory per version
-    /// (layout produced by `Tools/package-engine.sh`).
+    /// (layout produced by `methylpentynol/build-macos/package-engine.sh`).
     case managed(version: String)
 
     /// Both CodeWeavers apps: bottles carry `cxbottle.conf`, invocations
@@ -344,7 +344,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         // winemac.drv promotes any wine process that shows a window, and
         // there is no demotion API — so the promotion and the window
         // ordering are both taken away from Steam's infrastructure
-        // (Tools/dock-shim). The shim decides per process by the Windows exe
+        // (methylpentynol/build-macos/dock-shim). The shim decides per process by the Windows exe
         // name, so a game keeps the Dock promotion and orders its windows
         // normally; the suppression flag rides on every managed spawn
         // because a spawn that forgets it is a bare Wine window on screen.
