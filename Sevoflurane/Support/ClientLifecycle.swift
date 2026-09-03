@@ -285,10 +285,12 @@ nonisolated enum ClientLifecycle {
         if let environment = invocation.environment {
             process.environment = environment
         }
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        let trail = WineLog.handle(labeled: "client") ?? FileHandle.nullDevice
+        process.standardOutput = trail
+        process.standardError = trail
         process.terminationHandler = { finished in
             log("wine launcher exited (status \(finished.terminationStatus))")
+            try? trail.close()
         }
         do {
             try process.run()
@@ -459,11 +461,13 @@ nonisolated enum ClientLifecycle {
         if let environment = invocation.environment {
             process.environment = environment
         }
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
         let name = program.first ?? "?"
+        let trail = WineLog.handle(labeled: name) ?? FileHandle.nullDevice
+        process.standardOutput = trail
+        process.standardError = trail
         process.terminationHandler = { finished in
             log("\(name) exited (status \(finished.terminationStatus))")
+            try? trail.close()
         }
         do {
             try process.run()

@@ -115,12 +115,17 @@ struct BottleGraphicsTests {
 /// The engine choice as it persists in the shared suite.
 struct EnginePreferenceTests {
     @Test
-    func `preference values are stable and version-agnostic`() {
+    func `a managed engine is stored by name`() {
         #expect(Engine.crossover.preferenceValue == "crossover")
         #expect(Engine.crossoverPreview.preferenceValue == "crossover-preview")
-        // Managed drops the version: an engine update must not orphan the
-        // stored choice.
-        #expect(Engine.managed(version: "wine11.16-dxmt0.80-r1").preferenceValue == "managed")
+        // By directory name, so the Engine pane can pick one installed build
+        // among several and that exact one boots.
+        #expect(
+            Engine.managed(version: "wine11.16-dxmt0.80-r1").preferenceValue
+                == "managed:wine11.16-dxmt0.80-r1",
+        )
+        // Nameless is "whichever built-in engine fits" — the form a choice
+        // takes before its engine is installed.
         #expect(Engine.managed(version: "").preferenceValue == "managed")
     }
 

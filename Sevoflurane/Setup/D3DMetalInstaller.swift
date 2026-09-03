@@ -79,19 +79,27 @@ nonisolated enum D3DMetalInstaller {
         installed.root.appendingPathComponent("lib/wine/x86_64-windows")
     }
 
+    /// Makes a version the one a game gets: its macOS side goes into the
+    /// Wine tree and the choice is recorded.
+    static func activate(_ installed: Installed, inEngine engine: URL) throws {
+        try place(installed, inEngine: engine)
+        choose(version: installed.version)
+    }
+
     /// Puts a version's macOS side into the Wine tree that loads it: the
     /// framework beside the `.so` stubs that link to it, at the relative
     /// paths Apple's own instructions assume (`ditto redist/lib/ .`).
-    static func activate(_ installed: Installed, inEngine engine: URL) throws {
+    ///
+    /// The stubs are symlinks to `lib/external/libd3dshared.dylib`, so the
+    /// copy in the tree is the D3DMetal a game runs whatever the picker
+    /// says — every boot re-asserts it through ``EngineRenderers/stage``.
+    static func place(_ installed: Installed, inEngine engine: URL) throws {
         let wineLib = engine.appendingPathComponent("wine/lib")
         // A store that is not an engine has no Wine tree to populate: the
         // shadow tree points at the version's own directory instead.
         guard FileManager.default.fileExists(
             atPath: engine.appendingPathComponent("wine").path,
-        ) else {
-            choose(version: installed.version)
-            return
-        }
+        ) else { return }
         do {
             try copyContents(
                 of: installed.root.appendingPathComponent("lib/external"),
@@ -104,7 +112,34 @@ nonisolated enum D3DMetalInstaller {
         } catch {
             throw InstallError.copyFailed(error.localizedDescription)
         }
-        choose(version: installed.version)
+    }
+
+    /// Whether the Wine tree holds this version: the bridge dylib and the
+    /// framework binary are the two files that differ between versions, and
+    /// both are compared byte for byte. A tree swapped by hand answers false
+    /// and is put right at the next boot.
+    static func isPlaced(_ installed: Installed, inEngine engine: URL) -> Bool {
+        let manager = FileManager.default
+        let tree = engine.appendingPathComponent("wine/lib/external")
+        let own = installed.root.appendingPathComponent("lib/external")
+        return identifyingFiles.allSatisfy { relative in
+            manager.contentsEqual(
+                atPath: tree.appendingPathComponent(relative).path,
+                andPath: own.appendingPathComponent(relative).path,
+            )
+        }
+    }
+
+    /// Relative to `lib/external`.
+    private static let identifyingFiles = [
+        "libd3dshared.dylib",
+        "D3DMetal.framework/Versions/A/D3DMetal",
+    ]
+
+    /// The bridge dylib inside a managed engine's Wine tree — the file the
+    /// `.so` stubs resolve to, and the one ntdll opens by path.
+    static func bridgeLibrary(inEngine engine: URL) -> URL {
+        engine.appendingPathComponent("wine/lib/external/libd3dshared.dylib")
     }
 
     /// The version a game gets: the user's choice when it is still

@@ -17,6 +17,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
+            RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
     )
@@ -319,9 +320,20 @@ struct EngineCommand: AsyncParsableCommand {
             ?? D3DMetalInstaller.sharedRoot
         let label = version ?? "CrossOver"
         if let use {
-            D3DMetalInstaller.choose(version: use == "own" ? nil : use)
-            // Prepared now rather than during the next launch: choosing is
-            // the moment the user is waiting on this, not the moment a game is.
+            if use == "own" {
+                D3DMetalInstaller.choose(version: nil)
+            } else {
+                guard let entry = D3DMetalInstaller.installed(inEngine: engine)
+                    .first(where: { $0.version == use })
+                else {
+                    Sevo.printError("D3DMetal \(use) is not installed for \(label)")
+                    throw SevoExit.badInvocation
+                }
+                // Placed in the Wine tree now, not at the next boot: choosing
+                // is the moment the user is waiting on this, not the moment a
+                // game is.
+                try D3DMetalInstaller.activate(entry, inEngine: engine)
+            }
             let launcher = CrossOverShadow.preparedLauncher()
             print("D3DMetal for \(label): \(use == "own" ? "the engine's own" : use)"
                 + (launcher == nil ? "" : " (shadow tree ready)"))
@@ -329,13 +341,18 @@ struct EngineCommand: AsyncParsableCommand {
         }
         guard let from else {
             let installed = D3DMetalInstaller.installed(inEngine: engine)
-            let active = D3DMetalInstaller.active(inEngine: engine)?.version
+            let active = D3DMetalInstaller.active(inEngine: engine)
             if installed.isEmpty {
                 print("no D3DMetal installed for \(label) — add one with: "
                     + "sevo engine d3dmetal --from <Game Porting Toolkit dmg>")
             }
             for entry in installed {
-                print("\(entry.version)\(entry.version == active ? "  (active)" : "")")
+                var notes: [String] = []
+                if entry == active { notes.append("active") }
+                if version != nil, D3DMetalInstaller.isPlaced(entry, inEngine: engine) {
+                    notes.append("in the Wine tree")
+                }
+                print(entry.version + (notes.isEmpty ? "" : "  (\(notes.joined(separator: ", ")))"))
             }
             if active == nil, !installed.isEmpty { print("the engine's own  (active)") }
             return
@@ -421,7 +438,7 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value. Omit to read the key.") var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
@@ -447,10 +464,12 @@ struct BottleCommand: AsyncParsableCommand {
                 print(Sevo.json([
                     "renderer": selection.renderer.rawValue,
                     "msync": selection.msync,
+                    "wine-debug": WineLog.channels,
                 ], pretty: true))
             } else {
                 print("renderer \(selection.renderer.rawValue)")
                 print("msync \(selection.msync)")
+                print("wine-debug \(WineLog.channels)")
             }
             return
         }
@@ -458,10 +477,20 @@ struct BottleCommand: AsyncParsableCommand {
             switch key {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
+            case "wine-debug": print(WineLog.channels)
             default:
-                Sevo.printError("unknown key '\(key)' (renderer | msync)")
+                Sevo.printError("unknown key '\(key)' (renderer | msync | wine-debug)")
                 throw SevoExit.badInvocation
             }
+            return
+        }
+        if key == "wine-debug" {
+            // Wine's own channel syntax, e.g. `+seh,+loaddll` or
+            // `-all,err+all`; `off` is the quiet default. Read by the next
+            // client start, and inherited by every game it launches.
+            WineLog.setChannels(value == "off" ? nil : value)
+            print("wine-debug \(WineLog.channels) — takes effect at the next client start; "
+                + "trail at \(WineLog.fileURL.path)")
             return
         }
         switch key {
@@ -479,7 +508,7 @@ struct BottleCommand: AsyncParsableCommand {
             }
             selection.msync = flag
         default:
-            Sevo.printError("unknown key '\(key)' (renderer | msync)")
+            Sevo.printError("unknown key '\(key)' (renderer | msync | wine-debug)")
             throw SevoExit.badInvocation
         }
         do {
@@ -950,20 +979,83 @@ struct CDPCommand: AsyncParsableCommand {
     }
 }
 
+/// Runs one Windows program in the bottle under the engine a game would get.
+///
+/// The launcher path for everything that is not the client: a game's own exe
+/// when Steam refuses to start it, a harness, `winecfg`. Steam's updater
+/// gates a launch on free disk space it may not have, and this reaches the
+/// installed build regardless — with the client up, the game still finds
+/// SteamAPI.
+struct RunCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "run",
+        abstract: "Run a Windows program in the bottle (debug launcher; never the client).",
+        discussion: """
+        The program is a Unix or Windows path. Wine's own output goes to the \
+        terminal and to the wine trail (sevo logs --wine); set its channels \
+        with sevo bottle config wine-debug.
+        """,
+    )
+
+    @Argument(parsing: .captureForPassthrough, help: "The program, then its arguments.")
+    var program: [String] = []
+
+    @Flag(name: .customLong("wait"), help: "Stay until the program and its children exit.")
+    var wait = false
+
+    func run() async throws {
+        guard let first = program.first else {
+            Sevo.printError("nothing to run")
+            throw SevoExit.badInvocation
+        }
+        // The client has a lifecycle with a restart ladder and a supervisor
+        // that owns it; a second launcher racing that is how a bottle ends up
+        // with two clients.
+        guard !first.lowercased().hasSuffix("steam.exe") else {
+            Sevo.printError("the client is the supervisor's to start — use sevo client start")
+            throw SevoExit.badInvocation
+        }
+        let invocation = Engine.active.wineInvocation(
+            bottle: SteamBottle.name,
+            wait: wait ? .children : .none,
+            program: program,
+        )
+        let process = Process()
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        if let environment = invocation.environment { process.environment = environment }
+        do {
+            try process.run()
+        } catch {
+            Sevo.printError("could not start \(first): \(error.localizedDescription)")
+            throw SevoExit.failed
+        }
+        print("started \(first) under \(Engine.active)")
+        guard wait else { return }
+        process.waitUntilExit()
+        print("\(first) exited (status \(process.terminationStatus))")
+        if process.terminationStatus != 0 { throw SevoExit.failed }
+    }
+}
+
 struct LogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "logs", abstract: "The unified event log.",
     )
     @Option(name: .customLong("tail")) var tail: Int = 50
     @Flag(name: .shortAndLong) var follow = false
+    @Flag(
+        name: .customLong("wine"),
+        help: "Wine's own stderr for managed launches (client, games) instead of the event log.",
+    ) var wine = false
 
     func run() async throws {
-        try await Self.tail(lines: tail, follow: follow)
+        try await Self.tail(lines: tail, follow: follow, file: wine ? WineLog.fileURL : Sevo.logFile)
     }
 
-    static func tail(lines: Int, follow: Bool) async throws {
-        guard let handle = try? FileHandle(forReadingFrom: Sevo.logFile) else {
-            Sevo.printError("no log file at \(Sevo.logFile.path) — has the app ever run?")
+    static func tail(lines: Int, follow: Bool, file: URL = Sevo.logFile) async throws {
+        guard let handle = try? FileHandle(forReadingFrom: file) else {
+            Sevo.printError("no log file at \(file.path) — has the app ever run?")
             throw SevoExit.failed
         }
         let existing = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)

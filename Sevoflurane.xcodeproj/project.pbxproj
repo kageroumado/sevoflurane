@@ -192,9 +192,8 @@
 /* Begin PBXShellScriptBuildPhase section */
 		0BAA000000000000000C0001 /* Build sevo CLI */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			inputPaths = (
-				"$(SRCROOT)/Package.swift",
-				"$(SRCROOT)/Sevo/",
 			);
 			name = "Build sevo CLI";
 			outputPaths = (

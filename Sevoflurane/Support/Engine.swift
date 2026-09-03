@@ -338,7 +338,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         var env = [
             "WINEPREFIX": bottlesRoot.appendingPathComponent(bottle).path,
             "PATH": wineURL.deletingLastPathComponent().path + ":/usr/bin:/bin",
-            "WINEDEBUG": "-all",
+            "WINEDEBUG": WineLog.channels,
         ]
         // Keeps Steam's own processes out of the Dock and off the screen:
         // winemac.drv promotes any wine process that shows a window, and
@@ -366,9 +366,14 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             env["WINEDLLOVERRIDES"] = overrides
         }
         if graphics.renderer == .d3dmetal {
-            let activeToolkit = D3DMetalInstaller.active(inEngine: root)
-            let sharedLib = (activeToolkit?.root ?? root.appendingPathComponent("wine"))
-                .appendingPathComponent("lib/external/libd3dshared.dylib")
+            // The tree's copy, which staging fills with the picked version:
+            // the `.so` stubs a game loads are symlinks to this same file, so
+            // ntdll's early dlopen and the game's stubs share one image —
+            // one dispatch table, one code range for the ms_abi trampoline.
+            // Naming the toolkit's own copy instead put a second file in the
+            // process, and the game ran whatever the tree held (measured
+            // 2026-09-03: 3.0's caps with "4.0 beta 2" picked).
+            let sharedLib = D3DMetalInstaller.bridgeLibrary(inEngine: root)
             if FileManager.default.fileExists(atPath: sharedLib.path) {
                 env["SEVO_LIBD3DSHARED_PATH"] = sharedLib.path
             }

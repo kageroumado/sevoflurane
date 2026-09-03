@@ -1,0 +1,58 @@
+import Foundation
+
+/// Where Wine's own stderr goes for every managed launch — the client, a
+/// windowed program, and every game the client spawns, since they inherit
+/// the descriptor. Silent by default: the launch environment carries
+/// `WINEDEBUG=-all`, so only Wine's crash reports and whatever the
+/// `wineDebug` preference switches on reach the file.
+///
+/// `sevo bottle config wine-debug +seh,+loaddll` sets the channels for the
+/// next client start; `sevo logs --wine` reads the trail.
+nonisolated enum WineLog {
+    static let fileURL = FileManager.default.homeDirectoryForCurrentUser
+        .appending(path: "Library/Logs/Sevoflurane-wine.log")
+
+    /// The `WINEDEBUG` a managed launch carries.
+    static var channels: String {
+        Preferences.shared.string(forKey: channelsKey) ?? quiet
+    }
+
+    /// `nil` returns to the quiet default.
+    static func setChannels(_ channels: String?) {
+        if let channels, channels != quiet {
+            Preferences.shared.set(channels, forKey: channelsKey)
+        } else {
+            Preferences.shared.removeObject(forKey: channelsKey)
+        }
+    }
+
+    static let quiet = "-all"
+    private static let channelsKey = "wineDebug"
+
+    /// A handle appending to the log, after a header naming what is being
+    /// launched. The file is rotated once past ``rotateOverBytes`` so a
+    /// verbose channel left on for a week cannot fill the disk unbounded.
+    static func handle(labeled label: String) -> FileHandle? {
+        let manager = FileManager.default
+        rotateIfLarge()
+        if !manager.fileExists(atPath: fileURL.path) {
+            manager.createFile(atPath: fileURL.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: fileURL) else { return nil }
+        _ = try? handle.seekToEnd()
+        let stamp = ISO8601DateFormatter().string(from: .now)
+        handle.write(Data("==== \(stamp) \(label) (WINEDEBUG=\(channels))\n".utf8))
+        return handle
+    }
+
+    private static let rotateOverBytes = 20_000_000
+
+    private static func rotateIfLarge() {
+        let manager = FileManager.default
+        guard let size = (try? manager.attributesOfItem(atPath: fileURL.path))?[.size] as? Int,
+              size > rotateOverBytes else { return }
+        let old = fileURL.deletingPathExtension().appendingPathExtension("old.log")
+        try? manager.removeItem(at: old)
+        try? manager.moveItem(at: fileURL, to: old)
+    }
+}

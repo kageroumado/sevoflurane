@@ -92,6 +92,7 @@ let package = Package(
                 "Sevoflurane/Support/StorageInventory.swift",
                 "Sevoflurane/Support/SteamWebCookie.swift",
                 "Sevoflurane/Support/Subprocess.swift",
+                "Sevoflurane/Support/WineLog.swift",
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),

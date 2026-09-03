@@ -11,12 +11,18 @@ import Foundation
 /// 2026-09-01). So activation swaps the canonical copies instead, keeping
 /// each displaced original beside the tree for the swap back.
 ///
-/// D3DMetal always stages **3.0's** PE DLLs regardless of which libd3dshared
-/// version is active. 4.0b2's PE DLLs crash Wine processes during early
-/// init (SEH frame corruption from D3DMetal's thread creation). The 3.0
-/// stubs are compatible with both 3.0 and 4.0b2 libd3dshared because the
-/// PE side is a thin bridge into the unix-side dylib; the Win32DispatchInit
-/// and other 4.0b2 features live entirely in libd3dshared.
+/// D3DMetal is two halves and both are the picked version. The macOS half —
+/// `libd3dshared.dylib` and the framework — goes into `wine/lib/external`
+/// where the `.so` stubs resolve; the Windows half is that same toolkit's PE
+/// DLLs. Both are re-asserted on every boot, because the picker only records
+/// a choice and a tree holding another version runs that version whatever
+/// was picked.
+///
+/// The halves are one release and are never crossed. A PE DLL is a thin
+/// bridge whose calls carry a function index into the unix-side dylib, and
+/// the two releases do not number those alike: 4.0b2's dylib under 3.0's
+/// DLLs took Steam's client down 14 s into every boot, silently, where each
+/// version whole boots healthy (measured 2026-09-03).
 nonisolated enum EngineRenderers {
     /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
     /// `bottle`'s system32 holds a file for each renderer DLL. Answers what
@@ -24,6 +30,19 @@ nonisolated enum EngineRenderers {
     @discardableResult
     static func stage(
         _ renderer: Renderer, engine: URL, bottle: URL,
+    ) -> [String] {
+        stage(
+            renderer, engine: engine, bottle: bottle,
+            toolkit: D3DMetalInstaller.active(inEngine: engine),
+        )
+    }
+
+    /// `toolkit` is the D3DMetal version to hold in the tree; the
+    /// preference-free entry point for tests.
+    @discardableResult
+    static func stage(
+        _ renderer: Renderer, engine: URL, bottle: URL,
+        toolkit: D3DMetalInstaller.Installed?,
     ) -> [String] {
         let manager = FileManager.default
         if isGPTkFlavor(engine) {
@@ -45,9 +64,21 @@ nonisolated enum EngineRenderers {
         let originals = engine.appendingPathComponent("wine/lib/wine/x86_64-windows-original")
         guard manager.fileExists(atPath: canonical.path) else { return [] }
 
+        let payloads = payloadFiles(engine: engine)
+        disownPayloads(in: originals, matching: payloads)
         restoreOriginals(into: canonical, from: originals)
+        removeStrays(from: canonical, keptIn: originals, matching: payloads)
 
-        guard let source = libraries(for: renderer, engine: engine),
+        if renderer == .d3dmetal, let toolkit,
+           !D3DMetalInstaller.isPlaced(toolkit, inEngine: engine) {
+            do {
+                try D3DMetalInstaller.place(toolkit, inEngine: engine)
+            } catch {
+                SetupLog.log("D3DMetal \(toolkit.version) could not enter the Wine tree: \(error)")
+            }
+        }
+
+        guard let source = libraries(for: renderer, engine: engine, toolkit: toolkit),
               let dlls = try? manager.contentsOfDirectory(
                   at: source, includingPropertiesForKeys: nil,
               ).filter({ $0.pathExtension.lowercased() == "dll" })
@@ -59,7 +90,8 @@ nonisolated enum EngineRenderers {
             let target = canonical.appendingPathComponent(name)
             let keep = originals.appendingPathComponent(name)
             if manager.fileExists(atPath: target.path),
-               !manager.fileExists(atPath: keep.path) {
+               !manager.fileExists(atPath: keep.path),
+               !isPayload(target, among: payloads) {
                 try? manager.createDirectory(
                     at: originals, withIntermediateDirectories: true,
                 )
@@ -71,6 +103,68 @@ nonisolated enum EngineRenderers {
         }
         ensureLoaderFiles(canonical: canonical, engine: engine, bottle: bottle)
         return staged
+    }
+
+    /// Every renderer DLL any installed payload could supply, by name.
+    ///
+    /// A file is "stock" only if it is not one of these: the tree is the
+    /// place renderers overwrite, so a payload copy sitting there is the
+    /// last activation's work, never Wine's own.
+    private static func payloadFiles(engine: URL) -> [String: [URL]] {
+        let manager = FileManager.default
+        var files: [String: [URL]] = [:]
+        for payload in payloadDirectories(engine: engine) {
+            let dlls = (try? manager.contentsOfDirectory(
+                at: payload, includingPropertiesForKeys: nil,
+            ))?.filter { $0.pathExtension.lowercased() == "dll" } ?? []
+            for dll in dlls { files[dll.lastPathComponent, default: []].append(dll) }
+        }
+        return files
+    }
+
+    private static func isPayload(_ file: URL, among payloads: [String: [URL]]) -> Bool {
+        let manager = FileManager.default
+        return payloads[file.lastPathComponent]?.contains {
+            manager.contentsEqual(atPath: file.path, andPath: $0.path)
+        } ?? false
+    }
+
+    /// Drops a kept "original" that is really a renderer's own DLL.
+    ///
+    /// The tree is only read for an original the first time a name is
+    /// staged, and a payload that reached it before that — an activation
+    /// under an older build, a hand-swapped tree — was recorded as Wine's.
+    /// Restoring it puts one release's DLL under another's, which is the
+    /// thing versions are kept apart to prevent.
+    private static func disownPayloads(in originals: URL, matching payloads: [String: [URL]]) {
+        let manager = FileManager.default
+        let kept = (try? manager.contentsOfDirectory(
+            at: originals, includingPropertiesForKeys: nil,
+        )) ?? []
+        for original in kept where isPayload(original, among: payloads) {
+            try? manager.removeItem(at: original)
+            SetupLog.log("\(original.lastPathComponent) was a renderer's own DLL, "
+                + "not Wine's — dropped from the kept originals")
+        }
+    }
+
+    /// Clears a renderer DLL that Wine never shipped and this activation
+    /// does not supply — a name the previous renderer or toolkit version
+    /// staged, which has no original to restore over it.
+    ///
+    /// Only a file that is itself a payload goes: a stock builtin no name
+    /// has been staged over yet has no kept original either, and it is the
+    /// very thing the next staging must capture.
+    private static func removeStrays(
+        from canonical: URL, keptIn originals: URL, matching payloads: [String: [URL]],
+    ) {
+        let manager = FileManager.default
+        for name in payloads.keys {
+            let file = canonical.appendingPathComponent(name)
+            guard !manager.fileExists(atPath: originals.appendingPathComponent(name).path),
+                  isPayload(file, among: payloads) else { continue }
+            try? manager.removeItem(at: file)
+        }
     }
 
     /// Puts Wine's own builtins back, so each activation starts from the
@@ -109,8 +203,14 @@ nonisolated enum EngineRenderers {
         for name in names {
             let target = system32.appendingPathComponent(name)
             let source = canonical.appendingPathComponent(name)
-            guard !manager.fileExists(atPath: target.path),
-                  manager.fileExists(atPath: source.path) else { continue }
+            guard manager.fileExists(atPath: source.path) else {
+                // The tree no longer carries this one, so neither may the
+                // prefix: a file left here is the previous renderer's, and
+                // Wine would load it as the real thing.
+                try? manager.removeItem(at: target)
+                continue
+            }
+            guard !manager.fileExists(atPath: target.path) else { continue }
             try? manager.copyItem(at: source, to: target)
         }
     }
@@ -135,25 +235,17 @@ nonisolated enum EngineRenderers {
     }
 
     /// Where a renderer's Windows DLLs live inside a managed engine.
-    /// `Tools/package-engine.sh` builds `dxmt/` and `dxvk/`; D3DMetal uses
-    /// 3.0's PE DLLs regardless of the active toolkit version (4.0b2's PE
-    /// stubs crash Wine processes during early init).
-    private static func libraries(for renderer: Renderer, engine: URL) -> URL? {
+    /// `Tools/package-engine.sh` builds `dxmt/` and `dxvk/`; D3DMetal's are
+    /// the picked toolkit's own, the pair to the `libd3dshared` its macOS
+    /// half put in the tree.
+    private static func libraries(
+        for renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
+    ) -> URL? {
         switch renderer {
         case .dxmt: engine.appendingPathComponent("dxmt")
         case .dxvk: engine.appendingPathComponent("dxvk")
-        case .d3dmetal:
-            d3dmetalPELibraries(engine: engine)
+        case .d3dmetal: toolkit.map(D3DMetalInstaller.windowsLibraries)
         case .auto, .wined3d: nil
         }
-    }
-
-    /// Returns the 3.0 PE DLL directory when available, falling back to
-    /// whatever the active toolkit provides.
-    private static func d3dmetalPELibraries(engine: URL) -> URL? {
-        let v3 = engine.appendingPathComponent("d3dmetal/3.0/lib/wine/x86_64-windows")
-        if FileManager.default.fileExists(atPath: v3.path) { return v3 }
-        return D3DMetalInstaller.active(inEngine: engine)
-            .map(D3DMetalInstaller.windowsLibraries)
     }
 }
