@@ -83,6 +83,8 @@ final class ControlServer {
             }
             await supervisor.stopForControl()
             return Self.json(#"{"ok":true,"note":"client stopped; auto-restart paused"}"#)
+        case ("POST", "/engine/use"):
+            return useEngine(query: request.query)
         case ("POST", "/supervisor/pause"), ("POST", "/supervisor/resume"):
             let wantPaused = request.path.hasSuffix("pause")
             if (supervisor.health == .paused) != wantPaused {
@@ -92,6 +94,49 @@ final class ControlServer {
         default:
             return .error(404, "Not Found")
         }
+    }
+
+    /// Switch the active Wine engine (and optionally the bottle), then restart
+    /// the client under it — the control face of Settings › Engine's Apply.
+    ///
+    /// `Engine.choose` has to run in the app, because `Engine.active` is cached
+    /// per process: the supervisor's restart reads it to tear the old Windows
+    /// down and assemble the new invocation. A CLI that only wrote the shared
+    /// preference would leave this process — the one that relaunches the
+    /// client — still on the old engine, so the switch travels this endpoint.
+    private func useEngine(query: String) -> HTTPResponse {
+        guard !supervisor.isBusyRestarting else {
+            return .error(409, "restart in progress")
+        }
+        let version = Self.value(of: "version", in: query)
+        guard !version.isEmpty else {
+            return .error(400, "pass ?version=<engine> (sevo engine list)")
+        }
+        let engine: Engine = switch version {
+        case "crossover": .crossover
+        case "crossover-preview": .crossoverPreview
+        default: .managed(version: version)
+        }
+        guard engine.existsOnDisk else {
+            return .error(404, "engine \(version) is not installed")
+        }
+        let bottle = Self.value(of: "bottle", in: query)
+        let targetBottle = bottle.isEmpty ? SteamBottle.name : bottle
+        guard SetupProbe.bottles(for: engine)
+            .first(where: { $0.name == targetBottle })?.hasSteam == true
+        else {
+            return .error(
+                409, "bottle \(targetBottle) has no Steam client for this engine — run setup",
+            )
+        }
+        Engine.choose(engine)
+        if !bottle.isEmpty { SteamBottle.choose(bottle) }
+        EventLog.shared.log(
+            .supervisor,
+            "engine switched to \(engine.description), bottle \(targetBottle) (control)",
+        )
+        supervisor.restartNow()
+        return Self.json(#"{"ok":true,"note":"engine switched; restarting — poll /status"}"#)
     }
 
     private func status() -> HTTPResponse {
@@ -160,5 +205,4 @@ final class ControlServer {
         }
         return .ok(data, type: "application/json")
     }
-
 }

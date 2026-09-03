@@ -108,6 +108,23 @@ final class MCPServer {
                 "One-glance state: engine, bottle, client, bridge, app.",
                 readOnly: true,
             ),
+            tool(
+                "engine_list",
+                "Installed Wine engines (CrossOver and managed built-ins) and which is active.",
+                readOnly: true,
+            ),
+            tool(
+                "engine_use",
+                "Switch the active Wine engine and restart the client under it. "
+                    + "`version` is a name from engine_list — a built-in directory name, "
+                    + "or 'crossover'.",
+                properties: [
+                    "version": ["type": "string", "description": "Engine to switch to"],
+                    "bottle": ["type": "string", "description": "Bottle to run (default: the current one)"],
+                ],
+                required: ["version"],
+                destructive: true,
+            ),
             tool("client_start", "Start the bottled Steam client and wait for it to come up."),
             tool(
                 "client_stop",
@@ -251,6 +268,40 @@ final class MCPServer {
             let checks = Doctor.checks(from: snapshot)
             let summary = checks.map { "\($0.ok ? "ok" : "FAIL"): \($0.label)" }
             return summary.joined(separator: "\n")
+        case "engine_list":
+            let detection = await SetupProbe.detect()
+            var rows: [[String: Any]] = []
+            if let cx = detection.crossover {
+                rows.append([
+                    "engine": "crossover", "version": cx.version,
+                    "active": Engine.active == .crossover,
+                ])
+            }
+            for version in detection.managedEngineVersions {
+                rows.append([
+                    "engine": "builtin", "version": version,
+                    "active": Engine.active == .managed(version: version),
+                ])
+            }
+            return Sevo.json(rows, pretty: true)
+        case "engine_use":
+            guard let version = args["version"] as? String, !version.isEmpty else {
+                throw ClientOps.Failure.message("version (string) is required")
+            }
+            let engine: Engine = switch version {
+            case "crossover": .crossover
+            case "crossover-preview": .crossoverPreview
+            default: .managed(version: version)
+            }
+            guard engine.existsOnDisk else {
+                throw ClientOps.Failure.message(
+                    "engine \(version) is not installed — see engine_list",
+                )
+            }
+            try await ClientOps.useEngine(
+                engine, version: version, bottle: args["bottle"] as? String, noApp: false,
+            ) { progress.append($0) }
+            return (progress + ["active engine: \(version)"]).joined(separator: "\n")
         case "client_start":
             try await ClientOps.start(noApp: false) { progress.append($0) }
             return progress.joined(separator: "\n")

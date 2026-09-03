@@ -82,6 +82,38 @@ nonisolated enum ClientOps {
         try await start(noApp: true, progress: progress)
     }
 
+    /// `sevo engine use`: point the active engine (and optionally the bottle)
+    /// at `engine`, then restart under it. Through the app when it is running,
+    /// because `Engine.active` is cached in that process and the supervisor
+    /// reads it to relaunch; directly otherwise, where this CLI process is the
+    /// one that both writes the choice and launches.
+    static func useEngine(
+        _ engine: Engine, version: String, bottle: String?,
+        noApp: Bool, progress: (String) -> Void,
+    ) async throws {
+        if await appIsRunning(noApp: noApp) {
+            var path = "/engine/use?version=\(version)"
+            if let bottle, !bottle.isEmpty { path += "&bottle=\(bottle)" }
+            guard let reply = await AppControl.postReply(path, timeout: 120) else {
+                throw Failure.message("the app's control endpoint did not answer /engine/use")
+            }
+            guard (200 ..< 300).contains(reply.status) else {
+                throw Failure.message(
+                    String(decoding: reply.body, as: UTF8.self)
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                )
+            }
+            progress("engine switch requested via the app — waiting for healthy")
+            try await pollAppHealthy(progress: progress)
+            return
+        }
+        Engine.choose(engine)
+        if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
+        try await ensureProvisioned()
+        progress("engine set to \(version) — restarting the client")
+        try await restart(noApp: true, progress: progress)
+    }
+
     /// Headless client refresh. Only sane with everything stopped — a live
     /// client and its updater racing each other corrupts the install.
     static func update(progress: (String) -> Void) async throws {
@@ -211,7 +243,8 @@ nonisolated enum ClientOps {
         let detection = await SetupProbe.detect()
         guard detection.hasEngine else {
             throw Failure.unprovisioned(
-                "no usable engine — install CrossOver, or run: sevo engine install")
+                "no usable engine — install CrossOver, or run: sevo engine install",
+            )
         }
         guard detection.bottles.first(where: { $0.name == SteamBottle.name })?.hasSteam == true else {
             throw Failure.unprovisioned(

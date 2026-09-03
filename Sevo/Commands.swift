@@ -275,7 +275,17 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list | install | d3dmetal") var verb: String = "list"
+    @Argument(help: "list | install | d3dmetal | use") var verb: String = "list"
+    @Argument(help: "For use: the engine to switch to (a name from `sevo engine list`).")
+    var target: String?
+    @Option(
+        name: .customLong("bottle"),
+        help: "For use: the bottle to run (default: the current one).",
+    ) var bottle: String?
+    @Flag(
+        name: .customLong("no-app"),
+        help: "For use: switch directly even if the app is running (debug).",
+    ) var noApp = false
     @Option(
         name: .customLong("from"),
         help: "For d3dmetal: Apple's Game Porting Toolkit disk image, volume, or folder.",
@@ -302,10 +312,36 @@ struct EngineCommand: AsyncParsableCommand {
             try await install()
         case "d3dmetal":
             try await addD3DMetal()
+        case "use":
+            try await use()
         default:
-            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal)")
+            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use)")
             throw SevoExit.badInvocation
         }
+    }
+
+    /// Switches the active engine and restarts the client — the CLI face of
+    /// Settings › Engine's picker plus Apply.
+    private func use() async throws {
+        guard let target, !target.isEmpty else {
+            Sevo.printError("engine use: name the engine to switch to (sevo engine list)")
+            throw SevoExit.badInvocation
+        }
+        let engine: Engine = switch target {
+        case "crossover": .crossover
+        case "crossover-preview": .crossoverPreview
+        default: .managed(version: target)
+        }
+        guard engine.existsOnDisk else {
+            Sevo.printError("engine \(target) is not installed — sevo engine list")
+            throw SevoExit.badInvocation
+        }
+        try await handlingFailures {
+            try await ClientOps.useEngine(
+                engine, version: target, bottle: bottle, noApp: noApp,
+            ) { print($0) }
+        }
+        print("active engine: \(target)")
     }
 
     /// Adds Apple's D3DMetal to the managed engine from the user's own copy
