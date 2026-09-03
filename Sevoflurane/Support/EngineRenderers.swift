@@ -10,6 +10,13 @@ import Foundation
 /// d3d12 with D3DMetal fully installed ("DirectX 12 is not supported",
 /// 2026-09-01). So activation swaps the canonical copies instead, keeping
 /// each displaced original beside the tree for the swap back.
+///
+/// D3DMetal always stages **3.0's** PE DLLs regardless of which libd3dshared
+/// version is active. 4.0b2's PE DLLs crash Wine processes during early
+/// init (SEH frame corruption from D3DMetal's thread creation). The 3.0
+/// stubs are compatible with both 3.0 and 4.0b2 libd3dshared because the
+/// PE side is a thin bridge into the unix-side dylib; the Win32DispatchInit
+/// and other 4.0b2 features live entirely in libd3dshared.
 nonisolated enum EngineRenderers {
     /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
     /// `bottle`'s system32 holds a file for each renderer DLL. Answers what
@@ -20,9 +27,6 @@ nonisolated enum EngineRenderers {
     ) -> [String] {
         let manager = FileManager.default
         if isGPTkFlavor(engine) {
-            // The GPTk engine's canonical tree is already D3DMetal (the
-            // overlay is part of its install); the bottle only needs the
-            // MetalFX bridge pair, which Apple's Read Me puts in system32.
             guard renderer == .d3dmetal else { return [] }
             let source = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
             let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
@@ -131,15 +135,25 @@ nonisolated enum EngineRenderers {
     }
 
     /// Where a renderer's Windows DLLs live inside a managed engine.
-    /// `Tools/package-engine.sh` builds `dxmt/` and `dxvk/`; D3DMetal is the
-    /// user's own copy of Apple's toolkit, one directory per version.
+    /// `Tools/package-engine.sh` builds `dxmt/` and `dxvk/`; D3DMetal uses
+    /// 3.0's PE DLLs regardless of the active toolkit version (4.0b2's PE
+    /// stubs crash Wine processes during early init).
     private static func libraries(for renderer: Renderer, engine: URL) -> URL? {
         switch renderer {
         case .dxmt: engine.appendingPathComponent("dxmt")
         case .dxvk: engine.appendingPathComponent("dxvk")
         case .d3dmetal:
-            D3DMetalInstaller.active(inEngine: engine).map(D3DMetalInstaller.windowsLibraries)
+            d3dmetalPELibraries(engine: engine)
         case .auto, .wined3d: nil
         }
+    }
+
+    /// Returns the 3.0 PE DLL directory when available, falling back to
+    /// whatever the active toolkit provides.
+    private static func d3dmetalPELibraries(engine: URL) -> URL? {
+        let v3 = engine.appendingPathComponent("d3dmetal/3.0/lib/wine/x86_64-windows")
+        if FileManager.default.fileExists(atPath: v3.path) { return v3 }
+        return D3DMetalInstaller.active(inEngine: engine)
+            .map(D3DMetalInstaller.windowsLibraries)
     }
 }

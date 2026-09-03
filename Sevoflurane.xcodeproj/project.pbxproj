@@ -30,7 +30,6 @@
 		0BAA000000000000000A0001 /* Exceptions for "Sevoflurane" folder in "Sevoflurane" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				default.profraw,
 				Info.plist,
 			);
 			target = 0B33EFD930290E5E00182A68 /* Sevoflurane */;
@@ -166,7 +165,7 @@
 				7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */,
 				7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */,
 			);
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = 0B33EFDB30290E5E00182A68 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -193,9 +192,6 @@
 /* Begin PBXShellScriptBuildPhase section */
 		0BAA000000000000000C0001 /* Build sevo CLI */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/Package.swift",
 				"$(SRCROOT)/Sevo/",
@@ -204,9 +200,19 @@
 			outputPaths = (
 				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/sevo",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nif [[ \"$CONFIGURATION\" == \"Release\" ]]; then\n  CONF=\"release\"\nelse\n  CONF=\"debug\"\nfi\nswift build -c \"$CONF\" --package-path \"$SRCROOT\" --product sevo\nmkdir -p \"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\ncp \"$SRCROOT/.build/$CONF/sevo\" \"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers/sevo\"\n";
+			shellScript = (
+				"set -euo pipefail",
+				"if [[ \"$CONFIGURATION\" == \"Release\" ]]; then",
+				"  CONF=\"release\"",
+				"else",
+				"  CONF=\"debug\"",
+				"fi",
+				"swift build -c \"$CONF\" --package-path \"$SRCROOT\" --product sevo",
+				"mkdir -p \"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers\"",
+				"cp \"$SRCROOT/.build/$CONF/sevo\" \"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers/sevo\"",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -522,14 +528,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kageroumado/propofol.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.0;
-			};
-		};
 		7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/artginzburg/Tiptoe";
@@ -540,6 +538,14 @@
 			traits = (
 				GitHubSupport,
 			);
+		};
+		7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kageroumado/propofol.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 

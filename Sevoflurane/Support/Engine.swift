@@ -365,6 +365,15 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         if let overrides = graphics.renderer.managedDLLOverrides {
             env["WINEDLLOVERRIDES"] = overrides
         }
+        if graphics.renderer == .d3dmetal {
+            let activeToolkit = D3DMetalInstaller.active(inEngine: root)
+            let sharedLib = (activeToolkit?.root ?? root.appendingPathComponent("wine"))
+                .appendingPathComponent("lib/external/libd3dshared.dylib")
+            if FileManager.default.fileExists(atPath: sharedLib.path) {
+                env["SEVO_LIBD3DSHARED_PATH"] = sharedLib.path
+            }
+            env["D3DM_WINE_UNIX_CALL"] = "1"
+        }
         env.merge(BottleGraphics.translationDefaults) { current, _ in current }
         env.merge(graphics.gpu.environment.filter { !$0.value.isEmpty }) { current, _ in current }
         return env
