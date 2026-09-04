@@ -246,7 +246,7 @@ final class ClientSupervisor {
         Task(name: "Force quit \(scope == .steam ? "Steam" : "everything")") {
             let killed = await ClientLifecycle.forceQuit(scope)
             log.log(.client, "force-quit \(scope == .steam ? "Steam" : "everything")"
-                + " — \(killed) process(es) killed, restarting clean")
+                + " — \(killed.count) process(es) killed, restarting clean")
             await restartClient(
                 reason: "force-quit from the menu bar",
                 fullWindows: scope == .everything,

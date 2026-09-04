@@ -604,10 +604,102 @@ struct ClientCommand: AsyncParsableCommand {
         commandName: "client",
         abstract: "Client lifecycle: full ladder semantics, never raw wine calls.",
         subcommands: [
-            Start.self, Stop.self, Restart.self, Update.self,
+            Start.self, Stop.self, Restart.self, ForceQuit.self, Update.self,
             Pin.self, Unpin.self, Logs.self,
         ],
     )
+
+    /// The escape hatch when a graceful stop is itself hung. Every field of
+    /// the reply is observed after the fact — the caller's model updates from
+    /// what actually happened, not from "done".
+    struct ForceQuit: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "force-quit",
+            abstract: "SIGKILL now; report what died, what survived, and what came back.",
+            discussion: """
+            scope 'steam' kills the client and leaves the fake Windows booted; \
+            'all' runs wineserver -k and kills the whole bottle, games included. \
+            When the app is running the client is brought back clean afterward. \
+            The reply is the observation, not a verdict: killed, still-running \
+            (for 'steam' the Windows hosts left booted; for 'all' a kill that \
+            did not take), recovered (what restarted), and the client's final \
+            CDP state — poll again with `sevo status` for more.
+            """,
+        )
+        @Argument(help: "'steam' (client only) or 'all' (the whole bottle).")
+        var scope: String = "steam"
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
+        @Flag(name: .customLong("no-app"), help: "Kill directly even if the app is running (it will not restart the client).")
+        var noApp = false
+
+        func run() async throws {
+            let force: ClientLifecycle.ForceScope =
+                ["all", "everything"].contains(scope) ? .everything : .steam
+            let scopeName = force == .everything ? "everything" : "steam"
+            let before = await ClientLifecycle.bottleProcessIDs()
+            // Names have to be read before the kill — a dead pid has no `ps`
+            // entry — so the reply can still say what it killed.
+            let beforeNames = await ClientLifecycle.processNames(before)
+            let routed = await ClientOps.appIsRunning(noApp: noApp)
+            if routed {
+                _ = await AppControl.post("/client/forcequit?scope=\(scopeName)")
+            } else {
+                _ = await ClientLifecycle.forceQuit(force)
+            }
+            // Observe the kill settling and, when routed, the client coming
+            // back — the reply carries the after-state, not an assumption.
+            var after = before
+            var clientState = ClientLifecycle.ClientState.down
+            for _ in 0 ..< 12 {
+                try? await Task.sleep(for: .seconds(2))
+                after = await ClientLifecycle.bottleProcessIDs()
+                clientState = await ClientLifecycle.probeClient()
+                if clientState == .up { break }
+                if !routed, after.isEmpty { break }
+            }
+            let afterSet = Set(after), beforeSet = Set(before)
+            let killed = before.filter { !afterSet.contains($0) }
+            // Still running: for 'steam' these are the Windows hosts left
+            // booted by design; for 'all' anything here is a kill that did
+            // not take. Neutral name — the scope decides which it is.
+            let stillRunning = before.filter { afterSet.contains($0) }
+            let recovered = after.filter { !beforeSet.contains($0) }
+            // killed/still-running from the pre-kill read, recovered from a live one.
+            let names = beforeNames.merging(
+                await ClientLifecycle.processNames(recovered),
+            ) { _, new in new }
+            let clientText = switch clientState {
+            case .up: "running"
+            case .portWithoutContext: "half-wedged (no SharedJSContext)"
+            case .down: "down"
+            }
+            func label(_ pid: pid_t) -> String { "\(names[pid] ?? "?")(\(pid))" }
+            func rows(_ pids: [pid_t]) -> [[String: Any]] {
+                pids.map { ["pid": Int($0), "name": names[$0] ?? "?"] }
+            }
+            if asJSON {
+                print(Sevo.json([
+                    "scope": scopeName,
+                    "routed_through_app": routed,
+                    "killed": rows(killed),
+                    "still_running": rows(stillRunning),
+                    "recovered": rows(recovered),
+                    "client_state": clientText,
+                ], pretty: true))
+            } else {
+                print("force-quit (\(scopeName)) \(routed ? "via app" : "direct"):")
+                print("  killed: \(killed.isEmpty ? "none" : killed.map(label).joined(separator: ", "))")
+                if !stillRunning.isEmpty {
+                    print("  still running: \(stillRunning.map(label).joined(separator: ", "))")
+                }
+                if !recovered.isEmpty {
+                    print("  recovered: \(recovered.map(label).joined(separator: ", "))")
+                }
+                print("  client now: \(clientText)")
+            }
+        }
+    }
 
     struct Start: AsyncParsableCommand {
         static let configuration = CommandConfiguration(

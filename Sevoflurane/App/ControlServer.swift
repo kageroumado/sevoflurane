@@ -83,6 +83,12 @@ final class ControlServer {
             }
             await supervisor.stopForControl()
             return Self.json(#"{"ok":true,"note":"client stopped; auto-restart paused"}"#)
+        case ("POST", "/client/forcequit"):
+            let scope: ClientLifecycle.ForceScope =
+                ["all", "everything"].contains(Self.value(of: "scope", in: request.query))
+                ? .everything : .steam
+            supervisor.forceQuit(scope)
+            return Self.json(#"{"ok":true,"note":"force-quit begun; poll /status"}"#)
         case ("POST", "/engine/use"):
             return useEngine(query: request.query)
         case ("POST", "/supervisor/pause"), ("POST", "/supervisor/resume"):

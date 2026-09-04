@@ -95,13 +95,13 @@ nonisolated enum ClientLifecycle {
     /// files to this bottle, so another engine's wine is never touched.
     /// Answers how many processes it signalled.
     @discardableResult
-    static func forceQuit(_ scope: ForceScope) async -> Int {
+    static func forceQuit(_ scope: ForceScope) async -> [pid_t] {
         switch scope {
         case .steam:
             let pids = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
             for pid in pids { kill(pid, SIGKILL) }
             log("force-quit: SIGKILL'd \(pids.count) Steam process(es) \(pids)")
-            return pids.count
+            return pids
         case .everything:
             // wineserver -k brings down every process in the prefix — games
             // and service hosts included; the sweep is for anything it missed.
@@ -109,8 +109,34 @@ nonisolated enum ClientLifecycle {
             let pids = await bottleProcessIDs(matchingAnyOf: processNames)
             for pid in pids { kill(pid, SIGKILL) }
             log("force-quit: wineserver -k + SIGKILL'd \(pids.count) survivor(s) \(pids)")
-            return pids.count
+            return pids
         }
+    }
+
+    /// The Windows program name behind each pid, best effort — so a
+    /// force-quit's reply can name what it killed and what came back, not
+    /// just count them. A wine process carries its Windows exe as `argv`
+    /// (`C:\…\Game.exe`); the name is that path's last component.
+    static func processNames(_ pids: [pid_t]) async -> [pid_t: String] {
+        guard !pids.isEmpty else { return [:] }
+        let out = await Subprocess.run(
+            "/bin/ps", ["-o", "pid=,command=", "-p", pids.map(String.init).joined(separator: ",")],
+        ).output
+        var names: [pid_t: String] = [:]
+        for line in out.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard let space = trimmed.firstIndex(of: " "),
+                  let pid = pid_t(trimmed[..<space]) else { continue }
+            let command = trimmed[trimmed.index(after: space)...]
+            // "C:\Program Files\Steam\steam.exe -silent" → "steam.exe": the
+            // path holds spaces, so split on the separators first, then drop
+            // the arguments that trail the last component.
+            let lastComponent = command
+                .split(whereSeparator: { $0 == "/" || $0 == "\\" }).last ?? command
+            names[pid] = lastComponent.split(separator: " ").first.map(String.init)
+                ?? String(lastComponent)
+        }
+        return names
     }
 
     static func gracefulShutdown() async {
