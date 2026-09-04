@@ -47,6 +47,12 @@ nonisolated enum WineWindowWatch {
         "steam.exe", "steamwebhelper.exe",
     ]
 
+    /// Whether a resolved program name is a game's: an `.exe` window owned by
+    /// none of the client's own infrastructure.
+    static func isGameProgram(_ name: String) -> Bool {
+        name.hasSuffix(".exe") && !gameInfrastructureOwners.contains(name)
+    }
+
     /// Wine's plumbing: an on-screen `.exe` window owned by none of these is
     /// a game. `GameLaunchWatch` uses the same set to spot a launch's first
     /// window.
@@ -83,7 +89,7 @@ nonisolated enum WineWindowWatch {
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t else { continue }
             guard let name = resolved[pid] ?? program(owner: owner, pid: pid) else { continue }
             resolved[pid] = name
-            if name.hasSuffix(".exe"), !gameInfrastructureOwners.contains(name) {
+            if isGameProgram(name) {
                 gameWindowUp = true
             }
             guard clientPrograms.contains(name),
@@ -97,6 +103,57 @@ nonisolated enum WineWindowWatch {
             ))
         }
         return Scan(wineWindows: wineWindows, gameWindowUp: gameWindowUp)
+    }
+
+    /// The game's on-screen window: its owning process and its frame, in
+    /// CGWindowList coordinates (top-left origin, the space
+    /// ``SteamScreenSpace`` calls Steam's). The Steam overlay window is placed
+    /// over this, and focus is returned to this pid when the overlay closes.
+    struct GameWindow: Equatable, Sendable {
+        let pid: pid_t
+        /// Top-left-origin bounds as CGWindowList reports them; convert with
+        /// `SteamScreenSpace.appKitOrigin(steamX:steamY:size:)`.
+        let bounds: CGRect
+        /// The window's CGWindow level (`kCGWindowLayer`). A frontmost Wine
+        /// game raises itself far above normal windows and drops below them
+        /// when backgrounded, so the overlay is levelled at `layer + 1` to
+        /// ride just above it rather than at a fixed floating level.
+        let layer: Int
+    }
+
+    /// The largest on-screen game window (a `.exe` window owned by none of the
+    /// client's infrastructure), or `nil` when no game window is up. Windows at
+    /// every level are considered: a frontmost fullscreen game is not at level
+    /// zero, which is exactly when the overlay needs to find it.
+    @concurrent
+    static func gameWindow() async -> GameWindow? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
+            as? [[String: Any]] else { return nil }
+        var best: GameWindow?
+        var bestArea: CGFloat = 0
+        var resolved: [pid_t: String] = [:]
+        for entry in list {
+            guard let owner = entry[kCGWindowOwnerName as String] as? String,
+                  let pid = entry[kCGWindowOwnerPID as String] as? pid_t,
+                  let layer = entry[kCGWindowLayer as String] as? Int,
+                  let bounds = entry[kCGWindowBounds as String] as? [String: Any] else { continue }
+            guard let name = resolved[pid] ?? program(owner: owner, pid: pid) else { continue }
+            resolved[pid] = name
+            guard isGameProgram(name) else { continue }
+            let rect = CGRect(
+                x: (bounds["X"] as? NSNumber)?.doubleValue ?? 0,
+                y: (bounds["Y"] as? NSNumber)?.doubleValue ?? 0,
+                width: (bounds["Width"] as? NSNumber)?.doubleValue ?? 0,
+                height: (bounds["Height"] as? NSNumber)?.doubleValue ?? 0,
+            )
+            let area = rect.width * rect.height
+            if area > bestArea {
+                bestArea = area
+                best = GameWindow(pid: pid, bounds: rect, layer: layer)
+            }
+        }
+        return best
     }
 
     /// The Windows program a bottle process is running, lowercased and

@@ -38,7 +38,9 @@ final class SteamWindow: NSObject {
     /// its whole life at alpha 0.
     var isWindowVisible: Bool {
         guard let window, window.isVisible else { return false }
-        return role != .menu || window.alphaValue > 0
+        // A menu and the game overlay stay ordered in at alpha 0 so their
+        // pages keep rendering; they count as visible only once faded in.
+        return (role != .menu && role != .gameOverlay) || window.alphaValue > 0
     }
 
     /// Whether an AppKit window is this popup's, for hit-testing an event's
@@ -123,7 +125,19 @@ final class SteamWindow: NSObject {
         if let maximumSize { window.contentMaxSize = maximumSize }
         place(window)
         self.window = window
-        if role == .menu {
+        if role != .gameOverlay, let childLevel = host?.overlayChildLevel {
+            // Opened while the overlay is up — ride just above it rather than
+            // at the normal level, where the overlay and game would hide it.
+            // A `SteamPanel` hides itself when its app deactivates, and this
+            // app is never the active one over a game, so that is turned off or
+            // the popup would vanish the instant it appeared.
+            window.level = NSWindow.Level(rawValue: childLevel)
+            window.hidesOnDeactivate = false
+        }
+        if role == .menu || role == .gameOverlay {
+            // Ordered in at alpha 0 (chrome sets it) so WebKit schedules the
+            // page and it renders; the overlay is placed and faded in only
+            // when the client says it is active (`setOverlayActive`).
             window.orderFront(nil)
         } else if role == .toast {
             park(window)
@@ -132,7 +146,14 @@ final class SteamWindow: NSObject {
 
     /// The bare `NSWindow` for this popup's role, before any dressing.
     private func makeWindow(content: NSRect) -> NSWindow {
-        switch role {
+        if role != .gameOverlay, host?.isOverlayActive == true {
+            // A popup opened while the overlay is up (its Settings, a dialog):
+            // a non-activating panel, so it does not pull focus off the game.
+            // `realize` levels it above the overlay, and `show` orders it in
+            // without activating the app.
+            return SteamPanel(contentRect: content)
+        }
+        return switch role {
         case .menu, .keyboard:
             SteamPanel(contentRect: content)
         case .toast:
@@ -147,6 +168,15 @@ final class SteamWindow: NSObject {
                 backing: .buffered,
                 defer: false,
             )
+        case .gameOverlay:
+            // A non-activating panel: clicking the overlay must not promote
+            // this app to frontmost, because that drops the game out of focus
+            // and Wine sinks the game window below the Dock — leaving the Dock
+            // and every other window sandwiched between the game and the
+            // overlay. Keeping the game frontmost keeps the two an adjacent
+            // pair above everything else. It can still become key for the
+            // overlay's own mouse and hover (SteamPanel.canBecomeKey).
+            SteamPanel(contentRect: content)
         case .bigPicture:
             // BPM draws its own top bar flush with the content, leaving no
             // strip for overlaid traffic lights, so the title bar stays a real
@@ -328,6 +358,21 @@ final class SteamWindow: NSObject {
             window.level = .floating
             window.hidesOnDeactivate = false
             webView.underPageBackgroundColor = .clear
+        case .gameOverlay:
+            // Transparent, floating, click-through, and shown at alpha 0 until
+            // the overlay is activated — the page's own dark backdrop is the
+            // dimming, so an opaque window would read as solid black. It never
+            // hides on deactivation (the game is frontmost while it is up) and
+            // joins every Space so it follows a full-screen game.
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.level = .floating
+            window.hidesOnDeactivate = false
+            window.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
+            webView.underPageBackgroundColor = .clear
+            window.alphaValue = 0
+            window.ignoresMouseEvents = true
         case .context, .toast:
             break
         }
@@ -369,15 +414,17 @@ final class SteamWindow: NSObject {
             // A third argument carries the target monitor's scale factor,
             // because on Windows these are physical pixels. AppKit points are
             // already the page's own units, so it is dropped.
-            if !isParked, let point = geometry(args, at: 0 ..< 2, from: function) {
+            if !isParked, role != .gameOverlay, let point = geometry(args, at: 0 ..< 2, from: function) {
                 moveTo(x: point[0], y: point[1])
             }
         case "ResizeTo":
-            if let size = geometry(args, at: 0 ..< 2, from: function) {
+            // Steam resizes the overlay to the whole screen; it follows the
+            // game's frame instead (`setOverlayActive`).
+            if role != .gameOverlay, let size = geometry(args, at: 0 ..< 2, from: function) {
                 resizeTo(width: size[0], height: size[1])
             }
         case "PositionWindowRelative":
-            if !isParked, let frame = geometry(args, at: 1 ..< 5, from: function) {
+            if !isParked, role != .gameOverlay, let frame = geometry(args, at: 1 ..< 5, from: function) {
                 positionRelative(
                     toWindowNamed: string(args, 0),
                     x: frame[0],
@@ -469,6 +516,16 @@ final class SteamWindow: NSObject {
                 phase: string(args, 0),
                 appID: string(args, 1),
                 task: string(args, 2),
+            )
+        case "__overlayActivated":
+            // The context page's overlay subscription
+            // (SteamWebHost.overlayScript): Shift+Tab toggled the in-game
+            // overlay. The host places and shows the overlay window over the
+            // game, or hides it and returns focus. The app id is carried so the
+            // host can close it through Steam.
+            host?.noteOverlayActivated(
+                active: ((args.first as? NSNumber)?.intValue ?? 0) != 0,
+                appID: string(args, 1),
             )
         case "__bv":
             // An identity, not a measurement — read as an integer so a stray
@@ -647,6 +704,17 @@ final class SteamWindow: NSObject {
 
     func show(activating: Bool) {
         realize()
+        // The game overlay's visibility is the client's to decide, through
+        // `setOverlayActive`; the `ShowWindow`/`BringToFront` Steam sends at
+        // creation must not put it on screen over the game.
+        guard role != .gameOverlay else { return }
+        // A popup opened while the overlay is up rides above it (a
+        // non-activating panel levelled in `realize`) and is ordered in
+        // without activating the app, so the game keeps focus.
+        if host?.isOverlayActive == true {
+            window?.orderFrontRegardless()
+            return
+        }
         // Steam asks for its toast to be shown the moment the page renders
         // one. Refusing here is the whole of the suppression: the popup still
         // exists and still runs, so Steam's own queue drains on schedule and
@@ -724,12 +792,74 @@ final class SteamWindow: NSObject {
     private func hide() {
         showWasDeferredByHold = false
         guard let window else { return }
-        if role == .menu {
+        if role == .menu || role == .gameOverlay {
+            // Fade rather than order out: the overlay's page must keep
+            // rendering so its next activation has no blank first frame, the
+            // same reason a menu stays ordered in at alpha 0.
             window.alphaValue = 0
             window.ignoresMouseEvents = true
         } else {
             window.orderOut(nil)
         }
+    }
+
+    /// Shows the game overlay over the running game: placed at the game's
+    /// `frame`, levelled just above the game (`level` = the game window's own
+    /// level + 1, so it rides above a frontmost fullscreen game rather than at
+    /// a fixed floating level below it), faded in, made key, input enabled,
+    /// cursor shown. The host only calls this while the game — or this app,
+    /// once the overlay has key — is frontmost, so the overlay never sits over
+    /// a third application.
+    func showOverlay(frame: CGRect?, level: Int?) {
+        guard role == .gameOverlay else { return }
+        realize()
+        guard let window else { return }
+        if let frame { window.setFrame(frame, display: true) }
+        if let level { window.level = NSWindow.Level(rawValue: level) }
+        window.alphaValue = 1
+        window.ignoresMouseEvents = false
+        window.orderFrontRegardless()
+        // Key, so the overlay's own chat and search take the keyboard — but as
+        // a non-activating panel, so becoming key never promotes the app and
+        // drops the game out of focus. Shift+Tab (the overlay toggle) then
+        // lands here rather than in the game's hook, so the host swallows it
+        // and closes the overlay itself (`installOverlayKeyMonitor`).
+        window.makeKey()
+        if window.firstResponder === window {
+            window.makeFirstResponder(webView)
+        }
+        // The game hides the cursor; the renderer's ShowCursor hook only acts
+        // inside the game, so it is unhidden here for the app window.
+        NSCursor.unhide()
+    }
+
+    /// Orders an overlay child popup in or out with the overlay it belongs to,
+    /// so Settings and the like ride with it and vanish when it closes. A
+    /// no-op once the popup's own window is gone.
+    func setOrderedIn(_ orderedIn: Bool) {
+        guard let window else { return }
+        if orderedIn {
+            window.orderFrontRegardless()
+        } else {
+            window.orderOut(nil)
+        }
+    }
+
+    /// Takes the overlay off screen without ordering it out, so its page keeps
+    /// rendering: invisible, click-through, and dropped back to a normal level
+    /// so an alpha-0 window can never sit above — or intercept anything over —
+    /// another application. Used both when the overlay is dismissed and when a
+    /// third app takes the front.
+    func hideOverlay() {
+        guard role == .gameOverlay, let window else { return }
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        window.level = .normal
+        // Ordered out so the panel resigns key: while it was up it held key to
+        // take the overlay's typing, and an invisible key window would keep
+        // eating the keyboard — the game would never see the next Shift+Tab
+        // that reopens the overlay.
+        window.orderOut(nil)
     }
 
     /// Hides a menu the way Steam hides one itself: through the menu instance

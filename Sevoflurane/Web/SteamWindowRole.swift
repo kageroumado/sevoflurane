@@ -33,6 +33,13 @@ enum SteamWindowRole {
     /// the corner of the screen; here they are re-posted through
     /// `UNUserNotificationCenter` and the popup is never shown.
     case toast
+    /// The in-game Steam overlay (Shift+Tab), desktop or Big Picture. Steam
+    /// opens it as an off-screen composited browser sized to the whole screen;
+    /// here it is a transparent, floating, click-through panel placed over the
+    /// game and shown only while the overlay is active. Its visibility is
+    /// driven by the client's `RegisterForOverlayActivated`, not by the
+    /// `ShowWindow` Steam sends at creation.
+    case gameOverlay
     /// Anything else Steam pops out: game notes, broadcasts, the overlay.
     case auxiliary
 
@@ -63,13 +70,18 @@ enum SteamWindowRole {
             ("friendslist", .friends),
             ("chat_", .chat),
             ("notificationtoasts", .toast),
+            ("desktopoverlay", .gameOverlay),
+            ("gamepadoverlay", .gameOverlay),
         ]
         return families.first { base.hasPrefix($0.prefix) }?.role
     }
 
-    /// Panels never activate the app or take key focus from other apps.
+    /// Panels never activate the app or take key focus from other apps. The
+    /// game overlay is one: it takes key focus itself while active (for its
+    /// own input) but must never promote the app to a regular one or steal
+    /// focus on Steam's behalf.
     var isPanel: Bool {
-        self == .menu || self == .keyboard
+        self == .menu || self == .keyboard || self == .gameOverlay
     }
 
     /// Whether the window carries a real macOS title bar with the page's own
@@ -117,7 +129,7 @@ enum SteamWindowRole {
     /// Steam's menu re-measure loop flickers the window.
     var allowsOcclusionDetection: Bool {
         switch self {
-        case .context, .menu, .keyboard, .toast: false
+        case .context, .menu, .keyboard, .toast, .gameOverlay: false
         case .desktop, .bigPicture, .login, .controllerConfig, .auxiliary, .friends, .chat: true
         }
     }
