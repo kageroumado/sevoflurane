@@ -79,13 +79,6 @@ nonisolated enum D3DMetalInstaller {
         installed.root.appendingPathComponent("lib/wine/x86_64-windows")
     }
 
-    /// Makes a version the one a game gets: its macOS side goes into the
-    /// Wine tree and the choice is recorded.
-    static func activate(_ installed: Installed, inEngine engine: URL) throws {
-        try place(installed, inEngine: engine)
-        choose(version: installed.version)
-    }
-
     /// Puts a version's macOS side into the Wine tree that loads it: the
     /// framework beside the `.so` stubs that link to it, at the relative
     /// paths Apple's own instructions assume (`ditto redist/lib/ .`).
@@ -135,6 +128,50 @@ nonisolated enum D3DMetalInstaller {
         "libd3dshared.dylib",
         "D3DMetal.framework/Versions/A/D3DMetal",
     ]
+
+    // MARK: - On-disk truth
+
+    /// The version whose **macOS half** is in the Wine tree right now, matched
+    /// by content — the truth the picker's record is checked against.
+    static func placedMacOSVersion(inEngine engine: URL) -> Installed? {
+        installed(inEngine: engine).first { isPlaced($0, inEngine: engine) }
+    }
+
+    /// The version whose **Windows half** (the PE DLLs) fills the engine's
+    /// canonical tree, matched by content. `nil` when nothing matches — a
+    /// crossed tree, or one a non-D3DMetal renderer staged.
+    static func placedWindowsVersion(inEngine engine: URL) -> Installed? {
+        let canonical = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
+        let manager = FileManager.default
+        return installed(inEngine: engine).first { version in
+            let own = windowsLibraries(of: version)
+            let dlls = (try? manager.contentsOfDirectory(
+                at: own, includingPropertiesForKeys: nil,
+            ))?.filter { $0.pathExtension.lowercased() == "dll" } ?? []
+            guard !dlls.isEmpty else { return false }
+            return dlls.allSatisfy { dll in
+                manager.contentsEqual(
+                    atPath: dll.path,
+                    andPath: canonical.appendingPathComponent(dll.lastPathComponent).path,
+                )
+            }
+        }
+    }
+
+    /// What is actually in the tree, both halves. `halvesAgree` false is the
+    /// crossed state that silently kills the client 14 s into boot.
+    struct Placement: Equatable {
+        let macOS: String?
+        let windows: String?
+        var halvesAgree: Bool { macOS != nil && macOS == windows }
+    }
+
+    static func placement(inEngine engine: URL) -> Placement {
+        Placement(
+            macOS: placedMacOSVersion(inEngine: engine)?.version,
+            windows: placedWindowsVersion(inEngine: engine)?.version,
+        )
+    }
 
     /// The bridge dylib inside a managed engine's Wine tree — the file the
     /// `.so` stubs resolve to, and the one ntdll opens by path.
@@ -213,7 +250,10 @@ nonisolated enum D3DMetalInstaller {
             throw InstallError.copyFailed(error.localizedDescription)
         }
         let installed = Installed(version: version, root: destination)
-        try activate(installed, inEngine: engine)
+        // Record only: staging both halves is the next spawn's job
+        // (``EngineRenderers/stage``), so an install that lands mid-session
+        // cannot cross this version's dylib with the running tree's DLLs.
+        choose(version: installed.version)
         return installed
     }
 

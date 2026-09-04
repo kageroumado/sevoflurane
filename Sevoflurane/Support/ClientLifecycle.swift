@@ -264,6 +264,12 @@ nonisolated enum ClientLifecycle {
 
     @concurrent
     static func launchClient() async {
+        // Reconcile the engine tree to the desired selection before steam.exe
+        // loads anything: the renderer DLLs and both halves of the picked
+        // D3DMetal version, staged together. This is the single point graphics
+        // effects happen, so a record-only picker takes effect at the next
+        // spawn with no chance of a crossed tree.
+        BottleGraphics.reconcileManagedTree()
         let process = Process()
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches

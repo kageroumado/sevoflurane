@@ -89,6 +89,11 @@ nonisolated enum BottleGraphics {
         var msync: Bool
         /// What the bottle tells a game its GPU is.
         var gpu: GPUIdentity = defaultGPU
+        /// The D3DMetal toolkit version a game gets, resolved (auto → newest)
+        /// for the active managed engine; `nil` for CrossOver or no toolkit.
+        /// Part of the booted diff so an engine switch and a version switch
+        /// coalesce into one restart rather than two.
+        var d3dMetalVersion: String? = nil
     }
 
     /// The card a bottle claims when nobody has chosen one.
@@ -100,10 +105,17 @@ nonisolated enum BottleGraphics {
     static let defaultGPU = GPUIdentity.nvidia
 
     /// What the bottle is set to right now, whichever engine owns the store.
+    ///
+    /// For a managed engine the D3DMetal version is resolved here — not in
+    /// ``managedSelection``, which engine resolution itself calls, so reading
+    /// ``Engine/active`` from there would recurse.
     static func currentSelection() -> Selection {
-        Engine.active.isCrossOver
-            ? selection(forBottle: SteamBottle.root)
-            : managedSelection()
+        if Engine.active.isCrossOver {
+            return selection(forBottle: SteamBottle.root)
+        }
+        var selection = managedSelection()
+        selection.d3dMetalVersion = D3DMetalInstaller.active(inEngine: Engine.active.root)?.version
+        return selection
     }
 
     /// Writes a selection wherever the active engine keeps it.
@@ -159,6 +171,61 @@ nonisolated enum BottleGraphics {
         return wanted == booted ? nil : wanted
     }
 
+    // MARK: - Desired vs booted
+
+    /// How the desired graphics differ from what the running client booted
+    /// with — the single classification the launch and restart paths read.
+    ///
+    /// A renderer or D3DMetal-version change is a **restage**: the DLLs are
+    /// resolved from the engine tree, so ``EngineRenderers/stage`` puts the
+    /// new ones in place and the next game to launch loads them, with the
+    /// client left up. An msync or engine change is a **bounce**: those are
+    /// negotiated with a fresh wineserver at spawn, so the client restarts.
+    struct GraphicsChange: Equatable {
+        /// Renderer or D3DMetal version moved — a restage applies it.
+        var restage = false
+        /// msync or the engine root moved — the wineserver must go.
+        var bounce = false
+        var any: Bool { restage || bounce }
+    }
+
+    /// Whether a renderer/version change can be applied under a running
+    /// client by restaging the tree in place — the next game to launch loads
+    /// the new DLLs — rather than bouncing the client. Steam itself does not
+    /// render (it does not even draw its own UI here), so nothing it runs
+    /// should hold the renderer DLLs open. The one predicate the launch path
+    /// reads: flip to `false` if a live client is ever shown to hold them.
+    static let hotRestageSupported = true
+
+    /// The change since boot for the bottle default. A nil booted record
+    /// (nothing has spawned yet) reads as no change — the first spawn stages
+    /// from the desired selection regardless.
+    static func graphicsChangeSinceBoot() -> GraphicsChange {
+        guard let booted = bootedSelection() else { return GraphicsChange() }
+        let wanted = currentSelection()
+        return GraphicsChange(
+            restage: wanted.renderer != booted.renderer
+                || wanted.d3dMetalVersion != booted.d3dMetalVersion,
+            bounce: wanted.msync != booted.msync
+                || bootedEngineRoot() != Engine.active.root.path,
+        )
+    }
+
+    /// Brings the active managed engine's Wine tree in line with the desired
+    /// selection — both halves of the picked D3DMetal version and the
+    /// renderer's DLLs — so the next process to load them gets what the picker
+    /// says. Run before every client spawn; idempotent. A no-op for CrossOver,
+    /// which keeps its renderers in `cxbottle.conf`, not a shared tree.
+    @discardableResult
+    static func reconcileManagedTree() -> [String] {
+        guard case let .managed(version) = Engine.active else { return [] }
+        return EngineRenderers.stage(
+            managedSelection().renderer,
+            engine: Engine.managedRoot.appendingPathComponent(version),
+            bottle: SteamBottle.root,
+        )
+    }
+
     // MARK: - What the client booted with
 
     private static let bootedKey = "bootedGraphics"
@@ -169,27 +236,31 @@ nonisolated enum BottleGraphics {
     /// restart can leave Windows running.
     static func recordBootedSelection() {
         let selection = currentSelection()
+        // The engine root comes last: it holds "/" and could hold "|", so
+        // every reader takes it as the tail after a bounded split. The
+        // D3DMetal version sits before it so an empty version stays one field.
         Preferences.shared.set(
             "\(selection.renderer.rawValue)|\(selection.msync ? "1" : "0")"
-                + "|\(Engine.active.root.path)",
+                + "|\(selection.d3dMetalVersion ?? "")|\(Engine.active.root.path)",
             forKey: bootedKey,
         )
     }
 
-    static func bootedSelection() -> (renderer: Renderer, msync: Bool)? {
+    static func bootedSelection() -> (renderer: Renderer, msync: Bool, d3dMetalVersion: String?)? {
         guard let stored = Preferences.shared.string(forKey: bootedKey) else { return nil }
-        let parts = stored.split(separator: "|")
+        let parts = stored.split(separator: "|", maxSplits: 3, omittingEmptySubsequences: false)
         guard let renderer = parts.first.flatMap({ Renderer(rawValue: String($0)) })
         else { return nil }
-        return (renderer, parts.count > 1 && parts[1] == "1")
+        let version = parts.count > 2 && !parts[2].isEmpty ? String(parts[2]) : nil
+        return (renderer, parts.count > 1 && parts[1] == "1", version)
     }
 
     /// The engine root the running wineserver was booted from.
     static func bootedEngineRoot() -> String? {
         guard let stored = Preferences.shared.string(forKey: bootedKey) else { return nil }
-        let parts = stored.split(separator: "|", maxSplits: 2)
-        guard parts.count > 2 else { return nil }
-        return String(parts[2])
+        let parts = stored.split(separator: "|", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count > 3 else { return nil }
+        return String(parts[3])
     }
 
     private static let overridesKey = "rendererOverrides"

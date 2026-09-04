@@ -93,7 +93,11 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
             CrossOverShadow.remove()
             return
         }
-        try D3DMetalInstaller.activate(entry, inEngine: toolkitStore)
+        // Record only: the tree is staged from this choice at the next spawn
+        // (``EngineRenderers/stage``), both halves together. Placing the macOS
+        // half here while the Windows half waits for a restart is what crossed
+        // 4.0's dylib with 3.0's DLLs.
+        D3DMetalInstaller.choose(version: entry.version)
     }
 
     func removeToolkit(_ entry: D3DMetalInstaller.Installed) throws {

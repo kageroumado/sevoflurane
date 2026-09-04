@@ -365,10 +365,10 @@ struct EngineCommand: AsyncParsableCommand {
                     Sevo.printError("D3DMetal \(use) is not installed for \(label)")
                     throw SevoExit.badInvocation
                 }
-                // Placed in the Wine tree now, not at the next boot: choosing
-                // is the moment the user is waiting on this, not the moment a
-                // game is.
-                try D3DMetalInstaller.activate(entry, inEngine: engine)
+                // Record only: the next spawn stages both halves together
+                // (``EngineRenderers/stage``). Placing the macOS half here
+                // while the Windows half waits crosses versions.
+                D3DMetalInstaller.choose(version: entry.version)
             }
             let launcher = CrossOverShadow.preparedLauncher()
             print("D3DMetal for \(label): \(use == "own" ? "the engine's own" : use)"
@@ -383,14 +383,25 @@ struct EngineCommand: AsyncParsableCommand {
                     + "sevo engine d3dmetal --from <Game Porting Toolkit dmg>")
             }
             for entry in installed {
-                var notes: [String] = []
-                if entry == active { notes.append("active") }
-                if version != nil, D3DMetalInstaller.isPlaced(entry, inEngine: engine) {
-                    notes.append("in the Wine tree")
-                }
-                print(entry.version + (notes.isEmpty ? "" : "  (\(notes.joined(separator: ", ")))"))
+                let note = entry == active ? "  (selected)" : ""
+                print(entry.version + note)
             }
-            if active == nil, !installed.isEmpty { print("the engine's own  (active)") }
+            if active == nil, !installed.isEmpty { print("the engine's own  (selected)") }
+            // The on-disk truth: what a game actually loads, both halves,
+            // independent of what the picker recorded. A crossed tree here is
+            // the silent 14 s boot death.
+            if version != nil, !installed.isEmpty {
+                let placement = D3DMetalInstaller.placement(inEngine: engine)
+                if let macOS = placement.macOS, placement.halvesAgree {
+                    print("in the Wine tree: \(macOS)  (both halves)")
+                } else if placement.macOS != nil || placement.windows != nil {
+                    print("⚠ crossed tree: macOS half "
+                        + "\(placement.macOS ?? "none"), Windows half "
+                        + "\(placement.windows ?? "none") — start a game to restage")
+                } else {
+                    print("in the Wine tree: none yet (staged at the next launch)")
+                }
+            }
             return
         }
         do {

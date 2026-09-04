@@ -21,6 +21,7 @@ struct MenuBarView: View {
             PopoverHeader("Sevoflurane")
             healthCard
             recentGames
+            stagedRendererCaption
             friendsRow
             notificationPermissionCard
             openSteamButton
@@ -166,6 +167,23 @@ struct MenuBarView: View {
 
     /// No heading: five pieces of box art under the app's own name need no
     /// label to say they are games.
+    /// What a game will actually load — the renderer the running client is
+    /// staged for, read back from the booted record, not the pending pick.
+    @ViewBuilder private var stagedRendererCaption: some View {
+        if !host.recentGames.isEmpty, let booted = BottleGraphics.bootedSelection() {
+            let version = booted.renderer == .d3dmetal
+                ? (booted.d3dMetalVersion.map { " \($0)" } ?? "")
+                : ""
+            Label(
+                "Games run on \(booted.renderer.label)\(version)",
+                systemImage: "cube.transparent",
+            )
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, Theme.Space.xs)
+        }
+    }
+
     @ViewBuilder private var recentGames: some View {
         if host.recentGames.isEmpty {
             // A popover with nothing between the header and the button reads
@@ -192,9 +210,15 @@ struct MenuBarView: View {
                                 named: game.name,
                             )
                         },
-                    ) {
-                        Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
-                    }
+                        launch: {
+                            Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
+                        },
+                        runWith: { renderer in
+                            Task(name: "Run \(game.name) on \(renderer.label)") {
+                                await supervisor.launch(game, renderer: renderer)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -209,6 +233,8 @@ struct MenuBarView: View {
         let pinned: Renderer?
         let setPin: (Renderer?) -> Void
         let launch: () -> Void
+        /// Swap to this renderer and launch immediately (context menu).
+        let runWith: (Renderer) -> Void
         @State private var isHovered = false
         /// Instant acknowledgment for the click; the client's first
         /// game-action event takes over from it, and it stands alone as an
@@ -238,10 +264,11 @@ struct MenuBarView: View {
                                 .lineLimit(1)
                                 .transition(.opacity)
                         } else if let restartFor {
-                            // The renderer comes from the environment Steam
-                            // was started in, so a pinned game needs a new
-                            // one. Better said before the click than after.
-                            Text("\(restartFor.label) — restarts Steam first")
+                            // Pinned to a renderer the running client did not
+                            // boot with: the launch path restages it (or
+                            // restarts, if the engine or sync must change).
+                            // Better said before the click than after.
+                            Text("\(restartFor.label) — set when it launches")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -267,7 +294,16 @@ struct MenuBarView: View {
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
             .contextMenu {
-                Picker("Renderer", selection: pinBinding) {
+                // One-shot: swap the renderer and launch now. The launch path
+                // restages the tree (or restarts, if the engine or sync must
+                // change) before the game starts.
+                Menu("Run with…") {
+                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                        Button(renderer.label) { runWith(renderer) }
+                    }
+                }
+                Divider()
+                Picker("Always run with", selection: pinBinding) {
                     Text("Bottle default").tag(Renderer?.none)
                     ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
                         Text(renderer.label).tag(Renderer?.some(renderer))

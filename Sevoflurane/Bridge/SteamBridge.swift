@@ -364,6 +364,17 @@ actor SteamBridge {
               let path = request["path"] as? String,
               path.hasPrefix("SteamClient.") else { return }
         if path == "SteamClient.Apps.RunGame" {
+            // The one choke point every launch funnels through — menu bar,
+            // the library's Play button, steam://run. Reconcile the renderer
+            // tree here, before the call reaches Steam, so a version or
+            // renderer change made in Settings takes effect on this launch
+            // whatever started it, with no race against the game's DLL load.
+            // A bounce (msync, engine) can't be applied inline and stays the
+            // launch path's job; only a restage is owed here.
+            if BottleGraphics.graphicsChangeSinceBoot().restage {
+                BottleGraphics.reconcileManagedTree()
+                BottleGraphics.recordBootedSelection()
+            }
             onGameLaunch?()
         }
         let call = PerfProbe.bridge.beginInterval(

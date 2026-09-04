@@ -146,6 +146,53 @@ struct EngineRenderersTests {
     }
 }
 
+/// The ground-truth probe: what a game actually loads, both halves, matched
+/// by content — the thing that answers "is the version I picked what runs?"
+struct D3DMetalPlacementTests {
+    @Test
+    func `a version switch leaves no trace of the old one, both halves`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        let three = try engine.installToolkit("3.0")
+        let four = try engine.installToolkit("4.0 beta 2")
+
+        EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: three)
+        EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: four)
+
+        // What a game loads is both halves 4.0's: the canonical tree copy Wine
+        // resolves a builtin to, and the macOS bridge beside it. (system32
+        // holds a marker file only — its bytes are deliberately not the
+        // renderer, so they are not asserted here.)
+        let placement = D3DMetalInstaller.placement(inEngine: engine.root)
+        #expect(placement == D3DMetalInstaller.Placement(macOS: "4.0 beta 2", windows: "4.0 beta 2"))
+        #expect(placement.halvesAgree)
+        #expect(engine.read("wine/lib/external/libd3dshared.dylib") == "bridge 4.0 beta 2")
+        #expect(engine.read("wine/lib/wine/x86_64-windows/d3d12.dll") == "pe d3d12 4.0 beta 2")
+        #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "pe dxgi 4.0 beta 2")
+        _ = (three, four)
+    }
+
+    /// The exact failure the record-only picker prevents: 4.0's macOS half
+    /// over 3.0's Windows half. The probe must call it out rather than pass.
+    @Test
+    func `the probe catches a crossed tree`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        let three = try engine.installToolkit("3.0")
+        let four = try engine.installToolkit("4.0 beta 2")
+
+        // Windows half staged as 3.0, then only the macOS half swapped to 4.0
+        // — what the old eager picker did on a live switch.
+        EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: three)
+        try D3DMetalInstaller.place(four, inEngine: engine.root)
+
+        let placement = D3DMetalInstaller.placement(inEngine: engine.root)
+        #expect(placement.macOS == "4.0 beta 2")
+        #expect(placement.windows == "3.0")
+        #expect(!placement.halvesAgree)
+    }
+}
+
 struct EngineRendererStrayTests {
     /// A payload DLL that reached the tree before its name was ever staged
     /// was kept as Wine's own, and restored over every later version.
