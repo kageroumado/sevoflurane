@@ -137,6 +137,46 @@ enum StatusReport {
     }
 }
 
+/// The game window a launch produced, as an agent reads it: id, title, pid,
+/// and the frame twice — points (the click/move coordinate) and pixels (what a
+/// screenshot measures) — plus the Retina scale and which display, so a
+/// negative origin on a second display is legible rather than a surprise.
+enum WindowReport {
+    /// Polls the app for the game window until it appears or the timeout;
+    /// `nil` when none showed (or the app is not running to observe it).
+    static func awaitWindow(timeout: Int, progress: (String) -> Void) async -> [String: Any]? {
+        for waited in stride(from: 0, through: timeout, by: 3) {
+            if let data = await AppControl.get("/game/window"),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               obj["window_id"] != nil {
+                return obj
+            }
+            try? await Task.sleep(for: .seconds(3))
+            if waited > 0, waited % 15 == 0 { progress("waiting for the game window (\(waited)s)") }
+        }
+        return nil
+    }
+
+    static func lines(_ w: [String: Any]) -> [String] {
+        func frame(_ d: [String: Any]?) -> String {
+            guard let d, let x = d["x"] as? Double, let y = d["y"] as? Double,
+                  let width = d["w"] as? Double, let height = d["h"] as? Double else { return "?" }
+            return String(format: "%.0f,%.0f %.0f×%.0f", x, y, width, height)
+        }
+        let scale = w["retina_scale"] as? Double ?? 0
+        let display = w["display"] as? [String: Any]
+        let offPrimary = w["off_primary"] as? Bool == true
+        return [
+            "window \(w["window_id"] as? Int ?? 0) · \(w["owner"] as? String ?? "?") · pid \(w["pid"] as? Int ?? 0)",
+            "title: \(w["title"] as? String ?? "")",
+            "frame: \(frame(w["frame_points"] as? [String: Any])) pts · "
+                + "\(frame(w["frame_pixels"] as? [String: Any])) px · scale \(String(format: "%g", scale))",
+            "display \(display?["index"] as? Int ?? 0)"
+                + (offPrimary ? " · off primary (negative origin)" : ""),
+        ]
+    }
+}
+
 /// Live narration during a wait. In `--json` it goes to stderr so stdout
 /// stays a single clean observation; otherwise it prints inline.
 func narrate(_ line: String, asJSON: Bool) {
@@ -955,14 +995,36 @@ struct AppCommand: AsyncParsableCommand {
 
     struct Launch: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "launch", abstract: "Apps.RunGame.",
+            commandName: "launch",
+            abstract: "Apps.RunGame, then report the game window that appears.",
         )
         @Argument var appid: Int
+        @Option(name: .customLong("timeout"), help: "Seconds to wait for the window (default 180).")
+        var timeout = 180
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
                 try await SteamOps.launch(appid)
-                print("launch requested for \(appid)")
+                narrate("launch requested for \(appid) — waiting for its window", asJSON: asJSON)
+                let window = await WindowReport.awaitWindow(timeout: timeout) {
+                    narrate($0, asJSON: asJSON)
+                }
+                if asJSON {
+                    var payload: [String: Any] = [
+                        "verdict": window != nil ? "confirmed" : "unverifiable",
+                        "intent": "app launch",
+                        "appid": appid,
+                    ]
+                    payload["window"] = window.map { $0 as Any } ?? NSNull()
+                    print(Sevo.json(payload, pretty: true))
+                } else if let window {
+                    print("app launch: confirmed — game window up")
+                    for line in WindowReport.lines(window) { print("  \(line)") }
+                } else {
+                    print("app launch: unverifiable — no game window within \(timeout)s"
+                        + " (is the app running? poll: sevo status)")
+                }
             }
         }
     }

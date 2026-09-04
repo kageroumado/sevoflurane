@@ -41,6 +41,12 @@ final class ControlServer {
             return Self.logTail(query: request.query)
         case ("GET", "/windows"):
             return windows()
+        case ("GET", "/game/window"):
+            let payload = GameWindow.current() ?? ["present": false]
+            let data = (try? JSONSerialization.data(
+                withJSONObject: payload, options: [.prettyPrinted, .sortedKeys],
+            )) ?? Data("{}".utf8)
+            return Self.json(String(decoding: data, as: UTF8.self))
         case ("GET", "/benchmark/browser-views"):
             return Self.json(host.storeBrowserViewStatuses())
         case ("POST", "/steam/show"):
