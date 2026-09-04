@@ -298,23 +298,23 @@ final class MCPServer {
                     "engine \(version) is not installed — see engine_list",
                 )
             }
-            try await ClientOps.useEngine(
+            let outcome = try await ClientOps.useEngine(
                 engine, version: version, bottle: args["bottle"] as? String, noApp: false,
             ) { progress.append($0) }
-            return (progress + ["active engine: \(version)"]).joined(separator: "\n")
+            return await Self.observed(outcome, progress: progress)
         case "client_start":
-            try await ClientOps.start(noApp: false) { progress.append($0) }
-            return progress.joined(separator: "\n")
+            let outcome = try await ClientOps.start(noApp: false) { progress.append($0) }
+            return await Self.observed(outcome, progress: progress)
         case "client_stop":
-            try await ClientOps.stop(noApp: false) { progress.append($0) }
-            return progress.joined(separator: "\n")
+            let outcome = try await ClientOps.stop(noApp: false) { progress.append($0) }
+            return await Self.observed(outcome, progress: progress)
         case "client_restart":
-            try await ClientOps.restart(noApp: false) { progress.append($0) }
-            return progress.joined(separator: "\n")
+            let outcome = try await ClientOps.restart(noApp: false) { progress.append($0) }
+            return await Self.observed(outcome, progress: progress)
         case "recover":
             let deep = args["deep"] as? Bool ?? false
-            try await ClientOps.recover(deep: deep, noApp: false) { progress.append($0) }
-            return progress.joined(separator: "\n")
+            let outcome = try await ClientOps.recover(deep: deep, noApp: false) { progress.append($0) }
+            return await Self.observed(outcome, progress: progress)
         case "library_list":
             return try await SteamOps.libraryList(
                 installedOnly: args["installed_only"] as? Bool ?? false,
@@ -371,6 +371,15 @@ final class MCPServer {
         default:
             throw ClientOps.Failure.message("unknown tool: \(name)")
         }
+    }
+
+    /// A mutating verb's reply, MCP-flavored: the narration, the verdict, and
+    /// the state the agent's model should hold now — the observation, not "ok".
+    private static func observed(_ outcome: ClientOps.Outcome, progress: [String]) async -> String {
+        let (_, line) = await StatusReport.build()
+        return (progress + [
+            "\(outcome.intent): \(outcome.verdict.rawValue) — \(outcome.note)", line,
+        ]).joined(separator: "\n")
     }
 
     private static func logTail(lines: Int) throws -> String {

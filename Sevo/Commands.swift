@@ -12,7 +12,7 @@ struct SevoCommand: AsyncParsableCommand {
         abstract: "Manage Sevoflurane's bottled Steam client.",
         version: Sevo.version,
         subcommands: [
-            DoctorCommand.self, StatusCommand.self, SetupCommand.self,
+            DoctorCommand.self, StatusCommand.self, WaitCommand.self, SetupCommand.self,
             EngineCommand.self, BottleCommand.self, StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
@@ -75,15 +75,12 @@ struct DoctorCommand: AsyncParsableCommand {
     }
 }
 
-struct StatusCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "status",
-        abstract: "One line: engine, bottle, client, bridge, app.",
-    )
-
-    @Flag(name: .customLong("json")) var asJSON = false
-
-    func run() async throws {
+/// The one observation every mutating verb ends on and `status` prints alone:
+/// engine, bottle, client, bridge, app, as a line and as a dict. The verbs
+/// carry it as `state` so the reply is what actually happened, not that it was
+/// asked for.
+enum StatusReport {
+    static func build() async -> (dict: [String: Any], line: String) {
         let snapshot = await Doctor.snapshot()
         let d = snapshot.detection
         // The engine in use, which is a choice, and only "NONE" when there is
@@ -106,24 +103,90 @@ struct StatusCommand: AsyncParsableCommand {
         } else {
             "not running"
         }
+        let dict: [String: Any] = [
+            "engine": engine,
+            "bottle": SteamBottle.name,
+            "steam_installed": steamOK,
+            "client": client,
+            "services_up": snapshot.servicesUp ?? NSNull(),
+            "bridge": snapshot.bridgeUp,
+            "app": snapshot.appStatus ?? NSNull(),
+            "dump_rate_10m": snapshot.dumpCount,
+            "client_pinned": snapshot.pinned,
+        ]
+        let line = "engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
+            + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down") · app \(app)"
+        return (dict, line)
+    }
+
+    /// Prints a verb's outcome the way `sevo client force-quit` prints its
+    /// own: the verdict, then the state the caller's model should hold now.
+    static func emit(_ outcome: ClientOps.Outcome, asJSON: Bool) async {
+        let (dict, line) = await build()
         if asJSON {
-            let report: [String: Any] = [
-                "engine": engine,
-                "bottle": SteamBottle.name,
-                "steam_installed": steamOK,
-                "client": client,
-                "services_up": snapshot.servicesUp ?? NSNull(),
-                "bridge": snapshot.bridgeUp,
-                "app": snapshot.appStatus ?? NSNull(),
-                "dump_rate_10m": snapshot.dumpCount,
-                "client_pinned": snapshot.pinned,
-            ]
-            print(Sevo.json(report, pretty: true))
+            print(Sevo.json([
+                "verdict": outcome.verdict.rawValue,
+                "intent": outcome.intent,
+                "note": outcome.note,
+                "state": dict,
+            ], pretty: true))
         } else {
-            print("engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
-                + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
-                + " · app \(app)")
+            print("\(outcome.intent): \(outcome.verdict.rawValue) — \(outcome.note)")
+            print("  \(line)")
         }
+    }
+}
+
+/// Live narration during a wait. In `--json` it goes to stderr so stdout
+/// stays a single clean observation; otherwise it prints inline.
+func narrate(_ line: String, asJSON: Bool) {
+    if asJSON {
+        FileHandle.standardError.write(Data((line + "\n").utf8))
+    } else {
+        print(line)
+    }
+}
+
+struct StatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status",
+        abstract: "One line: engine, bottle, client, bridge, app.",
+    )
+
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        let (dict, line) = await StatusReport.build()
+        print(asJSON ? Sevo.json(dict, pretty: true) : line)
+    }
+}
+
+/// Block until the client reaches a state, then report it — the time-holding
+/// verb, mirroring rocuronium's `wait`. Default waits for healthy; `--gone`
+/// waits for it to be down. Either way the reply is the observed end state
+/// plus a verdict, never a bare "ok".
+struct WaitCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "wait",
+        abstract: "Block until the client is healthy (or --gone: down), then report.",
+    )
+    @Flag(name: .customLong("gone"), help: "Wait for the client to be gone, not healthy.")
+    var gone = false
+    @Option(name: .customLong("timeout"), help: "Seconds to wait (default 120).")
+    var timeout = 120
+    @Flag(name: .customLong("no-app")) var noApp = false
+    @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
+
+    func run() async throws {
+        let sink = { narrate($0, asJSON: asJSON) }
+        let outcome: ClientOps.Outcome = if gone {
+            await ClientOps.waitGone(timeout: timeout, progress: sink)
+        } else if await ClientOps.appIsRunning(noApp: noApp) {
+            await ClientOps.pollAppHealthy(intent: "wait", timeout: timeout, progress: sink)
+        } else {
+            await ClientOps.pollClientUp(intent: "wait", timeout: timeout, progress: sink)
+        }
+        await StatusReport.emit(outcome, asJSON: asJSON)
     }
 }
 
@@ -337,11 +400,11 @@ struct EngineCommand: AsyncParsableCommand {
             throw SevoExit.badInvocation
         }
         try await handlingFailures {
-            try await ClientOps.useEngine(
+            let outcome = try await ClientOps.useEngine(
                 engine, version: target, bottle: bottle, noApp: noApp,
-            ) { print($0) }
+            ) { narrate($0, asJSON: asJSON) }
+            await StatusReport.emit(outcome, asJSON: asJSON)
         }
-        print("active engine: \(target)")
     }
 
     /// Adds Apple's D3DMetal to the managed engine from the user's own copy
@@ -707,10 +770,13 @@ struct ClientCommand: AsyncParsableCommand {
         )
         @Flag(name: .customLong("no-app"), help: "Drive the client directly even if the app is running.")
         var noApp = false
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                try await ClientOps.start(noApp: noApp) { print($0) }
+                let outcome = try await ClientOps.start(noApp: noApp) { narrate($0, asJSON: asJSON) }
+                await StatusReport.emit(outcome, asJSON: asJSON)
             }
         }
     }
@@ -721,10 +787,13 @@ struct ClientCommand: AsyncParsableCommand {
             abstract: "Stop the client (graceful → wineserver -k → signals).",
         )
         @Flag(name: .customLong("no-app")) var noApp = false
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                try await ClientOps.stop(noApp: noApp) { print($0) }
+                let outcome = try await ClientOps.stop(noApp: noApp) { narrate($0, asJSON: asJSON) }
+                await StatusReport.emit(outcome, asJSON: asJSON)
             }
         }
     }
@@ -734,10 +803,13 @@ struct ClientCommand: AsyncParsableCommand {
             commandName: "restart", abstract: "Stop, then start.",
         )
         @Flag(name: .customLong("no-app")) var noApp = false
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                try await ClientOps.restart(noApp: noApp) { print($0) }
+                let outcome = try await ClientOps.restart(noApp: noApp) { narrate($0, asJSON: asJSON) }
+                await StatusReport.emit(outcome, asJSON: asJSON)
             }
         }
     }
@@ -747,10 +819,13 @@ struct ClientCommand: AsyncParsableCommand {
             commandName: "update",
             abstract: "Headless client refresh (client must be stopped).",
         )
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                try await ClientOps.update { print($0) }
+                let outcome = try await ClientOps.update { narrate($0, asJSON: asJSON) }
+                await StatusReport.emit(outcome, asJSON: asJSON)
             }
         }
     }
@@ -810,10 +885,14 @@ struct RecoverCommand: AsyncParsableCommand {
 
     @Flag(help: "Also trash the htmlcache and repair the client.") var deep = false
     @Flag(name: .customLong("no-app")) var noApp = false
+    @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
 
     func run() async throws {
         try await handlingFailures {
-            try await ClientOps.recover(deep: deep, noApp: noApp) { print($0) }
+            let outcome = try await ClientOps.recover(deep: deep, noApp: noApp) {
+                narrate($0, asJSON: asJSON)
+            }
+            await StatusReport.emit(outcome, asJSON: asJSON)
         }
     }
 }
