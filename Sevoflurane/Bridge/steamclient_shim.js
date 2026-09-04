@@ -13,6 +13,67 @@
   if (window.__sevoInstalled) return;
   window.__sevoInstalled = true;
 
+  /* ---- page-error capture -------------------------------------------------
+     The library's React error boundary swallows the stack behind the
+     intermittent "undefined is not an object (evaluating 'e.removeEventListener')"
+     crash — it shows only a reference id. Capture the real stack, and React's
+     componentStack (which the boundary console.errors), and hand them to the
+     app log so the next occurrence names the component. Bounded, deduped,
+     never throws, always calls through. */
+  (function () {
+    var seen = {}, sent = 0, MAX = 40;
+    function report(kind, detail) {
+      try {
+        if (sent >= MAX) return;
+        var key = kind + "|" + (detail.message || "").slice(0, 120)
+          + "|" + (detail.stack || "").slice(0, 80);
+        if (seen[key]) return;
+        seen[key] = 1; sent++;
+        var h = window.webkit && window.webkit.messageHandlers
+          && window.webkit.messageHandlers.sevoWindow;
+        if (!h) return;
+        detail.kind = kind;
+        detail.at = String(location.href).slice(0, 200);
+        h.postMessage({ fn: "__jsError", args: [JSON.stringify(detail).slice(0, 4000)] });
+      } catch (e) {}
+    }
+    window.addEventListener("error", function (e) {
+      try {
+        var err = e && e.error;
+        report("uncaught", {
+          message: (e && e.message) || String(err),
+          stack: (err && err.stack) || "",
+          where: (e && e.filename ? e.filename + ":" + e.lineno + ":" + e.colno : ""),
+        });
+      } catch (x) {}
+    }, true);
+    window.addEventListener("unhandledrejection", function (e) {
+      try {
+        var r = e && e.reason;
+        report("rejection", {
+          message: (r && r.message) || String(r), stack: (r && r.stack) || "",
+        });
+      } catch (x) {}
+    });
+    var origError = console.error;
+    console.error = function () {
+      try {
+        var text = Array.prototype.map.call(arguments, function (a) {
+          if (a && a.stack) return String(a.stack);
+          if (a && typeof a === "object") {
+            try { return JSON.stringify(a).slice(0, 600); } catch (e) { return String(a); }
+          }
+          return String(a);
+        }).join(" ");
+        if (/removeEventListener|went wrong while displaying|Error Reference|componentStack|The above error/i
+            .test(text)) {
+          report("boundary", { message: text.slice(0, 3500) });
+        }
+      } catch (x) {}
+      return origError.apply(this, arguments);
+    };
+  })();
+
   var WS_URL = "ws://127.0.0.1:%PAGE_PORT%";
   var seq = 0;
   var pending = new Map();   // request id  → {resolve, reject}
