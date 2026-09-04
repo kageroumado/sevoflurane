@@ -236,6 +236,24 @@ final class ClientSupervisor {
         }
     }
 
+    /// The escape hatch when a graceful restart is itself hung: SIGKILL the
+    /// Steam client straight away, then bring it back clean. `everything`
+    /// takes the whole fake machine — games and services included — down
+    /// first. The crash-loop budget resets because the user asked.
+    func forceQuit(_ scope: ClientLifecycle.ForceScope) {
+        recentRestarts.removeAll()
+        hygieneTried = false
+        Task(name: "Force quit \(scope == .steam ? "Steam" : "everything")") {
+            let killed = await ClientLifecycle.forceQuit(scope)
+            log.log(.client, "force-quit \(scope == .steam ? "Steam" : "everything")"
+                + " — \(killed) process(es) killed, restarting clean")
+            await restartClient(
+                reason: "force-quit from the menu bar",
+                fullWindows: scope == .everything,
+            )
+        }
+    }
+
     /// Whether the restart ladder is mid-flight — control verbs that would
     /// race it (`sevo client stop`) refuse instead of interleaving.
     var isBusyRestarting: Bool {

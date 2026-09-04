@@ -67,6 +67,19 @@ struct FooterBar: View {
                         supervisor.restartWindowsNow()
                     }
                     Divider()
+                    // The force rungs, for when a graceful restart is the
+                    // thing that is stuck: kill now, no waiting, then come
+                    // back clean.
+                    Button("Force-Quit Steam", systemImage: "xmark.octagon", role: .destructive) {
+                        supervisor.forceQuit(.steam)
+                    }
+                    Button(
+                        "Force-Quit Everything", systemImage: "exclamationmark.octagon",
+                        role: .destructive,
+                    ) {
+                        supervisor.forceQuit(.everything)
+                    }
+                    Divider()
                     Button("Open Event Log", systemImage: "doc.text") {
                         NSWorkspace.shared.open(EventLog.fileURL)
                     }

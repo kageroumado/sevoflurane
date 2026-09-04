@@ -86,6 +86,33 @@ nonisolated enum ClientLifecycle {
         return scoped.sorted()
     }
 
+    /// What a force-quit reaches. `steam` takes the client down and leaves
+    /// Windows booted; `everything` tears down the whole fake machine.
+    enum ForceScope { case steam, everything }
+
+    /// The escape hatch: immediate `SIGKILL`, no graceful ask and no wait —
+    /// for when the graceful ladder is the thing that hung. Scoped by open
+    /// files to this bottle, so another engine's wine is never touched.
+    /// Answers how many processes it signalled.
+    @discardableResult
+    static func forceQuit(_ scope: ForceScope) async -> Int {
+        switch scope {
+        case .steam:
+            let pids = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+            for pid in pids { kill(pid, SIGKILL) }
+            log("force-quit: SIGKILL'd \(pids.count) Steam process(es) \(pids)")
+            return pids.count
+        case .everything:
+            // wineserver -k brings down every process in the prefix — games
+            // and service hosts included; the sweep is for anything it missed.
+            await killWineserver()
+            let pids = await bottleProcessIDs(matchingAnyOf: processNames)
+            for pid in pids { kill(pid, SIGKILL) }
+            log("force-quit: wineserver -k + SIGKILL'd \(pids.count) survivor(s) \(pids)")
+            return pids.count
+        }
+    }
+
     static func gracefulShutdown() async {
         // The quiet path first: StartShutdown in the client's own JS context.
         // `steam.exe -shutdown` spawns a whole second client instance just to
