@@ -40,6 +40,12 @@ enum SteamWindowRole {
     /// driven by the client's `RegisterForOverlayActivated`, not by the
     /// `ShowWindow` Steam sends at creation.
     case gameOverlay
+    /// Steam's generic modal dialog (`PopupWindow_…`): the "Shutting down
+    /// Steam" notice, and the confirmations it raises over its main window.
+    /// Centered on the desktop window and riding above it as its child, in a
+    /// panel that never activates the app — Steam places these against its
+    /// own screen model, which lands bottom-left here.
+    case dialog
     /// Anything else Steam pops out: game notes, broadcasts, the overlay.
     case auxiliary
 
@@ -72,6 +78,7 @@ enum SteamWindowRole {
             ("notificationtoasts", .toast),
             ("desktopoverlay", .gameOverlay),
             ("gamepadoverlay", .gameOverlay),
+            ("PopupWindow_", .dialog),
         ]
         return families.first { base.hasPrefix($0.prefix) }?.role
     }
@@ -81,7 +88,7 @@ enum SteamWindowRole {
     /// own input) but must never promote the app to a regular one or steal
     /// focus on Steam's behalf.
     var isPanel: Bool {
-        self == .menu || self == .keyboard || self == .gameOverlay
+        self == .menu || self == .keyboard || self == .gameOverlay || self == .dialog
     }
 
     /// Whether the window carries a real macOS title bar with the page's own
@@ -130,7 +137,7 @@ enum SteamWindowRole {
     var allowsOcclusionDetection: Bool {
         switch self {
         case .context, .menu, .keyboard, .toast, .gameOverlay: false
-        case .desktop, .bigPicture, .login, .controllerConfig, .auxiliary, .friends, .chat: true
+        case .desktop, .bigPicture, .login, .controllerConfig, .auxiliary, .friends, .chat, .dialog: true
         }
     }
 }

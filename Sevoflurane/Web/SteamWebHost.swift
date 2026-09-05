@@ -39,6 +39,11 @@ final class SteamWebHost {
     /// button is the moment the user asked for a window.
     private(set) var isHoldingWindows = false
 
+    /// Set by the supervisor while it brings the client down (a quit, a stop,
+    /// a restart). The client asks for its windows again on the way out, and
+    /// `SteamWindow.show` answers those requests with nothing.
+    var clientIsStopping = false
+
     func holdWindows() {
         isHoldingWindows = true
     }

@@ -275,6 +275,7 @@ final class ClientSupervisor {
         // window comes down first (left up it freezes dimmed over the whole
         // stop), and the client's shutdown dialog is hidden as it exits.
         host.dismissWindows()
+        host.clientIsStopping = true
         await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
         log.log(.supervisor, "client stopped (sevo)")
     }
@@ -310,6 +311,7 @@ final class ClientSupervisor {
         // popup sweep runs here too: the client puts up "Shutting down
         // Steam…" on its way out, and a quit is the one moment nothing else
         // is left to hide it.
+        host.clientIsStopping = true
         await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
         let survivors = await ClientLifecycle.bottleProcessIDs()
         log.log(
@@ -404,6 +406,7 @@ final class ClientSupervisor {
         case .answering(servicesUp: false):
             await recoverDeadServices(wineWindows: wineWindows)
         case .answering(servicesUp: true):
+            host.clientIsStopping = false
             pageFailures = 0
             pageReloads = 0
             serviceRecoveryTried = false
@@ -666,6 +669,7 @@ final class ClientSupervisor {
                 health = .restarting(phase)
             }
         } else {
+            host.clientIsStopping = true
             await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true) { phase in
                 health = .restarting(phase)
             }
@@ -722,6 +726,7 @@ final class ClientSupervisor {
                 + "running the hygiene pass: htmlcache purge + headless client repair",
         )
         health = .restarting("crash loop: stopping the client")
+        host.clientIsStopping = true
         await ClientLifecycle.stopAll(gracePolls: 10) { phase in
             health = .restarting(phase)
         }

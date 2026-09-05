@@ -154,7 +154,7 @@ final class SteamWindow: NSObject {
             return SteamPanel(contentRect: content)
         }
         return switch role {
-        case .menu, .keyboard:
+        case .menu, .keyboard, .dialog:
             SteamPanel(contentRect: content)
         case .toast:
             // Borderless and never ordered in. It exists because WebKit only
@@ -238,6 +238,8 @@ final class SteamWindow: NSObject {
             // which lands bottom-left here. A sign-in dialog belongs in the
             // middle of the screen, wherever Steam thinks it put it.
             window.center()
+        } else if role == .dialog {
+            centerOnDesktop(window)
         } else if let requestedOrigin {
             window.setFrameOrigin(
                 SteamScreenSpace.appKitOrigin(
@@ -252,6 +254,28 @@ final class SteamWindow: NSObject {
             // user put it is a window the user has to place again every time.
             window.center()
         }
+    }
+
+    /// A dialog sits in the middle of the desktop window when there is one on
+    /// screen, and in the middle of the screen otherwise.
+    private func centerOnDesktop(_ window: NSWindow) {
+        guard let parent = host?.desktop?.nsWindow, parent.isVisible else {
+            window.center()
+            return
+        }
+        let size = window.frame.size
+        window.setFrameOrigin(NSPoint(
+            x: parent.frame.midX - size.width / 2,
+            y: parent.frame.midY - size.height / 2,
+        ))
+    }
+
+    /// Makes a dialog the desktop window's child, so it rides above it and
+    /// moves with it.
+    private func attachDialogToDesktop() {
+        guard role == .dialog, let window, window.parent == nil,
+              let parent = host?.desktop?.nsWindow, parent.isVisible else { return }
+        parent.addChildWindow(window, ordered: .above)
     }
 
     /// Keeps a toast's page alive without ever putting it on screen: it is
@@ -373,6 +397,13 @@ final class SteamWindow: NSObject {
             webView.underPageBackgroundColor = .clear
             window.alphaValue = 0
             window.ignoresMouseEvents = true
+        case .dialog:
+            // A modal over the desktop window: it keeps Steam's own frame and
+            // stays up while another app is frontmost, since it may be the
+            // last thing the user sees of a quit.
+            window.backgroundColor = Self.steamBackground
+            window.hasShadow = true
+            window.hidesOnDeactivate = false
         case .context, .toast:
             break
         }
@@ -414,7 +445,9 @@ final class SteamWindow: NSObject {
             // A third argument carries the target monitor's scale factor,
             // because on Windows these are physical pixels. AppKit points are
             // already the page's own units, so it is dropped.
-            if !isParked, role != .gameOverlay, let point = geometry(args, at: 0 ..< 2, from: function) {
+            // A dialog's place is the app's: Steam would put it bottom-left.
+            if !isParked, role != .gameOverlay, role != .dialog,
+               let point = geometry(args, at: 0 ..< 2, from: function) {
                 moveTo(x: point[0], y: point[1])
             }
         case "ResizeTo":
@@ -623,6 +656,7 @@ final class SteamWindow: NSObject {
         let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
         window.setContentSize(requestedSize)
         window.setFrameTopLeftPoint(topLeft)
+        if role == .dialog { centerOnDesktop(window) }
     }
 
     /// Places a menu against the window that opened it.
@@ -746,6 +780,12 @@ final class SteamWindow: NSObject {
             return
         }
         heldForNotification = false
+        if host?.clientIsStopping == true, role != .dialog {
+            // The client on its way out asks for its windows once more; the
+            // library coming forward and taking key is not how a quit should
+            // look. What is already on screen stays; nothing new comes up.
+            return
+        }
         let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
         if becameRegular {
             NSApp.setActivationPolicy(.regular)
@@ -756,8 +796,10 @@ final class SteamWindow: NSObject {
         }
         guard activating else {
             window.orderFront(nil)
+            attachDialogToDesktop()
             return
         }
+        attachDialogToDesktop()
         if becameRegular {
             // Promotion from `.accessory` only takes effect once the run loop
             // turns. Activating in the same pass is swallowed: the window
@@ -804,6 +846,7 @@ final class SteamWindow: NSObject {
             window.alphaValue = 0
             window.ignoresMouseEvents = true
         } else {
+            window.parent?.removeChildWindow(window)
             window.orderOut(nil)
         }
     }
@@ -1010,6 +1053,7 @@ final class SteamWindow: NSObject {
         webView.removeFromSuperview()
         if let window {
             window.delegate = nil
+            window.parent?.removeChildWindow(window)
             window.orderOut(nil)
             window.close()
         }
