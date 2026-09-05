@@ -19,6 +19,7 @@ struct EngineSettings: View {
     @State private var newBottleName = ""
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
+    @State private var resizableWindows = BottleGraphics.resizableGameWindows
 
     var body: some View {
         Form {
@@ -27,6 +28,9 @@ struct EngineSettings: View {
                 crossoverCard
             }
             msyncSection
+            if !store.stagedEngine.isCrossOver {
+                windowsSection
+            }
             dependenciesSection
             overridesSection
             advancedSection
@@ -249,6 +253,33 @@ struct EngineSettings: View {
                 + "built-in engine ignores this setting until it is updated, "
                 + "so leaving it on there changes nothing either way. Takes "
                 + "effect the next time a game starts.")
+        }
+    }
+
+    // MARK: - Windows
+
+    private var windowsSection: some View {
+        Section {
+            Toggle(isOn: $resizableWindows) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Resizable game windows")
+                    Text("A game that locks its window to one size gets a "
+                        + "resizable one anyway: drag it to any size and the "
+                        + "picture scales to fit, the game none the wiser. Games "
+                        + "that resize on their own are left to it.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: resizableWindows) { _, enabled in
+                BottleGraphics.resizableGameWindows = enabled
+            }
+            .highlightable(id: "engine.resizableWindows", highlighted: highlighted)
+        } footer: {
+            Text("Sevoflurane's own engine only. Takes effect for games started "
+                + "after Steam restarts.")
         }
     }
 

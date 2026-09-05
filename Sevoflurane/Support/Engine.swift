@@ -355,6 +355,13 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             env["DYLD_INSERT_LIBRARIES"] = dockShim.path
             env["SEVO_SUPPRESS_WINDOWS"] = "1"
         }
+        if BottleGraphics.resizableGameWindows {
+            // Every titled window a game locks to one size becomes a
+            // resizable one whose picture the driver scales to fit
+            // (methylpentynol winemac.drv, `ResizableWindows`). Games inherit
+            // it from the client, so a change reaches them once Steam restarts.
+            env["SEVO_RESIZABLE_WINDOWS"] = "fixed"
+        }
         let graphics = BottleGraphics.managedSelection()
         if graphics.msync {
             // The Whisky-documented quirk: msync must ride with esync or

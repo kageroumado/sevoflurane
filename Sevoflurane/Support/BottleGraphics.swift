@@ -526,6 +526,16 @@ nonisolated enum BottleGraphics {
 
     private static let rendererKey = "managedRenderer"
     private static let msyncKey = "managedMsync"
+    private static let resizableWindowsKey = "resizableGameWindows"
+
+    /// Whether the built-in engine makes a game's fixed-size window resizable,
+    /// scaling the picture to whatever size the user drags it to. On by
+    /// default; travels to games as `SEVO_RESIZABLE_WINDOWS` in the client's
+    /// environment (``Engine/environment(bottle:)``).
+    static var resizableGameWindows: Bool {
+        get { Preferences.shared.object(forKey: resizableWindowsKey) as? Bool ?? true }
+        set { Preferences.shared.set(newValue, forKey: resizableWindowsKey) }
+    }
 
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
