@@ -79,6 +79,9 @@ final class ClientSupervisor {
     @ObservationIgnored private var gameIsUp = false
     @ObservationIgnored private var probeCycleCount = 0
     @ObservationIgnored private var pageFailures = 0
+    /// Reloads given to the current page outage. Two that changed nothing
+    /// mean the web view itself is what is wedged, and the third try rebuilds it.
+    @ObservationIgnored private var pageReloads = 0
     @ObservationIgnored private var isRestarting = false
     @ObservationIgnored private var recentRestarts: [Date] = []
     @ObservationIgnored private var lastPageRecovery = Date.distantPast
@@ -374,11 +377,23 @@ final class ClientSupervisor {
         case let .notAnswering(detail):
             pageFailures += 1
             if pageFailures >= 2, Date.now.timeIntervalSince(lastPageRecovery) > 90 {
-                log.log(.page, "page not answering with a healthy client (\(detail)) — reloading the UI")
                 lastPageRecovery = .now
                 pageFailures = 0
-                host.reload()
-                health = .degraded("reloading the UI…")
+                if pageReloads >= 2 {
+                    log.log(
+                        .page,
+                        "page not answering with a healthy client after \(pageReloads) reloads "
+                            + "(\(detail)) — rebuilding the UI page",
+                    )
+                    pageReloads = 0
+                    host.rebuildContextPage()
+                    health = .degraded("rebuilding the UI…")
+                } else {
+                    log.log(.page, "page not answering with a healthy client (\(detail)) — reloading the UI")
+                    pageReloads += 1
+                    host.reload()
+                    health = .degraded("reloading the UI…")
+                }
             } else {
                 transition(
                     to: .degraded("page not answering (\(detail))"),
@@ -390,6 +405,7 @@ final class ClientSupervisor {
             await recoverDeadServices(wineWindows: wineWindows)
         case .answering(servicesUp: true):
             pageFailures = 0
+            pageReloads = 0
             serviceRecoveryTried = false
             hygieneTried = false
             wasAwaitingSignIn = false

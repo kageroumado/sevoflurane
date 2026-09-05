@@ -873,7 +873,38 @@ final class SteamWebHost {
         guard context == nil else { return }
         installMenuDismissalGuard()
         installEnergyPreferenceMirror()
+        createContextPage()
+    }
 
+    /// Tears the context page down to nothing and boots a fresh one: a new web
+    /// view, a new web content process, new delegates. The rung above
+    /// `reload()`, for the page a reload cannot bring back: a web view whose
+    /// content process is gone or wedged loads nothing, while WebKit's
+    /// networking process keeps its socket to the bridge open — so the bridge
+    /// goes on sending every eval into that socket and every one times out.
+    func rebuildContextPage() {
+        EventLog.shared.log(
+            .page, "rebuilding the UI page from scratch (\(popups.count) popups detached)",
+        )
+        for popup in popups.values {
+            popup.detach()
+        }
+        popups.removeAll()
+        desktop = nil
+        if let observer = contextMoveObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        contextMoveObserver = nil
+        context?.webView.stopLoading()
+        context?.webView.removeFromSuperview()
+        context = nil
+        contextWindow?.orderOut(nil)
+        contextWindow = nil
+        status = "restarting the UI"
+        createContextPage()
+    }
+
+    private func createContextPage() {
         let coordinator = SteamWebCoordinator(host: self)
         self.coordinator = coordinator
 
@@ -1596,6 +1627,9 @@ final class SteamWebHost {
     }
 
     func windowDidAdopt(_ window: SteamWindow) {
+        // The name is what classifies a popup, so an unexpected window on
+        // screen can be traced to the name Steam gave it.
+        EventLog.shared.log(.window, "popup adopted: \(window.name) as \(window.role)")
         // A popup adopted while the overlay is up belongs to it (its Settings,
         // a dialog): track it so it is ordered in and out with the overlay and
         // dismissed when it closes, rather than left floating above the game.
