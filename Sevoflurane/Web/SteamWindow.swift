@@ -747,6 +747,7 @@ final class SteamWindow: NSObject {
         // `setOverlayActive`; the `ShowWindow`/`BringToFront` Steam sends at
         // creation must not put it on screen over the game.
         guard role != .gameOverlay else { return }
+        host?.noteWindowWillShow(self)
         // A popup opened while the overlay is up rides above it (a
         // non-activating panel levelled in `realize`) and is ordered in
         // without activating the app, so the game keeps focus.
