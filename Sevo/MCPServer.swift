@@ -322,8 +322,12 @@ final class MCPServer {
         case "app_info":
             return try await SteamOps.appInfo(appid())
         case "app_launch":
-            try await SteamOps.launch(appid())
-            let window = await WindowReport.awaitWindow(timeout: 180) { progress.append($0) }
+            let id = try appid()
+            let before = await WindowReport.currentWindow()
+            try await SteamOps.launch(id)
+            let window = await WindowReport.awaitWindow(
+                forApp: id, before: before, timeout: 180,
+            ) { progress.append($0) }
             guard let window else {
                 return (progress + [
                     "app launch: unverifiable — no game window within 180s (poll: sevo status)",

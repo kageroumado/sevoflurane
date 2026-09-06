@@ -142,14 +142,29 @@ enum StatusReport {
 /// screenshot measures) — plus the Retina scale and which display, so a
 /// negative origin on a second display is legible rather than a surprise.
 enum WindowReport {
-    /// Polls the app for the game window until it appears or the timeout;
-    /// `nil` when none showed (or the app is not running to observe it).
-    static func awaitWindow(timeout: Int, progress: (String) -> Void) async -> [String: Any]? {
+    /// The game window the app reports right now, if any.
+    static func currentWindow() async -> [String: Any]? {
+        guard let data = await AppControl.get("/game/window"),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["window_id"] != nil else { return nil }
+        return obj
+    }
+
+    /// Polls the app for the launched game's window until it appears or the
+    /// timeout; `nil` when none showed (or the app is not running to observe
+    /// it). A window that was already up before the launch, or one owned by
+    /// an exe the store knows belongs to another game, is not this launch's.
+    static func awaitWindow(
+        forApp appid: Int, before: [String: Any]?, timeout: Int, progress: (String) -> Void,
+    ) async -> [String: Any]? {
+        let known = GameConfig.game(appid).exes ?? []
         for waited in stride(from: 0, through: timeout, by: 3) {
-            if let data = await AppControl.get("/game/window"),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               obj["window_id"] != nil {
-                return obj
+            if let obj = await currentWindow() {
+                let owner = (obj["owner"] as? String ?? "").lowercased()
+                let isNew = obj["window_id"] as? Int != before?["window_id"] as? Int
+                if known.isEmpty ? isNew : known.contains(owner) {
+                    return obj
+                }
             }
             try? await Task.sleep(for: .seconds(3))
             if waited > 0, waited % 15 == 0 { progress("waiting for the game window (\(waited)s)") }
@@ -1127,9 +1142,12 @@ struct AppCommand: AsyncParsableCommand {
 
         func run() async throws {
             try await handlingFailures {
+                let before = await WindowReport.currentWindow()
                 try await SteamOps.launch(appid)
                 narrate("launch requested for \(appid) — waiting for its window", asJSON: asJSON)
-                let window = await WindowReport.awaitWindow(timeout: timeout) {
+                let window = await WindowReport.awaitWindow(
+                    forApp: appid, before: before, timeout: timeout,
+                ) {
                     narrate($0, asJSON: asJSON)
                 }
                 if asJSON {
