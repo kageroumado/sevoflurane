@@ -69,15 +69,19 @@ nonisolated enum GameIcon {
         return (width, height)
     }
 
-    /// Turns a raster into an `.icns` through the system's own tools, cached
-    /// so that rebuilding a bundle does not rebuild the icon. macOS 26 shapes what it is given, so a square picture is all
-    /// this has to produce.
+    /// Turns a raster into an `.icns`, cached so that rebuilding a bundle does
+    /// not rebuild the icon. Every representation is drawn into an RGBA
+    /// bitmap: LaunchServices applies the macOS icon shape (continuous
+    /// corners, platter, glass edge) only to an icon with an alpha channel,
+    /// and shows an opaque one as the square it is.
     private static func icns(from raster: URL, named name: String) -> URL? {
         let manager = FileManager.default
         let cache = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Caches/Sevoflurane/GameIcons")
-        let icns = cache.appendingPathComponent("\(name).icns")
+        let icns = cache.appendingPathComponent("\(name)-rgba.icns")
         if manager.fileExists(atPath: icns.path) { return icns }
+        guard let source = CGImageSourceCreateWithURL(raster as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let iconset = cache.appendingPathComponent("\(name).iconset")
         try? manager.removeItem(at: iconset)
         guard (try? manager.createDirectory(at: iconset, withIntermediateDirectories: true)) != nil
@@ -85,12 +89,9 @@ nonisolated enum GameIcon {
         defer { try? manager.removeItem(at: iconset) }
         for size in [16, 32, 128, 256, 512] {
             for (scale, suffix) in [(1, ""), (2, "@2x")] {
-                let pixels = size * scale
                 let file = iconset.appendingPathComponent("icon_\(size)x\(size)\(suffix).png")
-                guard run("/usr/bin/sips", [
-                    "-s", "format", "png", "-z", String(pixels), String(pixels),
-                    raster.path, "--out", file.path,
-                ]) else { return nil }
+                guard let png = rgbaPNG(image, pixels: size * scale),
+                      (try? png.write(to: file)) != nil else { return nil }
             }
         }
         guard run("/usr/bin/iconutil", ["-c", "icns", iconset.path, "-o", icns.path]),
@@ -99,7 +100,24 @@ nonisolated enum GameIcon {
         return icns
     }
 
-    /// A tool run to completion, for the two the icon pipeline needs.
+    /// The image scaled to `pixels` square, as a PNG with an alpha channel.
+    private static func rgbaPNG(_ image: CGImage, pixels: Int) -> Data? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                  space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+              ) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+        guard let output = context.makeImage() else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destination, output, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
+    /// A tool run to completion, for `iconutil`.
     @discardableResult
     private static func run(_ tool: String, _ arguments: [String]) -> Bool {
         let process = Process()

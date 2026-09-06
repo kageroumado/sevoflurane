@@ -94,6 +94,10 @@ nonisolated enum GameLaunchers {
                 if !manager.contentsEqual(atPath: icon.path, andPath: destination.path) {
                     try? manager.removeItem(at: destination)
                     try manager.copyItem(at: icon, to: destination)
+                    // LaunchServices caches a bundle's icon against the bundle's
+                    // own date; a new icon behind an untouched bundle is served
+                    // stale until the bundle itself looks changed.
+                    try? manager.setAttributes([.modificationDate: Date()], ofItemAtPath: bundle.path)
                 }
             }
             let hasIcon = manager.fileExists(
