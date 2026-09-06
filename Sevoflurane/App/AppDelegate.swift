@@ -64,7 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host.gameWindowDidAppear()
             // The exe that owns a launch's first window is what a per-game
             // setting is written against; the launch names the app.
-            if let appID = host.activeLaunch?.appID, appID != 0 {
+            // A window another game has already claimed is that game's: a
+            // launch that never shows a window must not adopt a bystander's.
+            if let appID = host.activeLaunch?.appID, appID != 0,
+               GameConfig.app(claiming: owner).map({ $0 == appID }) ?? true {
                 GameConfig.noteExecutable(owner, forApp: appID)
                 // A game that has just run for the first time is also the
                 // first chance to read its files: what it is built on decides
