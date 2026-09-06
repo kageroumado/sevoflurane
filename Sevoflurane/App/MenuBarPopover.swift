@@ -98,6 +98,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         position(panel)
         panel.makeKeyAndOrderFront(nil)
+        // The full highlight pill every system item shows while its popover
+        // is up; `MenuBarExtra` does this by itself, an AppKit item does not.
+        statusItem.button?.highlight(true)
         // Escape reaches the panel as a key event no SwiftUI control claims.
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
@@ -108,6 +111,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
     private func close() {
         panel?.orderOut(nil)
+        statusItem.button?.highlight(false)
         refreshLoop?.cancel()
         refreshLoop = nil
         if let escapeMonitor {

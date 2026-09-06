@@ -43,6 +43,7 @@ struct FooterBar: View {
                     .accessibilityLabel("Quit")
             }
             .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
             .controlSize(.small)
         }
     }
