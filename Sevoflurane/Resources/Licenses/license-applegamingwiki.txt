@@ -1,0 +1,14 @@
+AppleGamingWiki and PCGamingWiki (Mac compatibility data on game pages)
+=======================================================================
+
+Compatibility ratings shown on a game's page come from AppleGamingWiki
+(https://www.applegamingwiki.com), and the app-id-to-title lookup that finds
+the right page comes from PCGamingWiki (https://www.pcgamingwiki.com). Both
+wikis publish their content under the Creative Commons
+Attribution-NonCommercial-ShareAlike 3.0 Unported license:
+
+    https://creativecommons.org/licenses/by-nc-sa/3.0/
+
+Each rating in the app links to the wiki page it was read from. The ratings
+are shown as the wikis state them; the headline badge is derived from them at
+display time and is not redistributed.

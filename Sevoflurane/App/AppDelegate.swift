@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
+    private lazy var aboutWindows = AboutWindows()
     private lazy var liveSettingsWindow = SettingsWindow(
         provisioner: provisioner, supervisor: supervisor, host: host,
     )
@@ -395,5 +396,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showSettings(_: Any?) {
         settingsWindow.show()
+    }
+
+    /// About, and the two documents its buttons open. The Settings About
+    /// pane reaches the same windows through the responder chain.
+    @objc
+    func showAbout(_: Any?) {
+        aboutWindows.showAbout()
+    }
+
+    @objc
+    func showAcknowledgements(_: Any?) {
+        aboutWindows.showAcknowledgements()
+    }
+
+    @objc
+    func showLicense(_: Any?) {
+        aboutWindows.showLicense()
     }
 }

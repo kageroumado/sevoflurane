@@ -1,0 +1,7 @@
+Version (semantic versions for the updater)
+===========================================
+
+Source: https://github.com/mxcl/Version
+
+Licensed under the Apache License, Version 2.0. The full text is reproduced
+in the Apache License section below.

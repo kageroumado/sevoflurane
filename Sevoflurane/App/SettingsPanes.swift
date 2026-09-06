@@ -822,6 +822,16 @@ struct AboutSettings: View {
                 )
             }
             .font(.system(size: 12))
+            HStack(spacing: 10) {
+                Button("Acknowledgements") {
+                    NSApp.sendAction(#selector(AppDelegate.showAcknowledgements(_:)), to: nil, from: nil)
+                }
+                Button("License") {
+                    NSApp.sendAction(#selector(AppDelegate.showLicense(_:)), to: nil, from: nil)
+                }
+            }
+            .controlSize(.small)
+            .padding(.top, 6)
         }
         .highlightable(id: "about.version", highlighted: highlighted)
         .padding(.vertical, 28)

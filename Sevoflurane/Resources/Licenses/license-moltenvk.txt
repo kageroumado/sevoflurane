@@ -1,0 +1,8 @@
+MoltenVK (Vulkan over Metal, used by DXVK)
+==========================================
+
+Copyright (c) 2015-2026 The Brenwill Workshop Ltd.
+Source: https://github.com/KhronosGroup/MoltenVK
+
+Licensed under the Apache License, Version 2.0. The full text is reproduced
+in the Apache License section below.

@@ -1,0 +1,8 @@
+Swift Argument Parser (the sevo CLI)
+====================================
+
+Copyright (c) 2020 Apple Inc. and the Swift project authors
+Source: https://github.com/apple/swift-argument-parser
+
+Licensed under the Apache License, Version 2.0. The full text is reproduced
+in the Apache License section below.

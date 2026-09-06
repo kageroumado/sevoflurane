@@ -1,0 +1,7 @@
+D3DMetal (Apple Game Porting Toolkit)
+=====================================
+
+D3DMetal is Apple's Direct3D 12 translation layer, part of the Game Porting
+Toolkit. It is not bundled with Sevoflurane: the app downloads it from Apple
+through your own Apple Developer sign-in, and its use is governed by the
+license you accept there.

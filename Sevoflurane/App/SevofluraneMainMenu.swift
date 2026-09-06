@@ -40,7 +40,7 @@ enum SevofluraneMainMenu {
         let menu = NSMenu()
         menu.addItem(
             withTitle: "About Sevoflurane",
-            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            action: #selector(AppDelegate.showAbout(_:)),
             keyEquivalent: "",
         )
         menu.addItem(.separator())
