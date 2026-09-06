@@ -85,6 +85,8 @@ let package = Package(
                 "Sevoflurane/Support/GPUEquivalence.swift",
                 "Sevoflurane/Support/GPUIdentity.swift",
                 "Sevoflurane/Support/GameAttribution.swift",
+                "Sevoflurane/Support/GameCompat.swift",
+                "Sevoflurane/Support/GameCompatService.swift",
                 "Sevoflurane/Support/GameConfig.swift",
                 "Sevoflurane/Support/GameIcon.swift",
                 "Sevoflurane/Support/GameLaunchers.swift",

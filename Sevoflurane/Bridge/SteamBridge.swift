@@ -90,6 +90,9 @@ actor SteamBridge {
                 // here would serialize every asset load against CDP dispatch
                 // and the health probe. Only /, /index.html, and /__eval need
                 // actor state.
+                if request.method == "GET", request.path.hasPrefix("/__compat/") {
+                    return await Self.handleCompatRequest(request)
+                }
                 if request.method == "GET",
                    request.path != "/", request.path != "/index.html" {
                     return Self.serveFile(under: SteamBottle.steamui, path: request.path)
@@ -666,6 +669,23 @@ actor SteamBridge {
             type: "text/html; charset=utf-8",
             headers: [("Cache-Control", "no-store")],
         )
+    }
+
+    // MARK: - HTTP: Mac compatibility
+
+    /// `GET /__compat/<appid>?name=<display name>&deck=<category>`: the
+    /// community databases' verdicts for one game, as the page's strip reads
+    /// them (``SteamCompatBadge``). Name and Deck category come from the
+    /// page because the client already holds both; the sources are keyed on
+    /// the app id and, for the wiki, on the title.
+    private nonisolated static func handleCompatRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        let id = String(request.path.dropFirst("/__compat/".count)).prefix(while: { $0 != "." })
+        guard let appID = Int(id) else { return .error(404, "Not Found") }
+        let items = URLComponents(string: "http://127.0.0.1" + request.target)?.queryItems ?? []
+        let name = items.first { $0.name == "name" }?.value ?? ""
+        let deck = items.first { $0.name == "deck" }?.value.flatMap(Int.init)
+        let body = await GameCompatService.shared.recordJSON(appID: appID, name: name, deckCategory: deck)
+        return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
     // MARK: - HTTP: art

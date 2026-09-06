@@ -1036,10 +1036,67 @@ struct AppCommand: AsyncParsableCommand {
         commandName: "app",
         abstract: "Library and per-app actions via the client's own API.",
         subcommands: [
-            List.self, Info.self, Config.self, Detect.self, Launch.self, Terminate.self,
-            Install.self, Uninstall.self, Verify.self,
+            List.self, Info.self, Compat.self, Config.self, Detect.self, Launch.self,
+            Terminate.self, Install.self, Uninstall.self, Verify.self,
         ],
     )
+
+    /// The same record the library page's strip draws, from the same cache:
+    /// AreWeAntiCheatYet, AppleGamingWiki, ProtonDB, and Steam's Deck
+    /// category when the client is up to say it.
+    struct Compat: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "compat",
+            abstract: "What the community databases say about a game on a Mac.",
+        )
+        @Argument var appid: Int
+        @Option(help: "The game's title, for the wiki lookup. Read from the client when omitted.")
+        var name: String?
+        @Flag(help: "Ask every source again instead of reading the week-old cache.")
+        var refresh = false
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            var title = name ?? ""
+            var deck: Int?
+            // The client, when it is up, knows the title and Valve's own
+            // category; without it the wiki lookup needs `--name`.
+            if let raw = try? await SteamOps.appInfo(appid),
+               let info = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] {
+                if title.isEmpty { title = info["name"] as? String ?? "" }
+                deck = info["deck_compat_category"] as? Int
+            }
+            let record = await GameCompatService.shared.record(
+                appID: appid, name: title, deckCategory: deck, ignoringCache: refresh,
+            )
+            if asJSON {
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let json = try encoder.encode(record)
+                print(String(decoding: json, as: UTF8.self))
+                return
+            }
+            print("\(record.name.isEmpty ? String(appid) : record.name) (\(appid))")
+            print("  Mac:        \(record.mac.label) — \(record.mac.reason)")
+            print("  Anti-cheat: \(record.antiCheatBadge.label) — \(record.antiCheatBadge.reason)")
+            if let wiki = record.wiki {
+                let columns: [(String, String?)] = [
+                    ("native", wiki.native), ("rosetta 2", wiki.rosetta2), ("crossover", wiki.crossover),
+                    ("wine", wiki.wine), ("parallels", wiki.parallels),
+                ]
+                let tiers: [String] = columns.compactMap { name, tier in tier.map { "\(name) \($0)" } }
+                print("  AppleGamingWiki: \(tiers.joined(separator: " · ")) — \(wiki.pageURL)")
+            }
+            if let proton = record.proton {
+                print("  ProtonDB:   \(proton.tier) (\(proton.total) reports, \(proton.confidence)) — \(proton.sourceURL)")
+            }
+            if let deck = record.deckCategory {
+                let words = [0: "unknown", 1: "unsupported", 2: "playable", 3: "verified"]
+                print("  Steam Deck: \(words[deck] ?? String(deck))")
+            }
+        }
+    }
 
     struct List: AsyncParsableCommand {
         static let configuration = CommandConfiguration(

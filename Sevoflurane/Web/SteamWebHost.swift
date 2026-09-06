@@ -1740,6 +1740,9 @@ final class SteamWebHost {
         // borderless OS window. Hosted here its buttons duplicate the traffic
         // lights and its strip has nowhere for them to sit.
         window.webView.evaluateJavaScript(SteamDesktopChrome.script)
+        // The Mac compatibility strip on game pages, in the slot Steam's own
+        // Deck strip leaves empty on a desktop client.
+        window.webView.evaluateJavaScript(SteamCompatBadge.script)
         Task(name: "Register game-action events") {
             let result = await evaluateInContext(Self.gameActionScript)
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")

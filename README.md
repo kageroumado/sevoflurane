@@ -54,6 +54,14 @@ induction. Its color code is yellow, and so is the app's accent.
   Mac process while Steam keeps counting playtime and tracking the session.
   Achievements still reach Steam through a small stand-in inside the bottle.
   The game keeps its own name and icon in the Dock.
+- **A compatibility strip on every game page.** Where Steam would draw its
+  Deck badge, the game page shows a Mac verdict and an anti-cheat verdict in
+  Steam's own glyphs, drawn from AppleGamingWiki, AreWeAntiCheatYet and
+  ProtonDB, with a Details panel that names each source and links to it.
+  Kernel anti-cheat is called out before anything else, because it is the
+  one failure no renderer can work around. Sources are fetched on demand and
+  cached for a week, so a page answers offline after its first look.
+  `sevo app compat <appid>` prints the same record.
 - **Nothing else to install.** A built-in open-source engine works on a clean
   Mac. Apple's Game Porting Toolkit is fetched in-app through Apple's own
   sign-in. CrossOver is a first-class engine choice too, and the one setup
