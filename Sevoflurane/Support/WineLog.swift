@@ -29,6 +29,22 @@ nonisolated enum WineLog {
     static let quiet = "-all"
     private static let channelsKey = "wineDebug"
 
+    /// What the diagnostics switch turns on: every channel's errors, and
+    /// exceptions as they are dispatched — the two that name a crash.
+    static let diagnostic = "err+all,+seh"
+
+    /// Whether anything beyond the quiet default is on.
+    static var isDiagnosing: Bool { channels != quiet }
+
+    static func setDiagnosing(_ on: Bool) {
+        setChannels(on ? diagnostic : nil)
+    }
+
+    /// `off`, or `on (<channels>)`.
+    static var summary: String {
+        isDiagnosing ? "on (\(channels))" : "off"
+    }
+
     /// A handle appending to the log, after a header naming what is being
     /// launched. The file is rotated once past ``rotateOverBytes`` so a
     /// verbose channel left on for a week cannot fill the disk unbounded.

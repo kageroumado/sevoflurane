@@ -537,6 +537,22 @@ nonisolated enum BottleGraphics {
         set { Preferences.shared.set(newValue, forKey: resizableWindowsKey) }
     }
 
+    private static let fullscreenInWindowKey = "fullscreenGamesInWindows"
+
+    /// Whether a game that fills the screen is shown in a window of its own
+    /// instead, resizable and movable, the game still believing it fills the
+    /// screen. Off by default; travels as `SEVO_RESIZABLE_WINDOWS=window`.
+    static var fullscreenGamesInWindows: Bool {
+        get { Preferences.shared.object(forKey: fullscreenInWindowKey) as? Bool ?? false }
+        set { Preferences.shared.set(newValue, forKey: fullscreenInWindowKey) }
+    }
+
+    /// The driver's `ResizableWindows` value the two switches add up to.
+    static var resizableWindowsMode: String {
+        if fullscreenGamesInWindows { return "window" }
+        return resizableGameWindows ? "fixed" : "off"
+    }
+
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
         // DXMT rather than ``defaultRenderer``: D3DMetal comes from Apple's

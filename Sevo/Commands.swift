@@ -474,8 +474,11 @@ struct EngineCommand: AsyncParsableCommand {
                 D3DMetalInstaller.choose(version: entry.version)
             }
             let launcher = CrossOverShadow.preparedLauncher()
+            // Games spawn inside the client, which staged its toolkit when it
+            // booted: the choice reaches them with the client's next boot.
             print("D3DMetal for \(label): \(use == "own" ? "the engine's own" : use)"
-                + (launcher == nil ? "" : " (shadow tree ready)"))
+                + (launcher == nil ? "" : ", shadow tree ready")
+                + " — in the client from its next boot: sevo client restart")
             return
         }
         guard let from else {
@@ -588,9 +591,9 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | windows | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value. Omit to read the key.") var value: String?
+    @Argument(help: "New value; for wine-debug: on, off, or Wine channels. Omit to read the key.") var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
@@ -614,12 +617,15 @@ struct BottleCommand: AsyncParsableCommand {
                 print(Sevo.json([
                     "renderer": selection.renderer.rawValue,
                     "msync": selection.msync,
-                    "wine-debug": WineLog.channels,
+                    "windows": BottleGraphics.resizableWindowsMode,
+                    "wine-debug": WineLog.isDiagnosing,
+                    "wine-debug-channels": WineLog.channels,
                 ], pretty: true))
             } else {
                 print("renderer \(selection.renderer.rawValue)")
                 print("msync \(selection.msync)")
-                print("wine-debug \(WineLog.channels)")
+                print("windows \(BottleGraphics.resizableWindowsMode)")
+                print("wine-debug \(WineLog.summary)")
             }
             return
         }
@@ -627,19 +633,45 @@ struct BottleCommand: AsyncParsableCommand {
             switch key {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
-            case "wine-debug": print(WineLog.channels)
+            case "windows": print(BottleGraphics.resizableWindowsMode)
+            case "wine-debug": print(WineLog.summary)
             default:
-                Sevo.printError("unknown key '\(key)' (renderer | msync | wine-debug)")
+                Sevo.printError("unknown key '\(key)' (renderer | msync | windows | wine-debug)")
                 throw SevoExit.badInvocation
             }
             return
         }
+        if key == "windows" {
+            // The built-in engine's window treatment: `off`, `fixed` (locked
+            // windows become resizable) or `window` (fullscreen games get a
+            // window of their own too). Games inherit it from the client.
+            switch value {
+            case "off":
+                BottleGraphics.resizableGameWindows = false
+                BottleGraphics.fullscreenGamesInWindows = false
+            case "fixed":
+                BottleGraphics.resizableGameWindows = true
+                BottleGraphics.fullscreenGamesInWindows = false
+            case "window":
+                BottleGraphics.resizableGameWindows = true
+                BottleGraphics.fullscreenGamesInWindows = true
+            default:
+                Sevo.printError("windows must be off, fixed or window")
+                throw SevoExit.badInvocation
+            }
+            print("windows \(BottleGraphics.resizableWindowsMode) — in games started after the client's next boot: sevo client restart")
+            return
+        }
         if key == "wine-debug" {
-            // Wine's own channel syntax, e.g. `+seh,+loaddll` or
-            // `-all,err+all`; `off` is the quiet default. Read by the next
-            // client start, and inherited by every game it launches.
-            WineLog.setChannels(value == "off" ? nil : value)
-            print("wine-debug \(WineLog.channels) — takes effect at the next client start; "
+            // `on` is the diagnostics set (errors + exceptions), `off` the
+            // quiet default, anything else Wine's own channel syntax, e.g.
+            // `+seh,+loaddll`. Read by the next client start, and inherited
+            // by every game it launches.
+            switch value {
+            case "on", "off": WineLog.setDiagnosing(value == "on")
+            default: WineLog.setChannels(value)
+            }
+            print("wine-debug \(WineLog.summary) — in the client from its next boot: sevo client restart; "
                 + "trail at \(WineLog.fileURL.path)")
             return
         }
@@ -658,7 +690,7 @@ struct BottleCommand: AsyncParsableCommand {
             }
             selection.msync = flag
         default:
-            Sevo.printError("unknown key '\(key)' (renderer | msync | wine-debug)")
+            Sevo.printError("unknown key '\(key)' (renderer | msync | windows | wine-debug)")
             throw SevoExit.badInvocation
         }
         do {

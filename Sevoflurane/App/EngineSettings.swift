@@ -20,6 +20,8 @@ struct EngineSettings: View {
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
     @State private var resizableWindows = BottleGraphics.resizableGameWindows
+    @State private var fullscreenInWindows = BottleGraphics.fullscreenGamesInWindows
+    @State private var wineDiagnostics = WineLog.isDiagnosing
 
     var body: some View {
         Form {
@@ -277,6 +279,23 @@ struct EngineSettings: View {
                 BottleGraphics.resizableGameWindows = enabled
             }
             .highlightable(id: "engine.resizableWindows", highlighted: highlighted)
+            Toggle(isOn: $fullscreenInWindows) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fullscreen games in a window")
+                    Text("A game that fills the screen gets a window of its "
+                        + "own instead: resizable, movable, with the rest of "
+                        + "the Mac around it, the game none the wiser. New; "
+                        + "turn it off if a game misbehaves.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: fullscreenInWindows) { _, enabled in
+                BottleGraphics.fullscreenGamesInWindows = enabled
+            }
+            .highlightable(id: "engine.fullscreenInWindows", highlighted: highlighted)
         } footer: {
             Text("Sevoflurane's own engine only. Takes effect for games started "
                 + "after Steam restarts.")
@@ -407,6 +426,23 @@ struct EngineSettings: View {
                     .disabled(store.isSwitching)
             }
             .highlightable(id: "engine.winecfg", highlighted: highlighted)
+            Toggle(isOn: $wineDiagnostics) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Wine diagnostics log")
+                    Text("Errors and exceptions from every Wine process, "
+                        + "Steam's and each game's, written to "
+                        + "~/Library/Logs/Sevoflurane-wine.log. Costs a little "
+                        + "speed; leave it off unless something is being chased.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: wineDiagnostics) { _, enabled in
+                WineLog.setDiagnosing(enabled)
+            }
+            .highlightable(id: "engine.wineDiagnostics", highlighted: highlighted)
             RepairRow(provisioner: provisioner, highlighted: highlighted)
                 .disabled(store.isSwitching)
         } header: {
@@ -415,7 +451,8 @@ struct EngineSettings: View {
             Text("Repair runs first-launch setup again: whatever is still "
                 + "there is left alone, and only what is missing or broken "
                 + "gets reinstalled. Your games, saves and Steam account are "
-                + "not touched.")
+                + "not touched. The diagnostics log takes effect when Steam "
+                + "restarts.")
         }
     }
 }
