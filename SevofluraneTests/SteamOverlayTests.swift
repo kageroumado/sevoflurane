@@ -24,8 +24,7 @@ struct GameOverlayRoleTests {
         #expect(!role.allowsOcclusionDetection)
         // …may be shown, and carries no chrome of its own.
         #expect(role.isShowable)
-        #expect(!role.hasNativeTitleBar)
-        #expect(!role.hasSteamFocusBar)
+        #expect(!role.hasPopupChrome)
     }
 
     @Test

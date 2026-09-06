@@ -91,25 +91,21 @@ enum SteamWindowRole {
         self == .menu || self == .keyboard || self == .gameOverlay || self == .dialog
     }
 
-    /// Whether the window carries a real macOS title bar with the page's own
-    /// title in it. Steam draws no strip of its own in these, so overlaid
-    /// traffic lights would land on whatever the page put in its top-left
-    /// corner.
-    var hasNativeTitleBar: Bool {
+    /// Whether the window is one of Steam's ordinary popups — friends, chat,
+    /// the configurator, notes and the rest — whose page draws a
+    /// `.TitleBar.title-area` strip inside a header of its own
+    /// (`.titleBarContainer`). These share one treatment: the macOS title bar
+    /// is transparent over the page, and the chrome script hides Steam's
+    /// strip, pads the header by the title-bar height so its content moves
+    /// out from under the traffic lights, and offers the header's remaining
+    /// stretch as the drag handle. The header keeps Steam's own color, so the
+    /// top of the window matches the rest of it instead of the system's
+    /// title-bar material.
+    var hasPopupChrome: Bool {
         switch self {
-        case .auxiliary, .controllerConfig, .chat: true
+        case .auxiliary, .controllerConfig, .chat, .friends: true
         default: false
         }
-    }
-
-    /// Whether the page's own title strip is the FriendsUI one: a 24pt focus
-    /// bar (teal-to-blue while the window is focused) over a dark header. The
-    /// macOS title bar goes transparent and the traffic lights float on that
-    /// bar, as they do on the desktop's strip; the chrome script grows the bar
-    /// to title-bar height and moves the header's content out from under
-    /// the lights.
-    var hasSteamFocusBar: Bool {
-        self == .friends
     }
 
     /// Whether this window may ever be put on screen.

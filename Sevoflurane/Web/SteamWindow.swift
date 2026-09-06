@@ -187,18 +187,6 @@ final class SteamWindow: NSObject {
                 backing: .buffered,
                 defer: false,
             )
-        case .auxiliary, .controllerConfig, .chat:
-            // Chat, notes, the configurator: Steam draws no title strip of
-            // its own in these, so overlaid traffic lights would land on
-            // whatever the page put in its top-left corner. A plain titled
-            // window reserves the strip instead, and the page keeps every
-            // pixel it drew.
-            NSWindow(
-                contentRect: content,
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered,
-                defer: false,
-            )
         default:
             NSWindow(
                 contentRect: content,
@@ -323,11 +311,12 @@ final class SteamWindow: NSObject {
         case .auxiliary, .controllerConfig, .friends, .chat:
             // Steam names its own popups through the document title —
             // "Friends List", or the name of whoever a chat window is with.
-            // On the windows with a real strip that title is drawn in it; the
-            // friends window shows Steam's focus bar instead and keeps the
-            // title for Mission Control and the Window menu.
-            window.titleVisibility = role.hasSteamFocusBar ? .hidden : .visible
-            window.titlebarAppearsTransparent = role.hasSteamFocusBar
+            // The page's own header is the title bar (see
+            // `SteamWindowRole.hasPopupChrome`), so the macOS one is
+            // transparent and titleless; the title is kept for Mission
+            // Control and the Window menu.
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
             window.title = webView.title ?? "Steam"
             window.backgroundColor = Self.steamBackground
             window.collectionBehavior.insert(.fullScreenPrimary)

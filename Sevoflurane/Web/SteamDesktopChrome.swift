@@ -194,17 +194,18 @@ enum SteamDesktopChrome {
     })()
     """
 
-    /// Windows with a native macOS title bar (friends, chat, controller
-    /// config, auxiliary): the entire Steam title strip is hidden so the
-    /// native title bar is the only chrome.
-    /// The friends window: Steam's strip is `.TitleBar.title-area`, absolutely
-    /// positioned over the dark header, and its first child is the focus bar
-    /// — 24px, teal-to-blue while the window is focused. The bar becomes the
-    /// title bar: grown to the macOS title-bar height, Steam's window buttons
-    /// removed, and the header padded by the same height so the avatar and
-    /// status control move out from under the traffic lights. The bar's
-    /// stretch right of the traffic lights is the window's drag handle.
-    static let friendsChromeScript = """
+    /// Steam's ordinary popups (friends, chat, the configurator, notes):
+    /// the page draws its strip, `.TitleBar.title-area`, absolutely
+    /// positioned inside a header of its own, and the macOS title bar is
+    /// transparent over the page. The strip goes away, the header becomes the
+    /// title bar: padded by the title-bar height so its content (the friends
+    /// avatar, a chat's tabs) moves out from under the traffic lights, in
+    /// Steam's own color all the way to the top edge. The friends header's
+    /// backdrop, an SVG gradient Steam starts below its strip, is pulled up
+    /// to the edge so the gradient runs under the lights with no band above
+    /// it. The header's stretch right of the traffic lights is the window's
+    /// drag handle.
+    static let popupChromeScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
 
@@ -213,9 +214,10 @@ enum SteamDesktopChrome {
       var TRAFFIC_LIGHTS = 80;   /* the strip the buttons and their margin occupy */
       var CSS = [
         ".TitleBar.title-area { display: block !important; }",
-        ".title-area-highlight, .singleWindowFocusBar { height: " + BAR + "px !important; }",
+        ".title-area-highlight, .singleWindowFocusBar { display: none !important; }",
         ".title-bar-actions.window-controls { display: none !important; }",
-        "div:has(> .TitleBar.title-area) { box-sizing: content-box !important; padding-top: " + BAR + "px !important; }"
+        "div:has(> .TitleBar.title-area) { box-sizing: content-box !important; padding-top: " + BAR + "px !important; }",
+        "div:has(> .TitleBar.title-area) svg[class*=\\"Gradient\\"], div:has(> .TitleBar.title-area) > .currentUserContainer > svg { top: 0 !important; height: 100% !important; }"
       ].join("\\n");
 
       function apply() {
@@ -231,13 +233,14 @@ enum SteamDesktopChrome {
       }
 
       function dragRegions() {
-        var bar = document.querySelector(".TitleBar.title-area > .title-area-highlight");
-        if (!bar) return [];
-        var r = bar.getBoundingClientRect();
+        var area = document.querySelector(".TitleBar.title-area");
+        var header = area && area.parentElement;
+        if (!header) return [];
+        var r = header.getBoundingClientRect();
         var left = Math.round(r.left) + TRAFFIC_LIGHTS;
         var width = Math.round(r.width) - TRAFFIC_LIGHTS;
         if (width <= 0) return [];
-        return [[left, Math.round(r.top), width, Math.round(r.height)]];
+        return [[left, Math.round(r.top), width, BAR]];
       }
 
       var pending = 0;
@@ -258,42 +261,6 @@ enum SteamDesktopChrome {
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-
-      window.__sevoChrome = { apply: apply };
-      apply();
-      return "installed";
-    })()
-    """
-
-    static let nativeTitleBarScript = """
-    (function () {
-      if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-
-      var STYLE_ID = "sevo-macos-chrome";
-      var CSS = ".TitleBar.title-area { display: none !important; }";
-
-      function apply() {
-        if (!document.head) return;
-        var style = document.getElementById(STYLE_ID);
-        if (!style) {
-          style = document.createElement("style");
-          style.id = STYLE_ID;
-          style.textContent = CSS;
-          document.head.appendChild(style);
-        }
-      }
-
-      function schedule() {
-        if (window.__sevoChromePending) return;
-        window.__sevoChromePending = setTimeout(function () {
-          window.__sevoChromePending = 0; apply();
-        }, 150);
-      }
-
-      new MutationObserver(function () {
-        if (document.head && !document.getElementById(STYLE_ID)) apply();
-        else schedule();
-      }).observe(document, { childList: true, subtree: true });
 
       window.__sevoChrome = { apply: apply };
       apply();

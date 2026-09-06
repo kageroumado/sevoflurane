@@ -19,8 +19,7 @@ struct SteamDialogRoleTests {
         // Never activates the app: the desktop must not become key on a quit.
         #expect(role.isPanel)
         // Steam draws its own frame.
-        #expect(!role.hasNativeTitleBar)
-        #expect(!role.hasSteamFocusBar)
+        #expect(!role.hasPopupChrome)
         #expect(role.isShowable)
         // Genuinely on screen, so it may stop rendering when covered.
         #expect(role.allowsOcclusionDetection)

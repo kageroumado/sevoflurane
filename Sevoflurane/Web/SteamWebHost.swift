@@ -1722,10 +1722,8 @@ final class SteamWebHost {
         menuMirror?.refresh()
         if window.role == .login {
             window.webView.evaluateJavaScript(SteamDesktopChrome.popupScript)
-        } else if window.role.hasSteamFocusBar {
-            window.webView.evaluateJavaScript(SteamDesktopChrome.friendsChromeScript)
-        } else if window.role.hasNativeTitleBar {
-            window.webView.evaluateJavaScript(SteamDesktopChrome.nativeTitleBarScript)
+        } else if window.role.hasPopupChrome {
+            window.webView.evaluateJavaScript(SteamDesktopChrome.popupChromeScript)
         }
         guard window.role == .desktop else { return }
         desktop = window
