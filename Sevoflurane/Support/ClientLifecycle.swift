@@ -351,6 +351,9 @@ nonisolated enum ClientLifecycle {
             log("wine launcher exited (status \(finished.terminationStatus))")
             try? trail.close()
         }
+        // The per-bottle and per-program env files the engine reads at
+        // every process start, from the store as it stands now.
+        ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         do {
             try process.run()
             // Games inherit this environment; remember what it was so a

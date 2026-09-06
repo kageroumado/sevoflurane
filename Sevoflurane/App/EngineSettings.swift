@@ -19,8 +19,7 @@ struct EngineSettings: View {
     @State private var newBottleName = ""
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
-    @State private var resizableWindows = BottleGraphics.resizableGameWindows
-    @State private var fullscreenInWindows = BottleGraphics.fullscreenGamesInWindows
+    @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
     @State private var wineDiagnostics = WineLog.isDiagnosing
 
     var body: some View {
@@ -262,43 +261,37 @@ struct EngineSettings: View {
 
     private var windowsSection: some View {
         Section {
-            Toggle(isOn: $resizableWindows) {
+            Picker(selection: $windowTreatment) {
+                ForEach(WindowTreatment.allCases, id: \.self) { treatment in
+                    Text(treatment.label).tag(treatment)
+                }
+            } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Resizable game windows")
-                    Text("A game that locks its window to one size gets a "
-                        + "resizable one anyway: drag it to any size and the "
-                        + "picture scales to fit, the game none the wiser. Games "
-                        + "that resize on their own are left to it.")
+                    Text("Game windows")
+                    Text("Resizable: a game that locks its window to one size "
+                        + "gets a resizable one anyway, and the picture scales to "
+                        + "fit. Fullscreen games in a window: a game that fills "
+                        + "the screen gets a window of its own as well, movable, "
+                        + "with the rest of the Mac around it. The game is none "
+                        + "the wiser either way.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .toggleStyle(.switch)
-            .onChange(of: resizableWindows) { _, enabled in
-                BottleGraphics.resizableGameWindows = enabled
+            .onChange(of: windowTreatment) { _, treatment in
+                var values = GameConfig.bottle(SteamBottle.name)
+                values.windows = treatment
+                GameConfig.setBottle(SteamBottle.name, values)
+                ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
             }
-            .highlightable(id: "engine.resizableWindows", highlighted: highlighted)
-            Toggle(isOn: $fullscreenInWindows) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Fullscreen games in a window")
-                    Text("A game that fills the screen gets a window of its "
-                        + "own instead: resizable, movable, with the rest of "
-                        + "the Mac around it, the game none the wiser. New; "
-                        + "turn it off if a game misbehaves.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
-            .onChange(of: fullscreenInWindows) { _, enabled in
-                BottleGraphics.fullscreenGamesInWindows = enabled
-            }
-            .highlightable(id: "engine.fullscreenInWindows", highlighted: highlighted)
+            .highlightable(id: "engine.windows", highlighted: highlighted)
         } footer: {
-            Text("Sevoflurane's own engine only. Takes effect for games started "
-                + "after Steam restarts.")
+            Text("Sevoflurane's own engine only. This bottle's default; a game "
+                + "can have its own (sevo app config). "
+                + (Engine.active.supportsEnvFiles
+                    ? "Reaches a game the next time it starts."
+                    : "Takes effect for games started after Steam restarts."))
         }
     }
 

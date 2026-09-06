@@ -166,14 +166,29 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         case .crossover, .crossoverPreview:
             return Renderer.allCases
         case .managed:
-            let info = root.appendingPathComponent("engine-info.json")
-            if let data = try? Data(contentsOf: info),
-               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-               let declared = object["renderers"] as? [String] {
+            if let declared = engineInfo?["renderers"] as? [String] {
                 return declared.compactMap(Renderer.init(rawValue:))
             }
             return [.auto, .dxmt, .dxvk, .wined3d]
         }
+    }
+
+    /// A managed engine's `engine-info.json`, written by `package-engine.sh`;
+    /// `nil` for CrossOver or an engine without the file.
+    private var engineInfo: [String: Any]? {
+        guard case .managed = self else { return nil }
+        let info = root.appendingPathComponent("engine-info.json")
+        guard let data = try? Data(contentsOf: info) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    /// Whether the engine reads `<prefix>/.sevo/bottle.env` and
+    /// `<prefix>/.sevo/apps/<exe>.env` at process start (methylpentynol
+    /// ntdll `load_sevo_env`; declared as `env-files` in `engine-info.json`).
+    /// With it, a setting reaches a game at its next launch; without it, the
+    /// game inherits the client's environment and waits for a Steam restart.
+    var supportsEnvFiles: Bool {
+        (engineInfo?["features"] as? [String])?.contains("env-files") == true
     }
 
     /// Whether the stored choice asks for the built-in engine, installed or
@@ -355,14 +370,12 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             env["DYLD_INSERT_LIBRARIES"] = dockShim.path
             env["SEVO_SUPPRESS_WINDOWS"] = "1"
         }
-        if BottleGraphics.resizableWindowsMode != "off" {
-            // Every titled window a game locks to one size becomes a
-            // resizable one whose picture the driver scales to fit, and with
-            // `window` a game filling the screen gets a window of its own
-            // (methylpentynol winemac.drv, `ResizableWindows`). Games inherit
-            // it from the client, so a change reaches them once Steam restarts.
-            env["SEVO_RESIZABLE_WINDOWS"] = BottleGraphics.resizableWindowsMode
-        }
+        // The bottle's window treatment (methylpentynol winemac.drv,
+        // `ResizableWindows`). An engine with the env files reads the same
+        // value, and a game's own, from `<prefix>/.sevo` at every process
+        // start; one without inherits this from the client, so a change
+        // reaches its games once Steam restarts.
+        env["SEVO_RESIZABLE_WINDOWS"] = GameConfig.windows(bottle: bottle).value.rawValue
         let graphics = BottleGraphics.managedSelection()
         if graphics.msync {
             // The Whisky-documented quirk: msync must ride with esync or

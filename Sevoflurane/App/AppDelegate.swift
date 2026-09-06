@@ -58,8 +58,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
         }
         PerfProbe.poi.emitEvent("Launch")
-        gameLaunchWatch.onGameWindowUp = { [weak self] in
-            self?.host.gameWindowDidAppear()
+        gameLaunchWatch.onGameWindowUp = { [weak self] owner in
+            guard let self else { return }
+            host.gameWindowDidAppear()
+            // The exe that owns a launch's first window is what a per-game
+            // setting is written against; the launch names the app.
+            if let appID = host.activeLaunch?.appID, appID != 0 {
+                GameConfig.noteExecutable(owner, forApp: appID)
+                ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            }
         }
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror

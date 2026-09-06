@@ -617,14 +617,14 @@ struct BottleCommand: AsyncParsableCommand {
                 print(Sevo.json([
                     "renderer": selection.renderer.rawValue,
                     "msync": selection.msync,
-                    "windows": BottleGraphics.resizableWindowsMode,
+                    "windows": GameConfig.windows(bottle: SteamBottle.name).value.rawValue,
                     "wine-debug": WineLog.isDiagnosing,
                     "wine-debug-channels": WineLog.channels,
                 ], pretty: true))
             } else {
                 print("renderer \(selection.renderer.rawValue)")
                 print("msync \(selection.msync)")
-                print("windows \(BottleGraphics.resizableWindowsMode)")
+                print("windows \(Self.windowsSummary)")
                 print("wine-debug \(WineLog.summary)")
             }
             return
@@ -633,7 +633,7 @@ struct BottleCommand: AsyncParsableCommand {
             switch key {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
-            case "windows": print(BottleGraphics.resizableWindowsMode)
+            case "windows": print(Self.windowsSummary)
             case "wine-debug": print(WineLog.summary)
             default:
                 Sevo.printError("unknown key '\(key)' (renderer | msync | windows | wine-debug)")
@@ -642,24 +642,22 @@ struct BottleCommand: AsyncParsableCommand {
             return
         }
         if key == "windows" {
-            // The built-in engine's window treatment: `off`, `fixed` (locked
-            // windows become resizable) or `window` (fullscreen games get a
-            // window of their own too). Games inherit it from the client.
-            switch value {
-            case "off":
-                BottleGraphics.resizableGameWindows = false
-                BottleGraphics.fullscreenGamesInWindows = false
-            case "fixed":
-                BottleGraphics.resizableGameWindows = true
-                BottleGraphics.fullscreenGamesInWindows = false
-            case "window":
-                BottleGraphics.resizableGameWindows = true
-                BottleGraphics.fullscreenGamesInWindows = true
-            default:
-                Sevo.printError("windows must be off, fixed or window")
+            // The built-in engine's window treatment at the bottle level:
+            // `off`, `fixed` (locked windows become resizable), `window`
+            // (fullscreen games get a window of their own too), or `inherit`
+            // for the global default. A game can override it: sevo app config.
+            var values = GameConfig.bottle(SteamBottle.name)
+            if value == "inherit" {
+                values.windows = nil
+            } else if let treatment = WindowTreatment(rawValue: value) {
+                values.windows = treatment
+            } else {
+                Sevo.printError("windows must be off, fixed, window or inherit")
                 throw SevoExit.badInvocation
             }
-            print("windows \(BottleGraphics.resizableWindowsMode) — in games started after the client's next boot: sevo client restart")
+            GameConfig.setBottle(SteamBottle.name, values)
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("windows \(Self.windowsSummary) — \(Self.gameReach)")
             return
         }
         if key == "wine-debug" {
@@ -671,8 +669,9 @@ struct BottleCommand: AsyncParsableCommand {
             case "on", "off": WineLog.setDiagnosing(value == "on")
             default: WineLog.setChannels(value)
             }
-            print("wine-debug \(WineLog.summary) — in the client from its next boot: sevo client restart; "
-                + "trail at \(WineLog.fileURL.path)")
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("wine-debug \(WineLog.summary) — \(Self.gameReach); in the client from its next "
+                + "boot: sevo client restart; trail at \(WineLog.fileURL.path)")
             return
         }
         switch key {
@@ -706,6 +705,20 @@ struct BottleCommand: AsyncParsableCommand {
         Engine.active.isCrossOver
             ? BottleGraphics.selection(forBottle: SteamBottle.root)
             : BottleGraphics.managedSelection()
+    }
+
+    /// The bottle's window treatment and where it comes from.
+    static var windowsSummary: String {
+        let resolved = GameConfig.windows(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
+    }
+
+    /// When a bottle-level value reaches games: at their next launch on an
+    /// engine that reads the env files, after a client restart otherwise.
+    static var gameReach: String {
+        Engine.active.supportsEnvFiles
+            ? "in games from their next launch"
+            : "in games started after the client's next boot: sevo client restart"
     }
 
     private func apply(_ selection: BottleGraphics.Selection) throws {
@@ -976,7 +989,7 @@ struct AppCommand: AsyncParsableCommand {
         commandName: "app",
         abstract: "Library and per-app actions via the client's own API.",
         subcommands: [
-            List.self, Info.self, Launch.self, Terminate.self,
+            List.self, Info.self, Config.self, Launch.self, Terminate.self,
             Install.self, Uninstall.self, Verify.self,
         ],
     )
@@ -1022,6 +1035,83 @@ struct AppCommand: AsyncParsableCommand {
             try await handlingFailures {
                 try await print(SteamOps.appInfo(appid))
             }
+        }
+    }
+
+    /// One game's settings: what it resolves to and from which level, and
+    /// the game's own values (`Docs/config-hierarchy-plan.md`). A value set
+    /// here is written to the engine's per-program env file for every exe
+    /// the game is known to run under.
+    struct Config: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "config",
+            abstract: "A game's own settings, over the bottle's and the global defaults.",
+            discussion: """
+            Keys: windows (off | fixed | window | inherit), exe <name> to \
+            name an executable the game runs under before its first launch \
+            has recorded one. Omit the key to print every setting with the \
+            level it comes from.
+            """,
+        )
+        @Argument var appid: Int
+        @Argument(help: "windows | exe. Omit to print every setting.") var key: String?
+        @Argument(help: "New value. Omit to read the key.") var value: String?
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            let bottle = SteamBottle.name
+            guard let key else {
+                let windows = GameConfig.windows(bottle: bottle, game: appid)
+                let exes = GameConfig.game(appid).exes ?? []
+                if asJSON {
+                    print(Sevo.json([
+                        "appid": appid,
+                        "windows": ["value": windows.value.rawValue, "source": windows.source.description],
+                        "exes": exes,
+                    ], pretty: true))
+                } else {
+                    print("windows \(windows.value.rawValue) (\(windows.source))")
+                    print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
+                }
+                return
+            }
+            var values = GameConfig.game(appid)
+            switch key {
+            case "windows":
+                guard let value else {
+                    let resolved = GameConfig.windows(bottle: bottle, game: appid)
+                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    return
+                }
+                if value == "inherit" {
+                    values.windows = nil
+                } else if let treatment = WindowTreatment(rawValue: value) {
+                    values.windows = treatment
+                } else {
+                    Sevo.printError("windows must be off, fixed, window or inherit")
+                    throw SevoExit.badInvocation
+                }
+                GameConfig.setGame(appid, values)
+            case "exe":
+                guard let value else {
+                    print((values.exes ?? []).joined(separator: "\n"))
+                    return
+                }
+                GameConfig.noteExecutable(value, forApp: appid)
+            default:
+                Sevo.printError("unknown key '\(key)' (windows | exe)")
+                throw SevoExit.badInvocation
+            }
+            ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
+            let resolved = GameConfig.windows(bottle: bottle, game: appid)
+            let exes = GameConfig.game(appid).exes ?? []
+            var reach = Engine.active.supportsEnvFiles
+                ? "reaches the game at its next launch"
+                : "needs an engine that reads the env files (methylpentynol-r2 or later)"
+            if exes.isEmpty {
+                reach += "; its exe is not known yet, so the value lands one launch late"
+            }
+            print("windows \(resolved.value.rawValue) (\(resolved.source)) — \(reach)")
         }
     }
 
@@ -1303,9 +1393,10 @@ struct RunCommand: AsyncParsableCommand {
         commandName: "run",
         abstract: "Run a Windows program in the bottle (debug launcher; never the client).",
         discussion: """
-        The program is a Unix or Windows path. Wine's own output goes to the \
-        terminal and to the wine trail (sevo logs --wine); set its channels \
-        with sevo bottle config wine-debug.
+        The program is a Unix or Windows path. Flags before it are sevo's, \
+        everything from it onward is the program's — so a program's own \
+        flags need no -- separator. Wine's output goes to the terminal; set \
+        its channels with sevo bottle config wine-debug.
         """,
     )
 
@@ -1319,6 +1410,11 @@ struct RunCommand: AsyncParsableCommand {
         guard let first = program.first else {
             Sevo.printError("nothing to run")
             throw SevoExit.badInvocation
+        }
+        // Everything from the first token onward is captured for the program,
+        // so the help flag is answered here rather than by the parser.
+        guard first != "--help", first != "-h" else {
+            throw CleanExit.helpRequest(self)
         }
         // The client has a lifecycle with a restart ladder and a supervisor
         // that owns it; a second launcher racing that is how a bottle ends up

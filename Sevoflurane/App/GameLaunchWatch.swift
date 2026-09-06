@@ -26,7 +26,7 @@ final class GameLaunchWatch {
 
     /// Fired when the game's first window is up — the host clears the
     /// launch-status line on it.
-    var onGameWindowUp: (() -> Void)?
+    var onGameWindowUp: ((_ owner: String) -> Void)?
 
     /// Arms (or re-arms) the watch; called when the bridge sees `RunGame`.
     func noteLaunchRequested() {
@@ -45,7 +45,7 @@ final class GameLaunchWatch {
     }
 
     private func activate(_ game: (owner: String, pid: pid_t)) {
-        defer { onGameWindowUp?() }
+        defer { onGameWindowUp?(game.owner) }
         GameModeSession.gameDidAppear()
         GameDisplayHold.gameDidAppear()
         guard let app = NSRunningApplication(processIdentifier: game.pid) else {

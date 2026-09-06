@@ -1,0 +1,71 @@
+import Foundation
+
+/// Turns the settings hierarchy into what the engine reads at process start:
+/// `<prefix>/.sevo/bottle.env` for the bottle's resolved values and
+/// `<prefix>/.sevo/apps/<exe>.env` for every game with a value of its own
+/// (methylpentynol ntdll, `load_sevo_env`). Whole-file rewrites, idempotent;
+/// run after every store change and at every client start.
+///
+/// The files carry a header naming this app, and only files with it are
+/// removed when a game's values go away — a file someone wrote by hand in the
+/// same directory is theirs.
+nonisolated enum ConfigMaterializer {
+    private static let header = "# written by Sevoflurane; edits are overwritten"
+
+    /// Rewrites the bottle's env files from the store.
+    static func materialize(bottle name: String, prefix: URL) {
+        let manager = FileManager.default
+        let dir = prefix.appendingPathComponent(".sevo")
+        let appsDir = dir.appendingPathComponent("apps")
+        try? manager.createDirectory(at: appsDir, withIntermediateDirectories: true)
+
+        write(bottleLines(name), to: dir.appendingPathComponent("bottle.env"))
+
+        var wanted: Set<String> = []
+        for (appID, values) in GameConfig.games() where values.hasSettings {
+            for exe in values.exes ?? [] {
+                let file = "\(exe).env"
+                wanted.insert(file)
+                write(gameLines(appID, values), to: appsDir.appendingPathComponent(file))
+            }
+        }
+        removeStale(in: appsDir, keeping: wanted)
+    }
+
+    /// The bottle level: the resolved value of every setting the engine takes
+    /// from the environment.
+    private static func bottleLines(_ name: String) -> [String] {
+        [
+            "SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)",
+            "WINEDEBUG=\(WineLog.channels)",
+        ]
+    }
+
+    /// A game's file carries only what the game sets; everything else falls
+    /// through to the bottle's file, which the engine reads first.
+    private static func gameLines(_ appID: Int, _ values: ConfigValues) -> [String] {
+        var lines = ["# app \(appID)" + (values.name.map { " \($0)" } ?? "")]
+        if let windows = values.windows {
+            lines.append("SEVO_RESIZABLE_WINDOWS=\(windows.rawValue)")
+        }
+        return lines
+    }
+
+    private static func write(_ lines: [String], to url: URL) {
+        let text = ([header] + lines).joined(separator: "\n") + "\n"
+        if let existing = try? String(contentsOf: url, encoding: .utf8), existing == text { return }
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func removeStale(in dir: URL, keeping wanted: Set<String>) {
+        let manager = FileManager.default
+        guard let entries = try? manager.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil,
+        ) else { return }
+        for url in entries where !wanted.contains(url.lastPathComponent) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8),
+                  text.hasPrefix(header) else { continue }
+            try? manager.removeItem(at: url)
+        }
+    }
+}

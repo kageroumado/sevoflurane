@@ -526,33 +526,6 @@ nonisolated enum BottleGraphics {
 
     private static let rendererKey = "managedRenderer"
     private static let msyncKey = "managedMsync"
-    private static let resizableWindowsKey = "resizableGameWindows"
-
-    /// Whether the built-in engine makes a game's fixed-size window resizable,
-    /// scaling the picture to whatever size the user drags it to. On by
-    /// default; travels to games as `SEVO_RESIZABLE_WINDOWS` in the client's
-    /// environment (``Engine/environment(bottle:)``).
-    static var resizableGameWindows: Bool {
-        get { Preferences.shared.object(forKey: resizableWindowsKey) as? Bool ?? true }
-        set { Preferences.shared.set(newValue, forKey: resizableWindowsKey) }
-    }
-
-    private static let fullscreenInWindowKey = "fullscreenGamesInWindows"
-
-    /// Whether a game that fills the screen is shown in a window of its own
-    /// instead, resizable and movable, the game still believing it fills the
-    /// screen. Off by default; travels as `SEVO_RESIZABLE_WINDOWS=window`.
-    static var fullscreenGamesInWindows: Bool {
-        get { Preferences.shared.object(forKey: fullscreenInWindowKey) as? Bool ?? false }
-        set { Preferences.shared.set(newValue, forKey: fullscreenInWindowKey) }
-    }
-
-    /// The driver's `ResizableWindows` value the two switches add up to.
-    static var resizableWindowsMode: String {
-        if fullscreenGamesInWindows { return "window" }
-        return resizableGameWindows ? "fixed" : "off"
-    }
-
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
         // DXMT rather than ``defaultRenderer``: D3DMetal comes from Apple's
