@@ -134,7 +134,7 @@ nonisolated enum SharedGames {
     /// Whether the active bottle's copy of this game is a link into another
     /// bottle — the distinction between "remove the link" and "uninstall".
     static func isLinked(appID: Int) -> Bool {
-        guard let directory = linkedDirectory(appID: appID) else { return false }
+        guard let directory = installDirectory(appID: appID) else { return false }
         return (try? FileManager.default
             .destinationOfSymbolicLink(atPath: directory.path)) != nil
     }
@@ -142,7 +142,7 @@ nonisolated enum SharedGames {
     /// Removes the link and the manifest. Refuses a real directory — only
     /// the source bottle uninstalls the actual files.
     static func unlink(appID: Int) throws {
-        guard let directory = linkedDirectory(appID: appID),
+        guard let directory = installDirectory(appID: appID),
               (try? FileManager.default
                   .destinationOfSymbolicLink(atPath: directory.path)) != nil
         else {
@@ -154,10 +154,33 @@ nonisolated enum SharedGames {
         )
     }
 
-    private static func linkedDirectory(appID: Int) -> URL? {
+    /// Where a game's files are in the active bottle, whether they are the
+    /// bottle's own or a link into another's. `nil` when the app is not
+    /// installed here.
+    static func installDirectory(appID: Int) -> URL? {
+        installed(appID: appID)?.directory
+    }
+
+    /// What Steam calls a game and where its files are, from the manifest in
+    /// the active bottle. `nil` when the app is not installed here.
+    static func installed(appID: Int) -> (name: String, directory: URL)? {
         let manifest = activeSteamapps.appendingPathComponent("appmanifest_\(appID).acf")
         guard let fields = read(manifest: manifest) else { return nil }
-        return activeSteamapps.appendingPathComponent("common/\(fields.installdir)")
+        let directory = activeSteamapps.appendingPathComponent("common/\(fields.installdir)")
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        return (fields.name, directory)
+    }
+
+    /// Every game installed in the active bottle, from the manifests Steam
+    /// keeps — the library as it stands on disk, readable without the client.
+    static func installedGames() -> [(appID: Int, name: String, directory: URL)] {
+        manifests(in: activeSteamapps).compactMap { manifest in
+            guard let fields = read(manifest: manifest) else { return nil }
+            let directory = activeSteamapps
+                .appendingPathComponent("common/\(fields.installdir)")
+            guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+            return (fields.appID, fields.name, directory)
+        }
     }
 
     // MARK: - ACF plumbing

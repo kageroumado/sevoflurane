@@ -27,6 +27,14 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
 /// per-program value is written against.
 nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var windows: WindowTreatment?
+    /// Game level only: which runtime the game runs on — the bottle's engine
+    /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
+    /// ``NWJSGames`` detects). Stored as text so a file written by a later
+    /// version, naming a runner this one does not know, still reads.
+    var runner: String?
+    /// Game level only: what ``NWJSGames`` found about the game's own NW.js
+    /// build, recorded whether or not the native runner is switched on.
+    var nwjs: NWJSInfo?
     /// Game level only: the exe names Steam has launched for this app, lower
     /// case, as `GameLaunchWatch` saw them own the first window.
     var exes: [String]?
@@ -35,9 +43,20 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
 
     static let empty = ConfigValues()
 
-    /// Whether any setting is set at this level (the exe list alone is
-    /// bookkeeping, not a setting).
-    var hasSettings: Bool { windows != nil }
+    /// Whether any setting is set at this level (the exe list and the
+    /// detection record are bookkeeping, not settings).
+    var hasSettings: Bool { windows != nil || runner != nil }
+
+    /// Whether this game runs natively rather than through the bottle.
+    var runsNatively: Bool { runner == GameRunner.nwjs }
+}
+
+/// The runtimes a game can run on. `wine` is the absence of a choice, so it
+/// is never written to a file.
+nonisolated enum GameRunner {
+    static let wine = "wine"
+    static let nwjs = "nwjs"
+    static let all = [wine, nwjs]
 }
 
 /// Where a resolved value came from.

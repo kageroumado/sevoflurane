@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExceptionWatch.install()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
+        NWJSRunner.log = { EventLog.enqueue(.client, $0) }
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
@@ -65,7 +66,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // setting is written against; the launch names the app.
             if let appID = host.activeLaunch?.appID, appID != 0 {
                 GameConfig.noteExecutable(owner, forApp: appID)
-                ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                // A game that has just run for the first time is also the
+                // first chance to read its files: what it is built on decides
+                // which runners it can be offered. Detached, because reading
+                // a game directory is disk work and this is the main actor.
+                Task.detached(name: "Detect app \(appID)'s runtime") {
+                    NWJSGames.record(appID: appID)
+                    ConfigMaterializer.materialize(
+                        bottle: SteamBottle.name, prefix: SteamBottle.root,
+                    )
+                }
             }
         }
         let mirror = SteamMenuMirror(host: host)

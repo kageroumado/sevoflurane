@@ -362,6 +362,11 @@ nonisolated enum ClientLifecycle {
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
         }
+        // What each installed game is built on, recorded for the library once
+        // per client start: a directory listing per game and one loader scan
+        // for the NW.js ones, which is why it follows the spawn rather than
+        // delaying it.
+        Task(name: "Detect native runtimes") { NWJSGames.recordLibrary() }
     }
 
     // MARK: - Client window suppression

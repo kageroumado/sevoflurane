@@ -1004,7 +1004,7 @@ struct AppCommand: AsyncParsableCommand {
         commandName: "app",
         abstract: "Library and per-app actions via the client's own API.",
         subcommands: [
-            List.self, Info.self, Config.self, Launch.self, Terminate.self,
+            List.self, Info.self, Config.self, Detect.self, Launch.self, Terminate.self,
             Install.self, Uninstall.self, Verify.self,
         ],
     )
@@ -1062,32 +1062,24 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "config",
             abstract: "A game's own settings, over the bottle's and the global defaults.",
             discussion: """
-            Keys: windows (off | fixed | window | inherit), exe <name> to \
-            name an executable the game runs under before its first launch \
-            has recorded one. Omit the key to print every setting with the \
-            level it comes from.
+            Keys: windows (off | fixed | window | inherit), runner (wine | \
+            nwjs — nwjs runs an NW.js game in native macOS NW.js and \
+            downloads the runtime the first time), detect to look at the \
+            game's files again, exe <name> to name an executable the game \
+            runs under before its first launch has recorded one. Omit the \
+            key to print every setting with the level it comes from.
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "windows | exe. Omit to print every setting.") var key: String?
+        @Argument(help: "windows | runner | detect | exe. Omit to print every setting.")
+        var key: String?
         @Argument(help: "New value. Omit to read the key.") var value: String?
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
             let bottle = SteamBottle.name
             guard let key else {
-                let windows = GameConfig.windows(bottle: bottle, game: appid)
-                let exes = GameConfig.game(appid).exes ?? []
-                if asJSON {
-                    print(Sevo.json([
-                        "appid": appid,
-                        "windows": ["value": windows.value.rawValue, "source": windows.source.description],
-                        "exes": exes,
-                    ], pretty: true))
-                } else {
-                    print("windows \(windows.value.rawValue) (\(windows.source))")
-                    print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
-                }
+                report(bottle: bottle)
                 return
             }
             var values = GameConfig.game(appid)
@@ -1107,6 +1099,15 @@ struct AppCommand: AsyncParsableCommand {
                     throw SevoExit.badInvocation
                 }
                 GameConfig.setGame(appid, values)
+            case "runner":
+                guard let value else {
+                    print(values.runner ?? GameRunner.wine)
+                    return
+                }
+                try await setRunner(value)
+            case "detect":
+                try Detect.report(appid: appid, asJSON: asJSON)
+                return
             case "exe":
                 guard let value else {
                     print((values.exes ?? []).joined(separator: "\n"))
@@ -1114,19 +1115,141 @@ struct AppCommand: AsyncParsableCommand {
                 }
                 GameConfig.noteExecutable(value, forApp: appid)
             default:
-                Sevo.printError("unknown key '\(key)' (windows | exe)")
+                Sevo.printError("unknown key '\(key)' (windows | runner | detect | exe)")
                 throw SevoExit.badInvocation
             }
             ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
-            let resolved = GameConfig.windows(bottle: bottle, game: appid)
-            let exes = GameConfig.game(appid).exes ?? []
+            report(bottle: bottle)
+        }
+
+        /// Switches the game between the bottle's engine and native NW.js,
+        /// fetching the runtime that matches the game's own build the first
+        /// time it is asked for.
+        private func setRunner(_ value: String) async throws {
+            var values = GameConfig.game(appid)
+            switch value {
+            case GameRunner.wine:
+                values.runner = nil
+            case GameRunner.nwjs:
+                guard let info = values.nwjs ?? NWJSGames.record(appID: appid) else {
+                    Sevo.printError("app \(appid): not an NW.js game")
+                    throw SevoExit.badInvocation
+                }
+                guard !info.version.isEmpty else {
+                    Sevo.printError("app \(appid): could not read the NW.js version out of "
+                        + "\(info.dir)/nw.dll")
+                    throw SevoExit.failed
+                }
+                let wanted = await NWJSRuntime.newestPatch(of: info.version)
+                do {
+                    _ = try await NWJSRuntime.ensure(version: wanted) { label, fraction in
+                        let percent = fraction.map { " \(Int($0 * 100))%" } ?? ""
+                        FileHandle.standardError.write(Data("\(label)\(percent)\n".utf8))
+                    }
+                } catch {
+                    Sevo.printError("\(error)")
+                    throw SevoExit.failed
+                }
+                if let caution = info.caution {
+                    Sevo.printError("app \(appid): \(caution)")
+                }
+                // Detection may have rewritten the file since it was read.
+                values = GameConfig.game(appid)
+                values.runner = GameRunner.nwjs
+                values.nwjs = info
+            default:
+                Sevo.printError("runner must be \(GameRunner.all.joined(separator: " or "))")
+                throw SevoExit.badInvocation
+            }
+            GameConfig.setGame(appid, values)
+        }
+
+        private func report(bottle: String) {
+            let windows = GameConfig.windows(bottle: bottle, game: appid)
+            let values = GameConfig.game(appid)
+            let exes = values.exes ?? []
+            let runner = values.runner ?? GameRunner.wine
+            if asJSON {
+                var payload: [String: Any] = [
+                    "appid": appid,
+                    "windows": [
+                        "value": windows.value.rawValue, "source": windows.source.description,
+                    ],
+                    "runner": runner,
+                    "exes": exes,
+                ]
+                payload["nwjs"] = values.nwjs.map { info -> Any in
+                    [
+                        "version": info.version, "dir": info.dir,
+                        "flavor": info.flavor ?? NSNull(),
+                        "greenworks": info.greenworks,
+                        "greenworks_cloud": info.greenworksCloud ?? NSNull(),
+                        "packageName": info.packageName,
+                    ] as [String: Any]
+                } ?? NSNull()
+                print(Sevo.json(payload, pretty: true))
+                return
+            }
+            print("windows \(windows.value.rawValue) (\(windows.source))")
+            print("runner \(runner)")
+            if let info = values.nwjs {
+                print(info.summary)
+            }
+            print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
             var reach = Engine.active.supportsEnvFiles
-                ? "reaches the game at its next launch"
+                ? "settings reach the game at its next launch"
                 : "needs an engine that reads the env files (methylpentynol-r2 or later)"
             if exes.isEmpty {
-                reach += "; its exe is not known yet, so the value lands one launch late"
+                reach += "; its exe is not known yet, so a value lands one launch late"
             }
-            print("windows \(resolved.value.rawValue) (\(resolved.source)) — \(reach)")
+            print("— \(reach)")
+        }
+    }
+
+    /// Looks at a game's files again and records what they are: the NW.js
+    /// build it ships, if any. The app does this for the whole installed
+    /// library at every client start, so this is for a game that has just
+    /// been installed or updated.
+    struct Detect: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "detect",
+            abstract: "Read a game's files and record what runtime it is built on.",
+        )
+        @Argument var appid: Int
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            try Self.report(appid: appid, asJSON: asJSON)
+        }
+
+        static func report(appid: Int, asJSON: Bool) throws {
+            guard SharedGames.installDirectory(appID: appid) != nil else {
+                Sevo.printError("app \(appid) is not installed in \(SteamBottle.name)")
+                throw SevoExit.failed
+            }
+            let found = NWJSGames.record(appID: appid)
+            if asJSON {
+                print(Sevo.json([
+                    "appid": appid,
+                    "nwjs": found.map { info -> Any in
+                        [
+                            "version": info.version, "dir": info.dir, "main": info.main,
+                            "flavor": info.flavor ?? NSNull(), "greenworks": info.greenworks,
+                            "greenworks_cloud": info.greenworksCloud ?? NSNull(),
+                            "packageName": info.packageName,
+                        ] as [String: Any]
+                    } ?? NSNull(),
+                ], pretty: true))
+            } else if let found {
+                print(found.summary)
+                if let caution = found.caution { print("caution: \(caution)") }
+                print("dir \(found.dir)")
+                print("page \(found.main)")
+                print("data \(found.packageName)")
+                print("— sevo app config \(appid) runner nwjs runs it natively")
+            } else {
+                print("no native runtime detected — this game runs on the bottle's engine")
+            }
         }
     }
 
@@ -1178,7 +1301,14 @@ struct AppCommand: AsyncParsableCommand {
         func run() async throws {
             try await handlingFailures {
                 try await SteamOps.terminate(appid)
-                print("terminate requested for \(appid)")
+                // A game on the native runner left the bottle at its first
+                // instruction, so the client's terminate only drops its
+                // record — the process itself is asked here.
+                let native = GameConfig.game(appid).runsNatively
+                    ? NWJSRunner.terminate(appID: appid) : []
+                print("terminate requested for \(appid)"
+                    + (native.isEmpty ? "" : " — and \(native.count) native "
+                        + "process\(native.count == 1 ? "" : "es") asked to quit"))
             }
         }
     }

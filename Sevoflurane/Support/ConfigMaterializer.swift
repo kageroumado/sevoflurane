@@ -22,14 +22,25 @@ nonisolated enum ConfigMaterializer {
         write(bottleLines(name), to: dir.appendingPathComponent("bottle.env"))
 
         var wanted: Set<String> = []
+        var native: Set<Int> = []
         for (appID, values) in GameConfig.games() where values.hasSettings {
+            var lines = gameLines(appID, values)
+            if values.runsNatively, let info = values.nwjs,
+               let environment = NWJSRunner.environment(appID: appID, info: info, prefix: prefix) {
+                native.insert(appID)
+                lines += environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            }
             for exe in values.exes ?? [] {
                 let file = "\(exe).env"
                 wanted.insert(file)
-                write(gameLines(appID, values), to: appsDir.appendingPathComponent(file))
+                write(lines, to: appsDir.appendingPathComponent(file))
             }
         }
         removeStale(in: appsDir, keeping: wanted)
+        // A game switched back to wine keeps its browsing-data link (the two
+        // runners share one store by design) and loses the wrapper package,
+        // which describes a run that is no longer arranged.
+        NWJSRunner.removeWrappers(keeping: native)
     }
 
     /// The bottle level: the resolved value of every setting the engine takes

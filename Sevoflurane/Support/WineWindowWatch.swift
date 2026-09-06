@@ -37,8 +37,29 @@ nonisolated enum WineWindowWatch {
     /// loader process. `GameLaunchWatch` classifies by the same answer.
     static func program(owner: String, pid: pid_t) -> String? {
         let name = owner.lowercased()
-        guard bottleLoaders.contains(name) else { return name }
-        return windowsProgram(of: pid)
+        if bottleLoaders.contains(name) { return windowsProgram(of: pid) }
+        return nativeProgram(of: pid) ?? name
+    }
+
+    /// The exe a native run stands in for, or `nil` for a window that is not
+    /// one. A game Sevoflurane runs outside the bottle (``NWJSRunner``) is
+    /// started with its own wrapper directory as the first argument, and that
+    /// directory is named after the app id — so the command line says which
+    /// game the window belongs to, whatever the process ended up being called.
+    /// It is called the game, in fact: a native run is exec'd through a bundle
+    /// named after it, which is the whole point of the bundle.
+    ///
+    /// Nothing is asked of the kernel until there is a native run to find: a
+    /// process's arguments cost a KERN_ARGMAX buffer each, and this is asked
+    /// of every window on screen.
+    private static func nativeProgram(of pid: pid_t) -> String? {
+        guard NWJSRunner.hasWrappers else { return nil }
+        let fields = arguments(of: pid)
+        guard fields.count >= 3, fields[2].hasPrefix(NWJSRunner.root.path),
+              let appID = Int(URL(fileURLWithPath: fields[2]).lastPathComponent),
+              let exe = GameConfig.game(appID).exes?.first
+        else { return nil }
+        return exe.lowercased()
     }
 
     /// The client's two window-bearing processes. The Mac Steam client's own
@@ -165,26 +186,30 @@ nonisolated enum WineWindowWatch {
     /// rewrite is the only thing that distinguishes Steam's infrastructure
     /// from a game once both run under the same loader binary.
     private static func windowsProgram(of pid: pid_t) -> String? {
+        let fields = arguments(of: pid)
+        guard fields.count >= 2 else { return nil }
+        let program = fields[1].split(separator: "\\").last.map(String.init) ?? fields[1]
+        return program.lowercased()
+    }
+
+    /// A process's executable path followed by its arguments, as the kernel
+    /// keeps them: `[executable, argv[0], argv[1], …]`.
+    private static func arguments(of pid: pid_t, upTo count: Int = 3) -> [String] {
         var limit: Int32 = 0
         var limitSize = MemoryLayout<Int32>.size
         var limitName = [CTL_KERN, KERN_ARGMAX]
-        guard sysctl(&limitName, 2, &limit, &limitSize, nil, 0) == 0, limit > 0 else {
-            return nil
-        }
+        guard sysctl(&limitName, 2, &limit, &limitSize, nil, 0) == 0, limit > 0 else { return [] }
         var buffer = [UInt8](repeating: 0, count: Int(limit))
         var size = Int(limit)
         var name = [CTL_KERN, KERN_PROCARGS2, pid]
         guard sysctl(&name, 3, &buffer, &size, nil, 0) == 0,
-              size > MemoryLayout<Int32>.size else { return nil }
+              size > MemoryLayout<Int32>.size else { return [] }
         // An argument count, then the executable's path, then NUL padding,
         // then the arguments themselves.
-        let fields = buffer[MemoryLayout<Int32>.size ..< size]
+        return buffer[MemoryLayout<Int32>.size ..< size]
             .split(separator: 0, omittingEmptySubsequences: true)
-            .prefix(2)
+            .prefix(count)
             .map { String(decoding: $0, as: UTF8.self) }
-        guard fields.count == 2 else { return nil }
-        let program = fields[1].split(separator: "\\").last.map(String.init) ?? fields[1]
-        return program.lowercased()
     }
 
     static func describe(_ windows: [Window]) -> String {
