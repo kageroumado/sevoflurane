@@ -29,9 +29,11 @@ nonisolated enum WineLog {
     static let quiet = "-all"
     private static let channelsKey = "wineDebug"
 
-    /// What the diagnostics switch turns on: every channel's errors, and
-    /// exceptions as they are dispatched — the two that name a crash.
-    static let diagnostic = "err+all,+seh"
+    /// What the diagnostics switch turns on: every channel's errors,
+    /// exceptions as they are dispatched — the two that name a crash — and
+    /// the process id on every line, since the client, its games and the
+    /// prefix's own daemons all write to the one file.
+    static let diagnostic = "err+all,+seh,+pid"
 
     /// Whether anything beyond the quiet default is on.
     static var isDiagnosing: Bool { channels != quiet }
@@ -48,6 +50,10 @@ nonisolated enum WineLog {
     /// A handle appending to the log, after a header naming what is being
     /// launched. The file is rotated once past ``rotateOverBytes`` so a
     /// verbose channel left on for a week cannot fill the disk unbounded.
+    /// Rotation copies and truncates rather than renaming: services.exe and
+    /// winedevice.exe hold the file open from prefix boot, and a renamed
+    /// inode would keep taking their output while readers watched the new
+    /// file.
     static func handle(labeled label: String) -> FileHandle? {
         let manager = FileManager.default
         rotateIfLarge()
@@ -69,6 +75,7 @@ nonisolated enum WineLog {
               size > rotateOverBytes else { return }
         let old = fileURL.deletingPathExtension().appendingPathExtension("old.log")
         try? manager.removeItem(at: old)
-        try? manager.moveItem(at: fileURL, to: old)
+        try? manager.copyItem(at: fileURL, to: old)
+        try? FileHandle(forWritingTo: fileURL).truncate(atOffset: 0)
     }
 }
