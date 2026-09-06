@@ -1843,6 +1843,20 @@ final class SteamWebHost {
 
     func windowDidClose(_ window: SteamWindow) {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
+        // A window the overlay adopted is held until the overlay dismisses, so
+        // that it rides in and out with it. Once it has closed there is
+        // nothing left to order, and holding it keeps its web view alive past
+        // the page teardown that tells Steam the popup is gone.
+        overlayChildren.removeAll { $0 === window }
+        // Steam learns a popup is gone from its document's `unload`, which
+        // WebKit ties to the page's teardown rather than to the window
+        // closing. Menus are left out: Steam keeps one per window and reopens
+        // it by name, and the app reaps them wholesale when the desktop's
+        // page goes.
+        if window !== desktop, window.role != .menu, window.role != .context {
+            notifyPopupUnloaded(named: window.name)
+            repairStuckModalOverlay()
+        }
         guard window === desktop else { return }
         desktop = nil
         desktopWasClosed = true
