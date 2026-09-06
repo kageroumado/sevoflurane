@@ -26,7 +26,9 @@ nonisolated enum ConfigMaterializer {
         for (appID, values) in GameConfig.games() where values.hasSettings {
             var lines = gameLines(appID, values)
             if values.runsNatively, let info = values.nwjs,
-               let environment = NWJSRunner.environment(appID: appID, info: info, prefix: prefix) {
+               let environment = NWJSRunner.environment(
+                   appID: appID, info: info, runtimeVersion: values.nwjsRuntime, prefix: prefix,
+               ) {
                 native.insert(appID)
                 lines += environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
             }

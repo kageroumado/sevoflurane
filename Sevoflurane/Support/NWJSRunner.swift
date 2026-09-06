@@ -34,6 +34,12 @@ nonisolated enum NWJSRunner {
             .contains { Int($0) != nil }
     }
 
+    /// Where a game's own app bundle lives: one directory per app id, outside
+    /// the wrapper the game is served from.
+    static func bundleDirectory(appID: Int) -> URL {
+        root.appendingPathComponent("bundles/\(appID)")
+    }
+
     /// A file the app bundle ships, by name — the greenworks preload and its
     /// shim live flat in `Contents/Resources`. `nil` from a bundle without
     /// it, and the wrapper then simply has no `node-main`.
@@ -64,14 +70,30 @@ nonisolated enum NWJSRunner {
     /// or `nil` when the game cannot run natively right now — no runtime for
     /// its NW.js series, or no wrapper to start. The game then launches under
     /// wine, which is the state it was in before the switch.
-    static func environment(appID: Int, info: NWJSInfo, prefix: URL) -> [String: String]? {
-        guard let runtime = NWJSRuntime.installedRuntime(forGameVersion: info.version) else {
-            log("nwjs: app \(appID) asks for the native runner, but no NW.js "
-                + "\(NWJSRuntime.series(of: info.version) ?? info.version) runtime is installed")
+    static func environment(
+        appID: Int, info: NWJSInfo, runtimeVersion: String?, prefix: URL,
+    ) -> [String: String]? {
+        guard let runtime = NWJSRuntime.installedRuntime(
+            recorded: runtimeVersion, gameVersion: info.version,
+        ) else {
+            log("nwjs: app \(appID) asks for the native runner, but the NW.js "
+                + "\(runtimeVersion ?? info.version) runtime is not installed")
             return nil
         }
-        guard let wrapper = writeWrapper(appID: appID, info: info) else { return nil }
-        linkDataDirectory(info, prefix: prefix)
+        // The two runners share their browsing data only when they run the
+        // same NW.js: a profile written by a newer Chromium is one the game's
+        // own build refuses to open at all ("your profile can not be used
+        // because it is from a newer version"), which would break the wine
+        // path the moment a native run had touched it. RPG Maker's saves are
+        // files in the game directory and are shared either way.
+        let sameSeries = NWJSRuntime.series(of: runtimeVersion ?? info.version)
+            == NWJSRuntime.series(of: info.version)
+        guard let wrapper = writeWrapper(
+            appID: appID, info: info, sharesBrowsingData: sameSeries,
+        ) else { return nil }
+        if sameSeries {
+            linkDataDirectory(info, prefix: prefix)
+        }
         // Exec'd through the game's own bundle when one can be built, so the
         // Dock tile carries the game rather than NW.js; the runtime's own
         // binary otherwise, which runs identically and is only anonymous.
@@ -130,7 +152,9 @@ nonisolated enum NWJSRunner {
     /// `main` naming its page inside the wrapper's root. Answers the
     /// directory to hand NW.js.
     @discardableResult
-    static func writeWrapper(appID: Int, info: NWJSInfo) -> URL? {
+    static func writeWrapper(
+        appID: Int, info: NWJSInfo, sharesBrowsingData: Bool = true,
+    ) -> URL? {
         let directory = wrapperDirectory(appID: appID)
         let gameDirectory = URL(fileURLWithPath: info.dir)
         let manager = FileManager.default
@@ -141,13 +165,20 @@ nonisolated enum NWJSRunner {
         let original = (try? Data(contentsOf: gameDirectory.appendingPathComponent("package.json")))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any] ?? [:]
 
+        // NW.js keeps browsing data in a directory named after the package,
+        // and takes that name from here rather than from the command line, so
+        // a run on a different NW.js than the game's own is given a name of
+        // its own. `--user-data-dir` in `chromium-args` does not do it: the
+        // path is resolved before the package is read (measured — the shared
+        // directory was still the one written).
         var package: [String: Any] = [
-            "name": info.packageName,
+            "name": sharesBrowsingData ? info.packageName : "sevoflurane-\(appID)",
             "main": "\(gameLink)/\(page)",
         ]
         for key in ["js-flags", "chromium-args", "user-agent"] {
             if let value = original[key] { package[key] = value }
         }
+
         if var window = original["window"] as? [String: Any] {
             // The icon is a path relative to the game's own package, which is
             // one level further down here.
@@ -267,12 +298,15 @@ nonisolated enum NWJSRunner {
     /// Removes the wrappers of every game that is not on the native runner —
     /// what a switch back to wine leaves behind otherwise.
     static func removeWrappers(keeping wanted: Set<Int>) {
-        let entries = (try? FileManager.default.contentsOfDirectory(
-            at: root, includingPropertiesForKeys: nil,
-        )) ?? []
-        for entry in entries {
-            guard let appID = Int(entry.lastPathComponent), !wanted.contains(appID) else { continue }
-            try? FileManager.default.removeItem(at: entry)
+        let manager = FileManager.default
+        for directory in [root, root.appendingPathComponent("bundles")] {
+            for entry in (try? manager.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil,
+            )) ?? [] {
+                guard let appID = Int(entry.lastPathComponent),
+                      !wanted.contains(appID) else { continue }
+                try? manager.removeItem(at: entry)
+            }
         }
     }
 
@@ -322,11 +356,22 @@ nonisolated enum NWJSRunner {
 
         let stem = fileSafe(title)
         guard !stem.isEmpty else { return nil }
-        let bundle = wrapper.appendingPathComponent("\(stem).app")
+        // Beside the wrapper, never inside it: the wrapper directory is the
+        // Chromium application's root, and NW.js from 0.60 on refuses to
+        // start an application with a bundle sitting in it (measured — the
+        // process runs and no window ever appears).
+        // The Dock labels a tile with the bundle's own file name — not
+        // `CFBundleName`, not `CFBundleDisplayName`, both of which say the
+        // game already (measured: a bundle named after the app id gives a
+        // tile that says "1933660"). So the bundle is named after the game,
+        // and lives in a directory of its own per app id so that two games
+        // sharing a title cannot share a bundle.
+        let bundles = bundleDirectory(appID: appID)
+        let bundle = bundles.appendingPathComponent("\(stem).app")
+        try? manager.createDirectory(at: bundles, withIntermediateDirectories: true)
         // A renamed game leaves a bundle behind that is no longer anyone's.
-        for entry in (try? manager.contentsOfDirectory(at: wrapper, includingPropertiesForKeys: nil))
-            ?? [] where entry.pathExtension == "app"
-            && entry.lastPathComponent != bundle.lastPathComponent {
+        for entry in (try? manager.contentsOfDirectory(at: bundles, includingPropertiesForKeys: nil))
+            ?? [] where entry.lastPathComponent != bundle.lastPathComponent {
             try? manager.removeItem(at: entry)
         }
 

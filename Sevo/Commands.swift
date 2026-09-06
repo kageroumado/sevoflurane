@@ -1130,6 +1130,7 @@ struct AppCommand: AsyncParsableCommand {
             switch value {
             case GameRunner.wine:
                 values.runner = nil
+                values.nwjsRuntime = nil
             case GameRunner.nwjs:
                 guard let info = values.nwjs ?? NWJSGames.record(appID: appid) else {
                     Sevo.printError("app \(appid): not an NW.js game")
@@ -1140,7 +1141,7 @@ struct AppCommand: AsyncParsableCommand {
                         + "\(info.dir)/nw.dll")
                     throw SevoExit.failed
                 }
-                let wanted = await NWJSRuntime.newestPatch(of: info.version)
+                let wanted = await NWJSRuntime.release(forGameVersion: info.version)
                 do {
                     _ = try await NWJSRuntime.ensure(version: wanted) { label, fraction in
                         let percent = fraction.map { " \(Int($0 * 100))%" } ?? ""
@@ -1157,6 +1158,7 @@ struct AppCommand: AsyncParsableCommand {
                 values = GameConfig.game(appid)
                 values.runner = GameRunner.nwjs
                 values.nwjs = info
+                values.nwjsRuntime = wanted
             default:
                 Sevo.printError("runner must be \(GameRunner.all.joined(separator: " or "))")
                 throw SevoExit.badInvocation
@@ -1194,6 +1196,11 @@ struct AppCommand: AsyncParsableCommand {
             print("runner \(runner)")
             if let info = values.nwjs {
                 print(info.summary)
+                if let runtime = values.nwjsRuntime {
+                    print("runtime nwjs \(runtime) \(NWJSRuntime.nativeFlavor)"
+                        + (runtime == info.version ? "" : " — the game's own \(info.version) has "
+                            + "no build this Mac runs without translation"))
+                }
             }
             print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
             var reach = Engine.active.supportsEnvFiles

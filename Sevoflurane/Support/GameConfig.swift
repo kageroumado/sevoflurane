@@ -35,6 +35,10 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// Game level only: what ``NWJSGames`` found about the game's own NW.js
     /// build, recorded whether or not the native runner is switched on.
     var nwjs: NWJSInfo?
+    /// Game level only: the NW.js release the native runner installed for
+    /// this game, which is its own where this Mac can run that natively and a
+    /// newer one where it cannot (``NWJSRuntime/release(forGameVersion:)``).
+    var nwjsRuntime: String?
     /// Game level only: the exe names Steam has launched for this app, lower
     /// case, as `GameLaunchWatch` saw them own the first window.
     var exes: [String]?

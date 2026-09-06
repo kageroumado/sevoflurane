@@ -1,13 +1,17 @@
 import Foundation
 
 /// The macOS NW.js builds a native run needs, one directory per version under
-/// `Runtimes/`. NW.js publishes every release it ever made, so a game built
-/// against 0.29 gets a 0.29 runtime — the Chromium and node behind the game's
-/// own code, rather than whatever is current.
+/// `Runtimes/`. NW.js publishes every release it ever made, so a game can have
+/// the Chromium and node its own code was written against.
 ///
-/// The x64 build is the one fetched: arm64 exists only from 0.60, the whole
-/// bottle already runs under Rosetta, and an x64 runtime is what the game's
-/// own Windows build was tested against.
+/// It gets them only when this Mac can run that release without translation.
+/// A game from 2018 asks for NW.js 0.29, whose macOS build is x86_64: under
+/// Rosetta, Chromium 65's stack sampling profiler walks a translated frame
+/// with libunwind and takes the browser process down with it — measured on
+/// macOS 26, a crash report per launch, four launches in five. NW.js has
+/// published arm64 builds since 0.77, and on an Apple Silicon Mac that is
+/// where an old game goes instead: a five-year jump in Chromium, against a
+/// runtime that cannot run at all.
 nonisolated enum NWJSRuntime {
     static let root = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/Runtimes")
@@ -39,14 +43,19 @@ nonisolated enum NWJSRuntime {
             .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
     }
 
-    /// The installed runtime that runs a game built against `version`: the
-    /// newest patch of its own major.minor, which is what the version resolver
-    /// downloaded. `nil` when nothing suitable is installed — the caller then
-    /// has a game whose runner is set and whose runtime is gone, which is a
-    /// state to report rather than to paper over with a mismatched Chromium.
-    static func installedRuntime(forGameVersion version: String) -> URL? {
-        guard let wanted = series(of: version) else { return nil }
-        guard let match = installed().last(where: { series(of: $0) == wanted }) else { return nil }
+    /// The installed runtime a game runs on: the release the switch recorded
+    /// for it, or — for a game switched on before that was recorded — the
+    /// newest installed patch of the game's own series. `nil` when nothing
+    /// suitable is installed: a game whose runner is set and whose runtime is
+    /// gone is a state to report, not one to paper over with a mismatched
+    /// Chromium.
+    static func installedRuntime(recorded: String?, gameVersion: String) -> URL? {
+        if let recorded, isInstalled(version: recorded) {
+            return executable(version: recorded)
+        }
+        guard let wanted = series(of: gameVersion),
+              let match = installed().last(where: { series(of: $0) == wanted })
+        else { return nil }
         return executable(version: match)
     }
 
@@ -60,33 +69,50 @@ nonisolated enum NWJSRuntime {
 
     // MARK: - Choosing a version
 
-    /// The newest published patch of a game's series that ships a macOS x64
-    /// build, from NW.js' own version index. Falls back to the game's exact
-    /// version when the index cannot be reached — that build is published too,
-    /// it is only older.
-    static func newestPatch(of version: String) async -> String {
+    /// The release a game should run on: the newest patch of its own series
+    /// when that series ships a build for this Mac's architecture, and
+    /// otherwise the oldest release that does — the closest native runtime to
+    /// the one the game was written against.
+    ///
+    /// Falls back to the game's exact version when NW.js' index cannot be
+    /// reached, which is also when nothing could be downloaded anyway.
+    static func release(forGameVersion version: String) async -> String {
         guard let series = series(of: version),
-              let url = URL(string: "https://nwjs.io/versions.json")
-        else { return version }
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
+              let url = URL(string: "https://nwjs.io/versions.json"),
+              let (data, response) = try? await URLSession.shared.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let index = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let entries = index["versions"] as? [[String: Any]]
         else { return version }
-        let candidates = entries.compactMap { entry -> String? in
+        let flavor = nativeFlavor
+        let native = entries.compactMap { entry -> String? in
             guard let raw = entry["version"] as? String,
-                  let files = entry["files"] as? [String], files.contains(macOSFlavor)
+                  let files = entry["files"] as? [String], files.contains(flavor)
             else { return nil }
             let number = raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
             // Prereleases carry a suffix ("0.29.0-beta1") and are never what a
             // shipped game was built against.
-            guard !number.contains("-"), Self.series(of: number) == series else { return nil }
-            return number
+            return number.contains("-") ? nil : number
         }
-        return candidates.max { $0.compare($1, options: .numeric) == .orderedAscending } ?? version
+        func newest(_ versions: [String]) -> String? {
+            versions.max { $0.compare($1, options: .numeric) == .orderedAscending }
+        }
+        func oldest(_ versions: [String]) -> String? {
+            versions.min { $0.compare($1, options: .numeric) == .orderedAscending }
+        }
+        if let own = newest(native.filter { Self.series(of: $0) == series }) { return own }
+        return oldest(native) ?? version
     }
 
-    private static let macOSFlavor = "osx-x64"
+    /// The build flavor this Mac runs without translation. Rosetta would run
+    /// the x64 one, and running an old Chromium there is what this exists to
+    /// avoid.
+    static var nativeFlavor: String {
+        var isARM: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let native = sysctlbyname("hw.optional.arm64", &isARM, &size, nil, 0) == 0 && isARM == 1
+        return native ? "osx-arm64" : "osx-x64"
+    }
 
     // MARK: - Installing
 
@@ -99,7 +125,7 @@ nonisolated enum NWJSRuntime {
         let binary = executable(version: version)
         if isInstalled(version: version) { return binary }
         guard let url = URL(
-            string: "https://dl.nwjs.io/v\(version)/nwjs-v\(version)-\(macOSFlavor).zip",
+            string: "https://dl.nwjs.io/v\(version)/nwjs-v\(version)-\(nativeFlavor).zip",
         ) else { throw RuntimeError("nwjs \(version) has no download address") }
 
         let manager = FileManager.default
