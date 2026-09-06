@@ -544,11 +544,18 @@ final class SteamWebHost {
     /// One `__gameAction` event from the context page's registrations
     /// (``gameActionScript``). The trail also lands in the log, so a slow
     /// launch explains itself after the fact.
+    /// A launch has begun for this app id, on any path (library, popover,
+    /// `steam://run`, the CLI): the client's own game-action event, so it
+    /// fires even for a launch the bridge never saw.
+    var onGameLaunchStart: ((Int) -> Void)?
+
     func noteGameAction(phase: String, appID: String, task: String) {
         switch phase {
         case "start":
             EventLog.shared.log(.client, "launch \(appID): \(task.isEmpty ? "begun" : task)")
-            setLaunch(GameLaunch(appID: Int(appID) ?? 0, detail: "Preparing…"), clearAfter: 180)
+            let id = Int(appID) ?? 0
+            setLaunch(GameLaunch(appID: id, detail: "Preparing…"), clearAfter: 180)
+            if id != 0 { onGameLaunchStart?(id) }
         case "task":
             guard !task.isEmpty, task != "None" else { return }
             EventLog.shared.log(.client, "launch \(appID): \(task)")
@@ -616,8 +623,10 @@ final class SteamWebHost {
             removeOverlayFrontObserver()
             removeOverlayKeyMonitor()
             overlay.hideOverlay()
+            // Closed, not merely hidden: a child left open is one Steam
+            // restores at the next activation and at the next game start.
             for child in overlayChildren {
-                child.setOrderedIn(false)
+                child.close()
             }
             overlayChildren.removeAll()
             if let pid = overlayGame?.pid {
@@ -1712,9 +1721,22 @@ final class SteamWebHost {
         // A popup adopted while the overlay is up belongs to it (its Settings,
         // a dialog): track it so it is ordered in and out with the overlay and
         // dismissed when it closes, rather than left floating above the game.
-        if overlayActive, window.role != .desktop, window.role != .context,
-           window.role != .gameOverlay {
+        // The overlay's own UI instance also restores whatever panels were
+        // open when it last closed — the friends list, a game overview — the
+        // moment a game starts, with the overlay still down. Those would come
+        // up as ordinary windows over the game, so they are closed instead:
+        // the overlay starts every session with nothing open.
+        let fromOverlayInstance = SteamWindowRole.instanceUID(ofPopupNamed: window.name) != 0
+        let isOverlayFurniture = window.role != .desktop && window.role != .context
+            && window.role != .gameOverlay && window.role != .toast && window.role != .menu
+        if overlayActive, isOverlayFurniture {
             overlayChildren.append(window)
+        } else if fromOverlayInstance, isOverlayFurniture {
+            EventLog.shared.log(
+                .window, "closed \(window.name): opened by the game overlay while it is down",
+            )
+            window.close()
+            return
         }
         // Every adoption is a chance the root menus now exist — they are
         // created after the desktop window, so anchoring on the desktop alone

@@ -88,6 +88,7 @@ let package = Package(
                 "Sevoflurane/Support/GameCompat.swift",
                 "Sevoflurane/Support/GameCompatService.swift",
                 "Sevoflurane/Support/GameConfig.swift",
+                "Sevoflurane/Support/GameExecutables.swift",
                 "Sevoflurane/Support/GameIcon.swift",
                 "Sevoflurane/Support/GameLaunchers.swift",
                 "Sevoflurane/Support/JSLiteral.swift",

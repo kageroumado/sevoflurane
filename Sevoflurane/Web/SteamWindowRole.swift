@@ -67,6 +67,16 @@ enum SteamWindowRole {
         }
     }
 
+    /// Which UI instance opened a popup, from the `_uid<n>` suffix Steam
+    /// gives every name: 0 is the desktop UI; a game's overlay UI stamps its
+    /// popups with the game's pid (`friendslist_uid2220`), so a friends list
+    /// or a game overview with a non-zero uid belongs to that overlay, not to
+    /// the desktop, however ordinary its name looks.
+    static func instanceUID(ofPopupNamed popupName: String) -> Int {
+        guard let range = popupName.range(of: "_uid", options: .backwards) else { return 0 }
+        return Int(popupName[range.upperBound...]) ?? 0
+    }
+
     /// The popups Steam names by family rather than by a fixed title: one
     /// per context menu, per chat window, and per notification toast, each
     /// with its own counter or id in the name.

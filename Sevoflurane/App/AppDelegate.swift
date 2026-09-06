@@ -61,14 +61,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
         }
         PerfProbe.poi.emitEvent("Launch")
+        host.onGameLaunchStart = { [weak self] appID in
+            guard let self else { return }
+            // Arms the window watch for launches the bridge did not carry
+            // (the CLI's, a steam:// URL the client handled itself).
+            gameLaunchWatch.noteLaunchRequested()
+            // The game's exes, read from its install directory now, so its
+            // env files — and the bundle that names it in the Dock — exist
+            // before the process starts rather than after its first window.
+            Task.detached(name: "Record app \(appID)'s executables") {
+                if GameExecutables.recordFromInstall(appID: appID) {
+                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                }
+            }
+        }
         gameLaunchWatch.onGameWindowUp = { [weak self] owner in
             guard let self else { return }
+            // Read before the host is told: the window's arrival is what ends
+            // the launch, and ending it clears the record of which app it was.
+            let launchedAppID = host.activeLaunch?.appID
             host.gameWindowDidAppear()
             // The exe that owns a launch's first window is what a per-game
             // setting is written against; the launch names the app.
             // A window another game has already claimed is that game's: a
             // launch that never shows a window must not adopt a bystander's.
-            if let appID = host.activeLaunch?.appID, appID != 0,
+            if let appID = launchedAppID, appID != 0,
                GameConfig.app(claiming: owner).map({ $0 == appID }) ?? true {
                 GameConfig.noteExecutable(owner, forApp: appID)
                 // A game that has just run for the first time is also the
