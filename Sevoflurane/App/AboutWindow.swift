@@ -115,13 +115,15 @@ struct AboutView: View {
             }
         }
         .padding(EdgeInsets(top: 28, leading: 28, bottom: 24, trailing: 28))
-        .frame(width: 580)
+        .frame(width: 540)
         .fixedSize()
     }
 
     private var links: some View {
         HStack(spacing: 4) {
-            Link("kageroumado/sevoflurane", destination: URL(string: "https://github.com/kageroumado/sevoflurane")!)
+            Link(destination: URL(string: "https://github.com/kageroumado/sevoflurane")!) {
+                Label("GitHub", systemImage: "link")
+            }
             Text("·").foregroundStyle(.secondary)
             Link("kagerou.glass", destination: URL(string: "https://kagerou.glass")!)
             Text("·").foregroundStyle(.secondary)
