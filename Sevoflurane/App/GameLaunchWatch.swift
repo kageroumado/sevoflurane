@@ -46,7 +46,6 @@ final class GameLaunchWatch {
 
     private func activate(_ game: (owner: String, pid: pid_t)) {
         defer { onGameWindowUp?(game.owner) }
-        GameModeSession.gameDidAppear()
         GameDisplayHold.gameDidAppear()
         guard let app = NSRunningApplication(processIdentifier: game.pid) else {
             EventLog.shared.log(

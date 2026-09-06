@@ -287,6 +287,16 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         }
     }
 
+    /// The unix loader a managed engine starts every Windows program with —
+    /// the binary ntdll's `wineloader` names, and the one a game's own bundle
+    /// carries a copy of (``GameLaunchers``). `nil` for CrossOver, whose tree
+    /// is not ours to copy out of.
+    var unixLoader: URL? {
+        guard case .managed = self else { return nil }
+        let loader = root.appendingPathComponent("wine/lib/wine/x86_64-unix/wine")
+        return FileManager.default.isExecutableFile(atPath: loader.path) ? loader : nil
+    }
+
     var wineserverURL: URL {
         switch self {
         case .crossover, .crossoverPreview:

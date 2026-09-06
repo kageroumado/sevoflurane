@@ -31,6 +31,10 @@ induction. Its color code is yellow, and so is the app's accent.
   is not responding") is a supervised, recovered condition: restart ladder,
   crash-loop hygiene, cache repair, before you see anything. Quitting the app
   takes the whole bottle down with it.
+- **Every game is a Mac app.** Each game runs from its own app bundle with
+  the game's name and icon, so the Dock shows the game, not "wine", and it
+  can be pinned there. Because the bundle is a real games-category app,
+  macOS Game Mode engages by itself when the game is full screen.
 - **Games play well.** Low Power Mode and Reduce Motion are honored. Idle
   CPU is a fraction of a hand-made setup. The display stays awake while a
   game runs. A full-screen game can run in a resizable window of its own,
@@ -159,9 +163,6 @@ own `d3d12.dll` answers every time.
 - **DirectX 12 is measured on samples, and played on one game.** The table
   above is the samples; Subnautica 2 (Unreal Engine 5) runs through Steam
   on the built-in engine. Numbers nobody measured are not quoted here.
-- **macOS Game Mode does not engage yet.** It wants the game to be a
-  macOS app bundle, which a Wine process is not; per-game bundles are in
-  progress and will close this.
 - **`.NET 4.8` is left out of the dependency installer** on purpose:
   winetricks marks it broken on several Wine versions.
 

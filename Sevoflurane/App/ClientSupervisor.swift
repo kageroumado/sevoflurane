@@ -462,14 +462,12 @@ final class ClientSupervisor {
         let scan = await WineWindowWatch.scan()
         if scan.gameWindowUp != gameIsUp {
             gameIsUp = scan.gameWindowUp
-            // The launch watch turns Game Mode on the moment the window
+            // The launch watch holds the display the moment the window
             // appears; this scan is the authoritative edge for games it
             // missed and for the exit.
             if scan.gameWindowUp {
-                GameModeSession.gameDidAppear()
                 GameDisplayHold.gameDidAppear()
             } else {
-                GameModeSession.gameDidExit()
                 GameDisplayHold.gameDidExit()
             }
         }

@@ -23,8 +23,19 @@ nonisolated enum ConfigMaterializer {
 
         var wanted: Set<String> = []
         var native: Set<Int> = []
-        for (appID, values) in GameConfig.games() where values.hasSettings {
+        var launchers: Set<Int> = []
+        // Every game with an executable on record, not only one with settings:
+        // the loader bundle is what gives a game its own name, icon and Game
+        // Mode, and a game nobody has configured wants those too.
+        for (appID, values) in GameConfig.games() where values.hasSettings || values.exes != nil {
             var lines = gameLines(appID, values)
+            if let title = values.name, !values.runsNatively,
+               let loader = GameLaunchers.materialize(
+                   appID: appID, title: title, engine: Engine.active,
+               ) {
+                launchers.insert(appID)
+                lines.append("SEVO_LOADER=\(loader.path)")
+            }
             if values.runsNatively, let info = values.nwjs,
                let environment = NWJSRunner.environment(
                    appID: appID, info: info, runtimeVersion: values.nwjsRuntime, prefix: prefix,
@@ -39,6 +50,7 @@ nonisolated enum ConfigMaterializer {
             }
         }
         removeStale(in: appsDir, keeping: wanted)
+        GameLaunchers.remove(keeping: launchers)
         // A game switched back to wine keeps its browsing-data link (the two
         // runners share one store by design) and loses the wrapper package,
         // which describes a run that is no longer arranged.

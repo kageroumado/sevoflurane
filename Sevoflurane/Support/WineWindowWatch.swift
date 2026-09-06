@@ -38,7 +38,22 @@ nonisolated enum WineWindowWatch {
     static func program(owner: String, pid: pid_t) -> String? {
         let name = owner.lowercased()
         if bottleLoaders.contains(name) { return windowsProgram(of: pid) }
+        // A game started through its own bundle is named after itself, not
+        // after the loader — that is what the bundle is for — so the loader
+        // has to be recognized by where it is instead (``GameLaunchers``).
+        if let bundled = bundledProgram(of: pid) { return bundled }
         return nativeProgram(of: pid) ?? name
+    }
+
+    /// The Windows program a game running through its own loader bundle is
+    /// on, or `nil` when this window belongs to something else. Nothing is
+    /// asked of the kernel until there is such a bundle to find.
+    private static func bundledProgram(of pid: pid_t) -> String? {
+        guard GameLaunchers.hasBundles else { return nil }
+        let fields = arguments(of: pid)
+        guard fields.count >= 2, fields[0].hasPrefix(GameLaunchers.root.path) else { return nil }
+        let program = fields[1].split(separator: "\\").last.map(String.init) ?? fields[1]
+        return program.lowercased()
     }
 
     /// The exe a native run stands in for, or `nil` for a window that is not
