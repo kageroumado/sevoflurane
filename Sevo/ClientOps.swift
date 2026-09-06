@@ -129,6 +129,9 @@ nonisolated enum ClientOps {
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                 )
             }
+            // The switch lands in the app's process; this one resolved
+            // `Engine.active` before it and reports the outcome from there.
+            Engine.active = engine
             progress("engine switch requested via the app — waiting for healthy")
             return await pollAppHealthy(intent: "engine use", progress: progress)
         }
