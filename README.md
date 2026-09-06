@@ -31,9 +31,25 @@ induction. Its color code is yellow, and so is the app's accent.
   is not responding") is a supervised, recovered condition: restart ladder,
   crash-loop hygiene, cache repair, before you see anything. Quitting the app
   takes the whole bottle down with it.
-- **Games play well.** macOS Game Mode engages by itself. Low Power Mode and
-  Reduce Motion are honored. Idle CPU is a fraction of a hand-made setup. The
-  display stays awake while a game runs.
+- **Games play well.** Low Power Mode and Reduce Motion are honored. Idle
+  CPU is a fraction of a hand-made setup. The display stays awake while a
+  game runs. A full-screen game can run in a resizable window of its own,
+  the game none the wiser, with the picture scaled to whatever size you drag.
+- **Settings per game, applied at the next launch.** Window treatment,
+  mouse behavior and more resolve game → bottle → global, and a change
+  reaches the game the next time it starts, with Steam still running: the
+  built-in engine reads a per-program environment at process start instead
+  of inheriting Steam's. `sevo app config <appid>` is the same surface from
+  the terminal.
+- **32-bit games run.** The built-in engine carries the Rosetta fixes
+  CrossOver's Wine has (the 32-to-64 thunk that Rosetta otherwise loses on a
+  signal, re-translation after code writes) and a 32-bit DXMT, so a 32-bit
+  Direct3D 11 game reaches Metal instead of software GL.
+- **RPG Maker and other NW.js games run natively.** The app recognizes a game
+  built on NW.js, fetches the matching macOS runtime, and runs it as a real
+  Mac process while Steam keeps counting playtime and tracking the session.
+  Achievements still reach Steam through a small stand-in inside the bottle.
+  The game keeps its own name and icon in the Dock.
 - **Nothing else to install.** A built-in open-source engine works on a clean
   Mac. Apple's Game Porting Toolkit is fetched in-app through Apple's own
   sign-in. CrossOver is a first-class engine choice too, and the one setup
@@ -99,7 +115,33 @@ one for the bottle:
 | **Automatic** | CrossOver's per-game database, then Wine's `wined3d` | You would rather trust their QA than choose. |
 
 Toolkit releases and betas sit side by side. The newest is used unless you
-pick another.
+pick another. DXMT is staged for both architectures, so a 32-bit game gets
+Metal too.
+
+## DirectX 12, measured
+
+The built-in engine was run against Microsoft's DirectX-Graphics-Samples,
+built on Windows with a frame-count exit, and compared with the same
+binaries on an RTX 4080 SUPER (`bispectral/dx12-samples`, D3DMetal 4.0
+beta 2, 2026-09-06). Of 35 comparable samples, 23 draw the reference image.
+
+| Works | Does not |
+|---|---|
+| The HelloWorld set (window, triangle, texture, constant buffers, bundles, frame buffering) | DirectX Raytracing, all four samples: the toolkit reports no raytracing tier |
+| Execute indirect, multithreading, predication queries, reserved resources, residency, small resources, depth bounds, dynamic indexing, n-body gravity | Variable Rate Shading: no tier reported, the sample gives up |
+| Mesh shaders: meshlet render, cull, instancing | Mesh shaders: dynamic LOD renders the mesh as shards (the amplification path) |
+| Full screen, linked-GPU samples on one adapter | Cross-GPU copy (one adapter is exposed) |
+| | Pipeline state cache, generic programs, 11-on-12: abort at the first Direct3D 12 call |
+| | HDR and SM6 wave intrinsics: stop on their own error dialog |
+
+Capabilities as the toolkit reports them next to the RTX card: feature
+level 12_2, resource binding tier 3, heap tier 2, enhanced barriers, wave
+operations and mesh shaders match. Shader Model is 6.6 against 6.8, root
+signature 1.1 against 1.2, tiled resources tier 2 against 4; conservative
+rasterization, sampler feedback, double-precision shaders and raytracing are
+absent. Games that need those will say so; the rest of Direct3D 12 is
+there. The Agility SDK redirect games ship is never honored; the engine's
+own `d3d12.dll` answers every time.
 
 ## Known limits
 
@@ -114,9 +156,12 @@ pick another.
   the experience: the client always opens, the windows are Mac windows, the
   failures recover. Whether a given game runs is the engine's story. Check
   CrossOver's database and AppleGamingWiki.
-- **DirectX 12 has been played, not surveyed.** One Unreal Engine 5 title
-  runs through Steam on the built-in engine today. Numbers nobody measured
-  are not quoted here.
+- **DirectX 12 is measured on samples, and played on one game.** The table
+  above is the samples; Subnautica 2 (Unreal Engine 5) runs through Steam
+  on the built-in engine. Numbers nobody measured are not quoted here.
+- **macOS Game Mode does not engage yet.** It wants the game to be a
+  macOS app bundle, which a Wine process is not; per-game bundles are in
+  progress and will close this.
 - **`.NET 4.8` is left out of the dependency installer** on purpose:
   winetricks marks it broken on several Wine versions.
 
