@@ -162,9 +162,13 @@ enum WindowReport {
             if let obj = await currentWindow() {
                 let owner = (obj["owner"] as? String ?? "").lowercased()
                 let isNew = obj["window_id"] as? Int != before?["window_id"] as? Int
-                if known.isEmpty ? isNew : known.contains(owner) {
-                    return obj
-                }
+                // With no exe recorded yet, any new window looks like this
+                // launch's — including a window another game just put up.
+                let claimant = GameConfig.app(claiming: owner)
+                let accepted = known.isEmpty
+                    ? (isNew && (claimant == nil || claimant == appid))
+                    : known.contains(owner)
+                if accepted { return obj }
             }
             try? await Task.sleep(for: .seconds(3))
             if waited > 0, waited % 15 == 0 { progress("waiting for the game window (\(waited)s)") }
@@ -606,7 +610,7 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | windows | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | windows | mouse | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value; for wine-debug: on, off, or Wine channels. Omit to read the key.") var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
@@ -633,6 +637,7 @@ struct BottleCommand: AsyncParsableCommand {
                     "renderer": selection.renderer.rawValue,
                     "msync": selection.msync,
                     "windows": GameConfig.windows(bottle: SteamBottle.name).value.rawValue,
+                    "mouse": GameConfig.mouse(bottle: SteamBottle.name).value.rawValue,
                     "wine-debug": WineLog.isDiagnosing,
                     "wine-debug-channels": WineLog.channels,
                 ], pretty: true))
@@ -640,6 +645,7 @@ struct BottleCommand: AsyncParsableCommand {
                 print("renderer \(selection.renderer.rawValue)")
                 print("msync \(selection.msync)")
                 print("windows \(Self.windowsSummary)")
+                print("mouse \(Self.mouseSummary)")
                 print("wine-debug \(WineLog.summary)")
             }
             return
@@ -649,9 +655,10 @@ struct BottleCommand: AsyncParsableCommand {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
             case "windows": print(Self.windowsSummary)
+            case "mouse": print(Self.mouseSummary)
             case "wine-debug": print(WineLog.summary)
             default:
-                Sevo.printError("unknown key '\(key)' (renderer | msync | windows | wine-debug)")
+                Sevo.printError("unknown key '\(key)' (renderer | msync | windows | mouse | wine-debug)")
                 throw SevoExit.badInvocation
             }
             return
@@ -673,6 +680,25 @@ struct BottleCommand: AsyncParsableCommand {
             GameConfig.setBottle(SteamBottle.name, values)
             ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
             print("windows \(Self.windowsSummary) — \(Self.gameReach)")
+            return
+        }
+        if key == "mouse" {
+            // What a game holding the cursor for mouse-look is given as
+            // movement: `system` for the pointer curve everything else on the
+            // Mac gets, `linear` for the mouse's own displacement, or
+            // `inherit` for the global default.
+            var values = GameConfig.bottle(SteamBottle.name)
+            if value == "inherit" {
+                values.mouse = nil
+            } else if let curve = MouseCurve(rawValue: value) {
+                values.mouse = curve
+            } else {
+                Sevo.printError("mouse must be system, linear or inherit")
+                throw SevoExit.badInvocation
+            }
+            GameConfig.setBottle(SteamBottle.name, values)
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("mouse \(Self.mouseSummary) — \(Self.gameReach)")
             return
         }
         if key == "wine-debug" {
@@ -704,7 +730,7 @@ struct BottleCommand: AsyncParsableCommand {
             }
             selection.msync = flag
         default:
-            Sevo.printError("unknown key '\(key)' (renderer | msync | windows | wine-debug)")
+            Sevo.printError("unknown key '\(key)' (renderer | msync | windows | mouse | wine-debug)")
             throw SevoExit.badInvocation
         }
         do {
@@ -725,6 +751,12 @@ struct BottleCommand: AsyncParsableCommand {
     /// The bottle's window treatment and where it comes from.
     static var windowsSummary: String {
         let resolved = GameConfig.windows(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
+    }
+
+    /// The bottle's mouse curve and where it comes from.
+    static var mouseSummary: String {
+        let resolved = GameConfig.mouse(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
@@ -1062,7 +1094,10 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "config",
             abstract: "A game's own settings, over the bottle's and the global defaults.",
             discussion: """
-            Keys: windows (off | fixed | window | inherit), runner (wine | \
+            Keys: windows (off | fixed | window | inherit), mouse (system | \
+            linear | inherit — linear gives a game holding the cursor for \
+            mouse-look the mouse's own displacement, unshaped by the pointer \
+            acceleration curve), runner (wine | \
             nwjs — nwjs runs an NW.js game in native macOS NW.js and \
             downloads the runtime the first time), detect to look at the \
             game's files again, exe <name> to name an executable the game \
@@ -1071,7 +1106,7 @@ struct AppCommand: AsyncParsableCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "windows | runner | detect | exe. Omit to print every setting.")
+        @Argument(help: "windows | mouse | runner | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value. Omit to read the key.") var value: String?
         @Flag(name: .customLong("json")) var asJSON = false
@@ -1099,6 +1134,21 @@ struct AppCommand: AsyncParsableCommand {
                     throw SevoExit.badInvocation
                 }
                 GameConfig.setGame(appid, values)
+            case "mouse":
+                guard let value else {
+                    let resolved = GameConfig.mouse(bottle: bottle, game: appid)
+                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    return
+                }
+                if value == "inherit" {
+                    values.mouse = nil
+                } else if let curve = MouseCurve(rawValue: value) {
+                    values.mouse = curve
+                } else {
+                    Sevo.printError("mouse must be system, linear or inherit")
+                    throw SevoExit.badInvocation
+                }
+                GameConfig.setGame(appid, values)
             case "runner":
                 guard let value else {
                     print(values.runner ?? GameRunner.wine)
@@ -1115,7 +1165,7 @@ struct AppCommand: AsyncParsableCommand {
                 }
                 GameConfig.noteExecutable(value, forApp: appid)
             default:
-                Sevo.printError("unknown key '\(key)' (windows | runner | detect | exe)")
+                Sevo.printError("unknown key '\(key)' (windows | mouse | runner | detect | exe)")
                 throw SevoExit.badInvocation
             }
             ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
@@ -1168,6 +1218,7 @@ struct AppCommand: AsyncParsableCommand {
 
         private func report(bottle: String) {
             let windows = GameConfig.windows(bottle: bottle, game: appid)
+            let mouse = GameConfig.mouse(bottle: bottle, game: appid)
             let values = GameConfig.game(appid)
             let exes = values.exes ?? []
             let runner = values.runner ?? GameRunner.wine
@@ -1176,6 +1227,9 @@ struct AppCommand: AsyncParsableCommand {
                     "appid": appid,
                     "windows": [
                         "value": windows.value.rawValue, "source": windows.source.description,
+                    ],
+                    "mouse": [
+                        "value": mouse.value.rawValue, "source": mouse.source.description,
                     ],
                     "runner": runner,
                     "exes": exes,
@@ -1193,6 +1247,7 @@ struct AppCommand: AsyncParsableCommand {
                 return
             }
             print("windows \(windows.value.rawValue) (\(windows.source))")
+            print("mouse \(mouse.value.rawValue) (\(mouse.source))")
             print("runner \(runner)")
             if let info = values.nwjs {
                 print(info.summary)

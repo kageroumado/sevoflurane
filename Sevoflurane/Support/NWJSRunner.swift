@@ -196,8 +196,8 @@ nonisolated enum NWJSRunner {
         do {
             try manager.createDirectory(at: directory, withIntermediateDirectories: true)
             try link(gameDirectory, at: directory.appendingPathComponent(gameLink))
-            if info.greenworks, let entry = writeNodeMain(in: directory, page: page) {
-                package["node-main"] = entry.path
+            if info.greenworks, writeNodeMain(in: directory, page: page) != nil {
+                package["node-main"] = nodeMain
             } else {
                 removeNodeMain(in: directory)
             }
@@ -263,14 +263,16 @@ nonisolated enum NWJSRunner {
         let pagePath = directory.appendingPathComponent("\(gameLink)/\(page)").path
         let source = """
         // Written by Sevoflurane; edits are overwritten.
+        // The preload comes first: a relative require resolves against this
+        // file, and the line below moves where this file claims to be.
+        require(\(quoted("./\(nodeResources[0])")));
         // NW.js makes this file the process's main module, and RPG Maker
         // derives its save directory from the main module's path, so the
         // game's own page goes back before anything reads it.
         process.mainModule.filename = \(quoted(pagePath));
-        require(\(quoted("./\(nodeResources[0])")));
 
         """
-        let file = directory.appendingPathComponent("node-main.js")
+        let file = directory.appendingPathComponent(nodeMain)
         let data = Data(source.utf8)
         if (try? Data(contentsOf: file)) != data {
             try? data.write(to: file, options: .atomic)
@@ -281,10 +283,14 @@ nonisolated enum NWJSRunner {
     /// Removes the node entry and the scripts it loads, for a game that no
     /// longer wants them.
     private static func removeNodeMain(in directory: URL) {
-        for name in nodeResources + ["node-main.js"] {
+        for name in nodeResources + [nodeMain] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
         }
     }
+
+    /// What the wrapper package names as its node entry: a name, not a path,
+    /// so NW.js resolves it inside the application it was handed.
+    private static let nodeMain = "node-main.js"
 
     /// A path as a JavaScript string literal. JSON escapes forward slashes,
     /// which is valid JavaScript and unreadable in a path.

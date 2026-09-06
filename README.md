@@ -38,6 +38,10 @@ induction. Its color code is yellow, and so is the app's accent.
   Mac. Apple's Game Porting Toolkit is fetched in-app through Apple's own
   sign-in. CrossOver is a first-class engine choice too, and the one setup
   recommends, because buying it funds the people who make Wine run on a Mac.
+- **Mouse-look that feels like a mouse.** When a game takes the cursor to aim
+  a camera, the engine can hand it the mouse's own movement instead of the
+  Mac's accelerated pointer, so the same sweep of the hand turns the same
+  distance however fast it is made. Per bottle or per game.
 - **Scriptable.** The `sevo` CLI manages and heals Steam from the terminal,
   and the same verbs are an MCP server, so an AI agent can install a game or
   fix a stuck download for you.

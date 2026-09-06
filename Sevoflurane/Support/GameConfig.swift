@@ -21,12 +21,34 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What a game holding the cursor for mouse-look is given as mouse movement —
+/// the driver's `LinearMouse` option (methylpentynol winemac.drv).
+nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
+    /// The pointer moves the way it does everywhere else on the Mac, the
+    /// system's acceleration curve included.
+    case system
+    /// The mouse's own displacement reaches the game unshaped, so the same
+    /// sweep of the hand turns the camera the same distance however fast it
+    /// is made.
+    case linear
+
+    var label: String {
+        switch self {
+        case .system: "Like the rest of the Mac"
+        case .linear: "Linear (raw deltas for mouse-look)"
+        }
+    }
+}
+
 /// One level of the settings hierarchy: the keys a game's launch reads, each
 /// optional so an absent one inherits from the level above. Game files also
 /// carry the executables the game is known to run under, which is what a
 /// per-program value is written against.
 nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var windows: WindowTreatment?
+    /// What the game is given as mouse movement while it holds the cursor for
+    /// mouse-look.
+    var mouse: MouseCurve?
     /// Game level only: which runtime the game runs on — the bottle's engine
     /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
@@ -49,7 +71,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
 
     /// Whether any setting is set at this level (the exe list and the
     /// detection record are bookkeeping, not settings).
-    var hasSettings: Bool { windows != nil || runner != nil }
+    var hasSettings: Bool { windows != nil || mouse != nil || runner != nil }
 
     /// Whether this game runs natively rather than through the bottle.
     var runsNatively: Bool { runner == GameRunner.nwjs }
@@ -96,7 +118,7 @@ nonisolated enum GameConfig {
         .appendingPathComponent("Library/Application Support/Sevoflurane/Config")
 
     /// What every level inherits when nothing is set anywhere.
-    static let defaults = ConfigValues(windows: .fixed)
+    static let defaults = ConfigValues(windows: .fixed, mouse: .system)
 
     // MARK: - Levels
 
@@ -152,6 +174,18 @@ nonisolated enum GameConfig {
             return Resolved(value: value, source: .bottle(bottle))
         }
         return Resolved(value: global().windows ?? defaults.windows!, source: .global)
+    }
+
+    /// The mouse curve a launch in this bottle gets: for a specific game when
+    /// its id is known, otherwise the bottle's own value.
+    static func mouse(bottle: String, game appID: Int? = nil) -> Resolved<MouseCurve> {
+        if let appID, let value = game(appID).mouse {
+            return Resolved(value: value, source: .game(appID))
+        }
+        if let value = Self.bottle(bottle).mouse {
+            return Resolved(value: value, source: .bottle(bottle))
+        }
+        return Resolved(value: global().mouse ?? defaults.mouse!, source: .global)
     }
 
     // MARK: - Executables

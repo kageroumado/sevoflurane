@@ -20,6 +20,7 @@ struct EngineSettings: View {
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
     @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
+    @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
     @State private var wineDiagnostics = WineLog.isDiagnosing
 
     var body: some View {
@@ -286,6 +287,7 @@ struct EngineSettings: View {
                 ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
             }
             .highlightable(id: "engine.windows", highlighted: highlighted)
+            mousePicker
         } footer: {
             Text("Sevoflurane's own engine only. This bottle's default; a game "
                 + "can have its own (sevo app config). "
@@ -293,6 +295,33 @@ struct EngineSettings: View {
                     ? "Reaches a game the next time it starts."
                     : "Takes effect for games started after Steam restarts."))
         }
+    }
+
+    private var mousePicker: some View {
+        Picker(selection: $mouseCurve) {
+            ForEach(MouseCurve.allCases, id: \.self) { curve in
+                Text(curve.label).tag(curve)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Mouse")
+                Text("A game aiming a camera takes the cursor and hides it. "
+                    + "Linear hands it the mouse's own movement, so the same "
+                    + "sweep of the hand turns the same distance however fast "
+                    + "it is made; the Mac's pointer keeps its own feel "
+                    + "everywhere else.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: mouseCurve) { _, curve in
+            var values = GameConfig.bottle(SteamBottle.name)
+            values.mouse = curve
+            GameConfig.setBottle(SteamBottle.name, values)
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+        }
+        .highlightable(id: "engine.mouse", highlighted: highlighted)
     }
 
     // MARK: - Dependencies

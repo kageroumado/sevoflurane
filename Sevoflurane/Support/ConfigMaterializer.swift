@@ -48,10 +48,12 @@ nonisolated enum ConfigMaterializer {
     /// The bottle level: the resolved value of every setting the engine takes
     /// from the environment.
     private static func bottleLines(_ name: String) -> [String] {
-        [
-            "SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)",
-            "WINEDEBUG=\(WineLog.channels)",
-        ]
+        var lines = ["SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)"]
+        if GameConfig.mouse(bottle: name).value == .linear {
+            lines.append("SEVO_LINEAR_MOUSE=1")
+        }
+        lines.append("WINEDEBUG=\(WineLog.channels)")
+        return lines
     }
 
     /// A game's file carries only what the game sets; everything else falls
@@ -60,6 +62,12 @@ nonisolated enum ConfigMaterializer {
         var lines = ["# app \(appID)" + (values.name.map { " \($0)" } ?? "")]
         if let windows = values.windows {
             lines.append("SEVO_RESIZABLE_WINDOWS=\(windows.rawValue)")
+        }
+        // A game asking for the system curve where the bottle is linear needs
+        // the key written, not omitted: the bottle's file is read first and
+        // an absent key leaves its value standing.
+        if let mouse = values.mouse {
+            lines.append("SEVO_LINEAR_MOUSE=\(mouse == .linear ? "1" : "0")")
         }
         return lines
     }
