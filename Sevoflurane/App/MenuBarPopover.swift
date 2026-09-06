@@ -100,7 +100,15 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         // The full highlight pill every system item shows while its popover
         // is up; `MenuBarExtra` does this by itself, an AppKit item does not.
-        statusItem.button?.highlight(true)
+        // Deferred one turn: this runs inside the button's own mouse tracking,
+        // and the cell clears the highlight when that tracking ends, so a
+        // highlight set here directly lasts only as long as the press.
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard self?.panel?.isVisible == true else { return }
+                self?.statusItem.button?.highlight(true)
+            }
+        }
         // Escape reaches the panel as a key event no SwiftUI control claims.
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
