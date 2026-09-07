@@ -183,9 +183,11 @@ nonisolated enum SetupProbe {
         }
     }
 
+    /// Oldest first, by the number in the name: `methylpentynol-r2` before
+    /// `methylpentynol-r10`, which a plain string sort gets backwards.
     static func managedEngineVersions() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: managedEngines.path)) ?? [])
             .filter { !$0.hasPrefix(".") }
-            .sorted()
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 }
