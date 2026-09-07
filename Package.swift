@@ -8,13 +8,12 @@
 import Foundation
 import PackageDescription
 
-/// Working notes and engine payloads sit beside the sources on a development
-/// machine and are gitignored, so a clone has none of them. SwiftPM warns
-/// about an exclude that names nothing, so only what is present is listed.
+/// Working notes sit beside the sources on a development machine and are
+/// gitignored, so a clone has none of them. SwiftPM warns about an exclude
+/// that names nothing, so only what is present is listed.
 let packageContents = (try? FileManager.default.contentsOfDirectory(atPath: Context.packageDirectory)) ?? []
 let localOnly = ["DELETE-CANDIDATES.md", "Docs", "HANDOFF.md", "Mockups", "Spike", "default.profraw"]
     .filter(packageContents.contains)
-let enginePayloads = packageContents.filter { $0.hasPrefix("sevo-engine-") && $0.hasSuffix(".tar.xz") }
 
 let package = Package(
     name: "sevo",
@@ -30,7 +29,7 @@ let package = Package(
             ],
             path: ".",
             // Everything in the repo that is not one of `sources` below.
-            exclude: localOnly + enginePayloads + [
+            exclude: localOnly + [
                 "CONTRIBUTING.md",
                 "LICENSE",
                 "README.md",

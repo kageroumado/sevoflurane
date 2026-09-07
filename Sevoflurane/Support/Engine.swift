@@ -121,8 +121,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// installed, a deleted app) — those fall to policy. A named managed
     /// engine wins as long as its directory exists; a bare `managed`, or a
     /// name whose directory is gone (an engine update replaced it), follows
-    /// the renderer: with a wine-staging engine and a GPTk engine both
-    /// installed, choosing D3DMetal boots the one that can host it.
+    /// the renderer, so the engine that can host the chosen renderer boots.
     static func preferred() -> Engine? {
         guard let stored = Preferences.shared.string(forKey: preferenceKey) else { return nil }
         switch stored {
@@ -206,7 +205,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             crossoverBin.map { FileManager.default.fileExists(atPath: $0) } ?? false
         case .managed:
             FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("wine/bin").path)
+                atPath: root.appendingPathComponent("wine/bin").path,
+            )
         }
     }
 
@@ -219,13 +219,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         }
     }
 
-    /// "Dormison r3" for the engine directory `dormison-r3`; an engine from
-    /// before the rename keeps its whole directory name after the product name.
+    /// "Dormison r3" for the engine directory `dormison-r3`.
     static func managedDisplayName(_ version: String) -> String {
-        for prefix in ["dormison-", "methylpentynol-"] where version.hasPrefix(prefix) {
-            return "Dormison \(version.dropFirst(prefix.count))"
-        }
-        return "Dormison \(version)"
+        version.hasPrefix("dormison-")
+            ? "Dormison \(version.dropFirst("dormison-".count))"
+            : "Dormison \(version)"
     }
 
     // MARK: - Paths

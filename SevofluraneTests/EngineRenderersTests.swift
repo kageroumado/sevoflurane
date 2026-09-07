@@ -28,7 +28,9 @@ private struct FakeEngine {
         try write("stock dxgi", to: "wine/lib/wine/x86_64-windows/dxgi.dll")
     }
 
-    func remove() { try? manager.removeItem(at: root) }
+    func remove() {
+        try? manager.removeItem(at: root)
+    }
 
     /// Lays down a toolkit the way the installer does: Apple's `lib/` shape,
     /// stubs as symlinks into `external`.
@@ -138,10 +140,10 @@ struct EngineRenderersTests {
 
     @Test
     func `the bridge a launch names is the tree's copy`() {
-        let engine = URL(fileURLWithPath: "/engines/sevo-r1d")
+        let engine = URL(fileURLWithPath: "/engines/dormison-r2")
         #expect(
             D3DMetalInstaller.bridgeLibrary(inEngine: engine).path
-                == "/engines/sevo-r1d/wine/lib/external/libd3dshared.dylib",
+                == "/engines/dormison-r2/wine/lib/external/libd3dshared.dylib",
         )
     }
 }

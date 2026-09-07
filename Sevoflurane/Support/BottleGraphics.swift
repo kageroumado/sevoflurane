@@ -68,9 +68,8 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         case .dxmt:
             "d3d10core,d3d11,dxgi=n,b"
         case .d3dmetal:
-            // The GPTk engine's canonical builtins ARE D3DMetal (Apple's
-            // libraries overlaid onto Gcenx's game-porting-toolkit Wine),
-            // so builtin resolution is already correct.
+            // D3DMetal is staged as the engine's own d3d11/d3d12/dxgi, so
+            // builtin resolution already reaches it.
             nil
         case .auto, .wined3d:
             nil
@@ -93,7 +92,7 @@ nonisolated enum BottleGraphics {
         /// for the active managed engine; `nil` for CrossOver or no toolkit.
         /// Part of the booted diff so an engine switch and a version switch
         /// coalesce into one restart rather than two.
-        var d3dMetalVersion: String? = nil
+        var d3dMetalVersion: String?
     }
 
     /// The card a bottle claims when nobody has chosen one.
@@ -186,7 +185,9 @@ nonisolated enum BottleGraphics {
         var restage = false
         /// msync or the engine root moved — the wineserver must go.
         var bounce = false
-        var any: Bool { restage || bounce }
+        var any: Bool {
+            restage || bounce
+        }
     }
 
     /// Whether a renderer/version change can be applied under a running
@@ -546,9 +547,8 @@ nonisolated enum BottleGraphics {
         // derived from it.
         GPUIdentity.writeDXVKConfig(selection.gpu, intoBottle: SteamBottle.root)
         carryGPUToRegistry(selection.gpu, intoBottle: SteamBottle.root)
-        // The renderer is part of managed-engine resolution — D3DMetal
-        // boots the GPTk engine, DXMT the wine-staging one — so the next
-        // client start re-picks the wine.
+        // The renderer is part of engine resolution, so the next client
+        // start re-picks the wine.
         Engine.refreshResolution()
     }
 

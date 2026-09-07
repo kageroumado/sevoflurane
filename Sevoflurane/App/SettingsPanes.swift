@@ -26,7 +26,9 @@ struct GeneralSettings: View {
         var registered: Bool
         var busy = false
         var error: String?
-        var id: String { harness.id }
+        var id: String {
+            harness.id
+        }
     }
 
     var body: some View {
@@ -587,10 +589,9 @@ struct GraphicsSettings: View {
 
     /// Shown when no installed engine declares D3DMetal. Apple's toolkit
     /// calls pthread from PE code, so it needs a Wine that keeps GS on the
-    /// thread's own data while PE code runs: CrossOver's does, and the
-    /// built-in engine does from `sevo-r1d` on (the `ntdll-macos-gsbase-
-    /// pthread` patch). Toolkits added meanwhile are kept for the engine that
-    /// gains them.
+    /// thread's own data while PE code runs: CrossOver's does, and Dormison
+    /// does (its GS base lives on the thread's TSD). Toolkits added meanwhile
+    /// are kept for the engine that gains them.
     private var dx12HostNotice: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Direct3D 12 needs an engine that hosts Apple's toolkit")

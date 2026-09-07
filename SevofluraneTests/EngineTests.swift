@@ -11,7 +11,7 @@ struct EngineManifestTests {
         "stable": {
           "version": "wine11.15-r1",
           "minAppVersion": "0.1.0",
-          "url": "https://example.com/sevo-engine-r1.tar.xz",
+          "url": "https://example.com/dormison-r1.tar.xz",
           "sha256": "abc123",
           "sizeBytes": 600000000,
           "notes": "first release"
@@ -226,8 +226,8 @@ struct EnginePreferenceTests {
         // By directory name, so the Engine pane can pick one installed build
         // among several and that exact one boots.
         #expect(
-            Engine.managed(version: "wine11.16-dxmt0.80-r1").preferenceValue
-                == "managed:wine11.16-dxmt0.80-r1",
+            Engine.managed(version: "dormison-r2").preferenceValue
+                == "managed:dormison-r2",
         )
         // Nameless is "whichever built-in engine fits" — the form a choice
         // takes before its engine is installed.
