@@ -88,25 +88,28 @@ nonisolated enum ShaderPackages {
         Available(
             name: "cunny-nvl",
             title: "CuNNy NVL",
-            description: "A small convolutional upscaler, the NVL weights.",
+            description: "CuNNy's NVL weights (4x12): a small convolutional upscaler for visual novels and illustrations.",
             content: "Trained on visual-novel screenshots and illustrations",
             license: "LGPL-3.0-only",
             version: "1",
             source: URL(string: "https://github.com/funnyplanter/CuNNy"),
             origin: .download(
                 url: URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/shaders/cunny-nvl-1.tar.gz")!,
-                sha256: nil, size: nil,
+                sha256: "e79a2e011f18c4fb1e2e01dff11ff8dced2c0e4f0fd73576d36bdfdfb6b1f026", size: 65585,
             ),
         ),
         Available(
             name: "anime4k-c",
             title: "Anime4K",
-            description: "Anime4K's mode C: restore, then upscale.",
+            description: "Anime4K's mode C: denoises while upscaling, for clean sources.",
             content: "For 2D art and anime-style games",
             license: "MIT",
             version: "4.0.1",
             source: URL(string: "https://github.com/bloc97/Anime4K"),
-            origin: .bundled,
+            origin: .download(
+                url: URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/shaders/anime4k-c-4.0.1.tar.gz")!,
+                sha256: "59da9be19e41dc0bc58f3d96b2d399a91cf01d8ec0e14c82f14c2f3ce1dfe3b0", size: 37337,
+            ),
         ),
     ]
 

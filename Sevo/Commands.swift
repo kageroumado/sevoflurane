@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import Synchronization
 import os
 
 /// `sevo` — one management surface, three consumers: us (testing and
@@ -879,9 +880,19 @@ struct ShadersCommand: AsyncParsableCommand {
             throw SevoExit.badInvocation
         }
         do {
+            // One line per whole percent, so a 60-second download does not
+            // scroll a thousand of them.
+            let lastPercent = Mutex(-1)
             let package = try await ShaderPackages.install(entry) { fraction in
-                let percent = fraction.map { " \(Int($0 * 100))%" } ?? ""
-                FileHandle.standardError.write(Data("downloading \(entry.title)\(percent)\n".utf8))
+                let percent = fraction.map { Int($0 * 100) } ?? -1
+                let changed = lastPercent.withLock { last -> Bool in
+                    guard last != percent else { return false }
+                    last = percent
+                    return true
+                }
+                guard changed else { return }
+                let suffix = percent >= 0 ? " \(percent)%" : ""
+                FileHandle.standardError.write(Data("downloading \(entry.title)\(suffix)\n".utf8))
             }
             print("\(package.title) \(package.manifest.version) installed at \(package.root.path)")
         } catch {

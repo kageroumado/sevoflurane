@@ -169,7 +169,7 @@ struct ShaderPackagesTests {
         }
         let anime = ShaderPackages.builtInCatalog.first { $0.name == "anime4k-c" }
         #expect(anime?.license == "MIT")
-        #expect(anime?.origin == .bundled)
+        #expect(anime?.size == 37634)
     }
 
     @Test
