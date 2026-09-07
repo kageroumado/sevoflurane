@@ -514,8 +514,7 @@ final class SteamWebHost {
 
     // MARK: - Launch status
 
-    /// A launch in flight, told by the client's own game-action events — the
-    /// signal the menu bar's spinner used to guess at with a timer.
+    /// A launch in flight, told by the client's own game-action events.
     struct GameLaunch: Equatable {
         let appID: Int
         var detail: String

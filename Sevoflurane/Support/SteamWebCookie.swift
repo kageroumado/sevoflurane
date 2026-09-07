@@ -1,8 +1,7 @@
 import Foundation
 
 /// One cookie from the bottled client's jar, as CDP reports it — the typed
-/// form that crosses the bridge actor's boundary (`Docs/release-plan.md`
-/// R5.1).
+/// form that crosses the bridge actor's boundary.
 nonisolated struct SteamWebCookie: Sendable, Equatable {
     let name: String
     let value: String

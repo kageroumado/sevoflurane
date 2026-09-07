@@ -1,7 +1,7 @@
 import Foundation
 
 /// Which Wine runs the bottle: CrossOver's, or a managed engine Sevoflurane
-/// installed itself (`Docs/onboarding-spec.md` S1, release-plan R2.2).
+/// installed itself.
 ///
 /// Everything above this type — bottle paths inside the prefix, launch lines,
 /// the kill ladder — is engine-agnostic; the differences live entirely in how
@@ -407,8 +407,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             // ntdll's early dlopen and the game's stubs share one image —
             // one dispatch table, one code range for the ms_abi trampoline.
             // Naming the toolkit's own copy instead put a second file in the
-            // process, and the game ran whatever the tree held (measured
-            // 2026-09-03: 3.0's caps with "4.0 beta 2" picked).
+            // process, and the game ran whatever the tree held (3.0's caps
+            // with "4.0 beta 2" picked).
             let sharedLib = D3DMetalInstaller.bridgeLibrary(inEngine: root)
             if FileManager.default.fileExists(atPath: sharedLib.path) {
                 env["SEVO_LIBD3DSHARED_PATH"] = sharedLib.path

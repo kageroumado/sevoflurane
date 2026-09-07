@@ -87,7 +87,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     /// registry from the display driver's idea of the GPU at every display
     /// enumeration, which is where a game's driver-version check reads, and
     /// where the number is one Wine invents for a card nobody ships; the
-    /// engine patch in `Docs/gpu-identity.md` makes it prefer these instead.
+    /// engine patch makes it prefer these instead.
     /// An engine without that patch ignores them.
     var environment: [String: String] {
         guard let card else {

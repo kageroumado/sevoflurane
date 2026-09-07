@@ -3,7 +3,7 @@ import Observation
 import os
 
 /// The idempotent provisioning state machine behind the first-run assistant
-/// and Settings › Repair (`Docs/onboarding-spec.md`). Every stage is
+/// and Settings › Repair. Every stage is
 /// detect → perform → re-detect; quitting mid-setup and relaunching continues
 /// where it left off because detection, not stored progress, decides what
 /// still needs doing.
@@ -68,8 +68,7 @@ final class Provisioner {
     ///
     /// The bottle's *name* matters: every path below this — `SteamBottle.root`,
     /// the launch lines, the kill ladder — addresses `SteamBottle.name`, so a
-    /// Steam sitting in some other bottle is not a provisioned machine. (The
-    /// multi-bottle picker that would adopt one is release-plan R2.3.)
+    /// Steam sitting in some other bottle is not a provisioned machine.
     var needsSetup: Bool {
         guard detection != nil else { return false }
         let ours = bottleRecord(named: SteamBottle.name)?.hasSteam == true
@@ -155,8 +154,8 @@ final class Provisioner {
         await refreshDetection()
     }
 
-    /// The managed engine is downloaded from the manifest (release-plan
-    /// R2.2) when nothing else can run Steam — or when the stored engine
+    /// The managed engine is downloaded from the manifest when nothing else
+    /// can run Steam — or when the stored engine
     /// choice asks for it despite a usable CrossOver, which is how the
     /// Engine pane's "Built-in engine (downloads on switch)" option lands.
     private func installEngineIfMissing() async throws {
@@ -231,8 +230,8 @@ final class Provisioner {
         // first launch to download (measured: 235 MB and ~80 s of updater
         // window); looping until the win64 manifest lands absorbs it here,
         // where "Updating Steam…" is already on screen. Passes continue
-        // while each one moves bytes into `package/` — a fixed cap of 3
-        // gave up mid-download on a real switch (2026-09-01).
+        // while each one moves bytes into `package/`, because a small fixed
+        // cap gives up mid-download on a slow switch.
         var lastPayload = packagePayloadBytes(inBottle: bottleName)
         for pass in 1 ... 6 {
             if pass > 1 {
@@ -254,9 +253,8 @@ final class Provisioner {
             throw ProvisionError("client update finished but steamclient64.dll is missing")
         }
         // The tree is there with packages staged: the client's own
-        // bootstrapper applies them on its first launch (observed live —
-        // the supervisor's start after a switch finished exactly this
-        // state), so an incomplete headless pass is a note, never a wall.
+        // bootstrapper applies them on its first launch, so an incomplete
+        // headless pass is a note, never a wall.
         SetupLog.log("provision: update incomplete after the headless passes — "
             + "the client applies the staged packages at first launch")
     }
@@ -301,7 +299,7 @@ final class Provisioner {
     /// today the tray suppression; renderer/msync knobs land here too.
     ///
     /// The tray values gate explorer.exe's own systray window, which the Mac
-    /// driver's path bypasses entirely (see SPEC), so neither removes Steam's
+    /// driver's path bypasses entirely, so neither removes Steam's
     /// status item here — `ClientSupervisor.suppressWineTray` does. They are
     /// still written because they are correct for the non-driver path an OSS
     /// Wine build may take.

@@ -2,8 +2,7 @@ import Foundation
 
 /// What a game's own NW.js build says about itself: enough to pick the macOS
 /// runtime that matches it, to write the wrapper package it is started
-/// through, and to know whether achievements need the bottle-side stub
-/// (`Docs/nwjs-runner-plan.md`).
+/// through, and to know whether achievements need the bottle-side stub.
 nonisolated struct NWJSInfo: Codable, Equatable, Sendable {
     /// The NW.js the game ships, as its own binary declares it ("0.29.0").
     var version: String

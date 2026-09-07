@@ -9,8 +9,7 @@ import os
 /// dialog (`CRescueDialog` in steamui.dll, "Steamwebhelper is not
 /// responding"), occasionally an update/EULA dialog. The supervisor treats
 /// such a window as a symptom to log and, when probes are failing too, as
-/// confirmation that the client is wedged; it is never clicked
-/// (`Docs/resilience-spec.md`).
+/// confirmation that the client is wedged; it is never clicked.
 ///
 /// Matching starts from the window owner name, which CGWindowList provides
 /// without any permission, and resolves to the Windows program the owning
@@ -152,7 +151,7 @@ nonisolated enum WineWindowWatch {
         let bounds: CGRect
         /// The window's CGWindow level (`kCGWindowLayer`). A frontmost Wine
         /// game raises itself far above normal windows and drops below them
-        /// when backgrounded, so the overlay is levelled at `layer + 1` to
+        /// when backgrounded, so the overlay is leveled at `layer + 1` to
         /// ride just above it rather than at a fixed floating level.
         let layer: Int
     }

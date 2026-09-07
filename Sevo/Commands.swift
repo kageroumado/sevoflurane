@@ -5,7 +5,7 @@ import os
 
 /// `sevo` — one management surface, three consumers: us (testing and
 /// debugging), terminal-comfortable end users, and AI agents (via `sevo mcp`
-/// or by just running the CLI). Design: `Docs/cli-mcp-spec.md`.
+/// or by just running the CLI).
 @main
 struct SevoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -544,7 +544,7 @@ struct EngineCommand: AsyncParsableCommand {
     }
 
     /// Downloads and installs the manifest's stable release — the CLI face
-    /// of the wizard's built-in-engine stage (release-plan R2.2).
+    /// of the wizard's built-in-engine stage.
     private func install() async throws {
         let manifestURL = try manifest.map {
             guard let url = URL(string: $0) else {
@@ -1469,8 +1469,8 @@ struct AppCommand: AsyncParsableCommand {
     }
 
     /// One game's settings: what it resolves to and from which level, and
-    /// the game's own values (`Docs/config-hierarchy-plan.md`). A value set
-    /// here is written to the engine's per-program env file for every exe
+    /// the game's own values. A value set here is written to the engine's
+    /// per-program env file for every exe
     /// the game is known to run under.
     struct Config: AsyncParsableCommand {
         static let configuration = CommandConfiguration(

@@ -134,8 +134,8 @@ Metal too.
 
 The built-in engine was run against Microsoft's DirectX-Graphics-Samples,
 built on Windows with a frame-count exit, and compared with the same
-binaries on an RTX 4080 SUPER (`bispectral/dx12-samples`, D3DMetal 4.0
-beta 2, 2026-09-06). Of 35 comparable samples, 23 draw the reference image.
+binaries on an RTX 4080 SUPER (D3DMetal 4.0 beta 2). Of 35 comparable
+samples, 23 draw the reference image.
 
 | Works | Does not |
 |---|---|

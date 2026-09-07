@@ -173,8 +173,7 @@ nonisolated struct Resolved<Value: Sendable>: Sendable {
 }
 
 /// The settings hierarchy — global, bottle, game — and its resolver: the
-/// game's own value wins, then the bottle's, then the global default
-/// (`Docs/config-hierarchy-plan.md`).
+/// game's own value wins, then the bottle's, then the global default.
 ///
 /// JSON files under `~/Library/Application Support/Sevoflurane/Config/` are
 /// the source of truth; the env files the engine reads at every process

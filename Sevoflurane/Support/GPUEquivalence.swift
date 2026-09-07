@@ -187,7 +187,7 @@ nonisolated enum GPUEquivalence {
 
     // MARK: - Driver versions
 
-    /// GeForce Game Ready 610.88, released 2026-08-03; recorded 2026-09-02.
+    /// GeForce Game Ready 610.88, released 2026-08-03.
     ///
     /// The four groups are Windows' own driver-version shape, and only the
     /// last two carry the number a game recognizes: joined and cut to five
@@ -207,7 +207,7 @@ nonisolated enum GPUEquivalence {
         vendor: UInt16(0x10DE),
     )
 
-    /// AMD Software: Adrenalin Edition 26.8.1; recorded 2026-09-02.
+    /// AMD Software: Adrenalin Edition 26.8.1.
     ///
     /// AMD publishes no mapping from the internal string to the Adrenalin
     /// release, so the release is spelled into the third group where a reader

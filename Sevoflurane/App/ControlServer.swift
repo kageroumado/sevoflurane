@@ -1,6 +1,6 @@
 import Foundation
 
-/// The app half of the `sevo` contract (`Docs/cli-mcp-spec.md`): a loopback
+/// The app half of the `sevo` contract: a loopback
 /// HTTP endpoint the CLI — and through it, agents — uses to drive the running
 /// app. Mutating verbs route through the supervisor so the restart ladder has
 /// one owner; with the app not running, `sevo` drives ``ClientLifecycle``

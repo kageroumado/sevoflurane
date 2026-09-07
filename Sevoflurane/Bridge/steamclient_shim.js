@@ -325,8 +325,8 @@
        real bindings: the UI's feature check (`library.js`, module 736) walks
        the path with `typeof === "object"` on every node before the leaf, and
        treats a function-shaped namespace as the whole feature being absent —
-       which is how the friends settings never loaded and the friends list
-       never opened. */
+       get this wrong and the friends settings and friends list silently
+       never open. */
     return new Proxy(node ? {} : fn, {
       get: function (t, prop) {
         if (typeof prop === "symbol" || prop === "then" || prop === "inspect") {

@@ -63,7 +63,7 @@ nonisolated enum CrossOverShadow {
 
     /// Removing a tree of symlinks removes the links, never what they point
     /// at: `FileManager` does not follow them, which is what makes a tree of
-    /// links into `/Applications` safe to throw away (verified 2026-08-29).
+    /// links into `/Applications` safe to throw away.
     private static func assemble(
         in root: URL, pointingAt d3dmetal: URL, crossOver: URL,
     ) throws {

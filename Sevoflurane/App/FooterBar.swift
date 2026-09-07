@@ -5,9 +5,8 @@ import SwiftUI
 /// The popover's bottom bar: what the client is doing on the left, what to do about it on the
 /// right.
 ///
-/// Every action that isn't a universal glyph carries its name. Reload and restart used to be two
-/// adjacent circular arrows that only their tooltips could tell apart; they live in the actions
-/// menu now, as words. What stays iconic is the pair every menu-bar app draws the same way —
+/// Every action that isn't a universal glyph carries its name: reload and restart live in the
+/// actions menu, as words. What stays iconic is the pair every menu-bar app draws the same way —
 /// the gear and the close box.
 struct FooterBar: View {
     let host: SteamWebHost

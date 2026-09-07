@@ -8,8 +8,8 @@ import Foundation
 /// D3DMetal) are winelib builds carrying Wine's builtin signature — and Wine
 /// resolves a builtin DLL to its canonical tree copy no matter what sits in
 /// `system32`. Staging them there was measured to load Wine's own vkd3d
-/// d3d12 with D3DMetal fully installed ("DirectX 12 is not supported",
-/// 2026-09-01). So activation swaps the canonical copies instead, keeping
+/// d3d12 with D3DMetal fully installed ("DirectX 12 is not supported"). So
+/// activation swaps the canonical copies instead, keeping
 /// each displaced original beside the tree for the swap back.
 ///
 /// D3DMetal is two halves and both are the picked version. The macOS half —
@@ -23,7 +23,7 @@ import Foundation
 /// bridge whose calls carry a function index into the unix-side dylib, and
 /// the two releases do not number those alike: 4.0b2's dylib under 3.0's
 /// DLLs took Steam's client down 14 s into every boot, silently, where each
-/// version whole boots healthy (measured 2026-09-03).
+/// version whole boots healthy.
 nonisolated enum EngineRenderers {
     /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
     /// `bottle`'s system32 holds a file for each renderer DLL. Answers what

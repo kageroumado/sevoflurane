@@ -54,7 +54,7 @@ enum GameWindow {
 
     /// The screen a top-left-origin window rect sits on, its backing scale,
     /// and that screen's own frame back in top-left space. Matches the window
-    /// centre so a window straddling an edge is attributed to where most of it
+    /// center so a window straddling an edge is attributed to where most of it
     /// is; falls back to the primary display.
     private static func display(for bounds: CGRect) -> (index: Int, scale: CGFloat, frameTopLeft: CGRect) {
         let flip = NSScreen.screens.first?.frame.maxY ?? 0

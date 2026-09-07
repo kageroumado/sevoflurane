@@ -17,8 +17,8 @@ protocol SetupEnvironment: AnyObject {
     /// `softwareupdate --install-rosetta --agree-to-license`.
     func installRosetta() async -> SetupCommandOutcome
 
-    /// Downloads and installs the manifest's stable managed engine
-    /// (release-plan R2.2) — the path taken when no usable CrossOver exists.
+    /// Downloads and installs the manifest's stable managed engine — the path
+    /// taken when no usable CrossOver exists.
     /// The fraction is download progress, or `nil` where none is measurable.
     func installEngine(
         progress: @escaping @Sendable (String, Double?) -> Void,
@@ -175,8 +175,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
     func configureBottle(named name: String) async {
         // Each write is skipped when the value already sits in the hive —
         // a `reg add` against a booting client can hang on the registry for
-        // the whole subprocess timeout (three wedged start.exe were caught
-        // doing exactly that, 2026-09-01), and every boot after the first
+        // the whole subprocess timeout, and every boot after the first
         // has nothing to write anyway.
         let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
         if !registry(

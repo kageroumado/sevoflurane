@@ -93,7 +93,7 @@ nonisolated enum ClientLifecycle {
     /// The escape hatch: immediate `SIGKILL`, no graceful ask and no wait —
     /// for when the graceful ladder is the thing that hung. Scoped by open
     /// files to this bottle, so another engine's wine is never touched.
-    /// Answers how many processes it signalled.
+    /// Answers how many processes it signaled.
     @discardableResult
     static func forceQuit(_ scope: ForceScope) async -> [pid_t] {
         switch scope {
@@ -286,7 +286,7 @@ nonisolated enum ClientLifecycle {
         try? await Task.sleep(for: .seconds(3))
         var survivors = await bottleProcessIDs()
         if !survivors.isEmpty {
-            log("signalling survivors (pids \(survivors))")
+            log("signaling survivors (pids \(survivors))")
             for pid in survivors {
                 kill(pid, SIGTERM)
             }
@@ -327,7 +327,7 @@ nonisolated enum ClientLifecycle {
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches
         // a wedged webhelper by itself instead of parking a visible Wine
-        // window (Docs/resilience-spec.md experiment #1, verified 2026-08-22).
+        // window.
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
             program: [

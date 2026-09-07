@@ -1,7 +1,7 @@
 import Foundation
 
-/// The support story: every detection from `Docs/onboarding-spec.md` S0–S3
-/// plus client/bridge/app health, one ✔/✖ line each. `--json` is what a user
+/// The support story: every environment detection plus client/bridge/app
+/// health, one ✔/✖ line each. `--json` is what a user
 /// pastes into an issue — no secrets (no account names, no tokens; bottle
 /// paths are fine).
 nonisolated enum Doctor {
@@ -165,9 +165,9 @@ nonisolated enum Doctor {
             ))
         }
 
-        // A single boot legitimately drops 1–2 asserts (HANDOFF 2026-08-21),
-        // and a supervised restart cycle can reach 3; five in ten minutes is
-        // the actual loop signature.
+        // A single boot legitimately drops 1–2 asserts, and a supervised
+        // restart cycle can reach 3; five in ten minutes is the actual loop
+        // signature.
         checks.append(Check(
             id: "dumps", ok: s.dumpCount < 5,
             label: "crash dumps last 10 min: \(s.dumpCount)",

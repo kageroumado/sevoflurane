@@ -1,8 +1,8 @@
 import Foundation
 
-/// The JavaScript the bridge injects or evaluates. Fidelity rules live in
-/// SPEC.md — shape mirroring, base64 envelopes carrying the view type,
-/// rejection objects never stringified, callbacks routed per page.
+/// The JavaScript the bridge injects or evaluates. Fidelity rules: shape
+/// mirroring, base64 envelopes carrying the view type, rejection objects
+/// never stringified, callbacks routed per page.
 nonisolated enum BridgeJS {
     /// Library snapshot for the page's `library` command.
     static let library = #"""

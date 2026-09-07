@@ -21,10 +21,9 @@ enum SteamDesktopChrome {
       var STYLE_ID = "sevo-macos-chrome";
       /* Every selector is static — anchored on `.TitleBar.title-area`, the one
          semantic class, via `:has()` — so the rules bite from the moment the
-         style element exists, before the title row's first paint. An earlier
-         version tagged the row with a class from the MutationObserver first,
-         and Steam's window controls stayed visible for the beat between paint
-         and observer. */
+         style element exists, before the title row's first paint. Tagging the
+         row from the MutationObserver instead would leave Steam's window
+         controls visible for the beat between paint and observer. */
       var CSS = [
         /* The macOS traffic lights are the window controls; Steam's are a
            second set for a window manager this app does not have. Hiding the

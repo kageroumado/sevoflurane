@@ -330,7 +330,7 @@
         ]
 
         /// One wizard per fixture machine, each on its own provisioner so a
-        /// tile that advances leaves its neighbours where they were.
+        /// tile that advances leaves its neighbors where they were.
         static let wizards: [(scenario: SetupScenario, provisioner: Provisioner)] =
             SetupScenario.allCases.map { scenario in
                 // Paced, not instant: with no think time every stage
@@ -409,7 +409,7 @@
             }
 
         /// One engine pane per fixture machine, each on its own provisioner
-        /// so a tile that starts a switch leaves its neighbours alone.
+        /// so a tile that starts a switch leaves its neighbors alone.
         static let enginePanes: [EnginePane] =
             DemoEngineEnvironment.Scenario.allCases.map { scenario in
                 let provisioner = Provisioner(

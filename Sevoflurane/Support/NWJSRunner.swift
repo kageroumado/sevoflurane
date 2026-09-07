@@ -3,7 +3,7 @@ import Foundation
 /// The native side of an NW.js game: the wrapper package NW.js is started
 /// with, the browsing-data directory shared with the bottle, and the
 /// environment the dock shim reads to exec macOS NW.js in place of the wine
-/// process (`Docs/nwjs-runner-plan.md`).
+/// process.
 ///
 /// Steam still launches the game's Windows exe and still owns the process, so
 /// playtime, the overlay and the cloud all follow it; only the code inside
@@ -116,8 +116,8 @@ nonisolated enum NWJSRunner {
     ///
     /// NW.js serves an application from one root, as a `chrome-extension://`
     /// origin, and a page outside that root is a network error — an absolute
-    /// `file://` main puts up no window at all (measured on 0.29.4 and 0.60,
-    /// 2026-09-06). So the game's directory is a child of the wrapper, by
+    /// `file://` main puts up no window at all (measured on 0.29.4 and 0.60).
+    /// So the game's directory is a child of the wrapper, by
     /// symlink, and `main` is a relative path through it.
     private static let gameLink = "game"
 
@@ -459,7 +459,7 @@ nonisolated enum NWJSRunner {
         // the bundle identifier, on both sides, and the helper app inside the
         // framework carries the runtime's — an identifier of our own gives
         // `bootstrap_look_up: Unknown service name` and a browser process with
-        // no renderer and no window (measured on 0.29.4, 2026-09-06).
+        // no renderer and no window (measured on 0.29.4).
         // The name form is what a modern icon asset is looked up by, and this
         // bundle has none — left in, the tile falls back to a generic icon.
         plist["CFBundleIconName"] = nil

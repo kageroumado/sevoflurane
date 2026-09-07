@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The first-run assistant (`Mockups/onboarding.html` is the design source).
-/// Zero questions on the happy path: every step has a detected default, and
+/// The first-run assistant. Zero questions on the happy path: every step has
+/// a detected default, and
 /// the user only chooses when the choice costs money (CrossOver) or is
 /// genuinely ambiguous.
 struct SetupView: View {

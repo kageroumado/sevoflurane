@@ -29,7 +29,7 @@ struct GameOverlayRoleTests {
 
     @Test
     func `the overlay names do not disturb the other roles`() {
-        // Regression: adding the overlay prefixes left every prior mapping
+        // The overlay prefixes must leave every prior popup-name mapping
         // intact.
         #expect(SteamWindowRole(popupName: "SP Desktop_uid1") == .desktop)
         #expect(SteamWindowRole(popupName: "SP BPM_uid1") == .bigPicture)

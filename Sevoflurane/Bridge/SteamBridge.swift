@@ -157,7 +157,7 @@ actor SteamBridge {
 
     /// The bottled client's cookie jar, for mirroring its authenticated web
     /// session into the app's web views (``WebSessionCookies``). Nil when the
-    /// client isn't reachable — the caller renders signed out, same as before.
+    /// client isn't reachable — the caller renders signed out.
     func clientCookies() async -> [SteamWebCookie]? {
         guard let cdp = try? await ensureCDP() else { return nil }
         do {
@@ -710,10 +710,9 @@ actor SteamBridge {
             + "steam/apps/\(appid)/library_600x900.jpg")
     }
 
-    /// The names the vertical capsule is written under. Older clients wrote
-    /// `library_600x900.jpg`; current ones write `library_capsule.jpg`. Both
-    /// hold the same 2:3 art and one library mixes them freely — 117 of 680
-    /// cached capsules on the machine this was found on carry the newer name.
+    /// The names the vertical capsule is written under: clients write either
+    /// `library_600x900.jpg` or `library_capsule.jpg`. Both hold the same 2:3
+    /// art and one library mixes them freely.
     private nonisolated static let capsuleNames = [
         "library_600x900.jpg", "library_capsule.jpg",
     ]

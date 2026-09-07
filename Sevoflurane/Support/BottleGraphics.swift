@@ -37,7 +37,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     /// When to reach for this one, for the Graphics pane's explainer.
     /// Sourced from CodeWeavers' own toggle documentation and their ARM64
-    /// guidance; `Docs/engines-and-renderers.md` carries the dates.
+    /// guidance.
     var guidance: String {
         switch self {
         case .auto:

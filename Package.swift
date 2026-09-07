@@ -1,6 +1,6 @@
 // swift-tools-version: 6.2
 
-// `sevo` — the CLI + MCP server from Docs/cli-mcp-spec.md. One executable
+// `sevo` — the CLI + MCP server. One executable
 // target that compiles the CLI sources in Sevo/ together with the app's own
 // shared source files (lifecycle, CDP client, detections), so the CLI and the
 // app cannot drift: same files, two build products. The app itself still
@@ -20,9 +20,9 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: ".",
-            // Everything in the repo that is not one of `sources` below. The two
+            // Everything in the repo that is not one of `sources` below. The
             // `sevo-engine-*.tar.xz` payloads are named for the engine revision they carry, so a
-            // fresh engine build (`methylpentynol/build-macos/package-engine.sh`) adds a name this list has to learn.
+            // fresh engine build adds a name this list has to learn.
             exclude: [
                 "CONTRIBUTING.md",
                 "DELETE-CANDIDATES.md",

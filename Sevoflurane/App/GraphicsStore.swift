@@ -2,11 +2,11 @@ import Foundation
 
 /// Where the Graphics pane reads and writes.
 ///
-/// The pane used to call ``BottleGraphics`` directly, which made it a live
-/// wire: the gallery draws every surface, and drawing the settings window
-/// there meant a stray click rewrote the machine's real bottle. Everything
-/// that reaches an engine or a bottle now goes through ``GraphicsEnvironment``,
-/// so a simulated one keeps the same shape in memory and touches nothing.
+/// Everything that reaches an engine or a bottle goes through
+/// ``GraphicsEnvironment`` rather than ``BottleGraphics`` directly: the gallery
+/// draws every surface, and a pane wired straight to the bottle would let a
+/// stray click rewrite the machine's real bottle. A simulated environment
+/// keeps the same shape in memory and touches nothing.
 @MainActor
 @Observable
 final class GraphicsStore {

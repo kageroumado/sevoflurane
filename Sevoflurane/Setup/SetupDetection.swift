@@ -1,8 +1,7 @@
 import Foundation
 
 /// What SevoKit can learn about this machine without touching anything —
-/// the facts the first-run assistant and `sevo doctor` both read
-/// (`Docs/onboarding-spec.md` S0–S3).
+/// the facts the first-run assistant and `sevo doctor` both read.
 nonisolated struct SetupDetection: Sendable, Equatable {
     struct CrossOver: Sendable, Equatable {
         let version: String

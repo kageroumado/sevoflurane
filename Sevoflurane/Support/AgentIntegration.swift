@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// Puts the bundled `sevo` on PATH and registers its MCP server with the AI
-/// agents present on this machine (`Docs/release-readiness.md` §D). Always
+/// agents present on this machine. Always
 /// explicit opt-in — the wizard's Options toggle or Settings › General —
 /// and each agent is its own switch: nothing is written for an agent that
 /// isn't installed, and agents with no stable config surface get shown the

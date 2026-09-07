@@ -10,7 +10,6 @@ work on than it first appears — and a few rules keep it that way.
   the menu bar.
 - `Spike/` — scratch probes. Provisioning, CDP evaluation and client
   lifecycle are the Swift `sevo` (`swift build`).
-- `Mockups/` — self-contained HTML mockups; open them in a browser.
 
 ## Building
 
@@ -139,7 +138,7 @@ Mach service for the prefix until the client restarts.
   launch to healthy` at every healthy transition; `stop audit: graceful exit
   in Ns` / `forced down in Ns` / `client-only …` at every stop. Phases: grep
   `launching the bottle client`, `client is back`, `client services ready`,
-  `healthy:`. Where the seconds go: `Docs/boot-time.md`.
+  `healthy:`.
 - **Window chronicle** `~/Library/Logs/Sevoflurane-windows.log`: every window
   a bottle process tried to show, with time, exe, class, title, size, and
   whether the shim suppressed it (`armed` / `suppressed` / `passed <exe>`).

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The library/app/download verbs, all one-shot evals against
-/// `SharedJSContext` — the ~15 bound SteamClient methods from SPEC plus the
+/// `SharedJSContext` — the ~15 bound SteamClient methods plus the
 /// `appStore` MobX snapshot the bridge already relies on.
 nonisolated enum SteamOps {
     /// `appStore.allApps` projected to the stable fields the spec promises.
@@ -18,7 +18,7 @@ nonisolated enum SteamOps {
 
     /// One app's overview, `null` when the appid is not in the library.
     /// `steam_deck_compat_category`: 0 unknown, 1 unsupported, 2 playable,
-    /// 3 verified — on every overview already (SPEC, Deck-mode section).
+    /// 3 verified — on every overview already.
     static func appInfo(_ appid: Int) async throws -> String {
         let js = """
         (() => {
@@ -76,7 +76,7 @@ nonisolated enum SteamOps {
 
     /// One `RegisterForDownloadOverview` snapshot: subscribe, take the first
     /// push, unregister. The overview's `progress[]` stage 3 (written to
-    /// disk) is the honest overall percentage (SPEC, determinations table).
+    /// disk) is the honest overall percentage.
     static func downloadsStatus() async throws -> String {
         let js = """
         (() => new Promise(resolve => {

@@ -8,8 +8,8 @@ import Foundation
 /// turn on the DLSS→MetalFX bridge).
 ///
 /// GPTk's libraries are winelib builds against this Wine lineage; the
-/// wine-staging engine refuses to load them (measured 2026-09-01), which is
-/// why D3DMetal gets its own engine instead of a payload directory.
+/// wine-staging engine refuses to load them, which is why D3DMetal gets its
+/// own engine instead of a payload directory.
 nonisolated enum GPTkEngineInstaller {
     /// The engine directory's name — also what the Engine pane shows.
     static let version = "gptk-3.0-3"

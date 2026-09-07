@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// Downloads, verifies, and installs a managed engine release into
-/// `Engines/<version>/` (release-plan R2.2). The download lands in a
+/// `Engines/<version>/`. The download lands in a
 /// temporary directory and only an integrity-verified, fully extracted tree
 /// is moved into place — a version directory either exists complete or not
 /// at all, which is what lets ``SetupProbe/managedEngineVersions()`` treat
@@ -77,9 +77,9 @@ nonisolated enum EngineInstaller {
 
     /// Downloads the tarball with real progress: a plain download task whose
     /// `Progress` is observed, the same shape the GPTk panel uses. (An
-    /// `AsyncBytes` loop was tried and crawled — per-byte iteration costs an
-    /// await per byte, minutes for a tarball a plain download moves in
-    /// seconds.) The temp file must be moved inside the completion handler —
+    /// `AsyncBytes` loop crawls — per-byte iteration costs an await per byte,
+    /// minutes for a tarball a plain download moves in seconds.) The temp file
+    /// must be moved inside the completion handler —
     /// URLSession deletes it when the handler returns.
     private static func download(
         _ release: EngineManifest.Release, to tarball: URL,

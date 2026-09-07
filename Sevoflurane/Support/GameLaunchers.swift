@@ -12,8 +12,7 @@ import Foundation
 /// starts the game through that copy (`SEVO_LOADER` in the game's env file,
 /// read by ntdll's `loader_exec`).
 ///
-/// Game Mode wants three things at once, measured
-/// (the research notes): the bundle declares
+/// Game Mode wants three things at once: the bundle declares
 /// the games category, the process is frontmost, and its window covers the
 /// screen. This provides the first; the other two are the game's own doing.
 nonisolated enum GameLaunchers {

@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Settings: General (login item), Graphics (the bottle's renderer knobs),
-/// Repair (the idempotent provisioner, re-run on demand), About. The wizard
+/// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
 /// covers first run; this is everything after it.
 ///
 /// A searchable sidebar rather than a row of tabs, because the knobs that

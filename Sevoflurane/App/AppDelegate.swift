@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             host.bootstrap()
             supervisor.start()
-            // The client's own cookie jar is the app's web session (R5.1);
+            // The client's own cookie jar is the app's web session;
             // mirrored once at start, refreshed per browser view.
             WebSessionCookies.bridge = bridge
             WebSessionCookies.refresh()

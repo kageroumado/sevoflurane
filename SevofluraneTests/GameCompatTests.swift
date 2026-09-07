@@ -3,7 +3,7 @@ import Testing
 @testable import Sevoflurane
 
 /// The badge ladder and the source parsers, on fixtures shaped like the live
-/// answers of 2026-09-07 (`sevo app compat` against the real endpoints).
+/// answers of the real endpoints (`sevo app compat`).
 struct GameCompatTests {
     private func antiCheat(_ engines: [String], status: String = "Supported") -> GameCompatRecord.AntiCheat {
         GameCompatRecord.AntiCheat(

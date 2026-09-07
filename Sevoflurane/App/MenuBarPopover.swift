@@ -2,8 +2,8 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The menu-bar item and the panel it opens — what `MenuBarExtra(.window)`
-/// gave the app before it moved to the AppKit lifecycle (`main.swift`).
+/// The menu-bar item and the panel it opens, on the AppKit lifecycle
+/// (`main.swift`).
 ///
 /// The panel is a non-activating window so opening the popover never takes
 /// focus from Steam's own window, and it dismisses itself the moment
@@ -192,8 +192,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     }
 
     /// The drop below the menu bar, and the least the panel keeps from a
-    /// screen edge — both the platform's, measured against the popover
-    /// `MenuBarExtra` used to draw.
+    /// screen edge.
     private static let gap: CGFloat = 6
     private static let margin: CGFloat = 8
 }

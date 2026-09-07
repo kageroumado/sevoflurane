@@ -174,7 +174,7 @@ final class ClientSupervisor {
     func launch(_ game: SteamWebHost.RecentGame, renderer explicit: Renderer? = nil) async {
         // The desired renderer for this launch — an explicit "Run with X" wins
         // over a persistent pin, and neither persists past the launch beyond
-        // the bottle default it sets. Single game for now.
+        // the bottle default it sets.
         let desired = explicit ?? BottleGraphics.overrides()[game.id]?.renderer
         if let desired, desired != BottleGraphics.currentSelection().renderer {
             do {
@@ -597,7 +597,7 @@ final class ClientSupervisor {
         }
         if !wineWindows.isEmpty {
             // Services dead with a Wine dialog up is the known rescue-
-            // dialog wedge (HANDOFF 02:16): the webhelper is gone, a
+            // dialog wedge: the webhelper is gone, a
             // reload would reattach to the same dead session.
             log.log(.client, "services dead with a Wine dialog up — restarting the client")
             await restartClient(reason: "client UI session dead, Steam's watchdog dialog visible")

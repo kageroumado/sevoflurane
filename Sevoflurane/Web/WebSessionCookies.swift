@@ -4,7 +4,7 @@ import WebKit
 
 /// Mirrors the bottled client's authenticated web session into the app's
 /// WKWebView cookie jar, so the store, community, and help pages render
-/// signed in (`Docs/release-plan.md` R5.1).
+/// signed in.
 ///
 /// Steam's web properties authenticate with a `steamLoginSecure` cookie the
 /// client already holds for every Steam domain — it mints them at sign-in

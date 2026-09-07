@@ -1,7 +1,5 @@
 # Performance tooling
 
-Findings from 2026-08-31 live in `Docs/perf-investigation-2026-08-31.md`.
-
 ## The smoke scenario
 
 Launch the app with `SEVO_ENABLE_BENCHMARKS=1`, then:
