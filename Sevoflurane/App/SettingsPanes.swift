@@ -992,6 +992,26 @@ struct RepairSettings: View {
 
 struct AboutSettings: View {
     let highlighted: String?
+    @State private var savingDiagnostics = false
+    @State private var diagnosticsError: String?
+
+    /// The bundled CLI writes the zip (`sevo diag`), so the app and the
+    /// terminal produce the same report; Finder then shows it.
+    private func saveDiagnostics() {
+        savingDiagnostics = true
+        diagnosticsError = nil
+        Task(name: "Save diagnostics") {
+            let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
+            let result = await Subprocess.run(helper.path, ["diag"], capture: .combined, timeout: .seconds(90))
+            savingDiagnostics = false
+            let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
+            guard result.status == 0, path.hasSuffix(".zip") else {
+                diagnosticsError = "Could not write the report: \(result.output.suffix(200))"
+                return
+            }
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -1021,9 +1041,21 @@ struct AboutSettings: View {
                 Button("License") {
                     NSApp.sendAction(#selector(AppDelegate.showLicense(_:)), to: nil, from: nil)
                 }
+                Button(savingDiagnostics ? "Saving…" : "Save Diagnostics…") { saveDiagnostics() }
+                    .disabled(savingDiagnostics)
+                    .highlightable(id: "about.diagnostics", highlighted: highlighted)
             }
             .controlSize(.small)
             .padding(.top, 6)
+            Text("Diagnostics is a zip on the Desktop with the logs, a doctor report and "
+                + "the engine's identity: what a bug report needs. It names no account.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+            if let diagnosticsError {
+                Text(diagnosticsError).font(.caption).foregroundStyle(.red)
+            }
         }
         .highlightable(id: "about.version", highlighted: highlighted)
         .padding(.vertical, 28)

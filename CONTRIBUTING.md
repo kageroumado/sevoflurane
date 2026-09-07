@@ -182,9 +182,25 @@ Mach service for the prefix until the client restarts.
 
 ## Reporting bugs
 
-Attach `~/Library/Logs/Sevoflurane.log` and the output of
-`sevo doctor --json` (build it with `swift build` → `.build/debug/sevo`;
-redact nothing — it contains no account data). If a game is involved, say
-which appid and whether it runs under plain CrossOver, and attach
-`~/Library/Logs/Sevoflurane-wine.log` from a run with
-`sevo bottle config wine-debug -- "+seh,err+all"` set.
+Use the issue templates: one for Steam and the app, one for a game, one for
+a feature. Every report wants the diagnostics zip — **Settings › About › Save
+Diagnostics…** or `sevo diag` — which holds the app's logs, a `sevo doctor`
+report, the active engine's `engine-info.json`, the bottle's env files and the
+last two days of crash reports from the engine's processes. `--steam-logs`
+adds Steam's own bootstrap, connection, webhelper and game-process logs. For
+a game crash, turn on Settings › Engine › Wine diagnostics log first
+(`sevo bottle config wine-debug on`), reproduce, then save the report.
+
+A game problem is fixed by running the game; a game the maintainer does not
+own is asked for in the issue, as a gift copy or a donation that covers it.
+
+## Pull requests
+
+The template asks who wrote the change and how it was verified. A change
+written with an agent says so, names the model, and says whether a human
+attended the session; that is read, not held against anyone. What is held
+against a PR: changes nobody ran, comments that narrate history or plans
+instead of describing the code, and unrelated edits in the same diff.
+
+Comments say what the code does and why, in the present tense. A negation
+earns its place only when it names the wrong belief it corrects.

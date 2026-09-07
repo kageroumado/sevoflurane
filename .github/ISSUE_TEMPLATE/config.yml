@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Dormison, the engine
+    url: https://github.com/kageroumado/dormison/issues/new/choose
+    about: A crash or a rendering problem inside Wine itself, or a DirectX 12 sample that draws wrong. Steam and game problems start here in Sevoflurane; the engine template is for people who can point at the driver.
