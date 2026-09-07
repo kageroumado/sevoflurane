@@ -60,7 +60,7 @@ struct GPUEquivalenceTests {
         #expect(amd.videoMemoryMB >= 8 * 1024)
     }
 
-    /// The two rungs chosen, with the ids read out of the pci.ids
+    /// Two rungs of the ladder, with the ids read out of the pci.ids
     /// registry: a mid-range card for the M1 Max, a much stronger one for the
     /// M3 Ultra.
     @Test

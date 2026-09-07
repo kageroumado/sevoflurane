@@ -584,9 +584,10 @@ struct EngineCommand: AsyncParsableCommand {
     private func list() async throws {
         let d = await SetupProbe.detect()
         var rows: [[String: Any]] = []
-        if let cx = d.crossover {
+        for (name, cx) in [("crossover", d.crossover), ("crossover-preview", d.crossoverPreview)] {
+            guard let cx else { continue }
             rows.append([
-                "engine": "crossover", "version": cx.version, "licensed": cx.licensed,
+                "engine": name, "version": cx.version, "licensed": cx.licensed,
                 "expires": cx.expires ?? NSNull(), "trial_expired": cx.trialExpired,
             ])
         }

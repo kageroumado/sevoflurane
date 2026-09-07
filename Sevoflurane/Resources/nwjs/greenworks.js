@@ -375,7 +375,7 @@ greenworks.setStat = function (name, value) {
 };
 
 greenworks.getStatInt = function (name) {
-  const reply = ask({ op: 'getStat', name: name });
+  const reply = ask({ op: 'getStatInt', name: name });
   return reply.ok ? reply.value : 0;
 };
 

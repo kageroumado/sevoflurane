@@ -54,11 +54,6 @@ final class GPTkDownload: NSObject {
     /// Called with each version as it finishes installing.
     var onInstalled: (@MainActor (String) -> Void)?
 
-    /// Versions installed this session, newest label last.
-    var installedVersions: [String] {
-        items.compactMap { if case let .installed(v) = $0.phase { v } else { nil } }
-    }
-
     var isBusy: Bool {
         items.contains { $0.phase == .downloading || $0.phase == .installing }
     }

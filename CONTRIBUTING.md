@@ -8,8 +8,8 @@ work on than it first appears — and a few rules keep it that way.
 - `Sevoflurane/` — the app. `Web/` hosts Steam's UI and windows; `Bridge/`
   is the in-process page↔client bridge; `App/` is supervision, logging, and
   the menu bar.
-- `Spike/` — scratch probes. Provisioning, CDP evaluation and client
-  lifecycle are the Swift `sevo` (`swift build`).
+- `Sevo/` — the `sevo` CLI and MCP server (`swift build`). It compiles the
+  app's own provisioning, CDP and lifecycle sources, so the two cannot drift.
 
 ## Building
 
@@ -123,8 +123,9 @@ start against the live client.
 
 A game's own setup state — EULA, gamma step, settings, saves — lives under
 the prefix, `drive_c/users/<user>/AppData/Local/<Game>/Saved/`. The built-in
-engine uses `Sevoflurane/Bottles/Steam` with Windows user `<you>`; CrossOver
-uses `CrossOver/Bottles/Steam` with user `crossover`. Switching engines hands
+engine uses `Sevoflurane/Bottles/Steam` with the macOS account's short name
+as the Windows user; CrossOver uses `CrossOver/Bottles/Steam` with user
+`crossover`. Switching engines hands
 the game a prefix it has never seen, so it runs first-time setup again. Game
 files are shared (`steamapps/common` is symlinked between bottles); config
 and saves are not. Steam Cloud carries saves across.
@@ -142,7 +143,8 @@ Mach service for the prefix until the client restarts.
 - **Window chronicle** `~/Library/Logs/Sevoflurane-windows.log`: every window
   a bottle process tried to show, with time, exe, class, title, size, and
   whether the shim suppressed it (`armed` / `suppressed` / `passed <exe>`).
-- **The shim** (`methylpentynol/build-macos/dock-shim/sevo_dock_shim.c`,
+- **The shim** (`build-macos/dock-shim/sevo_dock_shim.c` in the engine
+  repository, [kageroumado/methylpentynol](https://github.com/kageroumado/methylpentynol);
   built into the engine directory as `libsevodockshim.dylib`, wired by
   `Engine.environment` with `SEVO_SUPPRESS_WINDOWS=1`): no Dock promotion
   and no windows for Steam's infrastructure processes. It ships inside the
@@ -175,10 +177,8 @@ Mach service for the prefix until the client restarts.
   `~/Library/Developer/Xcode/DerivedData/Sevoflurane-*/Build/Products/Debug/`
   and its bundled `sevo` is at `Contents/Helpers/sevo`. Launch the one you
   mean by full path or the audits are not comparable.
-- **Worktrees**: agents cut branches from `origin/main`, which can lag local
-  `main` — push first, or `git worktree add -b <branch> <path> main`.
-  `.claude/worktrees/propofol` is a symlink because the pbxproj references
-  Propofol relative to the repo root.
+- **Worktrees**: a branch cut from `origin/main` can lag local `main` — push
+  first, or `git worktree add -b <branch> <path> main`.
 
 ## Reporting bugs
 

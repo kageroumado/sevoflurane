@@ -114,7 +114,8 @@ struct ShaderPackagesTests {
         try FileManager.default.createDirectory(at: nested.appendingPathComponent("source"), withIntermediateDirectories: true)
         try Data().write(to: nested.appendingPathComponent("package.json"))
         try Data().write(to: nested.appendingPathComponent("source/package.json"))
-        #expect(ShaderPackages.packageDirectory(under: root) == nested)
+        let found = ShaderPackages.packageDirectory(under: root)?.resolvingSymlinksInPath().path
+        #expect(found == nested.resolvingSymlinksInPath().path)
         #expect(ShaderPackages.packageDirectory(under: root.appendingPathComponent("nowhere")) == nil)
     }
 
@@ -160,16 +161,20 @@ struct ShaderPackagesTests {
     func `the built-in catalog names the two packages with their licenses`() {
         let cunny = ShaderPackages.builtInCatalog.first { $0.name == "cunny-nvl" }
         #expect(cunny?.license == "LGPL-3.0-only")
-        #expect(cunny?.size == nil)
         if case let .download(url, sha256, _)? = cunny?.origin {
             #expect(url.lastPathComponent == "cunny-nvl-1.tar.gz")
-            #expect(sha256 == nil)
+            #expect(sha256?.count == 64)
         } else {
             Issue.record("cunny-nvl is a download")
         }
         let anime = ShaderPackages.builtInCatalog.first { $0.name == "anime4k-c" }
         #expect(anime?.license == "MIT")
-        #expect(anime?.size == 37634)
+        if case let .download(url, sha256, _)? = anime?.origin {
+            #expect(url.lastPathComponent == "anime4k-c-4.0.1.tar.gz")
+            #expect(sha256?.count == 64)
+        } else {
+            Issue.record("anime4k-c is a download")
+        }
     }
 
     @Test

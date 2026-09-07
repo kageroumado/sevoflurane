@@ -540,14 +540,14 @@ final class SteamWebHost {
         }
     #endif
 
-    /// One `__gameAction` event from the context page's registrations
-    /// (``gameActionScript``). The trail also lands in the log, so a slow
-    /// launch explains itself after the fact.
     /// A launch has begun for this app id, on any path (library, popover,
     /// `steam://run`, the CLI): the client's own game-action event, so it
     /// fires even for a launch the bridge never saw.
     var onGameLaunchStart: ((Int) -> Void)?
 
+    /// One `__gameAction` event from the context page's registrations
+    /// (``gameActionScript``). The trail also lands in the log, so a slow
+    /// launch explains itself after the fact.
     func noteGameAction(phase: String, appID: String, task: String) {
         switch phase {
         case "start":
@@ -577,12 +577,6 @@ final class SteamWebHost {
         }
     }
 
-    /// The in-game overlay was activated or dismissed (Shift+Tab), told by the
-    /// context page's subscription (``overlayScript``). Places the overlay
-    /// window over the running game and fades it in, or fades it out and hands
-    /// focus back to the game process. The game window's frame comes from
-    /// CGWindowList (`WineWindowWatch.gameWindow`), so a game that moved or
-    /// resized since launch is followed on the next activation.
     // Overlay presence. It is shown only while the overlay is active *and* the
     // game (or this app, once the overlay has taken key) is frontmost, so it
     // rides just above the game and vanishes the moment another app comes
@@ -609,6 +603,12 @@ final class SteamWebHost {
     /// so it is not hidden behind it. `nil` when no overlay is up.
     var overlayChildLevel: Int? { overlayGame.map { $0.layer + 2 } }
 
+    /// The in-game overlay was activated or dismissed (Shift+Tab), told by the
+    /// context page's subscription (``overlayScript``). Places the overlay
+    /// window over the running game and fades it in, or fades it out and hands
+    /// focus back to the game process. The game window's frame comes from
+    /// CGWindowList (`WineWindowWatch.gameWindow`), so a game that moved or
+    /// resized since launch is followed on the next activation.
     func noteOverlayActivated(active: Bool, appID: String) {
         guard let overlay = popups.values.first(where: { $0.role == .gameOverlay }) else {
             EventLog.shared.log(

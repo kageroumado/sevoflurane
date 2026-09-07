@@ -52,8 +52,6 @@ enum WebSessionCookies {
         await inFlight?.value
     }
 
-    /// Copies the client's Steam-domain cookies into the default website data
-    /// store, replacing what was there. Returns how many landed.
     /// What the last pass wrote into WebKit, so the next pass writes only
     /// the difference. Each `setCookie` is a round trip to the network
     /// process, and the mirror sits on every browser view's load path — 46
@@ -62,6 +60,8 @@ enum WebSessionCookies {
     /// after launch re-applies everything once and settles.
     private static var lastApplied: [String: SteamWebCookie] = [:]
 
+    /// Copies the client's Steam-domain cookies into the default website data
+    /// store, replacing what was there. Returns how many landed.
     @discardableResult
     static func syncNow() async -> Int {
         // One CDP read plus one network-process round trip per changed

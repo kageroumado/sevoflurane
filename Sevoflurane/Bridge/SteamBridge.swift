@@ -16,11 +16,15 @@ actor SteamBridge {
     private final class PageSession {
         let ws: WSConnection
         let tunnel: AsyncStream<String>.Continuation
+        /// Distinguishes this page's call ids from another page's: every
+        /// shim counts from one.
+        let serial: Int
         var tasks: [Task<Void, Never>] = []
 
-        init(ws: WSConnection, tunnel: AsyncStream<String>.Continuation) {
+        init(ws: WSConnection, tunnel: AsyncStream<String>.Continuation, serial: Int) {
             self.ws = ws
             self.tunnel = tunnel
+            self.serial = serial
         }
     }
 
@@ -42,6 +46,11 @@ actor SteamBridge {
     private var tunnelOwner: [String: ObjectIdentifier] = [:]
     /// Callback id → the page that registered it.
     private var callbackOwner: [String: ObjectIdentifier] = [:]
+    /// Registration handle (page serial and call id, the key in the client's
+    /// `__sevoRet`) → the page that holds it and the callback ids minted for
+    /// it, so both are released when the handle is used or the page goes away.
+    private var registrations: [String: (owner: ObjectIdentifier, callbacks: [String])] = [:]
+    private var pageSerial = 0
     private var evalPending: [String: CheckedContinuation<(ok: Bool, v: String), Never>] = [:]
     private var evalTimeouts: [String: Task<Void, Never>] = [:]
     private var evalSeq = 0
@@ -201,7 +210,7 @@ actor SteamBridge {
             // Re-captured: the outer `weak self` is a mutable box, which a
             // @Sendable closure may not reference; its own capture is a copy.
             let client = CDPClient(onPush: { [weak self] payload in
-                await self?.broadcast(payload)
+                await self?.deliverCallback(payload)
             })
             try await client.connect(port: BridgePorts.cdp)
             _ = try await client.evaluate(BridgeJS.binaryCodec)
@@ -210,8 +219,7 @@ actor SteamBridge {
                     of: "%RELAY_PORT%", with: String(BridgePorts.relayWS),
                 ),
             )
-            let registered = try await client.evaluate(BridgeJS.registerDownloads)
-            self?.log(.bridge, "cdp connected — \(tunnel ?? "?"), \(registered ?? "?")")
+            self?.log(.bridge, "cdp connected — \(tunnel ?? "?")")
             return client
         }
         cdpTask = task
@@ -226,28 +234,24 @@ actor SteamBridge {
         }
     }
 
-    /// Routes one `__sevo` binding push. Callbacks name a function inside one
-    /// page; delivering them to every page runs the wrong page's handler on
-    /// this page's data. Everything else fans out.
-    private func broadcast(_ payload: String) {
-        guard let message = Self.jsonObject(payload) else { return }
-        if message["type"] as? String == "sc_callback" {
-            guard let cb = message["cb"] as? String,
-                  let owner = callbackOwner[cb],
-                  let session = pages[owner] else { return }
-            session.ws.send(text: payload)
-            return
-        }
-        for session in pages.values {
-            session.ws.send(text: payload)
-        }
+    /// Routes one `__sevo` binding push: a callback names a function inside
+    /// one page, and delivering it anywhere else would run the wrong page's
+    /// handler on this page's data. A callback whose page is gone is dropped.
+    private func deliverCallback(_ payload: String) {
+        guard let message = Self.jsonObject(payload),
+              message["type"] as? String == "sc_callback",
+              let cb = message["cb"] as? String,
+              let owner = callbackOwner[cb],
+              let session = pages[owner] else { return }
+        session.ws.send(text: payload)
     }
 
     // MARK: - Page sessions
 
     private func attachPage(_ ws: WSConnection, queue: DispatchQueue) {
         let (tunnelStream, tunnelContinuation) = AsyncStream.makeStream(of: String.self)
-        let session = PageSession(ws: ws, tunnel: tunnelContinuation)
+        pageSerial += 1
+        let session = PageSession(ws: ws, tunnel: tunnelContinuation, serial: pageSerial)
         let id = ObjectIdentifier(ws)
         pages[id] = session
         newestPage = id
@@ -262,7 +266,7 @@ actor SteamBridge {
         })
         let stream = Self.messages(of: ws, on: queue)
         session.tasks.append(Task { [weak self] in
-            await self?.pushInitialLibrary(to: ws)
+            await self?.closeUnlessClientReachable(ws)
             for await message in stream {
                 switch message {
                 case let .text(raw):
@@ -276,17 +280,12 @@ actor SteamBridge {
         })
     }
 
-    private func pushInitialLibrary(to ws: WSConnection) async {
-        do {
-            let cdp = try await ensureCDP()
-            if let apps = try await cdp.evaluate(BridgeJS.library) {
-                ws.send(text: #"{"type":"library","apps":\#(apps)}"#)
-            }
-        } catch {
-            // The shim reconnects a second after close; by then the
-            // supervisor may have the client back.
-            ws.close()
-        }
+    /// A page whose calls have nowhere to go is closed at once: the shim
+    /// reconnects a second after close, and by then the supervisor may have
+    /// the client back.
+    private func closeUnlessClientReachable(_ ws: WSConnection) async {
+        guard (try? await ensureCDP()) == nil else { return }
+        ws.close()
     }
 
     /// The session is looked up rather than captured: `PageSession` lives in
@@ -322,17 +321,11 @@ actor SteamBridge {
         let cmd = request["cmd"] as? String ?? ""
         do {
             switch cmd {
-            case "library":
-                if let apps = try await cdp.evaluate(BridgeJS.library) {
-                    ws.send(text: #"{"type":"library","apps":\#(apps)}"#)
-                }
             case "sc":
                 try await forwardSteamClient(request, ws: ws, id: id, cdp: cdp)
             case "sc_unregister":
-                if let rid = request["id"] as? Int {
-                    _ = try await cdp.evaluate(
-                        "(window.__sevoRet||{})[\(rid)]?.unregister?.(); 'ok'",
-                    )
+                if let rid = request["id"] as? Int, let session = pages[id] {
+                    try await unregister([Self.handle(session.serial, rid)], cdp: cdp)
                 }
             default:
                 guard let template = BridgeJS.commands[cmd],
@@ -355,8 +348,8 @@ actor SteamBridge {
     /// Function arguments arrive as `{"__sevoCb": id}` markers; they are
     /// rebuilt on the far side as real functions that push through the
     /// `__sevo` binding, so Steam's own callbacks stream back to the page
-    /// that registered them. The return value is retained in `__sevoRet` so
-    /// `unregister()` can find it.
+    /// that registered them. A registration's handle is retained in
+    /// `__sevoRet` so ``unregister(_:cdp:)`` can find it.
     private func forwardSteamClient(
         _ request: [String: Any],
         ws: WSConnection,
@@ -365,7 +358,9 @@ actor SteamBridge {
     ) async throws {
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
-              path.hasPrefix("SteamClient.") else { return }
+              path.hasPrefix("SteamClient."),
+              let session = pages[id] else { return }
+        let handle = Self.handle(session.serial, rid)
         if path == "SteamClient.Apps.RunGame" {
             // The one choke point every launch funnels through — menu bar,
             // the library's Play button, steam://run. Reconcile the renderer
@@ -387,10 +382,12 @@ actor SteamBridge {
         )
         defer { PerfProbe.bridge.endInterval("SteamClientCall", call) }
         var argsJS: [String] = []
+        var callbacks: [String] = []
         for argument in request["args"] as? [Any] ?? [] {
             if let marker = argument as? [String: Any],
                let cb = marker["__sevoCb"] as? String {
                 callbackOwner[cb] = id
+                callbacks.append(cb)
                 let cbJSON = Self.jsonText(cb) ?? "\"?\""
                 argsJS.append("function(){window.__sevo(JSON.stringify({type:'sc_callback',"
                     + "cb:\(cbJSON),args:window.__sevoEnc(Array.prototype.slice.call(arguments))}))}")
@@ -403,8 +400,11 @@ actor SteamBridge {
           window.__sevoRet = window.__sevoRet || {};
           try {
             const r = await \(path)(\(argsJS.joined(separator: ",")));
-            window.__sevoRet[\(rid)] = r;
-            return JSON.stringify({ok: true, v: (r && r.unregister) ? null : window.__sevoEnc(r)});
+            if (r && r.unregister) {
+              window.__sevoRet[\(Self.jsonText(handle) ?? "\"?\"")] = r;
+              return JSON.stringify({ok: true, reg: true, v: null});
+            }
+            return JSON.stringify({ok: true, v: window.__sevoEnc(r)});
           } catch (e) {
             // Steam rejects with plain objects (e.g. {result: n}) that the UI
             // inspects; stringifying them to "[object Object]" destroys the
@@ -418,6 +418,9 @@ actor SteamBridge {
         """
         let raw = try await cdp.evaluate(expr)
         let outcome = raw.flatMap(Self.jsonObject) ?? ["ok": false, "e": "no result"]
+        if outcome["reg"] as? Bool == true {
+            registrations[handle] = (owner: id, callbacks: callbacks)
+        }
         var reply = #"{"type":"sc_result","id":\#(rid)"#
         if outcome["ok"] as? Bool == true {
             reply += #","value":\#(Self.jsonText(Self.jsonText(outcome["v"]) ?? "null") ?? "\"null\"")}"#
@@ -427,12 +430,44 @@ actor SteamBridge {
         ws.send(text: reply)
     }
 
-    private func detachPage(_ id: ObjectIdentifier) {
+    /// Releases registrations on the far side and here: their handles are
+    /// used and dropped from `__sevoRet`, and their callback ids forgotten.
+    /// Without this a page that reloaded, or Steam's own popup that closed,
+    /// would leave its handlers firing into the client for the rest of the
+    /// session.
+    private func unregister(_ handles: [String], cdp: CDPClient) async throws {
+        var owned: [String] = []
+        for handle in handles {
+            guard let registration = registrations.removeValue(forKey: handle) else { continue }
+            owned.append(handle)
+            for cb in registration.callbacks {
+                callbackOwner.removeValue(forKey: cb)
+            }
+        }
+        guard !owned.isEmpty, let list = Self.jsonText(owned) else { return }
+        _ = try await cdp.evaluate(
+            "\(list).forEach(r => { const h = (window.__sevoRet||{})[r]; "
+                + "delete window.__sevoRet[r]; h?.unregister?.(); }); 'ok'",
+        )
+    }
+
+    private static func handle(_ serial: Int, _ rid: Int) -> String {
+        "\(serial)_\(rid)"
+    }
+
+    private func detachPage(_ id: ObjectIdentifier) async {
         guard let session = pages.removeValue(forKey: id) else { return }
         if newestPage == id { newestPage = pages.keys.first }
         session.tunnel.finish()
         for task in session.tasks {
             task.cancel()
+        }
+        let orphaned = registrations.filter { $0.value.owner == id }.map(\.key)
+        if let cdp, await !cdp.isClosed {
+            try? await unregister(orphaned, cdp: cdp)
+        }
+        for handle in orphaned {
+            registrations.removeValue(forKey: handle)
         }
         for (cb, owner) in callbackOwner where owner == id {
             callbackOwner.removeValue(forKey: cb)

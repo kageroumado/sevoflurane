@@ -37,7 +37,7 @@ xcuserdata/
 .swiftpm/
 Packages/
 
-## Python (Spike prototypes)
+## Python
 __pycache__/
 *.pyc
 
@@ -51,6 +51,6 @@ __pycache__/
 ## Claude Code
 .claude/
 
-## Compiled engine payloads (built by Tools/package-engine.sh)
+## Compiled engine payloads (built by the engine repository's build-macos/package-engine.sh)
 Tools/webhelper-wrapper/webhelper-wrapper.exe
 sevo-engine-*.tar.xz

@@ -5,7 +5,16 @@
 // shared source files (lifecycle, CDP client, detections), so the CLI and the
 // app cannot drift: same files, two build products. The app itself still
 // builds from Sevoflurane.xcodeproj; this package is only how `sevo` builds.
+import Foundation
 import PackageDescription
+
+/// Working notes and engine payloads sit beside the sources on a development
+/// machine and are gitignored, so a clone has none of them. SwiftPM warns
+/// about an exclude that names nothing, so only what is present is listed.
+let packageContents = (try? FileManager.default.contentsOfDirectory(atPath: Context.packageDirectory)) ?? []
+let localOnly = ["DELETE-CANDIDATES.md", "Docs", "HANDOFF.md", "Mockups", "Spike", "default.profraw"]
+    .filter(packageContents.contains)
+let enginePayloads = packageContents.filter { $0.hasPrefix("sevo-engine-") && $0.hasSuffix(".tar.xz") }
 
 let package = Package(
     name: "sevo",
@@ -20,17 +29,10 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: ".",
-            // Everything in the repo that is not one of `sources` below. The
-            // `sevo-engine-*.tar.xz` payloads are named for the engine revision they carry, so a
-            // fresh engine build adds a name this list has to learn.
-            exclude: [
+            // Everything in the repo that is not one of `sources` below.
+            exclude: localOnly + enginePayloads + [
                 "CONTRIBUTING.md",
-                "DELETE-CANDIDATES.md",
-                "default.profraw",
-                "Docs",
-                "HANDOFF.md",
                 "LICENSE",
-                "Mockups",
                 "README.md",
                 "Sevoflurane.xcodeproj",
                 "Sevoflurane/App",
@@ -44,7 +46,6 @@ let package = Package(
                 "Sevoflurane/Resources",
                 "Sevoflurane/Setup/GPTkDownload.swift",
                 "Sevoflurane/Setup/GPTkDownloadPanel.swift",
-                "Sevoflurane/Setup/GPTkEngineInstaller.swift",
                 "Sevoflurane/Setup/SetupDryRun.swift",
                 "Sevoflurane/Setup/SetupView.swift",
                 "Sevoflurane/Sevoflurane.icon",
@@ -59,11 +60,7 @@ let package = Package(
                 "Sevoflurane/Web",
                 "SevofluraneTests",
                 "Site",
-                "Spike",
                 "Tools",
-                "sevo-engine-sevo-r1c-wine11.16.tar.xz",
-                "sevo-engine-sevo-r1d-wine11.16.tar.xz",
-                "sevo-engine-wine11.16-dxmt0.80-r1.tar.xz",
             ],
             sources: [
                 "Sevo",

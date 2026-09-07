@@ -491,7 +491,7 @@ struct GraphicsSettings: View {
     private var rendererVersionsSection: some View {
         Section {
             if !store.engineHasOwnD3DMetal, !store.availableRenderers.contains(.d3dmetal) {
-                gptkEngineRow
+                dx12HostNotice
             }
             d3dMetalRow
             ForEach(RendererVersions.Component.allCases) { component in
@@ -591,7 +591,7 @@ struct GraphicsSettings: View {
     /// built-in engine does from `sevo-r1d` on (the `ntdll-macos-gsbase-
     /// pthread` patch). Toolkits added meanwhile are kept for the engine that
     /// gains them.
-    private var gptkEngineRow: some View {
+    private var dx12HostNotice: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Direct3D 12 needs an engine that hosts Apple's toolkit")
                 .font(.callout.weight(.semibold))

@@ -4,8 +4,8 @@
     /// A ``GraphicsEnvironment`` with no engine and no bottle behind it. The
     /// pane reads the scenario's fixture and every change lands in memory, so
     /// the gallery and the demo build can show each engine's Graphics pane —
-    /// including the install that fails and the DirectX 12 engine download,
-    /// which a real machine reaches once and then never again.
+    /// including the install that fails, which a real machine reaches once
+    /// and then never again.
     @MainActor
     final class DemoGraphicsEnvironment: GraphicsEnvironment {
         /// The engine-and-toolkit situations the pane has to answer for.
@@ -15,12 +15,8 @@
             /// The built-in engine with no toolkit yet — D3DMetal is absent
             /// from the renderer list and the pane asks for Apple's image.
             case builtInNoToolkit = "built-in-no-toolkit"
-            /// The built-in engine with two toolkit versions added, and the
-            /// DirectX 12 engine already installed.
+            /// The built-in engine with two toolkit versions added.
             case builtInWithToolkit = "built-in-with-toolkit"
-            /// A toolkit is present but the DirectX 12 engine that hosts it
-            /// is not, so the pane offers to fetch it.
-            case dx12EngineMissing = "dx12-engine-missing"
             /// A disk image that turns out not to carry the toolkit.
             case installFails = "install-fails"
 
@@ -33,7 +29,6 @@
                 case .crossOver: "CrossOver"
                 case .builtInNoToolkit: "Built-in engine, no toolkit"
                 case .builtInWithToolkit: "Built-in engine, toolkit added"
-                case .dx12EngineMissing: "DirectX 12 engine missing"
                 case .installFails: "Toolkit install fails"
                 }
             }
@@ -41,7 +36,6 @@
 
         let isSimulation = true
         let toolkitStore = URL(fileURLWithPath: "/demo/engine")
-        let dx12EngineVersion = "gptk-3.0-3"
 
         private let scenario: Scenario
         /// Per-action think time, so a progress state is on screen long enough
@@ -50,7 +44,6 @@
         private var selection: BottleGraphics.Selection
         private var toolkits: [D3DMetalInstaller.Installed]
         private var active: String?
-        private(set) var dx12EngineInstalled: Bool
 
         init(scenario: Scenario, stepDelay: Duration = .seconds(2)) {
             self.scenario = scenario
@@ -62,7 +55,7 @@
             )
             let store = URL(fileURLWithPath: "/demo/engine")
             toolkits = switch scenario {
-            case .builtInWithToolkit, .dx12EngineMissing:
+            case .builtInWithToolkit:
                 [
                     .init(version: "3.0", root: store),
                     .init(version: "4.0 beta 2", root: store),
@@ -71,7 +64,6 @@
                 []
             }
             active = toolkits.last?.version
-            dx12EngineInstalled = scenario == .builtInWithToolkit
             log("scenario '\(scenario.rawValue)' — no bottle will be written")
         }
 
@@ -79,11 +71,11 @@
             scenario == .crossOver
         }
 
-        /// A managed engine hosts what it was built for: wine-staging carries
-        /// DXMT and DXVK, the GPTk build carries D3DMetal.
+        /// A managed engine hosts what it was built for: DXMT and DXVK
+        /// always, D3DMetal once a toolkit has been added.
         func hostedRenderers() -> [Renderer] {
             var hosted: [Renderer] = [.auto, .dxmt, .dxvk, .wined3d]
-            if dx12EngineInstalled { hosted.append(.d3dmetal) }
+            if scenario == .builtInWithToolkit { hosted.append(.d3dmetal) }
             return hosted
         }
 
@@ -125,23 +117,6 @@
             toolkits = (toolkits + [entry]).sorted()
             active = entry.version
             return entry
-        }
-
-        func installDX12Engine(
-            overlaying toolkit: D3DMetalInstaller.Installed,
-            progress: @escaping @Sendable (String, Double?) -> Void,
-        ) async throws {
-            log("would download the GPTk Wine and overlay D3DMetal \(toolkit.version) onto it")
-            for (stage, fraction) in [
-                ("downloading", 0.35), ("verifying", 0.7), ("extracting", 0.9),
-            ] {
-                progress(stage, fraction)
-                try await Task.sleep(for: stepDelay)
-            }
-            guard scenario != .installFails else {
-                throw DemoError("the download didn't match its checksum")
-            }
-            dx12EngineInstalled = true
         }
 
         private var rendererVersions: [RendererVersions.Component: [RendererVersions.Installed]] = [

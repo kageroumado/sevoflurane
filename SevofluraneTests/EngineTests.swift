@@ -29,7 +29,7 @@ struct EngineManifestTests {
 
     @Test
     func `rejects unknown schema`() {
-        let future = manifestJSON.replacingOccurrences(of: "\"schema\": 1", with: "\"schema\": 2")
+        let future = manifestJSON.replacingOccurrences(of: "\"schema\": 1", with: "\"schema\": 3")
         #expect(throws: (any Error).self) {
             try EngineManifest.decode(Data(future.utf8))
         }

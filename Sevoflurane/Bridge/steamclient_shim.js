@@ -186,18 +186,22 @@
     return leaf.indexOf("Register") === 0;
   }
 
+  /* Returns the call id and the callback ids minted for it, so a
+     registration's unregister can drop exactly those. */
   function call(path, args) {
     var id = ++seq;
+    var cbs = [];
     var wire = Array.prototype.map.call(args, function (a) {
       if (typeof a !== "function") return a;
       var cb = PAGE_PREFIX + "cb" + (++seq);
       callbacks.set(cb, { fn: a, path: path });
+      cbs.push(cb);
       return { __sevoCb: cb };
     }).map(function (a) {
       return (a && a.__sevoCb) ? a : enc(a);
     });
     send({ cmd: "sc", id: id, path: path, args: wire });
-    return id;
+    return { id: id, cbs: cbs };
   }
 
   /* Built from a shape snapshot of the real client (namespace tree, 1 = method)
@@ -305,7 +309,7 @@
         entry = { command: arguments[0], fn: arguments[1] };
         steamURLHandlers.push(entry);
       }
-      var id = call(path, arguments);
+      var sent = call(path, arguments);
       if (isRegistration(path)) {
         return {
           unregister: function () {
@@ -313,12 +317,13 @@
               var i = steamURLHandlers.indexOf(entry);
               if (i >= 0) steamURLHandlers.splice(i, 1);
             }
-            send({ cmd: "sc_unregister", id: id });
+            sent.cbs.forEach(function (cb) { callbacks.delete(cb); });
+            send({ cmd: "sc_unregister", id: sent.id });
           },
         };
       }
       return new Promise(function (resolve, reject) {
-        pending.set(id, { resolve: resolve, reject: reject });
+        pending.set(sent.id, { resolve: resolve, reject: reject });
       });
     };
     /* A namespace is an object and a method is a function, exactly as in the

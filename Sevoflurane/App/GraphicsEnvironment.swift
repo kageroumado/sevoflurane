@@ -44,14 +44,6 @@ protocol GraphicsEnvironment: AnyObject {
     ) async throws -> RendererVersions.Installed
     func removeRendererVersion(_ installed: RendererVersions.Installed) throws
     func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release]
-
-    /// The Wine build the DirectX 12 renderer is locked to.
-    var dx12EngineVersion: String { get }
-    var dx12EngineInstalled: Bool { get }
-    func installDX12Engine(
-        overlaying toolkit: D3DMetalInstaller.Installed,
-        progress: @escaping @Sendable (String, Double?) -> Void,
-    ) async throws
 }
 
 extension GraphicsEnvironment {
@@ -153,20 +145,5 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
     func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release] {
         let manifest = try? await EngineManifest.fetch()
         return await RendererVersions.releases(component, manifest: manifest)
-    }
-
-    var dx12EngineVersion: String {
-        GPTkEngineInstaller.version
-    }
-
-    var dx12EngineInstalled: Bool {
-        GPTkEngineInstaller.isInstalled
-    }
-
-    func installDX12Engine(
-        overlaying toolkit: D3DMetalInstaller.Installed,
-        progress: @escaping @Sendable (String, Double?) -> Void,
-    ) async throws {
-        try await GPTkEngineInstaller.install(overlaying: toolkit, progress: progress)
     }
 }

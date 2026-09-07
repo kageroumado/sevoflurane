@@ -4,56 +4,6 @@ import Foundation
 /// mirroring, base64 envelopes carrying the view type, rejection objects
 /// never stringified, callbacks routed per page.
 nonisolated enum BridgeJS {
-    /// Library snapshot for the page's `library` command.
-    static let library = #"""
-    JSON.stringify(appStore.allApps
-      .filter(a => a.app_type === 1)
-      .map(a => ({
-        id: a.appid, name: a.display_name, inst: !!a.installed,
-        size: +(a.size_on_disk || 0), mins: a.minutes_playtime_forever || 0,
-        last: a.rt_last_time_played || 0,
-        st: a.per_client_data?.[0]?.display_status || 0,
-        pct: a.per_client_data?.[0]?.status_percentage ?? 100,
-      })))
-    """#
-
-    /// Download listeners pushing through the `__sevo` binding.
-    static let registerDownloads = #"""
-    (() => {
-      window.__sevoRegItems?.unregister?.();
-      window.__sevoRegOverview?.unregister?.();
-      window.__sevoRegItems = SteamClient.Downloads.RegisterForDownloadItems((dl, items) => {
-        try {
-          window.__sevo(JSON.stringify({ type: "downloads", downloading: dl,
-            items: (items || []).map(i => ({ appid: i.appid, active: i.active,
-              paused: i.paused, completed: i.completed,
-              done: i.downloaded_bytes, total: i.total_bytes, queue: i.queue_index })) }));
-        } catch (e) {}
-      });
-      window.__sevoRegOverview = SteamClient.Downloads.RegisterForDownloadOverview((o) => {
-        try {
-          /* o.progress is an array of pipeline stages; stage 3 (bytes written to
-             disk, uncompressed) is the honest overall progress, stage 2 the network
-             download. Prefer 3, fall back to any stage with a nonzero total. */
-          const stages = o.progress || [];
-          const stage = (stages[3]?.bytes_total ? stages[3] : null)
-            || (stages[2]?.bytes_total ? stages[2] : null)
-            || stages.find(s => s.bytes_total) || {};
-          window.__sevo(JSON.stringify({ type: "overview",
-            appid: o.update_appid, state: o.update_state,
-            paused: o.update_state === "Paused",
-            done: stage.bytes_in_progress || 0, total: stage.bytes_total || 0,
-            bps: o.update_network_bytes_per_second || 0,
-            eta_s: stage.estimated_time_remaining_sec }));
-        } catch (e) {
-          try { window.__sevo(JSON.stringify({ type: "err", where: "overview",
-            msg: String(e) })); } catch (_) {}
-        }
-      });
-      return "registered items+overview";
-    })()
-    """#
-
     /// SharedConnection — the protobuf transport the UI gets its real data
     /// from — passes ArrayBuffers, which JSON drops silently. Both sides
     /// translate binary to base64 envelopes instead.

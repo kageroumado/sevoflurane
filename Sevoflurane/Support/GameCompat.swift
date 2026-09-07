@@ -314,10 +314,6 @@ nonisolated enum GameCompatSources {
         func lookup(appID: Int, name: String) -> GameCompatRecord.AntiCheat? {
             byAppID[appID] ?? byTitle[GameCompatTitles.normalize(name)]
         }
-
-        var count: Int {
-            byAppID.count
-        }
     }
 
     /// AppleGamingWiki's `Compatibility_macOS` table, indexed by normalized
@@ -364,10 +360,6 @@ nonisolated enum GameCompatSources {
 
         func lookup(title: String) -> GameCompatRecord.WikiTiers? {
             byTitle[GameCompatTitles.normalize(title)]
-        }
-
-        var count: Int {
-            byTitle.count
         }
     }
 

@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
-/// covers first run; this is everything after it.
-///
-/// A searchable sidebar rather than a row of tabs, because the knobs that
-/// bring someone here are the ones they know by name — "msync", "renderer",
-/// "open at login" — and not by which pane happens to hold them. Searching
-/// lists the matching settings themselves; picking one opens its pane and
-/// flashes the row.
 /// What Settings can ask of the running Steam client — injected by the
 /// window so the panes stay host-free, and absent in the gallery, whose
 /// tiles must never uninstall anything.
@@ -21,6 +13,14 @@ struct SteamActions {
     var restartClient: () -> Void
 }
 
+/// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
+/// covers first run; this is everything after it.
+///
+/// A searchable sidebar rather than a row of tabs, because the knobs that
+/// bring someone here are the ones they know by name — "msync", "renderer",
+/// "open at login" — and not by which pane happens to hold them. Searching
+/// lists the matching settings themselves; picking one opens its pane and
+/// flashes the row.
 struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore

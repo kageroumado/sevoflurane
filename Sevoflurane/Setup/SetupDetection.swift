@@ -26,7 +26,8 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     /// the license, so usability follows the same rule.
     var crossoverPreview: CrossOver? = nil
 
-    /// The bottle setup would adopt, when exactly one candidate exists.
+    /// Every bottle with a Steam install; the wizard adopts one outright when
+    /// this has exactly one entry and asks otherwise.
     var steamBottles: [Bottle] {
         bottles.filter(\.hasSteam)
     }

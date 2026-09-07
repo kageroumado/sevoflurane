@@ -117,7 +117,7 @@ final class MCPServer {
                 "engine_use",
                 "Switch the active Wine engine and restart the client under it. "
                     + "`version` is a name from engine_list — a built-in directory name, "
-                    + "or 'crossover'.",
+                    + "'crossover', or 'crossover-preview'.",
                 properties: [
                     "version": ["type": "string", "description": "Engine to switch to"],
                     "bottle": ["type": "string", "description": "Bottle to run (default: the current one)"],
@@ -271,10 +271,14 @@ final class MCPServer {
         case "engine_list":
             let detection = await SetupProbe.detect()
             var rows: [[String: Any]] = []
-            if let cx = detection.crossover {
+            for (name, engine, cx) in [
+                ("crossover", Engine.crossover, detection.crossover),
+                ("crossover-preview", Engine.crossoverPreview, detection.crossoverPreview),
+            ] {
+                guard let cx else { continue }
                 rows.append([
-                    "engine": "crossover", "version": cx.version,
-                    "active": Engine.active == .crossover,
+                    "engine": name, "version": cx.version,
+                    "active": Engine.active == engine,
                 ])
             }
             for version in detection.managedEngineVersions {

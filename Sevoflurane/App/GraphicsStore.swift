@@ -21,7 +21,6 @@ final class GraphicsStore {
         selection = environment.currentSelection()
         d3dMetalVersions = environment.installedToolkits()
         activeD3DMetal = environment.activeToolkit()?.version
-        gptkEngineInstalled = environment.dx12EngineInstalled
         for component in RendererVersions.Component.allCases {
             rendererVersions[component] = RendererVersionState(
                 installed: environment.installedRendererVersions(component),
@@ -160,43 +159,6 @@ final class GraphicsStore {
     var availableRenderers: [Renderer] {
         guard !engineHasOwnD3DMetal else { return Renderer.allCases }
         return Renderer.allCases.filter(Set(environment.hostedRenderers()).contains)
-    }
-
-    // MARK: - The DX12 engine
-
-    private(set) var gptkEngineInstalled = false
-    private(set) var gptkEnginePhase: String?
-    private(set) var gptkEngineFraction: Double?
-    private(set) var gptkEngineError: String?
-
-    /// Downloads Gcenx's game-porting-toolkit Wine and overlays the active
-    /// D3DMetal toolkit onto it — the engine the D3DMetal renderer boots.
-    func installGPTkEngine() {
-        guard gptkEnginePhase == nil else { return }
-        guard let toolkit = environment.activeToolkit() else {
-            gptkEngineError = "add a D3DMetal toolkit below first"
-            return
-        }
-        let version = environment.dx12EngineVersion
-        gptkEngineError = nil
-        gptkEnginePhase = "starting"
-        Task(name: "Install DX12 engine") { [weak self] in
-            guard let self else { return }
-            do {
-                try await environment.installDX12Engine(overlaying: toolkit) { phase, fraction in
-                    DispatchQueue.main.async {
-                        self.gptkEnginePhase = phase
-                        self.gptkEngineFraction = fraction
-                    }
-                }
-                EventLog.enqueue(.setup, "DX12 engine \(version) installed")
-            } catch {
-                gptkEngineError = "\(error)"
-            }
-            gptkEnginePhase = nil
-            gptkEngineFraction = nil
-            gptkEngineInstalled = environment.dx12EngineInstalled
-        }
     }
 
     func update(_ selection: BottleGraphics.Selection) {
