@@ -23,15 +23,25 @@ nonisolated enum EngineInstaller {
         )
     }
 
-    /// Download → sha256 verify → extract → atomic move into place.
+    /// Download → verify → extract → atomic move into place.
     /// Idempotent: an already-installed version returns immediately. The
     /// fraction is the download's progress against the manifest's declared
     /// size, or `nil` for the phases with no measurable whole.
+    ///
+    /// A release from the verified manifest is held to the whole policy
+    /// (``EngineSignature``): the tarball comes from a kageroumado release
+    /// asset over HTTPS, is exactly the declared size, hashes to the declared
+    /// sha256, and its `.sig` verifies against the pinned key — all before
+    /// `tar` sees a byte. A release from an override manifest is checked by
+    /// size and hash.
     static func install(
         _ release: EngineManifest.Release,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws {
         guard !isInstalled(release) else { return }
+        if release.fromVerifiedManifest, !EngineSignature.isAllowedAssetURL(release.url) {
+            throw EngineSignature.Failure.urlNotAllowed(release.url)
+        }
         let manager = FileManager.default
         let staging = manager.temporaryDirectory
             .appendingPathComponent("sevo-engine-\(UUID().uuidString)")
@@ -46,9 +56,18 @@ nonisolated enum EngineInstaller {
         )
 
         progress("Verifying…", nil)
+        let size = try (manager.attributesOfItem(atPath: tarball.path)[.size] as? Int64) ?? -1
+        guard size == release.sizeBytes else {
+            throw InstallError("engine tarball is \(size) bytes, the manifest declares \(release.sizeBytes)")
+        }
         let digest = try sha256(of: tarball)
         guard digest == release.sha256.lowercased() else {
             throw InstallError("engine tarball hash mismatch: \(digest)")
+        }
+        if release.fromVerifiedManifest {
+            try await EngineSignature.verify(file: tarball, asset: release.url)
+        } else {
+            SetupLog.log("engine \(release.version) from an override manifest: hash checked, signature skipped")
         }
 
         progress("Installing…", nil)

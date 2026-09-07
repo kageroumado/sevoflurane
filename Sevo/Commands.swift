@@ -399,9 +399,15 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list | install | d3dmetal | use") var verb: String = "list"
-    @Argument(help: "For use: the engine to switch to (a name from `sevo engine list`).")
+    @Argument(help: "list | install | d3dmetal | use | check-manifest") var verb: String = "list"
+    @Argument(
+        help: "For use: the engine to switch to (a name from `sevo engine list`); for check-manifest: the engine.json to check.",
+    )
     var target: String?
+    @Option(
+        name: .customLong("sig"),
+        help: "For check-manifest: the engine.json.sig to verify against the pinned key.",
+    ) var signatureFile: String?
     @Option(
         name: .customLong("bottle"),
         help: "For use: the bottle to run (default: the current one).",
@@ -438,10 +444,61 @@ struct EngineCommand: AsyncParsableCommand {
             try await addD3DMetal()
         case "use":
             try await use()
+        case "check-manifest":
+            try checkManifest()
         default:
-            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use)")
+            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use | check-manifest)")
             throw SevoExit.badInvocation
         }
+    }
+
+    /// The gate `publish-engine.sh` runs before it uploads a manifest: the
+    /// file decodes with this build's decoder, every entry passes
+    /// ``EngineManifest/problems()``, and with `--sig` the bytes verify
+    /// against the key pinned in ``EngineSignature``. Exit 1 on any problem.
+    private func checkManifest() throws {
+        guard let target, !target.isEmpty else {
+            Sevo.printError("engine check-manifest: name the engine.json to check")
+            throw SevoExit.badInvocation
+        }
+        let path = URL(fileURLWithPath: (target as NSString).expandingTildeInPath)
+        var problems: [String] = []
+        var summary: [String: Any] = ["file": path.path]
+        do {
+            let data = try Data(contentsOf: path)
+            let manifest = try EngineManifest.decode(data)
+            problems = manifest.problems()
+            summary["schema"] = manifest.schema
+            summary["channels"] = manifest.channels.mapValues { $0.version }
+            summary["components"] = (manifest.components ?? [:]).mapValues(\.count)
+            summary["shaders"] = manifest.shaders?.count ?? 0
+            if let signatureFile {
+                let sigPath = (signatureFile as NSString).expandingTildeInPath
+                do {
+                    try EngineSignature.verify(
+                        data, signatureFile: try Data(contentsOf: URL(fileURLWithPath: sigPath)),
+                        subject: path.lastPathComponent,
+                    )
+                    summary["signature"] = "verified"
+                } catch {
+                    problems.append("signature: \(error)")
+                }
+            }
+        } catch {
+            problems.append("decode: \(error)")
+        }
+        summary["problems"] = problems
+        if asJSON {
+            print(Sevo.json(summary, pretty: true))
+        } else if problems.isEmpty {
+            let channels = (summary["channels"] as? [String: String] ?? [:])
+                .sorted { $0.key < $1.key }.map { "\($0.key) → \($0.value)" }.joined(separator: ", ")
+            print("manifest ok: schema \(summary["schema"] ?? "?"), \(channels)"
+                + ((summary["signature"] as? String).map { ", signature \($0)" } ?? ""))
+        } else {
+            for problem in problems { Sevo.printError("manifest: \(problem)") }
+        }
+        if !problems.isEmpty { throw SevoExit.failed }
     }
 
     /// Switches the active engine and restarts the client — the CLI face of

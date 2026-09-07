@@ -68,6 +68,7 @@ let package = Package(
                 "Sevoflurane/Setup/D3DMetalInstaller.swift",
                 "Sevoflurane/Setup/EngineInstaller.swift",
                 "Sevoflurane/Setup/EngineManifest.swift",
+                "Sevoflurane/Setup/EngineSignature.swift",
                 "Sevoflurane/Setup/Provisioner.swift",
                 "Sevoflurane/Setup/SetupEnvironment.swift",
                 "Sevoflurane/Setup/SetupLog.swift",

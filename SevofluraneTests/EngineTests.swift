@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import Sevoflurane
@@ -34,13 +35,117 @@ struct EngineManifestTests {
             try EngineManifest.decode(Data(future.utf8))
         }
     }
+
+    /// The shape `publish-engine.sh` writes: schema 2, a tested component
+    /// with no hash, and a channel on the engine repository's release.
+    private let publishedJSON = """
+    {
+      "schema": 2,
+      "channels": {
+        "stable": {
+          "version": "dormison-r3",
+          "minAppVersion": "1.0",
+          "url": "https://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz",
+          "sha256": "694477832c85da7bfa09793029eae182cd2aafd2bfe819c91888ec39be6e93be",
+          "sizeBytes": 229890008,
+          "notes": "wine 11.16; commit 07b0b312313a"
+        }
+      },
+      "components": {
+        "dxmt": [
+          {"version": "0.80", "url": "https://github.com/3Shain/dxmt/releases/download/v0.80/dxmt-v0.80-builtin.tar.gz",
+           "sha256": null, "notes": "run with r3"}
+        ]
+      }
+    }
+    """
+
+    @Test
+    func `the published shape decodes and passes the publish gate`() throws {
+        let manifest = try EngineManifest.decode(Data(publishedJSON.utf8), verified: true)
+        #expect(manifest.problems().isEmpty)
+        #expect(manifest.verified)
+        #expect(manifest.stable?.fromVerifiedManifest == true)
+        #expect(manifest.components?["dxmt"]?.first?.sha256 == nil)
+    }
+
+    @Test
+    func `a decode without verification marks every release untrusted`() throws {
+        let manifest = try EngineManifest.decode(Data(publishedJSON.utf8))
+        #expect(!manifest.verified)
+        #expect(manifest.stable?.fromVerifiedManifest == false)
+    }
+
+    @Test
+    func `the publish gate names each problem`() throws {
+        let broken = publishedJSON
+            .replacingOccurrences(of: "https://github.com/kageroumado/dormison", with: "http://example.com/x")
+            .replacingOccurrences(of: "\"sizeBytes\": 229890008", with: "\"sizeBytes\": 0")
+            .replacingOccurrences(of: "694477832c85da7bfa09793029eae182cd2aafd2bfe819c91888ec39be6e93be", with: "abc")
+        let problems = try EngineManifest.decode(Data(broken.utf8)).problems()
+        #expect(problems.contains { $0.contains("channels.stable.url is not a kageroumado release asset") })
+        #expect(problems.contains { $0.contains("channels.stable.sha256") })
+        #expect(problems.contains { $0.contains("channels.stable.sizeBytes") })
+    }
+}
+
+struct EngineSignatureTests {
+    @Test
+    func `release assets come only from our repositories over https`() throws {
+        #expect(try EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "https://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz")),
+        ))
+        #expect(try EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json.sig")),
+        ))
+        #expect(try !EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "http://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz")),
+        ))
+        #expect(try !EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "https://github.com/someone/dormison/releases/download/r3/dormison-r3.tar.xz")),
+        ))
+        #expect(try !EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "https://github.com/kageroumado/dormison/archive/refs/tags/r3.tar.gz")),
+        ))
+        #expect(try !EngineSignature.isAllowedAssetURL(
+            #require(URL(string: "https://evil.example@github.com/kageroumado/dormison/releases/download/r3/x")),
+        ))
+        #expect(try !EngineSignature.isAllowedAssetURL(#require(URL(string: "file:///tmp/dormison-r3.tar.xz"))))
+    }
+
+    @Test
+    func `the signature file sits beside its asset`() throws {
+        let asset = try #require(URL(string: "https://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz"))
+        #expect(EngineSignature.signatureURL(for: asset).absoluteString == asset.absoluteString + ".sig")
+    }
+
+    @Test
+    func `a signature over the bytes verifies, and a changed byte does not`() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let message = Data("{\"schema\": 2}".utf8)
+        let signatureFile = try Data((key.signature(for: message).base64EncodedString() + "\n").utf8)
+        try EngineSignature.verify(message, signatureFile: signatureFile, subject: "engine.json", key: key.publicKey)
+        var tampered = message
+        tampered[0] = UInt8(ascii: " ")
+        #expect(throws: EngineSignature.Failure.signatureInvalid("engine.json")) {
+            try EngineSignature.verify(tampered, signatureFile: signatureFile, subject: "engine.json", key: key.publicKey)
+        }
+        #expect(throws: EngineSignature.Failure.signatureMalformed) {
+            try EngineSignature.verify(message, signatureFile: Data("not base64!".utf8), subject: "x", key: key.publicKey)
+        }
+    }
+
+    @Test
+    func `the pinned key is a usable Ed25519 public key`() throws {
+        _ = try EngineSignature.pinnedKey
+    }
 }
 
 struct BottleGraphicsTests {
     private let conf = """
     [Bottle]
     "WineArch" = "win64"
-
+    
     [EnvironmentVariables]
     "CX_BOTTLE_CREATOR_APPID" = "com.codeweavers.c4.206"
     "WINED3DMETAL" = "1"
