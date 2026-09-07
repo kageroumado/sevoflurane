@@ -86,6 +86,15 @@ nonisolated enum StorageInventory {
                 removal: .permanent("Setup downloads one again if you need it."),
             ),
             Entry(
+                id: "renderers",
+                name: "Renderer versions",
+                detail: "DXMT and DXVK versions added beside the engine's own.",
+                icon: "square.stack.3d.up",
+                url: RendererVersions.root,
+                bytes: -1,
+                removal: .permanent("Settings › Graphics downloads or adds them again."),
+            ),
+            Entry(
                 id: "toolkits",
                 name: "Apple's Game Porting Toolkit",
                 detail: "The DirectX 12 translator versions you added.",

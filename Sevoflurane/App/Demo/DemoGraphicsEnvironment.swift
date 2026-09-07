@@ -144,6 +144,61 @@
             dx12EngineInstalled = true
         }
 
+        private var rendererVersions: [RendererVersions.Component: [RendererVersions.Installed]] = [
+            .dxmt: [.init(component: .dxmt, version: "0.81", root: URL(fileURLWithPath: "/demo/renderers/dxmt/0.81"))],
+            .dxvk: [],
+        ]
+        private var chosenRenderer: [RendererVersions.Component: String] = [:]
+
+        func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed] {
+            rendererVersions[component] ?? []
+        }
+
+        func chosenRendererVersion(_ component: RendererVersions.Component) -> String? {
+            chosenRenderer[component]
+        }
+
+        func defaultRendererVersion(_ component: RendererVersions.Component) -> String? {
+            component == .dxmt ? "0.80" : "1.10.3-20230507-repack"
+        }
+
+        func chooseRendererVersion(_ component: RendererVersions.Component, version: String?) {
+            chosenRenderer[component] = version
+            log("would run \(component.label) \(version ?? "(the engine's own)") from the next boot")
+        }
+
+        func installRendererVersion(
+            _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+        ) async throws -> RendererVersions.Installed {
+            log("would fetch \(source.lastPathComponent) into the \(component.label) store")
+            try await Task.sleep(for: stepDelay)
+            let entry = RendererVersions.Installed(
+                component: component, version: version ?? component.version(from: source.lastPathComponent),
+                root: URL(fileURLWithPath: "/demo/renderers/\(component.rawValue)"),
+            )
+            rendererVersions[component, default: []].append(entry)
+            return entry
+        }
+
+        func removeRendererVersion(_ installed: RendererVersions.Installed) throws {
+            rendererVersions[installed.component]?.removeAll { $0.version == installed.version }
+            log("would move \(installed.component.label) \(installed.version) to the Trash")
+        }
+
+        func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release] {
+            let url = URL(string: "https://example.invalid/\(component.rawValue).tar.gz")!
+            return switch component {
+            case .dxmt: [
+                    .init(component: .dxmt, version: "0.81", url: url, tested: true, sha256: nil),
+                    .init(component: .dxmt, version: "0.80", url: url, tested: true, sha256: nil),
+                    .init(component: .dxmt, version: "0.74", url: url, tested: false, sha256: nil),
+                ]
+            case .dxvk: [
+                    .init(component: .dxvk, version: "1.10.3-20230507-repack", url: url, tested: true, sha256: nil),
+                ]
+            }
+        }
+
         private func log(_ message: String) {
             EventLog.shared.log(.setup, "demo: graphics: \(message)")
         }

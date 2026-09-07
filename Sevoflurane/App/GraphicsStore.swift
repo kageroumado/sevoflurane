@@ -22,6 +22,117 @@ final class GraphicsStore {
         d3dMetalVersions = environment.installedToolkits()
         activeD3DMetal = environment.activeToolkit()?.version
         gptkEngineInstalled = environment.dx12EngineInstalled
+        for component in RendererVersions.Component.allCases {
+            rendererVersions[component] = RendererVersionState(
+                installed: environment.installedRendererVersions(component),
+                chosen: environment.chosenRendererVersion(component),
+                defaultVersion: environment.defaultRendererVersion(component),
+            )
+        }
+    }
+
+    // MARK: - Renderer versions
+
+    /// One component's versions as the pane shows them: what is on disk, what
+    /// is chosen, what the engine shipped, and what can be fetched.
+    struct RendererVersionState: Equatable {
+        var installed: [RendererVersions.Installed] = []
+        var chosen: String?
+        var defaultVersion: String?
+        var releases: [RendererVersions.Release] = []
+        var releasesLoaded = false
+        /// What is happening to it right now, for a progress line.
+        var busy: String?
+        var error: String?
+
+        /// A release newer than everything on disk and than the default.
+        var newer: RendererVersions.Release? {
+            RendererVersions.newerRelease(
+                than: installed.map(\.version), default: defaultVersion, among: releases,
+            )
+        }
+
+        /// The releases not yet on disk and not the default, for the download menu.
+        var downloadable: [RendererVersions.Release] {
+            let have = Set(installed.map(\.version) + [defaultVersion].compactMap { $0 })
+            return releases.filter { !have.contains($0.version) }
+        }
+    }
+
+    private(set) var rendererVersions: [RendererVersions.Component: RendererVersionState] = [:]
+
+    /// Asks each project's releases once per store, the first time the pane
+    /// wants them.
+    func loadRendererReleases() {
+        for component in RendererVersions.Component.allCases
+            where rendererVersions[component]?.releasesLoaded == false {
+            rendererVersions[component]?.releasesLoaded = true
+            Task(name: "List \(component.label) releases") { [weak self] in
+                guard let self else { return }
+                let releases = await environment.rendererReleases(component)
+                rendererVersions[component]?.releases = releases
+            }
+        }
+    }
+
+    /// `nil` chooses the engine's own — the reset.
+    func chooseRendererVersion(_ component: RendererVersions.Component, version: String?) {
+        rendererVersions[component]?.chosen = version
+        environment.chooseRendererVersion(component, version: version)
+        EventLog.shared.log(.setup, "\(component.label): \(version ?? "the engine's own") from the next boot")
+    }
+
+    func downloadRendererVersion(_ release: RendererVersions.Release) {
+        installRendererVersion(
+            release.component, from: release.url, version: release.version, sha256: release.sha256,
+            describedAs: "Downloading \(release.component.label) \(release.version)…",
+        )
+    }
+
+    func addRendererVersion(_ component: RendererVersions.Component, from source: URL) {
+        installRendererVersion(
+            component, from: source, version: nil, sha256: nil,
+            describedAs: "Adding \(source.lastPathComponent)…",
+        )
+    }
+
+    private func installRendererVersion(
+        _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+        describedAs phase: String,
+    ) {
+        guard rendererVersions[component]?.busy == nil else { return }
+        rendererVersions[component]?.busy = phase
+        rendererVersions[component]?.error = nil
+        Task(name: "Install \(component.label)") { [weak self] in
+            guard let self else { return }
+            do {
+                let entry = try await environment.installRendererVersion(
+                    component, from: source, version: version, sha256: sha256,
+                )
+                rendererVersions[component]?.installed = environment.installedRendererVersions(component)
+                chooseRendererVersion(component, version: entry.version)
+                EventLog.shared.log(.setup, "\(component.label) \(entry.version) added")
+            } catch {
+                rendererVersions[component]?.error = "\(error)"
+            }
+            rendererVersions[component]?.busy = nil
+        }
+    }
+
+    func removeRendererVersion(_ component: RendererVersions.Component, version: String) {
+        guard let entry = rendererVersions[component]?.installed.first(where: { $0.version == version })
+        else { return }
+        do {
+            try environment.removeRendererVersion(entry)
+        } catch {
+            rendererVersions[component]?.error = "\(error)"
+            return
+        }
+        rendererVersions[component]?.installed = environment.installedRendererVersions(component)
+        if rendererVersions[component]?.chosen == version {
+            chooseRendererVersion(component, version: nil)
+        }
+        EventLog.shared.log(.setup, "\(component.label) \(version) moved to the Trash")
     }
 
     /// Where installed toolkits are kept for this engine.

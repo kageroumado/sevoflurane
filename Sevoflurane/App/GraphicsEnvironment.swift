@@ -33,6 +33,18 @@ protocol GraphicsEnvironment: AnyObject {
     func removeToolkit(_ entry: D3DMetalInstaller.Installed) throws
     func installToolkit(from source: URL) async throws -> D3DMetalInstaller.Installed
 
+    /// The DXMT and DXVK versions beside the engine's own (``RendererVersions``).
+    func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed]
+    func chosenRendererVersion(_ component: RendererVersions.Component) -> String?
+    func defaultRendererVersion(_ component: RendererVersions.Component) -> String?
+    /// `nil` chooses the engine's own.
+    func chooseRendererVersion(_ component: RendererVersions.Component, version: String?)
+    func installRendererVersion(
+        _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+    ) async throws -> RendererVersions.Installed
+    func removeRendererVersion(_ installed: RendererVersions.Installed) throws
+    func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release]
+
     /// The Wine build the DirectX 12 renderer is locked to.
     var dx12EngineVersion: String { get }
     var dx12EngineInstalled: Bool { get }
@@ -106,6 +118,41 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
 
     func installToolkit(from source: URL) async throws -> D3DMetalInstaller.Installed {
         try await D3DMetalInstaller.install(from: source, intoEngine: toolkitStore)
+    }
+
+    func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed] {
+        RendererVersions.installed(component)
+    }
+
+    func chosenRendererVersion(_ component: RendererVersions.Component) -> String? {
+        RendererVersions.chosen(component)
+    }
+
+    func defaultRendererVersion(_ component: RendererVersions.Component) -> String? {
+        RendererVersions.defaultVersion(component, engine: Engine.active.root)
+    }
+
+    func chooseRendererVersion(_ component: RendererVersions.Component, version: String?) {
+        RendererVersions.choose(component, version: version)
+    }
+
+    func installRendererVersion(
+        _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+    ) async throws -> RendererVersions.Installed {
+        // Detached: the unpack and the copies are disk work, and this is the
+        // main actor.
+        try await Task.detached(name: "Install \(component.label) \(version ?? "")") {
+            try await RendererVersions.install(component, from: source, version: version, sha256: sha256)
+        }.value
+    }
+
+    func removeRendererVersion(_ installed: RendererVersions.Installed) throws {
+        try RendererVersions.remove(installed)
+    }
+
+    func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release] {
+        let manifest = try? await EngineManifest.fetch()
+        return await RendererVersions.releases(component, manifest: manifest)
     }
 
     var dx12EngineVersion: String {

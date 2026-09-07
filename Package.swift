@@ -97,6 +97,7 @@ let package = Package(
                 "Sevoflurane/Support/NWJSRuntime.swift",
                 "Sevoflurane/Support/PerformanceProbes.swift",
                 "Sevoflurane/Support/Preferences.swift",
+                "Sevoflurane/Support/RendererVersions.swift",
                 "Sevoflurane/Support/SharedGames.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
                 "Sevoflurane/Support/SteamChatAutoOpen.swift",

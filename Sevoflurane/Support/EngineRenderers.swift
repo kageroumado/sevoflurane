@@ -286,6 +286,9 @@ nonisolated enum EngineRenderers {
             engine.appendingPathComponent("dxmt"),
             engine.appendingPathComponent("dxvk"),
         ]
+        // Every added version too, so a file staged from one of them is
+        // still recognized as a payload after the choice moves on.
+        directories += RendererVersions.allDirectories()
         for toolkit in D3DMetalInstaller.installed(inEngine: engine) {
             directories.append(D3DMetalInstaller.windowsLibraries(of: toolkit))
         }
@@ -303,8 +306,8 @@ nonisolated enum EngineRenderers {
         architecture: Architecture,
     ) -> URL? {
         let payload: URL? = switch renderer {
-        case .dxmt: engine.appendingPathComponent("dxmt")
-        case .dxvk: engine.appendingPathComponent("dxvk")
+        case .dxmt: RendererVersions.directory(.dxmt, engine: engine)
+        case .dxvk: RendererVersions.directory(.dxvk, engine: engine)
         case .d3dmetal: toolkit.map(D3DMetalInstaller.windowsLibraries)
         case .auto, .wined3d: nil
         }

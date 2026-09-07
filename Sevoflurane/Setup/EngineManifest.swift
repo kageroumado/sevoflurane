@@ -14,8 +14,19 @@ nonisolated struct EngineManifest: Decodable, Sendable {
         let notes: String?
     }
 
+    /// One downloadable version of a renderer (schema 2): named here because
+    /// it was run with the engine the manifest points at.
+    struct ComponentRelease: Decodable, Sendable, Equatable {
+        let version: String
+        let url: URL
+        let sha256: String?
+        let notes: String?
+    }
+
     let schema: Int
     let channels: [String: Release]
+    /// Keyed by component (`dxmt`, `dxvk`); absent in schema 1.
+    let components: [String: [ComponentRelease]]?
 
     static let url = URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json")!
 
@@ -51,7 +62,7 @@ nonisolated struct EngineManifest: Decodable, Sendable {
 
     static func decode(_ data: Data) throws -> EngineManifest {
         let manifest = try JSONDecoder().decode(EngineManifest.self, from: data)
-        guard manifest.schema == 1 else {
+        guard (1 ... 2).contains(manifest.schema) else {
             throw ManifestError("unsupported engine manifest schema \(manifest.schema)")
         }
         return manifest

@@ -13,7 +13,7 @@ struct SevoCommand: AsyncParsableCommand {
         version: Sevo.version,
         subcommands: [
             DoctorCommand.self, StatusCommand.self, WaitCommand.self, SetupCommand.self,
-            EngineCommand.self, BottleCommand.self, StorageCommand.self,
+            EngineCommand.self, UpdateCommand.self, BottleCommand.self, StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
@@ -600,6 +600,141 @@ struct EngineCommand: AsyncParsableCommand {
                 print("\(row["engine"] ?? "?") \(row["version"] ?? "?")")
             }
         }
+    }
+}
+
+/// Versions of what runs under the app: the renderers beside the engine's
+/// own. The CLI face of Settings › Graphics › Renderer versions.
+struct UpdateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "update",
+        abstract: "Check for and switch renderer versions (DXMT, DXVK).",
+        discussion: """
+        check              what is installed, chosen and available for each renderer
+        use <c> <version>  run that version from the next boot; 'default' resets to the engine's own
+        install <c> <ref>  add a version: a release version from check, a URL, an archive, or a folder
+        remove <c> <version>
+        <c> is dxmt or dxvk.
+        """,
+    )
+
+    @Argument(help: "check | use | install | remove") var verb: String = "check"
+    @Argument var component: String?
+    @Argument var reference: String?
+    @Option(help: "For install: the version to file it under when it cannot be read from the name.")
+    var version: String?
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        switch verb {
+        case "check": try await check()
+        case "use": try await use()
+        case "install": try await install()
+        case "remove": try remove()
+        default:
+            Sevo.printError("update \(verb): unknown verb (check | use | install | remove)")
+            throw SevoExit.badInvocation
+        }
+    }
+
+    private func resolveComponent() throws -> RendererVersions.Component {
+        guard let component, let resolved = RendererVersions.Component(rawValue: component.lowercased()) else {
+            Sevo.printError("name the renderer: dxmt or dxvk")
+            throw SevoExit.badInvocation
+        }
+        return resolved
+    }
+
+    private func check() async throws {
+        let manifest = try? await EngineManifest.fetch()
+        let engine = Engine.active.root
+        var report: [[String: Any]] = []
+        for component in RendererVersions.Component.allCases {
+            let installed = RendererVersions.installed(component).map(\.version)
+            let chosen = RendererVersions.chosen(component)
+            let defaultVersion = RendererVersions.defaultVersion(component, engine: engine)
+            let releases = await RendererVersions.releases(component, manifest: manifest)
+            let newer = RendererVersions.newerRelease(than: installed, default: defaultVersion, among: releases)
+            report.append([
+                "component": component.rawValue,
+                "default": defaultVersion ?? NSNull(),
+                "chosen": chosen ?? NSNull(),
+                "installed": installed,
+                "available": releases.map { ["version": $0.version, "tested": $0.tested, "url": $0.url.absoluteString] },
+                "newer": newer?.version ?? NSNull(),
+            ])
+            if !asJSON {
+                print("\(component.label)")
+                print("  running:   \(chosen ?? "engine's own\(defaultVersion.map { " (\($0))" } ?? "")")")
+                print("  installed: \(installed.isEmpty ? "none added" : installed.joined(separator: ", "))")
+                let available = releases.map { "\($0.version)\($0.tested ? " (tested)" : "")" }
+                print("  available: \(available.isEmpty ? "unknown — no release list reachable" : available.joined(separator: ", "))")
+                if let newer { print("  newer:     \(newer.version)\(newer.tested ? ", tested with this engine" : ", untested")") }
+            }
+        }
+        if asJSON {
+            let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            print(String(decoding: data, as: UTF8.self))
+        }
+    }
+
+    private func use() async throws {
+        let component = try resolveComponent()
+        guard let reference else {
+            Sevo.printError("update use: name a version, or 'default'")
+            throw SevoExit.badInvocation
+        }
+        if reference == "default" {
+            RendererVersions.choose(component, version: nil)
+            print("\(component.label): the engine's own, from the next Steam start")
+            return
+        }
+        guard RendererVersions.installed(component).contains(where: { $0.version == reference }) else {
+            Sevo.printError("\(component.label) \(reference) is not installed — sevo update install \(component.rawValue) \(reference)")
+            throw SevoExit.badInvocation
+        }
+        RendererVersions.choose(component, version: reference)
+        print("\(component.label): \(reference), from the next Steam start")
+    }
+
+    private func install() async throws {
+        let component = try resolveComponent()
+        guard let reference else {
+            Sevo.printError("update install: a version from `sevo update check`, a URL, an archive, or a folder")
+            throw SevoExit.badInvocation
+        }
+        var source: URL
+        var sha256: String?
+        var name = version
+        if reference.hasPrefix("http://") || reference.hasPrefix("https://"), let url = URL(string: reference) {
+            source = url
+        } else if FileManager.default.fileExists(atPath: reference) {
+            source = URL(fileURLWithPath: reference)
+        } else {
+            let manifest = try? await EngineManifest.fetch()
+            let releases = await RendererVersions.releases(component, manifest: manifest)
+            guard let release = releases.first(where: { $0.version == reference }) else {
+                Sevo.printError("no \(component.label) release \(reference) — sevo update check lists them")
+                throw SevoExit.badInvocation
+            }
+            source = release.url
+            sha256 = release.sha256
+            name = name ?? release.version
+        }
+        let entry = try await RendererVersions.install(component, from: source, version: name, sha256: sha256)
+        RendererVersions.choose(component, version: entry.version)
+        print("\(component.label) \(entry.version) installed at \(entry.root.path) and chosen for the next Steam start")
+    }
+
+    private func remove() throws {
+        let component = try resolveComponent()
+        guard let reference,
+              let entry = RendererVersions.installed(component).first(where: { $0.version == reference }) else {
+            Sevo.printError("update remove: name an installed version (sevo update check)")
+            throw SevoExit.badInvocation
+        }
+        try RendererVersions.remove(entry)
+        print("\(component.label) \(reference) moved to the Trash")
     }
 }
 

@@ -374,25 +374,110 @@ struct GraphicsSettings: View {
                     + "whatever the client started with, so a change here "
                     + "lands with the next Steam restart.")
             }
-            d3dMetalSection
+            rendererVersionsSection
         }
         .formStyle(.grouped)
+        .onAppear { store.loadRendererReleases() }
     }
 
-    /// Apple's Game Porting Toolkit is not ours to ship, so a managed engine
-    /// gets D3DMetal from the user's own download — the arrangement Whisky
-    /// uses. Releases and betas install side by side; the newest is used
-    /// unless another is chosen here.
-    private var d3dMetalSection: some View {
+    /// Every renderer's versions in one place: Apple's D3DMetal from the
+    /// user's own download, and the DXMT and DXVK the engine shipped beside
+    /// any release added later. The engine's own is one click away again.
+    private var rendererVersionsSection: some View {
         Section {
             if !store.engineHasOwnD3DMetal, !store.availableRenderers.contains(.d3dmetal) {
                 gptkEngineRow
             }
-            d3dMetalControls
+            d3dMetalRow
+            ForEach(RendererVersions.Component.allCases) { component in
+                RendererVersionRow(store: store, component: component)
+            }
         } header: {
-            Text("Apple's Game Porting Toolkit")
+            Text("Renderer versions")
+        } footer: {
+            Text("D3DMetal is Apple's and comes from your own free download. "
+                + "DXMT and DXVK versions marked tested were run with this engine; "
+                + "any other release, or a build you add from a folder, runs the "
+                + "next time Steam starts, and Reset returns to the version the "
+                + "engine came with, which is kept.")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
+    }
+
+    /// The D3DMetal row in the same shape as the two below it: the picker,
+    /// then a menu for Apple's download, a disk image on hand, and removal.
+    /// An empty tag is CrossOver's own copy or, with nothing added, the
+    /// placeholder: a `String?` selection here crashed the compiler's IRGen.
+    private var d3dMetalRow: some View {
+        let selection = Binding<String>(
+            get: { store.activeD3DMetal ?? "" },
+            set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
+        )
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Picker("D3DMetal", selection: selection) {
+                    if store.engineHasOwnD3DMetal {
+                        Text("CrossOver's own").tag("")
+                    } else if store.d3dMetalVersions.isEmpty {
+                        Text("None added").tag("")
+                    }
+                    ForEach(store.d3dMetalVersions, id: \.version) { entry in
+                        Text(entry.version).tag(entry.version)
+                    }
+                }
+                .disabled(isAddingD3DMetal || (store.d3dMetalVersions.isEmpty && !store.engineHasOwnD3DMetal))
+                Menu {
+                    Button("Get It from Apple…") { showingGPTkDownload = true }
+                    Button("Add from a Downloaded Disk Image…") { addD3DMetal() }
+                    if let removable = removableD3DMetal {
+                        Divider()
+                        Button("Remove \(removable)…", role: .destructive) {
+                            confirmingD3DMetalRemoval = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(isAddingD3DMetal)
+                .confirmationDialog(
+                    "Remove D3DMetal \(removableD3DMetal ?? "")?",
+                    isPresented: $confirmingD3DMetalRemoval,
+                    titleVisibility: .visible,
+                ) {
+                    Button("Move to Trash", role: .destructive) {
+                        if let removable = removableD3DMetal {
+                            store.removeD3DMetal(version: removable)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Games pinned to it fall back to the newest remaining "
+                        + "version. It goes to the Trash, so a wrong click is recoverable.")
+                }
+            }
+            if isAddingD3DMetal {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Opening the disk image and copying the toolkit in…")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } else if store.d3dMetalVersions.isEmpty {
+                Text(store.engineHasOwnD3DMetal
+                    ? "CrossOver includes the version it supports; a newer one from Apple can replace it here."
+                    : "The newest games use DirectX 12, and only Apple's toolkit translates it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let d3dMetalError {
+                Label(d3dMetalError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     /// Shown when no installed engine declares D3DMetal. Apple's toolkit
@@ -413,76 +498,6 @@ struct GraphicsSettings: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder private var d3dMetalControls: some View {
-        Group {
-            if store.d3dMetalVersions.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(store.engineHasOwnD3DMetal
-                        ? "Use a newer toolkit than CrossOver's"
-                        : "Add the toolkit to play DirectX 12 games")
-                        .font(.callout.weight(.semibold))
-                    Text(store.engineHasOwnD3DMetal
-                        ? "CrossOver includes the version it supports. If Apple "
-                        + "has released a newer one, you can add it here and use "
-                        + "that instead."
-                        : "The newest games use DirectX 12, and only Apple's own "
-                        + "toolkit can translate it. Apple doesn't let anyone else "
-                        + "hand it out, so it comes from your own download — it's "
-                        + "free, and it's one file.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                D3DMetalVersionPicker(store: store)
-            }
-            if isAddingD3DMetal {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Opening the disk image and copying the toolkit in…")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Spacer()
-                }
-            }
-            if let d3dMetalError {
-                Label(d3dMetalError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Spacer()
-                if let removable = removableD3DMetal {
-                    Button("Remove \(removable)…", role: .destructive) {
-                        confirmingD3DMetalRemoval = true
-                    }
-                    .disabled(isAddingD3DMetal)
-                    .confirmationDialog(
-                        "Remove D3DMetal \(removable)?",
-                        isPresented: $confirmingD3DMetalRemoval,
-                        titleVisibility: .visible,
-                    ) {
-                        Button("Move to Trash", role: .destructive) {
-                            store.removeD3DMetal(version: removable)
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("Games pinned to it fall back to the newest "
-                            + "remaining version. It goes to the Trash, so a "
-                            + "wrong click is recoverable.")
-                    }
-                }
-                Button("Get It from Apple…") { showingGPTkDownload = true }
-                    .disabled(isAddingD3DMetal)
-                Button(store.d3dMetalVersions.isEmpty
-                    ? "Choose a Downloaded File…" : "Add Another Version…") {
-                        addD3DMetal()
-                    }
-                    .disabled(isAddingD3DMetal)
-            }
         }
     }
 
@@ -532,28 +547,101 @@ struct GraphicsSettings: View {
     }
 }
 
-/// The installed toolkit versions, plus the engine's own where it has one.
-/// An empty tag is that "own" case: a `String?` selection here crashed the
-/// compiler's IRGen, and a sentinel costs one line to read.
-private struct D3DMetalVersionPicker: View {
+/// One renderer: the version picker (the engine's own, then every added
+/// version), the fetch and folder menu, and Reset. Mirrors the D3DMetal
+/// picker above it.
+private struct RendererVersionRow: View {
     let store: GraphicsStore
+    let component: RendererVersions.Component
+    @State private var confirmingRemoval = false
+
+    private var state: GraphicsStore.RendererVersionState {
+        store.rendererVersions[component] ?? .init()
+    }
 
     private var selection: Binding<String> {
         Binding(
-            get: { store.activeD3DMetal ?? "" },
-            set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
+            get: { state.chosen ?? "" },
+            set: { store.chooseRendererVersion(component, version: $0.isEmpty ? nil : $0) },
         )
     }
 
     var body: some View {
-        Picker("D3DMetal version", selection: selection) {
-            if store.engineHasOwnD3DMetal {
-                Text("CrossOver's own").tag("")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Picker(component.label, selection: selection) {
+                    Text(state.defaultVersion.map { "Engine's own (\($0))" } ?? "Engine's own").tag("")
+                    ForEach(state.installed) { entry in
+                        Text(entry.version).tag(entry.version)
+                    }
+                }
+                .disabled(state.busy != nil)
+                Menu {
+                    Section("Download") {
+                        if state.downloadable.isEmpty {
+                            Text(state.releasesLoaded ? "Nothing newer to fetch" : "Looking…")
+                        }
+                        ForEach(state.downloadable) { release in
+                            Button(release.tested ? "\(release.version) — tested" : "\(release.version) — untested") {
+                                store.downloadRendererVersion(release)
+                            }
+                        }
+                    }
+                    Button("Add from Folder or Archive…") { addFromDisk() }
+                    if let chosen = state.chosen {
+                        Divider()
+                        Button("Reset to Engine's Own") {
+                            store.chooseRendererVersion(component, version: nil)
+                        }
+                        Button("Remove \(chosen)…", role: .destructive) { confirmingRemoval = true }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(state.busy != nil)
+                .confirmationDialog(
+                    "Remove \(component.label) \(state.chosen ?? "")?",
+                    isPresented: $confirmingRemoval, titleVisibility: .visible,
+                ) {
+                    Button("Move to Trash", role: .destructive) {
+                        if let chosen = state.chosen {
+                            store.removeRendererVersion(component, version: chosen)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("The engine's own version takes over. It goes to the Trash, so a wrong click is recoverable.")
+                }
             }
-            ForEach(store.d3dMetalVersions, id: \.version) { entry in
-                Text(entry.version).tag(entry.version)
+            if let busy = state.busy {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(busy).font(.callout).foregroundStyle(.secondary)
+                }
+            } else if let newer = state.newer {
+                Text("\(newer.version) is available" + (newer.tested ? ", tested with this engine." : ", untested here."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            if let error = state.error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func addFromDisk() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose a \(component.label) release archive, or a folder holding its DLLs."
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        store.addRendererVersion(component, from: source)
     }
 }
 
