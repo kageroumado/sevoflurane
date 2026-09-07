@@ -1,8 +1,8 @@
-Wine (the built-in engine, methylpentynol)
-==========================================
+Wine (Dormison, the built-in engine)
+====================================
 
-Sevoflurane's built-in engine is a fork of Wine Staging, published as
-methylpentynol: https://github.com/kageroumado/methylpentynol
+Dormison, Sevoflurane's built-in engine, is a fork of Wine Staging:
+https://github.com/kageroumado/dormison
 Upstream: https://www.winehq.org
 
 Copyright (c) 1993-2026 the Wine project authors (see the file AUTHORS

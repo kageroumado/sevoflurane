@@ -78,8 +78,8 @@ nonisolated enum StorageInventory {
             ),
             Entry(
                 id: "engines",
-                name: "Built-in engines",
-                detail: "The Windows translator Sevoflurane downloaded.",
+                name: "Dormison engines",
+                detail: "Sevoflurane's own Windows translator, one directory per version.",
                 icon: "gearshape.2",
                 url: support.appendingPathComponent("Engines"),
                 bytes: -1,
@@ -97,7 +97,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "shaders",
                 name: "Shader packages",
-                detail: "Upscalers downloaded for the built-in engine.",
+                detail: "Upscalers downloaded for Dormison.",
                 icon: "wand.and.stars",
                 url: ShaderPackages.root,
                 bytes: -1,

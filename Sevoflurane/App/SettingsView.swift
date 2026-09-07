@@ -165,7 +165,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     title: "Wine engine & bottle",
                     keywords: [
                         "engine", "wine", "crossover", "preview", "bottle",
-                        "prefix", "built-in", "builtin", "switch",
+                        "prefix", "built-in", "builtin", "dormison", "switch",
                     ],
                 ),
                 SearchableSetting(

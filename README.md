@@ -26,7 +26,7 @@ in-game overlay. The menu bar is the Mac menu bar. Notifications are Mac
 notifications.
 
 Games run through a Wine engine. The app ships its own, open-source engine,
-[methylpentynol](https://github.com/kageroumado/methylpentynol). It carries
+[Dormison](https://github.com/kageroumado/dormison). It carries
 the changes that make Apple's DirectX 12 layer run on upstream Wine, plus
 fixes for Steam and for Rosetta. CrossOver works as the engine too, and setup
 recommends it: buying it funds the people who make Wine run on a Mac.
@@ -127,11 +127,11 @@ DevTools Protocol. Protobuf traffic is relayed around CDP through a socket
 the client's own context opens. Every window Steam creates is adopted into an
 `NSWindow` with the right role.
 
-**The engine.** Upstream Wine 11.16 with wine-staging, built for x86_64, plus
-one commit of changes: hosting Apple's D3DMetal, CrossOver's msync, the
+**The engine.** Dormison: upstream Wine 11.16 with wine-staging, built for
+x86_64, plus the changes that make it the engine: hosting Apple's D3DMetal, CrossOver's msync, the
 Rosetta fixes for 32-bit games, the presenter that scales frames, per-game
 environment files, GPU identity, and the fixes that make the Steam client
-boot cleanly. The [engine repository](https://github.com/kageroumado/methylpentynol)
+boot cleanly. The [engine repository](https://github.com/kageroumado/dormison)
 lists every change against upstream. The engine ships as a versioned tarball
 behind a manifest, so it updates through the app.
 

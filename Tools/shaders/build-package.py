@@ -10,7 +10,7 @@ is a compute shader instead, whose hook() writes `out_image` for a bw×bh
 block of output pixels per threadgroup of tw×th threads. This tool wraps
 every pass in the main() mpv would give it, compiles it through glslang and
 SPIRV-Cross into Metal, links one metallib, and writes graph.json, the pass
-list the presenter's runner interprets at frame time (methylpentynol
+list the presenter's runner interprets at frame time (dormison
 dlls/winemac.drv/swift/MPVHook.swift).
 
     build-package.py --name anime4k-c --title Anime4K --version 4.0.1 \

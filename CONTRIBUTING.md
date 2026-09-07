@@ -144,7 +144,7 @@ Mach service for the prefix until the client restarts.
   a bottle process tried to show, with time, exe, class, title, size, and
   whether the shim suppressed it (`armed` / `suppressed` / `passed <exe>`).
 - **The shim** (`build-macos/dock-shim/sevo_dock_shim.c` in the engine
-  repository, [kageroumado/methylpentynol](https://github.com/kageroumado/methylpentynol);
+  repository, [kageroumado/dormison](https://github.com/kageroumado/dormison);
   built into the engine directory as `libsevodockshim.dylib`, wired by
   `Engine.environment` with `SEVO_SUPPRESS_WINDOWS=1`): no Dock promotion
   and no windows for Steam's infrastructure processes. It ships inside the

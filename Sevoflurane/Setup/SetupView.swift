@@ -138,7 +138,7 @@ struct SetupView: View {
                 .font(.system(size: 24, weight: .bold))
             Text("Apple's Game Porting Toolkit adds D3DMetal — the only renderer "
                 + "that runs DirectX 12, which most modern games use. It's a free "
-                + "download from Apple; the built-in engine can't include it directly.")
+                + "download from Apple; Dormison can't include it directly.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             GPTkDownloadPanel(
@@ -179,15 +179,17 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
                 Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
-                    + "License it at codeweavers.com, or use the built-in engine.")
+                    + "License it at codeweavers.com, or use Dormison.")
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
             engineOption(
                 .builtIn,
-                title: "Built-in engine — free, about 250 MB (recommended)",
-                detail: "A one-time download. This is Wine, the open-source "
-                    + "Windows translator, and it runs most games well.",
+                title: "Dormison — free, about 250 MB (recommended)",
+                detail: "Sevoflurane's own engine: Wine, the open-source Windows "
+                    + "translator, with the changes that run DirectX 12 games "
+                    + "through Apple's toolkit, keep Steam running, and upscale. "
+                    + "A one-time download.",
             )
             engineOption(.crossover, title: crossOverTitle, detail: crossOverDetail)
             // Shown rather than disclosed: the step has room for it, and a
@@ -198,9 +200,9 @@ struct SetupView: View {
                 Text("CodeWeavers pays the developers who build Wine — the "
                     + "translator under both options — so CrossOver gets their "
                     + "Steam and per-game fixes months before the free version "
-                    + "does. The built-in engine is the same project without "
-                    + "those extras, and it is enough for most games. You can "
-                    + "switch later in Settings without redoing this setup.")
+                    + "does. Dormison is built on the same project, and it is "
+                    + "enough for most games. You can switch later in Settings "
+                    + "without redoing this setup.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -224,16 +226,15 @@ struct SetupView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What the CrossOver option is worth saying: a licensed copy on the
-    /// machine is a free choice, and quoting a price at someone who has
-    /// already paid reads as a sales pitch.
+    /// What the CrossOver option is worth saying: whether a copy is on the
+    /// machine and what its license state is. CodeWeavers sets the price.
     private var crossOverTitle: String {
         guard let crossover = provisioner.detection?.crossover else {
-            return "Use CrossOver ($74, 14-day free trial)"
+            return "Use CrossOver (14-day free trial)"
         }
         if crossover.licensed { return "Use CrossOver \(crossover.version) (already licensed)" }
-        if crossover.trialExpired { return "Use CrossOver ($74 — this Mac's trial has ended)" }
-        return "Use CrossOver \(crossover.version) (trial, $74 to keep)"
+        if crossover.trialExpired { return "Use CrossOver (this Mac's trial has ended)" }
+        return "Use CrossOver \(crossover.version) (trial)"
     }
 
     private var crossOverDetail: String {

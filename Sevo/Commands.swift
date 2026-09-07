@@ -1660,7 +1660,7 @@ struct AppCommand: AsyncParsableCommand {
             print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
             var reach = Engine.active.supportsEnvFiles
                 ? "settings reach the game at its next launch"
-                : "needs an engine that reads the env files (methylpentynol-r2 or later)"
+                : "needs an engine that reads the env files (Dormison r2 or later)"
             if exes.isEmpty {
                 reach += "; its exe is not known yet, so a value lands one launch late"
             }

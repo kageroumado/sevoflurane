@@ -2,7 +2,7 @@ import Foundation
 
 /// The managed-engine version manifest: a static JSON at a URL we control,
 /// pointing at engine tarballs on GitHub Releases.
-/// `methylpentynol/build-macos/package-engine.sh` emits entries; rollback is
+/// `dormison/build-macos/package-engine.sh` emits entries; rollback is
 /// pointing the manifest at the previous entry.
 nonisolated struct EngineManifest: Decodable, Sendable {
     struct Release: Decodable, Sendable, Equatable {

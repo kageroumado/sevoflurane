@@ -254,10 +254,9 @@ struct EngineSettings: View {
             .toggleStyle(.switch)
             .highlightable(id: "engine.msync", highlighted: highlighted)
         } footer: {
-            Text("Works on CrossOver and on Sevoflurane's own engine. The "
-                + "built-in engine ignores this setting until it is updated, "
-                + "so leaving it on there changes nothing either way. Takes "
-                + "effect the next time a game starts.")
+            Text("Works on CrossOver and on Dormison. A Dormison from before "
+                + "msync ignores this setting, so leaving it on there changes "
+                + "nothing either way. Takes effect the next time a game starts.")
         }
     }
 

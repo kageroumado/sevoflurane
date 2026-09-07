@@ -595,11 +595,10 @@ struct GraphicsSettings: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Direct3D 12 needs an engine that hosts Apple's toolkit")
                 .font(.callout.weight(.semibold))
-            Text("Apple's Direct3D 12 toolkit runs on Sevoflurane's newest "
-                + "built-in engine and on CrossOver. This engine runs DirectX 9 "
-                + "to 11 games; for a DirectX 12 game, update the built-in engine "
-                + "or pick CrossOver in Settings › Engine. Toolkits added below "
-                + "are kept either way.")
+            Text("Apple's Direct3D 12 toolkit runs on the newest Dormison "
+                + "and on CrossOver. This engine runs DirectX 9 to 11 games; "
+                + "for a DirectX 12 game, update Dormison or pick CrossOver in "
+                + "Settings › Engine. Toolkits added below are kept either way.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shader packages the built-in engine's presenter runs as the upscaler
-/// (methylpentynol winemac.drv, `Upscaler` naming a package directory).
+/// (dormison winemac.drv, `Upscaler` naming a package directory).
 ///
 /// A package is one directory under `~/Library/Application
 /// Support/Sevoflurane/Shaders/<name>/`: `package.json` (what it is),

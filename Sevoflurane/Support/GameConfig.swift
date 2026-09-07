@@ -1,7 +1,7 @@
 import Foundation
 
 /// The built-in engine's treatment of a game's windows — the driver's
-/// `ResizableWindows` option (methylpentynol winemac.drv).
+/// `ResizableWindows` option (dormison winemac.drv).
 nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// Windows are left as the game makes them.
     case off
@@ -22,7 +22,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
 }
 
 /// The upscaler's fixed choices — the driver's `Upscaler` option
-/// (methylpentynol winemac.drv). Any other token names a shader package
+/// (dormison winemac.drv). Any other token names a shader package
 /// directory (``ShaderPackages``), which carries its own title and
 /// description.
 nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
@@ -54,7 +54,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
 }
 
 /// How the upscaler's last pass is resampled into the window — the driver's
-/// `FinalFilter` option (methylpentynol winemac.drv).
+/// `FinalFilter` option (dormison winemac.drv).
 nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
     case nearest
     case bilinear
@@ -79,7 +79,7 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
 }
 
 /// What a game holding the cursor for mouse-look is given as mouse movement —
-/// the driver's `LinearMouse` option (methylpentynol winemac.drv).
+/// the driver's `LinearMouse` option (dormison winemac.drv).
 nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     /// The pointer moves the way it does everywhere else on the Mac, the
     /// system's acceleration curve included.

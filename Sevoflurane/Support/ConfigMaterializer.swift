@@ -3,7 +3,7 @@ import Foundation
 /// Turns the settings hierarchy into what the engine reads at process start:
 /// `<prefix>/.sevo/bottle.env` for the bottle's resolved values and
 /// `<prefix>/.sevo/apps/<exe>.env` for every game with a value of its own
-/// (methylpentynol ntdll, `load_sevo_env`). Whole-file rewrites, idempotent;
+/// (dormison ntdll, `load_sevo_env`). Whole-file rewrites, idempotent;
 /// run after every store change and at every client start.
 ///
 /// The files carry a header naming this app, and only files with it are

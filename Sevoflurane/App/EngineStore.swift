@@ -86,8 +86,8 @@ final class EngineStore {
         for version in detection.managedEngineVersions.reversed() {
             built.append(EngineOption(
                 engine: .managed(version: version),
-                label: "Built-in engine \(version)",
-                detail: "Sevoflurane's managed Wine",
+                label: Engine.managedDisplayName(version),
+                detail: "Sevoflurane's own Wine engine",
             ))
         }
         if detection.managedEngineVersions.isEmpty {
@@ -95,8 +95,8 @@ final class EngineStore {
             // engine first, the same stage the wizard runs.
             built.append(EngineOption(
                 engine: .managed(version: ""),
-                label: "Built-in engine",
-                detail: "downloads on switch (~230 MB)",
+                label: "Dormison",
+                detail: "Sevoflurane's own Wine engine; downloads on switch (~230 MB)",
             ))
         }
         options = built

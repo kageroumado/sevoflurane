@@ -15,7 +15,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// migrates.
     case crossoverPreview
     /// A managed engine under ``managedRoot``, one directory per version
-    /// (layout produced by `methylpentynol/build-macos/package-engine.sh`).
+    /// (layout produced by `dormison/build-macos/package-engine.sh`).
     case managed(version: String)
 
     /// Both CodeWeavers apps: bottles carry `cxbottle.conf`, invocations
@@ -183,7 +183,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     }
 
     /// Whether the engine reads `<prefix>/.sevo/bottle.env` and
-    /// `<prefix>/.sevo/apps/<exe>.env` at process start (methylpentynol
+    /// `<prefix>/.sevo/apps/<exe>.env` at process start (dormison
     /// ntdll `load_sevo_env`; declared as `env-files` in `engine-info.json`).
     /// With it, a setting reaches a game at its next launch; without it, the
     /// game inherits the client's environment and waits for a Steam restart.
@@ -215,8 +215,17 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         case .crossover: "CrossOver"
         case .crossoverPreview: "CrossOver Preview"
         case let .managed(version):
-            version.isEmpty ? "the built-in engine" : "built-in \(version)"
+            version.isEmpty ? "Dormison" : Self.managedDisplayName(version)
         }
+    }
+
+    /// "Dormison r3" for the engine directory `dormison-r3`; an engine from
+    /// before the rename keeps its whole directory name after the product name.
+    static func managedDisplayName(_ version: String) -> String {
+        for prefix in ["dormison-", "methylpentynol-"] where version.hasPrefix(prefix) {
+            return "Dormison \(version.dropFirst(prefix.count))"
+        }
+        return "Dormison \(version)"
     }
 
     // MARK: - Paths
@@ -369,7 +378,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         // winemac.drv promotes any wine process that shows a window, and
         // there is no demotion API — so the promotion and the window
         // ordering are both taken away from Steam's infrastructure
-        // (methylpentynol/build-macos/dock-shim). The shim decides per process by the Windows exe
+        // (dormison/build-macos/dock-shim). The shim decides per process by the Windows exe
         // name, so a game keeps the Dock promotion and orders its windows
         // normally; the suppression flag rides on every managed spawn
         // because a spawn that forgets it is a bare Wine window on screen.
@@ -380,7 +389,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             env["DYLD_INSERT_LIBRARIES"] = dockShim.path
             env["SEVO_SUPPRESS_WINDOWS"] = "1"
         }
-        // The bottle's window treatment (methylpentynol winemac.drv,
+        // The bottle's window treatment (dormison winemac.drv,
         // `ResizableWindows`). An engine with the env files reads the same
         // value, and a game's own, from `<prefix>/.sevo` at every process
         // start; one without inherits this from the client, so a change

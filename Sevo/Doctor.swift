@@ -76,14 +76,14 @@ nonisolated enum Doctor {
                 id: "engine", ok: d.usableCrossOver != nil,
                 label: "CrossOver \(cx.version) (\(state))",
                 hint: "an expired trial cannot launch bottles — license CrossOver "
-                    + "or install the built-in engine: sevo engine install",
+                    + "or install Dormison: sevo engine install",
                 provisioning: true,
             ))
         } else {
             checks.append(Check(
                 id: "engine", ok: !d.managedEngineVersions.isEmpty,
                 label: d.managedEngineVersions.isEmpty
-                    ? "engine" : "built-in engine \(d.managedEngineVersions.joined(separator: ", "))",
+                    ? "engine" : d.managedEngineVersions.map(Engine.managedDisplayName).joined(separator: ", "),
                 hint: "no engine — install CrossOver, or run: sevo engine install",
                 provisioning: true,
             ))

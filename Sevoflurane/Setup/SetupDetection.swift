@@ -183,8 +183,8 @@ nonisolated enum SetupProbe {
         }
     }
 
-    /// Oldest first, by the number in the name: `methylpentynol-r2` before
-    /// `methylpentynol-r10`, which a plain string sort gets backwards.
+    /// Oldest first, by the number in the name: `dormison-r2` before
+    /// `dormison-r10`, which a plain string sort gets backwards.
     static func managedEngineVersions() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: managedEngines.path)) ?? [])
             .filter { !$0.hasPrefix(".") }
