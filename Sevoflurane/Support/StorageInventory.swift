@@ -95,6 +95,15 @@ nonisolated enum StorageInventory {
                 removal: .permanent("Settings › Graphics downloads or adds them again."),
             ),
             Entry(
+                id: "shaders",
+                name: "Shader packages",
+                detail: "Upscalers downloaded for the built-in engine.",
+                icon: "wand.and.stars",
+                url: ShaderPackages.root,
+                bytes: -1,
+                removal: .permanent("Settings › Graphics downloads them again."),
+            ),
+            Entry(
                 id: "toolkits",
                 name: "Apple's Game Porting Toolkit",
                 detail: "The DirectX 12 translator versions you added.",

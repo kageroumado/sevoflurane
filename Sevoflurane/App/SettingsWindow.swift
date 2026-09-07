@@ -14,6 +14,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private var window: NSWindow?
     private let makeGraphics: () -> GraphicsStore
     private let makeStorage: () -> StorageStore
+    private let makeShaders: () -> ShaderStore
     /// One engine store for the app's lifetime, not one per window: an
     /// engine switch outlives a closed Settings window, and reopening must
     /// show the switch still running rather than offer a second one.
@@ -34,6 +35,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         host: SteamWebHost? = nil,
         graphics: @escaping () -> GraphicsStore = { GraphicsStore() },
         storage: @escaping () -> StorageStore = { StorageStore() },
+        shaders: @escaping () -> ShaderStore = { ShaderStore() },
         engine: (() -> EngineStore)? = nil,
         compatibility: @escaping () -> CompatibilityStore = { CompatibilityStore() },
     ) {
@@ -42,6 +44,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         self.host = host
         makeGraphics = graphics
         makeStorage = storage
+        makeShaders = shaders
         makeCompatibility = compatibility
         makeEngine = engine ?? {
             EngineStore(provisioner: provisioner, supervisor: supervisor)
@@ -86,6 +89,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 graphics: makeGraphics(),
                 storage: makeStorage(),
                 engine: engineStore,
+                shaders: makeShaders(),
                 compatibility: compatibilityStore,
                 steam: steam,
                 supervisor: supervisor,

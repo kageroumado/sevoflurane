@@ -139,6 +139,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Up before provisioning gates so `sevo status` can see the app even
         // while the setup wizard is waiting for the user.
         controlServer.start()
+        // The bundle's shader packages are in the store before any game
+        // could be launched naming one. Detached: it copies files.
+        Task.detached(name: "Copy bundled shader packages") {
+            ShaderPackages.ensureBundled()
+        }
         Task {
             await provisioner.refreshDetection()
             if let detection = provisioner.detection {
@@ -319,10 +324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // No supervisor and no host: a demo boot started neither, and the
             // Engine pane's switch must not reach for the client that a real
             // instance alongside this one owns.
+            let shaders = ShaderStore(simulated: true)
             demoSettingsWindow = SettingsWindow(
                 provisioner: provisioner,
                 graphics: { graphics },
                 storage: { storage },
+                shaders: { shaders },
                 engine: { engine },
                 compatibility: { compatibility },
             )

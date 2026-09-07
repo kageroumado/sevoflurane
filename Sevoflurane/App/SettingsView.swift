@@ -27,6 +27,7 @@ struct SettingsView: View {
     let graphics: GraphicsStore
     let storage: StorageStore
     let engine: EngineStore
+    let shaders: ShaderStore
     var compatibility = CompatibilityStore()
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
@@ -50,6 +51,7 @@ struct SettingsView: View {
                 graphics: graphics,
                 storage: storage,
                 engine: engine,
+                shaders: shaders,
                 compatibility: compatibility,
                 steam: steam,
                 highlighted: highlighted,
@@ -66,6 +68,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case general
     case graphics
     case engine
+    case games
     case storage
     case about
 
@@ -78,6 +81,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general: "General"
         case .graphics: "Graphics"
         case .engine: "Engine"
+        case .games: "Games"
         case .storage: "Storage"
         case .about: "About"
         }
@@ -88,6 +92,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general: "gearshape.fill"
         case .graphics: "cpu.fill"
         case .engine: "wrench.and.screwdriver.fill"
+        case .games: "gamecontroller.fill"
         case .storage: "internaldrive.fill"
         case .about: "info.circle.fill"
         }
@@ -145,6 +150,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "vendor", "driver", "outdated", "unsupported",
                     ],
                 ),
+                SearchableSetting(
+                    id: "graphics.shaders",
+                    title: "Shader packages",
+                    keywords: [
+                        "shader", "package", "upscaler", "anime4k", "cunny",
+                        "download", "license",
+                    ],
+                ),
             ]
         case .engine:
             [
@@ -163,6 +176,24 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "msync", "sync", "synchronization", "performance",
                         "deadlock", "hang", "esync",
                     ],
+                ),
+                SearchableSetting(
+                    id: "engine.windows",
+                    title: "Game windows",
+                    keywords: ["window", "resizable", "fullscreen", "fixed", "scale"],
+                ),
+                SearchableSetting(
+                    id: "engine.upscaler",
+                    title: "Upscaler",
+                    keywords: [
+                        "upscaler", "upscale", "lanczos", "metalfx", "shader",
+                        "anime4k", "cunny", "resolution", "sharp",
+                    ],
+                ),
+                SearchableSetting(
+                    id: "engine.filter",
+                    title: "Final filter",
+                    keywords: ["filter", "nearest", "bilinear", "lanczos", "resample", "pixel"],
                 ),
                 SearchableSetting(
                     id: "engine.dependencies",
@@ -190,6 +221,17 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: [
                         "repair", "reinstall", "fix", "setup", "provision",
                         "broken",
+                    ],
+                ),
+            ]
+        case .games:
+            [
+                SearchableSetting(
+                    id: "games.settings",
+                    title: "Settings for one game",
+                    keywords: [
+                        "game", "per-game", "app", "inherit", "window", "upscaler",
+                        "filter", "mouse", "override",
                     ],
                 ),
             ]
@@ -302,6 +344,7 @@ private struct SettingsPane: View {
     let graphics: GraphicsStore
     let storage: StorageStore
     let engine: EngineStore
+    let shaders: ShaderStore
     let compatibility: CompatibilityStore
     let steam: SteamActions?
     let highlighted: String?
@@ -316,12 +359,14 @@ private struct SettingsPane: View {
                     highlighted: highlighted, supervisor: supervisor,
                 )
             case .graphics:
-                GraphicsSettings(store: graphics, steam: steam, highlighted: highlighted)
+                GraphicsSettings(store: graphics, shaders: shaders, steam: steam, highlighted: highlighted)
             case .engine:
                 EngineSettings(
-                    store: engine, graphics: graphics, compatibility: compatibility,
+                    store: engine, graphics: graphics, shaders: shaders, compatibility: compatibility,
                     provisioner: provisioner, highlighted: highlighted,
                 )
+            case .games:
+                GamesSettings(shaders: shaders, highlighted: highlighted)
             case .storage:
                 StorageSettings(store: storage, steam: steam, highlighted: highlighted)
             case .about: AboutSettings(highlighted: highlighted)

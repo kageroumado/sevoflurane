@@ -386,6 +386,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         // start; one without inherits this from the client, so a change
         // reaches its games once Steam restarts.
         env["SEVO_RESIZABLE_WINDOWS"] = GameConfig.windows(bottle: bottle).value.rawValue
+        // The presenter's upscaler and its final filter, same contract; the
+        // shader directory is where a package named by the upscaler lives.
+        env["SEVO_UPSCALER"] = GameConfig.upscaler(bottle: bottle).value
+        env["SEVO_FINAL_FILTER"] = GameConfig.filter(bottle: bottle).value.rawValue
+        env["SEVO_SHADER_DIR"] = ShaderPackages.root.path
         let graphics = BottleGraphics.managedSelection()
         if graphics.msync {
             // The Whisky-documented quirk: msync must ride with esync or

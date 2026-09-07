@@ -38,30 +38,6 @@ nonisolated enum NWJSRunner {
         root.appendingPathComponent("bundles/\(appID)")
     }
 
-    /// A file the app bundle ships, by name — the greenworks preload and its
-    /// shim live flat in `Contents/Resources`. `nil` from a bundle without
-    /// it, and the wrapper then simply has no `node-main`.
-    ///
-    /// `sevo` lives in the same bundle's `Contents/Helpers`, where
-    /// `Bundle.main` may resolve to the helper directory rather than the app,
-    /// so the bundle's `Contents` is found by walking up from the executable
-    /// when the direct lookup misses.
-    static func resourceURL(_ name: String) -> URL? {
-        let manager = FileManager.default
-        if let direct = Bundle.main.resourceURL?.appendingPathComponent(name),
-           manager.fileExists(atPath: direct.path) { return direct }
-        var directory = Bundle.main.executableURL?
-            .resolvingSymlinksInPath().deletingLastPathComponent()
-        while let current = directory, current.path != "/" {
-            if current.lastPathComponent == "Contents" {
-                let candidate = current.appendingPathComponent("Resources/\(name)")
-                return manager.fileExists(atPath: candidate.path) ? candidate : nil
-            }
-            directory = current.deletingLastPathComponent()
-        }
-        return nil
-    }
-
     // MARK: - The environment the shim reads
 
     /// The keys the dock shim looks for in `<prefix>/.sevo/apps/<exe>.env`,
@@ -251,7 +227,7 @@ nonisolated enum NWJSRunner {
     private static func writeNodeMain(in directory: URL, page: String) -> URL? {
         let manager = FileManager.default
         for name in nodeResources {
-            guard let source = resourceURL(name) else { return nil }
+            guard let source = BundledResources.url(name) else { return nil }
             let destination = directory.appendingPathComponent(name)
             guard !manager.contentsEqual(atPath: source.path, andPath: destination.path)
             else { continue }

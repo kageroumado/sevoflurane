@@ -23,10 +23,28 @@ nonisolated struct EngineManifest: Decodable, Sendable {
         let notes: String?
     }
 
+    /// One downloadable shader package for the presenter's upscaler
+    /// (schema 2, ``ShaderPackages``): what the package's own `package.json`
+    /// says, plus where its tarball is.
+    struct ShaderRelease: Decodable, Sendable, Equatable {
+        let name: String
+        let title: String
+        let description: String
+        let content: String
+        let license: String
+        let version: String
+        let source: URL?
+        let url: URL
+        let sha256: String?
+        let size: Int64?
+    }
+
     let schema: Int
     let channels: [String: Release]
     /// Keyed by component (`dxmt`, `dxvk`); absent in schema 1.
     let components: [String: [ComponentRelease]]?
+    /// Shader packages the presenter can fetch; absent in schema 1.
+    let shaders: [ShaderRelease]?
 
     static let url = URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json")!
 

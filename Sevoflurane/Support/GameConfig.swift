@@ -15,8 +15,65 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .off: "As the game makes them"
-        case .fixed: "Resizable"
-        case .window: "Fullscreen games in a window"
+        case .fixed: "Fixed-size windows become resizable"
+        case .window: "Every game in a resizable window"
+        }
+    }
+}
+
+/// The upscaler's fixed choices — the driver's `Upscaler` option
+/// (methylpentynol winemac.drv). Any other token names a shader package
+/// directory (``ShaderPackages``), which carries its own title and
+/// description.
+nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
+    /// The driver's presenter stays off and the window system scales the
+    /// picture.
+    case off
+    /// The presenter resamples the frame at the display's full resolution
+    /// with the final filter.
+    case lanczos
+    /// MetalFX Spatial, then the final filter.
+    case metalfx
+
+    var label: String {
+        switch self {
+        case .off: "Off"
+        case .lanczos: "Lanczos"
+        case .metalfx: "MetalFX Spatial"
+        }
+    }
+
+    /// One line on what the choice is for.
+    var detail: String {
+        switch self {
+        case .off: "The picture is scaled by the window system."
+        case .lanczos: "Sharp resampling at your display's full resolution, for any game."
+        case .metalfx: "For 3D games rendered below your display's resolution."
+        }
+    }
+}
+
+/// How the upscaler's last pass is resampled into the window — the driver's
+/// `FinalFilter` option (methylpentynol winemac.drv).
+nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
+    case nearest
+    case bilinear
+    case lanczos
+
+    var label: String {
+        switch self {
+        case .nearest: "Nearest"
+        case .bilinear: "Bilinear"
+        case .lanczos: "Lanczos"
+        }
+    }
+
+    /// One line on what the filter does to the picture.
+    var detail: String {
+        switch self {
+        case .nearest: "Pixels are copied: crisp at whole-number scales, uneven at any other."
+        case .bilinear: "Neighboring pixels are blended, the softest of the three."
+        case .lanczos: "Sharp resampling that keeps edges clean at any scale."
         }
     }
 }
@@ -49,6 +106,13 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// What the game is given as mouse movement while it holds the cursor for
     /// mouse-look.
     var mouse: MouseCurve?
+    /// The present-time upscaler: one of ``UpscalerChoice`` by raw value, or
+    /// the name of a shader package. Stored as text so a file written by a
+    /// later version, naming a package this one does not know, still reads;
+    /// `"off"` is a value like any other and means off at this level.
+    var upscaler: String?
+    /// How the upscaler's last pass is resampled into the window.
+    var filter: FinalFilter?
     /// Game level only: which runtime the game runs on — the bottle's engine
     /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
@@ -71,7 +135,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
 
     /// Whether any setting is set at this level (the exe list and the
     /// detection record are bookkeeping, not settings).
-    var hasSettings: Bool { windows != nil || mouse != nil || runner != nil }
+    var hasSettings: Bool {
+        windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
+    }
 
     /// Whether this game runs natively rather than through the bottle.
     var runsNatively: Bool { runner == GameRunner.nwjs }
@@ -118,7 +184,9 @@ nonisolated enum GameConfig {
         .appendingPathComponent("Library/Application Support/Sevoflurane/Config")
 
     /// What every level inherits when nothing is set anywhere.
-    static let defaults = ConfigValues(windows: .fixed, mouse: .system)
+    static let defaults = ConfigValues(
+        windows: .fixed, mouse: .system, upscaler: UpscalerChoice.off.rawValue, filter: .lanczos,
+    )
 
     // MARK: - Levels
 
@@ -167,25 +235,64 @@ nonisolated enum GameConfig {
     /// The window treatment a launch in this bottle gets: for a specific game
     /// when its id is known, otherwise the bottle's own value.
     static func windows(bottle: String, game appID: Int? = nil) -> Resolved<WindowTreatment> {
-        if let appID, let value = game(appID).windows {
-            return Resolved(value: value, source: .game(appID))
-        }
-        if let value = Self.bottle(bottle).windows {
-            return Resolved(value: value, source: .bottle(bottle))
-        }
-        return Resolved(value: global().windows ?? defaults.windows!, source: .global)
+        resolve(\.windows, bottle: bottle, game: appID)
     }
 
     /// The mouse curve a launch in this bottle gets: for a specific game when
     /// its id is known, otherwise the bottle's own value.
     static func mouse(bottle: String, game appID: Int? = nil) -> Resolved<MouseCurve> {
-        if let appID, let value = game(appID).mouse {
+        resolve(\.mouse, bottle: bottle, game: appID)
+    }
+
+    /// The upscaler a launch in this bottle gets — an ``UpscalerChoice`` raw
+    /// value or a package name: for a specific game when its id is known,
+    /// otherwise the bottle's own value.
+    static func upscaler(bottle: String, game appID: Int? = nil) -> Resolved<String> {
+        resolve(\.upscaler, bottle: bottle, game: appID)
+    }
+
+    /// The final filter a launch in this bottle gets: for a specific game
+    /// when its id is known, otherwise the bottle's own value.
+    static func filter(bottle: String, game appID: Int? = nil) -> Resolved<FinalFilter> {
+        resolve(\.filter, bottle: bottle, game: appID)
+    }
+
+    /// The game's own value wins, then the bottle's, then the global level's,
+    /// then ``defaults``, which sets every key.
+    private static func resolve<Value: Sendable>(
+        _ key: KeyPath<ConfigValues, Value?>, bottle: String, game appID: Int?,
+    ) -> Resolved<Value> {
+        if let appID, let value = game(appID)[keyPath: key] {
             return Resolved(value: value, source: .game(appID))
         }
-        if let value = Self.bottle(bottle).mouse {
+        if let value = Self.bottle(bottle)[keyPath: key] {
             return Resolved(value: value, source: .bottle(bottle))
         }
-        return Resolved(value: global().mouse ?? defaults.mouse!, source: .global)
+        return Resolved(value: global()[keyPath: key] ?? defaults[keyPath: key]!, source: .global)
+    }
+
+    // MARK: - Writing with effect
+
+    /// Changes the bottle's own values and rewrites the engine's env files
+    /// from the result — the one write path Settings › Engine and `sevo
+    /// bottle config` share.
+    static func update(bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void) {
+        var values = bottle(name)
+        change(&values)
+        setBottle(name, values)
+        ConfigMaterializer.materialize(bottle: name, prefix: prefix)
+    }
+
+    /// Changes a game's own values and rewrites the engine's env files from
+    /// the result — the one write path Settings › Games and `sevo app
+    /// config` share.
+    static func update(
+        game appID: Int, bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void,
+    ) {
+        var values = game(appID)
+        change(&values)
+        setGame(appID, values)
+        ConfigMaterializer.materialize(bottle: name, prefix: prefix)
     }
 
     // MARK: - Executables

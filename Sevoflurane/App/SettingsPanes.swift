@@ -300,9 +300,11 @@ private struct CopyButton: View {
 
 struct GraphicsSettings: View {
     let store: GraphicsStore
+    let shaders: ShaderStore
     var steam: SteamActions?
     let highlighted: String?
     @State private var showingRendererHelp = false
+    @State private var removingShaderPackage: ShaderPackages.Package?
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
     @State private var confirmingD3DMetalRemoval = false
@@ -375,9 +377,112 @@ struct GraphicsSettings: View {
                     + "lands with the next Steam restart.")
             }
             rendererVersionsSection
+            shaderPackagesSection
         }
         .formStyle(.grouped)
-        .onAppear { store.loadRendererReleases() }
+        .onAppear {
+            store.loadRendererReleases()
+            shaders.load()
+        }
+    }
+
+    /// The packages the upscaler can run: what is in the store, with its
+    /// license and removal, and what the catalog can fetch.
+    private var shaderPackagesSection: some View {
+        Section {
+            ForEach(shaders.installed) { package in
+                installedShaderRow(package)
+            }
+            ForEach(shaders.downloadable) { entry in
+                downloadableShaderRow(entry)
+            }
+            if shaders.installed.isEmpty, shaders.downloadable.isEmpty {
+                Text(shaders.catalogLoaded
+                    ? "Nothing is installed, and no catalog is reachable right now."
+                    : "Looking…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            ShaderFetchStatus(shaders: shaders)
+        } header: {
+            Text("Shader packages")
+        } footer: {
+            Text("Upscalers a game can be given for the bottle in Engine, or "
+                + "one game at a time in Games. Each package carries its own "
+                + "license and links to the project it comes from. A removed "
+                + "package goes to the Trash; a game still set to it draws with "
+                + "Lanczos until it is back.")
+        }
+        .highlightable(id: "graphics.shaders", highlighted: highlighted)
+        .confirmationDialog(
+            "Remove \(removingShaderPackage?.title ?? "")?",
+            isPresented: Binding(
+                get: { removingShaderPackage != nil },
+                set: { if !$0 { removingShaderPackage = nil } },
+            ),
+            titleVisibility: .visible,
+            presenting: removingShaderPackage,
+        ) { package in
+            Button("Move to Trash", role: .destructive) { shaders.remove(package) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("A game set to it draws with Lanczos until it is installed again. "
+                + "It goes to the Trash, so a wrong click is recoverable.")
+        }
+    }
+
+    private func installedShaderRow(_ package: ShaderPackages.Package) -> some View {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(package.title)
+                    Text("\(package.manifest.version) · \(package.manifest.license)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(package.manifest.content)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Space.sm)
+            if let source = package.manifest.source {
+                Link(destination: source) {
+                    Image(systemName: "arrow.up.right.square")
+                }
+                .help("The project it comes from")
+            }
+            Button("Remove…") { removingShaderPackage = package }
+                .disabled(shaders.busy != nil)
+        }
+    }
+
+    private func downloadableShaderRow(_ entry: ShaderPackages.Available) -> some View {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.title)
+                    Text("\(entry.version) · \(entry.license)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(entry.content)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Space.sm)
+            if let source = entry.source {
+                Link(destination: source) {
+                    Image(systemName: "arrow.up.right.square")
+                }
+                .help("The project it comes from")
+            }
+            Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download") {
+                Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
+            }
+            .disabled(shaders.busy != nil)
+        }
     }
 
     /// Every renderer's versions in one place: Apple's D3DMetal from the

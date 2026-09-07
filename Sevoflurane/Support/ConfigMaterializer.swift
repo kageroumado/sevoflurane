@@ -60,7 +60,12 @@ nonisolated enum ConfigMaterializer {
     /// The bottle level: the resolved value of every setting the engine takes
     /// from the environment.
     private static func bottleLines(_ name: String) -> [String] {
-        var lines = ["SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)"]
+        var lines = [
+            "SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)",
+            "SEVO_UPSCALER=\(GameConfig.upscaler(bottle: name).value)",
+            "SEVO_FINAL_FILTER=\(GameConfig.filter(bottle: name).value.rawValue)",
+            "SEVO_SHADER_DIR=\(ShaderPackages.root.path)",
+        ]
         if GameConfig.mouse(bottle: name).value == .linear {
             lines.append("SEVO_LINEAR_MOUSE=1")
         }
@@ -69,11 +74,19 @@ nonisolated enum ConfigMaterializer {
     }
 
     /// A game's file carries only what the game sets; everything else falls
-    /// through to the bottle's file, which the engine reads first.
-    private static func gameLines(_ appID: Int, _ values: ConfigValues) -> [String] {
+    /// through to the bottle's file, which the engine reads first. What the
+    /// game sets is written even when it equals the bottle's value: the
+    /// bottle's file can change under it, and the game's own choice holds.
+    static func gameLines(_ appID: Int, _ values: ConfigValues) -> [String] {
         var lines = ["# app \(appID)" + (values.name.map { " \($0)" } ?? "")]
         if let windows = values.windows {
             lines.append("SEVO_RESIZABLE_WINDOWS=\(windows.rawValue)")
+        }
+        if let upscaler = values.upscaler {
+            lines.append("SEVO_UPSCALER=\(upscaler)")
+        }
+        if let filter = values.filter {
+            lines.append("SEVO_FINAL_FILTER=\(filter.rawValue)")
         }
         // A game asking for the system curve where the bottle is linear needs
         // the key written, not omitted: the bottle's file is read first and

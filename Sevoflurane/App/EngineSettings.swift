@@ -9,6 +9,7 @@ import SwiftUI
 struct EngineSettings: View {
     let store: EngineStore
     let graphics: GraphicsStore
+    let shaders: ShaderStore
     let compatibility: CompatibilityStore
     let provisioner: Provisioner
     let highlighted: String?
@@ -20,6 +21,8 @@ struct EngineSettings: View {
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
     @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
+    @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
+    @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
     @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
     @State private var wineDiagnostics = WineLog.isDiagnosing
 
@@ -269,32 +272,65 @@ struct EngineSettings: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Game windows")
-                    Text("Resizable: a game that locks its window to one size "
-                        + "gets a resizable one anyway, and the picture scales to "
-                        + "fit. Fullscreen games in a window: a game that fills "
-                        + "the screen gets a window of its own as well, movable, "
-                        + "with the rest of the Mac around it. The game is none "
-                        + "the wiser either way.")
+                    Text("Off leaves windows as the game makes them. Fixed-size "
+                        + "windows become resizable: a game that locks its window "
+                        + "to one size gets a resizable one, and the picture "
+                        + "scales to fit. Every game in a resizable window: that, "
+                        + "and a game that covers the screen gets a resizable, "
+                        + "movable window of its own while still believing it "
+                        + "fills the screen — which is also where the upscaler "
+                        + "draws.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .onChange(of: windowTreatment) { _, treatment in
-                var values = GameConfig.bottle(SteamBottle.name)
-                values.windows = treatment
-                GameConfig.setBottle(SteamBottle.name, values)
-                ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                    $0.windows = treatment
+                }
             }
             .highlightable(id: "engine.windows", highlighted: highlighted)
+            UpscalerPicker(shaders: shaders, selection: upscalerBinding)
+                .highlightable(id: "engine.upscaler", highlighted: highlighted)
+            FinalFilterPicker(selection: filterBinding)
+                .highlightable(id: "engine.filter", highlighted: highlighted)
             mousePicker
         } footer: {
-            Text("Sevoflurane's own engine only. This bottle's default; a game "
-                + "can have its own (sevo app config). "
+            Text("Sevoflurane's own engine only. This bottle's defaults; a game "
+                + "can have its own in Games. "
                 + (Engine.active.supportsEnvFiles
                     ? "Reaches a game the next time it starts."
                     : "Takes effect for games started after Steam restarts."))
         }
+    }
+
+    /// The bottle level has no inherit entry, so a `nil` from the picker
+    /// cannot happen; a value is written when it differs from the one shown.
+    private var upscalerBinding: Binding<String?> {
+        Binding(
+            get: { upscaler },
+            set: { value in
+                guard let value, value != upscaler else { return }
+                upscaler = value
+                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                    $0.upscaler = value
+                }
+            },
+        )
+    }
+
+    private var filterBinding: Binding<FinalFilter?> {
+        Binding(
+            get: { finalFilter },
+            set: { value in
+                guard let value, value != finalFilter else { return }
+                finalFilter = value
+                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                    $0.filter = value
+                }
+            },
+        )
     }
 
     private var mousePicker: some View {
@@ -316,10 +352,9 @@ struct EngineSettings: View {
             }
         }
         .onChange(of: mouseCurve) { _, curve in
-            var values = GameConfig.bottle(SteamBottle.name)
-            values.mouse = curve
-            GameConfig.setBottle(SteamBottle.name, values)
-            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.mouse = curve
+            }
         }
         .highlightable(id: "engine.mouse", highlighted: highlighted)
     }

@@ -163,11 +163,13 @@ struct LicenseTextView: View {
 
 /// The bundled license texts, one file per component, joined in the order
 /// they are listed here: the engine and its graphics layers first, then the
-/// Swift packages, then the data sources behind the game-page strip, and the
-/// Apache text the three Apache-licensed components share at the end.
+/// shader packages the upscaler runs, then the Swift packages, then the data
+/// sources behind the game-page strip, and the Apache text the three
+/// Apache-licensed components share at the end.
 enum Acknowledgements {
     static let components = [
         "wine", "liberation-fonts", "dxvk", "dxmt", "moltenvk", "d3dmetal", "nwjs",
+        "anime4k", "cunny",
         "propofol", "tiptoe", "appupdater", "version", "swift-argument-parser",
         "areweanticheatyet", "applegamingwiki", "protondb",
         "apache-2.0",

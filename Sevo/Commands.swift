@@ -13,7 +13,8 @@ struct SevoCommand: AsyncParsableCommand {
         version: Sevo.version,
         subcommands: [
             DoctorCommand.self, StatusCommand.self, WaitCommand.self, SetupCommand.self,
-            EngineCommand.self, UpdateCommand.self, BottleCommand.self, StorageCommand.self,
+            EngineCommand.self, UpdateCommand.self, ShadersCommand.self, BottleCommand.self,
+            StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
@@ -738,6 +739,167 @@ struct UpdateCommand: AsyncParsableCommand {
     }
 }
 
+/// The values `sevo bottle config` and `sevo app config` accept for the keys
+/// the settings hierarchy resolves; `inherit` clears the level.
+enum ConfigKeyParsing {
+    static func windows(_ value: String) throws -> WindowTreatment? {
+        if value == "inherit" { return nil }
+        guard let treatment = WindowTreatment(rawValue: value) else {
+            Sevo.printError("windows must be off, fixed, window or inherit")
+            throw SevoExit.badInvocation
+        }
+        return treatment
+    }
+
+    static func mouse(_ value: String) throws -> MouseCurve? {
+        if value == "inherit" { return nil }
+        guard let curve = MouseCurve(rawValue: value) else {
+            Sevo.printError("mouse must be system, linear or inherit")
+            throw SevoExit.badInvocation
+        }
+        return curve
+    }
+
+    static func filter(_ value: String) throws -> FinalFilter? {
+        if value == "inherit" { return nil }
+        guard let filter = FinalFilter(rawValue: value) else {
+            Sevo.printError("filter must be nearest, bilinear, lanczos or inherit")
+            throw SevoExit.badInvocation
+        }
+        return filter
+    }
+
+    /// A fixed choice, or the name of a package that is installed or in the
+    /// catalog. A catalog package that is not installed is accepted and
+    /// said so: the driver falls back to lanczos until it lands.
+    static func upscaler(_ value: String) async throws -> String? {
+        if value == "inherit" { return nil }
+        if UpscalerChoice(rawValue: value) != nil { return value }
+        let manifest = try? await EngineManifest.fetch()
+        let catalog = ShaderPackages.catalog(manifest: manifest)
+        switch ShaderPackages.choice(for: value, installed: ShaderPackages.installed(), catalog: catalog) {
+        case .fixed, .installed:
+            return value
+        case let .downloadable(entry):
+            Sevo.printError("\(entry.title) is in the catalog and not installed: the driver falls back to "
+                + "lanczos until `sevo shaders install \(value)`")
+            return value
+        case nil:
+            Sevo.printError("upscaler must be off, lanczos, metalfx, the name of an installed or "
+                + "downloadable shader package (sevo shaders list), or inherit; with '\(value)' the "
+                + "driver would fall back to lanczos and log one error line")
+            throw SevoExit.badInvocation
+        }
+    }
+}
+
+/// The shader packages the presenter's upscaler can run. The CLI face of
+/// Settings › Graphics › Shader packages.
+struct ShadersCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "shaders",
+        abstract: "Shader packages for the upscaler: what is installed, what can be fetched.",
+        discussion: """
+        list             installed packages, then the ones that can be fetched
+        install <name>   fetch a package from the catalog, or copy the app's bundled one
+        remove <name>    move a package to the Trash; a setting naming it is left as it is
+        A package is chosen with sevo bottle config upscaler <name>, or per game with \
+        sevo app config <appid> upscaler <name>.
+        """,
+    )
+
+    @Argument(help: "list | install | remove") var verb: String = "list"
+    @Argument(help: "The package's name, as list prints it.") var name: String?
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        switch verb {
+        case "list": try await list()
+        case "install": try await install()
+        case "remove": try remove()
+        default:
+            Sevo.printError("shaders \(verb): unknown verb (list | install | remove)")
+            throw SevoExit.badInvocation
+        }
+    }
+
+    private func list() async throws {
+        ShaderPackages.ensureBundled()
+        let installed = ShaderPackages.installed()
+        let manifest = try? await EngineManifest.fetch()
+        let catalog = ShaderPackages.catalog(manifest: manifest)
+        let have = Set(installed.map(\.name))
+        let available = catalog.filter { !have.contains($0.name) }
+        if asJSON {
+            print(Sevo.json([
+                "installed": installed.map { package -> [String: Any] in
+                    [
+                        "name": package.name, "title": package.title, "version": package.manifest.version,
+                        "license": package.manifest.license, "content": package.manifest.content,
+                        "source": package.manifest.source?.absoluteString ?? NSNull(),
+                        "path": package.root.path,
+                    ]
+                },
+                "available": available.map { entry -> [String: Any] in
+                    var row: [String: Any] = [
+                        "name": entry.name, "title": entry.title, "version": entry.version,
+                        "license": entry.license, "content": entry.content,
+                        "source": entry.source?.absoluteString ?? NSNull(),
+                        "size": entry.size ?? NSNull(),
+                    ]
+                    if case let .download(url, _, _) = entry.origin { row["url"] = url.absoluteString }
+                    return row
+                },
+            ], pretty: true))
+            return
+        }
+        print("installed")
+        if installed.isEmpty { print("  none") }
+        for package in installed {
+            print("  \(package.name.padding(toLength: 12, withPad: " ", startingAt: 0)) "
+                + "\(package.title) \(package.manifest.version) · \(package.manifest.license) — \(package.manifest.content)")
+        }
+        print("available")
+        if available.isEmpty { print("  nothing further") }
+        for entry in available {
+            let size = entry.size.map { " · " + ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? ""
+            print("  \(entry.name.padding(toLength: 12, withPad: " ", startingAt: 0)) "
+                + "\(entry.title) \(entry.version) · \(entry.license)\(size) — \(entry.content)")
+        }
+    }
+
+    private func install() async throws {
+        guard let name else {
+            Sevo.printError("shaders install: name a package (sevo shaders list)")
+            throw SevoExit.badInvocation
+        }
+        let manifest = try? await EngineManifest.fetch()
+        guard let entry = ShaderPackages.catalog(manifest: manifest).first(where: { $0.name == name }) else {
+            Sevo.printError("no shader package named \(name) in the catalog — sevo shaders list")
+            throw SevoExit.badInvocation
+        }
+        do {
+            let package = try await ShaderPackages.install(entry) { fraction in
+                let percent = fraction.map { " \(Int($0 * 100))%" } ?? ""
+                FileHandle.standardError.write(Data("downloading \(entry.title)\(percent)\n".utf8))
+            }
+            print("\(package.title) \(package.manifest.version) installed at \(package.root.path)")
+        } catch {
+            Sevo.printError("\(error)")
+            throw SevoExit.failed
+        }
+    }
+
+    private func remove() throws {
+        guard let name, let package = ShaderPackages.installed().first(where: { $0.name == name }) else {
+            Sevo.printError("shaders remove: name an installed package (sevo shaders list)")
+            throw SevoExit.badInvocation
+        }
+        try ShaderPackages.remove(package)
+        print("\(package.title) moved to the Trash")
+    }
+}
+
 struct BottleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bottle",
@@ -745,7 +907,7 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | windows | mouse | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value; for wine-debug: on, off, or Wine channels. Omit to read the key.") var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
@@ -755,7 +917,7 @@ struct BottleCommand: AsyncParsableCommand {
         case "list":
             try await list()
         case "config":
-            try config()
+            try await config()
         default:
             Sevo.printError("bottle \(verb): unknown verb (list | config)")
             throw SevoExit.badInvocation
@@ -764,7 +926,7 @@ struct BottleCommand: AsyncParsableCommand {
 
     /// Reads or writes the graphics knobs the app's Settings › Graphics pane
     /// drives, against the same store (`Sevoflurane/Support/BottleGraphics.swift`).
-    private func config() throws {
+    private func config() async throws {
         var selection = current()
         guard let key else {
             if asJSON {
@@ -772,6 +934,8 @@ struct BottleCommand: AsyncParsableCommand {
                     "renderer": selection.renderer.rawValue,
                     "msync": selection.msync,
                     "windows": GameConfig.windows(bottle: SteamBottle.name).value.rawValue,
+                    "upscaler": GameConfig.upscaler(bottle: SteamBottle.name).value,
+                    "filter": GameConfig.filter(bottle: SteamBottle.name).value.rawValue,
                     "mouse": GameConfig.mouse(bottle: SteamBottle.name).value.rawValue,
                     "wine-debug": WineLog.isDiagnosing,
                     "wine-debug-channels": WineLog.channels,
@@ -780,6 +944,8 @@ struct BottleCommand: AsyncParsableCommand {
                 print("renderer \(selection.renderer.rawValue)")
                 print("msync \(selection.msync)")
                 print("windows \(Self.windowsSummary)")
+                print("upscaler \(Self.upscalerSummary)")
+                print("filter \(Self.filterSummary)")
                 print("mouse \(Self.mouseSummary)")
                 print("wine-debug \(WineLog.summary)")
             }
@@ -790,10 +956,12 @@ struct BottleCommand: AsyncParsableCommand {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
             case "windows": print(Self.windowsSummary)
+            case "upscaler": print(Self.upscalerSummary)
+            case "filter": print(Self.filterSummary)
             case "mouse": print(Self.mouseSummary)
             case "wine-debug": print(WineLog.summary)
             default:
-                Sevo.printError("unknown key '\(key)' (renderer | msync | windows | mouse | wine-debug)")
+                Sevo.printError("unknown key '\(key)' \(Self.keys)")
                 throw SevoExit.badInvocation
             }
             return
@@ -803,18 +971,25 @@ struct BottleCommand: AsyncParsableCommand {
             // `off`, `fixed` (locked windows become resizable), `window`
             // (fullscreen games get a window of their own too), or `inherit`
             // for the global default. A game can override it: sevo app config.
-            var values = GameConfig.bottle(SteamBottle.name)
-            if value == "inherit" {
-                values.windows = nil
-            } else if let treatment = WindowTreatment(rawValue: value) {
-                values.windows = treatment
-            } else {
-                Sevo.printError("windows must be off, fixed, window or inherit")
-                throw SevoExit.badInvocation
-            }
-            GameConfig.setBottle(SteamBottle.name, values)
-            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            let treatment = try ConfigKeyParsing.windows(value)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.windows = treatment }
             print("windows \(Self.windowsSummary) — \(Self.gameReach)")
+            return
+        }
+        if key == "upscaler" {
+            // The presenter's upscaler at the bottle level: `off`, `lanczos`,
+            // `metalfx`, a shader package's name, or `inherit`.
+            let upscaler = try await ConfigKeyParsing.upscaler(value)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.upscaler = upscaler }
+            print("upscaler \(Self.upscalerSummary) — \(Self.gameReach)")
+            return
+        }
+        if key == "filter" {
+            // How the upscaler's last pass reaches the window: `nearest`,
+            // `bilinear`, `lanczos`, or `inherit`.
+            let filter = try ConfigKeyParsing.filter(value)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.filter = filter }
+            print("filter \(Self.filterSummary) — \(Self.gameReach)")
             return
         }
         if key == "mouse" {
@@ -822,17 +997,8 @@ struct BottleCommand: AsyncParsableCommand {
             // movement: `system` for the pointer curve everything else on the
             // Mac gets, `linear` for the mouse's own displacement, or
             // `inherit` for the global default.
-            var values = GameConfig.bottle(SteamBottle.name)
-            if value == "inherit" {
-                values.mouse = nil
-            } else if let curve = MouseCurve(rawValue: value) {
-                values.mouse = curve
-            } else {
-                Sevo.printError("mouse must be system, linear or inherit")
-                throw SevoExit.badInvocation
-            }
-            GameConfig.setBottle(SteamBottle.name, values)
-            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            let curve = try ConfigKeyParsing.mouse(value)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.mouse = curve }
             print("mouse \(Self.mouseSummary) — \(Self.gameReach)")
             return
         }
@@ -865,7 +1031,7 @@ struct BottleCommand: AsyncParsableCommand {
             }
             selection.msync = flag
         default:
-            Sevo.printError("unknown key '\(key)' (renderer | msync | windows | mouse | wine-debug)")
+            Sevo.printError("unknown key '\(key)' \(Self.keys)")
             throw SevoExit.badInvocation
         }
         do {
@@ -883,9 +1049,23 @@ struct BottleCommand: AsyncParsableCommand {
             : BottleGraphics.managedSelection()
     }
 
+    private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | wine-debug)"
+
     /// The bottle's window treatment and where it comes from.
     static var windowsSummary: String {
         let resolved = GameConfig.windows(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
+    }
+
+    /// The bottle's upscaler and where it comes from.
+    static var upscalerSummary: String {
+        let resolved = GameConfig.upscaler(bottle: SteamBottle.name)
+        return "\(resolved.value) (\(resolved.source))"
+    }
+
+    /// The bottle's final filter and where it comes from.
+    static var filterSummary: String {
+        let resolved = GameConfig.filter(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
@@ -1286,10 +1466,13 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "config",
             abstract: "A game's own settings, over the bottle's and the global defaults.",
             discussion: """
-            Keys: windows (off | fixed | window | inherit), mouse (system | \
-            linear | inherit — linear gives a game holding the cursor for \
-            mouse-look the mouse's own displacement, unshaped by the pointer \
-            acceleration curve), runner (wine | \
+            Keys: windows (off | fixed | window | inherit), upscaler (off | \
+            lanczos | metalfx | a shader package's name | inherit — sevo \
+            shaders list names the packages), filter (nearest | bilinear | \
+            lanczos | inherit — how the upscaler's last pass reaches the \
+            window), mouse (system | linear | inherit — linear gives a game \
+            holding the cursor for mouse-look the mouse's own displacement, \
+            unshaped by the pointer acceleration curve), runner (wine | \
             nwjs — nwjs runs an NW.js game in native macOS NW.js and \
             downloads the runtime the first time), detect to look at the \
             game's files again, exe <name> to name an executable the game \
@@ -1298,7 +1481,7 @@ struct AppCommand: AsyncParsableCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "windows | mouse | runner | detect | exe. Omit to print every setting.")
+        @Argument(help: "windows | upscaler | filter | mouse | runner | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value. Omit to read the key.") var value: String?
         @Flag(name: .customLong("json")) var asJSON = false
@@ -1309,7 +1492,7 @@ struct AppCommand: AsyncParsableCommand {
                 report(bottle: bottle)
                 return
             }
-            var values = GameConfig.game(appid)
+            let values = GameConfig.game(appid)
             switch key {
             case "windows":
                 guard let value else {
@@ -1317,36 +1500,39 @@ struct AppCommand: AsyncParsableCommand {
                     print("\(resolved.value.rawValue) (\(resolved.source))")
                     return
                 }
-                if value == "inherit" {
-                    values.windows = nil
-                } else if let treatment = WindowTreatment(rawValue: value) {
-                    values.windows = treatment
-                } else {
-                    Sevo.printError("windows must be off, fixed, window or inherit")
-                    throw SevoExit.badInvocation
+                let treatment = try ConfigKeyParsing.windows(value)
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.windows = treatment }
+            case "upscaler":
+                guard let value else {
+                    let resolved = GameConfig.upscaler(bottle: bottle, game: appid)
+                    print("\(resolved.value) (\(resolved.source))")
+                    return
                 }
-                GameConfig.setGame(appid, values)
+                let upscaler = try await ConfigKeyParsing.upscaler(value)
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.upscaler = upscaler }
+            case "filter":
+                guard let value else {
+                    let resolved = GameConfig.filter(bottle: bottle, game: appid)
+                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    return
+                }
+                let filter = try ConfigKeyParsing.filter(value)
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.filter = filter }
             case "mouse":
                 guard let value else {
                     let resolved = GameConfig.mouse(bottle: bottle, game: appid)
                     print("\(resolved.value.rawValue) (\(resolved.source))")
                     return
                 }
-                if value == "inherit" {
-                    values.mouse = nil
-                } else if let curve = MouseCurve(rawValue: value) {
-                    values.mouse = curve
-                } else {
-                    Sevo.printError("mouse must be system, linear or inherit")
-                    throw SevoExit.badInvocation
-                }
-                GameConfig.setGame(appid, values)
+                let curve = try ConfigKeyParsing.mouse(value)
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.mouse = curve }
             case "runner":
                 guard let value else {
                     print(values.runner ?? GameRunner.wine)
                     return
                 }
                 try await setRunner(value)
+                ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
             case "detect":
                 try Detect.report(appid: appid, asJSON: asJSON)
                 return
@@ -1356,11 +1542,11 @@ struct AppCommand: AsyncParsableCommand {
                     return
                 }
                 GameConfig.noteExecutable(value, forApp: appid)
+                ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
             default:
-                Sevo.printError("unknown key '\(key)' (windows | mouse | runner | detect | exe)")
+                Sevo.printError("unknown key '\(key)' (windows | upscaler | filter | mouse | runner | detect | exe)")
                 throw SevoExit.badInvocation
             }
-            ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
             report(bottle: bottle)
         }
 
@@ -1410,6 +1596,8 @@ struct AppCommand: AsyncParsableCommand {
 
         private func report(bottle: String) {
             let windows = GameConfig.windows(bottle: bottle, game: appid)
+            let upscaler = GameConfig.upscaler(bottle: bottle, game: appid)
+            let filter = GameConfig.filter(bottle: bottle, game: appid)
             let mouse = GameConfig.mouse(bottle: bottle, game: appid)
             let values = GameConfig.game(appid)
             let exes = values.exes ?? []
@@ -1419,6 +1607,12 @@ struct AppCommand: AsyncParsableCommand {
                     "appid": appid,
                     "windows": [
                         "value": windows.value.rawValue, "source": windows.source.description,
+                    ],
+                    "upscaler": [
+                        "value": upscaler.value, "source": upscaler.source.description,
+                    ],
+                    "filter": [
+                        "value": filter.value.rawValue, "source": filter.source.description,
                     ],
                     "mouse": [
                         "value": mouse.value.rawValue, "source": mouse.source.description,
@@ -1439,6 +1633,8 @@ struct AppCommand: AsyncParsableCommand {
                 return
             }
             print("windows \(windows.value.rawValue) (\(windows.source))")
+            print("upscaler \(upscaler.value) (\(upscaler.source))")
+            print("filter \(filter.value.rawValue) (\(filter.source))")
             print("mouse \(mouse.value.rawValue) (\(mouse.source))")
             print("runner \(runner)")
             if let info = values.nwjs {

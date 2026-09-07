@@ -40,6 +40,7 @@
                                 graphics: Fixtures.graphics,
                                 storage: Fixtures.storage,
                                 engine: Fixtures.engine,
+                                shaders: Fixtures.shaders,
                                 compatibility: Fixtures.compatibility,
                             )
                             .frame(width: 720, height: 460)
@@ -63,7 +64,7 @@
                                 // Tall enough for the toolkit section below
                                 // the fold: a tile that clips the state it
                                 // exists to show is worse than no tile.
-                                GraphicsSettings(store: pane.store, highlighted: nil)
+                                GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
                                     .frame(width: 460, height: 620)
                             }
                         }
@@ -88,6 +89,7 @@
                                 EngineSettings(
                                     store: pane.store,
                                     graphics: Fixtures.graphics,
+                                    shaders: Fixtures.shaders,
                                     compatibility: Fixtures.compatibility,
                                     provisioner: pane.provisioner,
                                     highlighted: nil,
@@ -103,6 +105,7 @@
                                 EngineSettings(
                                     store: Fixtures.engine,
                                     graphics: Fixtures.graphics,
+                                    shaders: Fixtures.shaders,
                                     compatibility: pane.store,
                                     provisioner: Fixtures.settings,
                                     highlighted: nil,
@@ -368,6 +371,7 @@
         static let storage = StorageStore(
             environment: DemoStorageEnvironment(scenario: .library),
         )
+        static let shaders = ShaderStore(simulated: true)
         /// The wizard's own graphics step reads a store too — a separate one,
         /// so a toolkit added in a wizard tile doesn't appear in the Graphics
         /// pane tiles beside it.

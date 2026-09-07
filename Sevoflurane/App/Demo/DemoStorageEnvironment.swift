@@ -55,14 +55,14 @@
             case .empty:
                 [
                     "games": 0, "client": 1_932_735_283, "caches": 141_557_760,
-                    "bottle": 692_060_160, "engines": 1_395_864_371, "toolkits": 0,
-                    "shadow": 0, "logs": 88124,
+                    "bottle": 692_060_160, "engines": 1_395_864_371, "renderers": 0,
+                    "shaders": 0, "toolkits": 0, "shadow": 0, "logs": 88124,
                 ]
             case .library, .measuringSlowly, .linkableGames, .alreadyLinked:
                 [
                     "games": 214_863_953_920, "client": 1_932_735_283, "caches": 3_221_225_472,
-                    "bottle": 692_060_160, "engines": 1_395_864_371, "toolkits": 205_520_896,
-                    "shadow": 4096, "logs": 2_411_724,
+                    "bottle": 692_060_160, "engines": 1_395_864_371, "renderers": 61_865_984,
+                    "shaders": 38_797_312, "toolkits": 205_520_896, "shadow": 4096, "logs": 2_411_724,
                 ]
             }
             linked = scenario == .alreadyLinked ? [1_245_620, 892_970] : []
