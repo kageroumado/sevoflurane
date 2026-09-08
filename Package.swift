@@ -43,6 +43,7 @@ let package = Package(
                 "Sevoflurane/Bridge/steamclient_shim.js",
                 "Sevoflurane/Info.plist",
                 "Sevoflurane/Resources",
+                "Sevoflurane/Setup/EngineFilePanel.swift",
                 "Sevoflurane/Setup/GPTkDownload.swift",
                 "Sevoflurane/Setup/GPTkDownloadPanel.swift",
                 "Sevoflurane/Setup/SetupDryRun.swift",
@@ -58,7 +59,6 @@ let package = Package(
                 "Sevoflurane/Support/WineWindowWatch.swift",
                 "Sevoflurane/Web",
                 "SevofluraneTests",
-                "Site",
                 "Tools",
             ],
             sources: [

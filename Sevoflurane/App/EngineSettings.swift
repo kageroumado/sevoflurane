@@ -25,6 +25,8 @@ struct EngineSettings: View {
     @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
     @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
     @State private var wineDiagnostics = WineLog.isDiagnosing
+    @State private var isInstallingEngineFile = false
+    @State private var engineFileError: String?
 
     var body: some View {
         Form {
@@ -57,6 +59,7 @@ struct EngineSettings: View {
             if bottleChoice == Self.newBottleTag {
                 newBottleField
             }
+            engineFileRow
             if store.hasChanges || store.isSwitching {
                 switchRow
             } else if let error = store.switchError {
@@ -136,6 +139,53 @@ struct EngineSettings: View {
                 bottleChoice = name
             }
             .disabled(newBottleName.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+
+    /// Dormison from a file — the route for a Mac the release feed does
+    /// not reach, or for adding a release by hand. The engine lands beside
+    /// the installed ones and is staged in the picker; Switch still decides
+    /// when it runs.
+    private var engineFileRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Engine from a file")
+                Text(engineFileDetail)
+                    .font(.callout)
+                    .foregroundStyle(engineFileError == nil ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            if isInstallingEngineFile {
+                ProgressView().controlSize(.small)
+            }
+            Button("Choose…") { installEngineFile() }
+                .disabled(isInstallingEngineFile || store.isSwitching)
+        }
+    }
+
+    private var engineFileDetail: String {
+        if isInstallingEngineFile, case let .working(phase) = provisioner.activity {
+            return phase
+        }
+        return engineFileError
+            ?? "A dormison-r<N>.tar.xz you downloaded; the .sig beside it is checked."
+    }
+
+    private func installEngineFile() {
+        guard let tarball = EngineFilePanel.choose() else { return }
+        isInstallingEngineFile = true
+        engineFileError = nil
+        Task(name: "Install engine from file") {
+            do {
+                let version = try await provisioner.installEngine(fromFile: tarball)
+                await store.refresh()
+                store.stagedEngine = .managed(version: version)
+                bottleChoice = store.stagedBottle
+            } catch {
+                engineFileError = "\(error)"
+            }
+            isInstallingEngineFile = false
         }
     }
 

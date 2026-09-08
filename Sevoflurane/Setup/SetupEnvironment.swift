@@ -17,10 +17,13 @@ protocol SetupEnvironment: AnyObject {
     /// `softwareupdate --install-rosetta --agree-to-license`.
     func installRosetta() async -> SetupCommandOutcome
 
-    /// Downloads and installs the manifest's stable managed engine — the path
-    /// taken when no usable CrossOver exists.
-    /// The fraction is download progress, or `nil` where none is measurable.
+    /// Installs the managed engine — the path taken when no usable CrossOver
+    /// exists: from `tarball` when someone has the file, else the one shipped
+    /// with this copy of the app, else the manifest's stable release,
+    /// downloaded. The outcome's output is the version installed. The
+    /// fraction is download progress, or `nil` where none is measurable.
     func installEngine(
+        from tarball: URL?,
         progress: @escaping @Sendable (String, Double?) -> Void,
     ) async -> SetupCommandOutcome
 
@@ -89,9 +92,15 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     func installEngine(
+        from tarball: URL?,
         progress: @escaping @Sendable (String, Double?) -> Void,
     ) async -> SetupCommandOutcome {
         do {
+            if let tarball = tarball ?? EngineInstaller.bundledTarball() {
+                SetupLog.log("engine install from \(tarball.path)")
+                let version = try await EngineInstaller.install(fromFile: tarball, progress: progress)
+                return .success(version)
+            }
             let release = try await EngineInstaller.stableRelease()
             try await EngineInstaller.install(release, progress: progress)
             return .success(release.version)

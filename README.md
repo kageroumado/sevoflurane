@@ -143,7 +143,7 @@ sevo diag [--steam-logs]    the report zip for a bug report
 sevo client start|stop|restart|update|pin|unpin
 sevo recover [--deep]       the wedge playbook; --deep adds cache purge and repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
-sevo engine list|install|use
+sevo engine list|install [--file TARBALL]|use
 sevo bottle config <key> [value]
 sevo shaders list|install|remove
 sevo downloads status|pause|resume|throttle KBPS
@@ -188,7 +188,7 @@ window Steam creates is adopted into an `NSWindow` with the right role.
 - `Sevo/` + `Package.swift` — the `sevo` CLI and MCP server. They compile the
   app's own lifecycle and CDP sources, so the two cannot drift.
 - `SevofluraneTests/` — the test bundle. `Tools/` — the shader package
-  builder and performance scripts. `Site/` — the landing page.
+  builder and performance scripts.
 
 ### Contributing
 

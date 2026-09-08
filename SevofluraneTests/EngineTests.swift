@@ -141,6 +141,109 @@ struct EngineSignatureTests {
     }
 }
 
+/// The from-file route, against a scratch engine root: what the tarball has
+/// to look like, what refuses it, and how a shipped tarball is found.
+struct EngineInstallerTests {
+    private let manager = FileManager.default
+
+    /// A scratch directory holding `<version>/wine/bin/wine` and an
+    /// `engine-info.json`, packed as `<version>.tar.xz` beside it.
+    private func makeTarball(version: String, extraTopLevel: String? = nil) async throws -> (dir: URL, tarball: URL) {
+        let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
+        let tree = dir.appendingPathComponent("src/\(version)")
+        try manager.createDirectory(at: tree.appendingPathComponent("wine/bin"), withIntermediateDirectories: true)
+        try Data("wine".utf8).write(to: tree.appendingPathComponent("wine/bin/wine"))
+        try Data(#"{"version":"\#(version)"}"#.utf8).write(to: tree.appendingPathComponent("engine-info.json"))
+        var members = [version]
+        if let extraTopLevel {
+            try Data().write(to: dir.appendingPathComponent("src/\(extraTopLevel)"))
+            members.append(extraTopLevel)
+        }
+        let tarball = dir.appendingPathComponent("\(version).tar.xz")
+        let packed = await Subprocess.run(
+            "/usr/bin/tar", ["-cJf", tarball.path, "-C", dir.appendingPathComponent("src").path] + members,
+            capture: .combined, timeout: .seconds(60),
+        )
+        try #require(packed.status == 0, "\(packed.output)")
+        return (dir, tarball)
+    }
+
+    @Test
+    func `a tarball installs under its own name and reports it`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r99")
+        defer { try? manager.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("Engines")
+        let version = try await EngineInstaller.install(fromFile: tarball, into: root)
+        #expect(version == "dormison-r99")
+        #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/wine/bin/wine").path))
+        #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/engine-info.json").path))
+    }
+
+    @Test
+    func `an installed version is never replaced`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r98")
+        defer { try? manager.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("Engines")
+        _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        await #expect(throws: (any Error).self) {
+            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        }
+    }
+
+    @Test
+    func `a tarball with more than the engine at its top is refused`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r97", extraTopLevel: "README")
+        defer { try? manager.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("Engines")
+        await #expect(throws: (any Error).self) {
+            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        }
+        #expect(!manager.fileExists(atPath: root.appendingPathComponent("dormison-r97").path))
+    }
+
+    @Test
+    func `a signature beside the tarball that fails refuses the install`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r96")
+        defer { try? manager.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("Engines")
+        // Well-formed, from a key that is not the pinned one.
+        let stranger = Curve25519.Signing.PrivateKey()
+        let signature = try stranger.signature(for: Data(contentsOf: tarball))
+        try Data(signature.base64EncodedString().utf8).write(to: EngineSignature.signatureURL(for: tarball))
+        await #expect(throws: EngineSignature.Failure.signatureInvalid("dormison-r96.tar.xz")) {
+            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        }
+        try Data("not base64!".utf8).write(to: EngineSignature.signatureURL(for: tarball))
+        await #expect(throws: EngineSignature.Failure.signatureMalformed) {
+            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        }
+        #expect(!manager.fileExists(atPath: root.appendingPathComponent("dormison-r96").path))
+    }
+
+    @Test
+    func `the version is the file name without its archive suffix`() {
+        #expect(EngineInstaller.versionName(of: URL(fileURLWithPath: "/x/dormison-r3.tar.xz")) == "dormison-r3")
+        #expect(EngineInstaller.versionName(of: URL(fileURLWithPath: "/x/dormison-r3.txz")) == "dormison-r3")
+        #expect(EngineInstaller.versionName(of: URL(fileURLWithPath: "/x/dormison-r3.tar")) == "dormison-r3")
+        #expect(EngineInstaller.versionName(of: URL(fileURLWithPath: "/x/dormison-r3")) == "dormison-r3")
+    }
+
+    @Test
+    func `the newest shipped tarball is found beside the app or in its resources`() throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        let resources = dir.appendingPathComponent("App.app/Contents/Resources")
+        try manager.createDirectory(at: resources.appendingPathComponent("Engine"), withIntermediateDirectories: true)
+        let bundle = dir.appendingPathComponent("App.app")
+        #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle) == nil)
+        try Data().write(to: dir.appendingPathComponent("dormison-r2.tar.xz"))
+        try Data().write(to: dir.appendingPathComponent("notes.tar.xz"))
+        #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle)?.lastPathComponent == "dormison-r2.tar.xz")
+        try Data().write(to: resources.appendingPathComponent("Engine/dormison-r10.tar.xz"))
+        #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle)?.lastPathComponent == "dormison-r10.tar.xz")
+    }
+}
+
 struct BottleGraphicsTests {
     private let conf = """
     [Bottle]

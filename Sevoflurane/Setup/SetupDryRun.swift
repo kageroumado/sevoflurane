@@ -182,20 +182,30 @@
         }
 
         func installEngine(
+            from tarball: URL?,
             progress: @escaping @Sendable (String, Double?) -> Void,
         ) async -> SetupCommandOutcome {
-            log("would download the managed engine from the stable manifest channel")
-            for step in 1...4 {
-                progress("Downloading the engine…", Double(step) / 4)
+            let version: String
+            if let tarball {
+                log("would install the managed engine from \(tarball.path)")
+                version = EngineInstaller.versionName(of: tarball)
+                progress("Installing…", nil)
                 await pause()
+            } else {
+                log("would download the managed engine from the stable manifest channel")
+                version = "dry-run-engine"
+                for step in 1...4 {
+                    progress("Downloading the engine…", Double(step) / 4)
+                    await pause()
+                }
             }
             state = SetupDetection(
                 rosetta: state.rosetta,
                 crossover: state.crossover,
                 bottles: state.bottles,
-                managedEngineVersions: state.managedEngineVersions + ["dry-run-engine"],
+                managedEngineVersions: state.managedEngineVersions + [version],
             )
-            return .success("dry-run-engine")
+            return .success(version)
         }
 
         func createBottle(named name: String) async -> SetupCommandOutcome {

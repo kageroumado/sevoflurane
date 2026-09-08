@@ -35,6 +35,11 @@ final class Provisioner {
     /// Progress within the current stage (the engine download), or `nil`
     /// where none is measurable.
     private(set) var stageFraction: Double?
+    /// An engine tarball to install in place of a download — chosen in the
+    /// wizard or Settings by someone who has the file, the release asset
+    /// saved by hand on a Mac the release feed does not reach. The engine
+    /// stage consumes it.
+    var engineTarball: URL?
     private let environment: any SetupEnvironment
 
     init(environment: (any SetupEnvironment)? = nil) {
@@ -86,6 +91,15 @@ final class Provisioner {
                 && $0.url.deletingLastPathComponent().standardizedFileURL
                 == Engine.active.bottlesRoot.standardizedFileURL
         }
+    }
+
+    /// Whether what still needs doing starts with the engine: none on disk
+    /// and the built-in one wanted. The wizard offers the file route only
+    /// then — a failure past the engine has nothing a tarball fixes.
+    var engineInstallPending: Bool {
+        guard let detection else { return false }
+        return detection.managedEngineVersions.isEmpty
+            && (detection.usableCrossOver == nil || Engine.preferenceWantsManaged)
     }
 
     func refreshDetection() async {
@@ -165,18 +179,11 @@ final class Provisioner {
         if managedWanted, detection.managedEngineVersions.isEmpty {
             beginStage(2, "Installing the game engine…")
             SetupLog.log("provision: installing managed engine")
-            let result = await environment.installEngine { phase, fraction in
-                Task { @MainActor [weak self] in
-                    if self?.activity != .working(phase) {
-                        SetupLog.log("engine install: \(phase)")
-                        self?.activity = .working(phase)
-                    }
-                    self?.stageFraction = fraction
-                }
-            }
+            let result = await environment.installEngine(from: engineTarball, progress: engineProgress())
             guard result.succeeded else {
                 throw ProvisionError("engine install failed: \(result.output.suffix(200))")
             }
+            engineTarball = nil
             await refreshDetection()
         }
         // A dry run must never redirect the real process's wine invocations.
@@ -185,6 +192,46 @@ final class Provisioner {
         }
         guard self.detection?.hasEngine == true else {
             throw ProvisionError("no usable engine after install")
+        }
+    }
+
+    /// Installs an engine from a tarball on disk outside the provisioning
+    /// sequence — Settings › Engine's route for adding a release by hand.
+    /// Narrates through `activity` while it runs and rests at `.idle`
+    /// after; the version installed comes back, and the caller decides
+    /// whether to switch to it.
+    func installEngine(fromFile tarball: URL) async throws -> String {
+        guard !isWorking else {
+            throw ProvisionError("setup is already running")
+        }
+        beginStage(2, "Installing the game engine…")
+        SetupLog.log("installing engine from \(tarball.path)")
+        let result = await environment.installEngine(from: tarball, progress: engineProgress())
+        stage = nil
+        stageFraction = nil
+        activity = .idle
+        await refreshDetection()
+        guard result.succeeded else {
+            throw ProvisionError("engine install failed: \(result.output.suffix(200))")
+        }
+        return result.output
+    }
+
+    private var isWorking: Bool {
+        if case .working = activity { true } else { false }
+    }
+
+    /// The engine stage's narration: each new phase is logged once and shown,
+    /// the fraction rides along for the progress bar.
+    private func engineProgress() -> @Sendable (String, Double?) -> Void {
+        { [weak self] phase, fraction in
+            Task { @MainActor in
+                if self?.activity != .working(phase) {
+                    SetupLog.log("engine install: \(phase)")
+                    self?.activity = .working(phase)
+                }
+                self?.stageFraction = fraction
+            }
         }
     }
 

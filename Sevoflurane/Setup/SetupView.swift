@@ -50,6 +50,8 @@ struct SetupView: View {
     @State private var openAtLogin = true
     @State private var connectAgents = false
     @State private var engineChoice: EngineChoice = .builtIn
+    /// The engine tarball this copy of the app ships with, when it does.
+    @State private var bundledEngine: URL?
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
     @State private var newBottleName = SteamBottle.defaultName
@@ -87,7 +89,12 @@ struct SetupView: View {
                 .padding(.bottom, 28)
         }
         .frame(width: 680, height: step == .graphics ? 640 : 500)
-        .task { await provisioner.refreshDetection() }
+        .task {
+            if !provisioner.isDryRun {
+                bundledEngine = EngineInstaller.bundledTarball()
+            }
+            await provisioner.refreshDetection()
+        }
         .onChange(of: provisioner.activity) { _, activity in
             if activity == .done { onProvisioned() }
         }
@@ -191,6 +198,10 @@ struct SetupView: View {
                     + "through Apple's toolkit, keep Steam running, and upscale. "
                     + "A one-time download.",
             )
+            if engineChoice == .builtIn {
+                engineSource
+                    .padding(.leading, 30)
+            }
             engineOption(.crossover, title: crossOverTitle, detail: crossOverDetail)
             // Shown rather than disclosed: the step has room for it, and a
             // chevron the size of a chevron is a poor place to keep the one
@@ -224,6 +235,37 @@ struct SetupView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Where Dormison comes from: the download, the tarball this copy of the
+    /// app ships with, or a file someone chose — the route for a Mac the
+    /// release feed does not reach.
+    @ViewBuilder private var engineSource: some View {
+        if let tarball = provisioner.engineTarball {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.zipper")
+                    .foregroundStyle(.secondary)
+                Text("Installs from \(tarball.lastPathComponent) instead of downloading.")
+                Button("Change…") { chooseEngineFile() }
+                    .buttonStyle(.link)
+            }
+            .font(.callout)
+        } else if let bundledEngine {
+            Text("This copy of Sevoflurane comes with "
+                + "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine))) — "
+                + "nothing to download.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            Button("Already have the engine as a file? Choose it…") { chooseEngineFile() }
+                .buttonStyle(.link)
+                .font(.callout)
+        }
+    }
+
+    private func chooseEngineFile() {
+        guard let tarball = EngineFilePanel.choose() else { return }
+        provisioner.engineTarball = tarball
     }
 
     /// What the CrossOver option is worth saying: whether a copy is on the
@@ -389,6 +431,14 @@ struct SetupView: View {
                         }
                         Spacer()
                         if case .failed = provisioner.activity {
+                            if provisioner.engineInstallPending {
+                                Button("Use a Downloaded Engine…") {
+                                    guard let tarball = EngineFilePanel.choose() else { return }
+                                    provisioner.engineTarball = tarball
+                                    Task { await provisioner.retry() }
+                                }
+                                .buttonStyle(.glass)
+                            }
                             Button("Try Again") {
                                 Task { await provisioner.retry() }
                             }
@@ -406,15 +456,25 @@ struct SetupView: View {
                 }
                 .padding(8)
             }
-            Text(hasFailed
-                ? "Trying again keeps whatever already downloaded, so a second "
-                + "attempt is usually much shorter than the first."
-                : "You can close this window — setup carries on in the menu bar, "
-                + "and picks up where it left off if it is interrupted.")
+            Text(steamStepCaption)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var steamStepCaption: String {
+        guard hasFailed else {
+            return "You can close this window — setup carries on in the menu bar, "
+                + "and picks up where it left off if it is interrupted."
+        }
+        if provisioner.engineInstallPending {
+            return "If the download can't get through, the engine also installs "
+                + "from its file: dormison-r<N>.tar.xz from the Dormison release, "
+                + "with the .sig saved beside it."
+        }
+        return "Trying again keeps whatever already downloaded, so a second "
+            + "attempt is usually much shorter than the first."
     }
 
     /// The overall bar: completed stages plus the current stage's own

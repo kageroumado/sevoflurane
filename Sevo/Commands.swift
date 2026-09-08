@@ -399,7 +399,7 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list | install | d3dmetal | use | check-manifest") var verb: String = "list"
+    @Argument(help: "list | install [--file TARBALL] | d3dmetal | use | check-manifest") var verb: String = "list"
     @Argument(
         help: "For use: the engine to switch to (a name from `sevo engine list`); for check-manifest: the engine.json to check.",
     )
@@ -432,6 +432,10 @@ struct EngineCommand: AsyncParsableCommand {
         name: .customLong("manifest"),
         help: "Manifest URL override (default: the kagerou.glass manifest).",
     ) var manifest: String?
+    @Option(
+        name: .customLong("file"),
+        help: "For install: an engine tarball on disk (dormison-r<N>.tar.xz) in place of the download; a .sig beside it is verified.",
+    ) var file: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
@@ -601,8 +605,21 @@ struct EngineCommand: AsyncParsableCommand {
     }
 
     /// Downloads and installs the manifest's stable release — the CLI face
-    /// of the wizard's built-in-engine stage.
+    /// of the wizard's built-in-engine stage — or, with `--file`, installs
+    /// the tarball on disk, the route for a Mac the release feed does not
+    /// reach.
     private func install() async throws {
+        if let file {
+            let tarball = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
+            do {
+                let version = try await EngineInstaller.install(fromFile: tarball, progress: phasePrinter())
+                print("engine \(version) installed")
+            } catch {
+                Sevo.printError("engine install failed: \(error)")
+                throw SevoExit.failed
+            }
+            return
+        }
         let manifestURL = try manifest.map {
             guard let url = URL(string: $0) else {
                 Sevo.printError("not a URL: \($0)")
@@ -620,21 +637,27 @@ struct EngineCommand: AsyncParsableCommand {
                 print("engine \(release.version) already installed")
                 return
             }
-            let printed = OSAllocatedUnfairLock(initialState: "")
-            try await EngineInstaller.install(release) { phase, _ in
-                let repeated = printed.withLock { last in
-                    defer { last = phase }
-                    return last == phase
-                }
-                guard !repeated else { return }
-                FileHandle.standardError.write(Data((phase + "\n").utf8))
-            }
+            try await EngineInstaller.install(release, progress: phasePrinter())
             print("engine \(release.version) installed")
         } catch let code as ExitCode {
             throw code
         } catch {
             Sevo.printError("engine install failed: \(error)")
+            Sevo.printError("with the tarball on disk: sevo engine install --file dormison-r<N>.tar.xz")
             throw SevoExit.failed
+        }
+    }
+
+    /// Each new install phase once, on stderr; the fraction is not shown.
+    private func phasePrinter() -> @Sendable (String, Double?) -> Void {
+        let printed = OSAllocatedUnfairLock(initialState: "")
+        return { phase, _ in
+            let repeated = printed.withLock { last in
+                defer { last = phase }
+                return last == phase
+            }
+            guard !repeated else { return }
+            FileHandle.standardError.write(Data((phase + "\n").utf8))
         }
     }
 

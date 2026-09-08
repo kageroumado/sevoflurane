@@ -7,6 +7,11 @@ import Foundation
 /// is moved into place — a version directory either exists complete or not
 /// at all, which is what lets ``SetupProbe/managedEngineVersions()`` treat
 /// presence as installed.
+///
+/// The tarball can also come from disk, ``install(fromFile:into:progress:)``:
+/// the release asset someone saved by hand on a Mac the release feed does
+/// not reach, or the copy a disk image ships with the app
+/// (``bundledTarball(resources:beside:)``).
 nonisolated enum EngineInstaller {
     /// Fetches the manifest's stable release, or reports why the machine
     /// can't use it.
@@ -43,9 +48,7 @@ nonisolated enum EngineInstaller {
             throw EngineSignature.Failure.urlNotAllowed(release.url)
         }
         let manager = FileManager.default
-        let staging = manager.temporaryDirectory
-            .appendingPathComponent("sevo-engine-\(UUID().uuidString)")
-        try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+        let staging = try makeStaging()
         defer { try? manager.removeItem(at: staging) }
 
         let tarball = staging.appendingPathComponent("engine.tar.xz")
@@ -71,27 +74,117 @@ nonisolated enum EngineInstaller {
         }
 
         progress("Installing…", nil)
+        _ = try await unpack(tarball, expecting: release.version, in: staging, into: Engine.managedRoot)
+    }
+
+    /// Installs the engine tarball at `tarball` — `dormison-r<N>.tar.xz` as
+    /// the release ships it — and returns the version it carried. A
+    /// `<name>.sig` beside the file is verified against the pinned key, and
+    /// one that fails refuses the install; a tarball with nothing beside it
+    /// is the operator's own choice and is installed as such, logged. The
+    /// tarball's single top-level directory names the version, and the
+    /// version has to be new: an installed engine is never replaced.
+    static func install(
+        fromFile tarball: URL,
+        into root: URL = Engine.managedRoot,
+        progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
+    ) async throws -> String {
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: tarball.path) else {
+            throw InstallError("no engine tarball at \(tarball.path)")
+        }
+        let named = versionName(of: tarball)
+        guard !manager.fileExists(atPath: root.appendingPathComponent(named).path) else {
+            throw InstallError("engine \(named) is already installed")
+        }
+        progress("Verifying \(tarball.lastPathComponent)…", nil)
+        let signatureURL = EngineSignature.signatureURL(for: tarball)
+        if let signatureFile = try? Data(contentsOf: signatureURL) {
+            try EngineSignature.verify(file: tarball, signatureFile: signatureFile)
+            SetupLog.log("engine tarball \(tarball.lastPathComponent): signature verified")
+        } else {
+            SetupLog.log("engine tarball \(tarball.lastPathComponent): no .sig beside it, installed as the operator's own")
+        }
+        progress("Installing…", nil)
+        let staging = try makeStaging()
+        defer { try? manager.removeItem(at: staging) }
+        return try await unpack(tarball, expecting: nil, in: staging, into: root)
+    }
+
+    /// The engine a tarball is named for: `dormison-r3.tar.xz` → `dormison-r3`.
+    static func versionName(of tarball: URL) -> String {
+        var name = tarball.lastPathComponent
+        for suffix in [".tar.xz", ".txz", ".tar"] where name.hasSuffix(suffix) {
+            name.removeLast(suffix.count)
+            break
+        }
+        return name
+    }
+
+    /// An engine tarball shipped with this copy of the app, so a disk image
+    /// can carry the engine and setup needs no download: in
+    /// `Contents/Resources/Engine/`, or beside the app bundle — the disk
+    /// image's root while the app runs from it. The newest release wins
+    /// when there are several.
+    static func bundledTarball(
+        resources: URL? = Bundle.main.resourceURL,
+        beside bundle: URL = Bundle.main.bundleURL,
+    ) -> URL? {
+        let places = [resources?.appendingPathComponent("Engine"), bundle.deletingLastPathComponent()]
+            .compactMap(\.self)
+        let candidates = places.flatMap { place in
+            ((try? FileManager.default.contentsOfDirectory(atPath: place.path)) ?? [])
+                .filter { $0.hasPrefix("dormison-") && $0.hasSuffix(".tar.xz") }
+                .map(place.appendingPathComponent)
+        }
+        return candidates.max {
+            versionName(of: $0).localizedStandardCompare(versionName(of: $1)) == .orderedAscending
+        }
+    }
+
+    private static func makeStaging() throws -> URL {
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sevo-engine-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        return staging
+    }
+
+    /// Extracts `tarball` under `staging` and moves its single top-level
+    /// directory — the engine version — into `root`. With `expected`, the
+    /// directory has to be that version; the tree has to carry `wine/bin`,
+    /// what ``Engine/existsOnDisk`` looks for, or it is not an engine.
+    private static func unpack(
+        _ tarball: URL, expecting expected: String?, in staging: URL, into root: URL,
+    ) async throws -> String {
+        let manager = FileManager.default
         let extracted = staging.appendingPathComponent("extracted")
         try manager.createDirectory(at: extracted, withIntermediateDirectories: true)
         let untar = await Subprocess.run(
-            "/usr/bin/tar", ["-xJf", tarball.path, "-C", extracted.path],
+            "/usr/bin/tar", ["-xf", tarball.path, "-C", extracted.path],
             capture: .combined, timeout: .seconds(600),
         )
         guard untar.status == 0 else {
             throw InstallError("engine extraction failed: \(untar.output.suffix(200))")
         }
 
-        // The tarball's single top-level directory is the version.
         let contents = try manager.contentsOfDirectory(atPath: extracted.path)
             .filter { !$0.hasPrefix(".") }
-        guard contents == [release.version] else {
+        guard contents.count == 1, let version = contents.first,
+              expected == nil || version == expected
+        else {
             throw InstallError("engine tarball layout unexpected: \(contents)")
         }
-        try manager.createDirectory(at: Engine.managedRoot, withIntermediateDirectories: true)
-        try manager.moveItem(
-            at: extracted.appendingPathComponent(release.version),
-            to: Engine.managedRoot.appendingPathComponent(release.version),
-        )
+        let tree = extracted.appendingPathComponent(version)
+        guard manager.fileExists(atPath: tree.appendingPathComponent("wine/bin").path) else {
+            throw InstallError("\(version) is not an engine: no wine/bin inside")
+        }
+        let destination = root.appendingPathComponent(version)
+        guard !manager.fileExists(atPath: destination.path) else {
+            throw InstallError("engine \(version) is already installed")
+        }
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        try manager.moveItem(at: tree, to: destination)
+        return version
     }
 
     /// Downloads the tarball with real progress: a plain download task whose

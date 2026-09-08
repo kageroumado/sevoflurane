@@ -89,7 +89,7 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     /// decoded unverified.
     static func fetch(from url: URL? = nil) async throws -> EngineManifest {
         if let url {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let data = try await fetchBytes(url)
             return try decode(data)
         }
         if let overrideURL {
@@ -97,16 +97,27 @@ nonisolated struct EngineManifest: Decodable, Sendable {
             // and a rig's stale file:// target must not brick Repair on a
             // machine that could reach the real manifest fine.
             do {
-                let (data, _) = try await URLSession.shared.data(from: overrideURL)
+                let data = try await fetchBytes(overrideURL)
                 return try decode(data)
             } catch {
                 SetupLog.log("engine manifest override unreachable (\(error)) — using the release manifest")
             }
         }
-        let (data, _) = try await URLSession.shared.data(from: Self.url)
+        let data = try await fetchBytes(Self.url)
         let signatureFile = try await EngineSignature.fetchSignature(EngineSignature.signatureURL(for: Self.url))
         try EngineSignature.verify(data, signatureFile: signatureFile, subject: Self.url.lastPathComponent)
         return try decode(data, verified: true)
+    }
+
+    /// The manifest's bytes, or the HTTP status that stood in for them — a
+    /// private release feed answers 404 to anyone not signed in, and the
+    /// status names the problem where a JSON error would not.
+    private static func fetchBytes(_ url: URL) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw ManifestError("the engine manifest at \(url.absoluteString) answered HTTP \(http.statusCode)")
+        }
+        return data
     }
 
     static func decode(_ data: Data, verified: Bool = false) throws -> EngineManifest {
