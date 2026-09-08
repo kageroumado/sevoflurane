@@ -139,13 +139,28 @@ nonisolated enum ClientLifecycle {
         return names
     }
 
-    static func gracefulShutdown() async {
+    /// One DevTools call — a shutdown ask, a popup hide, a script install —
+    /// gets at most this long, and less when its phase's deadline is nearer.
+    static let cdpCallCap: Duration = .seconds(5)
+
+    /// A popup sweep made outside a stop phase: the supervisor's cycle, the
+    /// login-window sweep, the toast twin.
+    static let popupSweepBudget: Duration = .seconds(15)
+
+    /// The smaller of a call's own cap and what remains of its phase.
+    private static func cap(_ limit: Duration, until deadline: ContinuousClock.Instant) -> Duration {
+        min(limit, ContinuousClock.now.duration(to: deadline))
+    }
+
+    /// Asks the client to exit. The CDP ask is bounded by `deadline`; the
+    /// spawn fallback carries its own subprocess timeout.
+    static func gracefulShutdown(until deadline: ContinuousClock.Instant) async {
         // The quiet path first: StartShutdown in the client's own JS context.
         // `steam.exe -shutdown` spawns a whole second client instance just to
         // deliver the message — seconds of bottle work to say one word. The
         // spawn is the fallback for a client whose CDP is gone, and it goes
         // through the same suppressed environment as every other spawn.
-        if await shutdownOverCDP() { return }
+        if await shutdownOverCDP(until: deadline) { return }
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
             program: [SteamBottle.exeWindowsPath, "-shutdown"],
@@ -161,7 +176,7 @@ nonisolated enum ClientLifecycle {
 
     /// Asks the running client to exit via `SteamClient.User.StartShutdown`
     /// in SharedJSContext. Answers whether the ask was delivered.
-    private static func shutdownOverCDP() async -> Bool {
+    private static func shutdownOverCDP(until deadline: ContinuousClock.Instant) async -> Bool {
         guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
             return false
         }
@@ -176,8 +191,10 @@ nonisolated enum ClientLifecycle {
         for target in targets where (target["title"] as? String) == "SharedJSContext" {
             guard let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init)
             else { continue }
-            if let reply = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
-               reply == "ok" {
+            let reply = try? await withDeadline(cap(cdpCallCap, until: deadline)) {
+                try await CDPClient.evaluateOnce(socketURL: socketURL, script)
+            }
+            if reply == "ok" {
                 log("client asked to shut down over CDP")
                 return true
             }
@@ -214,11 +231,12 @@ nonisolated enum ClientLifecycle {
         log("stopping the client — Windows stays up (pids \(existing))")
         phase("stopping the client")
         let stopBegan = ContinuousClock.now
+        let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
         if await clientProcessAlive() {
-            await gracefulShutdown()
+            await gracefulShutdown(until: cdpDeadline)
         }
         for _ in 0 ..< gracePolls {
-            _ = await hideVisibleClientPopups()
+            _ = await hideVisibleClientPopups(until: cdpDeadline)
             if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
                 log("stop audit: client-only graceful exit in "
                     + "\(stopBegan.duration(to: .now).components.seconds)s")
@@ -241,6 +259,15 @@ nonisolated enum ClientLifecycle {
         try? await Task.sleep(for: .seconds(1))
     }
 
+    /// Everything a stop says to the client over CDP — the shutdown ask and
+    /// each poll's popup sweep — draws on one absolute deadline: the ask's
+    /// cap plus the grace in seconds. A mute target can hold the ladder for
+    /// at most this long however many polls sweep it; the force rung's
+    /// subprocesses carry their own timeouts.
+    private static func cdpBudget(gracePolls: Int) -> Duration {
+        cdpCallCap + .seconds(gracePolls)
+    }
+
     static func stopAll(
         gracePolls: Int,
         hidingPopups: Bool = false,
@@ -256,9 +283,10 @@ nonisolated enum ClientLifecycle {
         // the leftover wineserver/winedevice never answer a client shutdown.
         // Skip straight to the force rung, which brings them down in seconds.
         let stopBegan = ContinuousClock.now
+        let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
         var clean = false
         if await clientProcessAlive() {
-            await gracefulShutdown()
+            await gracefulShutdown(until: cdpDeadline)
             // One-second polls: a healthy client exits in 2–6 s, and a quit
             // with nothing to upload should be over in ten — the poll count
             // is the whole grace budget in seconds.
@@ -267,8 +295,9 @@ nonisolated enum ClientLifecycle {
                     // The client shows its "Shutting down Steam…" dialog on
                     // the way out; hiding it each poll keeps a deliberate
                     // stop (an engine switch, `sevo client stop`) from
-                    // narrating itself in Wine windows.
-                    _ = await hideVisibleClientPopups()
+                    // narrating itself in Wine windows. It is optional: once
+                    // the CDP budget is spent, the sweep does nothing.
+                    _ = await hideVisibleClientPopups(until: cdpDeadline)
                 }
                 if await bottleProcessIDs().isEmpty { clean = true; break }
                 try? await Task.sleep(for: .seconds(1))
@@ -385,8 +414,17 @@ nonisolated enum ClientLifecycle {
     /// are the targets the popup manager opened onto `about:blank`.
     ///
     /// Returns the names of the windows it hid, for the caller's log.
-    static func hideVisibleClientPopups() async -> [String] {
-        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
+    ///
+    /// Each target's session gets the smaller of ``cdpCallCap`` and what is
+    /// left before `deadline`; a target the sweep reaches after the deadline
+    /// is skipped, so a run of mute targets ends the sweep instead of
+    /// stretching it. The sweep is optional work everywhere it is called.
+    static func hideVisibleClientPopups(
+        port: Int = BridgePorts.cdp,
+        until deadline: ContinuousClock.Instant = .now + popupSweepBudget,
+    ) async -> [String] {
+        guard ContinuousClock.now < deadline,
+              let targets = try? await CDPClient.discoverTargets(port: port) else {
             return []
         }
         // One DevTools session per popup target, in series — the interval
@@ -405,12 +443,15 @@ nonisolated enum ClientLifecycle {
         })()
         """
         var hidden: [String] = []
-        for target in targets {
+        for target in targets where ContinuousClock.now < deadline {
             guard target["type"] as? String == "page",
                   (target["url"] as? String)?.hasPrefix("about:blank") == true,
-                  let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init),
-                  let name = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
-                  !name.isEmpty else { continue }
+                  let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init)
+            else { continue }
+            let name = try? await withDeadline(cap(cdpCallCap, until: deadline)) {
+                try await CDPClient.evaluateOnce(socketURL: socketURL, script)
+            }
+            guard let name, !name.isEmpty else { continue }
             hidden.append(name)
         }
         return hidden
@@ -434,7 +475,9 @@ nonisolated enum ClientLifecycle {
             if let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp),
                let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
                let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init),
-               let answer = try? await CDPClient.evaluateOnce(socketURL: socketURL, script),
+               let answer = try? await withDeadline(cdpCallCap, {
+                   try await CDPClient.evaluateOnce(socketURL: socketURL, script)
+               }),
                outcomes.contains(answer) {
                 return answer
             }

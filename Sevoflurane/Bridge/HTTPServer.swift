@@ -2,7 +2,7 @@ import Foundation
 import Network
 
 /// One parsed HTTP request, as delivered to an ``HTTPServer`` handler.
-nonisolated struct HTTPRequest: Sendable {
+nonisolated struct HTTPRequest: Sendable, Equatable {
     let method: String
     /// The full request target, query string included.
     let target: String
@@ -96,20 +96,9 @@ final nonisolated class HTTPServer: Sendable {
         leftover: Data,
     ) {
         readRequest(connection, buffer: leftover) { request, remainder in
-            guard let request else {
-                connection.cancel()
-                return
-            }
             Task {
                 let response = await handler(request)
-                var head = "HTTP/1.1 \(response.status) \(response.reason)\r\n"
-                for (name, value) in response.headers {
-                    head += "\(name): \(value)\r\n"
-                }
-                head += "Content-Length: \(response.body.count)\r\n\r\n"
-                var data = Data(head.utf8)
-                data.append(response.body)
-                connection.send(content: data, completion: .contentProcessed { error in
+                connection.send(content: wire(response), completion: .contentProcessed { error in
                     if error != nil {
                         connection.cancel()
                     } else {
@@ -120,49 +109,129 @@ final nonisolated class HTTPServer: Sendable {
         }
     }
 
+    /// Accumulates bytes until `buffer` holds one whole request, then hands
+    /// it over with the bytes read past its end. Every other outcome ends the
+    /// connection here: a peer that closes or errors is cancelled, and a
+    /// request the parser rejects is answered with its status and
+    /// `Connection: close` before the cancel.
     private static func readRequest(
         _ connection: NWConnection,
         buffer: Data,
-        completion: @escaping @Sendable (HTTPRequest?, Data) -> Void,
+        peerFinished: Bool = false,
+        completion: @escaping @Sendable (HTTPRequest, Data) -> Void,
     ) {
-        if let request = parse(buffer) {
-            completion(request.0, request.1)
-            return
-        }
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { data, _, done, error in
-            guard error == nil, let data, !data.isEmpty else {
-                completion(nil, Data())
+        switch parse(buffer) {
+        case let .complete(request, rest):
+            completion(request, rest)
+        case let .malformed(status):
+            reject(connection, status: status)
+        case .incomplete:
+            if peerFinished {
+                connection.cancel()
                 return
             }
-            var grown = buffer
-            grown.append(data)
-            if done, parse(grown) == nil {
-                completion(nil, Data())
-            } else {
-                readRequest(connection, buffer: grown, completion: completion)
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { data, _, done, error in
+                guard error == nil, let data, !data.isEmpty else {
+                    connection.cancel()
+                    return
+                }
+                var grown = buffer
+                grown.append(data)
+                readRequest(connection, buffer: grown, peerFinished: done, completion: completion)
             }
         }
     }
 
-    /// Returns the first complete request in `data` plus the unconsumed rest,
-    /// or nil if more bytes are needed.
-    static func parse(_ data: Data) -> (HTTPRequest, Data)? {
-        guard let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
+    private static func reject(_ connection: NWConnection, status: Int) {
+        var response = HTTPResponse.error(status, rejectionReasons[status] ?? "Bad Request")
+        response.headers.append(("Connection", "close"))
+        connection.send(content: wire(response), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+
+    private static let rejectionReasons: [Int: String] = [
+        400: "Bad Request",
+        413: "Content Too Large",
+        431: "Request Header Fields Too Large",
+        501: "Not Implemented",
+    ]
+
+    /// The response as bytes: status line, the handler's headers, then a
+    /// `Content-Length` and the body.
+    private static func wire(_ response: HTTPResponse) -> Data {
+        var head = "HTTP/1.1 \(response.status) \(response.reason)\r\n"
+        for (name, value) in response.headers {
+            head += "\(name): \(value)\r\n"
+        }
+        head += "Content-Length: \(response.body.count)\r\n\r\n"
+        var data = Data(head.utf8)
+        data.append(response.body)
+        return data
+    }
+
+    /// The parser's verdict on the front of a receive buffer.
+    enum ParseResult: Equatable {
+        /// The buffer ends before the request does; read more.
+        case incomplete
+        /// The bytes are a request this server refuses to frame, with the
+        /// status to answer before closing.
+        case malformed(status: Int)
+        /// One request, plus the bytes read past its end.
+        case complete(HTTPRequest, rest: Data)
+    }
+
+    /// The header block, request line through the blank line, fits in this
+    /// many bytes; anything longer is answered 431.
+    static let maxHeaderBytes = 16 * 1024
+    /// The largest body the server buffers; anything longer is answered 413.
+    static let maxBodyBytes = 1024 * 1024
+
+    /// Frames the first request in `data`.
+    ///
+    /// The body is exactly `Content-Length` bytes: a missing header means
+    /// zero, and the value must be ASCII digits only — `Int` also reads `-1`
+    /// and `UInt` reads `+5`, and both would frame a body the request never
+    /// carried. Two `Content-Length` fields or any `Transfer-Encoding`, chunked
+    /// included, are refused: every client of these loopback servers sends a
+    /// sized body, so the server frames exactly one way.
+    static func parse(_ data: Data) -> ParseResult {
+        let searched = data.prefix(maxHeaderBytes)
+        guard let headerEnd = searched.range(of: Data("\r\n\r\n".utf8)) else {
+            return data.count >= maxHeaderBytes ? .malformed(status: 431) : .incomplete
+        }
         guard let head = String(data: data[..<headerEnd.lowerBound], encoding: .utf8) else {
-            return nil
+            return .malformed(status: 400)
         }
         let lines = head.components(separatedBy: "\r\n")
         let requestLine = lines[0].split(separator: " ")
-        guard requestLine.count >= 2 else { return nil }
+        guard requestLine.count >= 2 else { return .malformed(status: 400) }
         var headers: [String: String] = [:]
+        var contentLengths = 0
         for line in lines.dropFirst() {
             guard let colon = line.firstIndex(of: ":") else { continue }
-            headers[line[..<colon].lowercased()] =
-                line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            let name = line[..<colon].lowercased()
+            if name == "content-length" { contentLengths += 1 }
+            headers[name] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
-        let bodyLength = Int(headers["content-length"] ?? "0") ?? 0
+        guard contentLengths <= 1, headers["transfer-encoding"] == nil else {
+            return .malformed(status: headers["transfer-encoding"] == nil ? 400 : 501)
+        }
+        let bodyLength: Int
+        switch headers["content-length"] {
+        case nil:
+            bodyLength = 0
+        case let field?:
+            guard !field.isEmpty, field.utf8.allSatisfy({ (0x30 ... 0x39).contains($0) }),
+                  let length = Int(field)
+            else {
+                return .malformed(status: 400)
+            }
+            guard length <= maxBodyBytes else { return .malformed(status: 413) }
+            bodyLength = length
+        }
         let bodyStart = headerEnd.upperBound
-        guard data.count - bodyStart >= bodyLength else { return nil }
+        guard data.count - bodyStart >= bodyLength else { return .incomplete }
         let body = data.subdata(in: bodyStart ..< bodyStart + bodyLength)
         let rest = data.subdata(in: bodyStart + bodyLength ..< data.count)
         let request = HTTPRequest(
@@ -171,7 +240,7 @@ final nonisolated class HTTPServer: Sendable {
             headers: headers,
             body: body,
         )
-        return (request, rest)
+        return .complete(request, rest: rest)
     }
 }
 

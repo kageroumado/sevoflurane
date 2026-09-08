@@ -33,8 +33,29 @@ actor SteamBridge {
     private var pageServer: WebSocketServer?
     private var relayServer: WebSocketServer?
 
+    /// One `Register*` call's handle: the page that made it and the callback
+    /// ids minted for it, so both are released when the handle is used or
+    /// the page goes away. Pending from the moment the call is forwarded;
+    /// active once the client's reply says the handle is retained in
+    /// `__sevoRet`. Absent means unregistered.
+    private struct Registration {
+        enum State {
+            case pending
+            case active
+        }
+
+        let owner: ObjectIdentifier
+        let callbacks: [String]
+        var state: State
+    }
+
     private var cdp: CDPClient?
-    private var cdpTask: Task<CDPClient, any Error>?
+    /// The connection attempt in flight, owned here: every ``ensureCDP()``
+    /// caller waits on the same one, and a waiter's cancellation ends only
+    /// its own wait.
+    private var cdpTask: Task<Void, Never>?
+    private var connectWaiters: [Int: CheckedContinuation<CDPClient, any Error>] = [:]
+    private var connectWaiterSeq = 0
     private var pages: [ObjectIdentifier: PageSession] = [:]
     /// The transport socket owned by SharedJSContext.
     private var relay: WSConnection?
@@ -47,9 +68,8 @@ actor SteamBridge {
     /// Callback id → the page that registered it.
     private var callbackOwner: [String: ObjectIdentifier] = [:]
     /// Registration handle (page serial and call id, the key in the client's
-    /// `__sevoRet`) → the page that holds it and the callback ids minted for
-    /// it, so both are released when the handle is used or the page goes away.
-    private var registrations: [String: (owner: ObjectIdentifier, callbacks: [String])] = [:]
+    /// `__sevoRet`) → its ``Registration``.
+    private var registrations: [String: Registration] = [:]
     private var pageSerial = 0
     private var evalPending: [String: CheckedContinuation<(ok: Bool, v: String), Never>] = [:]
     private var evalTimeouts: [String: Task<Void, Never>] = [:]
@@ -192,19 +212,32 @@ actor SteamBridge {
         guard let cdp = try? await ensureCDP() else { return false }
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
-            let result = try? await cdp.evaluate(
-                "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))"
-            )
+            // Each evaluate gets the smaller of its own cap and what is left
+            // of the whole wait, so a client that stops answering cannot
+            // hold this past `timeout`.
+            let remaining = ContinuousClock.now.duration(to: deadline)
+            let result = try? await withDeadline(min(.seconds(10), remaining)) {
+                try await cdp.evaluate(
+                    "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
+                )
+            }
             if result?.contains("true") == true { return true }
             try? await Task.sleep(for: .seconds(3))
         }
         return false
     }
 
+    /// Discovery, the handshake, and the codec and tunnel installs together.
+    static let connectBudget: Duration = .seconds(30)
+
     private func ensureCDP() async throws -> CDPClient {
         if let cdp, await !cdp.isClosed { return cdp }
-        if let cdpTask { return try await cdpTask.value }
-        let task = Task { [weak self] () throws -> CDPClient in
+        if cdpTask == nil { startConnection() }
+        return try await awaitConnection()
+    }
+
+    private func startConnection() {
+        cdpTask = Task { [weak self] in
             let connect = PerfProbe.bridge.beginInterval("CDPConnect")
             defer { PerfProbe.bridge.endInterval("CDPConnect", connect) }
             // Re-captured: the outer `weak self` is a mutable box, which a
@@ -212,26 +245,55 @@ actor SteamBridge {
             let client = CDPClient(onPush: { [weak self] payload in
                 await self?.deliverCallback(payload)
             })
-            try await client.connect(port: BridgePorts.cdp)
-            _ = try await client.evaluate(BridgeJS.binaryCodec)
-            let tunnel = try await client.evaluate(
-                BridgeJS.tunnel.replacingOccurrences(
-                    of: "%RELAY_PORT%", with: String(BridgePorts.relayWS),
-                ),
-            )
-            self?.log(.bridge, "cdp connected — \(tunnel ?? "?")")
-            return client
+            do {
+                let tunnel = try await withDeadline(Self.connectBudget) {
+                    try await client.connect(port: BridgePorts.cdp)
+                    _ = try await client.evaluate(BridgeJS.binaryCodec)
+                    return try await client.evaluate(
+                        BridgeJS.tunnel.replacingOccurrences(
+                            of: "%RELAY_PORT%", with: String(BridgePorts.relayWS),
+                        ),
+                    )
+                }
+                self?.log(.bridge, "cdp connected — \(tunnel ?? "?")")
+                await self?.settleConnection(.success(client))
+            } catch {
+                await client.disconnect()
+                self?.log(.bridge, "cdp connect failed: \(error)")
+                await self?.settleConnection(.failure(error))
+            }
         }
-        cdpTask = task
-        defer { cdpTask = nil }
-        do {
-            let client = try await task.value
-            cdp = client
-            return client
-        } catch {
-            log(.bridge, "cdp connect failed: \(error)")
-            throw error
+    }
+
+    private func settleConnection(_ outcome: Result<CDPClient, any Error>) {
+        cdpTask = nil
+        if case let .success(client) = outcome { cdp = client }
+        let waiters = connectWaiters.values
+        connectWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(with: outcome)
         }
+    }
+
+    /// Waits for the attempt in flight. Cancelling the caller resumes only
+    /// its own continuation; the attempt runs on for the other waiters. Same
+    /// shape as `CDPClient.send`: the insertion runs synchronously on this
+    /// actor, so the cancellation task cannot find the key before it exists.
+    private func awaitConnection() async throws -> CDPClient {
+        connectWaiterSeq += 1
+        let key = connectWaiterSeq
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                connectWaiters[key] = continuation
+            }
+        } onCancel: {
+            Task { await self.abandonConnectionWait(key) }
+        }
+    }
+
+    private func abandonConnectionWait(_ key: Int) {
+        connectWaiters.removeValue(forKey: key)?.resume(throwing: CancellationError())
     }
 
     /// Routes one `__sevo` binding push: a callback names a function inside
@@ -340,8 +402,31 @@ actor SteamBridge {
             }
         } catch {
             log(.bridge, "dispatch \(cmd) failed: \(error)")
+            if cmd == "sc", let rid = request["id"] as? Int {
+                // The shim's promise must settle: a call that timed out or
+                // lost its connection rejects there like a Steam error does.
+                ws.send(text: Self.resultReply(rid: rid, outcome: [
+                    "ok": false, "e": ["__sevoErr": "Error", "message": "\(error)"],
+                ]))
+            }
         }
     }
+
+    /// The `sc_result` envelope for one forwarded call's outcome.
+    private static func resultReply(rid: Int, outcome: [String: Any]) -> String {
+        var reply = #"{"type":"sc_result","id":\#(rid)"#
+        if outcome["ok"] as? Bool == true {
+            reply += #","value":\#(jsonText(jsonText(outcome["v"]) ?? "null") ?? "\"null\"")}"#
+        } else {
+            reply += #","error":\#(jsonText(jsonText(outcome["e"]) ?? "null") ?? "\"null\"")}"#
+        }
+        return reply
+    }
+
+    /// How long a forwarded `SteamClient` call may wait for the client's
+    /// reply. Generous, because some calls settle only when Steam has
+    /// finished a job of its own; the page's promise rejects after this.
+    static let forwardBudget: Duration = .seconds(120)
 
     /// Replays one shim call against the real SharedJSContext.
     ///
@@ -361,6 +446,7 @@ actor SteamBridge {
               path.hasPrefix("SteamClient."),
               let session = pages[id] else { return }
         let handle = Self.handle(session.serial, rid)
+        let handleJS = Self.jsonText(handle) ?? "\"?\""
         if path == "SteamClient.Apps.RunGame" {
             // The one choke point every launch funnels through — menu bar,
             // the library's Play button, steam://run. Reconcile the renderer
@@ -381,12 +467,46 @@ actor SteamBridge {
             "\(path, privacy: .public)",
         )
         defer { PerfProbe.bridge.endInterval("SteamClientCall", call) }
+        let (argsJS, callbacks) = mintArguments(of: request, owner: id)
+        let expr = Self.forwardExpression(path: path, handleJS: handleJS, argsJS: argsJS)
+        // The handle exists before the await: an unregister or a page close
+        // that arrives while the reply is pending finds it, and the reply
+        // then sees whether anyone still wants it.
+        registrations[handle] = Registration(owner: id, callbacks: callbacks, state: .pending)
+        let raw: String?
+        do {
+            raw = try await withDeadline(Self.forwardBudget) { try await cdp.evaluate(expr) }
+        } catch {
+            await abandonRegistration(handle, hadCallbacks: !callbacks.isEmpty, cdp: cdp)
+            throw error
+        }
+        let outcome = raw.flatMap(Self.jsonObject) ?? ["ok": false, "e": "no result"]
+        if outcome["reg"] as? Bool == true {
+            if registrations[handle] != nil, pages[id] != nil {
+                registrations[handle]?.state = .active
+            } else {
+                // Unregistered or orphaned while the reply was pending; the
+                // client retained the handle a moment ago, so release it.
+                registrations.removeValue(forKey: handle)
+                _ = try? await cdp.evaluate(Self.remoteUnregister([handle]))
+            }
+        } else {
+            registrations.removeValue(forKey: handle)
+        }
+        ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
+    }
+
+    /// The call's arguments as JS source, and the callback ids among them,
+    /// each now owned by `owner`.
+    private func mintArguments(
+        of request: [String: Any], owner: ObjectIdentifier,
+    ) -> (argsJS: [String], callbacks: [String]) {
         var argsJS: [String] = []
         var callbacks: [String] = []
         for argument in request["args"] as? [Any] ?? [] {
             if let marker = argument as? [String: Any],
                let cb = marker["__sevoCb"] as? String {
-                callbackOwner[cb] = id
+                callbackOwner[cb] = owner
                 callbacks.append(cb)
                 let cbJSON = Self.jsonText(cb) ?? "\"?\""
                 argsJS.append("function(){window.__sevo(JSON.stringify({type:'sc_callback',"
@@ -395,13 +515,25 @@ actor SteamBridge {
                 argsJS.append("window.__sevoDec(\(Self.jsonText(argument) ?? "null"))")
             }
         }
-        let expr = """
+        return (argsJS, callbacks)
+    }
+
+    /// The expression that makes one call in SharedJSContext and reports
+    /// its outcome as JSON text.
+    private static func forwardExpression(path: String, handleJS: String, argsJS: [String]) -> String {
+        """
         (async () => {
           window.__sevoRet = window.__sevoRet || {};
           try {
             const r = await \(path)(\(argsJS.joined(separator: ",")));
             if (r && r.unregister) {
-              window.__sevoRet[\(Self.jsonText(handle) ?? "\"?\"")] = r;
+              // A handle the bridge gave up on before this settled is
+              // released here, where the object exists.
+              if (window.__sevoDropped && window.__sevoDropped.delete(\(handleJS))) {
+                r.unregister();
+                return JSON.stringify({ok: true, v: null});
+              }
+              window.__sevoRet[\(handleJS)] = r;
               return JSON.stringify({ok: true, reg: true, v: null});
             }
             return JSON.stringify({ok: true, v: window.__sevoEnc(r)});
@@ -416,18 +548,30 @@ actor SteamBridge {
           }
         })()
         """
-        let raw = try await cdp.evaluate(expr)
-        let outcome = raw.flatMap(Self.jsonObject) ?? ["ok": false, "e": "no result"]
-        if outcome["reg"] as? Bool == true {
-            registrations[handle] = (owner: id, callbacks: callbacks)
+    }
+
+    /// Drops a forward that failed or timed out. The client's side of a
+    /// registration may still settle later, so a call that could have
+    /// produced one is marked dropped over there: the reply path releases
+    /// the handle itself when it finds the mark.
+    private func abandonRegistration(_ handle: String, hadCallbacks: Bool, cdp: CDPClient) async {
+        if let registration = registrations.removeValue(forKey: handle) {
+            for cb in registration.callbacks {
+                callbackOwner.removeValue(forKey: cb)
+            }
         }
-        var reply = #"{"type":"sc_result","id":\#(rid)"#
-        if outcome["ok"] as? Bool == true {
-            reply += #","value":\#(Self.jsonText(Self.jsonText(outcome["v"]) ?? "null") ?? "\"null\"")}"#
-        } else {
-            reply += #","error":\#(Self.jsonText(Self.jsonText(outcome["e"]) ?? "null") ?? "\"null\"")}"#
-        }
-        ws.send(text: reply)
+        guard hadCallbacks, await !cdp.isClosed else { return }
+        _ = try? await withDeadline(.seconds(5)) { try await cdp.evaluate(Self.remoteUnregister([handle])) }
+    }
+
+    /// Releases the client's side of each handle: the retained object is
+    /// unregistered and dropped from `__sevoRet`. A handle the client has
+    /// not retained yet is marked dropped, for the registration's own reply
+    /// path to release.
+    private static func remoteUnregister(_ handles: [String]) -> String {
+        "\(jsonText(handles) ?? "[]").forEach(r => { const h = (window.__sevoRet||{})[r]; "
+            + "delete window.__sevoRet[r]; if (h) h.unregister?.(); "
+            + "else (window.__sevoDropped = window.__sevoDropped || new Set()).add(r); }); 'ok'"
     }
 
     /// Releases registrations on the far side and here: their handles are
@@ -436,19 +580,18 @@ actor SteamBridge {
     /// would leave its handlers firing into the client for the rest of the
     /// session.
     private func unregister(_ handles: [String], cdp: CDPClient) async throws {
-        var owned: [String] = []
+        var active: [String] = []
         for handle in handles {
             guard let registration = registrations.removeValue(forKey: handle) else { continue }
-            owned.append(handle)
             for cb in registration.callbacks {
                 callbackOwner.removeValue(forKey: cb)
             }
+            // A pending handle has nothing on the far side yet; removing
+            // the entry is what makes its reply release the handle.
+            if registration.state == .active { active.append(handle) }
         }
-        guard !owned.isEmpty, let list = Self.jsonText(owned) else { return }
-        _ = try await cdp.evaluate(
-            "\(list).forEach(r => { const h = (window.__sevoRet||{})[r]; "
-                + "delete window.__sevoRet[r]; h?.unregister?.(); }); 'ok'",
-        )
+        guard !active.isEmpty else { return }
+        _ = try await cdp.evaluate(Self.remoteUnregister(active))
     }
 
     private static func handle(_ serial: Int, _ rid: Int) -> String {

@@ -41,29 +41,14 @@ enum Subprocess {
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
         if let environment { process.environment = environment }
-        let pipe: Pipe?
-        switch capture {
-        case .stdout:
-            let captured = Pipe()
-            pipe = captured
-            process.standardOutput = captured
-            process.standardError = FileHandle.nullDevice
-        case .combined:
-            let captured = Pipe()
-            pipe = captured
-            process.standardOutput = captured
-            process.standardError = captured
-        case .none:
-            pipe = nil
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-        }
+        let pipe = attachStreams(of: process, for: capture)
 
         // Drained while the process runs rather than read at the end: a tool
         // that fills the pipe's buffer stalls until someone empties it, and
         // wine's descendants inherit the write end and hold it open long
         // after the launcher exits — a read that waits for EOF never returns.
-        let collected = OutputBuffer()
+        // Without a pipe there is no end-of-file to wait for.
+        let collected = OutputBuffer(reachedEnd: pipe == nil)
         pipe?.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             if chunk.isEmpty {
@@ -74,15 +59,29 @@ enum Subprocess {
             }
         }
 
+        // Set once Foundation has reaped the child, which is the moment its
+        // PID becomes reusable; the watchdog reads it before signaling.
+        let exited = OSAllocatedUnfairLock(initialState: false)
         var watchdog: Task<Void, Never>?
         var launchError: (any Error)?
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            process.terminationHandler = { _ in continuation.resume() }
+            process.terminationHandler = { _ in
+                exited.withLock { $0 = true }
+                continuation.resume()
+            }
             do {
                 try process.run()
                 let pid = process.processIdentifier
                 watchdog = Task.detached {
-                    try? await Task.sleep(for: timeout)
+                    do { try await Task.sleep(for: timeout) } catch { return }
+                    // The check and the signal are two steps: a child reaped
+                    // between them, with its PID already handed to a new
+                    // process, puts the signal on that process, and a
+                    // scheduler pause between the steps makes the window as
+                    // wide as the pause. Closing it needs the signaling side
+                    // to own reaping, and Foundation.Process reaps in its own
+                    // handler.
+                    if exited.withLock({ $0 }) { return }
                     kill(pid, SIGKILL)
                 }
             } catch {
@@ -97,12 +96,33 @@ enum Subprocess {
         // leaves descendants holding the write end for as long as they live.
         // Tools whose output is parsed close it at once; the rest are quoted
         // in error messages, where a missing last line costs nothing.
-        for _ in 0 ..< 50 where !collected.isAtEnd {
-            try? await Task.sleep(for: .milliseconds(10))
+        if launchError == nil {
+            await collected.waitForEnd(bound: .milliseconds(500))
         }
         pipe?.fileHandleForReading.readabilityHandler = nil
         if let launchError { return (nil, "\(launchError)") }
         return (process.terminationStatus, collected.text)
+    }
+
+    /// Points the child's stdout and stderr at the pipe `capture` reads or
+    /// at the null device, and returns that pipe when there is one.
+    private nonisolated static func attachStreams(of process: Process, for capture: Capture) -> Pipe? {
+        switch capture {
+        case .stdout:
+            let captured = Pipe()
+            process.standardOutput = captured
+            process.standardError = FileHandle.nullDevice
+            return captured
+        case .combined:
+            let captured = Pipe()
+            process.standardOutput = captured
+            process.standardError = captured
+            return captured
+        case .none:
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            return nil
+        }
     }
 }
 
@@ -111,8 +131,18 @@ enum Subprocess {
 private final nonisolated class OutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
+    private var reachedEnd: Bool
+    /// The one task suspended in ``waitForEnd(bound:)``, held until
+    /// end-of-file, cancellation, or the bound takes it — whichever comes
+    /// first takes it under the lock, so it resumes exactly once.
+    private var waiter: CheckedContinuation<Void, Never>?
+    /// Set when cancellation or the bound ends a wait, so a continuation
+    /// installed after that moment resumes at once.
+    private var waitEnded = false
 
-    private var reachedEnd = false
+    init(reachedEnd: Bool) {
+        self.reachedEnd = reachedEnd
+    }
 
     func append(_ chunk: Data) {
         lock.lock()
@@ -122,19 +152,50 @@ private final nonisolated class OutputBuffer: @unchecked Sendable {
 
     func noteEndOfFile() {
         lock.lock()
-        defer { lock.unlock() }
         reachedEnd = true
-    }
-
-    var isAtEnd: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return reachedEnd
+        let resumed = waiter
+        waiter = nil
+        lock.unlock()
+        resumed?.resume()
     }
 
     var text: String {
         lock.lock()
         defer { lock.unlock() }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Suspends until end-of-file, cancellation of the calling task, or
+    /// `bound` elapses. Returns immediately when end-of-file is already seen.
+    func waitForEnd(bound: Duration) async {
+        if lock.withLock({ reachedEnd }) { return }
+        let timer = Task {
+            do { try await Task.sleep(for: bound) } catch { return }
+            endWait()
+        }
+        defer { timer.cancel() }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                if reachedEnd || waitEnded {
+                    lock.unlock()
+                    continuation.resume()
+                    return
+                }
+                waiter = continuation
+                lock.unlock()
+            }
+        } onCancel: {
+            endWait()
+        }
+    }
+
+    private func endWait() {
+        lock.lock()
+        waitEnded = true
+        let resumed = waiter
+        waiter = nil
+        lock.unlock()
+        resumed?.resume()
     }
 }

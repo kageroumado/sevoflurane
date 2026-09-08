@@ -57,7 +57,24 @@ actor CDPClient {
         _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
     }
 
+    /// How long the handshake — socket open plus `Runtime.enable` — may
+    /// take. Every other call is bounded by its caller, whose budget it
+    /// knows; the handshake has one budget wherever it is made.
+    static let connectBudget: Duration = .seconds(5)
+
+    /// Opens the socket and enables the Runtime domain, within
+    /// ``connectBudget``. A handshake that fails or runs out of time leaves
+    /// the client closed.
     func connect(socketURL: URL) async throws {
+        do {
+            try await withDeadline(Self.connectBudget) { try await self.handshake(socketURL: socketURL) }
+        } catch {
+            markClosed()
+            throw error
+        }
+    }
+
+    private func handshake(socketURL: URL) async throws {
         let socket = URLSession.shared.webSocketTask(with: socketURL)
         socket.maximumMessageSize = 64 * 1024 * 1024
         task = socket
@@ -87,8 +104,10 @@ actor CDPClient {
     /// bridge's persistent connection stays on `SharedJSContext`.
     static func evaluateOnce(socketURL: URL, _ expression: String) async throws -> String? {
         let client = CDPClient(onPush: { _ in })
-        try await client.connect(socketURL: socketURL)
+        // `connect` sits inside the cleanup scope: a cancelled handshake
+        // must close the socket, pump and push stream like a failed evaluate.
         do {
+            try await client.connect(socketURL: socketURL)
             let value = try await client.evaluate(expression)
             await client.disconnect()
             return value
@@ -146,13 +165,25 @@ actor CDPClient {
             "CDPCall", id: PerfProbe.bridge.makeSignpostID(), "\(method, privacy: .public)",
         )
         defer { PerfProbe.bridge.endInterval("CDPCall", call, "\(method, privacy: .public)") }
-        let raw: String? = try await withCheckedThrowingContinuation { continuation in
-            pending[id] = continuation
-            task.send(.string(text)) { error in
-                if let error {
-                    Task { await self.fail(id: id, error: error) }
+        try Task.checkCancellation()
+        // Reply, socket error, closure and cancellation all resume the
+        // continuation through `pending.removeValue(forKey:)`, so whichever
+        // arrives first is the only one that resumes it. The cancellation
+        // handler's task cannot reach `fail` before the insertion below: both
+        // wrappers run their bodies synchronously on this actor. No `await`
+        // may sit between entering the operation and `pending[id] = …`, or
+        // that ordering is gone.
+        let raw: String? = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pending[id] = continuation
+                task.send(.string(text)) { error in
+                    if let error {
+                        Task { await self.fail(id: id, error: error) }
+                    }
                 }
             }
+        } onCancel: {
+            Task { await self.fail(id: id, error: CancellationError()) }
         }
         guard let raw,
               let reply = try? JSONSerialization.jsonObject(with: Data(raw.utf8))

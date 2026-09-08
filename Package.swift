@@ -78,6 +78,7 @@ let package = Package(
                 "Sevoflurane/Support/ClientLifecycle.swift",
                 "Sevoflurane/Support/ConfigMaterializer.swift",
                 "Sevoflurane/Support/CrossOverShadow.swift",
+                "Sevoflurane/Support/Deadline.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/GPUEquivalence.swift",
