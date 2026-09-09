@@ -76,15 +76,16 @@ it. Killing the app tests something else.
    only place a game's exit code is recorded), the app log, the Wine log, the
    windows log (one line per process and window from the engine, whether or
    not the app ever saw a window), the bottle's env files, the launcher
-   bundles, `sevo doctor`, and two days of crash reports.
+   bundles, this month's run records, `sevo doctor`, and two days of crash
+   reports.
 
-2. **Collect the game's own logs** for any game that failed. The report does not
-   include them yet.
+2. **Check that the game's own log is in the zip.** The report carries this
+   month's run records under `runs/`, and under `games/<appid>/` the logs each
+   run's game wrote: Unity's `Player.log`, Unreal's `Saved/Logs` and
+   `Saved/Crashes`. Paths in them are rewritten before they go in.
 
-   - Unity games: `Player.log` under
-     `~/Library/Application Support/Sevoflurane/Bottles/<bottle>/drive_c/users/<you>/AppData/LocalLow/<Company>/<Game>/`
-   - Unreal games: `<install dir>/<Project>/Saved/Logs/` and `Saved/Crashes/`
-   - Games with their own launcher: whatever the launcher writes beside itself
+   A game with its own launcher writes wherever the launcher decided to;
+   collect that one by hand if the game failed.
 
 3. **Turn *Log every library a game loads* off** if you turned it on, and set
    the renderer back if you changed it.

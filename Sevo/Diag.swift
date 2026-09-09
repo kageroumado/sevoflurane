@@ -28,10 +28,11 @@ struct DiagCommand: AsyncParsableCommand {
 
 /// The report bundle: the three logs, `doctor` and `status` as JSON, the
 /// machine, the active engine's `engine-info.json`, the bottle's env files
-/// and dependency state, the game launcher bundles, Steam's own logs, and the
-/// last two days of crash reports from the engine's processes. Nothing in it names the
-/// account; crash reports and env files carry paths under the home
-/// directory, so the user's short name is in them.
+/// and dependency state, the game launcher bundles, Steam's own logs, this
+/// month's run records with the logs the games in them wrote for themselves,
+/// and the last two days of crash reports from the engine's processes.
+/// Nothing in it names the account; crash reports and env files carry paths
+/// under the home directory, so the user's short name is in them.
 nonisolated enum Diagnostics {
     static let crashReportPrefixes = ["wine", "wine64", "nwjs", "Sevoflurane", "steam", "sevo-"]
     /// `console_log.txt` carries the whole `GameAction` trail and the exit
@@ -138,6 +139,15 @@ nonisolated enum Diagnostics {
             }
         }
 
+        // The month's run records, and the logs the games in them wrote for
+        // themselves — the two things that say what a launch did rather than
+        // what the app saw of it.
+        let runs = RunLog.records(inMonth: Date())
+        copy(RunLog.url(forMonth: Date()), as: "runs/\(RunLog.url(forMonth: Date()).lastPathComponent)")
+        for log in GameLogs.collect(for: runs) {
+            write(log.text, as: log.path)
+        }
+
         write(contents.sorted().joined(separator: "\n") + "\n", as: "contents.txt")
 
         try? manager.createDirectory(at: zip.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -170,5 +180,149 @@ nonisolated enum Diagnostics {
             host["app"] = version
         }
         return host
+    }
+}
+
+/// The logs a game writes for itself, gathered for the runs a report covers.
+///
+/// Every engine invents its own dumping ground and none of them is named for
+/// the app id, so a file is claimed by a run when it was last written during
+/// that run — the only join that exists between a Unity player's `Player.log`
+/// and the launch that produced it. Paths are rewritten (``Redaction``) and
+/// every file is capped, because a game left running writes without a bound.
+nonisolated enum GameLogs {
+    struct Collected {
+        /// Where it goes inside the report, `games/<appid>/…`.
+        let path: String
+        let text: String
+    }
+
+    /// How much of a log is kept: the end, where the failure is.
+    static let maximumBytesPerFile = 2_000_000
+    /// The whole section's budget, spent newest run first.
+    static let maximumBytesTotal = 20_000_000
+    /// A log is still being written when the process dies, so its last write
+    /// can land just after the run record closes.
+    static let graceAfterRun: TimeInterval = 300
+
+    /// What every run in `records` left behind, newest run first so the
+    /// budget is spent on what is being asked about.
+    static func collect(for records: [RunRecord]) -> [Collected] {
+        var collected: [Collected] = []
+        var budget = maximumBytesTotal
+        let unityLogs = unityPlayerLogs()
+        let renderer = rendererLogs()
+        for record in records.reversed() {
+            guard let window = window(of: record) else { continue }
+            var sources = unityLogs.filter { window.contains($0.written) }.map(\.url)
+            sources += unrealLogs(forApp: record.appid)
+            sources += renderer
+            for source in sources {
+                guard budget > 0, let file = read(source) else { continue }
+                budget -= file.utf8.count
+                collected.append(
+                    Collected(path: "games/\(record.appid)/\(source.lastPathComponent)", text: file),
+                )
+            }
+        }
+        return collected
+    }
+
+    /// The stretch of time a run's own files were written in.
+    private static func window(of record: RunRecord) -> ClosedRange<Date>? {
+        guard let start = runRecordStamp.date(from: record.t) else { return nil }
+        let end = start.addingTimeInterval((record.durationSeconds ?? 0) + graceAfterRun)
+        return start ... end
+    }
+
+    /// Unity writes `Player.log` under the Windows user's `LocalLow`, one
+    /// directory per company and product, neither of which names the app id.
+    private static func unityPlayerLogs() -> [(url: URL, written: Date)] {
+        let users = SteamBottle.root.appendingPathComponent("drive_c/users")
+        var found: [(url: URL, written: Date)] = []
+        for user in InstallDirectory.entries(in: users) where user.isDirectory {
+            let lowRoot = user.url.appendingPathComponent("AppData/LocalLow")
+            for company in InstallDirectory.entries(in: lowRoot) where company.isDirectory {
+                for product in InstallDirectory.entries(in: company.url) where product.isDirectory {
+                    let log = product.url.appendingPathComponent("Player.log")
+                    guard let written = modified(log) else { continue }
+                    found.append((log, written))
+                }
+            }
+        }
+        return found
+    }
+
+    /// Unreal keeps its own logs and crash reports beside the game, under
+    /// `<Project>/Saved/`.
+    private static func unrealLogs(forApp appID: Int) -> [URL] {
+        guard let install = SharedGames.installed(appID: appID) else { return [] }
+        var found: [URL] = []
+        for project in InstallDirectory.entries(in: install.directory) where project.isDirectory {
+            let saved = project.url.appendingPathComponent("Saved")
+            for directory in ["Logs", "Crashes"] {
+                found += textFiles(under: saved.appendingPathComponent(directory))
+            }
+        }
+        return found
+    }
+
+    /// The renderer's own log, when the bottle's environment names one.
+    private static func rendererLogs() -> [URL] {
+        let sevo = SteamBottle.root.appendingPathComponent(".sevo")
+        var files = [sevo.appendingPathComponent("bottle.env")]
+        files += InstallDirectory.entries(in: sevo.appendingPathComponent("apps")).map(\.url)
+        var found: [URL] = []
+        for file in files {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            for line in text.split(separator: "\n") where line.hasPrefix(rendererLogKey) {
+                let value = String(line.dropFirst(rendererLogKey.count))
+                guard let url = SteamBottle.macURL(fromWindowsPath: value)
+                    ?? (value.hasPrefix("/") ? URL(fileURLWithPath: value) : nil),
+                    modified(url) != nil, !found.contains(url) else { continue }
+                found.append(url)
+            }
+        }
+        return found
+    }
+
+    private static let rendererLogKey = "DXMT_LOG_PATH="
+
+    /// Extensions whose content is text. A minidump is bytes nobody can read
+    /// out of a report, so it is left where it is.
+    private static let textExtensions = ["log", "txt", "xml", "json", "ini", "runtime-xml"]
+
+    /// Text files in a directory and one level under it — Unreal's crash
+    /// reports are one directory per crash.
+    private static func textFiles(under directory: URL) -> [URL] {
+        var found: [URL] = []
+        for entry in InstallDirectory.entries(in: directory) {
+            if entry.isDirectory {
+                found += InstallDirectory.entries(in: entry.url)
+                    .filter { !$0.isDirectory && isText($0.name) }
+                    .map(\.url)
+            } else if isText(entry.name) {
+                found.append(entry.url)
+            }
+        }
+        return found
+    }
+
+    private static func isText(_ name: String) -> Bool {
+        textExtensions.contains { name.lowercased().hasSuffix(".\($0)") }
+    }
+
+    /// The end of a file, redacted. `nil` when it is not there or is empty.
+    private static func read(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        let tail = data.suffix(maximumBytesPerFile)
+        let elided = tail.count < data.count
+            ? "… the first \(data.count - tail.count) bytes are not in this report\n"
+            : ""
+        return elided + Redaction.apply(to: String(decoding: tail, as: UTF8.self))
+    }
+
+    private static func modified(_ url: URL) -> Date? {
+        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 }
