@@ -13,6 +13,18 @@
   if (window.__sevoInstalled) return;
   window.__sevoInstalled = true;
 
+  /* Which call a rejection came from. Steam rejects with objects the UI
+     branches on, so the path is remembered beside the value rather than
+     written into it: nothing the page can read changes, and a client-origin
+     rejection still names itself in the log. */
+  var rejectionPaths = new WeakMap();
+  function tag(value, path) {
+    try {
+      if (value && typeof value === "object") rejectionPaths.set(value, path);
+    } catch (e) {}
+    return value;
+  }
+
   /* ---- page-error capture -------------------------------------------------
      The library's React error boundary swallows the stack behind the
      intermittent "undefined is not an object (evaluating 'e.removeEventListener')"
@@ -50,8 +62,15 @@
     window.addEventListener("unhandledrejection", function (e) {
       try {
         var r = e && e.reason;
+        var message = (r && r.message) || String(r);
+        /* The client's own message says what went wrong, never where, so a
+           rejection that came back through the bridge is reported with the
+           call that made it. */
+        var path = null;
+        try { path = r && typeof r === "object" ? rejectionPaths.get(r) : null; } catch (x) {}
         report("rejection", {
-          message: (r && r.message) || String(r), stack: (r && r.stack) || "",
+          message: path ? path + " rejected: " + message : message,
+          stack: (r && r.stack) || "",
         });
       } catch (x) {}
     });
@@ -74,9 +93,68 @@
     };
   })();
 
+  /* ---- same-origin egress -------------------------------------------------
+     Steam's web properties allow a cross-origin read from
+     https://steamloopback.host, the origin CEF gives the client's UI, and from
+     no other. From this page WebKit blocks the reply before the caller sees a
+     status, so axios reports "Network Error" with no code and a launch
+     dialog's EULA renders empty. Send those requests to the bridge's /__web
+     proxy instead: same origin, so no policy applies, and the proxy carries
+     the client's session, which is why withCredentials stops mattering here.
+
+     The hook sits on open() and fetch() rather than on the URLs the bundle
+     builds, because Steam's EULA loader runs replace("http://","https://") on
+     whatever it is handed and would turn a loopback URL into TLS against a
+     listener that speaks none. */
+  (function () {
+    var HOSTS = %STEAM_HOSTS%;
+    function proxied(url) {
+      try {
+        var u = new URL(String(url), location.href);
+        if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+        var host = u.hostname.toLowerCase();
+        for (var i = 0; i < HOSTS.length; i++) {
+          if (host === HOSTS[i] || host.endsWith("." + HOSTS[i])) {
+            return "/__web?u=" + encodeURIComponent(u.href);
+          }
+        }
+        return null;
+      } catch (e) { return null; }
+    }
+    var open = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function () {
+      var args = Array.prototype.slice.call(arguments);
+      var route = proxied(args[1]);
+      if (route) args[1] = route;
+      return open.apply(this, args);
+    };
+    var fetch0 = window.fetch;
+    window.fetch = function (input, init) {
+      try {
+        if (typeof input === "string" || input instanceof URL) {
+          var route = proxied(input);
+          if (route) return fetch0.call(this, route, init);
+        } else if (input && input.url && (input.method === "GET" || input.method === "HEAD")) {
+          /* A Request carrying a body cannot be rebuilt without consuming it,
+             so only the bodyless methods are re-pointed. */
+          var routed = proxied(input.url);
+          if (routed) {
+            return fetch0.call(this, new Request(routed, {
+              method: input.method, headers: input.headers,
+              mode: "same-origin", credentials: "same-origin",
+              cache: input.cache, redirect: input.redirect,
+              referrer: input.referrer, integrity: input.integrity,
+            }), init);
+          }
+        }
+      } catch (e) {}
+      return fetch0.call(this, input, init);
+    };
+  })();
+
   var WS_URL = "ws://127.0.0.1:%PAGE_PORT%";
   var seq = 0;
-  var pending = new Map();   // request id  → {resolve, reject}
+  var pending = new Map();   // request id  → {resolve, reject, path}
   var callbacks = new Map(); // callback id → local function
   var tunnels = new Map();   // tunnel id   → TunnelSocket
   var queue = [];            // sends issued before the socket opens
@@ -100,7 +178,10 @@
         pending.delete(m.id);
         if (m.error !== undefined) {
           var err = dec(JSON.parse(m.error));
-          p.reject(err && err.__sevoErr ? new Error(err.message) : err);
+          /* Steam rejects with objects the UI branches on, so only the
+             bridge's own error envelope is rebuilt; either way the value is
+             handed to the page exactly as it stands. */
+          p.reject(tag(err && err.__sevoErr ? new Error(err.message) : err, p.path));
         }
         else p.resolve(m.value === undefined ? undefined : dec(JSON.parse(m.value)));
       } else if (m.type === "sc_callback") {
@@ -323,7 +404,7 @@
         };
       }
       return new Promise(function (resolve, reject) {
-        pending.set(sent.id, { resolve: resolve, reject: reject });
+        pending.set(sent.id, { resolve: resolve, reject: reject, path: path });
       });
     };
     /* A namespace is an object and a method is a function, exactly as in the

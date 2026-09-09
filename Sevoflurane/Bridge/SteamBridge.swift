@@ -79,6 +79,9 @@ actor SteamBridge {
     /// `/__eval` — and with it the supervisor's health verdict — to the
     /// stale one.
     private var newestPage: ObjectIdentifier?
+    /// Loopback paths already reported unanswered, so one broken image does
+    /// not fill the log with the same line.
+    private var loopbackMisses: Set<String> = []
     private let shim: String
 
     /// Fired on `SteamClient.Apps.RunGame` — the one choke point every game
@@ -93,11 +96,13 @@ actor SteamBridge {
     init() {
         if let url = Bundle.main.url(forResource: "steamclient_shim", withExtension: "js"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
-            // The page port is templated like the relay port below, so the
-            // shim and BridgePorts cannot drift apart.
-            shim = text.replacingOccurrences(
-                of: "%PAGE_PORT%", with: String(BridgePorts.pageWS),
-            )
+            // The page port and the proxy's allowlist are templated like the
+            // relay port below, so the shim, BridgePorts, and
+            // WebSessionCookies cannot drift apart.
+            let hosts = Self.jsonText(WebSessionCookies.domains) ?? "[]"
+            shim = text
+                .replacingOccurrences(of: "%PAGE_PORT%", with: String(BridgePorts.pageWS))
+                .replacingOccurrences(of: "%STEAM_HOSTS%", with: hosts)
         } else {
             shim = ""
         }
@@ -121,6 +126,12 @@ actor SteamBridge {
                 // actor state.
                 if request.method == "GET", request.path.hasPrefix("/__compat/") {
                     return await Self.handleCompatRequest(request)
+                }
+                if request.path == "/__web" {
+                    return await self?.handleWebRequest(request) ?? .error(500, "bridge gone")
+                }
+                if request.path.hasPrefix(LoopbackAssets.pathPrefix + "/") {
+                    return await self?.handleLoopbackRequest(request) ?? .error(500, "bridge gone")
                 }
                 if request.method == "GET",
                    request.path != "/", request.path != "/index.html" {
@@ -866,6 +877,102 @@ actor SteamBridge {
         return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
+    // MARK: - HTTP: Steam's web properties
+
+    /// `GET /__web?u=<absolute URL>`: one Steam web page or document, fetched
+    /// here so the page reads it same-origin. See ``WebProxy``.
+    private func handleWebRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        switch WebProxy.target(method: request.method, query: request.query) {
+        case let .failure(rejection):
+            log(.bridge, "web proxy refused a request: \(rejection.reason)")
+            return .error(rejection.status, rejection.reason)
+        case let .success(url):
+            let cookies = await clientCookies() ?? []
+            return await WebProxy.fetch(url, method: request.method, cookies: cookies)
+        }
+    }
+
+    // MARK: - HTTP: the client's own origin
+
+    /// `GET /__loopback/<path>`: what the client's own origin used to serve.
+    /// Static assets come out of the Steam install; the paths CEF synthesizes
+    /// exist only inside the client, so they are fetched there.
+    private func handleLoopbackRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        guard request.method == "GET" || request.method == "HEAD" else {
+            return .error(405, "Method \(request.method) Not Allowed")
+        }
+        let path = String(request.path.dropFirst(LoopbackAssets.pathPrefix.count))
+        if LoopbackAssets.clientSynthesized.contains(where: path.hasPrefix) {
+            let target = request.query.isEmpty ? path : path + "?" + request.query
+            return await fetchFromClient(target)
+        }
+        let response = Self.serveFile(under: SteamBottle.steamRoot, path: path)
+        if response.status == 404 { noteLoopbackMiss(path, "no file in the Steam install") }
+        return response
+    }
+
+    /// One synthetic client path, read inside SharedJSContext and handed back
+    /// as bytes. The client answers these from memory — a window's icon, an
+    /// overlay's thumbnail, a recording's timeline — so there is nothing on
+    /// disk to serve and no second origin to fetch them from.
+    private func fetchFromClient(_ target: String) async -> HTTPResponse {
+        guard let cdp = try? await ensureCDP() else {
+            noteLoopbackMiss(target, "the client is not reachable")
+            return .error(503, "Client Unreachable")
+        }
+        let expression = """
+        (async () => {
+          try {
+            const r = await fetch(\(JSLiteral.string(target)));
+            if (!r.ok) return "";
+            const b = await r.blob();
+            if (b.size > \(Self.clientAssetCap)) return "";
+            return await new Promise(done => {
+              const reader = new FileReader();
+              reader.onload = () => done(String(reader.result));
+              reader.onerror = () => done("");
+              reader.readAsDataURL(b);
+            });
+          } catch (e) { return ""; }
+        })()
+        """
+        let reply = try? await withDeadline(.seconds(10)) {
+            try await cdp.evaluate(expression)
+        }
+        guard let reply, let asset = Self.decodeDataURL(reply) else {
+            noteLoopbackMiss(target, "the client returned nothing")
+            return .error(404, "Not Found")
+        }
+        return .ok(asset.body, type: asset.type, headers: [("Cache-Control", "no-store")])
+    }
+
+    /// The largest asset read back out of the client. A data URL crosses CDP
+    /// as one JSON string, so a recording's video segments land well over it
+    /// and take the logged 404 — which is the point: the log then names what a
+    /// playtest actually asked for.
+    private static let clientAssetCap = 4 * 1024 * 1024
+
+    private nonisolated static func decodeDataURL(_ text: String) -> (type: String, body: Data)? {
+        guard text.hasPrefix("data:"), let comma = text.firstIndex(of: ",") else { return nil }
+        let header = text[text.index(text.startIndex, offsetBy: 5) ..< comma]
+        guard header.hasSuffix(";base64") else { return nil }
+        let type = String(header.dropLast(";base64".count))
+        guard let body = Data(base64Encoded: String(text[text.index(after: comma)...])),
+              !body.isEmpty else { return nil }
+        return (type.isEmpty ? "application/octet-stream" : type, body)
+    }
+
+    /// Names each loopback path the bridge could not answer, once. The set of
+    /// endpoints Steam's UI reaches for is only observable by watching it run,
+    /// and a repeat of the same miss says nothing the first line did not.
+    private func noteLoopbackMiss(_ path: String, _ why: String) {
+        guard loopbackMisses.count < Self.loopbackMissCap,
+              loopbackMisses.insert(path).inserted else { return }
+        log(.bridge, "loopback \(path) went unanswered — \(why)")
+    }
+
+    private static let loopbackMissCap = 60
+
     // MARK: - HTTP: art
 
     private nonisolated static func handleArtRequest(_ request: HTTPRequest) -> HTTPResponse {
@@ -940,13 +1047,20 @@ actor SteamBridge {
         guard target.path.hasPrefix(root.standardizedFileURL.path + "/") else {
             return .error(403, "Forbidden")
         }
+        let type = ContentType.forExtension(target.pathExtension)
+        // A script or stylesheet that addresses the client's own origin is
+        // served from its rewritten copy (``LoopbackAssets``); the copy is
+        // cached, so this costs one read of the source per Steam update.
+        if let rewritten = LoopbackAssets.rewrittenBytes(for: target) {
+            return .ok(rewritten, type: type)
+        }
         // Mapped, not copied: Steam's UI chunks run to megabytes and the boot
         // waterfall requests dozens of them; the bytes go straight from the
         // page cache to the socket.
         guard let data = try? Data(contentsOf: target, options: [.mappedIfSafe]) else {
             return .error(404, "Not Found")
         }
-        return .ok(data, type: ContentType.forExtension(target.pathExtension))
+        return .ok(data, type: type)
     }
 
     private nonisolated static func jsonObject(_ text: String) -> [String: Any]? {

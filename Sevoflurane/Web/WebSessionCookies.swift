@@ -16,10 +16,11 @@ import WebKit
 /// whatever the client is signed in as, the web views are too.
 @MainActor
 enum WebSessionCookies {
-    /// Cookies are mirrored for Steam's own web properties only; the client's
-    /// jar also holds `steamloopback.host` entries, which belong to the local
-    /// UI origin and mean nothing to a remote page.
-    private static let domains = [
+    /// Steam's own web properties: the hosts cookies are mirrored for, and
+    /// the hosts the page's proxy (``WebProxy``) will fetch. The client's jar
+    /// also holds `steamloopback.host` entries, which belong to the local UI
+    /// origin and mean nothing to a remote page.
+    nonisolated static let domains = [
         "steampowered.com",
         "steamcommunity.com",
         "steamchina.com",
@@ -108,14 +109,14 @@ enum WebSessionCookies {
         cookies.filter { applied[identity(of: $0)] != $0 }
     }
 
-    static func isSteamDomain(_ domain: String) -> Bool {
+    nonisolated static func isSteamDomain(_ domain: String) -> Bool {
         let bare = domain.hasPrefix(".") ? String(domain.dropFirst()) : domain
         return domains.contains { bare == $0 || bare.hasSuffix("." + $0) }
     }
 
     /// Translates one client cookie into an `HTTPCookie`, dropping anything
     /// outside Steam's own web properties.
-    static func httpCookie(from cookie: SteamWebCookie) -> HTTPCookie? {
+    nonisolated static func httpCookie(from cookie: SteamWebCookie) -> HTTPCookie? {
         guard isSteamDomain(cookie.domain) else { return nil }
         var properties: [HTTPCookiePropertyKey: Any] = [
             .name: cookie.name,
