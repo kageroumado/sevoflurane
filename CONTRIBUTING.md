@@ -186,9 +186,10 @@ Mach service for the prefix until the client restarts.
 Use the issue templates: one for Steam and the app, one for a game, one for
 a feature. Every report wants the diagnostics zip — **Settings › About › Save
 Diagnostics…** or `sevo diag` — which holds the app's logs, a `sevo doctor`
-report, the active engine's `engine-info.json`, the bottle's env files and the
-last two days of crash reports from the engine's processes. `--steam-logs`
-adds Steam's own bootstrap, connection, webhelper and game-process logs. For
+report, the active engine's `engine-info.json`, the bottle's env files, the
+game launcher bundles, Steam's own bootstrap, connection, webhelper,
+game-process and console logs, and the last two days of crash reports from the
+engine's processes. `--no-steam-logs` leaves Steam's own logs out. For
 a game crash, turn on Settings › Engine › Wine diagnostics log first
 (`sevo bottle config wine-debug on`), reproduce, then save the report.
 

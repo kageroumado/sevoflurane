@@ -27,12 +27,12 @@ assignees: kageroumado
 
 Attach the report zip: **Settings › About › Save Diagnostics…**, or in a
 terminal, `sevo diag`. It holds the app's logs, a `sevo doctor` report, the
-engine's identity and the last two days of crash reports from the engine's
-processes. It names no account; crash reports carry paths under your home
-folder, so your short user name is in them.
+engine's identity, Steam's own logs from the bottle (bootstrap, connection,
+webhelper, game-process and console) and the last two days of crash reports
+from the engine's processes. It names no account; crash reports carry paths
+under your home folder, so your short user name is in them.
 
-If Steam itself is stuck, use `sevo diag --steam-logs`, which adds Steam's
-bootstrap, connection and webhelper logs from the bottle.
+`sevo diag --no-steam-logs` leaves Steam's own logs out.
 
 ## Anything else
 

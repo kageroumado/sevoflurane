@@ -14,8 +14,9 @@ struct DiagCommand: AsyncParsableCommand {
     ) var output: String?
     @Flag(
         name: .customLong("steam-logs"),
-        help: "Add Steam's own bootstrap, connection, webhelper and game-process logs from the bottle.",
-    ) var steamLogs = false
+        inversion: .prefixedNo,
+        help: "Steam's own bootstrap, connection, webhelper, game-process and console logs from the bottle.",
+    ) var steamLogs = true
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
@@ -27,13 +28,19 @@ struct DiagCommand: AsyncParsableCommand {
 
 /// The report bundle: the three logs, `doctor` and `status` as JSON, the
 /// machine, the active engine's `engine-info.json`, the bottle's env files,
-/// and the last two days of crash reports from the engine's processes.
-/// Steam's own logs come only when asked for. Nothing in it names the
+/// the game launcher bundles, Steam's own logs, and the last two days of
+/// crash reports from the engine's processes. Nothing in it names the
 /// account; crash reports and env files carry paths under the home
 /// directory, so the user's short name is in them.
 nonisolated enum Diagnostics {
     static let crashReportPrefixes = ["wine", "wine64", "nwjs", "Sevoflurane", "steam", "sevo-"]
-    static let steamLogNames = ["bootstrap_log.txt", "connection_log.txt", "webhelper.txt", "gameprocess_log.txt"]
+    /// `console_log.txt` carries the whole `GameAction` trail and the exit
+    /// code of a game the client started, which is the answer to most of what
+    /// a launch failure is asked about.
+    static let steamLogNames = [
+        "bootstrap_log.txt", "connection_log.txt", "webhelper.txt", "gameprocess_log.txt",
+        "console_log.txt",
+    ]
 
     static func bundle(to destination: URL?, steamLogs: Bool) async throws -> URL {
         let manager = FileManager.default
@@ -87,6 +94,15 @@ nonisolated enum Diagnostics {
         for app in (try? manager.contentsOfDirectory(atPath: sevoDir.appendingPathComponent("apps").path)) ?? [] {
             copy(sevoDir.appendingPathComponent("apps/\(app)"), as: "bottle/apps/\(app)")
         }
+
+        // Which games have a launcher bundle, and on which engine: a game
+        // whose Dock tile says "wine" either has no bundle or did not take
+        // it, and the two look identical from the outside.
+        let launchers = GameLaunchers.inventory()
+        write(
+            launchers.isEmpty ? "no launcher bundles\n" : launchers.joined(separator: "\n") + "\n",
+            as: "launchers.txt",
+        )
 
         let reports = logs.appendingPathComponent("DiagnosticReports")
         let recent = Date().addingTimeInterval(-48 * 3600)

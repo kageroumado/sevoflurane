@@ -94,9 +94,9 @@ for sample results and their limits.
 ## Reporting a problem
 
 **Settings › About › Save Diagnostics…** saves a ZIP containing logs,
-a `sevo doctor` report, engine details and recent crash reports. Review the
-contents before sharing; logs and file paths can identify your account.
-You can also run `sevo diag` from the terminal.
+a `sevo doctor` report, engine details, Steam's own logs and recent crash
+reports. Review the contents before sharing; logs and file paths can identify
+your account. You can also run `sevo diag` from the terminal.
 
 The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`.
@@ -118,7 +118,7 @@ and output options.
 sevo doctor [--json]
 sevo setup [--engine E]
 sevo status [--json]
-sevo diag [--steam-logs]
+sevo diag [--no-steam-logs]
 sevo client start|stop|restart|update|pin|unpin
 sevo recover [--deep]
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
@@ -133,8 +133,9 @@ sevo logs [--tail N] [-f] [--wine]
 ```
 
 `sevo recover --deep` adds web-cache removal and client repair.
-`sevo diag --steam-logs` includes Steam's bootstrap, connection, webhelper
-and game-process logs.
+The report carries Steam's own bootstrap, connection, webhelper,
+game-process and console logs from the bottle; `sevo diag --no-steam-logs`
+leaves them out.
 
 Exit codes are 0 for success, 1 for an operation failure, 2 for an invalid
 invocation, 3 for an incomplete installation and 4 for an unreachable

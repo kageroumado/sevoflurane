@@ -122,6 +122,23 @@ nonisolated enum GameLaunchers {
         return executable
     }
 
+    /// One line per bundle in the store — `<appid>/<Title>.app` and the
+    /// engine its loader was copied from — for a diagnostics report.
+    static func inventory() -> [String] {
+        let manager = FileManager.default
+        let ids = ((try? manager.contentsOfDirectory(atPath: root.path)) ?? [])
+            .filter { Int($0) != nil }
+            .sorted()
+        return ids.flatMap { id -> [String] in
+            let directory = root.appendingPathComponent(id)
+            let bundles = ((try? manager.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+            return bundles.map { bundle in
+                let contents = directory.appendingPathComponent("\(bundle)/Contents")
+                return "\(id)/\(bundle) — \(recordedEngine(in: contents) ?? "engine not recorded")"
+            }
+        }
+    }
+
     /// Removes the bundles of games that are no longer in the store.
     static func remove(keeping wanted: Set<Int>) {
         let manager = FileManager.default

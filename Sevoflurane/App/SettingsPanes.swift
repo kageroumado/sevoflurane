@@ -947,7 +947,9 @@ struct AboutSettings: View {
         diagnosticsError = nil
         Task(name: "Save diagnostics") {
             let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
-            let result = await Subprocess.run(helper.path, ["diag"], capture: .combined, timeout: .seconds(90))
+            let result = await Subprocess.run(
+                helper.path, ["diag", "--steam-logs"], capture: .combined, timeout: .seconds(90),
+            )
             savingDiagnostics = false
             let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
             guard result.status == 0, path.hasSuffix(".zip") else {
