@@ -372,6 +372,12 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             "PATH": wineURL.deletingLastPathComponent().path + ":/usr/bin:/bin",
             "WINEDEBUG": WineLog.channels,
         ]
+        // The process the prefix cannot outlive (``BottleOwner``). A managed
+        // spawn is handed an environment rather than inheriting one, so the
+        // owner has to be copied in by hand here.
+        if let owner = BottleOwner.pid {
+            env[BottleOwner.variable] = owner
+        }
         // Keeps Steam's own processes out of the Dock and off the screen:
         // winemac.drv promotes any wine process that shows a window, and
         // there is no demotion API — so the promotion and the window

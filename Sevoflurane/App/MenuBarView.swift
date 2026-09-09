@@ -78,10 +78,30 @@ struct MenuBarView: View {
         /// popover is where the user comes to *fix* it.
         let tint: Color?
         let action: (label: String, run: () -> Void)?
+        /// A second, quieter button beside the first — the state where the
+        /// user has somewhere to go *and* something to try again.
+        var alternative: (label: String, run: () -> Void)?
+    }
+
+    /// Supervision runs in a background helper macOS asks the user to approve,
+    /// so "it is not approved" is a state of its own with a way out, not a
+    /// Steam fault to restart out of.
+    private var daemonCard: HealthCard {
+        HealthCard(
+            symbol: "gearshape.badge.exclamationmark",
+            title: "Sevoflurane needs its background helper",
+            detail: supervisor.statusText,
+            tint: .red,
+            action: ("Open Login Items", { DaemonService.openLoginItems() }),
+            alternative: ("Retry", {
+                Task(name: "Retry the daemon") { await supervisor.attach() }
+            }),
+        )
     }
 
     private var healthCardModel: HealthCard? {
-        switch supervisor.health {
+        if supervisor.daemonIsUnreachable { return daemonCard }
+        return switch supervisor.health {
         case .healthy:
             nil
         case .starting:
@@ -168,6 +188,11 @@ struct MenuBarView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                if let alternative = card.alternative {
+                    Button(alternative.label, action: alternative.run)
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                }
                 if let action = card.action {
                     Button(action.label, action: action.run)
                         .buttonStyle(.glassProminent)

@@ -80,6 +80,24 @@ final class EventLog {
             Self.line(category, message, at: entry.date),
             synchronously: category == .window || Self.flushMode == .synchronous,
         )
+        Self.mirror?(category, message, entry.date)
+    }
+
+    /// Where a second process sends its lines. The daemon points this at the
+    /// app link, so the trail the menu-bar extra and the log window show is
+    /// the whole story and not just the half written in this process.
+    nonisolated(unsafe) static var mirror: ((Category, String, Date) -> Void)?
+
+    /// One line another process wrote, taken into this process's trail. The
+    /// file already has it — the writer appended it there — so this is the
+    /// in-memory half only.
+    func ingest(_ category: Category, _ message: String, at date: Date) {
+        let entry = Entry(id: nextID, date: date, category: category, message: message)
+        nextID += 1
+        recent.append(entry)
+        if recent.count > Self.recentLimit {
+            recent.removeFirst(recent.count - Self.recentLimit)
+        }
     }
 
     /// Whether a line is on disk before the call that wrote it returns.

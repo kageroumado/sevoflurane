@@ -1,6 +1,6 @@
 import Foundation
 
-/// The support story: every environment detection plus client/bridge/app
+/// The support story: every environment detection plus client/bridge/daemon
 /// health, one ✔/✖ line each. `--json` is what a user
 /// pastes into an issue — no secrets (no account names, no tokens; bottle
 /// paths are fine).
@@ -136,14 +136,24 @@ nonisolated enum Doctor {
             hint: "sevo recover", provisioning: false,
         ))
 
-        let appRunning = s.appStatus != nil
+        let supervising = s.appStatus != nil
         let appHealth = s.appStatus?["health"] as? String ?? "?"
         checks.append(Check(
+            id: "daemon",
+            ok: supervising && !["degraded", "gaveUp"].contains(appHealth),
+            label: supervising
+                ? "supervision: running (\(appHealth) — \(s.appStatus?["detail"] as? String ?? ""))"
+                : "supervision: not running — open Sevoflurane once to register its background helper",
+            hint: "sevo client start", provisioning: false,
+        ))
+
+        let appRunning = (s.appStatus?["app"] as? String) == "running"
+        checks.append(Check(
             id: "app",
-            ok: !appRunning || !["degraded", "gaveUp"].contains(appHealth),
+            ok: true,
             label: appRunning
-                ? "Sevoflurane app: running (\(appHealth) — \(s.appStatus?["detail"] as? String ?? ""))"
-                : "Sevoflurane app: not running (CLI drives the client directly)",
+                ? "Sevoflurane app: running"
+                : "Sevoflurane app: not running (the daemon keeps the client up without it)",
             hint: "sevo logs --tail 50", provisioning: false,
         ))
 
@@ -151,7 +161,7 @@ nonisolated enum Doctor {
             checks.append(Check(
                 id: "bridge", ok: s.bridgeUp,
                 label: "bridge :\(BridgePorts.steamUI)",
-                hint: "app up but bridge down — relaunch Sevoflurane", provisioning: false,
+                hint: "the app is up but its bridge is down — relaunch Sevoflurane", provisioning: false,
             ))
         }
 

@@ -54,7 +54,11 @@ final class LiveCompatibilityEnvironment: CompatibilityEnvironment {
         await BottleDependencies.removeOverride(dll: dll)
     }
 
+    /// Through the daemon, because it owns every bottle process — a winecfg
+    /// started here would be a second owner's child in the prefix.
     func openWineConfiguration() {
-        Task(name: "Open winecfg") { await ClientLifecycle.launchInBottle(["winecfg"]) }
+        Task(name: "Open winecfg") {
+            await DaemonService.post("/bottle/launch", body: Data("winecfg\n".utf8))
+        }
     }
 }

@@ -105,11 +105,16 @@ enum StatusReport {
         case .busy: "running, CDP too busy to answer"
         case .down: snapshot.bottleProcesses.isEmpty ? "stopped" : "up, CDP unreachable"
         }
-        let app = if let status = snapshot.appStatus {
+        // Two processes, two answers: supervision is the daemon that owns the
+        // bottle, and the app is the window onto it. Either can be down while
+        // the other works.
+        let supervision = if let status = snapshot.appStatus {
             "running (\(status["health"] as? String ?? "?"))"
         } else {
             "not running"
         }
+        let appRunning = (snapshot.appStatus?["app"] as? String) == "running"
+        let app = appRunning ? "running" : "not running"
         // A bottle missing a required dependency still runs games, so this is
         // a note beside the client's state rather than a state of its own.
         let incomplete = BottleReadiness.incompleteSummary()
@@ -123,11 +128,13 @@ enum StatusReport {
             "services_up": snapshot.servicesUp ?? NSNull(),
             "bridge": snapshot.bridgeUp,
             "app": snapshot.appStatus ?? NSNull(),
+            "app_running": appRunning,
             "dump_rate_10m": snapshot.dumpCount,
             "client_pinned": snapshot.pinned,
         ]
         var line = "engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
-            + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down") · app \(app)"
+            + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
+            + " · supervision \(supervision) · app \(app)"
         if incomplete != nil { line += " · bottle incomplete" }
         return (dict, line)
     }
@@ -222,7 +229,7 @@ func narrate(_ line: String, asJSON: Bool) {
 struct StatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "One line: engine, bottle, client, bridge, app.",
+        abstract: "One line: engine, bottle, client, bridge, supervision, app.",
     )
 
     @Flag(name: .customLong("json")) var asJSON = false
@@ -253,7 +260,7 @@ struct WaitCommand: AsyncParsableCommand {
         let sink = { narrate($0, asJSON: asJSON) }
         let outcome: ClientOps.Outcome = if gone {
             await ClientOps.waitGone(timeout: timeout, progress: sink)
-        } else if await ClientOps.appIsRunning(noApp: noApp) {
+        } else if await ClientOps.supervisionIsRunning(noApp: noApp) {
             await ClientOps.pollAppHealthy(intent: "wait", timeout: timeout, progress: sink)
         } else {
             await ClientOps.pollClientUp(intent: "wait", timeout: timeout, progress: sink)
@@ -1235,7 +1242,7 @@ struct ClientCommand: AsyncParsableCommand {
             discussion: """
             scope 'steam' kills the client and leaves the fake Windows booted; \
             'all' runs wineserver -k and kills the whole bottle, games included. \
-            When the app is running the client is brought back clean afterward. \
+            With supervision running the client is brought back clean afterward. \
             The reply is the observation, not a verdict: killed, still-running \
             (for 'steam' the Windows hosts left booted; for 'all' a kill that \
             did not take), recovered (what restarted), and the client's final \
@@ -1246,7 +1253,7 @@ struct ClientCommand: AsyncParsableCommand {
         var scope: String = "steam"
         @Flag(name: .customLong("json"), help: "Machine-readable observation.")
         var asJSON = false
-        @Flag(name: .customLong("no-app"), help: "Kill directly even if the app is running (it will not restart the client).")
+        @Flag(name: .customLong("no-app"), help: "Kill directly even if the daemon is running (it will not restart the client).")
         var noApp = false
 
         func run() async throws {
@@ -1257,7 +1264,7 @@ struct ClientCommand: AsyncParsableCommand {
             // Names have to be read before the kill — a dead pid has no `ps`
             // entry — so the reply can still say what it killed.
             let beforeNames = await ClientLifecycle.processNames(before)
-            let routed = await ClientOps.appIsRunning(noApp: noApp)
+            let routed = await ClientOps.supervisionIsRunning(noApp: noApp)
             if routed {
                 _ = await AppControl.post("/client/forcequit?scope=\(scopeName)")
             } else {
@@ -1322,7 +1329,7 @@ struct ClientCommand: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "start", abstract: "Start the bottled client.",
         )
-        @Flag(name: .customLong("no-app"), help: "Drive the client directly even if the app is running.")
+        @Flag(name: .customLong("no-app"), help: "Drive the client directly even if the daemon is running.")
         var noApp = false
         @Flag(name: .customLong("json"), help: "Machine-readable observation.")
         var asJSON = false
@@ -1844,7 +1851,7 @@ struct AppCommand: AsyncParsableCommand {
                     for line in WindowReport.lines(window) { print("  \(line)") }
                 } else {
                     print("app launch: unverifiable — no game window within \(timeout)s"
-                        + " (is the app running? poll: sevo status)")
+                        + " (is Sevoflurane running? poll: sevo status)")
                 }
             }
         }

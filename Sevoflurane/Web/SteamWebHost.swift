@@ -69,9 +69,19 @@ final class SteamWebHost {
     /// leave it set for the life of the process, and a set mark refuses every
     /// login window `show()` asks for.
     func duringClientStop<T>(_ body: () async -> T) async -> T {
-        clientIsStopping = true
-        defer { clientIsStopping = false }
+        beginClientStop()
+        defer { endClientStop() }
         return await body()
+    }
+
+    /// The same mark, opened and closed by the daemon across the link — a stop
+    /// runs in the daemon's process, so the scope cannot be a Swift one.
+    func beginClientStop() {
+        clientIsStopping = true
+    }
+
+    func endClientStop() {
+        clientIsStopping = false
     }
 
     func holdWindows() {
@@ -244,8 +254,15 @@ final class SteamWebHost {
 
     /// Launches a game exactly as Steam's tray menu does.
     func launchGame(_ game: RecentGame) {
+        launchGame(appID: game.id)
+    }
+
+    /// The same call by app id, for the daemon: it decides whether a launch
+    /// needs the client restarted first, and the launch itself comes back here
+    /// because it is a line of JavaScript in the page.
+    func launchGame(appID: Int) {
         context?.webView.evaluateJavaScript(
-            "SteamClient.Apps.RunGame(String(\(game.id)), '', -1, 100)",
+            "SteamClient.Apps.RunGame(String(\(appID)), '', -1, 100)",
         )
     }
 

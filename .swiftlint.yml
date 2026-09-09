@@ -1,6 +1,7 @@
 # Lint only first-party sources; never the build output or generated files.
 included:
   - Sevoflurane
+  - SevofluraneDaemon
   - SevofluraneTests
 
 excluded:

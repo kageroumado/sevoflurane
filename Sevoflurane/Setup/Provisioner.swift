@@ -372,7 +372,7 @@ final class Provisioner {
     ///
     /// The tray values gate explorer.exe's own systray window, which the Mac
     /// driver's path bypasses entirely, so neither removes Steam's
-    /// status item here — `ClientSupervisor.suppressWineTray` does. They are
+    /// status item here — `BottleSupervisor.suppressWineTray` does. They are
     /// still written because they are correct for the non-driver path an OSS
     /// Wine build may take.
     func configureBottle(named name: String) async {

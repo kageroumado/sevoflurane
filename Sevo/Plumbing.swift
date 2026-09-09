@@ -39,9 +39,10 @@ nonisolated enum Sevo {
     }
 }
 
-/// Talks to the running app's control endpoint (`ControlServer`, loopback
-/// :8764). `nil` from `get` means the app is not running — the CLI then
-/// drives ``ClientLifecycle`` directly.
+/// Talks to the supervision daemon's control endpoint (loopback :8764), which
+/// also proxies the app's own verbs. `nil` from `get` means supervision is not
+/// running — `sevo client start` brings it up, and `--no-app` drives
+/// ``ClientLifecycle`` directly for debugging.
 nonisolated enum AppControl {
     static func get(_ path: String, timeout: TimeInterval = 3) async -> Data? {
         await request(path, method: "GET", timeout: timeout)
@@ -52,7 +53,7 @@ nonisolated enum AppControl {
     }
 
     /// A POST whose failure body matters: the status code and the body
-    /// come back together, or nil when the app did not answer at all.
+    /// come back together, or nil when the daemon did not answer at all.
     static func postReply(_ path: String, timeout: TimeInterval = 10) async -> (status: Int, body: Data)? {
         guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)\(path)") else {
             return nil
@@ -82,9 +83,9 @@ nonisolated enum AppControl {
         return data
     }
 
-    /// The app's `/status` as a dictionary, or nil when the app is down.
-    /// One retry: the app's main actor can be busy past the timeout during a
-    /// page reload, and a single missed probe must not read as "app gone".
+    /// The daemon's `/status` as a dictionary, or nil when supervision is
+    /// down. One retry: the daemon's main actor can be busy past the timeout
+    /// mid-restart, and a single missed probe must not read as "gone".
     static func status() async -> [String: Any]? {
         for attempt in 0 ..< 2 {
             if attempt > 0 { try? await Task.sleep(for: .seconds(1)) }

@@ -42,9 +42,18 @@ With Dormison, you can:
 - Run supported NW.js games, including RPG Maker MV and MZ games, with a
   macOS runtime while retaining Steam playtime and achievement support.
 
-Sevoflurane watches the Steam client for hangs and crashes. It can restart
-the client, clear its web cache and repair its installation. If recovery
-keeps failing, it stops retrying and reports the problem.
+A background helper watches the Steam client for hangs and crashes. It can
+restart the client, clear its web cache and repair its installation. If
+recovery keeps failing, it stops retrying and reports the problem.
+
+The helper owns the Windows side, so quitting and crashing are different
+things. Quitting Sevoflurane quits Steam and everything in the bottle. If
+Sevoflurane crashes or is force-quit while you are playing, the game keeps
+running, and reopening Sevoflurane reattaches to the session you were in.
+
+macOS asks you to approve the helper the first time Sevoflurane runs, in
+System Settings › General › Login Items & Extensions. Without it Sevoflurane
+cannot start Steam and says so.
 
 ## Game compatibility
 

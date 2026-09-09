@@ -475,6 +475,29 @@ nonisolated enum ClientLifecycle {
         return "the client's own friends UI never appeared"
     }
 
+    /// Asks the client's own `SharedJSContext` whether `GetServicesInitialized()`
+    /// is true — the part that dies with the client's UI session while CDP goes
+    /// on listing the target.
+    ///
+    /// Nil when the client cannot be reached at all, so a caller's own cycle
+    /// decides what a client that stopped answering means. One short-lived
+    /// session per ask, on the same rung as the popup sweep: this is a boot
+    /// question asked a handful of times per launch, never the hot path.
+    static func clientServicesReady() async -> Bool? {
+        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp),
+              let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
+              let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init)
+        else { return nil }
+        let answer = try? await withDeadline(.seconds(10)) {
+            try await CDPClient.evaluateOnce(
+                socketURL: socketURL,
+                "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
+            )
+        }
+        guard let answer else { return nil }
+        return answer.contains("true")
+    }
+
     // MARK: - Crash-loop hygiene
 
     /// Fresh crash dumps in the client's `dumps/` folder — the crash-loop

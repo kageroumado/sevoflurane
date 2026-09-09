@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>glass.kagerou.sevoflurane.daemon</string>
+
+    <key>BundleProgram</key>
+    <string>Contents/Library/LaunchAgents/SevofluraneDaemon</string>
+
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>glass.kagerou.sevoflurane</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

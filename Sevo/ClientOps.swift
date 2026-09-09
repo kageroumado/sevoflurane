@@ -1,10 +1,9 @@
 import Foundation
 
-/// The lifecycle verbs. When the app is running, mutating verbs route through
-/// its control endpoint so the supervisor's ladder has one owner; otherwise
-/// the CLI drives ``ClientLifecycle`` directly. `--no-app` forces direct mode
-/// for debugging (with the app running it will fight the supervisor —
-/// that's what the flag is for).
+/// The lifecycle verbs. Mutating verbs route through the daemon's control
+/// endpoint so the restart ladder has one owner and the bottle has one parent;
+/// `--no-app` forces direct mode for debugging (with the daemon running it will
+/// fight the supervisor — that's what the flag is for).
 ///
 /// Every verb answers an ``Outcome``, not void: the reply is the observation.
 /// The verdict is one of three words: `confirmed` the intended state was
@@ -30,21 +29,35 @@ nonisolated enum ClientOps {
     }
 
     /// Resolves which mode a mutating verb runs in.
-    static func appIsRunning(noApp: Bool) async -> Bool {
+    static func supervisionIsRunning(noApp: Bool) async -> Bool {
         if noApp { return false }
         return await AppControl.status() != nil
     }
 
     static func start(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
-        if await appIsRunning(noApp: noApp) {
+        if !noApp, await AppControl.status() == nil {
+            progress("supervision is not running — starting the daemon")
+            switch await SupervisionDaemon.start() {
+            case .started:
+                progress("daemon started")
+            case .notInstalled:
+                throw Failure.message(
+                    "supervision is not running: open Sevoflurane once so it can register "
+                        + "its background helper, then try again",
+                )
+            case let .refused(reason):
+                throw Failure.message("the daemon would not start: \(reason)")
+            }
+        }
+        if await supervisionIsRunning(noApp: noApp) {
             let alreadyHealthy = (await AppControl.status())?["health"] as? String == "healthy"
             guard await AppControl.post("/client/start") != nil else {
-                throw Failure.message("the app's control endpoint refused /client/start")
+                throw Failure.message("the daemon's control endpoint refused /client/start")
             }
             if alreadyHealthy {
                 return Outcome(verdict: .noEffect, intent: "start", note: "client was already healthy")
             }
-            progress("start requested via the app — waiting for healthy")
+            progress("start requested via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "start", progress: progress)
         }
         try await ensureProvisioned()
@@ -74,11 +87,11 @@ nonisolated enum ClientOps {
     }
 
     static func stop(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
-        if await appIsRunning(noApp: noApp) {
-            progress("stopping via the app (auto-restart pauses)")
+        if await supervisionIsRunning(noApp: noApp) {
+            progress("stopping via the daemon (auto-restart pauses)")
             guard await AppControl.post("/client/stop", timeout: 120) != nil else {
                 throw Failure.message(
-                    "the app refused /client/stop (a restart may be in progress)",
+                    "the daemon refused /client/stop (a restart may be in progress)",
                 )
             }
             let survivors = await ClientLifecycle.bottleProcessIDs()
@@ -100,11 +113,11 @@ nonisolated enum ClientOps {
     }
 
     static func restart(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
-        if await appIsRunning(noApp: noApp) {
+        if await supervisionIsRunning(noApp: noApp) {
             guard await AppControl.post("/client/restart") != nil else {
-                throw Failure.message("the app's control endpoint refused /client/restart")
+                throw Failure.message("the daemon's control endpoint refused /client/restart")
             }
-            progress("restart begun via the app — waiting for healthy")
+            progress("restart begun via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "restart", progress: progress)
         }
         _ = try await stop(noApp: true, progress: progress)
@@ -112,39 +125,36 @@ nonisolated enum ClientOps {
     }
 
     /// `sevo engine use`: point the active engine (and optionally the bottle)
-    /// at `engine`, then restart under it. Through the app when it is running,
-    /// because `Engine.active` is cached in that process and the supervisor
-    /// reads it to relaunch. With the app closed the choice is written and
-    /// the app is opened to boot it: the supervisor owns the client, and a
-    /// client this process launched would run with nothing watching it.
-    /// `--no-app` drives the client directly, for debugging.
+    /// at `engine`, then restart under it. Through the daemon, because
+    /// `Engine.active` is cached per process and the daemon's copy is the one
+    /// that tears the old Windows down and assembles the new invocation — a
+    /// CLI that only wrote the shared preference would leave the process that
+    /// relaunches the client still on the old engine. `--no-app` drives the
+    /// client directly, for debugging.
     static func useEngine(
         _ engine: Engine, version: String, bottle: String?,
         noApp: Bool, progress: (String) -> Void,
     ) async throws -> Outcome {
         let alreadyActive = Engine.active == engine
         if !noApp, await AppControl.status() == nil {
-            Engine.choose(engine)
-            if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
-            guard await openApp() else {
+            progress("supervision is not running — starting the daemon")
+            switch await SupervisionDaemon.start() {
+            case .started:
+                break
+            case .notInstalled:
+                Engine.choose(engine)
+                if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
                 return Outcome(verdict: .confirmed, intent: "engine use",
                                note: "engine set to \(version); Sevoflurane is not installed here, so nothing was started")
+            case let .refused(reason):
+                throw Failure.message("the daemon would not start: \(reason)")
             }
-            progress("engine set to \(version) — opening Sevoflurane to boot it")
-            for _ in 0 ..< 20 where await AppControl.status() == nil {
-                try? await Task.sleep(for: .seconds(1))
-            }
-            guard await AppControl.status() != nil else {
-                return Outcome(verdict: .unverifiable, intent: "engine use",
-                               note: "engine set to \(version); Sevoflurane was opened but its control endpoint has not answered — sevo status")
-            }
-            return await pollAppHealthy(intent: "engine use", progress: progress)
         }
-        if await appIsRunning(noApp: noApp) {
+        if await supervisionIsRunning(noApp: noApp) {
             var path = "/engine/use?version=\(version)"
             if let bottle, !bottle.isEmpty { path += "&bottle=\(bottle)" }
             guard let reply = await AppControl.postReply(path, timeout: 120) else {
-                throw Failure.message("the app's control endpoint did not answer /engine/use")
+                throw Failure.message("the daemon's control endpoint did not answer /engine/use")
             }
             guard (200 ..< 300).contains(reply.status) else {
                 throw Failure.message(
@@ -155,7 +165,7 @@ nonisolated enum ClientOps {
             // The switch lands in the app's process; this one resolved
             // `Engine.active` before it and reports the outcome from there.
             Engine.active = engine
-            progress("engine switch requested via the app — waiting for healthy")
+            progress("engine switch requested via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "engine use", progress: progress)
         }
         Engine.choose(engine)
@@ -170,23 +180,6 @@ nonisolated enum ClientOps {
                            note: "already on \(version); restarted, healthy")
         }
         return outcome
-    }
-
-    /// Opens the installed app through Launch Services; false when there is
-    /// no app registered under its bundle identifier.
-    static func openApp() async -> Bool {
-        let open = Process()
-        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        open.arguments = ["-b", "glass.kagerou.sevoflurane"]
-        open.standardOutput = FileHandle.nullDevice
-        open.standardError = FileHandle.nullDevice
-        do {
-            try open.run()
-        } catch {
-            return false
-        }
-        open.waitUntilExit()
-        return open.terminationStatus == 0
     }
 
     /// Headless client refresh. Only sane with everything stopped — a live
@@ -225,17 +218,17 @@ nonisolated enum ClientOps {
             progress("client wedged (CDP unreachable) — restarting")
         }
 
-        if await appIsRunning(noApp: noApp), !deep {
+        if await supervisionIsRunning(noApp: noApp), !deep {
             guard await AppControl.post("/client/restart") != nil else {
-                throw Failure.message("the app's control endpoint refused /client/restart")
+                throw Failure.message("the daemon's control endpoint refused /client/restart")
             }
             return await pollAppHealthy(intent: "recover", progress: progress)
         }
 
-        let viaApp = await appIsRunning(noApp: noApp)
+        let viaApp = await supervisionIsRunning(noApp: noApp)
         if viaApp {
             guard await AppControl.post("/client/stop", timeout: 120) != nil else {
-                throw Failure.message("the app refused /client/stop (a restart may be in progress)")
+                throw Failure.message("the daemon refused /client/stop (a restart may be in progress)")
             }
         } else {
             await ClientLifecycle.stopAll(gracePolls: 15) { progress($0) }
@@ -279,7 +272,7 @@ nonisolated enum ClientOps {
                        note: "client not up within \(timeout)s — sevo status / sevo doctor")
     }
 
-    /// App mode: the supervisor's own healthy verdict (client + bridge +
+    /// Daemon mode: the supervisor's own healthy verdict (client + bridge +
     /// page + services) is the bar. Two consecutive healthy reads: right
     /// after a reload the *old* page still answers the services probe, so a
     /// single healthy can be a stale-page flicker that re-degrades a probe
@@ -293,7 +286,7 @@ nonisolated enum ClientOps {
             try? await Task.sleep(for: .seconds(3))
             guard let status = await AppControl.status() else {
                 return Outcome(verdict: .unverifiable, intent: intent,
-                               note: "the app went away mid-operation — sevo logs")
+                               note: "the daemon went away mid-operation — sevo logs")
             }
             let health = status["health"] as? String ?? "?"
             if health == "healthy" {

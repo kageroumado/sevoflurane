@@ -73,8 +73,10 @@ these. All five are load-bearing.
 
 ## Rules of the road
 
-1. **The supervisor owns the client lifecycle.** Nothing else may launch or
-   kill bottle processes; new recovery behavior goes through its ladder.
+1. **The supervisor owns the client lifecycle, and it lives in the daemon.**
+   Nothing else may launch or kill bottle processes; new recovery behavior
+   goes through its ladder, in `SevofluraneDaemon`. The app never supervises,
+   not even as a fallback — see *Two processes* below.
 2. **Steam's watchdog dialog is a symptom, never a control surface** — the
    app detects and recovers; it does not click Wine dialogs.
 3. **US English** in code, comments, and strings. DocC comments on public
@@ -100,6 +102,67 @@ these. All five are load-bearing.
    exception raised inside the display cycle, which AppKit turns into a
    crash. A SwiftLint custom rule (`settings_list_section`) fails the build
    on it.
+
+## Two processes
+
+`SevofluraneDaemon` is a `KeepAlive` LaunchAgent that ships inside the app
+bundle (`Contents/Library/LaunchAgents/`), is signed with it, and is
+registered by the app with `SMAppService.agent(plistName:)` on first launch.
+It owns every bottle process: the restart ladder, the probe cycle, the popup
+sweep, crash-loop hygiene, and the control port `:8764` that `sevo` speaks to.
+Sevoflurane.app owns the page — the WKWebViews, Steam's popups, the bridge —
+and attaches to the daemon as a client.
+
+Two truths the split keeps at once:
+
+- **Quitting takes the bottle down.** The app's quit path asks the daemon
+  once (`POST /quit`) and waits for it.
+- **A crash does not.** A `kill -9`, a force-quit or an uncaught exception
+  sends nothing, so the game keeps running and a relaunched app reattaches.
+
+Every spawn carries `SEVO_OWNER_PID` — the daemon's pid (`BottleOwner`). The
+engine's dock shim opens a `kqueue` `NOTE_EXIT` on it and runs `wineserver -k`
+if the *daemon* dies, so a bottle can never outlive its owner.
+
+There is no in-process supervisor. A daemon that cannot be registered or
+reached is a terminal state: the menu bar says so and offers Login Items and
+a Retry, and `sevo` says so and offers to start it. Do not add a fallback —
+two owners of one bottle is the bug this design exists to make unrepresentable.
+
+### The link
+
+Two loopback HTTP listeners push to each other; nothing polls and nothing
+correlates, because the daemon only ever sends commands and the app only ever
+sends facts (`Support/SupervisorLink.swift`).
+
+| direction | endpoint | payload |
+|---|---|---|
+| app → daemon | `POST :8764/app/facts` | `PageFacts`: the app's pid and version, whether the page holds Steam's login window, whether the bridge's socket to the client is open |
+| app → daemon | `POST :8764/app/detach` | the app is quitting |
+| app → daemon | `POST :8764/supervisor/wake` | the app saw something the cycle should not wait a tick for |
+| app → daemon | `POST :8764/game/launch` | a game the menu picked, with its renderer pin |
+| app → daemon | `POST :8764/bottle/run`, `/bottle/launch` | one Windows program, so the daemon stays the only parent |
+| daemon → app | `POST :8766/command?verb=` | `PageCommand`: `connectToClient`, `reload`, `rebuild`, `dismissWindows`, `dismissWindowsForQuit`, `clientStopBegan`, `clientStopEnded`, `showLibrary` |
+| daemon → app | `POST :8766/command/launch?appid=` | run the game now, the restart having been decided |
+| daemon → app | `POST :8766/state` | `SupervisorSnapshot`: the health verdict the menu bar draws |
+| daemon → app | `POST :8766/log` | one log line, for the in-memory trail (both processes append to the same file) |
+
+The app's own verbs (`/windows`, `/steam/show`, `/menu/cancel`, the
+benchmarks) stay on `:8766` and are proxied through `:8764`, so `sevo` asks
+one port for everything and gets a 409 when no app is running.
+
+Anything the daemon needs about the *client* it asks the client: CDP on
+`:8765` and the page's `/__eval` on `:8762` are reachable from either process,
+so services-readiness and page health are not facts the app has to relay.
+
+### Which target compiles what
+
+Three build products, one source tree. `SevofluraneTests/DaemonMembershipTests`
+asserts the daemon compiles everything `Package.swift` gives `sevo`, and
+nothing that imports SwiftUI, WebKit or Propofol. A new file under
+`Sevoflurane/` joins the daemon target unless the project's exception list
+names it, so a new view means one line added there — and the test fails until
+it is.
 
 ## Watching a game or the client from outside
 

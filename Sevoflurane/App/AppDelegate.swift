@@ -14,7 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let notifications = SteamNotifications()
     private let gameLaunchWatch = GameLaunchWatch()
     private let runRecorder = RunRecorder()
-    private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)
+    private lazy var appLinkServer = AppLinkServer(
+        supervisor: supervisor, host: host, bridge: bridge,
+    )
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
@@ -112,9 +114,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
             supervisor.showLibraryWhenHealthy()
         }
-        // Up before provisioning gates so `sevo status` can see the app even
+        // Up before provisioning gates so the daemon can reach the page even
         // while the setup wizard is waiting for the user.
-        controlServer.start()
+        appLinkServer.start()
         // The bundle's shader packages are in the store before any game
         // could be launched naming one. Detached: it copies files.
         Task.detached(name: "Copy bundled shader packages") {
@@ -441,8 +443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var quitTask: Task<Void, Never>?
 
-    /// Quitting Sevoflurane quits Steam: the bottle comes down first so no
-    /// Wine process (or its Dock icon) outlives the app.
+    /// Quitting Sevoflurane quits Steam: the daemon that owns the bottle is
+    /// asked to bring it down, and the quit waits for its answer. This is the
+    /// only path that asks — a crash or a force-quit sends nothing, which is
+    /// why a game survives one.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         #if DEBUG
             // A harness boot never started the client — and the bottle it would

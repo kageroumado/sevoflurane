@@ -9,8 +9,8 @@ import TiptoeGitHub
 /// The heavy lifting is [Tiptoe](https://github.com/artginzburg/Tiptoe) over mxcl/AppUpdater:
 /// AppUpdater checks the release, downloads the DMG, and verifies the Team ID against the running
 /// app; Tiptoe decides *when* the swap may run, waiting for the Mac to go quiet. The swap restarts
-/// the app, and here that is not merely awkward — quitting Sevoflurane tears the Steam client down
-/// with it, so a swap during a play session would close the game's Steam out from under it. The
+/// the app, and here that is not merely awkward — a clean quit asks the daemon to tear the Steam
+/// client down, so a swap during a play session would close the game's Steam out from under it. The
 /// gate below vetoes exactly that. It is a veto, not a preference: Tiptoe's own patience relaxes
 /// over days, this never does.
 ///
