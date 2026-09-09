@@ -33,6 +33,8 @@ from the engine's processes. It names no account; crash reports carry paths
 under your home folder, so your short user name is in them.
 
 `sevo diag --no-steam-logs` leaves Steam's own logs out.
+For a longer session, [PLAYTESTING.md](../../PLAYTESTING.md) says what to
+turn on first and what to collect.
 
 ## Anything else
 
