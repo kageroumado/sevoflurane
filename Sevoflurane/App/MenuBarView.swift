@@ -185,6 +185,15 @@ struct MenuBarView: View {
         }
     }
 
+    /// The press is the app's claim to the activation right, and the game's
+    /// window is what it will be spent on a minute later. The popover itself
+    /// is a non-activating panel — it must stay one, or every click in it
+    /// would pull focus off whatever the user was doing — so the press says
+    /// so explicitly instead.
+    private func claimActivationRight() {
+        Activation().claimRight()
+    }
+
     @ViewBuilder private var recentGames: some View {
         if host.recentGames.isEmpty {
             // A popover with nothing between the header and the button reads
@@ -212,9 +221,11 @@ struct MenuBarView: View {
                             )
                         },
                         launch: {
+                            claimActivationRight()
                             Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
                         },
                         runWith: { renderer in
+                            claimActivationRight()
                             Task(name: "Run \(game.name) on \(renderer.label)") {
                                 await supervisor.launch(game, renderer: renderer)
                             }

@@ -803,13 +803,10 @@ final class SteamWindow: NSObject {
         }
     }
 
-    /// Brings the app and this window forward. `NSRunningApplication` backs up
-    /// `NSApp.activate()`, which cooperative activation can decline when the
-    /// request comes from a menu-bar popover rather than a window of ours.
+    /// Brings the app and this window forward.
     private func activate(_ window: NSWindow) {
         if !role.isPanel {
-            NSApp.activate()
-            NSRunningApplication.current.activate(options: [.activateAllWindows])
+            Activation().bringAppForward()
         }
         window.makeKeyAndOrderFront(nil)
         // Until the web view is first responder, AppKit routes mouse-moved

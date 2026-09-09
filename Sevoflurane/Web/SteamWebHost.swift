@@ -662,7 +662,10 @@ final class SteamWebHost {
             }
             overlayChildren.removeAll()
             if let pid = overlayGame?.pid {
-                NSRunningApplication(processIdentifier: pid)?.activate()
+                Task(name: "Return focus to the game") {
+                    await Activation().bringForward(pid: pid, describedAs: "the game behind the overlay")
+                    ActivationPolicy.recedeIfLastWindow(closing: nil)
+                }
             }
             overlayGame = nil
             EventLog.shared.log(.window, "overlay dismissed; focus returned to the game")

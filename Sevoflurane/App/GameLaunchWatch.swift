@@ -29,6 +29,7 @@ final class GameLaunchWatch {
     private static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
 
     private var watch: Task<Void, Never>?
+    private let activation = Activation()
 
     /// A window of the launch's own game is up — the host clears the
     /// launch-status line on it.
@@ -67,13 +68,16 @@ final class GameLaunchWatch {
                     EventLog.shared.log(.window, line)
                 }
                 if let sighting {
-                    self?.activate(sighting)
+                    await self?.activate(sighting)
                     return
                 }
                 try? await Task.sleep(for: Self.pollEvery)
             }
             guard !Task.isCancelled else { return }
             EventLog.shared.log(.window, "no game window in three minutes — no longer watching")
+            // The right the launch took is spent or worthless by now, and the
+            // Dock tile it came with belongs to a window that never arrived.
+            ActivationPolicy.recedeIfLastWindow(closing: nil)
         }
     }
 
@@ -93,23 +97,27 @@ final class GameLaunchWatch {
         }
     }
 
-    private func activate(_ game: Sighting) {
-        defer { onGameWindowUp?(game.owner) }
+    /// Spends the activation right the launch took on the window that just
+    /// arrived, then hands the policy back: an app whose last window is a
+    /// game's belongs in the menu bar, not the Dock.
+    ///
+    /// The launch's own story ends the moment the window is up, so the
+    /// callback fires before the activation, which can take five seconds.
+    private func activate(_ game: Sighting) async {
         GameDisplayHold.gameDidAppear()
+        onGameWindowUp?(game.owner)
         let bundled = game.viaBundle ? ", via its own bundle" : ""
-        guard let app = NSRunningApplication(processIdentifier: game.pid) else {
-            EventLog.shared.log(
-                .window, "game window up (\(game.owner)) but pid \(game.pid) has no app to activate",
-            )
-            return
-        }
-        let activated = app.activate()
+        EventLog.shared.log(.window, "game window up (\(game.owner))\(bundled)")
+        let front = await activation.bringForward(
+            pid: game.pid, describedAs: "game \(game.owner)",
+        )
         EventLog.shared.log(
             .window,
-            activated
-                ? "game window up — brought \(game.owner) to the front\(bundled)"
-                : "game window up (\(game.owner)) but macOS declined the activation\(bundled)",
+            front
+                ? "brought \(game.owner) to the front"
+                : "\(game.owner) is not frontmost — macOS declined the activation",
         )
+        ActivationPolicy.recedeIfLastWindow(closing: nil)
     }
 
     /// What a pid is running, kept for as long as one launch is watched:

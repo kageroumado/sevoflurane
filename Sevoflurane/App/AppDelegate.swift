@@ -133,6 +133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Arms the window watch for launches the bridge did not carry
             // (the CLI's, a steam:// URL the client handled itself).
             gameLaunchWatch.noteLaunchRequested(appID: appID)
+            // Every launch path passes through here, so this is where the app
+            // takes the activation right it will spend on the game's window.
+            // A minute later, when that window finally arrives, there is no
+            // event left for the window server to attribute the request to.
+            Activation().claimRight()
             // The game's exes, read from its install directory now, so its
             // env files — and the bundle that names it in the Dock — exist
             // before the process starts rather than after its first window.
