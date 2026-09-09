@@ -233,6 +233,61 @@ actor SteamBridge {
         return await !cdp.isClosed
     }
 
+    /// Hides every visible popup the bottled client has put on screen, in
+    /// one evaluate on the connection the bridge already holds.
+    ///
+    /// The client's CEF windows exist to keep Steam's JS running — rendering
+    /// is this app's job, and the page mirrors every popup natively
+    /// (``SteamWebHost/adoptPopup(configuration:features:)``). The client
+    /// still shows its own window when it decides UI is needed — the
+    /// first-run login window above all, which OSS Wine paints as a black
+    /// rectangle. Each visible popup is put away through its own
+    /// `SteamClient.Window` binding, the same call the client uses to keep
+    /// that window parked when signed in, so the popup's JS stays alive and
+    /// only the pixels go.
+    ///
+    /// The popups are reached the way the page reaches its own: through
+    /// `g_PopupManager.m_mapPopups`, a name → record map whose `m_popup` is
+    /// the window. Membership in that map is what makes a window a client
+    /// popup, and `SharedJSContext` is the page doing the walking, so it is
+    /// excluded by identity.
+    ///
+    /// The window's own URL is not the discriminator it looks like: measured
+    /// against the running client, every popup's `location.href` reads back
+    /// as its opener's `https://steamloopback.host/index.html?…`, never the
+    /// `about:blank` the DevTools target list shows.
+    ///
+    /// Answers the names it hid, or nil when the bridge holds no connection
+    /// — the caller's cue that no sweep happened.
+    func hideVisibleClientPopups() async -> [String]? {
+        guard let cdp, await !cdp.isClosed else { return nil }
+        let hidden = try? await withDeadline(ClientLifecycle.cdpCallCap) {
+            try await cdp.evaluate(Self.popupHideScript)
+        }
+        guard let hidden else { return nil }
+        return (hidden ?? "").split(separator: "\n").map(String.init)
+    }
+
+    private static let popupHideScript = """
+    (function () {
+      var popups = window.g_PopupManager && g_PopupManager.m_mapPopups;
+      if (!popups) return "";
+      var hidden = [];
+      popups.forEach(function (record) {
+        try {
+          var win = record && record.m_popup;
+          if (!win || win === window || win.closed) return;
+          if (win.document.visibilityState !== "visible") return;
+          var client = win.SteamClient;
+          if (!client || !client.Window || !client.Window.HideWindow) return;
+          client.Window.HideWindow();
+          hidden.push(String(win.name || record.m_strName || "unnamed popup"));
+        } catch (e) {}
+      });
+      return hidden.join("\\n");
+    })()
+    """
+
     /// Asks the client's own SharedJSContext once whether
     /// `GetServicesInitialized()` is true. Steam's UI checks services once at
     /// boot, so a page booted before they are ready never picks them up and

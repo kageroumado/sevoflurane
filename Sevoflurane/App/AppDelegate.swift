@@ -48,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a throw during the rest of startup is still recorded.
         ExceptionWatch.install()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        ClientLifecycle.hidePopupsOverBridge = { [bridge] in
+            await bridge.hideVisibleClientPopups() ?? []
+        }
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
         NWJSRunner.log = { EventLog.enqueue(.client, $0) }
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }

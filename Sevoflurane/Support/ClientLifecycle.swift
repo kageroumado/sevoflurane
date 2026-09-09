@@ -159,13 +159,11 @@ nonisolated enum ClientLifecycle {
         return names
     }
 
-    /// One DevTools call — a shutdown ask, a popup hide, a script install —
-    /// gets at most this long, and less when its phase's deadline is nearer.
-    static let cdpCallCap: Duration = .seconds(5)
-
-    /// A popup sweep made outside a stop phase: the supervisor's cycle, the
-    /// login-window sweep, the toast twin.
-    static let popupSweepBudget: Duration = .seconds(15)
+    /// One DevTools call — a shutdown ask, a script install — gets at most
+    /// this long, and less when its phase's deadline is nearer. The cap is
+    /// the CDP budget's, because a call that holds a permit for longer holds
+    /// it against everything else that wants to talk to the client.
+    static let cdpCallCap = CDPBudget.callCap
 
     /// The smaller of a call's own cap and what remains of its phase.
     private static func cap(_ limit: Duration, until deadline: ContinuousClock.Instant) -> Duration {
@@ -256,7 +254,7 @@ nonisolated enum ClientLifecycle {
             await gracefulShutdown(until: cdpDeadline)
         }
         for _ in 0 ..< gracePolls {
-            _ = await hideVisibleClientPopups(until: cdpDeadline)
+            _ = await hideVisibleClientPopups()
             if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
                 log("stop audit: client-only graceful exit in "
                     + "\(stopBegan.duration(to: .now).components.seconds)s")
@@ -279,11 +277,9 @@ nonisolated enum ClientLifecycle {
         try? await Task.sleep(for: .seconds(1))
     }
 
-    /// Everything a stop says to the client over CDP — the shutdown ask and
-    /// each poll's popup sweep — draws on one absolute deadline: the ask's
-    /// cap plus the grace in seconds. A mute target can hold the ladder for
-    /// at most this long however many polls sweep it; the force rung's
-    /// subprocesses carry their own timeouts.
+    /// The shutdown ask draws on one absolute deadline: the ask's cap plus
+    /// the grace in seconds. A mute target can hold the ladder for at most
+    /// this long; the force rung's subprocesses carry their own timeouts.
     private static func cdpBudget(gracePolls: Int) -> Duration {
         cdpCallCap + .seconds(gracePolls)
     }
@@ -317,7 +313,7 @@ nonisolated enum ClientLifecycle {
                     // stop (an engine switch, `sevo client stop`) from
                     // narrating itself in Wine windows. It is optional: once
                     // the CDP budget is spent, the sweep does nothing.
-                    _ = await hideVisibleClientPopups(until: cdpDeadline)
+                    _ = await hideVisibleClientPopups()
                 }
                 if await bottleProcessIDs().isEmpty { clean = true; break }
                 try? await Task.sleep(for: .seconds(1))
@@ -429,61 +425,25 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Client window suppression
 
-    /// Hides any CEF popup window the bottled client has put on screen.
+    /// What hides the client's popups: one evaluate on the SharedJSContext
+    /// connection the bridge already holds
+    /// (``SteamBridge/hideVisibleClientPopups()``). The app points this
+    /// there; a process without a bridge — the `sevo` CLI — has no
+    /// connection to sweep through, and none of its paths ask. Same contract
+    /// as ``log``.
+    nonisolated(unsafe) static var hidePopupsOverBridge: @Sendable () async -> [String] = { [] }
+
+    /// Hides any CEF popup window the bottled client has put on screen, and
+    /// answers the names it hid for the caller's log.
     ///
-    /// The client's CEF windows exist to keep Steam's JS running — rendering
-    /// is this app's job, and the page mirrors every popup natively
-    /// (``SteamWebHost/adoptPopup(configuration:features:)``). The client
-    /// still shows its own window when it decides UI is needed — the
-    /// first-run login window above all, which OSS Wine paints as a black
-    /// rectangle. Each visible popup is put away through its own
-    /// `SteamClient.Window` binding, the same call the client uses to keep
-    /// the same window parked when signed in, so the popup's JS stays alive
-    /// and only the pixels go. `SharedJSContext` is never a candidate: popups
-    /// are the targets the popup manager opened onto `about:blank`.
-    ///
-    /// Returns the names of the windows it hid, for the caller's log.
-    ///
-    /// Each target's session gets the smaller of ``cdpCallCap`` and what is
-    /// left before `deadline`; a target the sweep reaches after the deadline
-    /// is skipped, so a run of mute targets ends the sweep instead of
-    /// stretching it. The sweep is optional work everywhere it is called.
-    static func hideVisibleClientPopups(
-        port: Int = BridgePorts.cdp,
-        until deadline: ContinuousClock.Instant = .now + popupSweepBudget,
-    ) async -> [String] {
-        guard ContinuousClock.now < deadline,
-              let targets = try? await CDPClient.discoverTargets(port: port) else {
-            return []
-        }
-        // One DevTools session per popup target, in series — the interval
-        // is what a busy CEF turns that into.
-        let hide = PerfProbe.supervisor.beginInterval(
-            "PopupHide", "targets=\(targets.count, privacy: .public)",
-        )
+    /// The sweep is a single evaluate over the bridge's live connection, and
+    /// every ask for one — the supervisor's cycle, a stop's polls, a client
+    /// notification's schedule — goes through ``PopupSweeper``, which is what
+    /// keeps two of them from running at the same millisecond.
+    static func hideVisibleClientPopups() async -> [String] {
+        let hide = PerfProbe.supervisor.beginInterval("PopupHide")
         defer { PerfProbe.supervisor.endInterval("PopupHide", hide) }
-        let script = """
-        (function () {
-          if (document.visibilityState !== "visible") return "";
-          if (!window.SteamClient || !SteamClient.Window
-              || !SteamClient.Window.HideWindow) return "";
-          SteamClient.Window.HideWindow();
-          return window.name || "unnamed popup";
-        })()
-        """
-        var hidden: [String] = []
-        for target in targets where ContinuousClock.now < deadline {
-            guard target["type"] as? String == "page",
-                  (target["url"] as? String)?.hasPrefix("about:blank") == true,
-                  let socketURL = (target["webSocketDebuggerUrl"] as? String).flatMap(URL.init)
-            else { continue }
-            let name = try? await withDeadline(cap(cdpCallCap, until: deadline)) {
-                try await CDPClient.evaluateOnce(socketURL: socketURL, script)
-            }
-            guard let name, !name.isEmpty else { continue }
-            hidden.append(name)
-        }
-        return hidden
+        return await PopupSweeper.shared.sweep()
     }
 
     /// Runs one of the app's standing scripts in the bottled client's own

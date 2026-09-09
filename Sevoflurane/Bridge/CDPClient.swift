@@ -35,28 +35,32 @@ actor CDPClient {
     /// connection even once the client's own listener is up. An unpooled
     /// connect always lands on the client's specific-address bind.
     static func discoverTargets(port: Int, timeout: TimeInterval = 3) async throws -> [[String: Any]] {
-        let session = URLSession(configuration: .ephemeral)
-        defer { session.finishTasksAndInvalidate() }
-        var wentUnanswered = false
-        for host in ["127.0.0.1", "[::1]"] {
-            guard let url = URL(string: "http://\(host):\(port)/json") else { continue }
-            var request = URLRequest(url: url)
-            request.timeoutInterval = timeout
-            let data: Data
-            do {
-                (data, _) = try await session.data(for: request)
-            } catch {
-                wentUnanswered = wentUnanswered || (error as? URLError)?.code == .timedOut
-                continue
+        try await CDPBudget.spend("target discovery") {
+            let session = URLSession(configuration: .ephemeral)
+            defer { session.finishTasksAndInvalidate() }
+            var wentUnanswered = false
+            for host in ["127.0.0.1", "[::1]"] {
+                guard let url = URL(string: "http://\(host):\(port)/json") else { continue }
+                var request = URLRequest(url: url)
+                request.timeoutInterval = timeout
+                let data: Data
+                do {
+                    (data, _) = try await session.data(for: request)
+                } catch {
+                    wentUnanswered = wentUnanswered || (error as? URLError)?.code == .timedOut
+                    continue
+                }
+                if let targets = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                    return targets
+                }
             }
-            if let targets = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                return targets
+            if wentUnanswered {
+                throw Failure.unanswered(
+                    "CDP on port \(port) accepted the connection and said nothing",
+                )
             }
+            throw Failure.unreachable("no CDP endpoint on port \(port) (is Steam up?)")
         }
-        if wentUnanswered {
-            throw Failure.unanswered("CDP on port \(port) accepted the connection and said nothing")
-        }
-        throw Failure.unreachable("no CDP endpoint on port \(port) (is Steam up?)")
     }
 
     func connect(port: Int, targetTitle: String = "SharedJSContext") async throws {
@@ -65,29 +69,49 @@ actor CDPClient {
               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init) else {
             throw Failure.unreachable("no \(targetTitle) target (half-wedged client?)")
         }
-        try await connect(socketURL: socketURL)
+        try await connect(socketURL: socketURL, consumingBindings: true)
         _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
     }
 
-    /// How long the handshake — socket open plus `Runtime.enable` — may
-    /// take. Every other call is bounded by its caller, whose budget it
-    /// knows; the handshake has one budget wherever it is made.
+    /// How long the handshake may take. Every other call is bounded by its
+    /// caller, whose budget it knows; the handshake has one budget wherever
+    /// it is made.
     static let connectBudget: Duration = .seconds(5)
 
-    /// Opens the socket and enables the Runtime domain, within
-    /// ``connectBudget``. A handshake that fails or runs out of time leaves
-    /// the client closed.
-    func connect(socketURL: URL) async throws {
+    /// Opens the socket within ``connectBudget``. A handshake that fails or
+    /// runs out of time leaves the client closed.
+    ///
+    /// `consumingBindings` enables the `Runtime` domain, which only the
+    /// bridge's persistent connection needs: `Runtime.bindingCalled` is what
+    /// carries the client's callbacks back, and `Runtime.evaluate` answers
+    /// without the domain enabled. A one-shot session that enabled it left
+    /// `Runtime` on in a renderer for a transport that was already gone.
+    func connect(socketURL: URL, consumingBindings: Bool) async throws {
         do {
-            try await withDeadline(Self.connectBudget) { try await self.handshake(socketURL: socketURL) }
+            try await withDeadline(Self.connectBudget) {
+                try await self.handshake(socketURL: socketURL, consumingBindings: consumingBindings)
+            }
         } catch {
             markClosed()
             throw error
         }
     }
 
-    private func handshake(socketURL: URL) async throws {
-        let socket = URLSession.shared.webSocketTask(with: socketURL)
+    /// One-shot sessions get an ephemeral session of their own, invalidated
+    /// with the socket: on the shared session they compete with the bridge's
+    /// persistent connection for the six connections `URLSession` allows per
+    /// host, and a cancelled task can sit in that pool.
+    private var ephemeralSession: URLSession?
+
+    private func handshake(socketURL: URL, consumingBindings: Bool) async throws {
+        let session: URLSession
+        if consumingBindings {
+            session = .shared
+        } else {
+            session = URLSession(configuration: .ephemeral)
+            ephemeralSession = session
+        }
+        let socket = session.webSocketTask(with: socketURL)
         socket.maximumMessageSize = 64 * 1024 * 1024
         task = socket
         socket.resume()
@@ -102,6 +126,7 @@ actor CDPClient {
             }
         }
         Task { await pump() }
+        guard consumingBindings else { return }
         _ = try await send(method: "Runtime.enable", params: [:])
     }
 
@@ -112,20 +137,28 @@ actor CDPClient {
     }
 
     /// One-shot evaluate against a specific target's debugger socket —
-    /// connect, evaluate, disconnect. For the client's popup targets; the
-    /// bridge's persistent connection stays on `SharedJSContext`.
+    /// connect, evaluate, disconnect. The bridge's persistent connection
+    /// stays on `SharedJSContext`; this is for the asks that stand outside
+    /// it, the shutdown ask and the standing scripts in the client's own
+    /// friends UI.
+    ///
+    /// It spends a permit from ``CDPBudget`` for its whole life, because a
+    /// session is what CEF's one DevTools thread pays for.
     static func evaluateOnce(socketURL: URL, _ expression: String) async throws -> String? {
-        let client = CDPClient(onPush: { _ in })
-        // `connect` sits inside the cleanup scope: a cancelled handshake
-        // must close the socket, pump and push stream like a failed evaluate.
-        do {
-            try await client.connect(socketURL: socketURL)
-            let value = try await client.evaluate(expression)
-            await client.disconnect()
-            return value
-        } catch {
-            await client.disconnect()
-            throw error
+        try await CDPBudget.spend("one-shot evaluate") {
+            let client = CDPClient(onPush: { _ in })
+            // `connect` sits inside the cleanup scope: a cancelled handshake
+            // must close the socket, pump and push stream like a failed
+            // evaluate.
+            do {
+                try await client.connect(socketURL: socketURL, consumingBindings: false)
+                let value = try await client.evaluate(expression)
+                await client.disconnect()
+                return value
+            } catch {
+                await client.disconnect()
+                throw error
+            }
         }
     }
 
@@ -244,7 +277,12 @@ actor CDPClient {
         pending.removeAll()
         pushSink?.finish()
         pushSink = nil
-        task?.cancel()
+        // A close frame, not a dropped connection: CEF then tears the
+        // session down itself instead of discovering a transport that
+        // stopped answering.
+        task?.cancel(with: .normalClosure, reason: nil)
         task = nil
+        ephemeralSession?.finishTasksAndInvalidate()
+        ephemeralSession = nil
     }
 }

@@ -312,21 +312,13 @@ final class SteamWebHost {
         // of its own (`notificationtoasts_N_desktop`), bottom-right on the
         // real desktop. The supervisor's sweep would catch it eventually;
         // catching it on the event is what keeps it from ever being seen.
-        //
-        // Every delay sweeps, because one notification can raise more than
-        // one window and they do not appear together: the toast is up within
-        // a second, and a chat window the twin opens behind it takes several
-        // more. Stopping at the first hit left that one on screen until the
-        // supervisor's next pass.
+        // The schedule belongs to ``PopupSweeper``, so a second notification
+        // arriving mid-sweep lengthens this one instead of racing it.
         Task(name: "Hide client toast twin") {
-            for delay in [500, 1_500, 3_000, 6_000] {
-                try? await Task.sleep(for: .milliseconds(delay))
-                let hidden = await ClientLifecycle.hideVisibleClientPopups()
-                if !hidden.isEmpty {
-                    EventLog.shared.log(
-                        .client, "hid the client's toast twin: \(hidden.joined(separator: ", "))",
-                    )
-                }
+            await PopupSweeper.shared.sweepAfterNotification { hidden in
+                EventLog.enqueue(
+                    .client, "hid the client's toast twin: \(hidden.joined(separator: ", "))",
+                )
             }
         }
     }
