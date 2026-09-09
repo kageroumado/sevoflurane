@@ -304,8 +304,9 @@ struct EngineSettings: View {
                 }
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Game windows")
-                    Text("Resizable windows scale the picture to fit.")
+                    Text("Make game windows resizable")
+                    Text("A resizable window scales the picture to fit. A full-screen game "
+                        + "keeps believing it owns the whole screen.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

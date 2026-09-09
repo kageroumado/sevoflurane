@@ -100,7 +100,7 @@ struct GamesSettings: View {
                 Text(treatment.label).tag(treatment.rawValue)
             }
         } label: {
-            Text("Game windows")
+            Text("Make game windows resizable")
         }
     }
 

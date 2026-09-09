@@ -201,3 +201,32 @@ struct ShaderPackagesTests {
         #expect(cunny.size == 12345)
     }
 }
+
+/// The window-mode ladder as the driver reads it and as the picker shows it.
+struct WindowTreatmentTests {
+    /// winemac.drv's `resizable_windows_from_option` looks at the first
+    /// character alone, so two rungs sharing one would silently become the
+    /// same setting.
+    @Test
+    func `every rung starts with a different letter`() {
+        let firsts = WindowTreatment.allCases.compactMap(\.rawValue.first)
+        #expect(firsts.count == WindowTreatment.allCases.count)
+        #expect(Set(firsts).count == firsts.count)
+    }
+
+    @Test
+    func `the rungs widen from off, and the default is fixed`() {
+        #expect(WindowTreatment.allCases.map(\.rawValue) == ["off", "fixed", "window", "all"])
+        #expect(GameConfig.defaults.windows == .fixed)
+    }
+
+    @Test
+    func `every rung says which games it reaches`() {
+        for treatment in WindowTreatment.allCases {
+            #expect(!treatment.label.isEmpty)
+            #expect(WindowTreatment.help.contains(treatment.summary))
+            #expect(WindowTreatment.rungs.contains(treatment.rawValue))
+        }
+        #expect(WindowTreatment.rungs.contains("inherit"))
+    }
+}

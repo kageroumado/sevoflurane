@@ -1,23 +1,60 @@
 import Foundation
 
 /// The built-in engine's treatment of a game's windows — the driver's
-/// `ResizableWindows` option (dormison winemac.drv).
+/// `ResizableWindows` option (dormison winemac.drv), which reads the first
+/// character of the value, so the raw values must stay distinct in it.
+///
+/// The cases are an ordered scope, widest last, and the labels say which
+/// games each one reaches: a collapsed picker shows only the selected label,
+/// so a label that names what it does without naming what it leaves out
+/// cannot be read against its neighbors.
 nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// Windows are left as the game makes them.
     case off
     /// A window the game locks to one size becomes resizable; the picture
     /// scales to fit.
     case fixed
-    /// As `fixed`, and a game filling the screen gets a resizable window of
+    /// As `fixed`, and a game covering the screen gets a resizable window of
     /// its own, still believing it fills the screen.
     case window
+    /// Every titled window becomes resizable, the ones the game already lets
+    /// the user resize included — which those games would otherwise redraw at
+    /// the new size rather than scale.
+    case all
 
+    /// The picker's line for this rung.
     var label: String {
         switch self {
-        case .off: "Use the game's window mode"
-        case .fixed: "Fixed-size windows become resizable"
-        case .window: "Make full-screen games resizable"
+        case .off: "Never"
+        case .fixed: "Games that run in a window"
+        case .window: "Games that run in a window or full screen"
+        case .all: "Every game window"
         }
+    }
+
+    /// What the rung covers, for a command line that has no picker to read
+    /// the neighboring rungs from.
+    var summary: String {
+        switch self {
+        case .off: "leaves every game window the size the game makes it"
+        case .fixed: "makes a window the game locked to one size resizable"
+        case .window: "as fixed, and a game covering the screen gets a resizable window of its own"
+        case .all: "makes every titled game window resizable, the ones the game already resizes included"
+        }
+    }
+
+    /// Every rung and what it covers, plus the level-clearing value the
+    /// config commands accept.
+    static var help: String {
+        allCases.map { "\($0.rawValue) — \($0.summary)" }
+            .joined(separator: "; ")
+            + "; inherit — take the level above's value"
+    }
+
+    /// The rung names alone, for the places a line of help has room for the
+    /// values but not for what they mean.
+    static var rungs: String {
+        allCases.map(\.rawValue).joined(separator: " | ") + " | inherit"
     }
 }
 

@@ -827,7 +827,7 @@ enum ConfigKeyParsing {
     static func windows(_ value: String) throws -> WindowTreatment? {
         if value == "inherit" { return nil }
         guard let treatment = WindowTreatment(rawValue: value) else {
-            Sevo.printError("windows must be off, fixed, window or inherit")
+            Sevo.printError("windows must be \(WindowTreatment.help)")
             throw SevoExit.badInvocation
         }
         return treatment
@@ -996,12 +996,14 @@ struct BottleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bottle",
         abstract: "CrossOver bottles and whether Steam is installed in each.",
+        discussion: "windows takes \(WindowTreatment.help).",
     )
 
     @Argument(help: "list | config") var verb: String = "list"
     @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value; for wine-debug: on, off, or Wine channels. Omit to read the key.") var value: String?
+    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on, off, or Wine channels. Omit to read the key.")
+    var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
     func run() async throws {
@@ -1059,10 +1061,9 @@ struct BottleCommand: AsyncParsableCommand {
             return
         }
         if key == "windows" {
-            // The built-in engine's window treatment at the bottle level:
-            // `off`, `fixed` (locked windows become resizable), `window`
-            // (fullscreen games get a window of their own too), or `inherit`
-            // for the global default. A game can override it: sevo app config.
+            // The built-in engine's window treatment at the bottle level;
+            // `WindowTreatment.help` carries the rungs, and a game overrides
+            // the bottle through `sevo app config`.
             let treatment = try ConfigKeyParsing.windows(value)
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.windows = treatment }
             print("windows \(Self.windowsSummary) — \(Self.gameReach)")
@@ -1143,10 +1144,12 @@ struct BottleCommand: AsyncParsableCommand {
 
     private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | wine-debug)"
 
-    /// The bottle's window treatment and where it comes from.
+    /// The bottle's window treatment, where it comes from, and what it
+    /// covers — the rung a reader cannot compare against its neighbors
+    /// without being told what those are.
     static var windowsSummary: String {
         let resolved = GameConfig.windows(bottle: SteamBottle.name)
-        return "\(resolved.value.rawValue) (\(resolved.source))"
+        return "\(resolved.value.rawValue) (\(resolved.source)) — \(resolved.value.summary)"
     }
 
     /// The bottle's upscaler and where it comes from.
@@ -1558,7 +1561,7 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "config",
             abstract: "A game's own settings, over the bottle's and the global defaults.",
             discussion: """
-            Keys: windows (off | fixed | window | inherit), upscaler (off | \
+            Keys: windows (\(WindowTreatment.help)), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
             shaders list names the packages), filter (nearest | bilinear | \
             lanczos | inherit — how the upscaler's last pass reaches the \
@@ -1575,7 +1578,8 @@ struct AppCommand: AsyncParsableCommand {
         @Argument var appid: Int
         @Argument(help: "windows | upscaler | filter | mouse | runner | detect | exe. Omit to print every setting.")
         var key: String?
-        @Argument(help: "New value. Omit to read the key.") var value: String?
+        @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
+        var value: String?
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
@@ -1589,7 +1593,7 @@ struct AppCommand: AsyncParsableCommand {
             case "windows":
                 guard let value else {
                     let resolved = GameConfig.windows(bottle: bottle, game: appid)
-                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    print("\(resolved.value.rawValue) (\(resolved.source)) — \(resolved.value.summary)")
                     return
                 }
                 let treatment = try ConfigKeyParsing.windows(value)
@@ -1724,7 +1728,7 @@ struct AppCommand: AsyncParsableCommand {
                 print(Sevo.json(payload, pretty: true))
                 return
             }
-            print("windows \(windows.value.rawValue) (\(windows.source))")
+            print("windows \(windows.value.rawValue) (\(windows.source)) — \(windows.value.summary)")
             print("upscaler \(upscaler.value) (\(upscaler.source))")
             print("filter \(filter.value.rawValue) (\(filter.source))")
             print("mouse \(mouse.value.rawValue) (\(mouse.source))")
