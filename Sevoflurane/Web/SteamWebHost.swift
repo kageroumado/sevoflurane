@@ -888,11 +888,20 @@ final class SteamWebHost {
 
     @ObservationIgnored private var context: SteamWindow?
     @ObservationIgnored private var contextWindow: NSWindow?
-    @ObservationIgnored private var contextMoveObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var popups: [ObjectIdentifier: SteamWindow] = [:]
     @ObservationIgnored private var coordinator: SteamWebCoordinator?
 
-    private static let contextParkOrigin = CGPoint(x: -20_000, y: -20_000)
+    /// Whether Steam's own window is somewhere a person can see it.
+    ///
+    /// AppKit's answer to the same question is worthless here: the context
+    /// page, faded menus and parked toasts are all ordered in without being
+    /// on any screen, so `NSApp.windows` and the `hasVisibleWindows` a reopen
+    /// carries both say yes when the user is looking at nothing. This is the
+    /// one answer the app acts on.
+    var isSteamOnScreen: Bool {
+        guard let desktop, desktop.isWindowVisible else { return false }
+        return SteamScreenSpace.isOnSomeScreen(desktop.appKitFrame)
+    }
 
     /// Every window the host owns, for `sevo` diagnostics
     /// (control endpoint `GET /windows`).
@@ -941,10 +950,6 @@ final class SteamWebHost {
         )
         detachPopups(reason: .pageTeardown)
         desktop = nil
-        if let observer = contextMoveObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        contextMoveObserver = nil
         context?.webView.stopLoading()
         context?.webView.removeFromSuperview()
         context = nil
@@ -980,18 +985,21 @@ final class SteamWebHost {
         context = page
 
         // The context renders nothing, but WebKit only schedules a web view
-        // that lives in a window, so it is parked off-screen.
+        // that lives in a window. A window with no size and no opacity at the
+        // origin schedules it exactly as an on-screen one does — measured:
+        // the page keeps `document.visibilityState == "visible"` and its
+        // animation frames at 60 Hz, because occlusion detection is off for
+        // this view — and it is not a phantom in `/windows`, in the window
+        // server's lists, or on a display the user just plugged in. The web
+        // view keeps its own 1280×800 frame inside it, so the page's viewport
+        // is the size Steam's UI expects rather than nothing.
         let window = NSWindow(
-            contentRect: NSRect(origin: Self.contextParkOrigin, size: CGSize(width: 1280, height: 800)),
+            contentRect: NSRect(origin: .zero, size: .zero),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false,
         )
-        // A display-mode change (a game going fullscreen) makes the window
-        // server relocate off-screen windows onto a live screen, where this
-        // one showed as a bare white 1280×800 rectangle. Invisible and
-        // click-through, so even a brief surfacing shows nothing — and the
-        // move observer below puts it straight back.
+        window.alphaValue = 0
         window.backgroundColor = .clear
         window.isOpaque = false
         window.ignoresMouseEvents = true
@@ -1002,18 +1010,6 @@ final class SteamWebHost {
         window.contentView = container
         window.orderBack(nil)
         contextWindow = window
-        contextMoveObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification, object: window, queue: .main,
-        ) { [weak window] _ in
-            MainActor.assumeIsolated {
-                guard let window, window.frame.origin != Self.contextParkOrigin else { return }
-                EventLog.shared.log(
-                    .window,
-                    "context window moved to \(window.frame.origin) (display change) — re-parking",
-                )
-                window.setFrameOrigin(Self.contextParkOrigin)
-            }
-        }
 
         status = "starting Steam"
         PerfProbe.poi.emitEvent("PageBoot")

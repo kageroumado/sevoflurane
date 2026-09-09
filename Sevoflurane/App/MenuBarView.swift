@@ -19,6 +19,7 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             PopoverHeader("Sevoflurane")
+            steamWindowRow
             healthCard
             BottleIncompleteChip()
             recentGames
@@ -41,6 +42,26 @@ struct MenuBarView: View {
         .onAppear {
             host.refreshRecentGames()
             SilentUpdates.shared.refresh()
+        }
+    }
+
+    // MARK: - Where Steam's window is
+
+    /// A running client with no window on screen looks exactly like a client
+    /// that failed to start, and the only thing on screen saying otherwise is
+    /// an 18-point menu-bar glyph. So the popover says which it is, next to
+    /// the one click that fixes it.
+    @ViewBuilder private var steamWindowRow: some View {
+        if canOpenSteam, !host.isSteamOnScreen {
+            HStack(spacing: Theme.Space.xs) {
+                Image(systemName: "macwindow")
+                Text("Steam window: hidden")
+                Spacer()
+                Button("Show") { host.showSteam() }
+                    .buttonStyle(.link)
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
         }
     }
 

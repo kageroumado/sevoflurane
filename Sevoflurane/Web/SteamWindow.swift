@@ -242,6 +242,24 @@ final class SteamWindow: NSObject {
             // user put it is a window the user has to place again every time.
             window.center()
         }
+        centerIfOffScreen(window, placedBy: "the frame it was built with")
+    }
+
+    /// Brings a window back onto a display when the frame it was given lands
+    /// on none. A frame saved on a display that has since been unplugged, and
+    /// a `MoveTo` computed against Steam's own screen model, both produce a
+    /// window that exists and that nobody can reach — and the desktop
+    /// window's frame is autosaved, so one bad placement persists across
+    /// every later launch.
+    private func centerIfOffScreen(_ window: NSWindow, placedBy source: String) {
+        guard role.needsAReachableFrame,
+              !SteamScreenSpace.isOnSomeScreen(window.frame) else { return }
+        EventLog.shared.log(
+            .window,
+            "\(name): \(source) put it at \(NSStringFromRect(window.frame)), "
+                + "which is on no display — centering instead",
+        )
+        window.center()
     }
 
     /// A dialog sits in the middle of the desktop window when there is one on
@@ -336,7 +354,17 @@ final class SteamWindow: NSObject {
             window.collectionBehavior.insert(.fullScreenPrimary)
             if role == .desktop {
                 window.title = "Steam"
-                window.setFrameAutosaveName(Self.desktopFrameName)
+                if !window.setFrameAutosaveName(Self.desktopFrameName) {
+                    // The name belongs to another `NSWindow` that is still
+                    // alive — the desktop window is rebuilt on every close and
+                    // released only by ARC. This one will not remember where
+                    // the user puts it.
+                    EventLog.shared.log(
+                        .window,
+                        "the desktop window could not claim its saved frame: "
+                            + "\(Self.desktopFrameName) is held by another window",
+                    )
+                }
                 // Steam's strip is 32pt tall; the bare titlebar's ~28pt sets
                 // the traffic lights slightly high against Steam's own row. An
                 // empty unified-compact toolbar is the supported way to ask
@@ -635,6 +663,7 @@ final class SteamWindow: NSObject {
                 size: window.frame.size,
             ),
         )
+        centerIfOffScreen(window, placedBy: "Steam's MoveTo(\(Int(x)), \(Int(y)))")
     }
 
     private func resizeTo(width: CGFloat, height: CGFloat) {
@@ -681,27 +710,33 @@ final class SteamWindow: NSObject {
         return CGPoint(x: rect.minX, y: rect.minY)
     }
 
+    /// This window's geometry and the display it is on, in Steam's
+    /// coordinates. The screen's own origin travels with its size, the way
+    /// ``monitorDimensions()`` reports `nAvailableLeft`: a display at a
+    /// negative x holds windows at a negative x, and a screen described by
+    /// size alone cannot say so.
     private func dimensions() -> [String: Any] {
         let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let screenRect = SteamScreenSpace.steamRect(from: screen.frame)
+        var answer: [String: Any] = [
+            "screenLeft": screenRect.minX,
+            "screenTop": screenRect.minY,
+            "screenWidth": screenRect.width,
+            "screenHeight": screenRect.height,
+        ]
         guard let window else {
-            return [
-                "x": requestedOrigin?.x ?? 0,
-                "y": requestedOrigin?.y ?? 0,
-                "width": requestedSize.width,
-                "height": requestedSize.height,
-                "screenWidth": screen.frame.width,
-                "screenHeight": screen.frame.height,
-            ]
+            answer["x"] = requestedOrigin?.x ?? 0
+            answer["y"] = requestedOrigin?.y ?? 0
+            answer["width"] = requestedSize.width
+            answer["height"] = requestedSize.height
+            return answer
         }
         let rect = SteamScreenSpace.steamRect(from: window.frame)
-        return [
-            "x": rect.minX,
-            "y": rect.minY,
-            "width": window.contentLayoutRect.width,
-            "height": window.contentLayoutRect.height,
-            "screenWidth": screen.frame.width,
-            "screenHeight": screen.frame.height,
-        ]
+        answer["x"] = rect.minX
+        answer["y"] = rect.minY
+        answer["width"] = window.contentLayoutRect.width
+        answer["height"] = window.contentLayoutRect.height
+        return answer
     }
 
     private func monitorDimensions() -> [String: Any] {

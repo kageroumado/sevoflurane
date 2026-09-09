@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    func applicationDidFinishLaunching(_: Notification) {
+    func applicationDidFinishLaunching(_ note: Notification) {
         #if DEBUG
             // The unit tests link against this binary, so running them
             // launches the app. Anything started here would boot the bottle,
@@ -99,6 +99,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
         #endif
+        // A person opened the app — the Dock, the Finder, `open` — rather
+        // than the system opening it as a login item or to handle a file.
+        // The window is what they came for, so it comes up as soon as the
+        // client is healthy; a login-item launch stays a menu-bar app.
+        if note.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
+            EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
+            supervisor.showLibraryWhenHealthy()
+        }
         // Up before provisioning gates so `sevo status` can see the app even
         // while the setup wizard is waiting for the user.
         controlServer.start()
@@ -439,13 +447,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The context web view lives in an off-screen window, so AppKit always
-    /// reports a visible window and its own reopen logic would never fire.
+    /// The context page lives in a window of its own, so AppKit counts a
+    /// visible window and its own reopen logic would never fire. `host`
+    /// answers the question the user is actually asking.
     func applicationShouldHandleReopen(
         _: NSApplication,
         hasVisibleWindows _: Bool,
     ) -> Bool {
-        EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — showing Steam")
+        EventLog.shared.log(
+            .window,
+            "reopen request (Dock icon or Finder) — Steam's window is "
+                + "\(host.isSteamOnScreen ? "on screen; bringing it forward" : "hidden; showing it")",
+        )
         host.showSteam()
         return true
     }

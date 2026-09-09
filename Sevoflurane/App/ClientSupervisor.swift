@@ -245,9 +245,17 @@ final class ClientSupervisor {
     /// with the services still down is the "the user just signed in" edge,
     /// which needs the page reloaded rather than waited out.
     @ObservationIgnored private var wasAwaitingSignIn = false
-    /// Set when sign-in completes so the library opens by itself the moment
-    /// everything is healthy.
+    /// Set when the library is to open by itself the moment everything is
+    /// healthy: sign-in completing, and a person opening the app.
     @ObservationIgnored private var showLibraryOnHealthy = false
+
+    /// Puts Steam's window on screen as soon as the client is healthy. A
+    /// person who opened the app came for that window; sign-in ending in
+    /// silence reads as a crash.
+    func showLibraryWhenHealthy() {
+        showLibraryOnHealthy = true
+    }
+
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
     /// When the current client launch began, for the boot-audit line at the

@@ -20,16 +20,10 @@ enum ActivationPolicy {
     static func recedeIfLastWindow(closing: NSWindow?) {
         let stillUp = NSApp.windows.contains { window in
             window !== closing && window.isVisible && window.alphaValue > 0
-                && !(window is NSPanel) && window.isOnSomeScreen
+                && !(window is NSPanel) && SteamScreenSpace.isOnSomeScreen(window.frame)
         }
         if !stillUp {
             NSApp.setActivationPolicy(.accessory)
         }
-    }
-}
-
-private extension NSWindow {
-    var isOnSomeScreen: Bool {
-        NSScreen.screens.contains { $0.frame.intersects(frame) }
     }
 }

@@ -35,6 +35,19 @@ enum SteamScreenSpace {
         CGPoint(x: steamX, y: flipLine - steamY - size.height)
     }
 
+    /// Whether a frame lands anywhere a person could see it.
+    ///
+    /// Tested against each display's own frame rather than the box around all
+    /// of them: an L-shaped layout — a portrait display beside a wide one —
+    /// leaves corners inside that box which no display covers, and a window
+    /// there is as lost as one at (−20000, −20000).
+    static func isOnSomeScreen(
+        _ frame: CGRect,
+        screens: [CGRect] = NSScreen.screens.map(\.frame),
+    ) -> Bool {
+        screens.contains { $0.intersects(frame) }
+    }
+
     /// The mouse location in Steam's convention.
     static var steamMouseLocation: CGPoint {
         let point = NSEvent.mouseLocation

@@ -128,6 +128,22 @@ enum SteamWindowRole {
         self != .toast
     }
 
+    /// Whether a frame that lands on no display is a mistake.
+    ///
+    /// A window a person opens and then goes looking for has to be somewhere
+    /// they can reach, and the desktop window's frame is autosaved, so one
+    /// bad placement outlives the session. The kinds left out are the ones
+    /// Steam deliberately puts nowhere: a context menu is parked at
+    /// (99788, 99544) between uses and re-placed against its parent on every
+    /// show, a toast is never shown at all, the keyboard is a panel Steam
+    /// positions itself, and the overlay is placed over the game.
+    var needsAReachableFrame: Bool {
+        switch self {
+        case .context, .menu, .keyboard, .toast, .gameOverlay: false
+        case .desktop, .bigPicture, .login, .controllerConfig, .auxiliary, .friends, .chat, .dialog: true
+        }
+    }
+
     /// Whether WebKit may mark this window's page hidden when the occlusion
     /// service says it is covered — which stops animations, rAF, and the layer
     /// commits behind them.
@@ -135,8 +151,8 @@ enum SteamWindowRole {
     /// On for the windows that are genuinely on screen and can genuinely be
     /// covered: an obscured library should no more animate here than Steam's
     /// own client animates one on Windows. Off for the kinds whose pages
-    /// would otherwise never run at all: the context page is parked
-    /// off-screen on purpose, a toast is never shown at all and still has a
+    /// would otherwise never run at all: the context page lives in a window
+    /// with no size, a toast is never shown at all and still has a
     /// dismissal timer to tick, and pop-up-level panels report as occluded
     /// even while visible — their pages then never run their fade-ins, and
     /// Steam's menu re-measure loop flickers the window.
