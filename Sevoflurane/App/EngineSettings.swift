@@ -12,7 +12,7 @@ struct EngineSettings: View {
     let shaders: ShaderStore
     let compatibility: CompatibilityStore
     let provisioner: Provisioner
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
 
     /// The bottle picker's sentinel for "type a new name".
     private static let newBottleTag = "\u{0}new"
@@ -76,7 +76,7 @@ struct EngineSettings: View {
         } footer: {
             Text("Each bottle has its own Steam installation, games, and settings.")
         }
-        .highlightable(id: "engine.selection", highlighted: highlighted)
+        .highlightable(.engineSelection, highlighted: highlighted)
     }
 
     private var enginePicker: some View {
@@ -288,7 +288,7 @@ struct EngineSettings: View {
                 }
             }
             .toggleStyle(.switch)
-            .highlightable(id: "engine.msync", highlighted: highlighted)
+            .highlightable(.engineMsync, highlighted: highlighted)
         } footer: {
             Text("Restart Steam to apply this setting.")
         }
@@ -317,11 +317,11 @@ struct EngineSettings: View {
                     $0.windows = treatment
                 }
             }
-            .highlightable(id: "engine.windows", highlighted: highlighted)
+            .highlightable(.engineWindows, highlighted: highlighted)
             UpscalerPicker(shaders: shaders, selection: upscalerBinding)
-                .highlightable(id: "engine.upscaler", highlighted: highlighted)
+                .highlightable(.engineUpscaler, highlighted: highlighted)
             FinalFilterPicker(selection: filterBinding)
-                .highlightable(id: "engine.filter", highlighted: highlighted)
+                .highlightable(.engineFilter, highlighted: highlighted)
             mousePicker
         } footer: {
             Text("Defaults for Dormison games. Override them in Games. "
@@ -378,7 +378,7 @@ struct EngineSettings: View {
                 $0.mouse = curve
             }
         }
-        .highlightable(id: "engine.mouse", highlighted: highlighted)
+        .highlightable(.engineMouse, highlighted: highlighted)
     }
 
     // MARK: - Dependencies
@@ -393,7 +393,7 @@ struct EngineSettings: View {
         } footer: {
             Text("Install a component when a game reports a missing DLL or displays missing text.")
         }
-        .highlightable(id: "engine.dependencies", highlighted: highlighted)
+        .highlightable(.engineDependencies, highlighted: highlighted)
     }
 
     private func dependencyRow(_ row: CompatibilityStore.DependencyRow) -> some View {
@@ -474,7 +474,7 @@ struct EngineSettings: View {
         } footer: {
             Text("Choose the installed Windows DLL (native), Wine's DLL (builtin), or the listed fallback order. Applies at the next game launch.")
         }
-        .highlightable(id: "engine.overrides", highlighted: highlighted)
+        .highlightable(.engineOverrides, highlighted: highlighted)
     }
 
     // MARK: - Advanced
@@ -492,7 +492,7 @@ struct EngineSettings: View {
                 Button("Open…") { compatibility.openWineConfiguration() }
                     .disabled(store.isSwitching)
             }
-            .highlightable(id: "engine.winecfg", highlighted: highlighted)
+            .highlightable(.engineWinecfg, highlighted: highlighted)
             Toggle(isOn: $wineDiagnostics) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Wine diagnostics log")
@@ -506,7 +506,7 @@ struct EngineSettings: View {
             .onChange(of: wineDiagnostics) { _, enabled in
                 WineLog.setDiagnosing(enabled)
             }
-            .highlightable(id: "engine.wineDiagnostics", highlighted: highlighted)
+            .highlightable(.engineWineDiagnostics, highlighted: highlighted)
             RepairRow(provisioner: provisioner, highlighted: highlighted)
                 .disabled(store.isSwitching)
         } header: {
@@ -521,7 +521,7 @@ struct EngineSettings: View {
 /// that re-runs it. Lives here and in the gallery's Repair tiles.
 struct RepairRow: View {
     let provisioner: Provisioner
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -534,7 +534,7 @@ struct RepairRow: View {
             }
             .disabled(isWorking)
         }
-        .highlightable(id: "engine.repair", highlighted: highlighted)
+        .highlightable(.engineRepair, highlighted: highlighted)
         .task { await provisioner.refreshDetection() }
     }
 

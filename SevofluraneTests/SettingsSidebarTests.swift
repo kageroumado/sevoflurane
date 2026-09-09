@@ -18,7 +18,7 @@ struct SettingsSidebarTests {
     final class Bindings {
         var category = SettingsCategory.general
         var searchText = ""
-        var highlighted: String?
+        var highlighted: SettingsAnchor?
     }
 
     private struct Harness: View {
@@ -57,7 +57,7 @@ struct SettingsSidebarTests {
             // Picking a result moves the selection while the widest set of
             // rows is on screen — the transaction the crash reported.
             bindings.category = cycle.isMultiple(of: 2) ? .engine : .games
-            bindings.highlighted = "engine.windows"
+            bindings.highlighted = .engineWindows
             settle(window)
             bindings.searchText = "en"
             settle(window)
@@ -75,5 +75,50 @@ struct SettingsSidebarTests {
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         window.layoutIfNeeded()
         CATransaction.flush()
+    }
+}
+
+/// Search and the panes name the same rows. A searchable setting with no row
+/// to flash sends the user to a pane and then stops; a row with an anchor
+/// nothing searches for can only be found by scrolling.
+@MainActor
+struct SettingsSearchTests {
+    @Test
+    func `every searchable setting has a row, and every row is searchable`() {
+        let searchable = Set(
+            SettingsCategory.allCases.flatMap { $0.searchableItems.map(\.id) },
+        )
+        #expect(searchable == Set(SettingsAnchor.allCases))
+    }
+
+    @Test
+    func `an id belongs to exactly one setting, in its own pane`() {
+        var seen: Set<SettingsAnchor> = []
+        for category in SettingsCategory.allCases {
+            for item in category.searchableItems {
+                #expect(seen.insert(item.id).inserted, "\(item.id.rawValue) is listed twice")
+                #expect(
+                    item.id.rawValue.hasPrefix("\(category.rawValue)."),
+                    "\(item.id.rawValue) is listed under \(category.rawValue)",
+                )
+            }
+        }
+    }
+
+    @Test
+    func `the holes the playtest found are closed`() {
+        let searchable = SettingsCategory.allCases.flatMap { $0.searchableItems }
+        for anchor in [
+            SettingsAnchor.gamesUpscaler, .aboutDiagnostics, .engineMouse, .engineWineDiagnostics,
+        ] {
+            #expect(searchable.contains { $0.id == anchor })
+        }
+        // The searches that reached nothing: each names its pane's setting now.
+        for needle in ["upscaler", "diagnostics", "mouse"] {
+            let panes = SettingsCategory.allCases.filter { category in
+                category.searchableItems.contains { $0.matches(needle) }
+            }
+            #expect(panes.count >= 2, "\(needle) reaches only \(panes.map(\.rawValue))")
+        }
     }
 }

@@ -9,7 +9,7 @@ struct GeneralSettings: View {
     let provisioner: Provisioner
     let store: StorageStore
     var steam: SteamActions?
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
     /// The supervisor to stand down before an uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
     @State private var openAtLogin = false
@@ -39,7 +39,7 @@ struct GeneralSettings: View {
                 .onChange(of: openAtLogin) { _, enabled in
                     provisioner.setOpenAtLogin(enabled)
                 }
-                .highlightable(id: "general.openAtLogin", highlighted: highlighted)
+                .highlightable(.generalOpenAtLogin, highlighted: highlighted)
                 if let steam {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -51,7 +51,7 @@ struct GeneralSettings: View {
                         Spacer()
                         Button("Open…") { steam.openSteamSettings() }
                     }
-                    .highlightable(id: "general.steamSettings", highlighted: highlighted)
+                    .highlightable(.generalSteamSettings, highlighted: highlighted)
                 }
             }
             Section {
@@ -121,7 +121,7 @@ struct GeneralSettings: View {
             }
             .disabled(cliBusy)
         }
-        .highlightable(id: "general.cli", highlighted: highlighted)
+        .highlightable(.generalCli, highlighted: highlighted)
     }
 
     private func agentRow(_ row: Binding<AgentRow>) -> some View {
@@ -151,7 +151,7 @@ struct GeneralSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .highlightable(id: "general.agents", highlighted: highlighted)
+        .highlightable(.generalAgents, highlighted: highlighted)
     }
 
     /// For every agent that speaks MCP but isn't in the list: the command,
@@ -209,7 +209,7 @@ struct GeneralSettings: View {
                 Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
                     .disabled(store.isUninstalling)
             }
-            .highlightable(id: "general.uninstall", highlighted: highlighted)
+            .highlightable(.generalUninstall, highlighted: highlighted)
         }
         .confirmationDialog(
             "Uninstall Sevoflurane?",
@@ -276,7 +276,7 @@ struct GraphicsSettings: View {
     let store: GraphicsStore
     let shaders: ShaderStore
     var steam: SteamActions?
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
     @State private var showingRendererHelp = false
     @State private var removingShaderPackage: ShaderPackages.Package?
     @State private var d3dMetalError: String?
@@ -314,7 +314,7 @@ struct GraphicsSettings: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                .highlightable(id: "graphics.renderer", highlighted: highlighted)
+                .highlightable(.graphicsRenderer, highlighted: highlighted)
                 VStack(alignment: .leading, spacing: 4) {
                     Picker("GPU reported to games", selection: graphics.gpu) {
                         ForEach(GPUIdentity.allCases, id: \.self) { identity in
@@ -325,7 +325,7 @@ struct GraphicsSettings: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                .highlightable(id: "graphics.gpu", highlighted: highlighted)
+                .highlightable(.graphicsGpu, highlighted: highlighted)
                 if let booted = BottleGraphics.bootedSelection()?.renderer,
                    booted != store.selection.renderer {
                     HStack {
@@ -377,7 +377,7 @@ struct GraphicsSettings: View {
         } footer: {
             Text("Choose an upscaler in Engine or Games.")
         }
-        .highlightable(id: "graphics.shaders", highlighted: highlighted)
+        .highlightable(.graphicsShaders, highlighted: highlighted)
         .confirmationDialog(
             "Remove \(removingShaderPackage?.title ?? "")?",
             isPresented: Binding(
@@ -738,13 +738,13 @@ private struct RendererHelp: View {
 struct StorageSettings: View {
     let store: StorageStore
     var steam: SteamActions?
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
 
     var body: some View {
         Form {
             Section {
                 ForEach(store.entries) { entry in
-                    if entry.id == "games", !store.games.isEmpty {
+                    if entry.id == StorageInventory.Entry.gamesID, !store.games.isEmpty {
                         DisclosureGroup { gameList } label: { row(entry) }
                     } else {
                         row(entry)
@@ -876,7 +876,7 @@ struct StorageSettings: View {
                     + "copy on disk, no second download. Steam verifies them on "
                     + "first launch; save files stay per-bottle.")
             }
-            .highlightable(id: "storage.sharing", highlighted: highlighted)
+            .highlightable(.storageSharing, highlighted: highlighted)
         }
     }
 
@@ -905,7 +905,12 @@ struct StorageSettings: View {
                     .help("Move \(entry.name.lowercased()) to the Trash")
             }
         }
-        .highlightable(id: "storage.\(entry.id)", highlighted: highlighted)
+        // Games is the one row search can reach; the rest are read, not
+        // navigated to.
+        .highlightable(
+            entry.id == StorageInventory.Entry.gamesID ? .storageGames : nil,
+            highlighted: highlighted,
+        )
     }
 
     fileprivate static func size(_ bytes: Int64) -> String {
@@ -919,7 +924,7 @@ struct StorageSettings: View {
 /// wrapped in its own Form so it stands alone.
 struct RepairSettings: View {
     let provisioner: Provisioner
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
 
     var body: some View {
         Form {
@@ -936,7 +941,7 @@ struct RepairSettings: View {
 // MARK: - About
 
 struct AboutSettings: View {
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
     @State private var savingDiagnostics = false
     @State private var diagnosticsError: String?
 
@@ -990,7 +995,7 @@ struct AboutSettings: View {
                 }
                 Button(savingDiagnostics ? "Saving…" : "Save Diagnostics…") { saveDiagnostics() }
                     .disabled(savingDiagnostics)
-                    .highlightable(id: "about.diagnostics", highlighted: highlighted)
+                    .highlightable(.aboutDiagnostics, highlighted: highlighted)
             }
             .controlSize(.small)
             .padding(.top, 6)
@@ -1003,7 +1008,7 @@ struct AboutSettings: View {
                 Text(diagnosticsError).font(.caption).foregroundStyle(.red)
             }
         }
-        .highlightable(id: "about.version", highlighted: highlighted)
+        .highlightable(.aboutVersion, highlighted: highlighted)
         .padding(.vertical, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }

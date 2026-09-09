@@ -33,7 +33,7 @@ struct SettingsView: View {
     var supervisor: ClientSupervisor?
     @State private var category: SettingsCategory = .general
     @State private var searchText = ""
-    @State private var highlighted: String?
+    @State private var highlighted: SettingsAnchor?
 
     var body: some View {
         NavigationSplitView {
@@ -112,22 +112,22 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:
             [
                 SearchableSetting(
-                    id: "general.openAtLogin",
+                    id: .generalOpenAtLogin,
                     title: "Open at login",
                     keywords: ["login", "startup", "start", "launch", "menu bar", "automatic"],
                 ),
                 SearchableSetting(
-                    id: "general.steamSettings",
+                    id: .generalSteamSettings,
                     title: "Steam's own settings",
                     keywords: ["steam", "settings", "downloads", "controller", "interface"],
                 ),
                 SearchableSetting(
-                    id: "general.cli",
+                    id: .generalCli,
                     title: "Command-line tool",
                     keywords: ["cli", "sevo", "command", "terminal", "path"],
                 ),
                 SearchableSetting(
-                    id: "general.agents",
+                    id: .generalAgents,
                     title: "AI assistants (MCP)",
                     keywords: [
                         "mcp", "agent", "assistant", "ai", "claude", "codex",
@@ -135,7 +135,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "general.uninstall",
+                    id: .generalUninstall,
                     title: "Uninstall Sevoflurane",
                     keywords: ["uninstall", "remove", "delete", "reset", "clean"],
                 ),
@@ -143,7 +143,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .graphics:
             [
                 SearchableSetting(
-                    id: "graphics.renderer",
+                    id: .graphicsRenderer,
                     title: "Game renderer",
                     keywords: [
                         "renderer", "graphics", "direct3d", "d3d", "d3dmetal",
@@ -151,7 +151,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "graphics.gpu",
+                    id: .graphicsGpu,
                     title: "Report the GPU as",
                     keywords: [
                         "gpu", "graphics card", "nvidia", "geforce", "amd", "radeon",
@@ -159,7 +159,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "graphics.shaders",
+                    id: .graphicsShaders,
                     title: "Shader packages",
                     keywords: [
                         "shader", "package", "upscaler", "anime4k", "cunny",
@@ -170,7 +170,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .engine:
             [
                 SearchableSetting(
-                    id: "engine.selection",
+                    id: .engineSelection,
                     title: "Wine engine & bottle",
                     keywords: [
                         "engine", "wine", "crossover", "preview", "bottle",
@@ -178,7 +178,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "engine.msync",
+                    id: .engineMsync,
                     title: "Enhanced synchronization (msync)",
                     keywords: [
                         "msync", "sync", "synchronization", "performance",
@@ -186,7 +186,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "engine.windows",
+                    id: .engineWindows,
                     title: "Make game windows resizable",
                     keywords: [
                         "window", "resizable", "resize", "move", "fullscreen",
@@ -194,7 +194,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "engine.upscaler",
+                    id: .engineUpscaler,
                     title: "Upscaler",
                     keywords: [
                         "upscaler", "upscale", "lanczos", "metalfx", "shader",
@@ -202,12 +202,12 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "engine.filter",
+                    id: .engineFilter,
                     title: "Final filter",
                     keywords: ["filter", "nearest", "bilinear", "lanczos", "resample", "pixel"],
                 ),
                 SearchableSetting(
-                    id: "engine.dependencies",
+                    id: .engineDependencies,
                     title: "Missing game dependencies",
                     keywords: [
                         "dependency", "vcruntime", "msvcp140", "vcredist", "vc++",
@@ -217,17 +217,33 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "engine.winecfg",
+                    id: .engineMouse,
+                    title: "Mouse",
+                    keywords: [
+                        "mouse", "pointer", "cursor", "acceleration", "linear",
+                        "sensitivity", "aim", "mouse-look", "fps",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .engineWinecfg,
                     title: "Wine configuration",
                     keywords: ["wine", "winecfg", "windows version", "configuration"],
                 ),
                 SearchableSetting(
-                    id: "engine.overrides",
+                    id: .engineWineDiagnostics,
+                    title: "Wine diagnostics log",
+                    keywords: [
+                        "wine", "diagnostics", "log", "logging", "debug",
+                        "winedebug", "trace", "error", "crash",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .engineOverrides,
                     title: "DLL overrides",
                     keywords: ["dll", "override", "native", "builtin", "library"],
                 ),
                 SearchableSetting(
-                    id: "engine.repair",
+                    id: .engineRepair,
                     title: "Repair the installation",
                     keywords: [
                         "repair", "reinstall", "fix", "setup", "provision",
@@ -238,18 +254,26 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .games:
             [
                 SearchableSetting(
-                    id: "games.settings",
+                    id: .gamesSettings,
                     title: "Settings for one game",
                     keywords: [
                         "game", "per-game", "app", "inherit", "window", "upscaler",
                         "filter", "mouse", "override",
                     ],
                 ),
+                SearchableSetting(
+                    id: .gamesUpscaler,
+                    title: "Upscaler for one game",
+                    keywords: [
+                        "upscaler", "upscale", "lanczos", "metalfx", "shader",
+                        "anime4k", "cunny", "resolution", "sharp", "per-game",
+                    ],
+                ),
             ]
         case .storage:
             [
                 SearchableSetting(
-                    id: "storage.games",
+                    id: .storageGames,
                     title: "What is using space",
                     keywords: [
                         "storage", "space", "disk", "size", "games", "cache",
@@ -257,7 +281,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
-                    id: "storage.sharing",
+                    id: .storageSharing,
                     title: "Share games between bottles",
                     keywords: [
                         "share", "link", "symlink", "bottle", "games",
@@ -266,17 +290,27 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
             ]
         case .about:
-            [SearchableSetting(
-                id: "about.version",
-                title: "Version",
-                keywords: ["about", "version", "build", "github", "source", "kageroumado"],
-            )]
+            [
+                SearchableSetting(
+                    id: .aboutVersion,
+                    title: "Version",
+                    keywords: ["about", "version", "build", "github", "source", "kageroumado"],
+                ),
+                SearchableSetting(
+                    id: .aboutDiagnostics,
+                    title: "Save Diagnostics…",
+                    keywords: [
+                        "diagnostics", "diagnostic", "report", "logs", "log",
+                        "zip", "bug", "crash", "support", "send",
+                    ],
+                ),
+            ]
         }
     }
 }
 
 struct SearchableSetting: Identifiable, Equatable {
-    let id: String
+    let id: SettingsAnchor
     let title: String
     let keywords: [String]
 
@@ -286,12 +320,46 @@ struct SearchableSetting: Identifiable, Equatable {
     }
 }
 
+/// Every row search can send someone to. A pane marks its row with the anchor
+/// (``SwiftUI/View/highlightable(_:highlighted:)``) and
+/// ``SettingsCategory/searchableItems`` names it; the two sets are the same
+/// one, and `SettingsSearchTests` fails if they drift. A row with no anchor is
+/// a row search cannot reach, and an anchor with no searchable item is a flash
+/// nothing can ask for.
+enum SettingsAnchor: String, CaseIterable {
+    case generalOpenAtLogin = "general.openAtLogin"
+    case generalSteamSettings = "general.steamSettings"
+    case generalCli = "general.cli"
+    case generalAgents = "general.agents"
+    case generalUninstall = "general.uninstall"
+    case graphicsRenderer = "graphics.renderer"
+    case graphicsGpu = "graphics.gpu"
+    case graphicsShaders = "graphics.shaders"
+    case engineSelection = "engine.selection"
+    case engineMsync = "engine.msync"
+    case engineWindows = "engine.windows"
+    case engineUpscaler = "engine.upscaler"
+    case engineFilter = "engine.filter"
+    case engineMouse = "engine.mouse"
+    case engineDependencies = "engine.dependencies"
+    case engineOverrides = "engine.overrides"
+    case engineWinecfg = "engine.winecfg"
+    case engineWineDiagnostics = "engine.wineDiagnostics"
+    case engineRepair = "engine.repair"
+    case gamesSettings = "games.settings"
+    case gamesUpscaler = "games.upscaler"
+    case storageGames = "storage.games"
+    case storageSharing = "storage.sharing"
+    case aboutDiagnostics = "about.diagnostics"
+    case aboutVersion = "about.version"
+}
+
 // MARK: - Sidebar
 
 struct SettingsSidebar: View {
     @Binding var category: SettingsCategory
     @Binding var searchText: String
-    @Binding var highlighted: String?
+    @Binding var highlighted: SettingsAnchor?
 
     /// One row per matching setting, each carrying the pane it lives in.
     ///
@@ -312,7 +380,7 @@ struct SettingsSidebar: View {
         let category: SettingsCategory
         let item: SearchableSetting
 
-        var id: String { item.id }
+        var id: SettingsAnchor { item.id }
     }
 
     var body: some View {
@@ -373,7 +441,7 @@ private struct SettingsPane: View {
     let shaders: ShaderStore
     let compatibility: CompatibilityStore
     let steam: SteamActions?
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
     var supervisor: ClientSupervisor?
 
     var body: some View {
@@ -405,8 +473,8 @@ private struct SettingsPane: View {
 
 /// Flashes a row the search sent the user to.
 private struct HighlightModifier: ViewModifier {
-    let id: String
-    let highlighted: String?
+    let anchor: SettingsAnchor?
+    let highlighted: SettingsAnchor?
 
     func body(content: Content) -> some View {
         content
@@ -414,14 +482,22 @@ private struct HighlightModifier: ViewModifier {
             .padding(.horizontal, 12)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(highlighted == id ? Color.accentColor.opacity(0.2) : .clear)
+                    .fill(isLit ? Color.accentColor.opacity(0.2) : .clear)
                     .animation(.easeInOut(duration: 0.3), value: highlighted),
             )
+    }
+
+    private var isLit: Bool {
+        guard let anchor else { return false }
+        return highlighted == anchor
     }
 }
 
 extension View {
-    func highlightable(id: String, highlighted: String?) -> some View {
-        modifier(HighlightModifier(id: id, highlighted: highlighted))
+    /// Marks this row as the one search flashes for `anchor`. A `nil` anchor
+    /// keeps the row's padding and gives it nothing to light up for — the
+    /// shape of a list whose other rows are reachable and this one is not.
+    func highlightable(_ anchor: SettingsAnchor?, highlighted: SettingsAnchor?) -> some View {
+        modifier(HighlightModifier(anchor: anchor, highlighted: highlighted))
     }
 }

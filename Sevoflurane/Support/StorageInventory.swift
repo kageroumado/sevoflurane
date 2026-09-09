@@ -7,6 +7,10 @@ import Foundation
 /// between a pane that fills in and one that hangs.
 nonisolated enum StorageInventory {
     struct Entry: Identifiable, Sendable, Equatable {
+        /// The one entry Settings' search can send someone to, and the one
+        /// that opens into a list of its own.
+        static let gamesID = "games"
+
         let id: String
         let name: String
         let detail: String
@@ -41,7 +45,7 @@ nonisolated enum StorageInventory {
         let steam = SteamBottle.steamRoot
         return [
             Entry(
-                id: "games",
+                id: Entry.gamesID,
                 name: "Games",
                 detail: "Every game Steam has installed on this Mac.",
                 icon: "gamecontroller",

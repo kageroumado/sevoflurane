@@ -6,7 +6,7 @@ import SwiftUI
 /// is the games that have run. Writes take the path `sevo app config` takes.
 struct GamesSettings: View {
     let shaders: ShaderStore
-    let highlighted: String?
+    let highlighted: SettingsAnchor?
     @State private var games: [Entry] = []
     @State private var selected: Int?
     /// The selected game's own values, the form's model.
@@ -71,7 +71,7 @@ struct GamesSettings: View {
                     inherited: GameConfig.upscaler(bottle: SteamBottle.name).value,
                     selection: binding(\.upscaler, for: entry),
                 )
-                .highlightable(id: "games.upscaler", highlighted: highlighted)
+                .highlightable(.gamesUpscaler, highlighted: highlighted)
                 FinalFilterPicker(
                     inherited: GameConfig.filter(bottle: SteamBottle.name).value,
                     selection: binding(\.filter, for: entry),
@@ -83,7 +83,7 @@ struct GamesSettings: View {
                 Text("Inherit uses the value in Engine. Changes apply at the next game launch"
                     + (Engine.active.supportsEnvFiles ? "." : ", once Steam has restarted."))
             }
-            .highlightable(id: "games.settings", highlighted: highlighted)
+            .highlightable(.gamesSettings, highlighted: highlighted)
         }
         .formStyle(.grouped)
     }
