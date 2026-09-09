@@ -32,20 +32,20 @@ struct BenchmarkOptionTests {
     }
 }
 
-struct MainThreadWatchdogTests {
+struct MainQueueLatencyProbeTests {
     @Test
     func `accounts stalls and resets per snapshot`() {
-        let watchdog = MainThreadWatchdog()
-        watchdog.record(delay: .milliseconds(2))
-        watchdog.record(delay: .milliseconds(80))
-        watchdog.record(delay: .milliseconds(120))
-        let first = watchdog.snapshotAndReset()
+        let probe = MainQueueLatencyProbe()
+        probe.record(delay: .milliseconds(2))
+        probe.record(delay: .milliseconds(80))
+        probe.record(delay: .milliseconds(120))
+        let first = probe.snapshotAndReset()
         #expect(first.pings == 3)
         #expect(first.maxDelayMilliseconds == 120)
         #expect(first.stallsOverThreshold == 2)
         #expect(first.stalledMilliseconds == 200)
 
-        let second = watchdog.snapshotAndReset()
+        let second = probe.snapshotAndReset()
         #expect(second.pings == 0)
         #expect(second.maxDelayMilliseconds == 0)
         #expect(second.stallsOverThreshold == 0)
@@ -53,9 +53,9 @@ struct MainThreadWatchdogTests {
 
     @Test
     func `a delay at the threshold counts as a stall`() {
-        let watchdog = MainThreadWatchdog()
-        watchdog.record(delay: MainThreadWatchdog.stallThreshold)
-        #expect(watchdog.snapshotAndReset().stallsOverThreshold == 1)
+        let probe = MainQueueLatencyProbe()
+        probe.record(delay: MainQueueLatencyProbe.stallThreshold)
+        #expect(probe.snapshotAndReset().stallsOverThreshold == 1)
     }
 }
 

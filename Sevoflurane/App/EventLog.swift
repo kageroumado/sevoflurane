@@ -19,6 +19,7 @@ final class EventLog {
         case bridge
         case page
         case window
+        case menu
         case supervisor
         case setup
         case update

@@ -65,6 +65,8 @@ final class ControlServer {
         case ("POST", "/steam/close"):
             host.closeSteam()
             return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
+        case ("POST", "/menu/cancel"):
+            return cancelMenuTracking()
         case ("POST", "/benchmark/smoke"):
             guard ProcessInfo.processInfo.environment["SEVO_ENABLE_BENCHMARKS"] == "1" else {
                 return .error(403, "set SEVO_ENABLE_BENCHMARKS=1 before launching Sevoflurane")
@@ -92,7 +94,7 @@ final class ControlServer {
         case ("POST", "/client/forcequit"):
             let scope: ClientLifecycle.ForceScope =
                 ["all", "everything"].contains(Self.value(of: "scope", in: request.query))
-                ? .everything : .steam
+                    ? .everything : .steam
             supervisor.forceQuit(scope)
             return Self.json(#"{"ok":true,"note":"force-quit begun; poll /status"}"#)
         case ("POST", "/engine/use"):
@@ -106,6 +108,18 @@ final class ControlServer {
         default:
             return .error(404, "Not Found")
         }
+    }
+
+    /// Ends every menu-bar tracking session, answering which root menus were
+    /// open. A stuck session leaves the app looking frozen while this listener
+    /// still answers, so it is both the tester's way out and the experiment
+    /// that says whether a session can be broken from outside.
+    private func cancelMenuTracking() -> HTTPResponse {
+        let payload: [String: Any] = ["ok": true, "open": host.menuMirror?.cancelTracking() ?? []]
+        let data = (try? JSONSerialization.data(
+            withJSONObject: payload, options: [.prettyPrinted, .sortedKeys],
+        )) ?? Data("{}".utf8)
+        return Self.json(String(decoding: data, as: UTF8.self))
     }
 
     /// Switch the active Wine engine (and optionally the bottle), then restart

@@ -3,15 +3,20 @@ import Foundation
 import os
 import Synchronization
 
-/// Measures how long the main thread takes to answer a ping while a
-/// scenario runs. A ping is a block posted to the main queue from a
-/// user-interactive thread every ``MainThreadWatchdog/pingInterval``; the
-/// time until it runs is the main thread's queueing delay at that moment.
-/// A delay above ``MainThreadWatchdog/stallThreshold`` is a stall — the
+/// A benchmark instrument: how long the main thread takes to answer a ping
+/// while one scenario step runs. A ping is a block posted to the main queue
+/// from a user-interactive thread every ``MainQueueLatencyProbe/pingInterval``;
+/// the time until it runs is the main thread's queueing delay at that moment.
+/// A delay above ``MainQueueLatencyProbe/stallThreshold`` is a stall — the
 /// main thread was busy, or blocked behind lower-priority work — and is
 /// also emitted as a `MainThreadStall` Point of Interest so Instruments can
 /// line it up with what every other thread was doing.
-final nonisolated class MainThreadWatchdog: Sendable {
+///
+/// It runs only inside `runSmokeBenchmark`, and it measures queueing delay
+/// rather than responsiveness: a nested event loop that never ends still
+/// drains the main queue, so a frozen menu reads here as zero delay.
+/// ``MenuTrackingWatchdog`` is what watches for that.
+final nonisolated class MainQueueLatencyProbe: Sendable {
     static let pingInterval: Duration = .milliseconds(16)
     static let stallThreshold: Duration = .milliseconds(50)
 
@@ -99,10 +104,10 @@ final nonisolated class MainThreadWatchdog: Sendable {
 
 nonisolated extension Duration {
     var milliseconds: Double {
-        Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1e15
+        Double(components.seconds) * 1000 + Double(components.attoseconds) / 1e15
     }
 
     var seconds: Double {
-        milliseconds / 1_000
+        milliseconds / 1000
     }
 }

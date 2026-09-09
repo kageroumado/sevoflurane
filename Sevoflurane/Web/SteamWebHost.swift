@@ -140,7 +140,7 @@ final class SteamWebHost {
         let outcome: String
         let detail: String?
         /// The main thread's queueing delays while this step ran.
-        let mainThread: MainThreadWatchdog.Snapshot
+        let mainThread: MainQueueLatencyProbe.Snapshot
     }
 
     struct BenchmarkSummary: Encodable {
@@ -179,7 +179,7 @@ final class SteamWebHost {
     }
 
     private var benchmarkRunning = false
-    private let benchmarkWatchdog = MainThreadWatchdog()
+    private let mainQueueLatency = MainQueueLatencyProbe()
     private var evaluationSequence = 0
     private var evaluationPending: [Int: CheckedContinuation<String?, Never>] = [:]
     private var evaluationTimeouts: [Int: Task<Void, Never>] = [:]
@@ -1235,11 +1235,11 @@ final class SteamWebHost {
         )
         load.start()
         defer { load.stop() }
-        benchmarkWatchdog.start()
-        defer { benchmarkWatchdog.stop() }
+        mainQueueLatency.start()
+        defer { mainQueueLatency.stop() }
         // Let the load and the watchdog reach steady state before timing.
         try await Task.sleep(for: .milliseconds(500))
-        _ = benchmarkWatchdog.snapshotAndReset()
+        _ = mainQueueLatency.snapshotAndReset()
 
         var samples: [BenchmarkSample] = []
         for iteration in 1 ... iterations {
@@ -1291,7 +1291,7 @@ final class SteamWebHost {
         BenchmarkSample(
             iteration: iteration, target: target.rawValue, milliseconds: 0,
             outcome: "skipped", detail: BenchmarkFailure.desktopHidden("hidden").errorDescription,
-            mainThread: benchmarkWatchdog.snapshotAndReset(),
+            mainThread: mainQueueLatency.snapshotAndReset(),
         )
     }
 
@@ -1331,7 +1331,7 @@ final class SteamWebHost {
                 return BenchmarkSample(
                     iteration: iteration, target: BenchmarkTarget.friends.rawValue, milliseconds: 0,
                     outcome: "failed", detail: "before the step: \(failure.localizedDescription)",
-                    mainThread: benchmarkWatchdog.snapshotAndReset(),
+                    mainThread: mainQueueLatency.snapshotAndReset(),
                 )
             }
         }
@@ -1383,7 +1383,7 @@ final class SteamWebHost {
     ) async throws -> BenchmarkSample {
         let clock = ContinuousClock()
         let started = clock.now
-        _ = benchmarkWatchdog.snapshotAndReset()
+        _ = mainQueueLatency.snapshotAndReset()
         let interval = PerfProbe.benchmark.beginInterval(
             "ScenarioStep", id: PerfProbe.benchmark.makeSignpostID(),
             "target=\(target.rawValue, privacy: .public),iteration=\(iteration, privacy: .public)",
@@ -1398,7 +1398,7 @@ final class SteamWebHost {
             return BenchmarkSample(
                 iteration: iteration, target: target.rawValue, milliseconds: milliseconds,
                 outcome: "ready", detail: nil,
-                mainThread: benchmarkWatchdog.snapshotAndReset(),
+                mainThread: mainQueueLatency.snapshotAndReset(),
             )
         } catch is CancellationError {
             PerfProbe.benchmark.endInterval(
@@ -1415,7 +1415,7 @@ final class SteamWebHost {
             return BenchmarkSample(
                 iteration: iteration, target: target.rawValue, milliseconds: milliseconds,
                 outcome: "failed", detail: error.localizedDescription,
-                mainThread: benchmarkWatchdog.snapshotAndReset(),
+                mainThread: mainQueueLatency.snapshotAndReset(),
             )
         }
     }
@@ -1952,6 +1952,9 @@ final class SteamWebHost {
         if window !== desktop, window.role != .menu, window.role != .context {
             notifyPopupUnloaded(named: window.name)
             repairStuckModalOverlay()
+            // Settings is one of these popups, and a language or a friends-list
+            // preference rewrites the strip's labels as it closes.
+            menuMirror?.refresh()
         }
         guard window === desktop else { return }
         desktop = nil
