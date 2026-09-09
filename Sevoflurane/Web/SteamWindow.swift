@@ -935,7 +935,7 @@ final class SteamWindow: NSObject {
         guard !isClosed else { return }
         isClosed = true
         webView.evaluateJavaScript("window.close()")
-        detach()
+        detach(reason: .steamClosedIt)
     }
 
     /// Steam's file picker, as an `NSOpenPanel`.
@@ -1032,9 +1032,28 @@ final class SteamWindow: NSObject {
         }
     }
 
+    /// Why a popup stopped existing.
+    ///
+    /// Steam learns a popup is gone from its document's `unload`, and the app
+    /// fires that itself (``SteamWebHost/notifyPopupUnloaded(named:)``). It is
+    /// owed for a popup whose own document went away while the context page
+    /// lives on, and it is poison for one that went because the page under it
+    /// is being torn down: the listeners go with the page, and running
+    /// `CPopup.OnClose` anyway tells Steam the user closed that window — which
+    /// for `SP DesktopLoginWindow` means quit.
+    enum DetachReason: Equatable {
+        /// The popup's own document went away while the context page lives on:
+        /// Steam closed it, or the user did through its close button.
+        case steamClosedIt
+        /// The context page under the popup is being reloaded or rebuilt.
+        case pageTeardown
+        /// The app is on its way out.
+        case appQuitting
+    }
+
     /// Drops the window and the page without asking the page to close itself.
     /// Used when WebKit has already closed the browsing context.
-    func detach() {
+    func detach(reason: DetachReason) {
         isClosed = true
         for view in browserViews.values {
             view.destroy()
@@ -1048,7 +1067,7 @@ final class SteamWindow: NSObject {
             window.close()
         }
         window = nil
-        host?.windowDidClose(self)
+        host?.windowDidClose(self, reason: reason)
     }
 
     /// Tells the popup its frame changed. Steam's popup manager listens for

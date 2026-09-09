@@ -318,6 +318,7 @@ final class ClientSupervisor {
         // popup sweep runs here too: the client puts up "Shutting down
         // Steam…" on its way out, and a quit is the one moment nothing else
         // is left to hide it.
+        host.dismissWindows(reason: .appQuitting)
         host.clientIsStopping = true
         await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
         let survivors = await ClientLifecycle.bottleProcessIDs()

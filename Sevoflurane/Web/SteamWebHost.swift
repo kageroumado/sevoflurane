@@ -906,10 +906,7 @@ final class SteamWebHost {
         EventLog.shared.log(
             .page, "rebuilding the UI page from scratch (\(popups.count) popups detached)",
         )
-        for popup in popups.values {
-            popup.detach()
-        }
-        popups.removeAll()
+        detachPopups(reason: .pageTeardown)
         desktop = nil
         if let observer = contextMoveObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -993,13 +990,27 @@ final class SteamWebHost {
 
     func reload() {
         EventLog.shared.log(.page, "reloading the UI page (\(popups.count) popups detached)")
-        for popup in popups.values {
-            popup.detach()
-        }
-        popups.removeAll()
+        detachPopups(reason: .pageTeardown)
         desktop = nil
         status = "reloading"
         context?.webView.load(URLRequest(url: Self.uiURL))
+    }
+
+    /// Whether a detach loop over every popup is running. The backstop under
+    /// ``SteamWindow/DetachReason``: a detach that reaches
+    /// ``windowDidClose(_:reason:)`` by some other route while the page under
+    /// it is going still says nothing to Steam.
+    private var isTearingDownPage = false
+
+    /// Drops every adopted popup, telling each why. One writer for all three
+    /// teardowns, so none of them can forget the guard.
+    private func detachPopups(reason: SteamWindow.DetachReason) {
+        isTearingDownPage = true
+        defer { isTearingDownPage = false }
+        for popup in popups.values {
+            popup.detach(reason: reason)
+        }
+        popups.removeAll()
     }
 
     /// Clears the windows a dead client left on screen — its library is frozen
@@ -1007,12 +1018,9 @@ final class SteamWebHost {
     /// of a restart is the "stuck, dimmed Steam window" the user sees. The
     /// fresh client adopts its own windows when it boots; the context page
     /// stays, so this is lighter than a full reload.
-    func dismissWindows() {
+    func dismissWindows(reason: SteamWindow.DetachReason = .pageTeardown) {
         guard desktop != nil || !popups.isEmpty else { return }
-        for popup in popups.values {
-            popup.detach()
-        }
-        popups.removeAll()
+        detachPopups(reason: reason)
         desktop = nil
         desktopWasClosed = true
         status = "reconnecting"
@@ -1097,7 +1105,7 @@ final class SteamWebHost {
                 isRecoveringFromWebProcessDeath = false
             }
         default:
-            window?.detach()
+            window?.detach(reason: .pageTeardown)
         }
     }
 
@@ -1940,7 +1948,7 @@ final class SteamWebHost {
         }
     }
 
-    func windowDidClose(_ window: SteamWindow) {
+    func windowDidClose(_ window: SteamWindow, reason: SteamWindow.DetachReason) {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
         // A window the overlay adopted is held until the overlay dismisses, so
         // that it rides in and out with it. Once it has closed there is
@@ -1949,10 +1957,14 @@ final class SteamWebHost {
         overlayChildren.removeAll { $0 === window }
         // Steam learns a popup is gone from its document's `unload`, which
         // WebKit ties to the page's teardown rather than to the window
-        // closing. Menus are left out: Steam keeps one per window and reopens
-        // it by name, and the app reaps them wholesale when the desktop's
-        // page goes.
-        if window !== desktop, window.role != .menu, window.role != .context {
+        // closing. Only a popup that went on its own is owed that word: a
+        // teardown takes the listeners with it, and telling Steam anyway runs
+        // `CPopup.OnClose`, which for the login window is the user closing it
+        // — and closing it quits Steam. Menus are left out: Steam keeps one
+        // per window and reopens it by name, and the app reaps them wholesale
+        // when the desktop's page goes.
+        if reason == .steamClosedIt, !isTearingDownPage,
+           window !== desktop, window.role != .menu, window.role != .context {
             notifyPopupUnloaded(named: window.name)
             repairStuckModalOverlay()
             // Settings is one of these popups, and a language or a friends-list
@@ -1969,7 +1981,7 @@ final class SteamWebHost {
         // belong to the page that just went, so they go with it — otherwise
         // every close/open cycle strands another dozen.
         for popup in popups.values where popup.role == .menu {
-            popup.detach()
+            popup.detach(reason: .pageTeardown)
         }
         menuMirror?.refresh()
         status = "Steam window closed"

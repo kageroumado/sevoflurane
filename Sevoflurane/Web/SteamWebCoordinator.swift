@@ -47,7 +47,7 @@ extension SteamWebCoordinator: WKUIDelegate {
     }
 
     func webViewDidClose(_ webView: WKWebView) {
-        host?.window(for: webView)?.detach()
+        host?.window(for: webView)?.detach(reason: .steamClosedIt)
     }
 
     /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
