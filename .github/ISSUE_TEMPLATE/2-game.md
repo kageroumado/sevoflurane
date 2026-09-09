@@ -28,11 +28,12 @@ assignees: kageroumado
 ## Diagnostics
 
 Attach the report zip: **Settings › About › Save Diagnostics…**, or in a
-terminal, `sevo diag`. For a crash or a launch failure, first turn on
-**Settings › Engine › Wine diagnostics log**, reproduce the problem, then save
-the report: the Wine log then carries the errors and exceptions from the
-game's process. The report carries Steam's own record of the launch, including the
-exit code. [PLAYTESTING.md](../../PLAYTESTING.md) has the full list,
+terminal, `sevo diag`. The Wine log already carries the errors and exceptions
+from the game's process, and the report carries Steam's own record of the
+launch, including the exit code, so reproducing once is enough. If the game
+never starts at all, turn on **Settings › Engine › Log every library a game
+loads**, reproduce, then save the report — it then names the library it could
+not resolve. [PLAYTESTING.md](../../PLAYTESTING.md) has the full list,
 including where Unity and Unreal games keep their logs.
 
 ## Access to the game

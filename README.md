@@ -99,7 +99,10 @@ reports. Review the contents before sharing; logs and file paths can identify
 your account. You can also run `sevo diag` from the terminal.
 
 The main logs are `~/Library/Logs/Sevoflurane.log` and
-`~/Library/Logs/Sevoflurane-wine.log`.
+`~/Library/Logs/Sevoflurane-wine.log`. The Wine log always records errors and
+exceptions, so a game that exits on its own still leaves a trail; Settings ›
+Engine › *Log every library a game loads* adds each library load when that is
+not enough. `sevo runs` lists what every launch ran on and how it ended.
 
 Use the [issue templates](https://github.com/kageroumado/sevoflurane/issues/new/choose)
 to report a problem. See [CONTRIBUTING.md](CONTRIBUTING.md) for debugging

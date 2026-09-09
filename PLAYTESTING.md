@@ -6,19 +6,23 @@ templates ask for the subset that matters.
 
 ## Before you start
 
-1. **Turn on the Wine diagnostics log.** Settings › Engine › *Wine diagnostics
-   log*, or in a terminal:
+1. **Nothing, for the logs.** The Wine log always carries `err+all,+seh,+pid`:
+   every subsystem's errors, exceptions as they are dispatched, and the process
+   id on every line, so a game that exits in two seconds leaves a trail without
+   anyone having turned anything on. Every launch also writes a run record —
+   what it ran on, how long it lasted, how it ended — which `sevo runs` prints
+   and the report zip carries.
+
+   Turn on Settings › Engine › *Log every library a game loads* only when a
+   game fails to start at all and you want to know which library it could not
+   resolve; it adds hundreds of lines per process. In a terminal:
 
    ```bash
    sevo bottle config wine-debug on
    ```
 
-   This sets Wine's channels to `err+all,+seh,+pid`: every subsystem's errors,
-   exceptions as they are dispatched, and the process id on every line. Without
-   it the Wine log carries no errors at all, so a game that exits in two seconds
-   leaves nothing behind. It applies at the next Steam start; restart Steam from
-   the menu bar if it is already running. Turn it off again after the session,
-   the log grows faster with it on.
+   It applies at the next Steam start; restart Steam from the menu bar if it is
+   already running, and turn it off again afterwards.
 
 2. **Note the renderer in force.** Settings › Graphics. A fresh Dormison bottle
    defaults to DXMT; D3DMetal is a choice. Every finding about a game needs the
@@ -82,15 +86,16 @@ it. Killing the app tests something else.
    - Unreal games: `<install dir>/<Project>/Saved/Logs/` and `Saved/Crashes/`
    - Games with their own launcher: whatever the launcher writes beside itself
 
-3. **Turn the Wine diagnostics log off** and set the renderer back if you
-   changed it.
+3. **Turn *Log every library a game loads* off** if you turned it on, and set
+   the renderer back if you changed it.
 
 ## What the report can and cannot say
 
 The report names no account. Crash reports and env files carry paths under your
 home folder, so your short user name is in them; review before sharing. It
 cannot say what you clicked, which is why the timestamped notes matter, and it
-cannot say why a game exited if the Wine diagnostics log was off.
+names the library a game failed to load only when *Log every library a game
+loads* was on.
 
 ## Filing
 

@@ -2,9 +2,13 @@ import Foundation
 
 /// Where Wine's own stderr goes for every managed launch — the client, a
 /// windowed program, and every game the client spawns, since they inherit
-/// the descriptor. Silent by default: the launch environment carries
-/// `WINEDEBUG=-all`, so only Wine's crash reports and whatever the
-/// `wineDebug` preference switches on reach the file.
+/// the descriptor.
+///
+/// The default channels are ``levelZero``: errors and exceptions, always on,
+/// because a game that exits in two seconds leaves nothing else behind and
+/// `WINEDEBUG=-all` silences `err` along with everything else. ``levelOne``
+/// is the diagnostics switch, which adds the channels whose cost is a line
+/// per event rather than a line per fault.
 ///
 /// `sevo bottle config wine-debug +seh,+loaddll` sets the channels for the
 /// next client start; `sevo logs --wine` reads the trail.
@@ -14,37 +18,44 @@ nonisolated enum WineLog {
 
     /// The `WINEDEBUG` a managed launch carries.
     static var channels: String {
-        Preferences.shared.string(forKey: channelsKey) ?? quiet
+        Preferences.shared.string(forKey: channelsKey) ?? levelZero
     }
 
-    /// `nil` returns to the quiet default.
+    /// `nil` returns to the always-on default.
     static func setChannels(_ channels: String?) {
-        if let channels, channels != quiet {
+        if let channels, channels != levelZero {
             Preferences.shared.set(channels, forKey: channelsKey)
         } else {
             Preferences.shared.removeObject(forKey: channelsKey)
         }
     }
 
-    static let quiet = "-all"
+    /// Always on: every channel's errors, exceptions as they are dispatched —
+    /// the two that name a crash — and the process id on every line, since
+    /// the client, its games and the prefix's own daemons all write to the
+    /// one file. `err+all` costs a line at a fault, `+seh` at exception
+    /// dispatch; neither costs anything while a game runs.
+    static let levelZero = "err+all,+seh,+pid"
+
+    /// What the diagnostics switch adds: every library load, which is what
+    /// separates a game that failed to resolve an import from one that
+    /// started and then died. Hundreds of lines per process, so it is a
+    /// choice rather than the default.
+    static let levelOne = "err+all,+seh,+pid,+loaddll"
+
     private static let channelsKey = "wineDebug"
 
-    /// What the diagnostics switch turns on: every channel's errors,
-    /// exceptions as they are dispatched — the two that name a crash — and
-    /// the process id on every line, since the client, its games and the
-    /// prefix's own daemons all write to the one file.
-    static let diagnostic = "err+all,+seh,+pid"
-
-    /// Whether anything beyond the quiet default is on.
-    static var isDiagnosing: Bool { channels != quiet }
+    /// Whether anything beyond the always-on default is on.
+    static var isDiagnosing: Bool { channels != levelZero }
 
     static func setDiagnosing(_ on: Bool) {
-        setChannels(on ? diagnostic : nil)
+        setChannels(on ? levelOne : nil)
     }
 
-    /// `off`, or `on (<channels>)`.
+    /// `on (<channels>)` or `off (<channels>)` — off still names what the
+    /// log keeps, which is not nothing.
     static var summary: String {
-        isDiagnosing ? "on (\(channels))" : "off"
+        "\(isDiagnosing ? "on" : "off") (\(channels))"
     }
 
     /// A handle appending to the log, after a header naming what is being

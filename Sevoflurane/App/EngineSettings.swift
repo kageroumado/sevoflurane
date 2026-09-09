@@ -519,8 +519,8 @@ struct EngineSettings: View {
             .highlightable(.engineWinecfg, highlighted: highlighted)
             Toggle(isOn: $wineDiagnostics) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Wine diagnostics log")
-                    Text("Records errors and exceptions in ~/Library/Logs/Sevoflurane-wine.log. May reduce performance.")
+                    Text("Log every library a game loads")
+                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors and exceptions. This adds each library load, which is what tells a game that failed to start from one that started and then stopped. It makes the log grow quickly.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -536,7 +536,7 @@ struct EngineSettings: View {
         } header: {
             Text("Troubleshooting")
         } footer: {
-            Text("Repair checks the engine, bottle, and Steam installation, keeping your games and saves. Restart Steam to apply diagnostics logging.")
+            Text("Repair checks the engine, bottle, and Steam installation, keeping your games and saves. Restart Steam to apply a change to logging.")
         }
     }
 }

@@ -198,9 +198,11 @@ Diagnostics…** or `sevo diag` — which holds the app's logs, a `sevo doctor`
 report, the active engine's `engine-info.json`, the bottle's env files, the
 game launcher bundles, Steam's own bootstrap, connection, webhelper,
 game-process and console logs, and the last two days of crash reports from the
-engine's processes. `--no-steam-logs` leaves Steam's own logs out. For
-a game crash, turn on Settings › Engine › Wine diagnostics log first
-(`sevo bottle config wine-debug on`), reproduce, then save the report.
+engine's processes. `--no-steam-logs` leaves Steam's own logs out. The Wine
+log already carries errors and exceptions for every launch; turn on Settings ›
+Engine › Log every library a game loads (`sevo bottle config wine-debug on`)
+only when a game fails to start and the library it could not resolve is the
+question.
 
 A game problem is fixed by running the game; a game the maintainer does not
 own is asked for in the issue, as a gift copy or a donation that covers it.

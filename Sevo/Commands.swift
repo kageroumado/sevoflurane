@@ -1013,7 +1013,7 @@ struct BottleCommand: AsyncParsableCommand {
     @Argument(help: "list | config") var verb: String = "list"
     @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on, off, or Wine channels. Omit to read the key.")
+    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add every library load, off for the errors and exceptions the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
@@ -1107,10 +1107,10 @@ struct BottleCommand: AsyncParsableCommand {
             return
         }
         if key == "wine-debug" {
-            // `on` is the diagnostics set (errors + exceptions), `off` the
-            // quiet default, anything else Wine's own channel syntax, e.g.
-            // `+seh,+loaddll`. Read by the next client start, and inherited
-            // by every game it launches.
+            // `on` adds every library load to the errors and exceptions the
+            // log always keeps, `off` returns to those alone, anything else
+            // is Wine's own channel syntax, e.g. `+seh,+loaddll`. Read by the
+            // next client start, and inherited by every game it launches.
             switch value {
             case "on", "off": WineLog.setDiagnosing(value == "on")
             default: WineLog.setChannels(value)

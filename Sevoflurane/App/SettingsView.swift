@@ -231,10 +231,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
                 SearchableSetting(
                     id: .engineWineDiagnostics,
-                    title: "Wine diagnostics log",
+                    title: "Log every library a game loads",
                     keywords: [
                         "wine", "diagnostics", "log", "logging", "debug",
-                        "winedebug", "trace", "error", "crash",
+                        "winedebug", "trace", "error", "crash", "library", "dll", "loaddll",
                     ],
                 ),
                 SearchableSetting(
