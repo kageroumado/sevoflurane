@@ -90,8 +90,8 @@ final class DebugModeSwitch {
             "on": isOn,
             "file": DebugMode.envURL(prefix: SteamBottle.root).path,
             "note": isOn
-                ? "engine half applies at the next Steam start — POST /client/restart"
-                : "off; the app half is off and the env file is gone",
+                ? "the app half is on; the engine half applies at Steam's next start — restart Steam"
+                : "the app half is off and the env file is gone",
         ]
         let data = (try? JSONSerialization.data(
             withJSONObject: payload, options: [.prettyPrinted, .sortedKeys],

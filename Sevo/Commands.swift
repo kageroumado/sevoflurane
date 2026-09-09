@@ -1021,7 +1021,7 @@ struct BottleCommand: AsyncParsableCommand {
     @Argument(help: "list | config") var verb: String = "list"
     @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add every library load, off for the errors and exceptions the log always keeps, or Wine channels. Omit to read the key.")
+    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 

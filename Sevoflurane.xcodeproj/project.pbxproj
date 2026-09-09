@@ -67,6 +67,7 @@
 				App/CompatibilityEnvironment.swift,
 				App/CompatibilityStore.swift,
 				App/DaemonService.swift,
+				App/DebugModeSwitch.swift,
 				App/Demo/DemoCompatibilityEnvironment.swift,
 				App/Demo/DemoEngineEnvironment.swift,
 				App/Demo/DemoGraphicsEnvironment.swift,

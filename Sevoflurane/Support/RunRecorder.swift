@@ -116,7 +116,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         }
     }
 
-    /// Wine's unhandled-exception record for the run (`WINEDEBUG=+seh`).
+    /// Wine's unhandled-exception record for the run (`err:seh`, always on).
     struct Crash: Codable, Equatable, Sendable {
         /// The NT status, `0xc0000005` and friends.
         var code: String
@@ -661,7 +661,7 @@ nonisolated enum WineExceptionTrail {
     private static let maximumNotes = 8
 
     /// `dlls/ntdll/unix/thread.c`'s last word before it terminates the
-    /// process, under `WINEDEBUG=+seh`.
+    /// process; `err:seh` is in the always-on channels.
     private nonisolated(unsafe) static let unhandled =
         /Unhandled exception code ([0-9a-fA-F]+) flags ([0-9a-fA-F]+) addr (0x[0-9a-fA-F]+)/
 }

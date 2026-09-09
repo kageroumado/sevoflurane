@@ -111,8 +111,8 @@ final class EventLog {
         case synchronous
     }
 
-    /// Read on the main actor by `log`; the app sets it at most once, at
-    /// startup.
+    /// Written and read on the main actor: the debug switch sets it, `log`
+    /// reads it.
     nonisolated(unsafe) static var flushMode: FlushMode = .asynchronous
 
     /// Blocks until every line written so far is on disk. The quit path and

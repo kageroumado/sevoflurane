@@ -100,7 +100,7 @@ final class ControlServer {
         }
         switch (request.method, request.path) {
         case ("GET", "/status"):
-            return status()
+            return await status()
         case ("GET", "/log/tail"):
             return Self.logTail(query: request.query)
         case ("POST", "/engine/use"):
@@ -269,12 +269,14 @@ final class ControlServer {
         return Self.json(#"{"ok":true,"note":"engine switched; restarting — poll /status"}"#)
     }
 
-    private func status() -> HTTPResponse {
+    private func status() async -> HTTPResponse {
         let version = Daemon.bundledAppVersion
+        let debug = await app.debugIsOn()
         let body = #"{"app":\#(JSLiteral.string(app.isAttached ? "running" : "not running")),"#
             + #""daemon":"running","version":\#(JSLiteral.string(version)),"#
             + #""health":\#(JSLiteral.string(supervisor.health.wireName)),"#
             + #""detail":\#(JSLiteral.string(supervisor.statusText)),"#
+            + #""debug":\#(debug),"#
             + #""needsAttention":\#(supervisor.health.needsAttention)}"#
         return Self.json(body)
     }

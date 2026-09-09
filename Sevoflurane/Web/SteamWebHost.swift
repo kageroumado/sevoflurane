@@ -970,13 +970,28 @@ final class SteamWebHost {
     /// debug mode is on. `GET /windows` answers the same question, but only
     /// for someone who thought to ask it while the window was still there;
     /// this is what a report has afterwards.
+    ///
+    /// A closed menu is counted rather than described: Steam keeps a dozen of
+    /// them per window, they are hidden two-by-one points at the pointer, and
+    /// spelling them all out on every adoption is what would make this
+    /// unreadable.
     private func logWindowInventory(_ occasion: String) {
         guard DebugModeSwitch.shared.isOn else { return }
-        let rows = windowInventory().map { row in
+        var rows: [String] = []
+        var hiddenMenus = 0
+        for row in windowInventory() {
+            let visible = row["visible"] as? Bool == true
+            let role = row["role"] as? String ?? "?"
+            guard visible || role != "menu" else {
+                hiddenMenus += 1
+                continue
+            }
             let name = row["name"] as? String ?? "?"
-            let visible = row["visible"] as? Bool == true ? "visible" : "hidden"
-            return "\(name) [\(row["role"] as? String ?? "?")] \(visible) \(row["frame"] as? String ?? "")"
+            rows.append(
+                "\(name) [\(role)] \(visible ? "visible" : "hidden") \(row["frame"] as? String ?? "")",
+            )
         }
+        if hiddenMenus > 0 { rows.append("\(hiddenMenus) closed menus") }
         EventLog.shared.log(
             .window,
             "windows after \(occasion): \(rows.isEmpty ? "none" : rows.joined(separator: "; "))",

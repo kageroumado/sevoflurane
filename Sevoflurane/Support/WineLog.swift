@@ -4,7 +4,7 @@ import Foundation
 /// windowed program, and every game the client spawns, since they inherit
 /// the descriptor.
 ///
-/// The default channels are ``levelZero``: errors and exceptions, always on,
+/// The default channels are ``levelZero``: errors, always on,
 /// because a game that exits in two seconds leaves nothing else behind and
 /// `WINEDEBUG=-all` silences `err` along with everything else. ``levelOne``
 /// is the diagnostics switch, which adds the channels whose cost is a line
@@ -30,18 +30,19 @@ nonisolated enum WineLog {
         }
     }
 
-    /// Always on: every channel's errors, exceptions as they are dispatched —
-    /// the two that name a crash — and the process id on every line, since
-    /// the client, its games and the prefix's own daemons all write to the
-    /// one file. `err+all` costs a line at a fault, `+seh` at exception
-    /// dispatch; neither costs anything while a game runs.
-    static let levelZero = "err+all,+seh,+pid"
+    /// Always on: every channel's errors — which is where Wine's unhandled
+    /// exception record lands — and the process id on every line, since the
+    /// client, its games and the prefix's own daemons all write to the one
+    /// file. `err+all` costs a line at a fault and nothing while a game runs.
+    static let levelZero = "err+all,+pid"
 
-    /// What the diagnostics switch adds: every library load, which is what
+    /// What the diagnostics switch adds: exceptions as they are dispatched,
+    /// which carries Steam's and a game's own `OutputDebugString` output but
+    /// also every C++ throw a game makes, and every library load, which
     /// separates a game that failed to resolve an import from one that
-    /// started and then died. Hundreds of lines per process, so it is a
-    /// choice rather than the default.
-    static let levelOne = "err+all,+seh,+pid,+loaddll"
+    /// started and then died. Tens of thousands of lines per game run, so it
+    /// is a choice rather than the default.
+    static let levelOne = "err+all,+pid,+seh,+loaddll"
 
     private static let channelsKey = "wineDebug"
 

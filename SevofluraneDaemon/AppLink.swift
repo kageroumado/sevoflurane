@@ -116,6 +116,18 @@ final class AppLink {
         _ = await post("/log", body: body)
     }
 
+    /// Whether the app has its debug mode on: a session-only switch the app
+    /// owns, read through its own `GET /debug` so `/status` can carry it.
+    func debugIsOn() async -> Bool {
+        guard isAttached else { return false }
+        let request = HTTPRequest(method: "GET", target: "/debug", headers: [:], body: Data())
+        let response = await proxy(request)
+        guard response.status == 200,
+              let json = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        else { return false }
+        return json["on"] as? Bool == true
+    }
+
     // MARK: - Proxying
 
     /// Passes one of the app's own verbs through from the control port. The

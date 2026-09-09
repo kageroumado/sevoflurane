@@ -520,7 +520,7 @@ struct EngineSettings: View {
             Toggle(isOn: $wineDiagnostics) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Log every library a game loads")
-                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors and exceptions. This adds each library load, which is what tells a game that failed to start from one that started and then stopped. It makes the log grow quickly.")
+                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors and exceptions. This adds exceptions as they are dispatched, which carries Steam's and the game's own debug output, and each library load, which is what tells a game that failed to start from one that started and then stopped. It makes the log grow very quickly.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

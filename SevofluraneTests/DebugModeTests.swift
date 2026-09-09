@@ -44,6 +44,21 @@ struct DebugModeTests {
         #expect(!DebugMode.isWritten(prefix: prefix))
     }
 
+    /// The renderer takes a Windows directory path, and the app has to create
+    /// the same directory as macOS sees it: the two spellings are of one
+    /// place, and a lost separator in either makes a log nobody can find.
+    @Test
+    func `the renderer's log directory is one place in two spellings`() throws {
+        let prefix = try makePrefix()
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let user = SteamBottle.windowsUser
+        #expect(DebugMode.rendererLogWindowsPath == #"C:\users\\#(user)\Temp\dxmt"#)
+        #expect(
+            DebugMode.rendererLogDirectory(prefix: prefix).path
+                == prefix.appending(path: "drive_c/users/\(user)/Temp/dxmt").path,
+        )
+    }
+
     /// The engine reads `KEY=` as an unset, so a value that is written must
     /// carry one: a stray empty key would silence the channels the bottle's
     /// own file just set.

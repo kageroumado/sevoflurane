@@ -6,7 +6,7 @@ templates ask for the subset that matters.
 
 ## Before you start
 
-1. **Nothing, for the logs.** The Wine log always carries `err+all,+seh,+pid`:
+1. **Nothing, for the logs.** The Wine log always carries `err+all,+pid`:
    every subsystem's errors, exceptions as they are dispatched, and the process
    id on every line, so a game that exits in two seconds leaves a trail without
    anyone having turned anything on. Every launch also writes a run record —

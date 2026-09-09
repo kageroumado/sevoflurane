@@ -64,7 +64,7 @@ nonisolated enum DebugMode {
     /// Where DXMT writes, as the bottle sees it. Inside the prefix, so the
     /// report collects it and a tester never has to find it.
     static var rendererLogWindowsPath: String {
-        #"C:\users\#(SteamBottle.windowsUser)\Temp\dxmt"#
+        "C:\\users\\" + SteamBottle.windowsUser + "\\Temp\\dxmt"
     }
 
     /// The same directory as macOS sees it.
