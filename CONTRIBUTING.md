@@ -13,10 +13,11 @@ work on than it first appears — and a few rules keep it that way.
 
 ## Building
 
-Xcode 26+, macOS 26+, Apple Silicon. Open `Sevoflurane.xcodeproj`, build the
-`Sevoflurane` scheme. To actually run against Steam you need a CrossOver
-bottle with Steam installed (`sevo setup` builds one headlessly, and the
-app's first-run assistant does the same with a window around it).
+Xcode 26+, macOS 26+, Apple Silicon. Open `Sevoflurane.xcodeproj`, pick your
+own team under Signing & Capabilities, and build the `Sevoflurane` scheme. To
+run against Steam you need a bottle with Steam installed: the app's first-run
+assistant creates one on the engine it installs, and `sevo setup` does the
+same from the terminal.
 
 ## Simulating a Steam event
 

@@ -120,8 +120,9 @@ everything the engine changes in Wine, is in the
 
 ### Building
 
-Xcode 26 or later. Open `Sevoflurane.xcodeproj` and build the `Sevoflurane`
-scheme. The first run walks through setup: it creates the bottle, installs
+Xcode 26 or later. Open `Sevoflurane.xcodeproj`, pick your own team under
+Signing & Capabilities, and build the `Sevoflurane` scheme. The first run
+walks through setup: it creates the bottle, installs
 Steam and signs in. After that the app starts the bottled client with CDP on
 port 8765, boots Steam's interface through the in-process bridge, and
 supervises from there.
@@ -138,6 +139,7 @@ same from the terminal. The logs are `~/Library/Logs/Sevoflurane.log` and
 
 ```
 sevo doctor [--json]        environment diagnosis, one line per check
+sevo setup [--engine E]     headless first run: engine, bottle, Steam client
 sevo status [--json]        engine · bottle · client · bridge · app
 sevo diag [--steam-logs]    the report zip for a bug report
 sevo client start|stop|restart|update|pin|unpin

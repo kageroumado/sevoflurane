@@ -5,7 +5,7 @@ import AppKit
 ///
 /// The frame is given twice on purpose: **points** (the Cocoa coordinate a
 /// click or a move uses — origin top-left of the primary display, y down, the
-/// same space `CGWindowListCopyWindowInfo` and rocuronium speak) and **pixels**
+/// same space `CGWindowListCopyWindowInfo` reports) and **pixels**
 /// (points × the display's backing scale — what a screenshot measures). A
 /// window on a display left of or above the primary has a negative origin;
 /// `offPrimary` says so, and `display` names which screen it landed on.

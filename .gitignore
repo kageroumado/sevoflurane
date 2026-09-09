@@ -1,4 +1,4 @@
-## Internal working notes — never in history (scrub-free open-sourcing)
+## Working notes, kept beside the sources on a development machine
 Docs/
 HANDOFF.md
 DELETE-CANDIDATES.md
@@ -51,6 +51,5 @@ __pycache__/
 ## Claude Code
 .claude/
 
-## Compiled engine payloads (built by the engine repository's build-macos/package-engine.sh)
-Tools/webhelper-wrapper/webhelper-wrapper.exe
-sevo-engine-*.tar.xz
+## Engine tarballs
+dormison-*.tar.xz

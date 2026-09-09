@@ -28,8 +28,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     }
 
     /// Managed engines, one directory per version:
-    /// `wine/` (WineHQ tree), `dxvk/`, `dxmt/`, `d3dmetal/`,
-    /// `webhelper-wrapper.exe`.
+    /// `wine/` (WineHQ tree), `dxvk/`, `dxmt/`, `d3dmetal/`, the dock shim
+    /// and the Steamworks stub.
     static let managedRoot = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/Engines")
 

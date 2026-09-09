@@ -6,8 +6,8 @@ import UserNotifications
 /// The menu-bar extra: what Steam's own tray menu shows — recent games first,
 /// then the client controls.
 ///
-/// The design is Propofol, the suite's shared popover language (adrafinil,
-/// phosphene, dantrolene, rocuronium): one radius/spacing ladder, one popover
+/// The design is Propofol, the popover language the maintainer's menu-bar
+/// apps share (Adrafinil, Phosphene, Dantrolene): one radius/spacing ladder, one popover
 /// width, the same header and footer chips. Reinterpreted for Steam: the
 /// library leads, the supervisor speaks only when something needs attention,
 /// and every footer control that isn't a universal glyph says what it does.

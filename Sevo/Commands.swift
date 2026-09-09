@@ -223,7 +223,7 @@ struct StatusCommand: AsyncParsableCommand {
 }
 
 /// Block until the client reaches a state, then report it — the time-holding
-/// verb, mirroring rocuronium's `wait`. Default waits for healthy; `--gone`
+/// verb. Default waits for healthy; `--gone`
 /// waits for it to be down. Either way the reply is the observed end state
 /// plus a verdict, never a bare "ok".
 struct WaitCommand: AsyncParsableCommand {

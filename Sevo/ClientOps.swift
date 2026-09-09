@@ -7,10 +7,10 @@ import Foundation
 /// that's what the flag is for).
 ///
 /// Every verb answers an ``Outcome``, not void: the reply is the observation.
-/// The verdict vocabulary mirrors rocuronium so an agent fluent in one reads
-/// the other — `confirmed` the intended state was reached, `noEffect` nothing
-/// changed because it was already so, `unverifiable` the act may have landed
-/// but the wait ran out before it could be seen. A `throw` is reserved for a
+/// The verdict is one of three words: `confirmed` the intended state was
+/// reached, `noEffect` nothing changed because it was already so,
+/// `unverifiable` the act may have landed but the wait ran out before it
+/// could be seen. A `throw` is reserved for a
 /// refusal that never began (unprovisioned, an endpoint that said no); a
 /// timeout is an observation, not an error.
 nonisolated enum ClientOps {
@@ -280,7 +280,7 @@ nonisolated enum ClientOps {
     }
 
     /// Blocks until no bottle process remains, or the timeout — the `--gone`
-    /// half of `sevo wait`, mirroring rocuronium's `wait --gone`.
+    /// half of `sevo wait`.
     static func waitGone(timeout: Int, progress: (String) -> Void) async -> Outcome {
         for waited in stride(from: 2, through: timeout, by: 2) {
             if (await ClientLifecycle.bottleProcessIDs()).isEmpty {
