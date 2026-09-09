@@ -2158,7 +2158,8 @@ struct RunsCommand: AsyncParsableCommand {
         commandName: "runs",
         abstract: "The last game launches: what each ran on, how long, and how it ended.",
         discussion: """
-        One line per launch, oldest first. Records live in ~/Library/Application \
+        One line per launch, oldest first, with the recognized failure beneath \
+        the ones the app knows. Records live in ~/Library/Application \
         Support/Sevoflurane/Runs, one JSON Lines file per month.
         """,
     )
@@ -2178,13 +2179,23 @@ struct RunsCommand: AsyncParsableCommand {
         }
         for record in records {
             print("\(Self.moment(record.t))  \(record.summary)")
+            guard let failure = KnownFailures.match(record) else { continue }
+            print("    \(failure.summary)")
+            if let fix = failure.fix { print("    fix: \(fix)") }
         }
     }
 
-    /// The record as it sits on disk.
+    /// The record as it sits on disk, plus what the app recognizes in it — a
+    /// caller reading JSON wants the match without repeating the table.
     private static func row(_ record: RunRecord) -> [String: Any] {
-        (try? JSONEncoder().encode(record))
+        var row = (try? JSONEncoder().encode(record))
             .flatMap { Sevo.jsonObject(String(decoding: $0, as: UTF8.self)) } ?? [:]
+        if let failure = KnownFailures.match(record) {
+            var known: [String: Any] = ["id": failure.id, "summary": failure.summary]
+            if let fix = failure.fix { known["fix"] = fix }
+            row["known_failure"] = known
+        }
+        return row
     }
 
     /// The record's UTC stamp in this Mac's own time, which is what the event
