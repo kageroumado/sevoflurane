@@ -10,8 +10,14 @@ import Foundation
 /// which exes exist before anything runs, so every candidate is recorded at
 /// launch time and the env files are in place when the process starts.
 nonisolated enum GameExecutables {
+    /// Where the scan's outcome is narrated. The default reaches `sevo`'s
+    /// caller; the app points it at its own event log.
+    nonisolated(unsafe) static var log: @Sendable (String) -> Void = {
+        FileHandle.standardError.write(Data(($0 + "\n").utf8))
+    }
+
     /// How deep the scan looks: `Game.exe` at the top, `bin/Game.exe`, and
-    /// Unreal's `Binaries/Win64/Game-Win64-Shipping.exe`.
+    /// Unreal's `<Project>/Binaries/Win64/Game-Win64-Shipping.exe`.
     private static let maxDepth = 3
     /// Games ship their tools beside the game; the tools are not the game.
     private static let excludedFragments = [
@@ -26,13 +32,43 @@ nonisolated enum GameExecutables {
     @discardableResult
     static func recordFromInstall(appID: Int) -> Bool {
         guard let game = SharedGames.installed(appID: appID) else { return false }
+        return record(appID: appID, name: game.name, directory: game.directory)
+    }
+
+    /// Records every installed game's executables — what the app runs at
+    /// every client start, so a game's env file and its launcher bundle exist
+    /// before Steam starts it. A link or an unlink is followed by a client
+    /// restart, and a game Steam downloads mid-session is read by
+    /// ``recordFromInstall(appID:)`` when it launches, so this is the whole
+    /// library's supply. Returns whether any game gained an exe, so one
+    /// materialize covers them all.
+    ///
+    /// A directory listing per game to ``maxDepth`` levels: a 29-game library
+    /// walks in under 10 ms, which is why it needs no cache.
+    @discardableResult
+    static func recordLibrary() -> Bool {
+        var recorded = false
+        for game in SharedGames.installedGames() {
+            if record(appID: game.appID, name: game.name, directory: game.directory) {
+                recorded = true
+            }
+        }
+        return recorded
+    }
+
+    private static func record(appID: Int, name: String, directory: URL) -> Bool {
         let known = Set(GameConfig.game(appID).exes ?? [])
-        let found = executables(in: game.directory)
+        let found = executables(in: directory)
+        guard !found.isEmpty else {
+            log("app \(appID): no executables under \(directory.path)")
+            return false
+        }
         let new = found.filter { !known.contains($0) }
         guard !new.isEmpty else { return false }
         for exe in new {
-            GameConfig.noteExecutable(exe, forApp: appID, named: game.name)
+            GameConfig.noteExecutable(exe, forApp: appID, named: name)
         }
+        log("app \(appID): recorded \(new.count) exes (\(new.joined(separator: ", ")))")
         return true
     }
 
@@ -40,19 +76,14 @@ nonisolated enum GameExecutables {
     static func executables(in directory: URL) -> [String] {
         var found: [(depth: Int, name: String)] = []
         var queue: [(URL, Int)] = [(directory, 0)]
-        let manager = FileManager.default
         while let (folder, depth) = queue.first {
             queue.removeFirst()
-            let entries = (try? manager.contentsOfDirectory(
-                at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles],
-            )) ?? []
-            for entry in entries {
-                let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                if isDirectory {
-                    if depth + 1 < maxDepth { queue.append((entry, depth + 1)) }
+            for entry in InstallDirectory.entries(in: folder) {
+                if entry.isDirectory {
+                    if depth + 1 <= maxDepth { queue.append((entry.url, depth + 1)) }
                     continue
                 }
-                let name = entry.lastPathComponent.lowercased()
+                let name = entry.name.lowercased()
                 guard name.hasSuffix(".exe"), isGameLike(name) else { continue }
                 found.append((depth, name))
             }

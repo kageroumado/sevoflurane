@@ -79,7 +79,7 @@ nonisolated enum GameLaunchers {
             // Signing rewrites the copy, so it never matches the original
             // again: what decides a re-copy is the engine the bundle records,
             // not the bytes.
-            var copied = !manager.isExecutableFile(atPath: executable.path)
+            let copied = !manager.isExecutableFile(atPath: executable.path)
                 || recordedEngine(in: contents) != engine.preferenceValue
             if copied {
                 for (source, name) in loaderFiles(loader, stem: stem) {
@@ -111,7 +111,10 @@ nonisolated enum GameLaunchers {
             if (try? Data(contentsOf: pkgInfo)) != stamp { try stamp.write(to: pkgInfo) }
             // The signature covers the plist and the executable, so it is
             // renewed whenever either of them was.
-            if copied || plist { sign(bundle) }
+            if copied || plist {
+                sign(bundle)
+                log("launcher: built \(stem).app on \(engine.description)")
+            }
         } catch {
             log("launcher: could not build \(title)'s bundle: \(error.localizedDescription)")
             return nil

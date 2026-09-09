@@ -128,17 +128,11 @@ nonisolated enum NWJSGames {
     /// walking a multi-gigabyte asset tree.
     private static func hasGreenworks(inDirectory directory: URL) -> Bool {
         func scan(_ url: URL, depth: Int) -> Bool {
-            guard let entries = try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles],
-            ) else { return false }
-            for entry in entries {
-                let name = entry.lastPathComponent.lowercased()
+            for entry in InstallDirectory.entries(in: url) {
+                let name = entry.name.lowercased()
                 if name.hasPrefix("greenworks"), name.hasSuffix(".node") { return true }
-                guard depth > 1,
-                      (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-                else { continue }
-                if scan(entry, depth: depth - 1) { return true }
+                guard depth > 1, entry.isDirectory else { continue }
+                if scan(entry.url, depth: depth - 1) { return true }
             }
             return false
         }
@@ -155,17 +149,13 @@ nonisolated enum NWJSGames {
     /// multi-gigabyte asset tree.
     private static func usesSteamCloud(inDirectory directory: URL) -> Bool {
         func scan(_ url: URL, depth: Int) -> Bool {
-            guard let entries = try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles],
-            ) else { return false }
-            for entry in entries {
-                if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                    if depth > 1, scan(entry, depth: depth - 1) { return true }
+            for entry in InstallDirectory.entries(in: url) {
+                if entry.isDirectory {
+                    if depth > 1, scan(entry.url, depth: depth - 1) { return true }
                     continue
                 }
-                guard entry.pathExtension.lowercased() == "js",
-                      let text = try? String(contentsOf: entry, encoding: .utf8)
+                guard entry.name.lowercased().hasSuffix(".js"),
+                      let text = try? String(contentsOf: entry.url, encoding: .utf8)
                 else { continue }
                 if cloudCalls.contains(where: text.contains) { return true }
             }
@@ -250,11 +240,8 @@ nonisolated enum NWJSGames {
     }
 
     private static func soleExecutable(inDirectory directory: URL) -> String? {
-        let entries = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles],
-        )) ?? []
-        let executables = entries
-            .map(\.lastPathComponent)
+        let executables = InstallDirectory.entries(in: directory)
+            .map(\.name)
             .filter { $0.lowercased().hasSuffix(".exe") }
         return executables.count == 1 ? executables[0] : nil
     }

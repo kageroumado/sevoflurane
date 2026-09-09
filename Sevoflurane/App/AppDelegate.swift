@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
         NWJSRunner.log = { EventLog.enqueue(.client, $0) }
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }
+        GameExecutables.log = { EventLog.enqueue(.client, $0) }
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]

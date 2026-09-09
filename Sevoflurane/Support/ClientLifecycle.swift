@@ -391,11 +391,17 @@ nonisolated enum ClientLifecycle {
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
         }
-        // What each installed game is built on, recorded for the library once
-        // per client start: a directory listing per game and one loader scan
-        // for the NW.js ones, which is why it follows the spawn rather than
-        // delaying it.
-        Task(name: "Detect native runtimes") { NWJSGames.recordLibrary() }
+        // What each installed game is built on and which executables it
+        // ships, recorded for the library once per client start: a directory
+        // listing per game and one loader scan for the NW.js ones, which is
+        // why it follows the spawn rather than delaying it. The env files and
+        // launcher bundles are then in place before Steam starts anything,
+        // rather than a game's first run being an anonymous `wine`.
+        Task(name: "Record the library") {
+            GameExecutables.recordLibrary()
+            NWJSGames.recordLibrary()
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+        }
     }
 
     // MARK: - Client window suppression
