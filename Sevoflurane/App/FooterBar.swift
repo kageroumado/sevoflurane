@@ -133,28 +133,33 @@ private struct StatusChip: View {
             let time = event.date.formatted(date: .omitted, time: .shortened)
             lines.append("last event \(time) — \(event.message)")
         }
-        lines.append("Click to pause or resume auto-restart.")
+        lines.append("Hover for the auto-restart switch.")
         return lines.joined(separator: "\n")
     }
 
     var body: some View {
-        Button { supervisor.togglePaused() } label: {
-            HStack(spacing: Theme.Space.xs) {
-                if isHovered {
+        HStack(spacing: Theme.Space.xs) {
+            if isHovered {
+                // Only the switch takes the press. A readout that reads as a status light and
+                // acts as a toggle is a trap: the playtest's two unexplained pauses were both
+                // clicks on what looked like the light.
+                Button { supervisor.togglePaused() } label: {
                     SwitchPip(isOn: supervisor.health != .paused)
-                    Text("Auto-restart")
-                } else {
-                    StatusDot(color: status.color, diameter: 7)
-                    Text(status.word)
                 }
+                .buttonStyle(.plain)
+                .help("Turn auto-restart on or off")
+                Text("Auto-restart")
+            } else {
+                StatusDot(color: status.color, diameter: 7)
+                Text(status.word)
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
-            // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
-            // the width its label asks for and the bar is sized to afford it.
-            .fixedSize()
-            .frame(height: FooterBar.labelBox)
         }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
+        // the width its label asks for and the bar is sized to afford it.
+        .fixedSize()
+        .frame(height: FooterBar.labelBox)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
