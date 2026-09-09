@@ -66,27 +66,35 @@ nonisolated enum WineWindowWatch {
         if bottleLoaders.contains(name) {
             return windowsProgram(of: pid).map { Program(name: $0, source: .loader) }
         }
-        // A game started through its own bundle is named after itself, not
-        // after the loader — that is what the bundle is for — so the loader
-        // has to be recognized by where it is instead (``GameLaunchers``).
-        if let bundled = bundledProgram(of: pid) {
+        // A process's arguments cost a KERN_ARGMAX buffer each and this is
+        // asked of every window on screen, so nothing is asked of the kernel
+        // until there is a bundle or a wrapper to find.
+        guard GameLaunchers.hasBundles || NWJSRunner.hasWrappers else {
+            return Program(name: name, source: .owner)
+        }
+        let fields = arguments(of: pid)
+        if let bundled = bundledProgram(fields) {
             return Program(name: bundled, source: .bundle)
         }
-        if let native = nativeProgram(of: pid) {
+        if let native = nativeProgram(fields) {
             return Program(name: native, source: .native)
+        }
+        // A bottle process macOS names after something else: the dock shim
+        // renames the application, and a game running on the engine's own
+        // loader is then neither one of the loader names nor a bundle path.
+        // Its command line still says which Windows program it is, and a Mac
+        // application's first argument does not end in `.exe`.
+        if let windows = windowsProgram(fields), windows.hasSuffix(".exe") {
+            return Program(name: windows, source: .loader)
         }
         return Program(name: name, source: .owner)
     }
 
     /// The Windows program a game running through its own loader bundle is
-    /// on, or `nil` when this window belongs to something else. Nothing is
-    /// asked of the kernel until there is such a bundle to find.
-    private static func bundledProgram(of pid: pid_t) -> String? {
-        guard GameLaunchers.hasBundles else { return nil }
-        let fields = arguments(of: pid)
+    /// on, or `nil` when this window belongs to something else.
+    private static func bundledProgram(_ fields: [String]) -> String? {
         guard fields.count >= 2, fields[0].hasPrefix(GameLaunchers.root.path) else { return nil }
-        let program = fields[1].split(separator: "\\").last.map(String.init) ?? fields[1]
-        return program.lowercased()
+        return windowsProgram(fields)
     }
 
     /// The exe a native run stands in for, or `nil` for a window that is not
@@ -96,13 +104,7 @@ nonisolated enum WineWindowWatch {
     /// game the window belongs to, whatever the process ended up being called.
     /// It is called the game, in fact: a native run is exec'd through a bundle
     /// named after it, which is the whole point of the bundle.
-    ///
-    /// Nothing is asked of the kernel until there is a native run to find: a
-    /// process's arguments cost a KERN_ARGMAX buffer each, and this is asked
-    /// of every window on screen.
-    private static func nativeProgram(of pid: pid_t) -> String? {
-        guard NWJSRunner.hasWrappers else { return nil }
-        let fields = arguments(of: pid)
+    private static func nativeProgram(_ fields: [String]) -> String? {
         guard fields.count >= 3, fields[2].hasPrefix(NWJSRunner.root.path),
               let appID = Int(URL(fileURLWithPath: fields[2]).lastPathComponent),
               let exe = GameConfig.game(appID).exes?.first
@@ -234,7 +236,10 @@ nonisolated enum WineWindowWatch {
     /// rewrite is the only thing that distinguishes Steam's infrastructure
     /// from a game once both run under the same loader binary.
     private static func windowsProgram(of pid: pid_t) -> String? {
-        let fields = arguments(of: pid)
+        windowsProgram(arguments(of: pid))
+    }
+
+    private static func windowsProgram(_ fields: [String]) -> String? {
         guard fields.count >= 2 else { return nil }
         let program = fields[1].split(separator: "\\").last.map(String.init) ?? fields[1]
         return program.lowercased()
