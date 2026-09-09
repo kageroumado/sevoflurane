@@ -86,6 +86,7 @@ let package = Package(
                 "Sevoflurane/Support/ConfigMaterializer.swift",
                 "Sevoflurane/Support/CrossOverShadow.swift",
                 "Sevoflurane/Support/Deadline.swift",
+                "Sevoflurane/Support/DebugMode.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/FileDigest.swift",

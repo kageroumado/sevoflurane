@@ -26,6 +26,9 @@ final class ControlServer {
         "/steam/close",
         "/chat/open",
         "/menu/cancel",
+        "/debug",
+        "/debug/on",
+        "/debug/off",
     ]
 
     /// Verbs that mean "there should be a client": a daemon that has not been

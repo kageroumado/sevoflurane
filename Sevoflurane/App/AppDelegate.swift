@@ -95,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a throw during the rest of startup is still recorded.
         ExceptionWatch.install()
         installSharedHooks()
+        // Before anything can start a bottle process, so the client this
+        // launch brings up is not the killed session's verbose one.
+        DebugModeSwitch.shared.clearStaleFile()
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
@@ -483,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// after this: the lines describing the shutdown are the ones a reader
     /// wants most, so the process waits for them to reach the disk.
     func applicationWillTerminate(_: Notification) {
+        DebugModeSwitch.shared.endSession()
         EventLog.shared.log(.app, "the app is stopping")
         EventLog.flush()
     }

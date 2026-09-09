@@ -19,7 +19,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
-            RunsCommand.self, DiagCommand.self,
+            RunsCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -136,6 +136,7 @@ enum StatusReport {
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
             + " · supervision \(supervision) · app \(app)"
         if incomplete != nil { line += " · bottle incomplete" }
+        if snapshot.appStatus?["debug"] as? Bool == true { line += " · debug mode on" }
         return (dict, line)
     }
 
@@ -2247,6 +2248,93 @@ struct LogsCommand: AsyncParsableCommand {
                 FileHandle.standardOutput.write(data)
             }
         }
+    }
+}
+
+// MARK: - debug mode
+
+/// `sevo debug` — the playtest switch, as a scripted playtest reaches it.
+///
+/// The mode is a session of the running app: it holds the state, it flushes
+/// its own log line by line while it is on, and it turns everything off when
+/// it quits. So `on` needs the app, and only `off` can act without it — to
+/// clear the env file a killed session left in the bottle.
+struct DebugCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "debug",
+        abstract: "The playtest switch: verbose engine and app logging until the app quits.",
+        subcommands: [On.self, Off.self, Status.self],
+        defaultSubcommand: Status.self,
+    )
+
+    struct On: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "on", abstract: "Turn debug mode on (needs the app running).",
+        )
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            guard let reply = await AppControl.post("/debug/on") else {
+                Sevo.printError(
+                    "the app is not running — debug mode is a session of it; open Sevoflurane first",
+                )
+                throw SevoExit.unreachable
+            }
+            DebugCommand.report(reply, asJSON: asJSON)
+        }
+    }
+
+    struct Off: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "off", abstract: "Turn debug mode off.",
+        )
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            if let reply = await AppControl.post("/debug/off") {
+                DebugCommand.report(reply, asJSON: asJSON)
+                return
+            }
+            // No app, so no session — but a killed one can have left its file
+            // in the bottle, where the next program to start would read it.
+            let cleared = ConfigMaterializer.removeDebugEnv(prefix: SteamBottle.root)
+            let note = cleared
+                ? "the app is not running; deleted the env file a previous session left behind"
+                : "the app is not running; there was nothing to turn off"
+            print(asJSON ? Sevo.json(["on": false, "note": note], pretty: true) : "debug mode off — \(note)")
+        }
+    }
+
+    struct Status: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "status", abstract: "Whether debug mode is on, and where its file is.",
+        )
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            if let reply = await AppControl.get("/debug") {
+                DebugCommand.report(reply, asJSON: asJSON)
+                return
+            }
+            let url = DebugMode.envURL(prefix: SteamBottle.root)
+            let stale = DebugMode.isWritten(prefix: SteamBottle.root)
+            let note = stale
+                ? "the app is not running, and \(url.path) is a killed session's — sevo debug off"
+                : "the app is not running"
+            print(asJSON ? Sevo.json(["on": false, "note": note], pretty: true) : "debug mode off — \(note)")
+        }
+    }
+
+    /// The app's own answer, printed as JSON or as the line it describes.
+    private static func report(_ reply: Data, asJSON: Bool) {
+        guard !asJSON else {
+            print(String(decoding: reply, as: UTF8.self))
+            return
+        }
+        let object = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any]
+        let on = object?["on"] as? Bool == true
+        let note = object?["note"] as? String ?? ""
+        print("debug mode \(on ? "on" : "off") — \(note)")
     }
 }
 

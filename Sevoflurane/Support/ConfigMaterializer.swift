@@ -4,7 +4,9 @@ import Foundation
 /// `<prefix>/.sevo/bottle.env` for the bottle's resolved values and
 /// `<prefix>/.sevo/apps/<exe>.env` for every game with a value of its own
 /// (dormison ntdll, `load_sevo_env`). Whole-file rewrites, idempotent;
-/// run after every store change and at every client start.
+/// run after every store change and at every client start. ``DebugMode``'s
+/// `debug.env` is read between those two and is written here as well, so one
+/// type owns every file in that directory.
 ///
 /// The files carry a header naming this app, and only files with it are
 /// removed when a game's values go away — a file someone wrote by hand in the
@@ -55,6 +57,31 @@ nonisolated enum ConfigMaterializer {
         // runners share one store by design) and loses the wrapper package,
         // which describes a run that is no longer arranged.
         NWJSRunner.removeWrappers(keeping: native)
+    }
+
+    /// Writes ``DebugMode``'s own file, which the engine reads after the
+    /// bottle's and before a game's. It is a whole file of its own rather
+    /// than lines in `bottle.env` so that turning the mode off is a deletion
+    /// and the user's own bottle settings are never rewritten.
+    static func writeDebugEnv(_ lines: [String], prefix: URL) {
+        let url = debugEnvURL(prefix: prefix)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+        )
+        write(lines, to: url)
+    }
+
+    /// Deletes the debug file, answering whether one was there.
+    @discardableResult
+    static func removeDebugEnv(prefix: URL) -> Bool {
+        let url = debugEnvURL(prefix: prefix)
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        try? FileManager.default.removeItem(at: url)
+        return true
+    }
+
+    static func debugEnvURL(prefix: URL) -> URL {
+        prefix.appendingPathComponent(".sevo/debug.env")
     }
 
     /// The bottle level: the resolved value of every setting the engine takes

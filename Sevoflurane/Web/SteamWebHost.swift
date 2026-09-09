@@ -966,6 +966,23 @@ final class SteamWebHost {
         return SteamScreenSpace.isOnSomeScreen(desktop.appKitFrame)
     }
 
+    /// The inventory as a log line, written on every adoption and close while
+    /// debug mode is on. `GET /windows` answers the same question, but only
+    /// for someone who thought to ask it while the window was still there;
+    /// this is what a report has afterwards.
+    private func logWindowInventory(_ occasion: String) {
+        guard DebugModeSwitch.shared.isOn else { return }
+        let rows = windowInventory().map { row in
+            let name = row["name"] as? String ?? "?"
+            let visible = row["visible"] as? Bool == true ? "visible" : "hidden"
+            return "\(name) [\(row["role"] as? String ?? "?")] \(visible) \(row["frame"] as? String ?? "")"
+        }
+        EventLog.shared.log(
+            .window,
+            "windows after \(occasion): \(rows.isEmpty ? "none" : rows.joined(separator: "; "))",
+        )
+    }
+
     /// Every window the host owns, for `sevo` diagnostics
     /// (control endpoint `GET /windows`).
     func windowInventory() -> [[String: Any]] {
@@ -1893,6 +1910,7 @@ final class SteamWebHost {
         // The name is what classifies a popup, so an unexpected window on
         // screen can be traced to the name Steam gave it.
         EventLog.shared.log(.window, "popup adopted: \(window.name) as \(window.role)")
+        defer { logWindowInventory("adopting \(window.name)") }
         // A popup adopted while the overlay is up belongs to it (its Settings,
         // a dialog): track it so it is ordered in and out with the overlay and
         // dismissed when it closes, rather than left floating above the game.
@@ -2115,6 +2133,7 @@ final class SteamWebHost {
 
     func windowDidClose(_ window: SteamWindow, reason: SteamWindow.DetachReason) {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
+        defer { logWindowInventory("closing \(window.name)") }
         // A window the overlay adopted is held until the overlay dismisses, so
         // that it rides in and out with it. Once it has closed there is
         // nothing left to order, and holding it keeps its web view alive past

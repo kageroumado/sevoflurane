@@ -159,7 +159,7 @@ final class EventLog {
 /// At file scope so both writers share it. `DateFormatter.string(from:)` is
 /// thread-safe for a formatter that is never mutated after construction,
 /// which is what this is.
-private nonisolated(unsafe) let eventStamp: DateFormatter = {
+private nonisolated let eventStamp: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -171,14 +171,20 @@ private nonisolated(unsafe) let eventStamp: DateFormatter = {
 /// in tens of milliseconds — on the main thread every log line would be a
 /// UI stall of that length.
 private final nonisolated class LogFile: Sendable {
-    /// Rotation threshold; one boot's worth of transitions is a few KB, so
-    /// this only ever trips after months of unattended running.
+    /// Rotation threshold. One boot's worth of transitions is a few KB; a
+    /// debug-mode session writing a window inventory per adoption is the case
+    /// this bounds.
     private static let rotateOverBytes = 5_000_000
+    /// How much is written between size checks: a `stat` per line would cost
+    /// more than the write it guards.
+    private static let checkSizeEveryBytes = 64_000
 
     private let url: URL
     private let queue: DispatchQueue
     /// Confined to `queue`.
     nonisolated(unsafe) private var handle: FileHandle?
+    /// Confined to `queue`: bytes written since the last size check.
+    nonisolated(unsafe) private var sinceSizeCheck = 0
 
     init(url: URL) {
         self.url = url
@@ -186,15 +192,34 @@ private final nonisolated class LogFile: Sendable {
     }
 
     func append(_ line: String, synchronously: Bool) {
-        let write = { [self] in
+        let write: @Sendable () -> Void = { [self] in
             if handle == nil { openFile() }
-            try? handle?.write(contentsOf: Data(line.utf8))
+            let data = Data(line.utf8)
+            try? handle?.write(contentsOf: data)
+            sinceSizeCheck += data.count
+            if sinceSizeCheck > Self.checkSizeEveryBytes {
+                sinceSizeCheck = 0
+                rotateIfLarge()
+            }
         }
         if synchronously {
             queue.sync(execute: write)
         } else {
             queue.async(execute: write)
         }
+    }
+
+    /// Moves the trail aside by copy and truncate rather than by renaming:
+    /// the handle stays open on the same inode, so a rename would leave every
+    /// subsequent line in a file nobody is reading. Runs on `queue`.
+    private func rotateIfLarge() {
+        let manager = FileManager.default
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size > Self.rotateOverBytes else { return }
+        let old = url.deletingPathExtension().appendingPathExtension("old.log")
+        try? manager.removeItem(at: old)
+        try? manager.copyItem(at: url, to: old)
+        try? handle?.truncate(atOffset: 0)
     }
 
     /// Returns once the queue has run everything enqueued before the call:
@@ -205,12 +230,6 @@ private final nonisolated class LogFile: Sendable {
 
     private func openFile() {
         let manager = FileManager.default
-        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-           size > Self.rotateOverBytes {
-            let old = url.deletingPathExtension().appendingPathExtension("old.log")
-            try? manager.removeItem(at: old)
-            try? manager.moveItem(at: url, to: old)
-        }
         try? manager.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true,

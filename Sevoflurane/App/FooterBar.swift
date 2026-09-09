@@ -28,6 +28,7 @@ struct FooterBar: View {
         GlassEffectContainer(spacing: Theme.Space.xs) {
             HStack(spacing: Theme.Space.xs) {
                 StatusChip(host: host, supervisor: supervisor)
+                DebugChip()
                 UpdateChip()
                 Spacer(minLength: 0)
                 actionsMenu
@@ -83,6 +84,7 @@ struct FooterBar: View {
                     Button("Open Event Log", systemImage: "doc.text") {
                         NSWorkspace.shared.open(EventLog.fileURL)
                     }
+                    debugModeItem
                 } label: {
                     Color.clear.contentShape(.rect)
                 }
@@ -91,6 +93,32 @@ struct FooterBar: View {
             }
             .help("Reload, restart, and the event log")
             .accessibilityLabel("More actions")
+    }
+
+    /// The playtest switch, and — while a client is already up under the old environment — the
+    /// restart that carries it to the client and its games. The app half is on the moment the
+    /// toggle is pressed; the engine half is read by a program at its start, so a running Steam
+    /// keeps the channels it booted with.
+    @ViewBuilder private var debugModeItem: some View {
+        let debug = DebugModeSwitch.shared
+        Toggle(isOn: Binding(get: { debug.isOn }, set: { debug.set($0) })) {
+            Label("Debug Mode", systemImage: "ladybug")
+        }
+        .help("Log every library load, the renderer's errors and the engine's frame trail, "
+            + "until this app quits")
+        if debug.isOn, isClientUp {
+            Button("Debug Mode takes effect at the next Steam start — Restart Steam") {
+                supervisor.restartNow(reason: "debug mode")
+            }
+        }
+    }
+
+    /// Whether a client is running under the environment debug mode has just changed.
+    private var isClientUp: Bool {
+        switch supervisor.health {
+        case .healthy, .degraded, .waitingForSignIn: true
+        case .starting, .launching, .restarting, .gaveUp, .paused: false
+        }
     }
 
     /// A glyph for the bottom-bar utility controls, pinned to the shared label box so every glass
@@ -164,6 +192,26 @@ private struct StatusChip: View {
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
         .help(tooltip)
+    }
+}
+
+// MARK: - Debug chip
+
+/// Present only while debug mode is on, because that is the whole of what it says: the logs are
+/// growing and something turned them on. Its tooltip carries the sizes, so "how much" is a hover
+/// rather than a trip to the Finder.
+private struct DebugChip: View {
+    var body: some View {
+        let debug = DebugModeSwitch.shared
+        if debug.isOn {
+            Label("Debug", systemImage: "ladybug.fill")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
+                .fixedSize()
+                .frame(height: FooterBar.labelBox)
+                .help(debug.summary)
+        }
     }
 }
 

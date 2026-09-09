@@ -111,6 +111,8 @@ final class AppLinkServer {
             return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
         case ("POST", "/menu/cancel"):
             return cancelMenuTracking()
+        case ("GET", "/debug"), ("POST", "/debug/on"), ("POST", "/debug/off"):
+            return DebugModeSwitch.shared.handleControl(request)
         case ("POST", "/benchmark/smoke"):
             guard ProcessInfo.processInfo.environment["SEVO_ENABLE_BENCHMARKS"] == "1" else {
                 return .error(403, "set SEVO_ENABLE_BENCHMARKS=1 before launching Sevoflurane")

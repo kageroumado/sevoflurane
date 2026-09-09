@@ -109,6 +109,9 @@ nonisolated enum Diagnostics {
         copy(engine.root.appendingPathComponent("engine-info.json"), as: "engine/engine-info.json")
         let sevoDir = SteamBottle.root.appendingPathComponent(".sevo")
         copy(sevoDir.appendingPathComponent("bottle.env"), as: "bottle/bottle.env")
+        // Present only while debug mode is on, which is itself the answer to
+        // "why is this Wine log so large".
+        copy(sevoDir.appendingPathComponent("debug.env"), as: "bottle/debug.env")
         for app in (try? manager.contentsOfDirectory(atPath: sevoDir.appendingPathComponent("apps").path)) ?? [] {
             copy(sevoDir.appendingPathComponent("apps/\(app)"), as: "bottle/apps/\(app)")
         }
@@ -302,10 +305,15 @@ nonisolated enum GameLogs {
         return nil
     }
 
-    /// The renderer's own log, when the bottle's environment names one.
+    /// The renderer's own logs, when the bottle's environment names where
+    /// they go. DXMT takes a directory and writes one file per executable in
+    /// it, so a directory contributes its files rather than itself.
     private static func rendererLogs() -> [URL] {
         let sevo = SteamBottle.root.appendingPathComponent(".sevo")
-        var files = [sevo.appendingPathComponent("bottle.env")]
+        var files = [
+            sevo.appendingPathComponent("bottle.env"),
+            sevo.appendingPathComponent("debug.env"),
+        ]
         files += InstallDirectory.entries(in: sevo.appendingPathComponent("apps")).map(\.url)
         var found: [URL] = []
         for file in files {
@@ -314,8 +322,11 @@ nonisolated enum GameLogs {
                 let value = String(line.dropFirst(rendererLogKey.count))
                 guard let url = SteamBottle.macURL(fromWindowsPath: value)
                     ?? (value.hasPrefix("/") ? URL(fileURLWithPath: value) : nil),
-                    modified(url) != nil, !found.contains(url) else { continue }
-                found.append(url)
+                    modified(url) != nil else { continue }
+                let entries = InstallDirectory.entries(in: url)
+                let logs = entries.isEmpty
+                    ? [url] : entries.filter { !$0.isDirectory && isText($0.name) }.map(\.url)
+                found += logs.filter { !found.contains($0) }
             }
         }
         return found
