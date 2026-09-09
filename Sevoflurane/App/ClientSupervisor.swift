@@ -1068,6 +1068,9 @@ final class ClientSupervisor {
         pendingRestart = stamp
         clientFailures = 0
         clientShowsLoginWindow = false
+        // A pass that will launch is a fresh try, so the last one's verdict —
+        // a crash loop included — stops being the state to report.
+        fault = nil
         log.log(.supervisor, "restarting client: \(reason)")
 
         // Take the dead client's frozen windows off screen now, rather than
