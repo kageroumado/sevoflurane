@@ -83,6 +83,11 @@ final class ClientSupervisor {
     /// mean the web view itself is what is wedged, and the third try rebuilds it.
     @ObservationIgnored private var pageReloads = 0
     @ObservationIgnored private var isRestarting = false
+    /// A restart asked for while the ladder is mid-flight, with its reason.
+    /// The running ladder stops waiting on the client it is bringing up and
+    /// runs again from the top, so an engine switch that lands during a boot
+    /// boots the new engine instead of finishing the old one first.
+    @ObservationIgnored private var restartAgain: String?
     @ObservationIgnored private var recentRestarts: [Date] = []
     @ObservationIgnored private var lastPageRecovery = Date.distantPast
     /// Whether the current services outage already got its one page reload —
@@ -216,13 +221,15 @@ final class ClientSupervisor {
         host.launchGame(game)
     }
 
-    /// The menu-bar button: restarts unconditionally, with a fresh crash-loop
-    /// budget — the user asking is what distinguishes "try again" from a loop.
-    func restartNow() {
+    /// The menu-bar button and the control endpoint: restarts
+    /// unconditionally, with a fresh crash-loop budget — the user asking is
+    /// what distinguishes "try again" from a loop. A ladder already in flight
+    /// runs again rather than being fought or refused.
+    func restartNow(reason: String = "manual restart from the menu bar") {
         recentRestarts.removeAll()
         hygieneTried = false
         Task(name: "Manual client restart") {
-            await restartClient(reason: "manual restart from the menu bar")
+            await restartClient(reason: reason)
         }
     }
 
@@ -633,9 +640,29 @@ final class ClientSupervisor {
     // MARK: - Restart ladder
 
     private func restartClient(reason: String, fullWindows: Bool = false) async {
-        guard !isRestarting, !isQuitting else { return }
+        guard !isQuitting else { return }
+        if isRestarting {
+            restartAgain = reason
+            log.log(.supervisor, "restart requested mid-restart (\(reason)); the ladder runs again")
+            return
+        }
         isRestarting = true
         defer { isRestarting = false }
+        var reason = reason, fullWindows = fullWindows
+        while true {
+            await runRestartLadder(reason: reason, fullWindows: fullWindows)
+            guard let again = restartAgain, !isQuitting else { return }
+            restartAgain = nil
+            reason = again
+            fullWindows = false
+        }
+    }
+
+    /// One pass of the ladder: stop what is up, launch under `Engine.active`
+    /// as it is at launch time, wait for the client. A restart asked for on
+    /// the way (`restartAgain`) ends the pass early, before the launch when
+    /// it can, so the next pass decides afresh what has to come down.
+    private func runRestartLadder(reason: String, fullWindows: Bool) async {
         let ladder = PerfProbe.supervisor.beginInterval("ClientRestart")
         defer { PerfProbe.supervisor.endInterval("ClientRestart", ladder) }
 
@@ -691,6 +718,9 @@ final class ClientSupervisor {
             return
         }
         guard !isQuitting else { return }
+        // The engine may have changed under this pass; the next one settles
+        // what has to come down for it before anything is launched.
+        guard restartAgain == nil else { return }
 
         health = .restarting("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
@@ -763,6 +793,10 @@ final class ClientSupervisor {
             health = progress("waiting for the client (\(waited)s)")
             try? await Task.sleep(for: .seconds(stride))
             waited += stride
+            if restartAgain != nil {
+                log.log(.client, "abandoning this boot after \(waited)s: a restart is wanted")
+                return
+            }
             // A Wine window with CDP still dead this far in is Steam saying
             // something instead of starting — the gptk-wine wedge sat in
             // this loop for the full 180s, three times over, before the

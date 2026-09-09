@@ -414,7 +414,7 @@ struct EngineCommand: AsyncParsableCommand {
     ) var bottle: String?
     @Flag(
         name: .customLong("no-app"),
-        help: "For use: switch directly even if the app is running (debug).",
+        help: "For use: drive the client from this process instead of through the app (debug); without it a closed app is opened to boot the engine.",
     ) var noApp = false
     @Option(
         name: .customLong("from"),

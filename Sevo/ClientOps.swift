@@ -110,13 +110,32 @@ nonisolated enum ClientOps {
     /// `sevo engine use`: point the active engine (and optionally the bottle)
     /// at `engine`, then restart under it. Through the app when it is running,
     /// because `Engine.active` is cached in that process and the supervisor
-    /// reads it to relaunch; directly otherwise, where this CLI process is the
-    /// one that both writes the choice and launches.
+    /// reads it to relaunch. With the app closed the choice is written and
+    /// the app is opened to boot it: the supervisor owns the client, and a
+    /// client this process launched would run with nothing watching it.
+    /// `--no-app` drives the client directly, for debugging.
     static func useEngine(
         _ engine: Engine, version: String, bottle: String?,
         noApp: Bool, progress: (String) -> Void,
     ) async throws -> Outcome {
         let alreadyActive = Engine.active == engine
+        if !noApp, await AppControl.status() == nil {
+            Engine.choose(engine)
+            if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
+            guard await openApp() else {
+                return Outcome(verdict: .confirmed, intent: "engine use",
+                               note: "engine set to \(version); Sevoflurane is not installed here, so nothing was started")
+            }
+            progress("engine set to \(version) — opening Sevoflurane to boot it")
+            for _ in 0 ..< 20 where await AppControl.status() == nil {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            guard await AppControl.status() != nil else {
+                return Outcome(verdict: .unverifiable, intent: "engine use",
+                               note: "engine set to \(version); Sevoflurane was opened but its control endpoint has not answered — sevo status")
+            }
+            return await pollAppHealthy(intent: "engine use", progress: progress)
+        }
         if await appIsRunning(noApp: noApp) {
             var path = "/engine/use?version=\(version)"
             if let bottle, !bottle.isEmpty { path += "&bottle=\(bottle)" }
@@ -147,6 +166,23 @@ nonisolated enum ClientOps {
                            note: "already on \(version); restarted, healthy")
         }
         return outcome
+    }
+
+    /// Opens the installed app through Launch Services; false when there is
+    /// no app registered under its bundle identifier.
+    static func openApp() async -> Bool {
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = ["-b", "glass.kagerou.sevoflurane"]
+        open.standardOutput = FileHandle.nullDevice
+        open.standardError = FileHandle.nullDevice
+        do {
+            try open.run()
+        } catch {
+            return false
+        }
+        open.waitUntilExit()
+        return open.terminationStatus == 0
     }
 
     /// Headless client refresh. Only sane with everything stopped — a live

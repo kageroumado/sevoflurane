@@ -78,7 +78,7 @@ final class ControlServer {
                 return .error(409, error.localizedDescription)
             }
         case ("POST", "/client/restart"):
-            supervisor.restartNow()
+            supervisor.restartNow(reason: "sevo client restart")
             return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
         case ("POST", "/client/start"):
             supervisor.startForControl()
@@ -116,10 +116,9 @@ final class ControlServer {
     /// down and assemble the new invocation. A CLI that only wrote the shared
     /// preference would leave this process — the one that relaunches the
     /// client — still on the old engine, so the switch travels this endpoint.
+    /// A switch during a restart is taken as well: the ladder abandons the
+    /// boot it is waiting on and runs again under the new engine.
     private func useEngine(query: String) -> HTTPResponse {
-        guard !supervisor.isBusyRestarting else {
-            return .error(409, "restart in progress")
-        }
         let version = Self.value(of: "version", in: query)
         guard !version.isEmpty else {
             return .error(400, "pass ?version=<engine> (sevo engine list)")
@@ -147,7 +146,7 @@ final class ControlServer {
             .supervisor,
             "engine switched to \(engine.description), bottle \(targetBottle) (control)",
         )
-        supervisor.restartNow()
+        supervisor.restartNow(reason: "engine switched to \(engine.description)")
         return Self.json(#"{"ok":true,"note":"engine switched; restarting — poll /status"}"#)
     }
 
