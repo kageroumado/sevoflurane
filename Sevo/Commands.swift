@@ -18,7 +18,8 @@ struct SevoCommand: AsyncParsableCommand {
             StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
             AppCommand.self, DownloadsCommand.self,
-            EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self, DiagCommand.self,
+            EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
+            RunsCommand.self, DiagCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -2148,6 +2149,53 @@ struct RunCommand: AsyncParsableCommand {
         process.waitUntilExit()
         print("\(first) exited (status \(process.terminationStatus))")
         if process.terminationStatus != 0 { throw SevoExit.failed }
+    }
+}
+
+/// `sevo runs`: what every game launch did, from the run records.
+struct RunsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "runs",
+        abstract: "The last game launches: what each ran on, how long, and how it ended.",
+        discussion: """
+        One line per launch, oldest first. Records live in ~/Library/Application \
+        Support/Sevoflurane/Runs, one JSON Lines file per month.
+        """,
+    )
+
+    @Option(name: .customLong("last"), help: "How many launches to print.") var last = 20
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        let records = RunLog.recent(max(1, last))
+        guard !records.isEmpty else {
+            print("no runs recorded yet — launch a game and look again")
+            return
+        }
+        if asJSON {
+            print(Sevo.json(records.map(Self.row), pretty: true))
+            return
+        }
+        for record in records {
+            print("\(Self.moment(record.t))  \(record.summary)")
+        }
+    }
+
+    /// The record as it sits on disk.
+    private static func row(_ record: RunRecord) -> [String: Any] {
+        (try? JSONEncoder().encode(record))
+            .flatMap { Sevo.jsonObject(String(decoding: $0, as: UTF8.self)) } ?? [:]
+    }
+
+    /// The record's UTC stamp in this Mac's own time, which is what the event
+    /// log beside it is written in.
+    private static func moment(_ stamp: String) -> String {
+        let parser = ISO8601DateFormatter()
+        guard let date = parser.date(from: stamp) else { return stamp }
+        let local = DateFormatter()
+        local.dateFormat = "yyyy-MM-dd HH:mm"
+        local.locale = Locale(identifier: "en_US_POSIX")
+        return local.string(from: date)
     }
 }
 

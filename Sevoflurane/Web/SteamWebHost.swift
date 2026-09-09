@@ -567,6 +567,15 @@ final class SteamWebHost {
     /// fires even for a launch the bridge never saw.
     var onGameLaunchStart: ((Int) -> Void)?
 
+    /// An app started or stopped running, told by the client itself
+    /// (`GameSessions.RegisterForAppLifetimeNotifications`). The stop edge is
+    /// what closes a run record.
+    var onGameRunningChanged: ((_ appID: Int, _ running: Bool) -> Void)?
+
+    /// The client showed an error for a game action — it refused or abandoned
+    /// the launch rather than the game exiting on its own.
+    var onGameActionError: ((_ appID: Int, _ detail: String) -> Void)?
+
     /// One `__gameAction` event from the context page's registrations
     /// (``gameActionScript``). The trail also lands in the log, so a slow
     /// launch explains itself after the fact.
@@ -597,6 +606,18 @@ final class SteamWebHost {
             // again, whether a game came up or an error dialog did, so it is
             // worth one check that there is something to look at.
             repairBlankDesktop()
+        case "error":
+            let id = Int(appID) ?? activeLaunch?.appID ?? 0
+            EventLog.shared.log(
+                .client,
+                "launch \(id): Steam reported an error\(task.isEmpty ? "" : " — \(task)")",
+            )
+            if id != 0 { onGameActionError?(id, task) }
+        case "life":
+            guard let id = Int(appID), id != 0 else { return }
+            let running = task == "1"
+            EventLog.shared.log(.client, "app \(id) \(running ? "is running" : "stopped running")")
+            onGameRunningChanged?(id, running)
         default:
             break
         }
@@ -825,32 +846,65 @@ final class SteamWebHost {
         }
     }
 
-    /// Subscribes the context page to the client's game-action events; they
-    /// come back through the popup message handler as `__gameAction`.
-    /// Idempotent per page session, and a reload re-registers because the
-    /// desktop window is re-adopted.
+    /// Subscribes the context page to the client's game-action events and to
+    /// the running edge of every app; they come back through the popup message
+    /// handler as `__gameAction`.
+    ///
+    /// One registration per callback, recorded in a page global, so the script
+    /// can be re-evaluated at any time and only registers what the page is
+    /// missing. A reload drops the global with the page and re-registers,
+    /// which is what a fresh page needs.
+    ///
+    /// `GameSessions.RegisterForAppLifetimeNotifications` is the only place a
+    /// game's exit exists on this side: games are `CreateProcess`ed by
+    /// `Steam.exe` inside the bottle, so the app has no pid to wait on.
     private static let gameActionScript = """
     (function () {
-      if (window.__sevoGameActions) return "already registered";
       if (!window.SteamClient || !SteamClient.Apps
           || !SteamClient.Apps.RegisterForGameActionStart) return "unavailable";
-      window.__sevoGameActions = true;
+      var registered = window.__sevoGameActions || (window.__sevoGameActions = {});
       var post = function (args) {
         try {
           window.webkit.messageHandlers.sevoWindow
             .postMessage({ fn: "__gameAction", args: args });
         } catch (e) {}
       };
-      SteamClient.Apps.RegisterForGameActionStart(function (id, appid, action) {
-        post(["start", String(appid), String(action || "")]);
+      var added = 0;
+      var once = function (key, available, register) {
+        if (registered[key] || !available) return;
+        registered[key] = register() || true;
+        added++;
+      };
+      once("start", SteamClient.Apps.RegisterForGameActionStart, function () {
+        return SteamClient.Apps.RegisterForGameActionStart(function (id, appid, action) {
+          post(["start", String(appid), String(action || "")]);
+        });
       });
-      SteamClient.Apps.RegisterForGameActionTaskChange(function (id, appid, task) {
-        post(["task", String(appid), String(task || "")]);
+      once("task", SteamClient.Apps.RegisterForGameActionTaskChange, function () {
+        return SteamClient.Apps.RegisterForGameActionTaskChange(function (id, appid, task) {
+          post(["task", String(appid), String(task || "")]);
+        });
       });
-      SteamClient.Apps.RegisterForGameActionEnd(function () {
-        post(["end", "", ""]);
+      once("end", SteamClient.Apps.RegisterForGameActionEnd, function () {
+        return SteamClient.Apps.RegisterForGameActionEnd(function () {
+          post(["end", "", ""]);
+        });
       });
-      return "registered";
+      once("error", SteamClient.Apps.RegisterForGameActionShowError, function () {
+        return SteamClient.Apps.RegisterForGameActionShowError(
+          function (id, appid, action, error, param) {
+            post(["error", String(appid || ""),
+                  [action, error, param].filter(Boolean).join(" ")]);
+          });
+      });
+      once("life", window.SteamClient.GameSessions
+           && SteamClient.GameSessions.RegisterForAppLifetimeNotifications, function () {
+        return SteamClient.GameSessions.RegisterForAppLifetimeNotifications(function (change) {
+          if (!change) return;
+          post(["life", String(change.unAppID || ""), change.bRunning ? "1" : "0"]);
+        });
+      });
+      return added ? "registered" : "already registered";
     })()
     """
 

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var supervisor = ClientSupervisor(host: host, bridge: bridge)
     let notifications = SteamNotifications()
     private let gameLaunchWatch = GameLaunchWatch()
+    private let runRecorder = RunRecorder()
     private lazy var controlServer = ControlServer(supervisor: supervisor, host: host)
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
@@ -55,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NWJSRunner.log = { EventLog.enqueue(.client, $0) }
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }
         GameExecutables.log = { EventLog.enqueue(.client, $0) }
+        RunRecorder.log = { EventLog.enqueue(.client, $0) }
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
@@ -136,8 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - What a launch records
 
-    /// The three moments a launch tells the app something: it began, one of
-    /// its processes reached the Mac driver, and one of them put up a window.
+    /// The moments a launch tells the app something: it began, one of its
+    /// processes reached the Mac driver, one of them put up a window, Steam
+    /// raised an error for it, and the game stopped running.
     private func installLaunchHooks() {
         host.onGameLaunchStart = { [weak self] appID in
             guard let self else { return }
@@ -149,6 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A minute later, when that window finally arrives, there is no
             // event left for the window server to attribute the request to.
             Activation().claimRight()
+            // The run record opens here rather than at the first window:
+            // a game that dies before it draws is the one worth recording.
+            runRecorder.arm(appID: appID)
             // The game's exes, read from its install directory now, so its
             // env files — and the bundle that names it in the Dock — exist
             // before the process starts rather than after its first window.
@@ -162,6 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that survives a game which dies before it draws.
         gameLaunchWatch.onGameProcessArmed = { [weak self] exe in
             guard let self, let appID = host.activeLaunch?.appID else { return }
+            runRecorder.noteExecutable(exe, forApp: appID)
             record(exe, forApp: appID, detectingRuntime: false)
         }
         gameLaunchWatch.onGameWindowUp = { [weak self] owner in
@@ -175,8 +182,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // chance to read its files: what it is built on decides which
             // runners it can be offered.
             if let launchedAppID {
+                runRecorder.noteWindowUp(forApp: launchedAppID)
                 record(owner, forApp: launchedAppID, detectingRuntime: true)
             }
+        }
+        host.onGameActionError = { [weak self] appID, detail in
+            self?.runRecorder.noteSteamError(detail, forApp: appID)
+        }
+        // The client's own notification is the exit edge: a game Steam started
+        // is not a process this app can wait on.
+        host.onGameRunningChanged = { [weak self] appID, running in
+            guard !running else { return }
+            self?.runRecorder.close(appID: appID)
         }
     }
 
@@ -433,6 +450,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if isSimulatedBoot { return .terminateNow }
         #endif
         guard quitTask == nil else { return .terminateCancel }
+        // Before the bottle comes down: a game still up ends here, and after
+        // the teardown nothing is left that could say how.
+        runRecorder.closeAll()
         quitTask = Task(name: "Quit teardown") {
             GameDisplayHold.gameDidExit()
             await supervisor.shutdownForQuit()
