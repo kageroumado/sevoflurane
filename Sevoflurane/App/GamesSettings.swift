@@ -52,12 +52,12 @@ struct GamesSettings: View {
         if games.isEmpty {
             ContentUnavailableView(
                 "No games yet", systemImage: "gamecontroller",
-                description: Text("A game appears here after its first launch, once its executables are on record."),
+                description: Text("Games appear here after their first launch."),
             )
         } else {
             ContentUnavailableView(
                 "Choose a game", systemImage: "gamecontroller",
-                description: Text("Its settings over the bottle's are set here."),
+                description: Text("Customize its window, upscaler, and mouse settings."),
             )
         }
     }
@@ -80,8 +80,7 @@ struct GamesSettings: View {
             } header: {
                 Text(entry.name)
             } footer: {
-                Text("Inherit takes the bottle's value from Settings › Engine. A change reaches "
-                    + "the game at its next launch"
+                Text("Inherit uses the value in Engine. Changes apply at the next game launch"
                     + (Engine.active.supportsEnvFiles ? "." : ", once Steam has restarted."))
             }
             .highlightable(id: "games.settings", highlighted: highlighted)

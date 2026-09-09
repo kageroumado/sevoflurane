@@ -99,7 +99,7 @@ enum AgentIntegration {
             switch self {
             case .claudeCode: "Claude Code"
             case .claudeDesktop: "Claude Desktop"
-            case .codex: "Codex / ChatGPT"
+            case .codex: "Codex"
             case .hermes: "Hermes"
             }
         }

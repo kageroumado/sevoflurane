@@ -17,7 +17,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     var label: String {
         switch self {
-        case .auto: "Automatic (recommended)"
+        case .auto: "Automatic"
         case .d3dmetal: "D3DMetal"
         case .dxmt: "DXMT"
         case .dxvk: "DXVK"
@@ -27,11 +27,11 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     var detail: String {
         switch self {
-        case .auto: "A per-game choice made for you. Leave it here."
-        case .d3dmetal: "Apple's own. The only one that handles DirectX 12."
+        case .auto: "Uses CrossOver's game settings, with Wine's renderer as fallback."
+        case .d3dmetal: "DirectX 11 and 12 through Apple's Game Porting Toolkit."
         case .dxmt: "DirectX 11, translated straight to Metal."
         case .dxvk: "DirectX 9 to 11, by way of Vulkan."
-        case .wined3d: "The slow, safe one that draws almost anything."
+        case .wined3d: "Wine's built-in Direct3D renderer."
         }
     }
 
@@ -41,20 +41,15 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     var guidance: String {
         switch self {
         case .auto:
-            "Leave it here unless a game misbehaves. CrossOver's database has "
-                + "a per-game answer for most of them."
+            "Uses CrossOver's per-game database when available, then falls back to Wine's renderer."
         case .d3dmetal:
-            "The only option that speaks DirectX 12, and the one MetalFX "
-                + "upscaling needs. Best for recent, demanding titles."
+            "DirectX 11 and 12 through Metal. Requires Apple's toolkit or a CrossOver engine that includes it."
         case .dxmt:
-            "DirectX 11 with no Vulkan in between. Often the steadiest frame "
-                + "pacing, and the kinder option on an older Mac."
+            "DirectX 10 and 11 through Metal. Try it if a DirectX 11 game has graphics problems."
         case .dxvk:
-            "DirectX 9 to 11 by way of Vulkan. Two translations deep — worth "
-                + "trying when a game refuses to draw on the Metal paths."
+            "DirectX 9 to 11 through Vulkan and MoltenVK."
         case .wined3d:
-            "Wine's own translation. Slow, and the most likely to render "
-                + "something at all: old and 2D games live here."
+            "Wine's built-in renderer. Try it for games that have trouble with the other renderers."
         }
     }
 

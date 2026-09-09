@@ -77,8 +77,7 @@ struct UpscalerPicker: View {
         let token = pending ?? selection ?? inherited
         guard let token else { return "" }
         guard let choice = shaders.choices.first(where: { $0.token == token }) else {
-            return "Named in the settings and missing from the store: the game draws with Lanczos "
-                + "until the package is back."
+            return "This package is missing. Games use Lanczos until it is reinstalled."
         }
         return choice.detail
     }

@@ -1,201 +1,184 @@
 # Sevoflurane
 
-**Steam for macOS, as a real Mac app. It runs your Windows Steam games,
-DirectX 12 included.**
+**Play Windows Steam games on an Apple silicon Mac, with Steam's interface
+in Mac windows.**
 
-Steam's own interface opens in Mac windows. Games install and launch as they
-do anywhere. The Windows Steam client that makes this possible runs hidden
-inside a Wine bottle, and Sevoflurane keeps it running.
+Browse your library, install games and chat with friends through Steam.
+Sevoflurane uses Wine to run the Windows Steam client and compatible games
+in the background.
 
 > **Status: pre-release.** A first public build is being prepared.
 
-The name is an anesthetic: delivered as vapor, known for a smooth and fast
-induction. Its color code is yellow, and so is the app's accent.
+Requires macOS 26.5 or later on Apple silicon.
 
-## What it does
+## Get started
 
-Steam's interface is a web app. Sevoflurane serves that web app into Mac
-windows of its own and replays every call it makes into the real Steam client
-running in the bottle. Every window Steam opens becomes a Mac window with the
-right role: the library, menus, the friends list, chats, notifications, the
-in-game overlay. The menu bar is the Mac menu bar. Notifications are Mac
-notifications. When Steam's own component hangs after an update, the app
-repairs it before you see anything.
+Build the app from source while the first public release is being prepared:
 
-Games run through a Wine engine. The app ships its own,
-[Dormison](https://github.com/kageroumado/dormison): upstream Wine with the
-changes that make Apple's DirectX 12 layer run on it, CrossOver's msync, the
-Rosetta fixes for 32-bit games, an upscaling presenter, and the fixes that
-make the Steam client boot cleanly. CrossOver works as the engine too, and
-setup recommends it: buying it funds the people who make Wine run on a Mac.
+1. Open `Sevoflurane.xcodeproj` in Xcode with the macOS 26.5 SDK or later.
+2. Choose your team under Signing & Capabilities and build the `Sevoflurane` scheme.
+3. Open the app and follow setup to install Steam, then sign in.
 
-## Compared with the other ways to play
+Setup offers [Dormison](https://github.com/kageroumado/dormison), the free
+Wine engine maintained with Sevoflurane. You can also use an installed copy
+of CrossOver.
 
-| | Sevoflurane | Steam inside a Wine app | Steam's own Mac app |
-|---|:---:|:---:|:---:|
-| Plays Windows Steam games on a Mac | ✓ | ✓ | Mac-native games only |
-| Nothing else to buy or install | ✓ | A Wine app, paid or free | ✓ |
-| Looks and behaves like a Mac app | ✓ | — | ✓ |
-| Setup is one window | ✓ | — | ✓ |
-| Keeps working after Steam updates | ✓ | — | ✓ |
-| DirectX 12 games | ✓ | With CrossOver | — |
-| Each game is its own app in the Dock, with Game Mode | ✓ | — | ✓ |
-| Mac notifications for messages and friends | ✓ | — | ✓ |
-| Launch a game from the menu bar | ✓ | — | — |
-| Settings per game, applied without restarting Steam | ✓ | — | — |
-| Full-screen games in a resizable window | ✓ | — | — |
-| Upscaling built in | ✓ | — | — |
-| Mouse-look that feels like a mouse | ✓ | — | — |
-| Mac and anti-cheat verdicts on every game page | ✓ | — | — |
-| RPG Maker games run as native Mac processes | ✓ | — | — |
-| A command line, and an interface for AI agents | ✓ | — | — |
-| Free and open source | ✓ | Varies | Free |
+For DirectX 12 games, add Apple's Game Porting Toolkit during setup.
+The download uses Apple's sign-in. CrossOver includes its own copy of
+D3DMetal, the toolkit's graphics translator.
 
-"Steam inside a Wine app" is the Windows Steam client running inside CrossOver,
-Whisky and the like, drawing its own Windows-style window. What each row means:
+## Playing games
 
-- **Looks and behaves like a Mac app.** Traffic lights, Mission Control, full
-  screen, the macOS menu bar driving Steam's menus, Retina sharpness.
-- **Setup is one window.** It creates the bottle, installs Steam and signs you
-  in. Apple's DirectX 12 toolkit is fetched through Apple's own sign-in.
-- **Keeps working after Steam updates.** The "a critical Steam component is
-  not responding" hang is detected and repaired: restart, cache repair,
-  crash-loop protection. Quitting the app takes the whole bottle down.
-- **Each game is its own app.** Each game runs from an app bundle with its
-  name and icon. The Dock shows the game. macOS Game Mode turns on when it
-  goes full screen.
-- **Settings per game.** Window mode, upscaler, mouse and renderer are set per
-  game and reach it at its next launch while Steam keeps running.
-- **Upscaling built in.** The engine puts every frame on screen through its
-  own Metal layer, so a game is upscaled on the way: Lanczos, MetalFX, Anime4K
-  or CuNNy, per game.
-- **Full-screen games in a window.** A game that insists on full screen, or on
-  a fixed window size, runs in a resizable Mac window. The game never notices.
-- **Mouse-look.** A game that takes the cursor to aim gets the mouse's own
-  movement instead of the Mac's accelerated pointer.
-- **Verdicts on every game page.** Where Steam shows its Deck badge, the game
-  page shows a Mac verdict and an anti-cheat verdict, with sources:
-  AppleGamingWiki, AreWeAntiCheatYet, ProtonDB.
-- **RPG Maker games.** A game built on NW.js runs as a real Mac process. Steam
-  still counts playtime, and achievements still arrive.
-- **A command line and an agent interface.** `sevo` manages and heals Steam
-  from the terminal. The same verbs are an MCP server, so an AI agent can
-  install a game or fix a stuck download.
+Steam's library, friends list and chats open in Mac windows, with the macOS
+menu bar and notifications. Your library is also available from Sevoflurane's
+menu bar icon.
 
-The app is native on Apple silicon and drives whichever engine is installed:
-Dormison, CrossOver, and CrossOver's ARM64 build once it hosts DirectX 12.
+With Dormison, you can:
 
-## Graphics
+- Give games their own Dock name and icon, with Game Mode support when the
+  game is frontmost and fills the screen.
+- Run full-screen or fixed-size games in resizable windows.
+- Choose a renderer, upscaler and mouse behavior for each game.
+- Run supported NW.js games, including RPG Maker MV and MZ games, with a
+  macOS runtime while retaining Steam playtime and achievement support.
 
-A Windows game draws with Direct3D. On a Mac those calls are translated to
-Metal, and which translator a game gets is the biggest single lever on how it
-runs. Settings › Graphics picks one for the bottle; a game can override it.
+Sevoflurane watches the Steam client for hangs and crashes. It can restart
+the client, clear its web cache and repair its installation. If recovery
+keeps failing, it stops retrying and reports the problem.
 
-| Renderer | What it is | Choose it when |
+## Game compatibility
+
+Compatibility varies by game. Game pages show Mac and anti-cheat reports
+from AppleGamingWiki, AreWeAntiCheatYet and ProtonDB, with links to the
+sources. ProtonDB reports describe Linux compatibility; the badge details
+say when Mac testing is unavailable.
+
+Games or online modes that require Windows kernel anti-cheat cannot run
+through Wine. A game's offline mode may still work.
+
+The Windows engine runs under Rosetta. Sevoflurane itself is native on
+Apple silicon.
+
+## Graphics and game settings
+
+Settings › Graphics chooses the default graphics translator. A game's
+renderer can also be set from its menu in the menu bar library. Settings ›
+Games has per-game window, upscaler, filter and mouse controls.
+
+| Renderer | Supports | Use |
 |---|---|---|
-| **D3DMetal** | Apple's Game Porting Toolkit: Direct3D 11 and **12** | The default. The only path for DirectX 12 and for MetalFX upscaling. |
-| **DXMT** | Open-source Direct3D 10/11 straight to Metal ([3Shain/dxmt](https://github.com/3Shain/dxmt)) | DirectX 11 titles. Some run better here and some on D3DMetal. It is one switch to try. |
-| **DXVK** | Direct3D 9 to 11 through Vulkan and MoltenVK | A game refuses to draw on either Metal path, or needs Direct3D 9. |
-| **Automatic** | CrossOver's per-game database, then Wine's `wined3d` | You would rather trust their testing than choose. |
+| **D3DMetal** | Direct3D 11 and 12 through Apple's Game Porting Toolkit | Required for DirectX 12. Install the toolkit when using Dormison. |
+| **DXMT** | Direct3D 10 and 11 through Metal | Dormison's default before D3DMetal is installed. |
+| **DXVK** | Direct3D 9 to 11 through Vulkan and MoltenVK | An option for DirectX 9 games, or when a Metal renderer has problems. |
+| **Automatic** | CrossOver's per-game choices, with Wine's renderer as fallback | Uses CrossOver's database when running CrossOver. |
+| **Wine built-in** | Wine's `wined3d` renderer | Another option for games that have trouble with the other renderers. |
 
-Toolkit releases and betas sit side by side; the newest is used unless you
-pick another. DXMT and DXVK versions can be added the same way. 32-bit games
-get Metal too.
+Toolkit releases and betas can be installed side by side. The newest is
+selected unless you choose another. DXMT and DXVK versions can also be
+installed separately.
 
-DirectX 12 was measured on Microsoft's own samples against an RTX 4080 SUPER:
-23 of 35 comparable samples draw the reference image. The full table, and
-everything the engine changes in Wine, is in the
-[Dormison README](https://github.com/kageroumado/dormison#directx-12-measured).
+Dormison's presenter can upscale games with Lanczos, MetalFX or shader
+packages such as Anime4K and CuNNy. Window, upscaler and mouse settings take
+effect at the next game launch when the engine supports per-game
+configuration files. Engines without that support need a Steam restart
+for inherited settings.
 
-## Good to know
+Launch from the menu bar to apply renderer changes. Sevoflurane can stage
+renderer files while Steam stays open; engine and msync changes require a
+restart. Changes to the selected DXMT or DXVK version apply after Steam
+restarts.
 
-- **Games with kernel anti-cheat stay on Windows.** EasyAntiCheat, BattlEye
-  and similar need a Windows kernel driver. The game page says so before you
-  install.
-- **The engine runs under Rosetta.** macOS 27 is the last release that carries
-  Rosetta in full. The app itself is native.
-- **Requirements.** macOS 26 or later on Apple silicon. CrossOver is optional.
+See [Dormison's testing notes](https://github.com/kageroumado/dormison#directx-12-testing)
+for sample results and their limits.
 
-## For developers
+## Reporting a problem
 
-### Building
+**Settings › About › Save Diagnostics…** saves a ZIP containing logs,
+a `sevo doctor` report, engine details and recent crash reports. Review the
+contents before sharing; logs and file paths can identify your account.
+You can also run `sevo diag` from the terminal.
 
-Xcode 26 or later. Open `Sevoflurane.xcodeproj`, pick your own team under
-Signing & Capabilities, and build the `Sevoflurane` scheme. The first run
-walks through setup: it creates the bottle, installs
-Steam and signs in. After that the app starts the bottled client with CDP on
-port 8765, boots Steam's interface through the in-process bridge, and
-supervises from there.
-
-Diagnostics: **Settings › About › Save Diagnostics…** writes a zip with the
-logs, a `sevo doctor` report and the engine's identity. `sevo diag` does the
-same from the terminal. The logs are `~/Library/Logs/Sevoflurane.log` and
+The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`.
 
-### `sevo`, the command line
+Use the [issue templates](https://github.com/kageroumado/sevoflurane/issues/new/choose)
+to report a problem. See [CONTRIBUTING.md](CONTRIBUTING.md) for debugging
+and contribution instructions.
 
-`swift build` produces `.build/debug/sevo`. `sevo install-cli` links it into
-`/usr/local/bin`. One management surface for terminals and agents:
+## Command line
 
-```
-sevo doctor [--json]        environment diagnosis, one line per check
-sevo setup [--engine E]     headless first run: engine, bottle, Steam client
-sevo status [--json]        engine · bottle · client · bridge · app
-sevo diag [--steam-logs]    the report zip for a bug report
+`swift build` produces `.build/debug/sevo`. Run
+`.build/debug/sevo install-cli` to link that executable into `/usr/local/bin`.
+
+Start with `sevo doctor` to check the installation or `sevo status` to
+inspect the running client. Use `--help` on a command for its arguments
+and output options.
+
+```text
+sevo doctor [--json]
+sevo setup [--engine E]
+sevo status [--json]
+sevo diag [--steam-logs]
 sevo client start|stop|restart|update|pin|unpin
-sevo recover [--deep]       the wedge playbook; --deep adds cache purge and repair
+sevo recover [--deep]
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
 sevo engine list|install [--file TARBALL]|use
 sevo bottle config <key> [value]
 sevo shaders list|install|remove
 sevo downloads status|pause|resume|throttle KBPS
-sevo run PROGRAM [ARGS]     one Windows program in the bottle, under the game's engine
-sevo eval 'JS' · sevo cdp 'JS' [TARGET] · sevo logs [--tail N] [-f] [--wine]
+sevo run PROGRAM [ARGS]
+sevo eval 'JS'
+sevo cdp 'JS' [TARGET]
+sevo logs [--tail N] [-f] [--wine]
 ```
 
-`--json` everywhere. Exit codes: 0 ok · 1 failed · 3 not provisioned · 4
-client unreachable. When the app is running, verbs that change state go
-through its supervisor, so the restart ladder has one owner.
+`sevo recover --deep` adds web-cache removal and client repair.
+`sevo diag --steam-logs` includes Steam's bootstrap, connection, webhelper
+and game-process logs.
 
-### MCP: ask your agent to fix your Steam
+Exit codes are 0 for success, 1 for an operation failure, 2 for an invalid
+invocation, 3 for an incomplete installation and 4 for an unreachable
+client. When the app is running, client lifecycle commands go through
+its supervisor.
 
-`sevo mcp` is a stdio MCP server with the same verbs as typed tools, plus
-`sevo://status`, `sevo://doctor`, `sevo://log` and `sevo://library`
-resources.
+### MCP
+
+`sevo mcp` provides a stdio MCP server. Its tools cover diagnostics,
+client recovery, library queries, game installation and launch, downloads
+and logs. It also exposes `sevo://status`, `sevo://doctor`, `sevo://log`
+and `sevo://library` resources.
 
 ```json
 { "mcpServers": { "sevoflurane": { "command": "sevo", "args": ["mcp"] } } }
 ```
 
-"Why won't Steam start", "install Hades and launch it", "my download is
-stuck" all work from a chat. `eval_js` is exposed only with
-`SEVO_MCP_ALLOW_EVAL=1` in the server's environment.
+`eval_js` is exposed only with `SEVO_MCP_ALLOW_EVAL=1` in the server's environment.
 
-### How the interface works
+## How it works
 
-The Windows Steam client runs headless in the bottle. Steam's interface needs
-only a `SteamClient` binding, so Sevoflurane serves Steam's own web bundle
-into native `WKWebView`s with a shim. The shim's calls are replayed into the
-client's real context over the Chrome DevTools Protocol. Protobuf traffic is
-relayed around CDP through a socket the client's own context opens. Every
-window Steam creates is adopted into an `NSWindow` with the right role.
+The Windows Steam client runs in a Wine bottle: a directory containing
+its Windows files and settings. Sevoflurane loads Steam's web interface
+into `WKWebView`s and connects its `SteamClient` calls to the client
+through the Chrome DevTools Protocol on port 8765.
 
-### Layout
+Protobuf traffic uses a separate socket opened by the client's context.
+Sevoflurane assigns Steam windows roles such as library, chat, menu and
+overlay, then hosts them in macOS windows.
 
-- `Sevoflurane/` — the app (Swift 6). `Web/` hosts Steam's interface and
-  windows, `Bridge/` is the page-to-client bridge, `Setup/` the first-run
-  assistant, `App/` supervision, logging and the menu bar, `Support/` bottle
-  paths, engines and subprocesses, `Resources/` the shim, licenses and the
-  NW.js glue.
-- `Sevo/` + `Package.swift` — the `sevo` CLI and MCP server. They compile the
-  app's own lifecycle and CDP sources, so the two cannot drift.
-- `SevofluraneTests/` — the test bundle. `Tools/` — the shader package
-  builder and performance scripts.
+Dormison supplies the Wine changes needed for D3DMetal, msync, 32-bit
+games under Rosetta, Steam startup and the Metal presenter. CrossOver
+and CrossOver Preview can also serve as engines.
 
-### Contributing
+### Source layout
 
-See `CONTRIBUTING.md` for the fidelity rules, the issue templates and what a
-pull request is expected to say about how it was made.
+- `Sevoflurane/` — the app. `Web/` hosts Steam's interface and windows;
+  `Bridge/` connects pages to the client; `Setup/` handles installation;
+  `App/` contains supervision, logging and the menu bar; `Support/`
+  contains engine, bottle and game configuration code.
+- `Sevo/` and `Package.swift` — the CLI and MCP server, compiled with
+  shared lifecycle, CDP and provisioning sources from the app.
+- `SevofluraneTests/` — the test bundle.
+- `Tools/` — shader packaging, debugging and performance tools.
 
 ## License
 

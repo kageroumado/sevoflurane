@@ -74,10 +74,7 @@ struct EngineSettings: View {
         } header: {
             Text("Where Steam runs")
         } footer: {
-            Text("The engine is the translator that turns Windows into "
-                + "something your Mac understands. The bottle is the pretend "
-                + "Windows drive Steam lives on — games are installed inside "
-                + "one, so a second bottle starts with an empty library.")
+            Text("Each bottle has its own Steam installation, games, and settings.")
         }
         .highlightable(id: "engine.selection", highlighted: highlighted)
     }
@@ -230,14 +227,8 @@ struct EngineSettings: View {
         let target = "\(store.stagedEngine.description), bottle "
             + "\u{201C}\(store.stagedBottle)\u{201D}"
         return store.stagedBottleIsNew
-            ? "Switching to \(target) closes Steam, builds the new bottle, "
-            + "downloads Steam into it — the long part, the same as first "
-            + "run — and opens it there with an empty library. Your current "
-            + "bottle and every game in it stay exactly as they are, and you "
-            + "can switch back at any time."
-            : "Switching to \(target) closes Steam, checks that bottle and "
-            + "brings it up to date, then opens Steam there with the games "
-            + "that bottle already has."
+            ? "Steam will close and install in \(target). Your current bottle and games stay in place."
+            : "Steam will close, prepare \(target), then reopen there."
     }
 
     private var switchDetail: String {
@@ -255,9 +246,7 @@ struct EngineSettings: View {
                 Image(systemName: "info.circle")
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
-                Text("This bottle belongs to \(store.stagedEngine.description). "
-                    + "For dependencies, overrides and Windows settings, its own "
-                    + "interface is the safer place — it tracks what it installs.")
+                Text("You can also manage this bottle's dependencies and Windows settings in \(store.stagedEngine.description).")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -291,11 +280,8 @@ struct EngineSettings: View {
         Section {
             Toggle(isOn: msyncBinding) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Faster game speed (msync)")
-                    Text("Recommended. Games spend a lot of time waiting on "
-                        + "themselves, and this makes that waiting cheaper. If "
-                        + "a game freezes before it reaches its menu, turn this "
-                        + "off and start it again.")
+                    Text("Enhanced synchronization (msync)")
+                    Text("Reduces synchronization overhead. If a game freezes, try turning this off.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -304,9 +290,7 @@ struct EngineSettings: View {
             .toggleStyle(.switch)
             .highlightable(id: "engine.msync", highlighted: highlighted)
         } footer: {
-            Text("Works on CrossOver and on Dormison. A Dormison from before "
-                + "msync ignores this setting, so leaving it on there changes "
-                + "nothing either way. Takes effect the next time a game starts.")
+            Text("Restart Steam to apply this setting.")
         }
     }
 
@@ -321,14 +305,7 @@ struct EngineSettings: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Game windows")
-                    Text("Off leaves windows as the game makes them. Fixed-size "
-                        + "windows become resizable: a game that locks its window "
-                        + "to one size gets a resizable one, and the picture "
-                        + "scales to fit. Every game in a resizable window: that, "
-                        + "and a game that covers the screen gets a resizable, "
-                        + "movable window of its own while still believing it "
-                        + "fills the screen — which is also where the upscaler "
-                        + "draws.")
+                    Text("Resizable windows scale the picture to fit.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -346,10 +323,9 @@ struct EngineSettings: View {
                 .highlightable(id: "engine.filter", highlighted: highlighted)
             mousePicker
         } footer: {
-            Text("Sevoflurane's own engine only. This bottle's defaults; a game "
-                + "can have its own in Games. "
+            Text("Defaults for Dormison games. Override them in Games. "
                 + (Engine.active.supportsEnvFiles
-                    ? "Reaches a game the next time it starts."
+                    ? "Changes apply at the next game launch."
                     : "Takes effect for games started after Steam restarts."))
         }
     }
@@ -390,11 +366,7 @@ struct EngineSettings: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Mouse")
-                Text("A game aiming a camera takes the cursor and hides it. "
-                    + "Linear hands it the mouse's own movement, so the same "
-                    + "sweep of the hand turns the same distance however fast "
-                    + "it is made; the Mac's pointer keeps its own feel "
-                    + "everywhere else.")
+                Text("Linear removes acceleration while a game captures the mouse.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -416,13 +388,9 @@ struct EngineSettings: View {
                 dependencyRow(row)
             }
         } header: {
-            Text("Pieces some games are missing")
+            Text("Game dependencies")
         } footer: {
-            Text("Some games need a Windows component that Steam doesn't "
-                + "install for them. If a game won't start, or its text comes "
-                + "out as blank boxes, the fix is usually one of these. "
-                + "Installing something that's already there does no harm, so "
-                + "it is safe to try.")
+            Text("Install a component when a game reports a missing DLL or displays missing text.")
         }
         .highlightable(id: "engine.dependencies", highlighted: highlighted)
     }
@@ -503,12 +471,7 @@ struct EngineSettings: View {
         } header: {
             Text("DLL overrides")
         } footer: {
-            Text("For following a fix you found somewhere. A DLL is one piece "
-                + "of Windows, and this chooses which copy a game gets: the "
-                + "real one installed in this bottle (native), the engine's "
-                + "stand-in (builtin), or both in that order. Guides for "
-                + "specific games name the DLL and the mode to use. Takes "
-                + "effect the next time a game starts.")
+            Text("Choose the installed Windows DLL (native), Wine's DLL (builtin), or the listed fallback order. Applies at the next game launch.")
         }
         .highlightable(id: "engine.overrides", highlighted: highlighted)
     }
@@ -520,10 +483,7 @@ struct EngineSettings: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Windows settings")
-                    Text("The engine's own control panel: which Windows "
-                        + "version to pretend to be, drives, audio, and "
-                        + "per-game overrides. For people who know what they "
-                        + "are looking for.")
+                    Text("Windows version, drives, audio, and game overrides.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -535,10 +495,7 @@ struct EngineSettings: View {
             Toggle(isOn: $wineDiagnostics) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Wine diagnostics log")
-                    Text("Errors and exceptions from every Wine process, "
-                        + "Steam's and each game's, written to "
-                        + "~/Library/Logs/Sevoflurane-wine.log. Costs a little "
-                        + "speed; leave it off unless something is being chased.")
+                    Text("Records errors and exceptions in ~/Library/Logs/Sevoflurane-wine.log. May reduce performance.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -552,13 +509,9 @@ struct EngineSettings: View {
             RepairRow(provisioner: provisioner, highlighted: highlighted)
                 .disabled(store.isSwitching)
         } header: {
-            Text("If Steam stops working")
+            Text("Troubleshooting")
         } footer: {
-            Text("Repair runs first-launch setup again: whatever is still "
-                + "there is left alone, and only what is missing or broken "
-                + "gets reinstalled. Your games, saves and Steam account are "
-                + "not touched. The diagnostics log takes effect when Steam "
-                + "restarts.")
+            Text("Repair checks the engine, bottle, and Steam installation, keeping your games and saves. Restart Steam to apply diagnostics logging.")
         }
     }
 }
@@ -594,7 +547,7 @@ struct RepairRow: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Repair stopped early.")
+                Text("Repair could not finish.")
                 Text(reason)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -607,7 +560,7 @@ struct RepairRow: View {
         case .idle:
             Image(systemName: "checkmark.circle")
                 .foregroundStyle(.secondary)
-            Text("Nothing to do right now.")
+            Text("Repair Steam")
         }
     }
 

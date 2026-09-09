@@ -14,9 +14,9 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .off: "As the game makes them"
+        case .off: "Use the game's window mode"
         case .fixed: "Fixed-size windows become resizable"
-        case .window: "Every game in a resizable window"
+        case .window: "Make full-screen games resizable"
         }
     }
 }
@@ -47,7 +47,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
     var detail: String {
         switch self {
         case .off: "The picture is scaled by the window system."
-        case .lanczos: "Sharp resampling at your display's full resolution, for any game."
+        case .lanczos: "Sharp resampling at your display's full resolution."
         case .metalfx: "For 3D games rendered below your display's resolution."
         }
     }
@@ -73,7 +73,7 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
         switch self {
         case .nearest: "Pixels are copied: crisp at whole-number scales, uneven at any other."
         case .bilinear: "Neighboring pixels are blended, the softest of the three."
-        case .lanczos: "Sharp resampling that keeps edges clean at any scale."
+        case .lanczos: "Sharp resampling for fractional scales."
         }
     }
 }
@@ -91,8 +91,8 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .system: "Like the rest of the Mac"
-        case .linear: "Linear (raw deltas for mouse-look)"
+        case .system: "macOS acceleration"
+        case .linear: "Linear"
         }
     }
 }

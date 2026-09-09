@@ -34,14 +34,7 @@ struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $openAtLogin) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Open at login")
-                        Text("Sevoflurane starts in the menu bar. No windows until you ask.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Toggle("Open at login", isOn: $openAtLogin)
                 .toggleStyle(.switch)
                 .onChange(of: openAtLogin) { _, enabled in
                     provisioner.setOpenAtLogin(enabled)
@@ -50,9 +43,8 @@ struct GeneralSettings: View {
                 if let steam {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Steam's own settings")
-                            Text("Interface, downloads, controller — everything "
-                                + "the client keeps for itself.")
+                            Text("Steam settings")
+                            Text("Downloads, controllers, and the Steam interface.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -80,9 +72,7 @@ struct GeneralSettings: View {
                 Text("Automation")
             } footer: {
                 if cliInstalled {
-                    Text("Each switch writes one entry into that assistant's "
-                        + "own configuration and nothing else; turning it off "
-                        + "removes exactly that entry.")
+                    Text("Allow each assistant to control Steam through MCP.")
                 }
             }
             uninstallSection
@@ -103,12 +93,8 @@ struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Command-line tool")
                 Text(cliInstalled
-                    ? "Installed at /usr/local/bin/sevo — a link into the "
-                    + "app, so updates never ask again. Connect assistants "
-                    + "below."
-                    : "Puts sevo on your PATH so AI assistants can drive "
-                    + "Steam over MCP. Asks for an administrator password "
-                    + "once.")
+                    ? "Installed at /usr/local/bin/sevo."
+                    : "Adds sevo for Terminal and MCP. Requires an administrator password.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let cliError {
@@ -143,15 +129,13 @@ struct GeneralSettings: View {
             HStack(spacing: Theme.Space.md) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.wrappedValue.harness.displayName)
-                    Text(row.wrappedValue.harness.configDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .help(row.wrappedValue.harness.configDescription)
                 }
                 Spacer()
                 if row.wrappedValue.busy {
                     ProgressView().controlSize(.small)
                 }
-                Toggle("", isOn: Binding(
+                Toggle(row.wrappedValue.harness.displayName, isOn: Binding(
                     get: { row.wrappedValue.registered },
                     set: { enabled in flip(row, to: enabled) },
                 ))
@@ -174,7 +158,7 @@ struct GeneralSettings: View {
     /// ready to paste.
     private var manualCommandRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Anything else that speaks MCP")
+            Text("Other MCP assistants")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: Theme.Space.sm) {
@@ -216,10 +200,7 @@ struct GeneralSettings: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Uninstall Sevoflurane").font(.headline)
-                    Text("Removes what this app installed, the sevo command "
-                        + "and its assistant connections included, and then "
-                        + "removes the app. Your Steam account and everything "
-                        + "in the cloud stay as they are.")
+                    Text("Remove Sevoflurane and its downloaded engines and toolkits. You can choose to keep games.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -243,16 +224,7 @@ struct GeneralSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Steam is closed first, and everything goes to the Trash rather "
-                + "than being deleted, so a change of mind costs a drag back.\n\n"
-                + "Keeping your games removes the engines, the toolkits and this "
-                + "app's settings, and leaves Steam and its "
-                + "\(StorageSettings.size(bottleBytes)) of games where they are.\n\n"
-                + "Uninstalling everything takes that "
-                + "\(StorageSettings.size(bottleBytes)) too — you would download "
-                + "the games again from Steam.\n\n"
-                + "Either way, Sevoflurane moves itself to the Trash and quits "
-                + "when it finishes.")
+            Text("Steam will close. Sevoflurane removes its downloaded engines and toolkits, resets preferences, and disconnects assistants.\n\nKeep Games leaves Steam and its \(StorageSettings.size(bottleBytes)) of files in place. Uninstall Everything moves those files to the Trash too, including local saves stored in the bottle.\n\nThe app moves itself to the Trash and quits. Your Steam account and cloud saves are kept.")
         }
     }
 
@@ -344,7 +316,7 @@ struct GraphicsSettings: View {
                 }
                 .highlightable(id: "graphics.renderer", highlighted: highlighted)
                 VStack(alignment: .leading, spacing: 4) {
-                    Picker("Tell games your graphics card is", selection: graphics.gpu) {
+                    Picker("GPU reported to games", selection: graphics.gpu) {
                         ForEach(GPUIdentity.allCases, id: \.self) { identity in
                             Text(identity.label).tag(identity)
                         }
@@ -357,9 +329,7 @@ struct GraphicsSettings: View {
                 if let booted = BottleGraphics.bootedSelection()?.renderer,
                    booted != store.selection.renderer {
                     HStack {
-                        Text("Steam is running on \(booted.label) — games get "
-                            + "\(store.selection.renderer.label) once it restarts. "
-                            + "Launching from the menu bar restarts it by itself.")
+                        Text("Launch from the menu bar to apply \(store.selection.renderer.label), or restart Steam.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -370,13 +340,9 @@ struct GraphicsSettings: View {
                     }
                 }
             } header: {
-                Text("How games are drawn")
+                Text("Renderer")
             } footer: {
-                Text("A renderer turns the Windows drawing instructions a game "
-                    + "sends into ones your Mac's graphics chip understands. "
-                    + "Steam's own window doesn't use one — games inherit "
-                    + "whatever the client started with, so a change here "
-                    + "lands with the next Steam restart.")
+                Text("Launch games from the menu bar to apply renderer changes. Steam restarts if needed.")
             }
             rendererVersionsSection
             shaderPackagesSection
@@ -400,7 +366,7 @@ struct GraphicsSettings: View {
             }
             if shaders.installed.isEmpty, shaders.downloadable.isEmpty {
                 Text(shaders.catalogLoaded
-                    ? "Nothing is installed, and no catalog is reachable right now."
+                    ? "No packages installed. The download catalog is unavailable."
                     : "Looking…")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -409,11 +375,7 @@ struct GraphicsSettings: View {
         } header: {
             Text("Shader packages")
         } footer: {
-            Text("Upscalers a game can be given for the bottle in Engine, or "
-                + "one game at a time in Games. Each package carries its own "
-                + "license and links to the project it comes from. A removed "
-                + "package goes to the Trash; a game still set to it draws with "
-                + "Lanczos until it is back.")
+            Text("Choose an upscaler in Engine or Games.")
         }
         .highlightable(id: "graphics.shaders", highlighted: highlighted)
         .confirmationDialog(
@@ -428,8 +390,7 @@ struct GraphicsSettings: View {
             Button("Move to Trash", role: .destructive) { shaders.remove(package) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("A game set to it draws with Lanczos until it is installed again. "
-                + "It goes to the Trash, so a wrong click is recoverable.")
+            Text("Games using this package will use Lanczos until it is reinstalled.")
         }
     }
 
@@ -452,7 +413,7 @@ struct GraphicsSettings: View {
                 Link(destination: source) {
                     Image(systemName: "arrow.up.right.square")
                 }
-                .help("The project it comes from")
+                .help("Project website")
             }
             Button("Remove…") { removingShaderPackage = package }
                 .disabled(shaders.busy != nil)
@@ -478,7 +439,7 @@ struct GraphicsSettings: View {
                 Link(destination: source) {
                     Image(systemName: "arrow.up.right.square")
                 }
-                .help("The project it comes from")
+                .help("Project website")
             }
             Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download") {
                 Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
@@ -502,11 +463,7 @@ struct GraphicsSettings: View {
         } header: {
             Text("Renderer versions")
         } footer: {
-            Text("D3DMetal is Apple's and comes from your own free download. "
-                + "DXMT and DXVK versions marked tested were run with this engine; "
-                + "any other release, or a build you add from a folder, runs the "
-                + "next time Steam starts, and Reset returns to the version the "
-                + "engine came with, which is kept.")
+            Text("DXMT and DXVK version changes apply after Steam restarts. Reset restores the engine's bundled version.")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
@@ -560,20 +517,19 @@ struct GraphicsSettings: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("Games pinned to it fall back to the newest remaining "
-                        + "version. It goes to the Trash, so a wrong click is recoverable.")
+                    Text("D3DMetal will use the newest remaining version. Removing the last copy from Dormison disables DirectX 12 support.")
                 }
             }
             if isAddingD3DMetal {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Opening the disk image and copying the toolkit in…")
+                    Text("Installing the toolkit…")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             } else if store.d3dMetalVersions.isEmpty {
                 Text(store.engineHasOwnD3DMetal
                     ? "CrossOver includes the version it supports; a newer one from Apple can replace it here."
-                    : "The newest games use DirectX 12, and only Apple's toolkit translates it.")
+                    : "Adds support for DirectX 12 games.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -594,12 +550,9 @@ struct GraphicsSettings: View {
     /// are kept for the engine that gains them.
     private var dx12HostNotice: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Direct3D 12 needs an engine that hosts Apple's toolkit")
+            Text("Update the engine for DirectX 12")
                 .font(.callout.weight(.semibold))
-            Text("Apple's Direct3D 12 toolkit runs on the newest Dormison "
-                + "and on CrossOver. This engine runs DirectX 9 to 11 games; "
-                + "for a DirectX 12 game, update Dormison or pick CrossOver in "
-                + "Settings › Engine. Toolkits added below are kept either way.")
+            Text("Choose an engine with D3DMetal support in Engine. Downloaded toolkits stay installed when you switch.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -717,7 +670,7 @@ private struct RendererVersionRow: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("The engine's own version takes over. It goes to the Trash, so a wrong click is recoverable.")
+                    Text("The engine's bundled version will be used.")
                 }
             }
             if let busy = state.busy {
@@ -758,11 +711,7 @@ private struct RendererHelp: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choosing a renderer")
                 .font(.headline)
-            Text("Every Windows game draws through DirectX. Each of these "
-                + "turns DirectX into Metal, the language your Mac's graphics "
-                + "chip speaks, and each does it differently. A game that "
-                + "stutters or refuses to start is usually a game on the "
-                + "wrong one.")
+            Text("These renderers translate Direct3D graphics for macOS. Try another if a game has graphics problems.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -775,7 +724,7 @@ private struct RendererHelp: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text("Changing this takes effect the next time a game starts.")
+            Text("Launch from the menu bar to apply changes. Steam restarts if needed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -825,9 +774,7 @@ struct StorageSettings: View {
                     Text(Self.size(store.total)).monospacedDigit().foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Anything removed here goes to the Trash, so a wrong click "
-                    + "costs a drag back rather than a re-download. Uninstalling "
-                    + "the app itself lives in General.")
+                Text("Caches and downloaded components go to the Trash. Games are uninstalled through Steam.")
             }
             sharingSection
         }
@@ -979,10 +926,7 @@ struct RepairSettings: View {
             Section {
                 RepairRow(provisioner: provisioner, highlighted: highlighted)
             } footer: {
-                Text("Repair runs first-launch setup again: whatever is still "
-                    + "there is left alone, and only what is missing or broken "
-                    + "gets reinstalled. Your games, saves and Steam account "
-                    + "are not touched.")
+                Text("Repair checks the engine, bottle, and Steam installation, keeping your games and saves.")
             }
         }
         .formStyle(.grouped)
@@ -1021,7 +965,7 @@ struct AboutSettings: View {
                 .frame(width: 72, height: 72)
             Text("Sevoflurane")
                 .font(.system(size: 18, weight: .bold))
-            Text("Steam for macOS, natively — version \(Self.version)")
+            Text("Version \(Self.version)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             HStack(spacing: 14) {
@@ -1036,7 +980,7 @@ struct AboutSettings: View {
             }
             .font(.system(size: 12))
             HStack(spacing: 10) {
-                Button("Acknowledgements") {
+                Button("Acknowledgments") {
                     NSApp.sendAction(#selector(AppDelegate.showAcknowledgements(_:)), to: nil, from: nil)
                 }
                 Button("License") {
@@ -1048,8 +992,7 @@ struct AboutSettings: View {
             }
             .controlSize(.small)
             .padding(.top, 6)
-            Text("Diagnostics is a zip on the Desktop with the logs, a doctor report and "
-                + "the engine's identity: what a bug report needs. It names no account.")
+            Text("Saves logs, system details, and recent crash reports to a ZIP on your Desktop. Review it before sharing.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -143,9 +143,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("DirectX 12 games (optional)")
                 .font(.system(size: 24, weight: .bold))
-            Text("Apple's Game Porting Toolkit adds D3DMetal — the only renderer "
-                + "that runs DirectX 12, which most modern games use. It's a free "
-                + "download from Apple; Dormison can't include it directly.")
+            Text("Add Apple's Game Porting Toolkit to play DirectX 12 games. Download it with your Apple account, or add it later in Graphics settings.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             GPTkDownloadPanel(
@@ -165,8 +163,7 @@ struct SetupView: View {
                 .frame(width: 96, height: 96)
             Text("Welcome to Sevoflurane")
                 .font(.system(size: 26, weight: .bold))
-            Text("Your Steam library, native on the Mac. Setup takes a few "
-                + "minutes and runs by itself — you'll sign in to Steam once at the end.")
+            Text("Play Windows Steam games with a Mac interface. Setup installs the engine and Steam, then opens Steam for sign-in.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -177,12 +174,9 @@ struct SetupView: View {
 
     private var engine: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("One thing to install")
+            Text("Choose an engine")
                 .font(.system(size: 24, weight: .bold))
-            Text("Steam's games are built for Windows. To play them, your Mac "
-                + "needs a translator that turns what a game asks Windows for "
-                + "into something macOS understands. Which translator is the "
-                + "only decision in this setup.")
+            Text("A Wine engine runs Windows games on your Mac. Choose Dormison or an installed copy of CrossOver.")
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
                 Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
@@ -192,11 +186,8 @@ struct SetupView: View {
             }
             engineOption(
                 .builtIn,
-                title: "Dormison — free, about 250 MB (recommended)",
-                detail: "Sevoflurane's own engine: Wine, the open-source Windows "
-                    + "translator, with the changes that run DirectX 12 games "
-                    + "through Apple's toolkit, keep Steam running, and upscale. "
-                    + "A one-time download.",
+                title: "Dormison — free (recommended)",
+                detail: "Sevoflurane's Wine engine, with support for Apple's DirectX 12 toolkit and game upscaling.",
             )
             if engineChoice == .builtIn {
                 engineSource
@@ -208,12 +199,7 @@ struct SetupView: View {
             // paragraph that answers "why would I pay for this?".
             VStack(alignment: .leading, spacing: 4) {
                 Text("Why pay for CrossOver?").font(.callout.weight(.semibold))
-                Text("CodeWeavers pays the developers who build Wine — the "
-                    + "translator under both options — so CrossOver gets their "
-                    + "Steam and per-game fixes months before the free version "
-                    + "does. Dormison is built on the same project, and it is "
-                    + "enough for most games. You can switch later in Settings "
-                    + "without redoing this setup.")
+                Text("CodeWeavers develops Wine, which both engines use. CrossOver includes game-specific fixes and paid support. You can switch engines later in Settings.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -330,11 +316,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Which Steam?")
                 .font(.system(size: 24, weight: .bold))
-            Text("This Mac already has Steam installed more than once. Each "
-                + "copy sits in its own pretend Windows drive — a bottle — "
-                + "with its own games and settings. Pick one and its games "
-                + "stay exactly where they are; start a new one and Steam "
-                + "downloads from scratch.")
+            Text("Choose an existing Steam installation or create a new bottle. Each bottle stores its own games and settings.")
                 .foregroundStyle(.secondary)
             Picker("", selection: $bottleChoice) {
                 ForEach(bottleCandidates, id: \.name) { candidate in
@@ -416,7 +398,7 @@ struct SetupView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Setup stopped before Steam was installed.")
+                                Text("Setup could not finish.")
                                 Text(reason)
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
@@ -494,14 +476,14 @@ struct SetupView: View {
 
     private var options: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("A few preferences")
+            Text("Startup and automation")
                 .font(.system(size: 24, weight: .bold))
             Text("All of these can be changed later.")
                 .foregroundStyle(.secondary)
             Toggle(isOn: $openAtLogin) {
                 VStack(alignment: .leading) {
                     Text("Open at login").font(.headline)
-                    Text("Sevoflurane starts in the menu bar. No windows until you ask.")
+                    Text("Start Sevoflurane in the menu bar.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -513,11 +495,7 @@ struct SetupView: View {
             Toggle(isOn: $connectAgents) {
                 VStack(alignment: .leading) {
                     Text("Install the sevo command").font(.headline)
-                    Text("Puts the sevo command-line tool on your PATH and "
-                        + "connects your AI assistants — Claude, Codex, Hermes — "
-                        + "to Steam over MCP where they're installed. Asks for "
-                        + "an administrator password once; every connection has "
-                        + "its own switch in Settings.")
+                    Text("Installs sevo and connects supported AI assistants to Steam through MCP. Requires an administrator password. Manage connections in Settings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

@@ -52,19 +52,11 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     func detail(for chip: MacChip) -> String {
         switch self {
         case .automatic:
-            "Your Mac's own chip, by its real name, on the DirectX 11 and 12 "
-                + "renderers; Wine's own Direct3D answers with its stock card, "
-                + "a GeForce from 2004. Some games read either one, find a card "
-                + "they have never heard of, and offer to install a Windows "
-                + "driver instead of starting."
+            "Reports your Mac's chip on the DirectX 11 and 12 renderers. Wine's built-in renderer reports its default graphics card."
         case .nvidia:
-            "Matched to your \(chip.name): a GeForce that runs the same games "
-                + "at about the same speed. Games that keep their best "
-                + "settings for NVIDIA, or that check the driver before they "
-                + "start, find what they are looking for."
+            "Reports an NVIDIA card to help with GPU and driver checks. Performance depends on your Mac and the game."
         case .amd:
-            "Matched to your \(chip.name): a Radeon of about the same speed. "
-                + "Worth trying when a game misbehaves specifically on NVIDIA."
+            "Reports an AMD card. Try this if a game has problems with the NVIDIA identity."
         }
     }
 
