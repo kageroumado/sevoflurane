@@ -23,6 +23,9 @@ final class CompatibilityStore {
     private(set) var rows: [DependencyRow]
     private(set) var overrides: [BottleDependencies.Override] = []
     private(set) var overrideError: String?
+    /// Which required components the bottle is missing, said once for the
+    /// whole section; `nil` when it is complete.
+    private(set) var incompleteSummary: String?
     private let environment: any CompatibilityEnvironment
 
     init(environment: (any CompatibilityEnvironment)? = nil) {
@@ -32,11 +35,22 @@ final class CompatibilityStore {
         self.environment = environment ?? LiveCompatibilityEnvironment()
     }
 
-    /// Re-reads the disk truth: what's installed, and the current overrides.
+    /// Re-reads the disk truth: what's installed, what failed to install, and
+    /// the current overrides.
+    ///
+    /// A failure is read back from the record rather than held here, so
+    /// leaving the pane and coming back still shows why the row is empty.
     func refresh() {
         for index in rows.indices where !rows[index].busy {
             rows[index].installed = environment.isInstalled(rows[index].dependency)
+            if !environment.isSimulation {
+                rows[index].error = BottleReadiness.dependencyFailure(rows[index].id)
+            }
         }
+        incompleteSummary = BottleReadiness.incompleteSummary(
+            missing: rows.filter { $0.dependency.required && !$0.installed }
+                .map(\.dependency.name),
+        )
         overrides = environment.overrides()
     }
 
@@ -57,6 +71,9 @@ final class CompatibilityStore {
             rows[index].phase = nil
             rows[index].error = failure
             rows[index].installed = environment.isInstalled(rows[index].dependency)
+            if !environment.isSimulation {
+                BottleReadiness.record(dependency: id, failure: failure)
+            }
             EventLog.enqueue(
                 .app, failure.map { "\(name) install failed: \($0)" } ?? "\(name) installed",
             )

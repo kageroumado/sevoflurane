@@ -20,6 +20,7 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             PopoverHeader("Sevoflurane")
             healthCard
+            BottleIncompleteChip()
             recentGames
             stagedRendererCaption
             friendsRow
@@ -490,5 +491,36 @@ struct MenuBarView: View {
         case .starting, .launching, .restarting, .gaveUp: false
         case .healthy, .waitingForSignIn, .degraded, .paused: true
         }
+    }
+}
+
+// MARK: - Bottle completeness
+
+/// The one line the popover says about an unfinished bottle: that required
+/// components are missing, and where to install them. Games still launch —
+/// this is a note, not a gate — so it stays a chip rather than a card, and it
+/// is absent on a complete bottle.
+private struct BottleIncompleteChip: View {
+    /// Read once per appearance: the test opens files inside the prefix,
+    /// which is not something a view body may do.
+    @State private var summary: String?
+
+    var body: some View {
+        Group {
+            if let summary {
+                Button {
+                    NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Bottle incomplete", systemImage: "shippingbox")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .help("\(summary). Install them in Settings › Engine › Game dependencies.")
+                .padding(.horizontal, Theme.Space.xs)
+            }
+        }
+        .onAppear { summary = BottleReadiness.incompleteSummary() }
     }
 }

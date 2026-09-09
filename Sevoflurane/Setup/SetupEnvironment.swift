@@ -34,7 +34,13 @@ protocol SetupEnvironment: AnyObject {
     /// Fetches SteamSetup.exe from the Steam CDN into the bottle's `drive_c`.
     func downloadSteamInstaller(intoBottle name: String) async throws
 
-    /// Runs the NSIS bootstrapper installer silently (`SteamSetup.exe /S`).
+    /// Waits for a freshly created prefix to finish booting. An installer
+    /// started while `wineboot` is still writing the registry exits nonzero
+    /// in under a second and says nothing about why.
+    func settleBottle(named name: String) async
+
+    /// Runs the NSIS bootstrapper installer silently (`SteamSetup.exe /S`),
+    /// with Wine's error channel on so a failure carries a reason.
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome
 
     /// Bootstrapper → full client, the long headless download. Exit status is
@@ -53,6 +59,9 @@ extension SetupEnvironment {
     var isSimulation: Bool {
         false
     }
+
+    /// Nothing boots in a simulation, so nothing has to settle.
+    func settleBottle(named name: String) async {}
 }
 
 nonisolated struct SetupCommandOutcome: Sendable {
@@ -164,8 +173,46 @@ final class LiveSetupEnvironment: SetupEnvironment {
         try FileManager.default.moveItem(at: temp, to: setup)
     }
 
+    /// Polls the prefix's `system.reg` until it stops changing. `wineboot`
+    /// writes the registry as its last act, and the process that started it
+    /// returns before the writing is done — on a fresh prefix the Steam
+    /// installer that follows failed 0.58 s later with no output at all.
+    func settleBottle(named name: String) async {
+        let registry = Engine.active.bottlesRoot
+            .appendingPathComponent(name)
+            .appendingPathComponent("system.reg")
+        var lastWrite = modificationDate(of: registry)
+        var stableSince = Date.now
+        for _ in 0 ..< Self.settlePolls {
+            try? await Task.sleep(for: .milliseconds(500))
+            let write = modificationDate(of: registry)
+            if write != lastWrite {
+                lastWrite = write
+                stableSince = .now
+                continue
+            }
+            if Date.now.timeIntervalSince(stableSince) >= Self.settleQuiet { return }
+        }
+        SetupLog.log("provision: the prefix is still writing its registry — going ahead")
+    }
+
+    /// How long the registry must sit still, and how long to wait for that.
+    private static let settleQuiet: TimeInterval = 2
+    private static let settlePolls = 60
+
+    private nonisolated func modificationDate(of file: URL) -> Date? {
+        (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate
+    }
+
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
-        await runWine(bottle: name, args: [#"C:\SteamSetup.exe"#, "/S"])
+        // The one invocation whose failure a user is asked to act on, so it
+        // is also the one that never runs silenced: `WINEDEBUG=-all`, the
+        // default, is why "Steam installer failed:" once ended in a colon.
+        await runWine(
+            bottle: name, args: [#"C:\SteamSetup.exe"#, "/S"],
+            wineDebug: "err+all",
+        )
     }
 
     func updateSteamClient(inBottle name: String) async {
@@ -262,14 +309,23 @@ final class LiveSetupEnvironment: SetupEnvironment {
     /// in failure messages, and these invocations are rare and bounded.
     private nonisolated func runWine(
         bottle: String, args: [String], timeout: Duration = .seconds(600),
+        wineDebug: String? = nil,
     ) async -> SetupCommandOutcome {
         let invocation = Engine.active.wineInvocation(
             bottle: bottle, wait: .children, program: args,
         )
+        var environment = invocation.environment
+        if let wineDebug {
+            // CrossOver assembles its own environment and hands back none,
+            // so the channels ride on the process's own.
+            var merged = invocation.environment ?? ProcessInfo.processInfo.environment
+            merged["WINEDEBUG"] = wineDebug
+            environment = merged
+        }
         return await run(
             invocation.executable.path,
             invocation.arguments,
-            environment: invocation.environment,
+            environment: environment,
             timeout: timeout,
         )
     }

@@ -27,6 +27,10 @@ final class EngineStore {
     private(set) var isSwitching = false
     private(set) var switchPhase: String?
     private(set) var switchError: String?
+    /// The failure the pane keeps showing: this session's switch error, or
+    /// the last provisioning pass's, which the pane is usually not open for
+    /// and which a rebuild used to erase.
+    private(set) var standingFailure: String?
 
     private let provisioner: Provisioner
     private weak var supervisor: ClientSupervisor?
@@ -63,6 +67,53 @@ final class EngineStore {
             stagedBottle = activeBottle
         }
         refreshBottles(resetChoice: false)
+        refreshStandingFailure()
+    }
+
+    /// Whether a failed pass is holding the client down — the pane's cue to
+    /// offer starting it anyway.
+    private(set) var clientStartIsBlocked = false
+
+    private func refreshStandingFailure() {
+        guard !environment.isSimulation else {
+            standingFailure = switchError
+            return
+        }
+        let recorded = BottleReadiness.lastProvision.flatMap {
+            $0.succeeded ? nil : $0.reason
+        }
+        standingFailure = switchError ?? recorded
+        clientStartIsBlocked = BottleReadiness.clientStartBlock != nil
+    }
+
+    /// Runs the failed pass again from wherever detection says it stopped,
+    /// then starts the client if the bottle is whole.
+    func retryProvisioning() {
+        guard !isSwitching else { return }
+        isSwitching = true
+        switchError = nil
+        Task(name: "Retry provisioning") { [weak self] in
+            guard let self else { return }
+            switchPhase = "Setting up the bottle…"
+            await provisioner.retry()
+            if case let .failed(reason) = provisioner.activity { switchError = reason }
+            switchPhase = nil
+            isSwitching = false
+            await refresh()
+            startClientIfAllowed()
+        }
+    }
+
+    /// Starts the client over a provisioning failure, on the user's say-so.
+    func startClientAnyway() {
+        BottleReadiness.allowClientStart()
+        refreshStandingFailure()
+        environment.startClient(supervisor: supervisor)
+    }
+
+    private func startClientIfAllowed() {
+        guard !clientStartIsBlocked else { return }
+        environment.startClient(supervisor: supervisor)
     }
 
     private func rebuildOptions() {
@@ -158,6 +209,16 @@ final class EngineStore {
                 }
             } else {
                 await provisioner.configureBottle(named: bottle)
+            }
+            refreshStandingFailure()
+            if clientStartIsBlocked {
+                // A prefix whose Steam installer failed has no client to
+                // start; starting one anyway is how the switch ended with a
+                // supervised bottle that had no Steam in it.
+                switchPhase = nil
+                isSwitching = false
+                await refresh()
+                return
             }
             switchPhase = "Starting Steam…"
             environment.startClient(supervisor: supervisor)

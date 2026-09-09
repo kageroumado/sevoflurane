@@ -27,9 +27,9 @@ struct DiagCommand: AsyncParsableCommand {
 }
 
 /// The report bundle: the three logs, `doctor` and `status` as JSON, the
-/// machine, the active engine's `engine-info.json`, the bottle's env files,
-/// the game launcher bundles, Steam's own logs, and the last two days of
-/// crash reports from the engine's processes. Nothing in it names the
+/// machine, the active engine's `engine-info.json`, the bottle's env files
+/// and dependency state, the game launcher bundles, Steam's own logs, and the
+/// last two days of crash reports from the engine's processes. Nothing in it names the
 /// account; crash reports and env files carry paths under the home
 /// directory, so the user's short name is in them.
 nonisolated enum Diagnostics {
@@ -80,6 +80,11 @@ nonisolated enum Diagnostics {
             write(Sevo.json(status, pretty: true), as: "status.json")
         }
         write(Sevo.json(await host(), pretty: true), as: "host.json")
+        let bottleState: [String: Any] = [
+            "dependencies": snapshot.dependencies,
+            "provisioning": snapshot.provision.map(\.dictionary) ?? NSNull(),
+        ]
+        write(Sevo.json(bottleState, pretty: true), as: "bottle/dependencies.json")
 
         let logs = manager.homeDirectoryForCurrentUser.appending(path: "Library/Logs")
         for file in [

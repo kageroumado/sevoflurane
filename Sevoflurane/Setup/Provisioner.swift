@@ -123,9 +123,16 @@ final class Provisioner {
             try await installBootstrapperIfMissing(inBottle: bottleName)
             try await updateClient(inBottle: bottleName)
             activity = .done
+            if !environment.isSimulation { BottleReadiness.recordProvisionSucceeded() }
             SetupLog.log("provision: Steam client present in bottle \(bottleName)")
         } catch {
             activity = .failed("\(error)")
+            if !environment.isSimulation {
+                BottleReadiness.recordProvisionFailed(
+                    "\(error)",
+                    blocksClientStart: (error as? ProvisionError)?.leavesNothingToStart ?? false,
+                )
+            }
             SetupLog.log("provision failed: \(error)")
         }
         stage = nil
@@ -181,7 +188,10 @@ final class Provisioner {
             SetupLog.log("provision: installing managed engine")
             let result = await environment.installEngine(from: engineTarball, progress: engineProgress())
             guard result.succeeded else {
-                throw ProvisionError("engine install failed: \(result.output.suffix(200))")
+                throw ProvisionError(
+                    "engine install failed: \(result.output.suffix(200))",
+                    leavesNothingToStart: true,
+                )
             }
             engineTarball = nil
             await refreshDetection()
@@ -191,7 +201,7 @@ final class Provisioner {
             Engine.active = Engine.resolve(from: refreshed)
         }
         guard self.detection?.hasEngine == true else {
-            throw ProvisionError("no usable engine after install")
+            throw ProvisionError("no usable engine after install", leavesNothingToStart: true)
         }
     }
 
@@ -243,7 +253,10 @@ final class Provisioner {
         SetupLog.log("provision: creating bottle \(bottleName) (win10_64)")
         let create = await environment.createBottle(named: bottleName)
         guard create.succeeded else {
-            throw ProvisionError("bottle creation failed: \(create.output.suffix(200))")
+            throw ProvisionError(
+                "bottle creation failed: \(create.output.suffix(200))",
+                leavesNothingToStart: true,
+            )
         }
         await refreshDetection()
     }
@@ -256,10 +269,19 @@ final class Provisioner {
         try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
         activity = .working("Installing Steam…")
+        await environment.settleBottle(named: bottleName)
         SetupLog.log("provision: silent NSIS install")
         let install = await environment.runSteamInstaller(inBottle: bottleName)
         guard install.succeeded else {
-            throw ProvisionError("Steam installer failed: \(install.output.suffix(200))")
+            let status = install.status.map(String.init) ?? "no exit status"
+            let output = install.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ProvisionError(
+                "Steam installer failed (exit \(status))"
+                    + (output.isEmpty
+                        ? " without printing anything"
+                        : ": \(output.suffix(200))"),
+                leavesNothingToStart: true,
+            )
         }
     }
 
@@ -297,7 +319,10 @@ final class Provisioner {
         guard steamPresent(inBottle: bottleName)
             || FileManager.default.fileExists(atPath: steamExePath(inBottle: bottleName))
         else {
-            throw ProvisionError("client update finished but steamclient64.dll is missing")
+            throw ProvisionError(
+                "client update finished but steamclient64.dll is missing",
+                leavesNothingToStart: true,
+            )
         }
         // The tree is there with packages staged: the client's own
         // bootstrapper applies them on its first launch, so an incomplete
@@ -383,8 +408,14 @@ final class Provisioner {
 
     private struct ProvisionError: Error, CustomStringConvertible {
         let description: String
-        init(_ description: String) {
+        /// Whether the stage that threw leaves nothing to start: no engine,
+        /// no bottle, no Steam in it. The client start is held until such a
+        /// failure is retried or the user asks for it anyway.
+        let leavesNothingToStart: Bool
+
+        init(_ description: String, leavesNothingToStart: Bool = false) {
             self.description = description
+            self.leavesNothingToStart = leavesNothingToStart
         }
     }
 }

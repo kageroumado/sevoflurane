@@ -29,6 +29,10 @@ nonisolated enum Doctor {
         let servicesUp: Bool?
         let dumpCount: Int
         let pinned: Bool
+        /// Every dependency catalog entry with its installed state and any
+        /// failure on record — the answer to "is this bottle finished".
+        let dependencies: [[String: Any]]
+        let provision: BottleReadiness.ProvisionOutcome?
     }
 
     static func snapshot() async -> Snapshot {
@@ -58,6 +62,8 @@ nonisolated enum Doctor {
             servicesUp: servicesUp,
             dumpCount: ClientLifecycle.recentDumpCount(),
             pinned: ClientLifecycle.isPinned(),
+            dependencies: BottleReadiness.dependencyReport(),
+            provision: BottleReadiness.lastProvision,
         )
     }
 
@@ -102,6 +108,8 @@ nonisolated enum Doctor {
             label: "Steam client in bottle '\(SteamBottle.name)'",
             hint: "run Sevoflurane's setup wizard to install it", provisioning: true,
         ))
+
+        checks.append(contentsOf: dependencyChecks(from: s))
 
         let clientLabel: String
         let clientOK: Bool
@@ -189,6 +197,39 @@ nonisolated enum Doctor {
         return checks
     }
 
+    /// One line per required dependency, plus what the last setup pass ended
+    /// as. Optional entries are reported in `--json` and stay out of the
+    /// ✔/✖ list: fonts a bottle has never needed are not a fault.
+    private static func dependencyChecks(from s: Snapshot) -> [Check] {
+        var checks: [Check] = []
+        for dependency in BottleDependencies.catalog where dependency.required {
+            let installed = BottleDependencies.isInstalled(dependency)
+            let failure = BottleReadiness.dependencyFailure(dependency.id)
+            checks.append(Check(
+                id: "dependency-\(dependency.id)", ok: installed,
+                label: "\(dependency.name) in bottle '\(SteamBottle.name)'"
+                    + (failure.map { " — last install failed: \($0)" } ?? ""),
+                hint: "\(dependency.detail) Install it in Settings › Engine › Game dependencies.",
+                provisioning: false,
+            ))
+        }
+        if let provision = s.provision {
+            let when = provision.date.formatted(date: .abbreviated, time: .shortened)
+            checks.append(Check(
+                id: "provisioning", ok: provision.succeeded,
+                label: provision.succeeded
+                    ? "last setup pass: finished \(when)"
+                    : "last setup pass: failed \(when) — \(provision.reason)",
+                hint: provision.blocksClientStart
+                    ? "the client stays down until this is fixed — sevo setup, "
+                        + "or Settings › Engine › Try Again"
+                    : "sevo setup, or Settings › Engine › Repair",
+                provisioning: true,
+            ))
+        }
+        return checks
+    }
+
     static func jsonReport(from s: Snapshot, checks: [Check]) -> [String: Any] {
         var report: [String: Any] = [
             "sevo": Sevo.version,
@@ -197,7 +238,9 @@ nonisolated enum Doctor {
             "dump_rate_10m": s.dumpCount,
             "client_pinned": s.pinned,
             "bottle_pids": s.bottleProcesses.map(Int.init),
+            "dependencies": s.dependencies,
         ]
+        report["provisioning"] = s.provision?.dictionary ?? NSNull()
         report["app"] = s.appStatus ?? ["app": "not running"]
         let d = s.detection
         report["detection"] = [

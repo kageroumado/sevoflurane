@@ -514,6 +514,20 @@ final class ClientSupervisor {
         log.log(.supervisor, "client stopped (sevo)")
     }
 
+    /// Whether a provisioning failure is holding the client down: the last
+    /// setup pass for this engine and bottle stopped at a stage that leaves
+    /// nothing to start, and nobody has retried it or asked for the client
+    /// anyway (Settings › Engine). Says so in the log once per attempt,
+    /// because a client that never comes up is otherwise a mystery.
+    func provisioningBlocksStart(reason: String) -> Bool {
+        guard let failure = BottleReadiness.clientStartBlock else { return false }
+        log.log(
+            .supervisor,
+            "not starting the client (\(reason)): the bottle is unfinished — \(failure)",
+        )
+        return true
+    }
+
     /// `sevo client start`: resumes supervision, and restarts the client if
     /// it is not already up — the supervisor's ladder, not a bare launch.
     func startForControl() {
@@ -1029,7 +1043,7 @@ final class ClientSupervisor {
     // MARK: - Restart ladder
 
     private func restartClient(reason: String, fullWindows: Bool = false) async {
-        guard !isQuitting else { return }
+        guard !isQuitting, !provisioningBlocksStart(reason: reason) else { return }
         if isRestarting {
             restartAgain = reason
             log.log(.supervisor, "restart requested mid-restart (\(reason)); the ladder runs again")

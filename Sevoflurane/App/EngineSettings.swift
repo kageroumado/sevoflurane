@@ -62,14 +62,31 @@ struct EngineSettings: View {
             engineFileRow
             if store.hasChanges || store.isSwitching {
                 switchRow
-            } else if let error = store.switchError {
+            } else if let error = store.standingFailure {
                 // A switch that failed after applying its choice has no
                 // pending change left to hang the message on — the error
-                // still has to be said.
-                Text(error)
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                // still has to be said, and it is read back from the record
+                // so leaving the pane does not lose it.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(error)
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if store.clientStartIsBlocked {
+                        Text("Steam stays down until this is fixed.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack {
+                        Spacer()
+                        if store.clientStartIsBlocked {
+                            Button("Start Steam Anyway") { store.startClientAnyway() }
+                        }
+                        Button("Try Again") { store.retryProvisioning() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
             }
         } header: {
             Text("Where Steam runs")
@@ -391,7 +408,14 @@ struct EngineSettings: View {
         } header: {
             Text("Game dependencies")
         } footer: {
-            Text("Install a component when a game reports a missing DLL or displays missing text.")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Install a component when a game reports a missing DLL or displays missing text.")
+                if let summary = compatibility.incompleteSummary {
+                    Text(summary)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .highlightable(.engineDependencies, highlighted: highlighted)
     }
