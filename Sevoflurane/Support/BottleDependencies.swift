@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// The Windows pieces games assume are present and a fresh prefix lacks —
@@ -482,7 +481,7 @@ nonisolated enum BottleDependencies {
             throw RetryableDownload(message: message)
         }
         if let sha256 {
-            let digest = try digest(of: temp)
+            let digest = try FileDigest.sha256(of: temp)
             guard digest == sha256 else {
                 try? FileManager.default.removeItem(at: temp)
                 throw InstallFailure(
@@ -502,15 +501,6 @@ nonisolated enum BottleDependencies {
         return destination
     }
 
-    private static func digest(of file: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
-            hasher.update(data: chunk)
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
 
     private static func replaceFile(at destination: URL, with source: URL) throws {
         try? FileManager.default.removeItem(at: destination)

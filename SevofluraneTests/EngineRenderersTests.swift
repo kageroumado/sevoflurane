@@ -50,6 +50,35 @@ private struct FakeEngine {
         return D3DMetalInstaller.Installed(version: version, root: toolkit)
     }
 
+    /// The second architecture: the 32-bit tree and the `syswow64` a 32-bit
+    /// process reads as its own `system32`.
+    func addI386() throws {
+        try manager.createDirectory(
+            at: root.appendingPathComponent("wine/lib/wine/i386-windows"),
+            withIntermediateDirectories: true,
+        )
+        try manager.createDirectory(
+            at: bottle.appendingPathComponent("drive_c/windows/syswow64"),
+            withIntermediateDirectories: true,
+        )
+    }
+
+    /// The engine's own DXMT payload, both architectures, in the shape
+    /// `package-engine.sh` lays down.
+    func installDXMT(_ version: String) throws {
+        for name in ["d3d11", "dxgi", "winemetal"] {
+            try write("pe \(name) dxmt", to: "dxmt/\(name).dll")
+            try write("pe32 \(name) dxmt", to: "dxmt/i386-windows/\(name).dll")
+        }
+        try write(
+            """
+            {"version": "test", "dxmt":
+             "https://example.invalid/dxmt-v\(version)-builtin.tar.gz"}
+            """,
+            to: "engine-info.json",
+        )
+    }
+
     func write(_ text: String, to relative: String) throws {
         let url = root.appendingPathComponent(relative)
         try manager.createDirectory(
@@ -138,6 +167,52 @@ struct EngineRenderersTests {
         #expect(engine.read("wine/lib/external/libd3dshared.dylib") == "bridge 3.0")
     }
 
+    /// The stale-loader bug: under D3DMetal the 32-bit pass has no payload,
+    /// and bailing there left the previous renderer's `syswow64` files in
+    /// place — a Sep 6 `winemetal.dll` under a tree that carries none.
+    @Test
+    func `an architecture with no payload still loses the last renderer's loader files`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.addI386()
+        try engine.installDXMT("0.80")
+        let toolkit = try engine.installToolkit("4.0 beta 2")
+
+        EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") != nil)
+
+        EngineRenderers.stage(
+            .d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit,
+        )
+
+        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == nil)
+        #expect(engine.read("wine/lib/wine/i386-windows/winemetal.dll") == nil)
+        // The 64-bit half is D3DMetal's, and its loader files are still there.
+        #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "pe dxgi 4.0 beta 2")
+        #expect(engine.read("bottle/drive_c/windows/system32/dxgi.dll") != nil)
+    }
+
+    /// `auto` and `wined3d` stage nothing at all, which is exactly when the
+    /// prefix is left holding whatever the last renderer put there.
+    @Test
+    func `wined3d clears the prefix of the last renderer's files`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.addI386()
+        try engine.installDXMT("0.80")
+
+        EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+        EngineRenderers.stage(.wined3d, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+
+        // winemetal is DXMT's alone: the tree lost it, so the prefix must too.
+        #expect(engine.read("bottle/drive_c/windows/system32/winemetal.dll") == nil)
+        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == nil)
+        // dxgi is Wine's own again, and the prefix still has a file for it —
+        // without one, a game importing dxgi dies at load.
+        #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "stock dxgi")
+        #expect(engine.read("bottle/drive_c/windows/system32/dxgi.dll") != nil)
+    }
+
     @Test
     func `the bridge a launch names is the tree's copy`() {
         let engine = URL(fileURLWithPath: "/engines/dormison-r2")
@@ -192,6 +267,79 @@ struct D3DMetalPlacementTests {
         #expect(placement.macOS == "4.0 beta 2")
         #expect(placement.windows == "3.0")
         #expect(!placement.halvesAgree)
+    }
+}
+
+/// What the engine reads at every process start to say which renderer
+/// answered: `<engine>/renderer-hashes`, `key=value` lines with `#` comments.
+struct EngineRendererProvenanceTests {
+    private func entries(_ engine: FakeEngine) -> [String: String] {
+        let text = engine.read(EngineRenderers.provenanceFile) ?? ""
+        var found: [String: String] = [:]
+        for line in text.split(separator: "\n") where !line.hasPrefix("#") {
+            let parts = line.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            found[String(parts[0])] = String(parts[1])
+        }
+        return found
+    }
+
+    @Test
+    func `staging records the renderer, its version and a hash per DLL`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.addI386()
+        try engine.installDXMT("0.80")
+
+        EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+
+        let entries = entries(engine)
+        #expect(entries["renderer"] == "dxmt")
+        #expect(entries["toolkit"] == "0.80")
+        // The sha256 of the canonical tree copy, lower-case hex.
+        let d3d11 = try FileDigest.sha256(
+            of: engine.root.appendingPathComponent("wine/lib/wine/x86_64-windows/d3d11.dll"),
+        )
+        #expect(entries["d3d11"] == d3d11)
+        #expect(entries["dxgi"]?.count == 64)
+        #expect(entries["dxgi"] == entries["dxgi"]?.lowercased())
+    }
+
+    @Test
+    func `the record is rewritten whole at the next staging`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.installDXMT("0.80")
+        let toolkit = try engine.installToolkit("4.0 beta 2")
+
+        EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+        EngineRenderers.stage(
+            .d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit,
+        )
+
+        let entries = entries(engine)
+        #expect(entries["renderer"] == "d3dmetal")
+        #expect(entries["toolkit"] == "4.0 beta 2")
+        #expect(entries["d3d12"]?.count == 64)
+        // DXMT's own DLL is gone from the tree, so its hash is gone too.
+        #expect(entries["winemetal"] == nil)
+    }
+
+    /// A renderer that stages nothing still says so, because the engine
+    /// prints `unknown` for a file it cannot find and "wined3d" is not
+    /// "unknown".
+    @Test
+    func `wined3d is recorded as itself`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.installDXMT("0.80")
+
+        EngineRenderers.stage(.wined3d, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+
+        let entries = entries(engine)
+        #expect(entries["renderer"] == "wined3d")
+        #expect(entries["toolkit"] == nil)
+        #expect(entries["d3d11"] == nil)
     }
 }
 

@@ -84,14 +84,14 @@ nonisolated enum EngineRenderers {
             restoreOriginals(into: canonical, from: originals)
             removeStrays(from: canonical, keptIn: originals, matching: payloads)
 
-            guard let source = libraries(
+            let source = libraries(
                 for: renderer, engine: engine, toolkit: toolkit,
                 architecture: architecture,
-            ),
-                let dlls = try? manager.contentsOfDirectory(
-                    at: source, includingPropertiesForKeys: nil,
-                ).filter({ $0.pathExtension.lowercased() == "dll" })
-            else { continue }
+            )
+            let dlls = source.flatMap {
+                try? manager.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension.lowercased() == "dll" }
+            } ?? []
 
             for dll in dlls {
                 let name = dll.lastPathComponent
@@ -109,12 +109,74 @@ nonisolated enum EngineRenderers {
                 guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
                 staged.append(name)
             }
+            // Every architecture, whether this renderer has a payload for it
+            // or not: an architecture that gets no DLLs is exactly the one
+            // whose prefix still holds the last renderer's loader files, and
+            // `auto` and `wined3d` have no payload for either.
             ensureLoaderFiles(
                 canonical: canonical, engine: engine, bottle: bottle,
                 architecture: architecture,
             )
         }
+        writeProvenance(renderer: renderer, toolkit: toolkit, staged: staged, engine: engine)
         return staged
+    }
+
+    // MARK: - Provenance
+
+    /// The file `winemac.drv` reads at every process start to print which
+    /// renderer answered and which build of it: `key=value` lines carrying
+    /// the renderer, the payload version, and the sha256 of each DLL this
+    /// staging put in the tree.
+    ///
+    /// Written here because this is the only place that knows what was
+    /// staged, and written whole each time — an engine that finds no file, or
+    /// no key, prints `unknown`, so a stale line would be worse than none.
+    static let provenanceFile = "renderer-hashes"
+
+    private static func writeProvenance(
+        renderer: Renderer, toolkit: D3DMetalInstaller.Installed?, staged: [String], engine: URL,
+    ) {
+        var lines = [
+            "# written by Sevoflurane at renderer staging",
+            "renderer=\(renderer.rawValue)",
+        ]
+        if let version = payloadVersion(of: renderer, engine: engine, toolkit: toolkit) {
+            lines.append("toolkit=\(version)")
+        }
+        let canonical = Architecture.x86_64.tree(in: engine)
+        for name in Set(staged).sorted() {
+            let file = canonical.appendingPathComponent(name)
+            guard let digest = try? FileDigest.sha256(of: file) else { continue }
+            lines.append("\(file.deletingPathExtension().lastPathComponent.lowercased())=\(digest)")
+        }
+        let contents = lines.joined(separator: "\n") + "\n"
+        try? contents.write(
+            to: engine.appendingPathComponent(provenanceFile),
+            atomically: true, encoding: .utf8,
+        )
+    }
+
+    /// The version of the payload this renderer is staged from: the picked
+    /// toolkit for D3DMetal, the chosen version for DXMT and DXVK, and
+    /// otherwise the one the engine shipped, read from the asset URL in its
+    /// own `engine-info.json`.
+    private static func payloadVersion(
+        of renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
+    ) -> String? {
+        switch renderer {
+        case .d3dmetal:
+            return toolkit?.version
+        case .dxmt, .dxvk:
+            let component: RendererVersions.Component = renderer == .dxmt ? .dxmt : .dxvk
+            if let chosen = RendererVersions.chosen(component) { return chosen }
+            guard let asset = engineInfo(engine)[component.rawValue] as? String,
+                  let name = URL(string: asset)?.lastPathComponent
+            else { return nil }
+            return component.version(from: name)
+        case .auto, .wined3d:
+            return nil
+        }
     }
 
     /// A module tree in the engine and the prefix directory whose files let it
@@ -274,11 +336,16 @@ nonisolated enum EngineRenderers {
     }
 
     private static func isGPTkFlavor(_ engine: URL) -> Bool {
+        engineInfo(engine)["flavor"] as? String == "gptk"
+    }
+
+    /// The engine's own description of itself, empty for a tree without one.
+    private static func engineInfo(_ engine: URL) -> [String: Any] {
         let info = engine.appendingPathComponent("engine-info.json")
         guard let data = try? Data(contentsOf: info),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return false }
-        return object["flavor"] as? String == "gptk"
+        else { return [:] }
+        return object
     }
 
     private static func payloadDirectories(engine: URL) -> [URL] {

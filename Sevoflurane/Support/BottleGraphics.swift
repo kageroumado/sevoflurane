@@ -30,7 +30,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         case .auto: "Uses CrossOver's game settings, with Wine's renderer as fallback."
         case .d3dmetal: "DirectX 11 and 12 through Apple's Game Porting Toolkit."
         case .dxmt: "DirectX 11, translated straight to Metal."
-        case .dxvk: "DirectX 9 to 11, by way of Vulkan."
+        case .dxvk: "DirectX 10 and 11, by way of Vulkan."
         case .wined3d: "Wine's built-in Direct3D renderer."
         }
     }
@@ -43,11 +43,13 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         case .auto:
             "Uses CrossOver's per-game database when available, then falls back to Wine's renderer."
         case .d3dmetal:
-            "DirectX 11 and 12 through Metal. Requires Apple's toolkit or a CrossOver engine that includes it."
+            "DirectX 11 and 12 through Metal, for 64-bit games only — a 32-bit game gets "
+                + "Wine's own DirectX 12 whatever is chosen here. Requires Apple's toolkit "
+                + "or a CrossOver engine that includes it."
         case .dxmt:
             "DirectX 10 and 11 through Metal. Try it if a DirectX 11 game has graphics problems."
         case .dxvk:
-            "DirectX 9 to 11 through Vulkan and MoltenVK."
+            "DirectX 10 and 11 through Vulkan and MoltenVK. DXGI stays Wine's own."
         case .wined3d:
             "Wine's built-in renderer. Try it for games that have trouble with the other renderers."
         }
@@ -59,7 +61,11 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     var managedDLLOverrides: String? {
         switch self {
         case .dxvk:
-            "d3d9,d3d10core,d3d11,dxgi=n,b"
+            // What the payload ships, and only that: the engine's DXVK build
+            // is `d3d10core` and `d3d11`, so `d3d9` and `dxgi` stay Wine's
+            // own. Naming a DLL the payload does not carry sends a game
+            // looking for a native file that is not there.
+            "d3d10core,d3d11=n,b"
         case .dxmt:
             "d3d10core,d3d11,dxgi=n,b"
         case .d3dmetal:
