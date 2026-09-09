@@ -13,27 +13,39 @@ templates ask for the subset that matters.
    what it ran on, how long it lasted, how it ended — which `sevo runs` prints
    and the report zip carries.
 
-   Turn on Settings › Engine › *Log every library a game loads* only when a
-   game fails to start at all and you want to know which library it could not
-   resolve; it adds hundreds of lines per process. In a terminal:
+2. **Debug mode, for a planned session.** The menu bar's ⋯ menu › *Debug Mode*,
+   or:
 
    ```bash
-   sevo bottle config wine-debug on
+   sevo debug on      # sevo debug status; sevo debug off
    ```
 
-   It applies at the next Steam start; restart Steam from the menu bar if it is
-   already running, and turn it off again afterwards.
+   It turns on everything this protocol used to ask for by hand: every library
+   a game loads, the renderer's own errors in a file of its own, the engine's
+   frame trail, a window inventory whenever a window comes or goes, and a log
+   written line by line, so the last line before a crash is on disk. The app
+   half is on at once; the engine half reaches the client and its games at the
+   next Steam start, so restart Steam from the menu bar — the menu item says so
+   while a client is up.
 
-2. **Note the renderer in force.** Settings › Graphics. A fresh Dormison bottle
+   Nothing about it is remembered. It is off at the next launch whatever
+   happened to this one, a force quit included, and the logs stop growing with
+   it. Leave it on for the whole session; the report is what reads it.
+
+   On a build without Debug mode, the manual equivalent is Settings › Engine ›
+   *Log every library a game loads* (`sevo bottle config wine-debug on`), which
+   also applies at the next Steam start and has to be turned off by hand.
+
+3. **Note the renderer in force.** Settings › Graphics. A fresh Dormison bottle
    defaults to DXMT; D3DMetal is a choice. Every finding about a game needs the
    renderer that answered it, and a renderer switch from the menu bar restarts
    Steam, so write the time down.
 
-3. **Note the window mode.** Settings › Engine › *Make game windows resizable*.
+4. **Note the window mode.** Settings › Engine › *Make game windows resizable*.
    The default covers games that run in a window; a game that covers the screen
    needs the third option before it can be moved or resized.
 
-4. **Keep the app running.** Quit it with ⌘Q, never Force Quit, unless force
+5. **Keep the app running.** Quit it with ⌘Q, never Force Quit, unless force
    quitting is the thing under test. A force-quit leaves the bottle running with
    nobody supervising it; that is a known limitation, not a finding.
 
@@ -53,6 +65,8 @@ Useful probes while the app is up, none of which disturb it:
 | What does Steam think is running? | `sevo cdp 'JSON.stringify(SteamUIStore.RunningApps.map(a=>a.appid))'` |
 | The last 50 app log lines | `sevo logs --tail 50` |
 | The Wine log, following | `sevo logs --wine -f` |
+| Is Debug mode on, and where does it apply? | `sevo debug status` |
+| Put Steam's window away, then bring it back | `curl -s -X POST localhost:8764/steam/close`, then `curl -s -X POST localhost:8764/steam/show` |
 
 `curl localhost:8764/…` answers even when the app's window is frozen, because
 the control server is its own listener. If the app stops responding, run
@@ -76,8 +90,8 @@ it. Killing the app tests something else.
    only place a game's exit code is recorded), the app log, the Wine log, the
    windows log (one line per process and window from the engine, whether or
    not the app ever saw a window), the bottle's env files, the launcher
-   bundles, this month's run records, `sevo doctor`, and two days of crash
-   reports.
+   bundles, this month's run records, the renderer's own log if Debug mode was
+   on, `sevo doctor`, and two days of crash reports.
 
 2. **Check that the game's own log is in the zip.** The report carries this
    month's run records under `runs/`, and under `games/<appid>/` the logs each
@@ -87,16 +101,17 @@ it. Killing the app tests something else.
    A game with its own launcher writes wherever the launcher decided to;
    collect that one by hand if the game failed.
 
-3. **Turn *Log every library a game loads* off** if you turned it on, and set
-   the renderer back if you changed it.
+3. **Set the renderer back** if you changed it. Debug mode needs nothing:
+   quitting the app ends it. *Log every library a game loads*, if you used that
+   instead of Debug mode, is a setting and stays on until you turn it off.
 
 ## What the report can and cannot say
 
 The report names no account. Crash reports and env files carry paths under your
 home folder, so your short user name is in them; review before sharing. It
 cannot say what you clicked, which is why the timestamped notes matter, and it
-names the library a game failed to load only when *Log every library a game
-loads* was on.
+names the library a game failed to load only when Debug mode — or *Log every
+library a game loads* — was on for that launch.
 
 ## Filing
 

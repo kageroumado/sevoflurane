@@ -1180,12 +1180,22 @@ final class SteamWebHost {
             loginWindow?.show(activating: true)
             return
         }
+        // The window the user asked for does not exist yet: a reload boots
+        // the UI and Steam re-creates its desktop window hidden, on the
+        // route it had. Nothing else would ever show it, so the request is
+        // held until the adoption it is waiting for.
+        desktopShowIsPending = true
         if desktopWasClosed {
             reload()
         } else {
             routeDesktop()
         }
     }
+
+    /// Whether a ``showSteam`` found no desktop window and is waiting for the
+    /// one the page is building. Cleared by the adoption that answers it, and
+    /// by a close, which is a newer statement of what the user wants.
+    private var desktopShowIsPending = false
 
     /// Ends the Steam UI from our side, the way the window's close button
     /// does. Exposed so the control endpoint (and anything driving the app)
@@ -1962,6 +1972,12 @@ final class SteamWebHost {
         }
         installContextScripts()
         refreshRecentGames()
+        // The user asked for the window before it existed; this is it.
+        if desktopShowIsPending {
+            desktopShowIsPending = false
+            routeDesktop()
+            window.show(activating: true)
+        }
     }
 
     func windowDidHide(_ window: SteamWindow) {
@@ -2158,6 +2174,7 @@ final class SteamWebHost {
         guard window === desktop else { return }
         desktop = nil
         desktopWasClosed = true
+        desktopShowIsPending = false
         // Steam's context menus are per-window popups it creates lazily and
         // then keeps: a dozen hidden web views accumulate behind one desktop
         // window, and closing that window from our side leaves them orphaned
