@@ -276,16 +276,31 @@ struct SearchableSetting: Identifiable, Equatable {
 
 // MARK: - Sidebar
 
-private struct SettingsSidebar: View {
+struct SettingsSidebar: View {
     @Binding var category: SettingsCategory
     @Binding var searchText: String
     @Binding var highlighted: String?
 
-    private var results: [(category: SettingsCategory, items: [SearchableSetting])] {
-        SettingsCategory.allCases.compactMap { category in
-            let items = category.searchableItems.filter { $0.matches(searchText) }
-            return items.isEmpty ? nil : (category, items)
+    /// One row per matching setting, each carrying the pane it lives in.
+    ///
+    /// Flat by design: the sidebar is a `List`, and a `Section` header row
+    /// beside content rows gives AppKit's table two kinds of row view to
+    /// constrain against each other when the results change under a live
+    /// selection — the layout exception that took the app down. Grouping by
+    /// pane belongs in the row, not in the list's structure.
+    private var matches: [Match] {
+        SettingsCategory.allCases.flatMap { category in
+            category.searchableItems
+                .filter { $0.matches(searchText) }
+                .map { Match(category: category, item: $0) }
         }
+    }
+
+    private struct Match: Identifiable {
+        let category: SettingsCategory
+        let item: SearchableSetting
+
+        var id: String { item.id }
     }
 
     var body: some View {
@@ -301,20 +316,20 @@ private struct SettingsSidebar: View {
                     .tag(category)
                 }
             } else {
-                ForEach(results, id: \.category.id) { result in
-                    Section {
-                        ForEach(result.items) { item in
-                            Button { reveal(item, in: result.category) } label: {
-                                HStack {
-                                    Text(item.title).foregroundStyle(.primary)
-                                    Spacer()
-                                }
+                ForEach(matches) { match in
+                    Button { reveal(match.item, in: match.category) } label: {
+                        Label {
+                            HStack {
+                                Text(match.item.title).foregroundStyle(.primary)
+                                Spacer(minLength: 8)
+                                Text(match.category.title).foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                        } icon: {
+                            Image(systemName: match.category.icon)
+                                .foregroundStyle(Color.accentColor)
                         }
-                    } header: {
-                        Label(result.category.title, systemImage: result.category.icon)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

@@ -60,3 +60,20 @@ function_parameter_count:
   error: 8
 
 indentation: 4
+
+custom_rules:
+  # A Settings `List` is a flat sidebar of one kind of row. A `Section` header
+  # row beside content rows makes AppKit's table constrain a header row view
+  # against a content row view across a diff, and the recycled row is pinned to
+  # an anchor in a hierarchy it has already left — an AutoLayout exception
+  # raised inside the display cycle, which AppKit turns into a crash. Panes are
+  # `Form` with `.formStyle(.grouped)`; see CONTRIBUTING.md.
+  #
+  # The match is file-wide rather than brace-accurate: in these files the only
+  # `List` is the sidebar, so a `Section` anywhere below one is the defect.
+  settings_list_section:
+    name: "Section inside a Settings List"
+    included: ".*/Sevoflurane/App/Settings.*\\.swift"
+    regex: 'List\s*[({].*?\bSection\s*[{(]'
+    message: "A Settings List must stay a flat sidebar — use Form + .formStyle(.grouped) for grouped content."
+    severity: error

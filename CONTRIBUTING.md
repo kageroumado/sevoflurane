@@ -91,6 +91,15 @@ these. All five are load-bearing.
    carries a function index into the unix-side library and the releases do
    not number those alike, so the failure is a call into the wrong function
    with nothing in any log.
+6. **No `Section` inside a `List` in Settings.** Panes are `Form` with
+   `.formStyle(.grouped)`; a `List` here is only ever a flat sidebar of one
+   kind of row. A section header row beside content rows gives AppKit's
+   table a header row view and a content row view to constrain against each
+   other across a diff, and rows recycled between the two kinds are pinned
+   to anchors in a hierarchy they have already left — an AutoLayout
+   exception raised inside the display cycle, which AppKit turns into a
+   crash. A SwiftLint custom rule (`settings_list_section`) fails the build
+   on it.
 
 ## Watching a game or the client from outside
 
