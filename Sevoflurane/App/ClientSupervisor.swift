@@ -441,7 +441,9 @@ final class ClientSupervisor {
             // tree under the running client; the game loads the new DLLs when
             // it launches, and the booted record now matches.
             log.log(.client, "restaging graphics for \(game.name) without a restart")
-            BottleGraphics.reconcileManagedTree()
+            if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
+                log.log(.client, note)
+            }
             BottleGraphics.recordBootedSelection()
         }
         host.launchGame(game)

@@ -481,7 +481,9 @@ actor SteamBridge {
             // A bounce (msync, engine) can't be applied inline and stays the
             // launch path's job; only a restage is owed here.
             if BottleGraphics.graphicsChangeSinceBoot().restage {
-                BottleGraphics.reconcileManagedTree()
+                if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
+                    log(.client, note)
+                }
                 BottleGraphics.recordBootedSelection()
             }
             onGameLaunch?()

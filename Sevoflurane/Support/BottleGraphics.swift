@@ -222,6 +222,21 @@ nonisolated enum BottleGraphics {
         )
     }
 
+    /// One line naming what a staging pass put in the Wine tree: the renderer
+    /// a game will load, the toolkit version behind it, and how many DLLs
+    /// moved. Nil for an engine that keeps no managed tree.
+    ///
+    /// Every spawn and every hot restage says this, because a black-screen
+    /// report has to name the layer the game actually loaded — and a renderer
+    /// switch used to be visible only as a translation layer's own lines
+    /// going missing from the wine log.
+    static func stagingNote(_ staged: [String]) -> String? {
+        guard case .managed = Engine.active else { return nil }
+        let toolkit = D3DMetalInstaller.active(inEngine: Engine.active.root)?.version
+        return "staged \(staged.count) renderer DLL(s) for \(managedSelection().renderer.label)"
+            + (toolkit.map { ", D3DMetal \($0)" } ?? "")
+    }
+
     // MARK: - What the client booted with
 
     private static let bootedKey = "bootedGraphics"

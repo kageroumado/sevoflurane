@@ -371,7 +371,9 @@ nonisolated enum ClientLifecycle {
         // D3DMetal version, staged together. This is the single point graphics
         // effects happen, so a record-only picker takes effect at the next
         // spawn with no chance of a crossed tree.
-        BottleGraphics.reconcileManagedTree()
+        if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
+            log(note)
+        }
         let process = Process()
         // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
         // ("Steamwebhelper is not responding"); with it, the client relaunches
