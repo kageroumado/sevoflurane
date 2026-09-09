@@ -20,19 +20,26 @@ final class AppLinkServer {
         self.bridge = bridge
     }
 
-    func start() {
+    /// Takes the link port, exclusively: a second copy of the app answering
+    /// the daemon's commands would render Steam twice and reload each other's
+    /// pages. The caller stops the launch when this answers false.
+    func start() async -> Bool {
         do {
-            let server = try HTTPServer(port: BridgePorts.appLink) { [weak self] request in
+            let server = try HTTPServer(
+                port: BridgePorts.appLink, exclusive: true,
+            ) { [weak self] request in
                 await self?.handle(request) ?? .error(500, "app link gone")
             }
-            server.start()
+            try await server.startWaitingForThePort()
             self.server = server
             EventLog.shared.log(.app, "daemon link up on :\(BridgePorts.appLink)")
+            return true
         } catch {
             EventLog.shared.log(
                 .app,
                 "daemon link failed to start: \(error.localizedDescription)",
             )
+            return false
         }
     }
 
@@ -54,6 +61,11 @@ final class AppLinkServer {
             }
             supervisor.apply(snapshot)
             return Self.json(#"{"ok":true}"#)
+        case ("POST", "/popups/sweep"):
+            return Self.json(await ClientLifecycle.hideVisibleClientPopups())
+        case ("POST", "/services/ready"):
+            let ready = await bridge.clientServicesReady()
+            return Self.json(#"{"ready":\#(ready.map(String.init) ?? "null")}"#)
         case ("POST", "/log"):
             guard let line = try? JSONDecoder()
                 .decode(RemoteLogLine.self, from: request.body),

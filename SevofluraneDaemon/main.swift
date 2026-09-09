@@ -16,6 +16,11 @@ termination.setEventHandler {
 }
 termination.resume()
 
-MainActor.assumeIsolated { daemon.start() }
+// The control port is taken exclusively, so a second daemon cannot come up
+// beside the first and split supervision between them. It ends here instead,
+// having said in the log which one holds the port.
+Task(name: "Daemon startup") { @MainActor in
+    guard await daemon.start() else { exit(0) }
+}
 
 RunLoop.main.run()

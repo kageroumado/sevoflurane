@@ -124,12 +124,17 @@ actor SteamBridge {
     /// always means another copy of the app owns the ports, and the caller
     /// must say so instead of running half-alive.
     @discardableResult
-    func start() -> Bool {
+    func start() async -> Bool {
         if shim.isEmpty {
             log(.bridge, "steamclient_shim.js missing from the app bundle — UI cannot boot")
         }
         do {
-            let ui = try HTTPServer(port: BridgePorts.steamUI) { [weak self] request in
+            // Exclusive: this is the port that says whether another copy of
+            // Sevoflurane owns the app. Two listeners on it means the kernel
+            // decides which process serves Steam's bundle, request by request.
+            let ui = try HTTPServer(
+                port: BridgePorts.steamUI, exclusive: true,
+            ) { [weak self] request in
                 // Static assets never enter the actor: reading Steam's bundle
                 // here would serialize every asset load against CDP dispatch
                 // and the health probe. Only /, /index.html, and /__eval need
@@ -149,7 +154,7 @@ actor SteamBridge {
                 }
                 return await self?.handleUIRequest(request) ?? .error(500, "bridge gone")
             }
-            ui.start()
+            try await ui.startWaitingForThePort()
             uiServer = ui
             let art = try HTTPServer(port: BridgePorts.art) { request in
                 Self.handleArtRequest(request)

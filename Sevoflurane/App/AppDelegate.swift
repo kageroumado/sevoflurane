@@ -35,8 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    func applicationDidFinishLaunching(_ note: Notification) {
-        #if DEBUG
+    /// Launches that do something other than run the app: the test host, and
+    /// the helper-unregistering pass a worktree build ends with. Answers
+    /// whether one of them took the launch.
+    #if DEBUG
+        private func handledDebugLaunch() -> Bool {
             // The unit tests link against this binary, so running them
             // launches the app. Anything started here would boot the bottle,
             // take the ports off a copy the user is running, and stage into
@@ -45,20 +48,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // all behind it.
             if Self.isHostingTests {
                 isSimulatedBoot = true
-                return
+                return true
             }
-        #endif
-        // First, so a throw during the rest of startup is still recorded.
-        ExceptionWatch.install()
+            // Leaves the machine as a test run found it: a build run from a
+            // worktree registers its own background helper, and a stale
+            // registration would start that build's daemon at the next login
+            // and give it the control port. `SMAppService` can only
+            // unregister from the bundle that registered, so the trigger has
+            // to live here. `open` strips the environment, so run the
+            // executable inside the bundle directly.
+            if ProcessInfo.processInfo.environment["SEVO_UNREGISTER_HELPER"] == "1" {
+                isSimulatedBoot = true
+                Task(name: "Unregister the background helper") {
+                    await DaemonService.unregister()
+                    print("unregistered \(SupervisorLink.launchAgentPlistName)")
+                    NSApp.terminate(nil)
+                }
+                return true
+            }
+            return false
+        }
+    #endif
+
+    /// Points the shared, process-agnostic code at this process's answers:
+    /// where its lines go, and the one live connection to the client. The
+    /// daemon installs its own set — the same seams, different answers.
+    private func installSharedHooks() {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         ClientLifecycle.hidePopupsOverBridge = { [bridge] in
             await bridge.hideVisibleClientPopups() ?? []
+        }
+        ClientLifecycle.servicesReadyOverBridge = { [bridge] in
+            await bridge.clientServicesReady()
         }
         SetupLog.log = { EventLog.enqueue(.setup, $0) }
         NWJSRunner.log = { EventLog.enqueue(.client, $0) }
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }
         GameExecutables.log = { EventLog.enqueue(.client, $0) }
         RunRecorder.log = { EventLog.enqueue(.client, $0) }
+    }
+
+    func applicationDidFinishLaunching(_ note: Notification) {
+        #if DEBUG
+            if handledDebugLaunch() { return }
+        #endif
+        // First, so a throw during the rest of startup is still recorded.
+        ExceptionWatch.install()
+        installSharedHooks()
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
@@ -116,7 +152,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Up before provisioning gates so the daemon can reach the page even
         // while the setup wizard is waiting for the user.
-        appLinkServer.start()
+        Task(name: "Take the daemon link port") {
+            guard await self.appLinkServer.start() else {
+                self.reportAnotherCopyIsRunning()
+                return
+            }
+        }
         // The bundle's shader packages are in the store before any game
         // could be launched naming one. Detached: it copies files.
         Task.detached(name: "Copy bundled shader packages") {
@@ -232,6 +273,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startSilentUpdates()
     }
 
+    /// Another copy of Sevoflurane holds the ports. A half-alive instance —
+    /// one that renders no Steam but answers the daemon's commands — is worse
+    /// than saying so and going away.
+    private func reportAnotherCopyIsRunning() {
+        let alert = NSAlert()
+        alert.messageText = "Sevoflurane is already running"
+        alert.informativeText = "Another copy of Sevoflurane has the app's ports — "
+            + "possibly from a different location. Quit the other copy, then open this one again."
+        alert.runModal()
+        NSApp.terminate(nil)
+    }
+
     private var isRuntimeStarted = false
 
     /// Bridge listeners must be up before the web view's first load 302s
@@ -245,15 +298,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             guard await bridge.start() else {
                 // Almost always a second copy of the app holding the ports
-                // (watched happen: a tester copy plus the installed one) —
-                // a half-alive instance is worse than saying so.
-                let alert = NSAlert()
-                alert.messageText = "Sevoflurane is already running"
-                alert.informativeText = "Another copy of Sevoflurane has the "
-                    + "app's ports — possibly from a different location. Quit "
-                    + "the other copy, then open this one again."
-                alert.runModal()
-                NSApp.terminate(nil)
+                // (watched happen: a tester copy plus the installed one).
+                reportAnotherCopyIsRunning()
                 return
             }
             await bridge.setGameLaunchHandler { [weak self] in

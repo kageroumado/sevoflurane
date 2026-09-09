@@ -23,12 +23,16 @@ final class AppLink {
         facts.appPID > 0 && kill(facts.appPID, 0) == 0
     }
 
-    /// The app said hello, or one of its facts changed.
-    func attach(_ incoming: PageFacts) {
+    /// The app said hello, or one of its facts changed. Answers whether this
+    /// is a different app process from the one that was attached — a relaunch
+    /// after a crash, or the first one of the session.
+    @discardableResult
+    func attach(_ incoming: PageFacts) -> Bool {
         let isNew = incoming.appPID != facts.appPID
         facts = incoming
-        guard isNew else { return }
+        guard isNew else { return false }
         log.log(.app, "Sevoflurane \(incoming.appVersion) attached (pid \(incoming.appPID))")
+        return true
     }
 
     /// Forgets the app, so every page-side guard reads as "nobody is
@@ -74,6 +78,23 @@ final class AppLink {
             try? await Task.sleep(for: .seconds(1))
             guard isAttached else { return }
         }
+    }
+
+    /// Hides whatever CEF windows the client has on screen, over the bridge's
+    /// connection, and answers what it hid — the sign-in window among them is
+    /// how the daemon learns the machine is waiting on a human.
+    func sweepClientPopups() async -> [String] {
+        guard isAttached, let data = await post("/popups/sweep") else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    /// Whether Steam's own stores have finished initializing. Nil when the app
+    /// cannot say — no app, or a bridge whose socket is closed — so the boot's
+    /// own clock decides what the silence means.
+    func servicesReady() async -> Bool? {
+        guard isAttached, let data = await post("/services/ready") else { return nil }
+        struct Reply: Decodable { let ready: Bool? }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.ready
     }
 
     func launchGame(appID: Int) async {

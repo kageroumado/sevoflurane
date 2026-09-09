@@ -136,7 +136,6 @@
 				Setup/SetupView.swift,
 				Sevoflurane.icon,
 				Support/AgentIntegration.swift,
-				Support/HostSnapshot.swift,
 				Support/MainQueueLatencyProbe.swift,
 				Support/MainThreadHop.swift,
 				Support/MenuTrackingWatchdog.swift,

@@ -31,7 +31,17 @@ final class BottleSupervisor {
     /// has, every failure is the first launch still happening.
     @ObservationIgnored private var hasSeenClientUp = false
 
-    @ObservationIgnored private var isPaused = false
+    private var isPaused = false
+
+    /// Whether anyone wants a client at all.
+    ///
+    /// The daemon outlives every app launch, so "the process is running" no
+    /// longer means "the user is here". Until something asks — an app
+    /// attaching, a control verb, or a client already running that this daemon
+    /// is adopting — the cycle probes and reports but launches nothing.
+    /// Without it, quitting Sevoflurane would bring the bottle down and the
+    /// next probe would put it straight back up.
+    private var wantsClient = false
     @ObservationIgnored private var restartPhase = ""
     @ObservationIgnored private var progressPhase: String?
     @ObservationIgnored private var lastProbe: ClientLifecycle.ClientState = .down
@@ -44,7 +54,7 @@ final class BottleSupervisor {
 
     private var healthInputs: HealthInputs {
         HealthInputs(
-            isPaused: isPaused,
+            isPaused: isPaused || !wantsClient,
             isRestarting: isRestarting,
             restartPhase: restartPhase,
             progressPhase: progressPhase,
@@ -149,9 +159,31 @@ final class BottleSupervisor {
     /// with the services still down is the "the user just signed in" edge,
     /// which needs the page reloaded rather than waited out.
     @ObservationIgnored private var wasAwaitingSignIn = false
-    /// Set when sign-in completes so the library opens by itself the moment
-    /// everything is healthy.
-    @ObservationIgnored private var showLibraryOnHealthy = false
+    /// Why the library is to open by itself the moment everything is healthy,
+    /// or nil when it is not. The reason picks the line the log gets: a person
+    /// who opened Sevoflurane and a sign-in that just finished are different
+    /// stories and only one of them mentions signing in.
+    private var showLibraryOnHealthy: LibraryOpening?
+    /// What armed the automatic library opening.
+    enum LibraryOpening: Equatable, Sendable {
+        /// A person opened Sevoflurane and came for the window.
+        case theUserOpenedTheApp
+        /// Sign-in completed; ending in silence reads as a crash.
+        case signInFinished
+
+        var note: String {
+            switch self {
+            case .theUserOpenedTheApp: "the client is up — opening Steam's window"
+            case .signInFinished: "sign-in finished — opening the library"
+            }
+        }
+    }
+
+    /// Puts Steam's window on screen as soon as the client is healthy.
+    func showLibraryWhenHealthy(_ reason: LibraryOpening = .theUserOpenedTheApp) {
+        showLibraryOnHealthy = reason
+    }
+
     /// Dedupes the "Wine window visible" log line across probe cycles.
     @ObservationIgnored private var wineWindowsVisible = false
     /// When the current client launch began, for the boot-audit line at the
@@ -226,6 +258,30 @@ final class BottleSupervisor {
             }
         }
         wake(.tick)
+    }
+
+    /// A new app process is rendering Steam. Its page is seconds old, so the
+    /// recovery clocks start again from here — without this, a page that has
+    /// existed for two seconds is measured against a grace that ran out while
+    /// no app was running at all, and the first thing a relaunched app gets is
+    /// a reload.
+    func appDidAttach() {
+        lastPageRecovery = .now
+        pageFailures = 0
+        pageReloads = 0
+        serviceRecoveryTried = false
+        refreshHealth()
+    }
+
+    /// Something asked for a client: an app attached, or a control verb
+    /// arrived. Idempotent, and the first ask starts a cycle rather than
+    /// waiting one out.
+    func wantClient(because reason: String) {
+        guard !wantsClient else { return }
+        wantsClient = true
+        log.log(.supervisor, "supervision is live: \(reason)")
+        refreshHealth()
+        wake(.control(reason))
     }
 
     /// Runs a cycle now. Coalescing is the stream's: a burst of wakes while a
@@ -436,22 +492,22 @@ final class BottleSupervisor {
         }
     }
 
-    /// Quit teardown: quitting Sevoflurane quits Steam. Stops supervision so
-    /// nothing relaunches the client, then brings every bottle process down —
-    /// the client's processes are launched detached, so without this they
-    /// outlive the session (and a leaked webhelper window parks a dead icon
-    /// in the Dock). Reached only from `/quit` and `SIGTERM`: a bottle that
-    /// nobody asked to come down keeps running, which is the whole of what
-    /// surviving an app crash means.
+    /// Quit teardown: quitting Sevoflurane quits Steam. Stops wanting a client
+    /// so nothing relaunches it, then brings every bottle process down — the
+    /// client's processes are launched detached, so without this they outlive
+    /// the session (and a leaked webhelper window parks a dead icon in the
+    /// Dock). Reached only from `/quit` and `SIGTERM`: a bottle that nobody
+    /// asked to come down keeps running, which is the whole of what surviving
+    /// an app crash means.
+    ///
+    /// The daemon itself stays up and idle afterwards — it still answers
+    /// `sevo status`, and the next ask starts a client again.
     func shutdownForQuit() async {
         guard !isQuitting else { return }
         isQuitting = true
-        pendingTick?.cancel()
-        pendingTick = nil
-        wakeups?.finish()
-        wakeups = nil
-        loop?.cancel()
-        loop = nil
+        wantsClient = false
+        endBoot()
+        refreshHealth()
         log.log(.supervisor, "quit: bringing the bottle down")
         // The last thing a user sees of this app is the teardown, so the
         // popup sweep runs here too: the client puts up "Shutting down
@@ -468,6 +524,8 @@ final class BottleSupervisor {
                 ? "quit: bottle is down"
                 : "quit: pids \(survivors) survived SIGKILL",
         )
+        isQuitting = false
+        refreshHealth()
     }
 
     // MARK: - Probe cycle
@@ -506,6 +564,7 @@ final class BottleSupervisor {
         }
         clientFailures = 0
         hasSeenClientUp = true
+        wantClient(because: "a client is already running")
         if case .gaveUp = fault {
             fault = nil
             log.log(.supervisor, "client recovered on its own")
@@ -517,8 +576,12 @@ final class BottleSupervisor {
         // sees. The sweep opens a DevTools session per CEF popup target, so
         // it runs every cycle only while converging; a healthy steady state
         // sweeps every eighth cycle, and a running game suspends it.
-        if !gameIsUp, boot != .idle || health != .healthy
-            || probeCycleCount.isMultiple(of: 8) {
+        // `.awaitingClient` is the cycle that connects the bridge, and the
+        // sweep runs over that connection — so this one sweeps at the end of
+        // the connect instead, and finds the login window on the first cycle
+        // rather than the second.
+        if !gameIsUp, boot != .awaitingClient,
+           boot != .idle || health != .healthy || probeCycleCount.isMultiple(of: 8) {
             await sweepClientPopups(duringStartup: boot != .idle)
         }
 
@@ -556,11 +619,17 @@ final class BottleSupervisor {
             progressPhase = "connecting to the client"
             refreshHealth()
             await app.connectToClient()
+            await sweepClientPopups(duringStartup: true)
             enterBoot(.awaitingServices)
             progressPhase = "waiting for Steam's services…"
             return true
         case .awaitingServices:
             progressPhase = "waiting for Steam's services…"
+            guard app.isAttached else {
+                log.log(.client, "client is up with no app attached — the boot ends here")
+                endBoot()
+                return false
+            }
             if isAwaitingSignIn {
                 // A signed-out client never initializes its services, so the
                 // sign-in window ends this wait as decisively as the services
@@ -594,7 +663,7 @@ final class BottleSupervisor {
     }
 
     private func reactToPage(wineWindows: [WineWindowWatch.Window]) async {
-        switch await Self.probePage() {
+        switch await PageProbe.state() {
         case .bridgeDown:
             endBoot()
             pageServicesUp = false
@@ -669,9 +738,9 @@ final class BottleSupervisor {
                             + "from launch to healthy",
                     )
                 }
-                if becameHealthy, showLibraryOnHealthy {
-                    showLibraryOnHealthy = false
-                    log.log(.supervisor, "sign-in finished — opening the library")
+                if becameHealthy, let opening = showLibraryOnHealthy {
+                    showLibraryOnHealthy = nil
+                    log.log(.supervisor, opening.note)
                     await app.send(.showLibrary)
                 }
                 // Explorer exists to suppress right after the client comes
@@ -885,7 +954,7 @@ final class BottleSupervisor {
             pageFailures = 0
             // The library opens by itself once everything is up: sign-in
             // ending in silence reads as a crash.
-            showLibraryOnHealthy = true
+            showLibraryOnHealthy = .signInFinished
             let promoted = Self.promotedBottlePIDs()
             if !promoted.isEmpty {
                 // Showing the login window made winemac.drv promote its
@@ -953,6 +1022,7 @@ final class BottleSupervisor {
     // MARK: - Restart ladder
 
     private func restartClient(reason: String, fullWindows: Bool = false) async {
+        guard wantsClient else { return }
         guard !isQuitting, !provisioningBlocksStart(reason: reason) else { return }
         if isRestarting {
             restartAgain = reason
@@ -1108,43 +1178,5 @@ final class BottleSupervisor {
         clientStartedAt = .now
         await ClientLifecycle.launchClient()
         enterBoot(.awaitingClient)
-    }
-
-    // MARK: - Probes
-
-    private enum PageState: Equatable {
-        /// The page evals; `servicesUp` is whether Steam's stores finished
-        /// initializing — the part that dies with the client's UI session.
-        case answering(servicesUp: Bool)
-        case bridgeDown
-        case notAnswering(String)
-    }
-
-    /// One probe covers the whole chain the UI depends on: app page → bridge
-    /// WebSocket → page eval and back. The bridge always answers HTTP 200 with
-    /// `ok: false` carrying the failure ("no page connected", eval timeout),
-    /// so an HTTP-level failure specifically means the bridge itself is down.
-    ///
-    /// The expression asks Steam's own app object whether its stores finished
-    /// initializing. A bare eval is not enough: the page runs in the app's
-    /// WKWebView and keeps answering evals after the client's UI session dies
-    /// (steamwebhelper hang, regression to the login window) — a state where
-    /// CDP still lists SharedJSContext and the user sees a frozen splash.
-    private nonisolated static func probePage() async -> PageState {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
-        request.httpMethod = "POST"
-        request.httpBody = Data(
-            "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))".utf8,
-        )
-        request.timeoutInterval = 30
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else {
-            return .bridgeDown
-        }
-        struct Reply: Decodable { let ok: Bool; let v: String? }
-        guard let reply = try? JSONDecoder().decode(Reply.self, from: data) else {
-            return .notAnswering("malformed /__eval reply")
-        }
-        guard reply.ok else { return .notAnswering(reply.v ?? "eval failed") }
-        return .answering(servicesUp: reply.v?.contains("true") == true)
     }
 }

@@ -16,11 +16,18 @@ final class Daemon {
     private var supervisor: BottleSupervisor!
     private var control: ControlServer!
 
-    func start() {
+    /// Answers false when another supervisor already holds the control port,
+    /// in which case this process has nothing to do and should end.
+    func start() async -> Bool {
         // Ownership first: everything spawned from here carries this pid, and
         // the engine's dock shim brings the prefix down if it dies.
         BottleOwner.claim()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        // Both questions are the client's, and the only live connection to it
+        // belongs to the app's bridge — so both travel the link rather than
+        // opening a second DevTools session per ask.
+        ClientLifecycle.hidePopupsOverBridge = { [app] in await app.sweepClientPopups() }
+        ClientLifecycle.servicesReadyOverBridge = { [app] in await app.servicesReady() }
         EventLog.mirror = { [weak self] category, message, date in
             guard let self else { return }
             Task(name: "Mirror a log line to the app") {
@@ -40,12 +47,13 @@ final class Daemon {
         control = ControlServer(supervisor: supervisor, app: app) { [weak self] in
             await self?.bringTheBottleDown()
         }
-        control.start()
+        guard await control.start() else { return false }
         EventLog.shared.log(
             .supervisor,
             "daemon up (pid \(getpid())) — it owns the bottle from here",
         )
         supervisor.start()
+        return true
     }
 
     private func snapshot(_ health: SupervisorHealth) -> SupervisorSnapshot {
@@ -56,12 +64,16 @@ final class Daemon {
         )
     }
 
-    /// The version of the app this daemon was copied into. A command-line tool
-    /// carries no Info.plist of its own, and the daemon sits three levels down
-    /// from the bundle root at `Contents/Library/LaunchAgents/`.
+    /// The version of the app this daemon was copied into.
+    ///
+    /// A command-line tool carries no Info.plist of its own, and `Bundle.main`
+    /// for one is the directory holding the executable — here
+    /// `Contents/Library/LaunchAgents`, three directories inside the bundle
+    /// whose version this is. `CommandLine.arguments[0]` is not the path to
+    /// walk: launchd starts the daemon by its `BundleProgram`, which is
+    /// relative to the bundle.
     static let bundledAppVersion: String = {
-        let appRoot = URL(filePath: CommandLine.arguments[0])
-            .deletingLastPathComponent()
+        let appRoot = Bundle.main.bundleURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()

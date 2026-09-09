@@ -477,13 +477,24 @@ nonisolated enum ClientLifecycle {
 
     /// Asks the client's own `SharedJSContext` whether `GetServicesInitialized()`
     /// is true — the part that dies with the client's UI session while CDP goes
-    /// on listing the target.
+    /// on listing the target. Nil when the client cannot be reached at all, so
+    /// a caller's own cycle decides what a client that stopped answering means.
     ///
-    /// Nil when the client cannot be reached at all, so a caller's own cycle
-    /// decides what a client that stopped answering means. One short-lived
-    /// session per ask, on the same rung as the popup sweep: this is a boot
-    /// question asked a handful of times per launch, never the hot path.
+    /// Asked over the connection the bridge already holds, for the same reason
+    /// the popup sweep is: a boot spends two minutes asking this once a second,
+    /// and a fresh DevTools session per ask is a hundred sessions against a
+    /// component this project has wedged twice that way. The default opens one
+    /// anyway, because a process with no bridge — the `sevo` CLI — still has
+    /// the question. Same contract as ``log``.
+    nonisolated(unsafe) static var servicesReadyOverBridge: @Sendable () async -> Bool? = {
+        await servicesReadyOverOwnSession()
+    }
+
     static func clientServicesReady() async -> Bool? {
+        await servicesReadyOverBridge()
+    }
+
+    private static func servicesReadyOverOwnSession() async -> Bool? {
         guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp),
               let shared = targets.first(where: { $0["title"] as? String == "SharedJSContext" }),
               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init)

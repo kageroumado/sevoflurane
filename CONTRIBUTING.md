@@ -142,6 +142,9 @@ sends facts (`Support/SupervisorLink.swift`).
 | app → daemon | `POST :8764/supervisor/wake` | the app saw something the cycle should not wait a tick for |
 | app → daemon | `POST :8764/game/launch` | a game the menu picked, with its renderer pin |
 | app → daemon | `POST :8764/bottle/run`, `/bottle/launch` | one Windows program, so the daemon stays the only parent |
+| app → daemon | `POST :8764/library/show-when-healthy` | a person opened the app and came for Steam's window |
+| daemon → app | `POST :8766/popups/sweep` | hide the client's own CEF windows over the bridge's connection; answers what it hid |
+| daemon → app | `POST :8766/services/ready` | whether Steam's stores have initialized, asked over that same connection |
 | daemon → app | `POST :8766/command?verb=` | `PageCommand`: `connectToClient`, `reload`, `rebuild`, `dismissWindows`, `dismissWindowsForQuit`, `clientStopBegan`, `clientStopEnded`, `showLibrary` |
 | daemon → app | `POST :8766/command/launch?appid=` | run the game now, the restart having been decided |
 | daemon → app | `POST :8766/state` | `SupervisorSnapshot`: the health verdict the menu bar draws |
@@ -151,9 +154,30 @@ The app's own verbs (`/windows`, `/steam/show`, `/menu/cancel`, the
 benchmarks) stay on `:8766` and are proxied through `:8764`, so `sevo` asks
 one port for everything and gets a 409 when no app is running.
 
-Anything the daemon needs about the *client* it asks the client: CDP on
-`:8765` and the page's `/__eval` on `:8762` are reachable from either process,
-so services-readiness and page health are not facts the app has to relay.
+The page's `/__eval` on `:8762` is reachable from either process, so page
+health is not a fact the app has to relay. The two questions that *are* the
+client's — hide your popups, are your stores ready — go through the link
+anyway: the bridge holds the one live `SharedJSContext` connection, and a boot
+asks the second question once a second for up to two minutes. A DevTools
+session per ask is how this project has wedged CEF twice.
+
+### Testing against a real bottle
+
+A build run from a worktree registers *its own* background helper, and the
+registration outlives the run: at the next login launchd would start that
+build's daemon and hand it the control port. Undo it when the pass is over —
+`SMAppService` can only unregister from the bundle that registered, and `open`
+strips the environment, so run the executable inside the bundle:
+
+```bash
+SEVO_UNREGISTER_HELPER=1 path/to/Sevoflurane.app/Contents/MacOS/Sevoflurane
+launchctl print gui/$(id -u)/glass.kagerou.sevoflurane.daemon   # expect: not found
+```
+
+Debug builds only. Before starting, check the machine is free — `pgrep -x
+Sevoflurane`, `pgrep -x SevofluraneDaemon`, and `curl -s localhost:8764/status`
+must all come back empty — and never rebuild the app while it is running: the
+signature changes under it and macOS ends the process.
 
 ### Which target compiles what
 

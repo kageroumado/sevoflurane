@@ -68,14 +68,36 @@ final nonisolated class HTTPServer: Sendable {
     /// serial queue.
     private let queue: DispatchQueue
 
-    init(port: UInt16, handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) throws {
+    /// Why an exclusive listener did not come up.
+    enum StartFailure: Error, Equatable {
+        /// Another process holds the port.
+        case portIsTaken(UInt16)
+        case listenerFailed(String)
+    }
+
+    private let port: UInt16
+    /// Whether a second process may listen on the same port.
+    ///
+    /// Reuse is the default because the bridge's asset and art servers are
+    /// harmless twins. It is wrong for anything that owns state: two listeners
+    /// on the control port means the kernel hands each request to whichever it
+    /// likes, and "one supervisor owns the bottle" becomes a coin toss.
+    private let isExclusive: Bool
+
+    init(
+        port: UInt16,
+        exclusive: Bool = false,
+        handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
+    ) throws {
         self.handler = handler
+        self.port = port
+        isExclusive = exclusive
         queue = DispatchQueue(label: "sevo.http.\(port)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
         )
-        parameters.allowLocalEndpointReuse = true
+        parameters.allowLocalEndpointReuse = !exclusive
         listener = try NWListener(using: parameters)
     }
 
@@ -85,6 +107,50 @@ final nonisolated class HTTPServer: Sendable {
             Self.serve(connection, handler: handler, leftover: Data())
         }
         listener.start(queue: queue)
+    }
+
+    /// Starts and answers once the port is held — or throws, naming the port,
+    /// when something else already holds it. An exclusive listener's failure
+    /// arrives on the listener's state handler rather than out of `start()`,
+    /// so a caller that must not run half-alive has to wait for it.
+    func startWaitingForThePort() async throws {
+        let outcome = Outcome()
+        try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, any Error>) in
+            listener.stateUpdateHandler = { [port] state in
+                switch state {
+                case .ready:
+                    outcome.finish(waiter, with: .success(()))
+                case let .failed(error):
+                    let taken = error == .posix(.EADDRINUSE) || error == .posix(.EADDRNOTAVAIL)
+                    outcome.finish(waiter, with: .failure(
+                        taken ? StartFailure.portIsTaken(port)
+                            : StartFailure.listenerFailed(error.localizedDescription),
+                    ))
+                default:
+                    break
+                }
+            }
+            start()
+        }
+        listener.stateUpdateHandler = nil
+    }
+
+    /// Resumes the wait exactly once, whatever order the listener's states
+    /// arrive in.
+    private final class Outcome: @unchecked Sendable {
+        private let lock = NSLock()
+        private var isFinished = false
+
+        func finish(
+            _ waiter: CheckedContinuation<Void, any Error>, with result: Result<Void, any Error>,
+        ) {
+            lock.lock()
+            let first = !isFinished
+            isFinished = true
+            lock.unlock()
+            guard first else { return }
+            waiter.resume(with: result)
+        }
     }
 
     /// Reads one request (headers, then `Content-Length` bytes of body),

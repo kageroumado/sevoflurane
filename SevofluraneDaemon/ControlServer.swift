@@ -28,6 +28,16 @@ final class ControlServer {
         "/menu/cancel",
     ]
 
+    /// Verbs that mean "there should be a client": a daemon that has not been
+    /// asked launches nothing.
+    private static let asksForAClient: Set<String> = [
+        "/client/start",
+        "/client/restart",
+        "/client/forcequit",
+        "/game/launch",
+        "/library/show-when-healthy",
+    ]
+
     init(
         supervisor: BottleSupervisor,
         app: AppLink,
@@ -38,20 +48,47 @@ final class ControlServer {
         self.onQuit = onQuit
     }
 
-    func start() {
+    /// Takes the control port, exclusively. Answers false when something else
+    /// already holds it — which means another supervisor is running, and this
+    /// process must not become a second owner of the bottle.
+    func start() async -> Bool {
         do {
-            let server = try HTTPServer(port: BridgePorts.control) { [weak self] request in
+            let server = try HTTPServer(
+                port: BridgePorts.control, exclusive: true,
+            ) { [weak self] request in
                 await self?.handle(request) ?? .error(500, "control server gone")
             }
-            server.start()
+            try await server.startWaitingForThePort()
             self.server = server
             EventLog.shared.log(.supervisor, "control endpoint up on :\(BridgePorts.control)")
+            return true
+        } catch HTTPServer.StartFailure.portIsTaken {
+            let holder = await Self.whoHoldsTheControlPort()
+            EventLog.shared.log(
+                .supervisor,
+                "not starting: \(holder) already holds :\(BridgePorts.control) — "
+                    + "one supervisor owns the bottle",
+            )
+            return false
         } catch {
             EventLog.shared.log(
                 .supervisor,
                 "control endpoint failed to start: \(error.localizedDescription)",
             )
+            return false
         }
+    }
+
+    /// Asks the port itself what is on the other end, so the refusal names it.
+    private static func whoHoldsTheControlPort() async -> String {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)/status"),
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              let status = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return "something" }
+        guard status["daemon"] as? String == "running" else {
+            return "a process that is not a Sevoflurane daemon"
+        }
+        return "a Sevoflurane \(status["version"] as? String ?? "?") daemon"
     }
 
     private func handle(_ request: HTTPRequest) async -> HTTPResponse {
@@ -75,7 +112,10 @@ final class ControlServer {
             guard let facts = try? JSONDecoder().decode(PageFacts.self, from: request.body) else {
                 return .error(400, "expected a PageFacts body")
             }
-            app.attach(facts)
+            if app.attach(facts) {
+                supervisor.appDidAttach()
+            }
+            supervisor.wantClient(because: "Sevoflurane is running")
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/app/detach"):
             app.detach(reason: "the app said goodbye")
@@ -87,6 +127,9 @@ final class ControlServer {
 
     /// Everything that moves the client or the bottle. One owner, one door.
     private func clientVerb(_ request: HTTPRequest) async -> HTTPResponse {
+        if Self.asksForAClient.contains(request.path) {
+            supervisor.wantClient(because: "\(request.path) was asked for")
+        }
         switch (request.method, request.path) {
         case ("POST", "/client/restart"):
             let reason = Self.value(of: "reason", in: request.query).removingPercentEncoding
@@ -96,6 +139,9 @@ final class ControlServer {
                 supervisor.restartNow(reason: reason ?? "sevo client restart")
             }
             return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
+        case ("POST", "/library/show-when-healthy"):
+            supervisor.showLibraryWhenHealthy()
+            return Self.json(#"{"ok":true}"#)
         case ("POST", "/supervisor/wake"):
             // The app sees some deaths first — the bridge's transport closes
             // four seconds before the launcher exits — so it says so rather
@@ -211,6 +257,7 @@ final class ControlServer {
         }
         Engine.choose(engine)
         if !bottle.isEmpty { SteamBottle.choose(bottle) }
+        supervisor.wantClient(because: "an engine switch was asked for")
         EventLog.shared.log(
             .supervisor,
             "engine switched to \(engine.description), bottle \(targetBottle) (control)",

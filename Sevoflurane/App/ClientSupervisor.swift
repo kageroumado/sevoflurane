@@ -68,14 +68,11 @@ final class ClientSupervisor {
         }
     #endif
 
-    /// Why the app woke the daemon's probe cycle. Every one of these is
-    /// something the app sees first: the bridge's transport closing, a game
-    /// window appearing, a control verb.
+    /// What the app saw that the daemon's probe cycle should not wait a tick
+    /// to notice. The bridge learns of a dead client four seconds before the
+    /// launcher exits, and a game window is the app's own observation.
     nonisolated enum Wake: Equatable, Sendable {
-        case tick
-        case launcherExited(Int32)
         case clientConnectionLost
-        case control(String)
         case gameWindowChanged
     }
 
@@ -159,11 +156,8 @@ final class ClientSupervisor {
 
     /// The daemon's probe cycle wakes on what this app saw. A wake is a hint,
     /// never a state: the cycle decides what it means.
-    func wake(_ reason: Wake) {
-        guard case .tick = reason else {
-            Task(name: "Wake the daemon") { _ = await DaemonService.post("/supervisor/wake") }
-            return
-        }
+    func wake(_: Wake) {
+        Task(name: "Wake the daemon") { _ = await DaemonService.post("/supervisor/wake") }
     }
 
     // MARK: - Verbs
