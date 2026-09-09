@@ -31,17 +31,51 @@ nonisolated enum WineWindowWatch {
         "wine", "wine64", "wine-preloader", "wine64-preloader",
     ]
 
+    /// A window's Windows program and what named it.
+    struct Program: Equatable, Sendable {
+        /// Where the name came from, which is also how much it is worth: the
+        /// first three are the bottle's own answers about its own processes,
+        /// while `owner` is whatever macOS calls the window's application.
+        enum Source: Equatable, Sendable {
+            /// The process is the engine's loader; the name is its command line.
+            case loader
+            /// The process runs through a game's launcher bundle (``GameLaunchers``).
+            case bundle
+            /// A game run outside the bottle (``NWJSRunner``).
+            case native
+            /// Nothing claimed the process, so the window's owner names it.
+            case owner
+        }
+
+        let name: String
+        let source: Source
+    }
+
     /// The Windows program behind an on-screen window, lowercased: the owner
     /// name when the engine reports one, otherwise the program inside the
     /// loader process. `GameLaunchWatch` classifies by the same answer.
     static func program(owner: String, pid: pid_t) -> String? {
+        resolve(owner: owner, pid: pid)?.name
+    }
+
+    /// As ``program(owner:pid:)``, and says which of the four supplies
+    /// answered — what a launch's log line needs to report that a game came
+    /// up through its own bundle.
+    static func resolve(owner: String, pid: pid_t) -> Program? {
         let name = owner.lowercased()
-        if bottleLoaders.contains(name) { return windowsProgram(of: pid) }
+        if bottleLoaders.contains(name) {
+            return windowsProgram(of: pid).map { Program(name: $0, source: .loader) }
+        }
         // A game started through its own bundle is named after itself, not
         // after the loader — that is what the bundle is for — so the loader
         // has to be recognized by where it is instead (``GameLaunchers``).
-        if let bundled = bundledProgram(of: pid) { return bundled }
-        return nativeProgram(of: pid) ?? name
+        if let bundled = bundledProgram(of: pid) {
+            return Program(name: bundled, source: .bundle)
+        }
+        if let native = nativeProgram(of: pid) {
+            return Program(name: native, source: .native)
+        }
+        return Program(name: name, source: .owner)
     }
 
     /// The Windows program a game running through its own loader bundle is

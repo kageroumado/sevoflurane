@@ -62,45 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
         }
         PerfProbe.poi.emitEvent("Launch")
-        host.onGameLaunchStart = { [weak self] appID in
-            guard let self else { return }
-            // Arms the window watch for launches the bridge did not carry
-            // (the CLI's, a steam:// URL the client handled itself).
-            gameLaunchWatch.noteLaunchRequested()
-            // The game's exes, read from its install directory now, so its
-            // env files — and the bundle that names it in the Dock — exist
-            // before the process starts rather than after its first window.
-            Task.detached(name: "Record app \(appID)'s executables") {
-                if GameExecutables.recordFromInstall(appID: appID) {
-                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-                }
-            }
-        }
-        gameLaunchWatch.onGameWindowUp = { [weak self] owner in
-            guard let self else { return }
-            // Read before the host is told: the window's arrival is what ends
-            // the launch, and ending it clears the record of which app it was.
-            let launchedAppID = host.activeLaunch?.appID
-            host.gameWindowDidAppear()
-            // The exe that owns a launch's first window is what a per-game
-            // setting is written against; the launch names the app.
-            // A window another game has already claimed is that game's: a
-            // launch that never shows a window must not adopt a bystander's.
-            if let appID = launchedAppID, appID != 0,
-               GameConfig.app(claiming: owner).map({ $0 == appID }) ?? true {
-                GameConfig.noteExecutable(owner, forApp: appID)
-                // A game that has just run for the first time is also the
-                // first chance to read its files: what it is built on decides
-                // which runners it can be offered. Detached, because reading
-                // a game directory is disk work and this is the main actor.
-                Task.detached(name: "Detect app \(appID)'s runtime") {
-                    NWJSGames.record(appID: appID)
-                    ConfigMaterializer.materialize(
-                        bottle: SteamBottle.name, prefix: SteamBottle.root,
-                    )
-                }
-            }
-        }
+        installLaunchHooks()
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
@@ -158,6 +120,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 startRunning()
             }
+        }
+    }
+
+    // MARK: - What a launch records
+
+    /// The three moments a launch tells the app something: it began, one of
+    /// its processes reached the Mac driver, and one of them put up a window.
+    private func installLaunchHooks() {
+        host.onGameLaunchStart = { [weak self] appID in
+            guard let self else { return }
+            // Arms the window watch for launches the bridge did not carry
+            // (the CLI's, a steam:// URL the client handled itself).
+            gameLaunchWatch.noteLaunchRequested(appID: appID)
+            // The game's exes, read from its install directory now, so its
+            // env files — and the bundle that names it in the Dock — exist
+            // before the process starts rather than after its first window.
+            Task.detached(name: "Record app \(appID)'s executables") {
+                if GameExecutables.recordFromInstall(appID: appID) {
+                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                }
+            }
+        }
+        // A process of the launch loaded winemac.drv. This is the attribution
+        // that survives a game which dies before it draws.
+        gameLaunchWatch.onGameProcessArmed = { [weak self] exe in
+            guard let self, let appID = host.activeLaunch?.appID else { return }
+            record(exe, forApp: appID, detectingRuntime: false)
+        }
+        gameLaunchWatch.onGameWindowUp = { [weak self] owner in
+            guard let self else { return }
+            // Read before the host is told: the window's arrival is what ends
+            // the launch, and ending it clears the record of which app it was.
+            let launchedAppID = host.activeLaunch?.appID
+            host.gameWindowDidAppear()
+            // A game that has just run for the first time is also the first
+            // chance to read its files: what it is built on decides which
+            // runners it can be offered.
+            if let launchedAppID {
+                record(owner, forApp: launchedAppID, detectingRuntime: true)
+            }
+        }
+    }
+
+    /// Records the exe a launch of `appID` started, unless another game has
+    /// already claimed that exe — a window or a process another game owns is
+    /// that game's, whatever launch is in flight.
+    ///
+    /// Detached, because reading a game's directory and rewriting the env
+    /// files is disk work and this is the main actor.
+    private func record(_ exe: String, forApp appID: Int, detectingRuntime: Bool) {
+        guard appID != 0, GameConfig.app(claiming: exe).map({ $0 == appID }) ?? true else { return }
+        let known = GameConfig.game(appID).exes?.contains(exe) ?? false
+        guard !known || detectingRuntime else { return }
+        Task.detached(name: "Record app \(appID)'s \(exe)") {
+            GameConfig.noteExecutable(exe, forApp: appID)
+            if detectingRuntime { NWJSGames.record(appID: appID) }
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         }
     }
 

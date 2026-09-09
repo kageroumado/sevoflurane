@@ -562,11 +562,14 @@ final class SteamWebHost {
             setLaunch(GameLaunch(appID: id, detail: Self.launchTaskText(task)), clearAfter: 180)
         case "end":
             // The launch flow is done but the engine still has to put up its
-            // first window; GameLaunchWatch ends the story when it does.
+            // first window; GameLaunchWatch ends the story when it does. The
+            // status outlives the flow for as long as that watch runs,
+            // because which app is launching is what every window and every
+            // process the launch starts is attributed to.
             EventLog.shared.log(.client, "launch flow finished — waiting for the game window")
             if var launch = activeLaunch {
                 launch.detail = "Waiting for the game window…"
-                setLaunch(launch, clearAfter: 20)
+                setLaunch(launch, clearAfter: 180)
             }
             // The end of a launch is the moment the user looks at the window
             // again, whether a game came up or an error dialog did, so it is

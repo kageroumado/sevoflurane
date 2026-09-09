@@ -59,6 +59,7 @@ let package = Package(
                 "Sevoflurane/Support/MenuTrackingWatchdog.swift",
                 "Sevoflurane/Support/SteamScreenSpace.swift",
                 "Sevoflurane/Support/SyntheticLoad.swift",
+                "Sevoflurane/Support/WineChronicle.swift",
                 "Sevoflurane/Support/WineWindowWatch.swift",
                 "Sevoflurane/Web",
                 "SevofluraneTests",
