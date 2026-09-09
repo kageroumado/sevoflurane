@@ -93,6 +93,37 @@
     };
   })();
 
+  /* ---- page readiness -----------------------------------------------------
+     Steam's UI boots its window store and its collection store on separate
+     clocks. The navigator answers first, so a route taken between the two
+     runs ExitSearch -> ResetSearch -> SetIsCollapsed against a collection map
+     that does not exist yet, and the library dies on
+     m_mapLibrarySectionCollapseState. Nothing in the page waits for the
+     second clock; the app drives navigation from outside, so it has to, and
+     this is the signal it waits on. __sevoIsReady() answers for right now
+     (the app polls it, and /__eval reads it); __sevoReady settles once, for
+     anything in the page that can await. */
+  (function () {
+    var settle;
+    window.__sevoIsReady = function () {
+      try {
+        var main = window.SteamUIStore && SteamUIStore.WindowStore
+          && SteamUIStore.WindowStore.MainWindowInstance;
+        var collections = window.collectionStore;
+        return !!(main && collections && collections.allAppsCollection);
+      } catch (e) { return false; }
+    };
+    window.__sevoReady = new Promise(function (resolve) { settle = resolve; });
+    var delay = 50;
+    (function poll() {
+      if (window.__sevoIsReady()) { settle(true); return; }
+      /* A page that never finishes booting must not hold a 20 Hz timer for
+         the app's lifetime, so the gap widens to a second and stays there. */
+      delay = Math.min(delay * 1.5, 1000);
+      setTimeout(poll, delay);
+    })();
+  })();
+
   /* ---- same-origin egress -------------------------------------------------
      Steam's web properties allow a cross-origin read from
      https://steamloopback.host, the origin CEF gives the client's UI, and from
@@ -358,6 +389,11 @@
     });
   }
 
+  /* What __sevoRunSteamURL answers for a URL it has queued behind page
+     readiness: a count of handlers cannot be negative, so the caller tells
+     "queued" from "nothing wanted it" without a second channel. */
+  var DEFERRED = -1;
+
   /* steam:// URLs the UI itself can handle. The client broadcasts RunSteamURL
      to *every* UI including its own hidden one, which then raises real Wine
      windows; dispatching to the handlers this page registered keeps the whole
@@ -365,6 +401,14 @@
      broadcasts keep working. */
   var steamURLHandlers = [];
   window.__sevoRunSteamURL = function (url) {
+    /* A URL dispatched before the stores exist finds no handler, and the
+       caller then falls back to the client's own broadcast, which raises a
+       real Wine window. Hold it on the readiness promise instead and answer
+       DEFERRED, which the caller reads as handled. */
+    if (!window.__sevoIsReady()) {
+      window.__sevoReady.then(function () { window.__sevoRunSteamURL(url); });
+      return DEFERRED;
+    }
     var rest = String(url).replace(/^steam:\/\//, "");
     var hit = 0;
     steamURLHandlers.forEach(function (h) {

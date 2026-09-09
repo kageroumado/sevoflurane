@@ -1076,8 +1076,7 @@ final class SteamWebHost {
             // launch: a menu-bar app that puts a window on screen at login
             // is not a menu-bar app.
             if !hasRoutedDesktop {
-                hasRoutedDesktop = true
-                openLibrary()
+                routeDesktop()
             }
             desktop.show(activating: true)
             return
@@ -1104,7 +1103,7 @@ final class SteamWebHost {
         if desktopWasClosed {
             reload()
         } else {
-            openLibrary()
+            routeDesktop()
         }
     }
 
@@ -1158,21 +1157,66 @@ final class SteamWebHost {
     /// adopted one renders nothing until it is.
     private var hasRoutedDesktop = false
 
+    /// Whether a route is being retried, so a second ask joins the first
+    /// rather than racing it onto the same window.
+    private var isRoutingDesktop = false
+
     /// The context boots its window on no route at all, the same way a
     /// `-silent` client does until its tray item is clicked. The route runs
     /// through Steam's own navigator in this page — `ExecuteSteamURL` would
     /// navigate the window the *bottle's* client owns instead.
-    func openLibrary() {
-        context?.webView.evaluateJavaScript("""
+    ///
+    /// Answers whether the route was taken. It is refused while the page is
+    /// still booting: `Home()` runs `ExitSearch → ResetSearch → SetIsCollapsed`
+    /// against the collection store, which the navigator's own existence says
+    /// nothing about.
+    func openLibrary() async -> Bool {
+        await evaluateInContext("""
         (function () {
+          if (!window.__sevoIsReady || !__sevoIsReady()) return "false";
           var window_ = window.SteamUIStore && SteamUIStore.WindowStore
             && SteamUIStore.WindowStore.MainWindowInstance;
           var nav = window_ && window_.Navigator;
-          if (!nav || typeof nav.Home !== "function") return false;
+          if (!nav || typeof nav.Home !== "function") return "false";
           nav.Home();
-          return true;
+          return "true";
         })()
-        """)
+        """) == "true"
+    }
+
+    /// How long a route waits for the page to be ready, and how often it
+    /// asks — the bounded poll ``repairBlankDesktop`` runs on, at the pace a
+    /// user notices a window that is still black.
+    private enum Routing {
+        static let attempts = 40
+        static let interval: Duration = .milliseconds(250)
+    }
+
+    /// Sends the desktop to the library, retrying while the page's stores
+    /// are still arriving.
+    func routeDesktop() {
+        Task(name: "Route the desktop to the library") { [weak self] in
+            await self?.routeDesktopWhenReady()
+        }
+    }
+
+    /// The retry itself. A page that never becomes ready says so once: the
+    /// window stays on no route, which ``repairBlankDesktop`` is the backstop
+    /// for.
+    private func routeDesktopWhenReady() async {
+        guard !isRoutingDesktop else { return }
+        isRoutingDesktop = true
+        defer { isRoutingDesktop = false }
+        for _ in 0 ..< Routing.attempts {
+            if await openLibrary() {
+                hasRoutedDesktop = true
+                return
+            }
+            try? await Task.sleep(for: Routing.interval)
+        }
+        EventLog.shared.log(
+            .window, "Steam's stores never finished booting — the desktop is on no route",
+        )
     }
 
     /// A window is about to reach the screen.
@@ -1187,8 +1231,7 @@ final class SteamWebHost {
     func noteWindowWillShow(_ window: SteamWindow) {
         guard window.role == .desktop, !clientIsStopping else { return }
         guard hasRoutedDesktop else {
-            hasRoutedDesktop = true
-            openLibrary()
+            routeDesktop()
             return
         }
         repairBlankDesktop()
@@ -1219,7 +1262,7 @@ final class SteamWebHost {
             EventLog.shared.log(
                 .window, "the desktop was showing no route — sent it back to the library",
             )
-            openLibrary()
+            await routeDesktopWhenReady()
         }
     }
 
@@ -1277,6 +1320,7 @@ final class SteamWebHost {
         let hostBefore = HostSnapshot.take()
         showSteam()
         try await waitForDesktopVisibility()
+        try await waitForPageReady()
         let visibility = await ensureDesktopPageVisible()
         defer { desktop?.suspendOcclusionDetection(false) }
 
@@ -1470,6 +1514,17 @@ final class SteamWebHost {
         }
     }
 
+    /// Steam's stores, not just its window. A sample taken between the two
+    /// clocks measures a page still assembling itself, and the library route
+    /// into it throws inside Steam's own code.
+    private func waitForPageReady() async throws {
+        try await waitForReadiness("Steam's stores") { [weak self] in
+            await self?.evaluateInContext(
+                "String(!!(window.__sevoIsReady && __sevoIsReady()))",
+            ) == "true"
+        }
+    }
+
     private func waitForDesktopVisibility() async throws {
         try await waitForReadiness("visible desktop") { [weak self] in
             self?.desktop?.isWindowVisible == true
@@ -1530,7 +1585,9 @@ final class SteamWebHost {
     }
 
     private func requireBenchmarkCommand(_ reply: String?) throws {
-        guard let reply, !["false", "0", "unavailable", "no browser context", "no navigator"].contains(reply)
+        guard let reply,
+              !["false", "0", "unavailable", "no browser context", "no navigator", "not ready"]
+                  .contains(reply)
         else { throw BenchmarkFailure.commandRejected(reply ?? "no reply") }
     }
 
@@ -1556,6 +1613,7 @@ final class SteamWebHost {
 
     private static let libraryBenchmarkScript = """
     (function () {
+      if (!window.__sevoIsReady || !__sevoIsReady()) return "not ready";
       var window_ = window.SteamUIStore && SteamUIStore.WindowStore
         && SteamUIStore.WindowStore.MainWindowInstance;
       var nav = window_ && window_.Navigator;
@@ -1568,6 +1626,7 @@ final class SteamWebHost {
     private static let storeBenchmarkScript = """
     (function () {
       if (typeof window.__sevoRunSteamURL !== "function") return "unavailable";
+      if (!window.__sevoIsReady || !__sevoIsReady()) return "not ready";
       return String(window.__sevoRunSteamURL("steam://store"));
     })()
     """
@@ -1648,6 +1707,10 @@ final class SteamWebHost {
     /// client's own, which then raises a real (visible) Wine window for
     /// dialogs like About; the local path keeps it in this process. The round
     /// trip remains as fallback for URLs only the client resolves.
+    ///
+    /// A page that is still booting answers `-1`: the URL is queued on the
+    /// readiness promise and will run in this process, so the fallback that
+    /// would raise a Wine window stays down.
     func executeSteamURL(_ url: URL) {
         let literal = JSLiteral.string(url.absoluteString)
         Task(name: "Run \(url.absoluteString)") {
