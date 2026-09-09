@@ -391,6 +391,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    /// The log's queue is drained on the main actor, and nothing drains it
+    /// after this: the lines describing the shutdown are the ones a reader
+    /// wants most, so the process waits for them to reach the disk.
+    func applicationWillTerminate(_: Notification) {
+        EventLog.shared.log(.app, "the app is stopping")
+        EventLog.flush()
+    }
+
     private var quitTask: Task<Void, Never>?
 
     /// Quitting Sevoflurane quits Steam: the bottle comes down first so no

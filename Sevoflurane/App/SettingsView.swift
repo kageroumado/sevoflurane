@@ -58,6 +58,15 @@ struct SettingsView: View {
             )
         }
         .navigationSplitViewStyle(.balanced)
+        .onChange(of: category, initial: true) { _, category in
+            EventLog.shared.log(.window, "settings: showing \(category.title)")
+        }
+        .onChange(of: searchText.isEmpty) { _, isEmpty in
+            EventLog.shared.log(
+                .window,
+                isEmpty ? "settings: sidebar search cleared" : "settings: sidebar search active",
+            )
+        }
     }
 }
 

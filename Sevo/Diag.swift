@@ -41,6 +41,8 @@ nonisolated enum Diagnostics {
         "bootstrap_log.txt", "connection_log.txt", "webhelper.txt", "gameprocess_log.txt",
         "console_log.txt",
     ]
+    /// How far back crash reports and exception sidecars are collected.
+    static let crashReportWindow: TimeInterval = 48 * 3600
 
     static func bundle(to destination: URL?, steamLogs: Bool) async throws -> URL {
         let manager = FileManager.default
@@ -86,6 +88,16 @@ nonisolated enum Diagnostics {
         ] {
             copy(logs.appendingPathComponent(file), as: "logs/\(file)")
         }
+        // One sidecar per ObjC exception the app caught (`ExceptionWatch`),
+        // over the same window as the crash reports below.
+        let recentReports = Date().addingTimeInterval(-crashReportWindow)
+        for file in (try? manager.contentsOfDirectory(atPath: logs.path)) ?? []
+            where file.hasPrefix("Sevoflurane-exception-") && file.hasSuffix(".json") {
+            let url = logs.appendingPathComponent(file)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            guard let modified, modified > recentReports else { continue }
+            copy(url, as: "logs/\(file)")
+        }
 
         let engine = Engine.active
         copy(engine.root.appendingPathComponent("engine-info.json"), as: "engine/engine-info.json")
@@ -105,7 +117,7 @@ nonisolated enum Diagnostics {
         )
 
         let reports = logs.appendingPathComponent("DiagnosticReports")
-        let recent = Date().addingTimeInterval(-48 * 3600)
+        let recent = Date().addingTimeInterval(-crashReportWindow)
         for file in (try? manager.contentsOfDirectory(atPath: reports.path)) ?? [] {
             guard crashReportPrefixes.contains(where: { file.hasPrefix($0) }) else { continue }
             let url = reports.appendingPathComponent(file)

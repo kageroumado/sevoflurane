@@ -72,8 +72,44 @@ final class EventLog {
         if recent.count > Self.recentLimit {
             recent.removeFirst(recent.count - Self.recentLimit)
         }
-        let line = "\(stamp.string(from: entry.date)) [\(entry.category.rawValue)] \(entry.message)\n"
-        Self.file.append(line)
+        // Window transitions are write-through: they are the lines that say
+        // what the app was showing, they are the last thing written before a
+        // crash or a kill, and there are few enough of them that the disk's
+        // answer is not a cost anyone can see.
+        Self.file.append(
+            Self.line(category, message, at: entry.date),
+            synchronously: category == .window || Self.flushMode == .synchronous,
+        )
+    }
+
+    /// Whether a line is on disk before the call that wrote it returns.
+    ///
+    /// A synchronous write costs the caller the disk's answer — tens of
+    /// milliseconds while a game installs — so it is not the default. A
+    /// Debug mode that wants every line to survive whatever happens next
+    /// turns it on for the whole app.
+    enum FlushMode {
+        case asynchronous
+        case synchronous
+    }
+
+    /// Read on the main actor by `log`; the app sets it at most once, at
+    /// startup.
+    nonisolated(unsafe) static var flushMode: FlushMode = .asynchronous
+
+    /// Blocks until every line written so far is on disk. The quit path and
+    /// the exception path call it: both are moments where nothing is left to
+    /// drain the queue.
+    nonisolated static func flush() {
+        file.flush()
+    }
+
+    /// Appends text that is on disk before this returns, in the queue's own
+    /// order behind whatever is already waiting. The exception path writes
+    /// through it rather than opening a second handle, which would seek to
+    /// an end the queue is still moving.
+    nonisolated static func writeThrough(_ text: String) {
+        file.append(text, synchronously: true)
     }
 
     private static let recentLimit = 100
@@ -82,15 +118,35 @@ final class EventLog {
     @ObservationIgnored private let logger = Logger(
         subsystem: "glass.kagerou.sevoflurane", category: "events",
     )
-    @ObservationIgnored private let stamp: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter
-    }()
-
     private nonisolated static let file = LogFile(url: fileURL)
+
+    /// The only way a line reaches the log file: one timestamp, one format,
+    /// local time, newline included. Every writer goes through it — the
+    /// queued path here and the exception path in ``ExceptionWatch`` — so a
+    /// reader can sort the file by time and a grep for a moment finds
+    /// everything that happened in it.
+    nonisolated static func line(
+        _ category: Category, _ message: String, at date: Date = .now,
+    ) -> String {
+        "\(stamp(date)) [\(category.rawValue)] \(message)\n"
+    }
+
+    /// The log's moment format, for the places that carry a time without
+    /// being a line — the exception sidecar's own field.
+    nonisolated static func stamp(_ date: Date = .now) -> String {
+        eventStamp.string(from: date)
+    }
 }
+
+/// At file scope so both writers share it. `DateFormatter.string(from:)` is
+/// thread-safe for a formatter that is never mutated after construction,
+/// which is what this is.
+private nonisolated(unsafe) let eventStamp: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    return formatter
+}()
 
 /// The on-disk log, written from a utility queue. A `write(2)` waits on the
 /// disk, and while a game installs or the compressor swaps, the disk answers
@@ -111,11 +167,22 @@ private final nonisolated class LogFile: Sendable {
         queue = DispatchQueue(label: "sevo.eventlog.file", qos: .utility)
     }
 
-    func append(_ line: String) {
-        queue.async { [self] in
+    func append(_ line: String, synchronously: Bool) {
+        let write = { [self] in
             if handle == nil { openFile() }
             try? handle?.write(contentsOf: Data(line.utf8))
         }
+        if synchronously {
+            queue.sync(execute: write)
+        } else {
+            queue.async(execute: write)
+        }
+    }
+
+    /// Returns once the queue has run everything enqueued before the call:
+    /// the queue is serial, so an empty block behind them is the wait.
+    func flush() {
+        queue.sync {}
     }
 
     private func openFile() {

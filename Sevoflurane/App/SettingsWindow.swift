@@ -65,6 +65,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        EventLog.shared.log(.window, "settings: opened")
     }
 
     private func makeWindow() -> NSWindow {
@@ -117,6 +118,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.window = nil
+                EventLog.shared.log(.window, "settings: closed")
                 ActivationPolicy.recedeIfLastWindow(closing: window)
             }
         }
