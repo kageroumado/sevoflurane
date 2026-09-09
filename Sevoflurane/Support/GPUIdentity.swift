@@ -45,11 +45,10 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// What picking this identity buys. The card itself is in ``label``,
+    /// which is matched to the Mac's chip; this line is the same on every
+    /// Mac.
     var detail: String {
-        detail(for: MacChip.current)
-    }
-
-    func detail(for chip: MacChip) -> String {
         switch self {
         case .automatic:
             "Reports your Mac's chip on the DirectX 11 and 12 renderers. Wine's built-in renderer reports its default graphics card."
