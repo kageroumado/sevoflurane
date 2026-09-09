@@ -40,7 +40,23 @@ nonisolated enum Redaction {
         if fullName.count > 2 {
             result = result.replacingOccurrences(of: fullName, with: user)
         }
-        return result
+        return removingAccountName(from: result)
+    }
+
+    /// The account's short name standing on its own, once every path that
+    /// contains it has already become `~`. Unreal writes `LogInit: User:
+    /// <name>` with nothing around it, and a name is what a report may not
+    /// carry however it is spelled.
+    private static func removingAccountName(from text: String) -> String {
+        let name = NSUserName()
+        guard name.count > 2 else { return text }
+        let pattern = "\\b\(NSRegularExpression.escapedPattern(for: name))\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        else { return text }
+        return regex.stringByReplacingMatches(
+            in: text, range: NSRange(text.startIndex ..< text.endIndex, in: text),
+            withTemplate: user,
+        )
     }
 
     /// A file's path as a report may carry it.
@@ -54,7 +70,7 @@ nonisolated enum Redaction {
 
     /// `/Users/<someone>`, which is the whole of what a macOS path says about
     /// a person. `/Users/Shared` names no one and is left alone.
-    nonisolated(unsafe) private static let macHome =
+    private nonisolated(unsafe) static let macHome =
         /\/Users\/(?!Shared(?:\/|$))[^\/\s"':;,\)\]]+/
 
     /// The user directory of a Windows prefix, on either side of the
@@ -62,9 +78,9 @@ nonisolated enum Redaction {
     /// `drive_c/users/<someone>` as the file system holds it. The prefix is
     /// kept so a reader can still tell which directory it was. `Shared` and
     /// `Public` are the accounts macOS and Windows create for everyone.
-    nonisolated(unsafe) private static let windowsUser =
+    private nonisolated(unsafe) static let windowsUser =
         /(?i)(users[\/\\])(?!(?:Shared|Public)(?:[\/\\]|$))[^\/\\"'\s]+/
 
     /// A Steam id: the individual-account block, seventeen digits.
-    nonisolated(unsafe) private static let steamIDDigits = /\b7656119\d{10}\b/
+    private nonisolated(unsafe) static let steamIDDigits = /\b7656119\d{10}\b/
 }

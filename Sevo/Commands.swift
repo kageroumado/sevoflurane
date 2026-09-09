@@ -2169,12 +2169,12 @@ struct RunsCommand: AsyncParsableCommand {
 
     func run() async throws {
         let records = RunLog.recent(max(1, last))
-        guard !records.isEmpty else {
-            print("no runs recorded yet — launch a game and look again")
-            return
-        }
         if asJSON {
             print(Sevo.json(records.map(Self.row), pretty: true))
+            return
+        }
+        guard !records.isEmpty else {
+            print("no runs recorded yet — launch a game and look again")
             return
         }
         for record in records {
@@ -2201,8 +2201,7 @@ struct RunsCommand: AsyncParsableCommand {
     /// The record's UTC stamp in this Mac's own time, which is what the event
     /// log beside it is written in.
     private static func moment(_ stamp: String) -> String {
-        let parser = ISO8601DateFormatter()
-        guard let date = parser.date(from: stamp) else { return stamp }
+        guard let date = runRecordStamp.date(from: stamp) else { return stamp }
         let local = DateFormatter()
         local.dateFormat = "yyyy-MM-dd HH:mm"
         local.locale = Locale(identifier: "en_US_POSIX")

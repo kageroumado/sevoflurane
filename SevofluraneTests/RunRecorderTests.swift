@@ -103,6 +103,19 @@ struct RunRecorderTests {
         #expect(exit?.code == 1)
     }
 
+    /// Steam.exe is a Windows program and writes CRLF. Swift reads `\r\n` as
+    /// one Character, so splitting on `"\n"` finds no line breaks at all in
+    /// this file and the whole log reads as one line.
+    @Test
+    func `a log written with Windows line endings is still read line by line`() {
+        let crlf = Self.gameProcessLog.replacingOccurrences(of: "\n", with: "\r\n")
+        let exits = SteamGameProcessLog.exits(forApp: 508_440, in: crlf)
+        #expect(exits.map(\.code) == [0, 1])
+        #expect(
+            SteamGameProcessLog.exit(forApp: 508_440, running: nil, in: crlf)?.code == 1,
+        )
+    }
+
     @Test
     func `another app's lines are not this app's`() {
         #expect(SteamGameProcessLog.exits(forApp: 367_520, in: Self.gameProcessLog).isEmpty)
@@ -152,5 +165,4 @@ struct RunRecorderTests {
             ],
         )
     }
-
 }

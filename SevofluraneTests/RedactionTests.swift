@@ -50,6 +50,17 @@ struct RedactionTests {
         )
     }
 
+    /// Unreal writes `LogInit: User: <name>` with no path around it.
+    @Test
+    func `the account's short name is replaced where it stands alone`() {
+        let name = NSUserName()
+        #expect(name.count > 2, "this Mac's short name is too short to redact")
+        #expect(
+            Redaction.apply(to: "LogInit: User: \(name)")
+                == "LogInit: User: \(Redaction.user)",
+        )
+    }
+
     @Test
     func `text with nothing to hide comes back unchanged`() {
         let line = "err:seh:NtRaiseException Unhandled exception code c0000005 flags 0 addr 0x140"

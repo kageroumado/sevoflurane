@@ -188,8 +188,10 @@ nonisolated enum Diagnostics {
 /// Every engine invents its own dumping ground and none of them is named for
 /// the app id, so a file is claimed by a run when it was last written during
 /// that run — the only join that exists between a Unity player's `Player.log`
-/// and the launch that produced it. Paths are rewritten (``Redaction``) and
-/// every file is capped, because a game left running writes without a bound.
+/// and the launch that produced it. Two games up at once can therefore both
+/// claim a file, which costs a duplicate rather than a missing log. Paths are
+/// rewritten (``Redaction``) and every file is capped, because a game left
+/// running writes without a bound.
 nonisolated enum GameLogs {
     struct Collected {
         /// Where it goes inside the report, `games/<appid>/…`.
@@ -214,8 +216,9 @@ nonisolated enum GameLogs {
         let renderer = rendererLogs()
         for record in records.reversed() {
             guard let window = window(of: record) else { continue }
-            var sources = unityLogs.filter { window.contains($0.written) }.map(\.url)
-            sources += unrealLogs(forApp: record.appid)
+            var sources = (unityLogs + unrealLogs(for: record))
+                .filter { window.contains($0.written) }
+                .map(\.url)
             sources += renderer
             for source in sources {
                 guard budget > 0, let file = read(source) else { continue }
@@ -253,18 +256,50 @@ nonisolated enum GameLogs {
         return found
     }
 
-    /// Unreal keeps its own logs and crash reports beside the game, under
-    /// `<Project>/Saved/`.
-    private static func unrealLogs(forApp appID: Int) -> [URL] {
-        guard let install = SharedGames.installed(appID: appID) else { return [] }
-        var found: [URL] = []
-        for project in InstallDirectory.entries(in: install.directory) where project.isDirectory {
-            let saved = project.url.appendingPathComponent("Saved")
+    /// Unreal keeps its logs and crash reports under `<Project>/Saved/`, which
+    /// sits beside the game in a development build and under the Windows
+    /// user's `AppData\Local` in a shipping one — where every project has a
+    /// directory whether or not it ran.
+    private static func unrealLogs(for record: RunRecord) -> [(url: URL, written: Date)] {
+        let project = unrealProject(of: record.exe)
+        // The user's `AppData\Local` holds a directory for every Unreal game
+        // ever run, so a run that cannot name its project would claim all of
+        // them that were written while it was up.
+        guard project != nil || record.runtime == "unreal" else { return [] }
+        var savedDirectories: [URL] = []
+        if let install = SharedGames.installed(appID: record.appid) {
+            savedDirectories += InstallDirectory.entries(in: install.directory)
+                .filter(\.isDirectory)
+                .map { $0.url.appendingPathComponent("Saved") }
+        }
+        let users = SteamBottle.root.appendingPathComponent("drive_c/users")
+        for user in InstallDirectory.entries(in: users) where user.isDirectory {
+            let local = user.url.appendingPathComponent("AppData/Local")
+            savedDirectories += InstallDirectory.entries(in: local)
+                .filter { $0.isDirectory && (project == nil || $0.name.lowercased() == project) }
+                .map { $0.url.appendingPathComponent("Saved") }
+        }
+        var found: [(url: URL, written: Date)] = []
+        for saved in savedDirectories {
             for directory in ["Logs", "Crashes"] {
-                found += textFiles(under: saved.appendingPathComponent(directory))
+                for file in textFiles(under: saved.appendingPathComponent(directory)) {
+                    guard let written = modified(file) else { continue }
+                    found.append((file, written))
+                }
             }
         }
         return found
+    }
+
+    /// The project name Unreal writes under, taken off its shipping
+    /// executable: `Subnautica2-Win64-Shipping.exe` is `Subnautica2`.
+    private static func unrealProject(of exe: String?) -> String? {
+        guard let exe = exe?.lowercased() else { return nil }
+        for suffix in ["-win64-shipping.exe", "-win32-shipping.exe"]
+            where exe.hasSuffix(suffix) {
+            return String(exe.dropLast(suffix.count))
+        }
+        return nil
     }
 
     /// The renderer's own log, when the bottle's environment names one.
@@ -275,7 +310,7 @@ nonisolated enum GameLogs {
         var found: [URL] = []
         for file in files {
             guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
-            for line in text.split(separator: "\n") where line.hasPrefix(rendererLogKey) {
+            for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix(rendererLogKey) {
                 let value = String(line.dropFirst(rendererLogKey.count))
                 guard let url = SteamBottle.macURL(fromWindowsPath: value)
                     ?? (value.hasPrefix("/") ? URL(fileURLWithPath: value) : nil),

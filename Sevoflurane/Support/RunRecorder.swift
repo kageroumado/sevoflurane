@@ -48,11 +48,27 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     var host: Host
 
     enum CodingKeys: String, CodingKey {
-        case t, appid, name, exe, engine, renderer, runner, windows, msync, d3dmetal
-        case runtime, macos, chip
+        case t
+        case appid
+        case name
+        case exe
+        case engine
+        case renderer
+        case runner
+        case windows
+        case msync
+        case d3dmetal
+        case runtime
+        case macos
+        case chip
         case windowAfterSeconds = "window_after_s"
         case durationSeconds = "duration_s"
-        case fps, stalls, exit, crash, notes, host
+        case fps
+        case stalls
+        case exit
+        case crash
+        case notes
+        case host
     }
 
     struct FrameRate: Codable, Equatable, Sendable {
@@ -162,19 +178,26 @@ nonisolated enum RunLog {
         root.appendingPathComponent("\(month(of: date)).jsonl")
     }
 
+    /// Appends one record. Two games can end at the same moment, and a
+    /// seek-to-end followed by a write is not atomic against another one, so
+    /// every append goes through one queue.
     static func append(_ record: RunRecord) {
         guard let line = try? encoder.encode(record) else { return }
-        let manager = FileManager.default
-        try? manager.createDirectory(at: root, withIntermediateDirectories: true)
-        let url = url(forMonth: .now)
-        if !manager.fileExists(atPath: url.path) {
-            manager.createFile(atPath: url.path, contents: nil)
+        writes.sync {
+            let manager = FileManager.default
+            try? manager.createDirectory(at: root, withIntermediateDirectories: true)
+            let url = url(forMonth: .now)
+            if !manager.fileExists(atPath: url.path) {
+                manager.createFile(atPath: url.path, contents: nil)
+            }
+            guard let handle = try? FileHandle(forWritingTo: url) else { return }
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line + Data("\n".utf8))
         }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return }
-        defer { try? handle.close() }
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: line + Data("\n".utf8))
     }
+
+    private static let writes = DispatchQueue(label: "sevo.runlog")
 
     /// Every record of a month, oldest first.
     static func records(inMonth date: Date) -> [RunRecord] {
@@ -183,13 +206,17 @@ nonisolated enum RunLog {
 
     /// The most recent records across as many months as it takes, oldest
     /// first.
+    ///
+    /// By when each launch began, not by when its record was appended: a game
+    /// still up when the app quits is written after games that started and
+    /// ended while it ran.
     static func recent(_ limit: Int) -> [RunRecord] {
         var found: [RunRecord] = []
         for url in monthFiles().reversed() {
             found = records(in: url) + found
             if found.count >= limit { break }
         }
-        return Array(found.suffix(limit))
+        return Array(found.sorted { $0.t < $1.t }.suffix(limit))
     }
 
     /// Compresses every month before this one and drops all but the newest
@@ -260,6 +287,55 @@ nonisolated enum RunLog {
     }()
 }
 
+/// A launch in progress and everything about the machine that was true when
+/// it started. `Sendable` so closing one can leave the caller's actor: it
+/// reads the tails of two logs, which is disk work.
+nonisolated struct RunInProgress: Sendable {
+    let started: ContinuousClock.Instant
+    var record: RunRecord
+    /// Where the two logs ended when the run began; what they gained since is
+    /// the run's own output.
+    let wineLogOffset: UInt64
+    let steamLogOffset: UInt64
+    /// The client showed an error for this game action.
+    var steamError: String?
+
+    /// Reads what the two logs gained during the run, decides how it ended,
+    /// and appends the record.
+    func write(lasting seconds: Double, kind: RunRecord.Exit.Kind?) {
+        var record = record
+        record.durationSeconds = seconds
+        let steamTail = RunRecorder.text(of: RunRecorder.steamProcessLogURL, from: steamLogOffset)
+        let wineTail = RunRecorder.text(of: WineLog.fileURL, from: wineLogOffset)
+        record.runtime = SteamGameProcessLog.runtime(
+            forApp: record.appid, in: steamTail, exe: record.exe,
+        )
+        let exit = SteamGameProcessLog.exit(
+            forApp: record.appid, running: record.exe, in: steamTail,
+        )
+        record.crash = WineExceptionTrail.lastException(in: wineTail)
+        let notes = WineExceptionTrail.notes(in: wineTail)
+        record.notes = notes.isEmpty ? nil : notes
+        record.exit = RunRecord.Exit(
+            kind: kind ?? Self.kind(
+                code: exit?.code, crashed: record.crash != nil, steamError: steamError,
+            ),
+            code: exit?.code,
+        )
+        RunLog.append(record)
+        RunRecorder.log("run recorded — \(record.summary)")
+    }
+
+    /// How a run ended, from what the client and Steam's log actually say.
+    private static func kind(
+        code: Int?, crashed: Bool, steamError: String?,
+    ) -> RunRecord.Exit.Kind {
+        if let code { return code == 0 && !crashed ? .user : .crash }
+        if crashed { return .crash }
+        return steamError == nil ? .unknown : .steamTerminate
+    }
+}
+
 /// A record's own moment: UTC, seconds, so records from two machines sort
 /// against each other. Spelled out rather than taken from
 /// `ISO8601DateFormatter`, which is not `Sendable` and would need an unchecked
@@ -284,7 +360,7 @@ nonisolated let runRecordStamp: DateFormatter = {
 /// Steam's `gameprocess_log.txt`, which is the only place it exists.
 ///
 /// Steam can have two games up at once, so a run is keyed by app id.
-nonisolated final class RunRecorder {
+final nonisolated class RunRecorder {
     /// Where the recorder narrates. The app points it at its own event log.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
 
@@ -292,18 +368,9 @@ nonisolated final class RunRecorder {
     private var hasGroomed = false
 
     /// A launch in progress and everything about the machine that was true
-    /// when it started.
-    private struct OpenRun {
-        let startedAt: Date
-        let started: ContinuousClock.Instant
-        var record: RunRecord
-        /// Where the two logs ended when the run began; what they gained
-        /// since is the run's own output.
-        let wineLogOffset: UInt64
-        let steamLogOffset: UInt64
-        /// The client showed an error for this game action.
-        var steamError: String?
-    }
+    /// when it started. `Sendable` so closing one can leave the main actor:
+    /// it reads the tails of two logs, which is disk work.
+    typealias OpenRun = RunInProgress
 
     init() {}
 
@@ -337,7 +404,6 @@ nonisolated final class RunRecorder {
             host: Self.hostState(),
         )
         open[appID] = OpenRun(
-            startedAt: now,
             started: .now,
             record: record,
             wineLogOffset: Self.size(of: WineLog.fileURL),
@@ -345,7 +411,7 @@ nonisolated final class RunRecorder {
         )
         if !hasGroomed {
             hasGroomed = true
-            RunLog.groom()
+            Task.detached(name: "Groom the run records") { RunLog.groom() }
         }
     }
 
@@ -368,45 +434,29 @@ nonisolated final class RunRecorder {
         open[appID]?.steamError = detail
     }
 
-    /// The client says the app is no longer running.
+    /// The client says the app is no longer running. The record is written on
+    /// the closing queue: finishing it reads the tails of two logs, which is
+    /// disk work the caller should not wait on.
     func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
-        guard var run = open.removeValue(forKey: appID) else { return }
-        run.record.durationSeconds = Self.seconds(since: run.started)
-        let steamTail = Self.text(of: Self.steamProcessLogURL, from: run.steamLogOffset)
-        let wineTail = Self.text(of: WineLog.fileURL, from: run.wineLogOffset)
-        run.record.runtime = SteamGameProcessLog.runtime(
-            forApp: appID, in: steamTail, exe: run.record.exe,
-        )
-        let exit = SteamGameProcessLog.exit(
-            forApp: appID, running: run.record.exe, in: steamTail,
-        )
-        run.record.crash = WineExceptionTrail.lastException(in: wineTail)
-        let notes = WineExceptionTrail.notes(in: wineTail)
-        run.record.notes = notes.isEmpty ? nil : notes
-        run.record.exit = RunRecord.Exit(
-            kind: kind ?? Self.kind(
-                code: exit?.code, crashed: run.record.crash != nil, steamError: run.steamError,
-            ),
-            code: exit?.code,
-        )
-        RunLog.append(run.record)
-        Self.log("run recorded — \(run.record.summary)")
+        guard let run = open.removeValue(forKey: appID) else { return }
+        let lasted = Self.seconds(since: run.started)
+        Self.closings.async { run.write(lasting: lasted, kind: kind) }
     }
 
     /// Closes every open run, for the quit path: the app is going away and
-    /// nothing will learn how these ended.
+    /// nothing will learn any more about these than is already on disk.
+    /// Inline, because nothing will drain a queue after this either.
     func closeAll() {
-        for appID in open.keys { close(appID: appID, kind: .unknown) }
+        for run in open.values {
+            run.write(lasting: Self.seconds(since: run.started), kind: nil)
+        }
+        open.removeAll()
     }
 
-    /// How a run ended, from what the client and Steam's log actually say.
-    private static func kind(
-        code: Int?, crashed: Bool, steamError: String?,
-    ) -> RunRecord.Exit.Kind {
-        if let code { return code == 0 && !crashed ? .user : .crash }
-        if crashed { return .crash }
-        return steamError == nil ? .unknown : .steamTerminate
-    }
+    /// Where a closing run reads its logs and writes its record. Serial, so
+    /// two games ending together are two records rather than one damaged
+    /// line.
+    private static let closings = DispatchQueue(label: "sevo.runrecorder", qos: .utility)
 
     // MARK: - The machine
 
@@ -456,7 +506,7 @@ nonisolated final class RunRecorder {
 
     /// A file shorter than the offset was truncated under us (Steam rewrites
     /// its own log at each client start) and is read whole.
-    private static func text(of url: URL, from offset: UInt64) -> String {
+    fileprivate static func text(of url: URL, from offset: UInt64) -> String {
         let size = size(of: url)
         let start = size < offset ? 0 : offset
         guard size > start, let handle = try? FileHandle(forReadingFrom: url) else { return "" }
@@ -520,7 +570,7 @@ nonisolated enum SteamGameProcessLog {
     static func exits(forApp appID: Int, in text: String) -> [Exit] {
         var executables: [Int: String] = [:]
         var exits: [Exit] = []
-        for line in text.split(separator: "\n") {
+        for line in text.split(whereSeparator: \.isNewline) {
             guard let rest = body(of: line, forApp: appID) else { continue }
             if let match = rest.firstMatch(of: added) {
                 executables[Int(match.output.1) ?? 0] = executable(fromCommandLine: match.output.2)
@@ -564,8 +614,8 @@ nonisolated enum SteamGameProcessLog {
 
     // `nonisolated(unsafe)`: `Regex` is not `Sendable`, and a regex built from
     // a literal carries no transform that could hold state.
-    nonisolated(unsafe) private static let added = /adding PID (\d+) as a tracked process (.*)/
-    nonisolated(unsafe) private static let removed = /no longer tracking PID (\d+), exit code (-?\d+)/
+    private nonisolated(unsafe) static let added = /adding PID (\d+) as a tracked process (.*)/
+    private nonisolated(unsafe) static let removed = /no longer tracking PID (\d+), exit code (-?\d+)/
 }
 
 /// What the Wine log gained during a run, read for the two things it can say
@@ -575,7 +625,7 @@ nonisolated enum WineExceptionTrail {
     /// process, since Wine terminates it on the spot.
     static func lastException(in text: String) -> RunRecord.Crash? {
         var found: RunRecord.Crash?
-        for line in text.split(separator: "\n") {
+        for line in text.split(whereSeparator: \.isNewline) {
             guard let match = line.firstMatch(of: unhandled) else { continue }
             found = RunRecord.Crash(
                 code: "0x\(match.output.1)",
@@ -593,7 +643,7 @@ nonisolated enum WineExceptionTrail {
     static func notes(in text: String) -> [String] {
         var counts: [String: Int] = [:]
         var order: [String] = []
-        for line in text.split(separator: "\n") {
+        for line in text.split(whereSeparator: \.isNewline) {
             guard let marker = markers.first(where: { line.contains($0) }) else { continue }
             let note = String(
                 line[(line.range(of: marker)?.lowerBound ?? line.startIndex)...],
@@ -612,6 +662,6 @@ nonisolated enum WineExceptionTrail {
 
     /// `dlls/ntdll/unix/thread.c`'s last word before it terminates the
     /// process, under `WINEDEBUG=+seh`.
-    nonisolated(unsafe) private static let unhandled =
+    private nonisolated(unsafe) static let unhandled =
         /Unhandled exception code ([0-9a-fA-F]+) flags ([0-9a-fA-F]+) addr (0x[0-9a-fA-F]+)/
 }
