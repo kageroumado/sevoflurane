@@ -112,6 +112,9 @@ nonisolated enum Doctor {
         case .portWithoutContext:
             clientLabel = "client: CDP up but no SharedJSContext (half-wedged)"
             clientOK = false
+        case .busy:
+            clientLabel = "client: running, CDP :\(BridgePorts.cdp) too busy to answer"
+            clientOK = false
         case .down:
             // A stopped client is a state, not a fault; processes alive with
             // CDP dead is the fault.

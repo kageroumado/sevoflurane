@@ -43,6 +43,9 @@ nonisolated func handlingFailures(_ body: () async throws -> Void) async throws 
         case let .unreachable(detail):
             Sevo.printError("client unreachable: \(detail) — try: sevo client start")
             throw SevoExit.unreachable
+        case let .unanswered(detail):
+            Sevo.printError("client too busy to answer: \(detail) — try again shortly")
+            throw SevoExit.unreachable
         case .closed, .badReply:
             Sevo.printError("client eval failed: \(failure)")
             throw SevoExit.failed
@@ -98,6 +101,7 @@ enum StatusReport {
         let client = switch snapshot.clientState {
         case .up: "running"
         case .portWithoutContext: "half-wedged (no SharedJSContext)"
+        case .busy: "running, CDP too busy to answer"
         case .down: snapshot.bottleProcesses.isEmpty ? "stopped" : "up, CDP unreachable"
         }
         let app = if let status = snapshot.appStatus {
@@ -1277,6 +1281,7 @@ struct ClientCommand: AsyncParsableCommand {
             let clientText = switch clientState {
             case .up: "running"
             case .portWithoutContext: "half-wedged (no SharedJSContext)"
+            case .busy: "running, CDP too busy to answer"
             case .down: "down"
             }
             func label(_ pid: pid_t) -> String { "\(names[pid] ?? "?")(\(pid))" }

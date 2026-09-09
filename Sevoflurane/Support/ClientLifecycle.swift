@@ -31,10 +31,23 @@ nonisolated enum ClientLifecycle {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
 
+    /// Called with its status when the wine launcher that spawned the client
+    /// exits. The app points this at its supervisor so a death is an event
+    /// rather than something the next poll happens to notice — with a game up
+    /// the poll is a minute apart, which was the whole of the 58 s a dead
+    /// client once went unnoticed. Same contract as ``log``.
+    nonisolated(unsafe) static var clientDidExit: @Sendable (Int32) -> Void = { _ in }
+
     enum ClientState: Equatable {
         case up
         /// CDP answers but lists no `SharedJSContext` — the half-wedged client.
         case portWithoutContext
+        /// The process is alive and its DevTools server accepted the
+        /// connection without answering. A busy CEF under memory pressure
+        /// reads exactly like a dead one to a plain timeout, and treating the
+        /// two alike bought a two-minute restart for a stall that ends by
+        /// itself.
+        case busy
         case down
     }
 
@@ -42,10 +55,17 @@ nonisolated enum ClientLifecycle {
     /// `/json` slowly, and a slow answer must read as "slow", never as
     /// "down" — a false "down" costs a two-minute full restart.
     static func probeClient() async -> ClientState {
-        guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp, timeout: 10)
-        else { return .down }
-        return targets.contains { $0["title"] as? String == "SharedJSContext" }
-            ? .up : .portWithoutContext
+        do {
+            let targets = try await CDPClient.discoverTargets(
+                port: BridgePorts.cdp, timeout: 10,
+            )
+            return targets.contains { $0["title"] as? String == "SharedJSContext" }
+                ? .up : .portWithoutContext
+        } catch {
+            let unanswered = if case .unanswered = error as? CDPClient.Failure { true } else { false }
+            if unanswered, await clientProcessAlive() { return .busy }
+            return .down
+        }
     }
 
     /// Whether the bottle's client process exists at all, told by command
@@ -379,6 +399,7 @@ nonisolated enum ClientLifecycle {
         process.terminationHandler = { finished in
             log("wine launcher exited (status \(finished.terminationStatus))")
             try? trail.close()
+            clientDidExit(finished.terminationStatus)
         }
         // The per-bottle and per-program env files the engine reads at
         // every process start, from the store as it stands now.
@@ -494,18 +515,29 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Crash-loop hygiene
 
-    /// Fresh dumps in the client's `dumps/` folder — the crash-loop signature
-    /// when the count climbs while the supervisor is restarting.
+    /// Fresh crash dumps in the client's `dumps/` folder — the crash-loop
+    /// signature when the count climbs while the supervisor is restarting.
+    ///
+    /// Only `.dmp` files count, and only by when they were written: the folder
+    /// also holds the bookkeeping the client rewrites at every start, which
+    /// counted as three fresh crashes across a night with no crash in it.
     static func recentDumpCount(within interval: TimeInterval = 600) -> Int {
         let cutoff = Date.now.addingTimeInterval(-interval)
         guard let files = try? FileManager.default.contentsOfDirectory(
-            at: SteamBottle.dumps, includingPropertiesForKeys: [.contentModificationDateKey],
+            at: SteamBottle.dumps, includingPropertiesForKeys: [.creationDateKey],
         ) else { return 0 }
         return files.count { file in
-            let date = try? file.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate
+            guard file.pathExtension.lowercased() == "dmp" else { return false }
+            let date = try? file.resourceValues(forKeys: [.creationDateKey]).creationDate
             return date.map { $0 > cutoff } ?? false
         }
+    }
+
+    /// Whether a swept popup name is the client's own sign-in window
+    /// (`SP DesktopLoginWindow_uid0`). A client showing it is signed out and
+    /// waiting on a human, which no recovery timer should read as a wedge.
+    static func isLoginWindow(_ name: String) -> Bool {
+        name.range(of: "DesktopLoginWindow", options: .caseInsensitive) != nil
     }
 
     /// Trashes the client's Chromium cache — the proven first response to a

@@ -154,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the launch, and ending it clears the record of which app it was.
             let launchedAppID = host.activeLaunch?.appID
             host.gameWindowDidAppear()
+            supervisor.wake(.gameWindowChanged)
             // A game that has just run for the first time is also the first
             // chance to read its files: what it is built on decides which
             // runners it can be offered.
@@ -222,6 +223,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             await bridge.setGameLaunchHandler { [weak self] in
                 Task { @MainActor in self?.gameLaunchWatch.noteLaunchRequested() }
+            }
+            // The bridge sees a client die before any probe does.
+            await bridge.setClientConnectionLostHandler { [weak self] in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.supervisor.wake(.clientConnectionLost) }
+                }
             }
             host.bootstrap()
             supervisor.start()

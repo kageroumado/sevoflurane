@@ -4,8 +4,12 @@ import os
 /// One connection to the bottled client's `SharedJSContext` over the Chrome
 /// DevTools Protocol: `evaluate()` plus the `__sevo` binding's push events.
 actor CDPClient {
-    enum Failure: Error {
+    enum Failure: Error, Equatable {
         case unreachable(String)
+        /// Something is listening and did not answer inside the timeout. A
+        /// mute server is a different fault from an absent one: one is a
+        /// client under load, the other is a client that is gone.
+        case unanswered(String)
         case closed
         case badReply(String)
     }
@@ -33,16 +37,24 @@ actor CDPClient {
     static func discoverTargets(port: Int, timeout: TimeInterval = 3) async throws -> [[String: Any]] {
         let session = URLSession(configuration: .ephemeral)
         defer { session.finishTasksAndInvalidate() }
+        var wentUnanswered = false
         for host in ["127.0.0.1", "[::1]"] {
             guard let url = URL(string: "http://\(host):\(port)/json") else { continue }
             var request = URLRequest(url: url)
             request.timeoutInterval = timeout
-            guard let (data, _) = try? await session.data(for: request) else {
+            let data: Data
+            do {
+                (data, _) = try await session.data(for: request)
+            } catch {
+                wentUnanswered = wentUnanswered || (error as? URLError)?.code == .timedOut
                 continue
             }
             if let targets = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
                 return targets
             }
+        }
+        if wentUnanswered {
+            throw Failure.unanswered("CDP on port \(port) accepted the connection and said nothing")
         }
         throw Failure.unreachable("no CDP endpoint on port \(port) (is Steam up?)")
     }

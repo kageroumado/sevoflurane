@@ -93,6 +93,16 @@ actor SteamBridge {
         onGameLaunch = handler
     }
 
+    /// Told when the client's transport goes away. The bridge learns of a
+    /// dying client before anything else does — the relay closed four seconds
+    /// before the launcher exited on the night this was measured — and had no
+    /// way to say so; the supervisor's cycle waited out its interval instead.
+    private var onClientConnectionLost: (@Sendable () -> Void)?
+
+    func setClientConnectionLostHandler(_ handler: @escaping @Sendable () -> Void) {
+        onClientConnectionLost = handler
+    }
+
     init() {
         if let url = Bundle.main.url(forResource: "steamclient_shim", withExtension: "js"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
@@ -215,27 +225,31 @@ actor SteamBridge {
         await (try? ensureCDP()) != nil
     }
 
-    /// Polls the client's own SharedJSContext until `GetServicesInitialized()`
-    /// returns true. Steam's UI checks services once at boot; a page booted
-    /// before they are ready never picks them up, so the supervisor waits here
-    /// instead of booting into a 90-second grace that always ends in a reload.
-    func waitForClientServices(timeout: Duration = .seconds(120)) async -> Bool {
-        guard let cdp = try? await ensureCDP() else { return false }
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            // Each evaluate gets the smaller of its own cap and what is left
-            // of the whole wait, so a client that stops answering cannot
-            // hold this past `timeout`.
-            let remaining = ContinuousClock.now.duration(to: deadline)
-            let result = try? await withDeadline(min(.seconds(10), remaining)) {
-                try await cdp.evaluate(
-                    "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
-                )
-            }
-            if result?.contains("true") == true { return true }
-            try? await Task.sleep(for: .seconds(3))
+    /// Whether the connection to the client's `SharedJSContext` is open. A
+    /// DevTools server too busy to answer `/json` on a client whose socket is
+    /// still live is slow, not gone, and must not be restarted for it.
+    func isClientConnected() async -> Bool {
+        guard let cdp else { return false }
+        return await !cdp.isClosed
+    }
+
+    /// Asks the client's own SharedJSContext once whether
+    /// `GetServicesInitialized()` is true. Steam's UI checks services once at
+    /// boot, so a page booted before they are ready never picks them up and
+    /// the supervisor holds the page back until this answers true.
+    ///
+    /// Nil when the client cannot be reached at all — a closed socket answers
+    /// immediately rather than burning a timeout, so the caller's own cycle
+    /// decides what a client that stopped answering means.
+    func clientServicesReady() async -> Bool? {
+        guard let cdp = try? await ensureCDP(), await !cdp.isClosed else { return nil }
+        let answer = try? await withDeadline(.seconds(10)) {
+            try await cdp.evaluate(
+                "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
+            )
         }
-        return false
+        guard let answer else { return nil }
+        return answer.contains("true")
     }
 
     /// Discovery, the handshake, and the codec and tunnel installs together.
@@ -690,6 +704,7 @@ actor SteamBridge {
         if relay === ws {
             relay = nil
             log(.bridge, "relay: disconnected")
+            onClientConnectionLost?()
         }
     }
 

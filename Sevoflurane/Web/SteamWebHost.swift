@@ -25,13 +25,32 @@ final class SteamWebHost {
     /// The desktop window, once Steam has opened it.
     private(set) var desktop: SteamWindow?
 
-    /// Whether the page is showing Steam's login window — the signed-out
-    /// state in which Steam's services legitimately never initialize until
-    /// the user acts. The supervisor holds its recovery ladder on this.
+    /// Whether the page holds Steam's login window — the signed-out state in
+    /// which Steam's services legitimately never initialize until the user
+    /// acts. The supervisor holds its recovery ladder on this, and every
+    /// reload path refuses while it is true: a reload detaches the popup, and
+    /// Steam reads its document unloading as the user closing the sign-in
+    /// window, which quits.
+    ///
+    /// The popup existing is the whole test. Whether it is on screen is a
+    /// question about window ordering, and a window this app is deliberately
+    /// holding back is still a session waiting on a human.
     var isAwaitingSignIn: Bool {
-        popups.values.contains {
-            $0.role == .login && ($0.isWindowVisible || $0.showWasDeferredByHold)
-        }
+        Self.isAwaitingSignIn(popupRoles: popups.values.map(\.role))
+    }
+
+    /// Whether a page holding these popups is waiting on a sign-in. Visibility
+    /// is not a parameter: a login window this app is deliberately keeping off
+    /// screen is still a session waiting on a human, and keying on visibility
+    /// is what let a stuck stop flag switch the whole guard off.
+    static func isAwaitingSignIn(popupRoles: some Sequence<SteamWindowRole>) -> Bool {
+        popupRoles.contains(.login)
+    }
+
+    /// The login window itself, for the paths that must put it in front of
+    /// the user rather than rebuild the page under it.
+    var loginWindow: SteamWindow? {
+        popups.values.first { $0.role == .login }
     }
 
     /// While true, a login window Steam asks to show stays built but off
@@ -39,10 +58,21 @@ final class SteamWebHost {
     /// button is the moment the user asked for a window.
     private(set) var isHoldingWindows = false
 
-    /// Set by the supervisor while it brings the client down (a quit, a stop,
-    /// a restart). The client asks for its windows again on the way out, and
+    /// Set while the supervisor brings the client down (a quit, a stop, a
+    /// restart). The client asks for its windows again on the way out, and
     /// `SteamWindow.show` answers those requests with nothing.
-    var clientIsStopping = false
+    private(set) var clientIsStopping = false
+
+    /// Runs a stop with the client marked as stopping. The mark is a scoped
+    /// token rather than a flag two subsystems poke: a stop that ends without
+    /// the client ever becoming healthy — every signed-out boot — used to
+    /// leave it set for the life of the process, and a set mark refuses every
+    /// login window `show()` asks for.
+    func duringClientStop<T>(_ body: () async -> T) async -> T {
+        clientIsStopping = true
+        defer { clientIsStopping = false }
+        return await body()
+    }
 
     func holdWindows() {
         isHoldingWindows = true
@@ -1062,6 +1092,16 @@ final class SteamWebHost {
             NSApp.setActivationPolicy(.regular)
         }
         NSApp.activate()
+        guard !isAwaitingSignIn else {
+            // Signed out, the window the user is asking for is the login
+            // popup, and a reload would detach it — which Steam reads as the
+            // user closing its sign-in window, and quits.
+            EventLog.shared.log(
+                .window, "asked for Steam while signed out — bringing the login window forward",
+            )
+            loginWindow?.show(activating: true)
+            return
+        }
         if desktopWasClosed {
             reload()
         } else {

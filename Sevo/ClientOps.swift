@@ -53,6 +53,10 @@ nonisolated enum ClientOps {
             return Outcome(verdict: .noEffect, intent: "start", note: "client already running")
         case .portWithoutContext:
             throw Failure.message("CDP is up but lists no SharedJSContext — sevo recover")
+        case .busy:
+            throw Failure.message(
+                "the client is running but too busy to answer CDP — try again shortly",
+            )
         case .down:
             let alive = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe")
             guard alive.isEmpty else {
