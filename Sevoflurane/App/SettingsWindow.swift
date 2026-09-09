@@ -60,12 +60,14 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
             NSApp.activate()
             return
         }
+        // Before the window is built: the view's first body evaluation logs
+        // the pane it opens on, and that line reads as what followed this one.
+        EventLog.shared.log(.window, "settings: opened")
         let window = makeWindow()
         self.window = window
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        EventLog.shared.log(.window, "settings: opened")
     }
 
     private func makeWindow() -> NSWindow {
