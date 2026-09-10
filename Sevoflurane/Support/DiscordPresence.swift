@@ -1,6 +1,13 @@
 import Foundation
 
-/// What Sevoflurane is playing, published to the Discord client on this Mac.
+/// What the player is playing, published to the Discord client on this Mac
+/// under the game's own Discord application.
+///
+/// Sevoflurane is a host that runs games, the way Steam is, so it publishes
+/// the activity under the application id Discord's own database gives that
+/// game: the status reads "Playing Subnautica 2", with the game's icon, which
+/// is what Discord's detection shows for a game running natively.
+/// ``DiscordApplications`` resolves the id.
 ///
 /// Most Windows games ship no Discord support at all, and Discord's own game
 /// scanner sees `wine64-preloader` rather than a game, so nothing appears in a
@@ -19,42 +26,19 @@ actor DiscordPresence {
     /// The session the app publishes through.
     static let shared = DiscordPresence()
 
-    /// The application Discord attributes the activity to.
-    ///
-    /// The maintainer registers the application at
-    /// <https://discord.com/developers/applications> and puts its id here. Its
-    /// name is what Discord shows above the activity, so it wants to read
-    /// "Sevoflurane". Until then the id is empty, ``isConfigured`` is false,
-    /// and the Settings switch is off and disabled.
-    static let builtInApplicationID = ""
-
-    /// The application id in force: the `discordApplicationID` preference when
-    /// one is set, else the built-in.
-    static var applicationID: String {
-        let stored = Preferences.shared.string(forKey: applicationIDKey)?
-            .trimmingCharacters(in: .whitespaces) ?? ""
-        return stored.isEmpty ? builtInApplicationID : stored
-    }
-
-    static let applicationIDKey = "discordApplicationID"
-
-    /// Whether there is an application id to hand Discord.
-    static var isConfigured: Bool {
-        !applicationID.isEmpty
-    }
-
     /// One game, as Discord will show it.
     struct Activity: Sendable, Equatable {
-        /// The game's name, shown as the activity's details.
+        /// The Discord application the game is registered as, which is what
+        /// Discord names the activity after.
+        var applicationID: String
+        /// The game's name, as Discord's database spells it.
         var name: String
-        /// The Steam app id, which supplies the artwork and the store link.
-        var steamAppID: Int?
         /// When play began.
         var started: Date
 
-        init(name: String, steamAppID: Int? = nil, started: Date = .now) {
+        init(applicationID: String, name: String, started: Date = .now) {
+            self.applicationID = applicationID
             self.name = name
-            self.steamAppID = steamAppID
             self.started = started
         }
     }
@@ -67,20 +51,16 @@ actor DiscordPresence {
     }
 
     private let directory: URL
-    private let applicationID: String
     private var socket: Int32?
+    /// The application the open session handshook with, so a session opened
+    /// for one game is closed before another game claims the status line.
+    private var openApplicationID: String?
 
-    /// - Parameters:
-    ///   - directory: where the `discord-ipc-N` sockets live. Discord resolves
-    ///     the same per-user `TMPDIR` the app does, since neither is sandboxed.
-    ///     Injectable so a test can point at a socket of its own.
-    ///   - applicationID: the application Discord attributes the activity to.
-    init(
-        directory: URL = URL(fileURLWithPath: NSTemporaryDirectory()),
-        applicationID: String = DiscordPresence.applicationID,
-    ) {
+    /// - Parameter directory: where the `discord-ipc-N` sockets live. Discord
+    ///   resolves the same per-user `TMPDIR` the app does, since neither is
+    ///   sandboxed. Injectable so a test can point at a socket of its own.
+    init(directory: URL = URL(fileURLWithPath: NSTemporaryDirectory())) {
         self.directory = directory
-        self.applicationID = applicationID
     }
 
     // MARK: - Publishing
@@ -92,9 +72,10 @@ actor DiscordPresence {
     /// session ends there and nothing is published. That is an answer, not an
     /// error, so it does not throw.
     func show(_ activity: Activity) throws {
-        guard !applicationID.isEmpty else { return }
+        guard !activity.applicationID.isEmpty else { return }
+        if openApplicationID != activity.applicationID { end() }
         if socket == nil {
-            guard try openSession() else { return }
+            guard try openSession(applicationID: activity.applicationID) else { return }
         }
         try send(opcode: .frame, payload: Self.setActivity(activity))
     }
@@ -111,12 +92,13 @@ actor DiscordPresence {
     func end() {
         if let socket { Darwin.close(socket) }
         socket = nil
+        openApplicationID = nil
     }
 
-    /// Opens the socket and completes the handshake.
+    /// Opens the socket and completes the handshake as `applicationID`.
     ///
     /// - Returns: whether Discord accepted the application id.
-    private func openSession() throws -> Bool {
+    private func openSession(applicationID: String) throws -> Bool {
         guard let opened = Self.connectToDiscord(in: directory) else { throw Failure.discordAbsent }
         socket = opened
         let handshake = Self.json(["v": 1, "client_id": applicationID])
@@ -131,6 +113,7 @@ actor DiscordPresence {
             end()
             throw error
         }
+        openApplicationID = applicationID
         return true
     }
 
@@ -156,24 +139,15 @@ actor DiscordPresence {
 
     /// The `SET_ACTIVITY` payload for a game that is running.
     ///
-    /// `status_display_type` 2 selects the details field, so the member list
-    /// reads "Playing <game>" rather than "Playing Sevoflurane". `pid` is the
-    /// app's own, which is the process Discord watches to clear the activity.
+    /// The handshake already named the game, and Discord fills the name, the
+    /// icon and the store links in from that application, so the activity
+    /// carries only its type and when play began. `pid` is the app's own,
+    /// which is the process Discord watches to clear the activity.
     static func setActivity(_ activity: Activity) -> Data {
-        var payload: [String: Any] = [
+        command("SET_ACTIVITY", activity: [
             "type": 0,
-            "details": activity.name,
-            "status_display_type": 2,
             "timestamps": ["start": Int(activity.started.timeIntervalSince1970 * 1000)],
-        ]
-        if let steamAppID = activity.steamAppID {
-            payload["assets"] = [
-                "large_image": "https://cdn.cloudflare.steamstatic.com/steam/apps/\(steamAppID)/header.jpg",
-                "large_text": activity.name,
-                "large_url": "https://store.steampowered.com/app/\(steamAppID)",
-            ]
-        }
-        return command("SET_ACTIVITY", activity: payload)
+        ])
     }
 
     /// The `SET_ACTIVITY` payload that takes the activity away.

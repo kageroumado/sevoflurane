@@ -79,11 +79,12 @@ once.
 Discord shows what you play. Two switches in Settings › General control it, and
 both are on when Discord is running.
 
-Sevoflurane publishes the game's name and its Steam artwork while it runs, then
-clears the status when the game stops. Games that ship their own Discord support
-publish their own status instead, with their own artwork and buttons: Dormison
-carries a relay that connects a game's Discord pipe in the bottle to the Discord
-client on your Mac. CrossOver has no relay, so those games stay quiet there.
+Sevoflurane publishes the game under its own entry in Discord's game database,
+so your status reads "Playing Subnautica 2" the way it would on Windows, and
+clears when the game stops. Games that ship their own Discord support publish
+their own status instead, with their own artwork and buttons: Dormison carries
+a relay that connects a game's Discord pipe in the bottle to the Discord client
+on your Mac. CrossOver has no relay, so those games stay quiet there.
 
 ## Game compatibility
 

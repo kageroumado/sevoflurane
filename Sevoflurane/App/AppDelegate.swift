@@ -247,19 +247,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Tells Discord which game is on screen.
+    /// Tells Discord which game is on screen, under that game's own Discord
+    /// application: a game Discord's database names shows the way its native
+    /// build would, and one it does not name shows nothing.
     ///
     /// Detached, because the name comes off disk and the socket is the Discord
     /// client's to answer at its own pace. A game that ships its own Discord
     /// library publishes a richer activity through the in-bottle bridge, so the
     /// app leaves that one alone.
     private func publishToDiscord(appID: Int) {
-        guard Preferences.discordPresence, DiscordPresence.isConfigured else { return }
-        let name = GameConfig.game(appID).name
+        guard Preferences.discordPresence else { return }
+        let configured = GameConfig.game(appID).name
         Task.detached(name: "Publish app \(appID) to Discord") {
-            guard let name = name ?? SharedGames.installed(appID: appID)?.name else { return }
+            guard let name = configured ?? SharedGames.installed(appID: appID)?.name else { return }
             guard !DiscordPresence.publishesItsOwn(appID: appID) else { return }
-            let activity = DiscordPresence.Activity(name: name, steamAppID: appID)
+            let applications = DiscordApplications.shared
+            var resolved = await applications.applicationID(steamAppID: appID)
+            if resolved == nil { resolved = await applications.applicationID(named: name) }
+            guard let application = resolved else {
+                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so nothing is published")
+                return
+            }
+            let activity = DiscordPresence.Activity(
+                applicationID: application.id, name: application.name,
+            )
             try? await DiscordPresence.shared.show(activity)
         }
     }

@@ -116,13 +116,10 @@ struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 2) {
                 Toggle("Show what you play in Discord", isOn: $discordPresence)
                     .toggleStyle(.switch)
-                    .disabled(!DiscordPresence.isConfigured)
                     .onChange(of: discordPresence) { _, enabled in
                         Preferences.discordPresence = enabled
                     }
-                Text(DiscordPresence.isConfigured
-                    ? "Sevoflurane shows the game's name and artwork while it runs."
-                    : "Needs a Discord application id.")
+                Text("Games in Discord's database show as what you play.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

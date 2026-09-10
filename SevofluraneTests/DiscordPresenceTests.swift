@@ -26,20 +26,23 @@ struct DiscordPresenceTests {
     }
 
     @Test
-    func `hands Discord the application id, then the game, then nothing`() async throws {
+    func `hands Discord the game's application id, then the game, then nothing`() async throws {
         let discord = try FakeDiscord(replyingWith: .ready)
         defer { discord.stop() }
 
-        let presence = DiscordPresence(directory: discord.directory, applicationID: "1234")
+        let presence = DiscordPresence(directory: discord.directory)
         let started = Date(timeIntervalSince1970: 1_700_000_000)
         try await presence.show(
-            .init(name: "Subnautica", steamAppID: 264_710, started: started),
+            .init(applicationID: "1505320535268261888", name: "Subnautica 2", started: started),
         )
         try await Self.wait(for: 2, on: discord)
 
+        // The handshake is where the game is named: Discord shows the activity
+        // as the application it accepted here.
         let handshake = discord.frames[0]
         #expect(handshake.opcode == DiscordPresence.Opcode.handshake.rawValue)
-        #expect(String(decoding: handshake.payload, as: UTF8.self) == #"{"client_id":"1234","v":1}"#)
+        #expect(String(decoding: handshake.payload, as: UTF8.self)
+            == #"{"client_id":"1505320535268261888","v":1}"#)
 
         let published = discord.frames[1]
         #expect(published.opcode == DiscordPresence.Opcode.frame.rawValue)
@@ -50,16 +53,9 @@ struct DiscordPresenceTests {
         let arguments = try #require(body["args"] as? [String: Any])
         #expect(arguments["pid"] as? Int == Int(getpid()))
         let activity = try #require(arguments["activity"] as? [String: Any])
+        #expect(activity.keys.sorted() == ["timestamps", "type"])
         #expect(activity["type"] as? Int == 0)
-        #expect(activity["details"] as? String == "Subnautica")
-        // 2 is DETAILS, so the member list reads "Playing Subnautica" rather
-        // than "Playing Sevoflurane".
-        #expect(activity["status_display_type"] as? Int == 2)
         #expect((activity["timestamps"] as? [String: Any])?["start"] as? Int == 1_700_000_000_000)
-        let assets = try #require(activity["assets"] as? [String: Any])
-        #expect(assets["large_image"] as? String
-            == "https://cdn.cloudflare.steamstatic.com/steam/apps/264710/header.jpg")
-        #expect(assets["large_url"] as? String == "https://store.steampowered.com/app/264710")
 
         await presence.clear()
         try await Self.wait(for: 3, on: discord)
@@ -73,21 +69,37 @@ struct DiscordPresenceTests {
         let discord = try FakeDiscord(replyingWith: .close)
         defer { discord.stop() }
 
-        let presence = DiscordPresence(directory: discord.directory, applicationID: "0")
+        let presence = DiscordPresence(directory: discord.directory)
         // Discord refusing the application id is an answer, not a fault.
-        try await presence.show(.init(name: "Subnautica"))
+        try await presence.show(.init(applicationID: "0", name: "Subnautica"))
         try await Self.wait(for: 1, on: discord)
         try await Task.sleep(for: .milliseconds(200))
         #expect(discord.frames.count == 1)
     }
 
     @Test
-    func `publishes nothing without an application id`() async throws {
+    func `a second game handshakes again under its own application id`() async throws {
         let discord = try FakeDiscord(replyingWith: .ready)
         defer { discord.stop() }
 
-        let presence = DiscordPresence(directory: discord.directory, applicationID: "")
-        try await presence.show(.init(name: "Subnautica"))
+        let presence = DiscordPresence(directory: discord.directory)
+        try await presence.show(.init(applicationID: "111", name: "First"))
+        try await Self.wait(for: 2, on: discord)
+        try await presence.show(.init(applicationID: "222", name: "Second"))
+        try await Self.wait(for: 4, on: discord)
+
+        #expect(discord.frames[2].opcode == DiscordPresence.Opcode.handshake.rawValue)
+        #expect(String(decoding: discord.frames[2].payload, as: UTF8.self)
+            == #"{"client_id":"222","v":1}"#)
+    }
+
+    @Test
+    func `publishes nothing for a game with no application id`() async throws {
+        let discord = try FakeDiscord(replyingWith: .ready)
+        defer { discord.stop() }
+
+        let presence = DiscordPresence(directory: discord.directory)
+        try await presence.show(.init(applicationID: "", name: "Subnautica"))
         try await Task.sleep(for: .milliseconds(200))
         #expect(discord.frames.isEmpty)
     }
@@ -172,10 +184,18 @@ private final class FakeDiscord: @unchecked Sendable {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// Serves one client at a time, for as many as connect: a game that
+    /// replaces another opens a second session under its own application id.
     private func serve() {
-        let client = Darwin.accept(listener, nil, nil)
-        guard client >= 0 else { return }
-        defer { Darwin.close(client) }
+        while !lock.withLock({ stopped }) {
+            let client = Darwin.accept(listener, nil, nil)
+            guard client >= 0 else { return }
+            session(client)
+            Darwin.close(client)
+        }
+    }
+
+    private func session(_ client: Int32) {
         while !lock.withLock({ stopped }) {
             guard let header = read(client, exactly: 8) else { return }
             let opcode = header.prefix(4).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
