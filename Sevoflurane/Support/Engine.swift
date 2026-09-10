@@ -190,6 +190,17 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         (engineInfo?["features"] as? [String])?.contains("env-files") == true
     }
 
+    /// The relay that serves `\\.\pipe\discord-ipc-0` inside the bottle and
+    /// carries it to the Discord client's socket on macOS, so a game that
+    /// ships discord-rpc or the Game SDK reaches Discord with its own artwork
+    /// and buttons. `nil` for CrossOver and for an engine built before the
+    /// bridge, where the app's own presence is all there is.
+    var discordBridge: URL? {
+        guard case .managed = self else { return nil }
+        let bridge = root.appendingPathComponent("sevo-discord-bridge.exe")
+        return FileManager.default.fileExists(atPath: bridge.path) ? bridge : nil
+    }
+
     /// Whether the stored choice asks for the built-in engine, installed or
     /// not — provisioning reads this to know an install is wanted even with
     /// a usable CrossOver on the machine.

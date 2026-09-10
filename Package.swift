@@ -90,6 +90,7 @@ let package = Package(
                 "Sevoflurane/Support/CrossOverShadow.swift",
                 "Sevoflurane/Support/Deadline.swift",
                 "Sevoflurane/Support/DebugMode.swift",
+                "Sevoflurane/Support/DiscordPresence.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/FileDigest.swift",

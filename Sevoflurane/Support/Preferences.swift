@@ -39,3 +39,25 @@ nonisolated enum Preferences {
         }
     }
 }
+
+// MARK: - Discord
+
+nonisolated extension Preferences {
+    /// Whether the daemon starts the in-bottle relay after a client boot, so a
+    /// game that ships its own Discord support reaches the Mac client.
+    static var discordBridge: Bool {
+        get { bool(forKey: "discordBridge", default: true) }
+        set { shared.set(newValue, forKey: "discordBridge") }
+    }
+
+    /// Whether the app publishes the game it launched to Discord itself.
+    static var discordPresence: Bool {
+        get { bool(forKey: "discordPresence", default: true) }
+        set { shared.set(newValue, forKey: "discordPresence") }
+    }
+
+    /// A boolean whose absence means something other than `false`.
+    private static func bool(forKey key: String, default fallback: Bool) -> Bool {
+        shared.object(forKey: key) as? Bool ?? fallback
+    }
+}

@@ -18,6 +18,8 @@ struct GeneralSettings: View {
     @State private var cliError: String?
     @State private var agents: [AgentRow] = []
     @State private var confirmingUninstall = false
+    @State private var discordBridge = false
+    @State private var discordPresence = false
 
     /// One detected AI assistant: its registration state, and the in-flight
     /// and failure state of the last flip.
@@ -75,15 +77,61 @@ struct GeneralSettings: View {
                     Text("Allow each assistant to control Steam through MCP.")
                 }
             }
+            discordSection
             uninstallSection
         }
         .formStyle(.grouped)
         .onAppear {
             openAtLogin = provisioner.openAtLogin
             cliInstalled = AgentIntegration.isCLIInstalled
+            discordBridge = Preferences.discordBridge
+            discordPresence = Preferences.discordPresence
             refreshAgents()
         }
         .task { await store.measure() }
+    }
+
+    // MARK: - Discord
+
+    /// Whether this engine ships the relay that carries a game's own Discord
+    /// traffic out of the bottle.
+    private var hasDiscordBridge: Bool {
+        Engine.active.discordBridge != nil
+    }
+
+    private var discordSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Discord presence in games", isOn: $discordBridge)
+                    .toggleStyle(.switch)
+                    .disabled(!hasDiscordBridge)
+                    .onChange(of: discordBridge) { _, enabled in
+                        Preferences.discordBridge = enabled
+                    }
+                Text(hasDiscordBridge
+                    ? "Games with their own Discord support show their status. A change takes effect at the next Steam restart."
+                    : "This engine ships no Discord relay. Switch to the built-in engine for it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalDiscordBridge, highlighted: highlighted)
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Show what you play in Discord", isOn: $discordPresence)
+                    .toggleStyle(.switch)
+                    .disabled(!DiscordPresence.isConfigured)
+                    .onChange(of: discordPresence) { _, enabled in
+                        Preferences.discordPresence = enabled
+                    }
+                Text(DiscordPresence.isConfigured
+                    ? "Sevoflurane publishes the game's name and artwork while it runs."
+                    : "Needs a Discord application id.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalDiscordPresence, highlighted: highlighted)
+        } header: {
+            Text("Discord")
+        }
     }
 
     // MARK: - Automation

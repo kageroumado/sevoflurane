@@ -74,6 +74,17 @@ remove the program.
 Finder shows a Windows program's own icon once Sevoflurane has run at least
 once.
 
+## Discord
+
+Discord shows what you play. Two switches in Settings › General control it, and
+both are on when Discord is running.
+
+Sevoflurane publishes the game's name and its Steam artwork while it runs, then
+clears the status when the game stops. Games that ship their own Discord support
+publish their own status instead, with their own artwork and buttons: Dormison
+carries a relay that connects a game's Discord pipe in the bottle to the Discord
+client on your Mac. CrossOver has no relay, so those games stay quiet there.
+
 ## Game compatibility
 
 Compatibility varies by game. Game pages show Mac and anti-cheat reports

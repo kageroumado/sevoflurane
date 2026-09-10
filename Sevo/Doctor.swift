@@ -173,6 +173,16 @@ nonisolated enum Doctor {
             ))
         }
 
+        // Discord being closed is a state, not a fault: the check reports what
+        // presence has to work with and never fails the run.
+        checks.append(Check(
+            id: "discord", ok: true,
+            label: DiscordPresence.isDiscordRunning()
+                ? "Discord socket: answering in $TMPDIR"
+                : "Discord socket: none in $TMPDIR (presence is quiet while Discord is closed)",
+            hint: "start Discord", provisioning: false,
+        ))
+
         // Only when the symlink exists at all: a machine that never installed
         // the CLI is healthy, not broken.
         if let destination = try? FileManager.default

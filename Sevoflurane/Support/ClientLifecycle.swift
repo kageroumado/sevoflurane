@@ -421,6 +421,18 @@ nonisolated enum ClientLifecycle {
             NWJSGames.recordLibrary()
             ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         }
+        await startDiscordBridge()
+    }
+
+    /// Starts the Discord relay for this client boot, so a game that ships its
+    /// own Discord support finds the pipe already served when it looks.
+    ///
+    /// One bridge serves the whole prefix and a second copy exits on its own
+    /// mutex, so starting it once per client boot is enough. It makes itself a
+    /// Wine system process half a minute in and comes down with the bottle.
+    private static func startDiscordBridge() async {
+        guard Preferences.discordBridge, let bridge = Engine.active.discordBridge else { return }
+        await launchInBottle([bridge.path, "--dir", NSTemporaryDirectory()])
     }
 
     // MARK: - Client window suppression

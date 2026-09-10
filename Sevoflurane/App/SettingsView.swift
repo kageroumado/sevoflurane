@@ -127,6 +127,16 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: ["cli", "sevo", "command", "terminal", "path"],
                 ),
                 SearchableSetting(
+                    id: .generalDiscordBridge,
+                    title: "Discord presence in games",
+                    keywords: ["discord", "presence", "rich presence", "status", "bridge", "rpc"],
+                ),
+                SearchableSetting(
+                    id: .generalDiscordPresence,
+                    title: "Show what you play in Discord",
+                    keywords: ["discord", "presence", "playing", "status", "activity"],
+                ),
+                SearchableSetting(
                     id: .generalAgents,
                     title: "AI assistants (MCP)",
                     keywords: [
@@ -330,6 +340,8 @@ enum SettingsAnchor: String, CaseIterable {
     case generalOpenAtLogin = "general.openAtLogin"
     case generalSteamSettings = "general.steamSettings"
     case generalCli = "general.cli"
+    case generalDiscordBridge = "general.discordBridge"
+    case generalDiscordPresence = "general.discordPresence"
     case generalAgents = "general.agents"
     case generalUninstall = "general.uninstall"
     case graphicsRenderer = "graphics.renderer"

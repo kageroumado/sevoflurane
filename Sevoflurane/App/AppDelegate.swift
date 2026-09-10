@@ -230,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let launchedAppID {
                 runRecorder.noteWindowUp(forApp: launchedAppID)
                 record(owner, forApp: launchedAppID, detectingRuntime: true)
+                publishToDiscord(appID: launchedAppID)
             }
         }
         host.onGameActionError = { [weak self] appID, detail in
@@ -240,6 +241,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         host.onGameRunningChanged = { [weak self] appID, running in
             guard !running else { return }
             self?.runRecorder.close(appID: appID)
+            Task.detached(name: "Clear the Discord activity") {
+                await DiscordPresence.shared.clear()
+            }
+        }
+    }
+
+    /// Tells Discord which game is on screen.
+    ///
+    /// Detached, because the name comes off disk and the socket is the Discord
+    /// client's to answer at its own pace. A game that ships its own Discord
+    /// library publishes a richer activity through the in-bottle bridge, so the
+    /// app leaves that one alone.
+    private func publishToDiscord(appID: Int) {
+        guard Preferences.discordPresence, DiscordPresence.isConfigured else { return }
+        let name = GameConfig.game(appID).name
+        Task.detached(name: "Publish app \(appID) to Discord") {
+            guard let name = name ?? SharedGames.installed(appID: appID)?.name else { return }
+            guard !DiscordPresence.publishesItsOwn(appID: appID) else { return }
+            let activity = DiscordPresence.Activity(name: name, steamAppID: appID)
+            try? await DiscordPresence.shared.show(activity)
         }
     }
 
