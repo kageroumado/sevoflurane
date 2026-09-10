@@ -292,7 +292,7 @@ private struct AdoptionView: View {
     private var progress: some View {
         HStack(spacing: Theme.Space.md) {
             ProgressView().controlSize(.small)
-            Text("Installing into the bottle. This window says what it added.")
+            Text("Installing into the bottle. The next step lists what it added.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
@@ -355,9 +355,9 @@ private struct InstalledStep: View {
     }
 
     private var summary: String {
-        guard let root else { return "The installer added nothing this app can see." }
+        guard let root else { return "Sevoflurane found nothing the installer added." }
         return executables.isEmpty
-            ? "It installed \(root.lastPathComponent), which holds no program to start."
+            ? "It installed \(root.lastPathComponent). No program inside it can start."
             : "It installed \(root.lastPathComponent). Pick what to keep."
     }
 

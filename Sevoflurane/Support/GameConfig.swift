@@ -83,7 +83,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
     /// One line on what the choice is for.
     var detail: String {
         switch self {
-        case .off: "The picture is scaled by the window system."
+        case .off: "The window system scales the picture."
         case .lanczos: "Sharp resampling at your display's full resolution."
         case .metalfx: "For 3D games rendered below your display's resolution."
         }
@@ -108,8 +108,8 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
     /// One line on what the filter does to the picture.
     var detail: String {
         switch self {
-        case .nearest: "Pixels are copied: crisp at whole-number scales, uneven at any other."
-        case .bilinear: "Neighboring pixels are blended, the softest of the three."
+        case .nearest: "Copies pixels. Crisp at whole-number scales, uneven at the rest."
+        case .bilinear: "Blends neighboring pixels. The softest of the three."
         case .lanczos: "Sharp resampling for fractional scales."
         }
     }

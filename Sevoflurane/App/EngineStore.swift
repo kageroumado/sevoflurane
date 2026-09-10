@@ -130,8 +130,8 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .crossoverPreview,
                 label: "CrossOver Preview \(preview.version)",
-                detail: "keeps its own bottles; adopting stable ones is "
-                    + "Preview's own opt-in",
+                detail: "Keeps its own bottles. Adopting the stable ones is "
+                    + "a switch inside Preview.",
             ))
         }
         for version in detection.managedEngineVersions.reversed() {
@@ -147,7 +147,7 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .managed(version: ""),
                 label: "Dormison",
-                detail: "Sevoflurane's own Wine engine; downloads on switch (~230 MB)",
+                detail: "Sevoflurane's own Wine engine. Downloads about 230 MB when you switch.",
             ))
         }
         options = built
@@ -180,7 +180,7 @@ final class EngineStore {
         let engine = stagedEngine
         let bottle = stagedBottle.trimmingCharacters(in: .whitespaces)
         guard !bottle.isEmpty, !bottle.contains("/") else {
-            switchError = "bottle names can't be empty or contain \u{201C}/\u{201D}"
+            switchError = "A bottle name cannot be empty or contain \u{201C}/\u{201D}."
             return
         }
         isSwitching = true

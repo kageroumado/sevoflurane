@@ -113,7 +113,7 @@ struct SetupView: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(.orange.opacity(0.15)))
             .padding(10)
-            .help("Simulated setup — nothing on this Mac changes.")
+            .help("Simulated setup. Nothing on this Mac changes.")
     }
 
     @ViewBuilder private var content: some View {
@@ -141,9 +141,9 @@ struct SetupView: View {
 
     @ViewBuilder private var graphics: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("DirectX 12 games (optional)")
+            Text("DirectX 12 games")
                 .font(.system(size: 24, weight: .bold))
-            Text("Add Apple's Game Porting Toolkit to play DirectX 12 games. Download it with your Apple account, or add it later in Graphics settings.")
+            Text("This step is optional. Add Apple's Game Porting Toolkit to play DirectX 12 games. Download it with your Apple account. Graphics settings can add it later.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             GPTkDownloadPanel(
@@ -163,7 +163,7 @@ struct SetupView: View {
                 .frame(width: 96, height: 96)
             Text("Welcome to Sevoflurane")
                 .font(.system(size: 26, weight: .bold))
-            Text("Play Windows Steam games with a Mac interface. Setup installs the engine and Steam, then opens Steam for sign-in.")
+            Text("Play Windows Steam games with a Mac interface. Setup installs the engine and Steam. Then you sign in.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -176,18 +176,18 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose an engine")
                 .font(.system(size: 24, weight: .bold))
-            Text("A Wine engine runs Windows games on your Mac. Choose Dormison or an installed copy of CrossOver.")
+            Text("A Wine engine runs Windows games on your Mac. Choose Dormison or CrossOver.")
                 .foregroundStyle(.secondary)
             if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
-                Text("CrossOver \(crossover.version) is installed, but its trial has ended. "
+                Text("The CrossOver \(crossover.version) trial on this Mac has ended. "
                     + "License it at codeweavers.com, or use Dormison.")
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
             engineOption(
                 .builtIn,
-                title: "Dormison — free (recommended)",
-                detail: "Sevoflurane's Wine engine, with support for Apple's DirectX 12 toolkit and game upscaling.",
+                title: "Dormison (free, recommended)",
+                detail: "Sevoflurane's own Wine engine. It supports Apple's DirectX 12 toolkit and game upscaling.",
             )
             if engineChoice == .builtIn {
                 engineSource
@@ -199,7 +199,7 @@ struct SetupView: View {
             // paragraph that answers "why would I pay for this?".
             VStack(alignment: .leading, spacing: 4) {
                 Text("Why pay for CrossOver?").font(.callout.weight(.semibold))
-                Text("CodeWeavers develops Wine, which both engines use. CrossOver includes game-specific fixes and paid support. You can switch engines later in Settings.")
+                Text("CodeWeavers develops Wine, and both engines use it. CrossOver adds per-game fixes and paid support. Switch engines later in Settings.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -237,13 +237,13 @@ struct SetupView: View {
             }
             .font(.callout)
         } else if let bundledEngine {
-            Text("This copy of Sevoflurane comes with "
-                + "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine))) — "
-                + "nothing to download.")
+            Text("This copy of Sevoflurane includes "
+                + "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine)))"
+                + ". Nothing to download.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         } else {
-            Button("Already have the engine as a file? Choose it…") { chooseEngineFile() }
+            Button("Choose an Engine File…") { chooseEngineFile() }
                 .buttonStyle(.link)
                 .font(.callout)
         }
@@ -266,8 +266,8 @@ struct SetupView: View {
     }
 
     private var crossOverDetail: String {
-        "The paid version of the same translator, with fixes for specific "
-            + "games and a support team behind it."
+        "The paid version of the same engine. It adds per-game fixes "
+            + "and a support team."
     }
 
     private func engineOption(
@@ -316,7 +316,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Which Steam?")
                 .font(.system(size: 24, weight: .bold))
-            Text("Choose an existing Steam installation or create a new bottle. Each bottle stores its own games and settings.")
+            Text("Choose an existing Steam install, or start a new bottle. Each bottle keeps its own games and settings.")
                 .foregroundStyle(.secondary)
             Picker("", selection: $bottleChoice) {
                 ForEach(bottleCandidates, id: \.name) { candidate in
@@ -346,7 +346,7 @@ struct SetupView: View {
             if let objection = newBottleObjection {
                 Text(objection).font(.caption).foregroundStyle(.orange)
             } else {
-                Text("The new bottle's folder takes this name, alongside the others.")
+                Text("The new bottle's folder takes this name.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -382,10 +382,10 @@ struct SetupView: View {
             Text(isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam")
                 .font(.system(size: 24, weight: .bold))
             Text(isAdoptingSteam
-                ? "Checking the Steam already installed here and bringing it up "
-                + "to date. An old copy can take a few minutes to catch up."
-                : "Downloading and installing the Steam client. This is the longest "
-                + "step — a few minutes on most connections.")
+                ? "Checking the Steam installed here and updating it. An old copy "
+                + "takes a few minutes to catch up."
+                : "Downloading and installing the Steam client. It is the longest "
+                + "step. Most connections take a few minutes.")
                 .foregroundStyle(.secondary)
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
@@ -447,16 +447,15 @@ struct SetupView: View {
 
     private var steamStepCaption: String {
         guard hasFailed else {
-            return "You can close this window — setup carries on in the menu bar, "
-                + "and picks up where it left off if it is interrupted."
+            return "Close this window any time. Setup carries on in the menu bar, "
+                + "and resumes where it stopped."
         }
         if provisioner.engineInstallPending {
-            return "If the download can't get through, the engine also installs "
-                + "from its file: dormison-r<N>.tar.xz from the Dormison release, "
-                + "with the .sig saved beside it."
+            return "The engine also installs from a file. Get dormison-r<N>.tar.xz "
+                + "and its .sig from the Dormison release."
         }
-        return "Trying again keeps whatever already downloaded, so a second "
-            + "attempt is usually much shorter than the first."
+        return "A second try keeps what already downloaded. It is usually much "
+            + "shorter than the first."
     }
 
     /// The overall bar: completed stages plus the current stage's own
@@ -469,7 +468,7 @@ struct SetupView: View {
     private func stageCaption(_ stage: Provisioner.Stage) -> String {
         var caption = "Step \(stage.index) of \(Provisioner.Stage.count)"
         if let fraction = provisioner.stageFraction {
-            caption += " — \(Int(fraction * 100))% downloaded"
+            caption += ", \(Int(fraction * 100))% downloaded"
         }
         return caption
     }
@@ -478,7 +477,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Startup and automation")
                 .font(.system(size: 24, weight: .bold))
-            Text("All of these can be changed later.")
+            Text("Change any of this later.")
                 .foregroundStyle(.secondary)
             Toggle(isOn: $openAtLogin) {
                 VStack(alignment: .leading) {
@@ -495,7 +494,7 @@ struct SetupView: View {
             Toggle(isOn: $connectAgents) {
                 VStack(alignment: .leading) {
                     Text("Install the sevo command").font(.headline)
-                    Text("Installs sevo and connects supported AI assistants to Steam through MCP. Requires an administrator password. Manage connections in Settings.")
+                    Text("Adds sevo and connects AI assistants to Steam through MCP. Needs an administrator password. Manage connections in Settings.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -529,7 +528,7 @@ struct SetupView: View {
         let icon = Image(nsImage: MenuBarIcon.image(badged: false))
         if signInPending() {
             return Text(
-                "Your library lives in the menu bar, behind \(icon) at the top right. Steam is ready — sign in and your library opens.",
+                "Your library lives in the menu bar, behind \(icon) at the top right. Steam is ready. Sign in and your library opens.",
             )
         }
         return Text("Your library lives in the menu bar, behind \(icon) at the top right.")

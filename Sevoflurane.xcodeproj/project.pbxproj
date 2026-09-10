@@ -79,6 +79,7 @@
 		0BAA000000000000000D0006 /* Exceptions for "Sevoflurane" folder in "SevofluraneDaemon" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				App/AboutSettings.swift,
 				App/AboutWindow.swift,
 				App/ActivationPolicy.swift,
 				App/AdoptionPanel.swift,
@@ -105,13 +106,15 @@
 				App/GameLaunchWatch.swift,
 				App/GameWindow.swift,
 				App/GamesSettings.swift,
+				App/GeneralSettings.swift,
 				App/GraphicsEnvironment.swift,
+				App/GraphicsSettings.swift,
 				App/GraphicsStore.swift,
 				App/MenuBarIcon.swift,
 				App/MenuBarPopover.swift,
 				App/MenuBarView.swift,
 				App/QuickLaunchStore.swift,
-				App/SettingsPanes.swift,
+				App/RepairSettings.swift,
 				App/SettingsView.swift,
 				App/SettingsWindow.swift,
 				App/SevofluraneMainMenu.swift,
@@ -119,6 +122,7 @@
 				App/SilentUpdates.swift,
 				App/SteamNotifications.swift,
 				App/StorageEnvironment.swift,
+				App/StorageSettings.swift,
 				App/StorageStore.swift,
 				App/Theme.swift,
 				App/UpscalerPickers.swift,

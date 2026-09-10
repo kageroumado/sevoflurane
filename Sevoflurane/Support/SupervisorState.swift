@@ -147,7 +147,7 @@ nonisolated extension SupervisorHealth {
         if case let .degraded(reason)? = inputs.fault { return .degraded(reason) }
         if inputs.isPageBooting { return .starting }
         if inputs.lastProbe != .up, !inputs.hasSeenClientUp {
-            return .launching("the client is coming up — a first launch takes a minute.")
+            return .launching("Steam is starting. A first launch takes a minute.")
         }
         return inputs.lastProbe == .up && inputs.pageServicesUp ? .healthy : .starting
     }

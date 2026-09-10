@@ -38,7 +38,7 @@ struct GamesSettings: View {
         List(games, selection: $selected) { entry in
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.name).lineLimit(1)
-                Text(entry.exes.isEmpty ? "no executable recorded yet" : entry.exes.joined(separator: ", "))
+                Text(entry.exes.isEmpty ? "no executable yet" : entry.exes.joined(separator: ", "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -80,8 +80,9 @@ struct GamesSettings: View {
             } header: {
                 Text(entry.name)
             } footer: {
-                Text("Inherit uses the value in Engine. Changes apply at the next game launch"
-                    + (Engine.active.supportsEnvFiles ? "." : ", once Steam has restarted."))
+                Text(Engine.active.supportsEnvFiles
+                    ? "Inherit uses the value from Engine. A change applies at the next launch."
+                    : "Inherit uses the value from Engine. Restart Steam to apply a change.")
             }
             .highlightable(.gamesSettings, highlighted: highlighted)
         }

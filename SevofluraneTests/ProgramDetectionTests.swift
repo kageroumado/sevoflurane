@@ -125,6 +125,6 @@ struct ProgramDetectionTests {
         try tree.file("steam_api64.dll")
         let exe = try tree.file("Nightsong.exe")
         #expect(ProgramDetection.classify(exe).summary
-            == "Looks like a game — Steam's API beside it")
+            == "Looks like a game: Steam's API beside it")
     }
 }

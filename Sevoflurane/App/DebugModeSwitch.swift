@@ -51,12 +51,12 @@ final class DebugModeSwitch {
     /// What the mode is doing and what it costs, for the footer chip's
     /// tooltip: the three logs it makes grow, with what they weigh now.
     var summary: String {
-        var lines = ["Debug mode — logs grow"]
+        var lines = ["Debug mode is on. Logs grow."]
         lines += Self.logs.map { name, url in
             "\(name): \(Self.size(of: url))"
         }
         if Engine.active.isCrossOver {
-            lines.append("CrossOver ignores the engine half; the app half is on.")
+            lines.append("CrossOver skips the engine logs. The app logs are on.")
         } else {
             lines.append("Restart Steam to apply it to the client and its games.")
         }

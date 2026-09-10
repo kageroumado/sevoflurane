@@ -113,7 +113,8 @@ final class ShaderStore {
 
     private static let demoPackage = ShaderPackages.Package(
         manifest: .init(
-            name: "anime4k-c", title: "Anime4K", description: "Anime4K's mode C: restore, then upscale.",
+            name: "anime4k-c", title: "Anime4K",
+            description: "Anime4K mode C. Removes noise while it upscales.",
             license: "MIT", version: "4.0.1", source: URL(string: "https://github.com/bloc97/Anime4K"),
             content: "For 2D art and anime-style games",
         ),

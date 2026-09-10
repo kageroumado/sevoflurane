@@ -65,7 +65,7 @@ struct UpscalerPicker: View {
     private func label(for choice: ShaderPackages.Choice) -> String {
         guard case let .downloadable(entry) = choice else { return choice.label }
         let size = entry.size.map { " (\(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)))" } ?? ""
-        return "\(entry.title) — Download\(size)"
+        return "\(entry.title) · Download\(size)"
     }
 
     private func label(forToken token: String) -> String {
@@ -77,7 +77,7 @@ struct UpscalerPicker: View {
         let token = pending ?? selection ?? inherited
         guard let token else { return "" }
         guard let choice = shaders.choices.first(where: { $0.token == token }) else {
-            return "This package is missing. Games use Lanczos until it is reinstalled."
+            return "This package is missing. Games fall back to Lanczos."
         }
         return choice.detail
     }

@@ -131,7 +131,7 @@ struct MenuBarView: View {
             HealthCard(
                 symbol: "person.crop.circle",
                 title: "Waiting for sign-in",
-                detail: "Sign in to Steam in the login window to finish setting up.",
+                detail: "Sign in to the Steam login window to finish setup.",
                 tint: nil,
                 action: nil,
             )
@@ -163,7 +163,7 @@ struct MenuBarView: View {
             HealthCard(
                 symbol: "moon.zzz",
                 title: "Auto-restart paused",
-                detail: "Sevoflurane won't revive a hung client.",
+                detail: "Restart Steam yourself while this is paused.",
                 tint: nil,
                 action: ("Resume", { supervisor.togglePaused() }),
             )
@@ -330,7 +330,7 @@ struct MenuBarView: View {
                             // boot with: the launch path restages it (or
                             // restarts, if the engine or sync must change).
                             // Better said before the click than after.
-                            Text("\(restartFor.label) — set when it launches")
+                            Text("\(restartFor.label) · set when it launches")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -623,7 +623,7 @@ struct MenuBarView: View {
                         .font(.system(size: 12, weight: .semibold))
                     Text(
                         denied
-                            ? "Turn Sevoflurane back on in System Settings to get messages here."
+                            ? "Turn Sevoflurane on in System Settings to see messages here."
                             : "Let Sevoflurane post Steam's messages to Notification Center.",
                     )
                     .font(.system(size: 11))

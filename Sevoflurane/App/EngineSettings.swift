@@ -183,7 +183,7 @@ struct EngineSettings: View {
             return phase
         }
         return engineFileError
-            ?? "A dormison-r<N>.tar.xz you downloaded; the .sig beside it is checked."
+            ?? "A dormison-r<N>.tar.xz you downloaded. Sevoflurane checks the .sig beside it."
     }
 
     private func installEngineFile() {
@@ -244,8 +244,8 @@ struct EngineSettings: View {
         let target = "\(store.stagedEngine.description), bottle "
             + "\u{201C}\(store.stagedBottle)\u{201D}"
         return store.stagedBottleIsNew
-            ? "Steam will close and install in \(target). Your current bottle and games stay in place."
-            : "Steam will close, prepare \(target), then reopen there."
+            ? "Steam closes and installs in \(target). Your current bottle and games stay."
+            : "Steam closes, prepares \(target), then reopens there."
     }
 
     private var switchDetail: String {
@@ -263,7 +263,7 @@ struct EngineSettings: View {
                 Image(systemName: "info.circle")
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
-                Text("You can also manage this bottle's dependencies and Windows settings in \(store.stagedEngine.description).")
+                Text("\(store.stagedEngine.description) manages this bottle's dependencies and Windows settings too.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -298,7 +298,7 @@ struct EngineSettings: View {
             Toggle(isOn: msyncBinding) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Enhanced synchronization (msync)")
-                    Text("Reduces synchronization overhead. If a game freezes, try turning this off.")
+                    Text("Cuts synchronization overhead. Turn it off if a game freezes.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -322,8 +322,8 @@ struct EngineSettings: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Make game windows resizable")
-                    Text("A resizable window scales the picture to fit. A full-screen game "
-                        + "keeps believing it owns the whole screen.")
+                    Text("A resizable window scales the picture to fit. The game "
+                        + "keeps drawing at its own size.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -341,10 +341,9 @@ struct EngineSettings: View {
                 .highlightable(.engineFilter, highlighted: highlighted)
             mousePicker
         } footer: {
-            Text("Defaults for Dormison games. Override them in Games. "
-                + (Engine.active.supportsEnvFiles
-                    ? "Changes apply at the next game launch."
-                    : "Takes effect for games started after Steam restarts."))
+            Text(Engine.active.supportsEnvFiles
+                ? "Defaults for Dormison games. Change one game in Games. A change applies at the next launch."
+                : "Defaults for Dormison games. Change one game in Games. Restart Steam to apply a change.")
         }
     }
 
@@ -384,7 +383,7 @@ struct EngineSettings: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Mouse")
-                Text("Linear removes acceleration while a game captures the mouse.")
+                Text("Linear removes acceleration while a game controls the mouse.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -409,7 +408,7 @@ struct EngineSettings: View {
             Text("Game dependencies")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Install a component when a game reports a missing DLL or displays missing text.")
+                Text("Install one when a game reports a missing DLL or blank text.")
                 if let summary = compatibility.incompleteSummary {
                     Text(summary)
                         .foregroundStyle(.orange)
@@ -474,7 +473,7 @@ struct EngineSettings: View {
                 }
             }
             HStack(spacing: Theme.Space.md) {
-                TextField("DLL name (e.g. dinput8)", text: $newOverrideDLL)
+                TextField("DLL name, like dinput8", text: $newOverrideDLL)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                 Picker("", selection: $newOverrideMode) {
@@ -496,7 +495,7 @@ struct EngineSettings: View {
         } header: {
             Text("DLL overrides")
         } footer: {
-            Text("Choose the installed Windows DLL (native), Wine's DLL (builtin), or the listed fallback order. Applies at the next game launch.")
+            Text("Choose native for the installed Windows DLL, or builtin for Wine's own. A change applies at the next game launch.")
         }
         .highlightable(.engineOverrides, highlighted: highlighted)
     }
@@ -520,7 +519,7 @@ struct EngineSettings: View {
             Toggle(isOn: $wineDiagnostics) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Log every library a game loads")
-                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors and exceptions. This adds exceptions as they are dispatched, which carries Steam's and the game's own debug output, and each library load, which is what tells a game that failed to start from one that started and then stopped. It makes the log grow very quickly.")
+                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This adds every exception and every library load. The log then grows fast.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -536,7 +535,7 @@ struct EngineSettings: View {
         } header: {
             Text("Troubleshooting")
         } footer: {
-            Text("Repair checks the engine, bottle, and Steam installation, keeping your games and saves. Restart Steam to apply a change to logging.")
+            Text("Repair checks the engine, the bottle, and Steam. Your games and saves stay. Restart Steam to apply a logging change.")
         }
     }
 }

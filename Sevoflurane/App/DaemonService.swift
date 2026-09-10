@@ -34,7 +34,7 @@ enum DaemonService {
         case .requiresApproval:
             return Outcome(
                 isReachable: false,
-                message: "Sevoflurane needs its background helper — approve it in Login Items.",
+                message: "Approve Sevoflurane's background helper in Login Items.",
                 needsApproval: true,
             )
         case .notRegistered, .notFound:
@@ -43,7 +43,7 @@ enum DaemonService {
             } catch {
                 return Outcome(
                     isReachable: false,
-                    message: "Sevoflurane's background helper could not be registered: "
+                    message: "Sevoflurane could not register its background helper: "
                         + error.localizedDescription,
                     needsApproval: true,
                 )
@@ -51,7 +51,7 @@ enum DaemonService {
             if service.status == .requiresApproval {
                 return Outcome(
                     isReachable: false,
-                    message: "Sevoflurane needs its background helper — approve it in Login Items.",
+                    message: "Approve Sevoflurane's background helper in Login Items.",
                     needsApproval: true,
                 )
             }
@@ -67,7 +67,7 @@ enum DaemonService {
         }
         return Outcome(
             isReachable: false,
-            message: "Sevoflurane needs its background helper — it is registered but not running.",
+            message: "The background helper is registered and stopped.",
             needsApproval: true,
         )
     }

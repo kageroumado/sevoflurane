@@ -39,7 +39,7 @@ struct FooterBar: View {
                     .accessibilityLabel("Settings")
                 Button { NSApplication.shared.terminate(nil) } label: { utilityIcon("xmark") }
                     .keyboardShortcut("q")
-                    .help("Quit Sevoflurane and shut down the Steam client")
+                    .help("Quit Sevoflurane and close Steam")
                     .accessibilityLabel("Quit")
             }
             .buttonStyle(.glass)
@@ -104,10 +104,10 @@ struct FooterBar: View {
         Toggle(isOn: Binding(get: { debug.isOn }, set: { debug.set($0) })) {
             Label("Debug Mode", systemImage: "ladybug")
         }
-        .help("Log every library load, the renderer's errors and the engine's frame trail, "
-            + "until this app quits")
+        .help("Logs library loads, renderer errors, and the engine's frame trail. "
+            + "Stops when the app quits.")
         if debug.isOn, isClientUp {
-            Button("Debug Mode takes effect at the next Steam start — Restart Steam") {
+            Button("Restart Steam to Apply Debug Mode") {
                 supervisor.restartNow(reason: "debug mode")
             }
         }
@@ -159,7 +159,7 @@ private struct StatusChip: View {
         var lines = ["\(supervisor.statusText) · \(host.status)"]
         if let event = EventLog.shared.latest {
             let time = event.date.formatted(date: .omitted, time: .shortened)
-            lines.append("last event \(time) — \(event.message)")
+            lines.append("last event \(time) · \(event.message)")
         }
         lines.append("Hover for the auto-restart switch.")
         return lines.joined(separator: "\n")
@@ -268,7 +268,7 @@ private struct UpdateChip: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.small)
-            .help("Version \(available) is available — click to install it now")
+            .help("Click to install version \(available)")
         } else {
             Button {
                 autoUpdate.toggle()
@@ -292,7 +292,7 @@ private struct UpdateChip: View {
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
-            .help("Install updates automatically, once no game is running")
+            .help("Install updates automatically while no game runs")
         }
     }
 

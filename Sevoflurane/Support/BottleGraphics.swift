@@ -27,7 +27,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
 
     var detail: String {
         switch self {
-        case .auto: "Uses CrossOver's game settings, with Wine's renderer as fallback."
+        case .auto: "Uses CrossOver's game settings, then Wine's renderer."
         case .d3dmetal: "DirectX 11 and 12 through Apple's Game Porting Toolkit."
         case .dxmt: "DirectX 11, translated straight to Metal."
         case .dxvk: "DirectX 10 and 11, by way of Vulkan."
@@ -41,17 +41,17 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     var guidance: String {
         switch self {
         case .auto:
-            "Uses CrossOver's per-game database when available, then falls back to Wine's renderer."
+            "Uses CrossOver's per-game settings, then Wine's renderer."
         case .d3dmetal:
-            "DirectX 11 and 12 through Metal, for 64-bit games only — a 32-bit game gets "
-                + "Wine's own DirectX 12 whatever is chosen here. Requires Apple's toolkit "
-                + "or a CrossOver engine that includes it."
+            "DirectX 11 and 12 through Metal, for 64-bit games. A 32-bit game "
+                + "uses Wine's renderer instead. Needs Apple's Game Porting Toolkit, "
+                + "or a CrossOver engine with it."
         case .dxmt:
-            "DirectX 10 and 11 through Metal. Try it if a DirectX 11 game has graphics problems."
+            "DirectX 10 and 11 through Metal. Try it if a DirectX 11 game looks wrong."
         case .dxvk:
             "DirectX 10 and 11 through Vulkan and MoltenVK. DXGI stays Wine's own."
         case .wined3d:
-            "Wine's built-in renderer. Try it for games that have trouble with the other renderers."
+            "Wine's built-in renderer. Try it when the others fail."
         }
     }
 

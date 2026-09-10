@@ -23,7 +23,7 @@ nonisolated enum ProgramDetection {
             case ProgramKind.game: "Looks like a game"
             default: "A Windows program"
             }
-            return reasons.isEmpty ? what : "\(what) — \(reasons.joined(separator: ", "))"
+            return reasons.isEmpty ? what : "\(what): \(reasons.joined(separator: ", "))"
         }
     }
 

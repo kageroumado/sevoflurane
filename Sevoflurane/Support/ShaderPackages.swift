@@ -88,7 +88,7 @@ nonisolated enum ShaderPackages {
         Available(
             name: "cunny-nvl",
             title: "CuNNy NVL",
-            description: "CuNNy's NVL weights (4x12): a small convolutional upscaler for visual novels and illustrations.",
+            description: "CuNNy's NVL weights, a small neural upscaler for visual novels and art.",
             content: "Trained on visual-novel screenshots and illustrations",
             license: "LGPL-3.0-only",
             version: "1",
@@ -101,7 +101,7 @@ nonisolated enum ShaderPackages {
         Available(
             name: "anime4k-c",
             title: "Anime4K",
-            description: "Anime4K's mode C: denoises while upscaling, for clean sources.",
+            description: "Anime4K mode C. Removes noise while it upscales, for clean sources.",
             content: "For 2D art and anime-style games",
             license: "MIT",
             version: "4.0.1",
@@ -310,8 +310,8 @@ nonisolated enum ShaderPackages {
                 throw InstallError("\(url.lastPathComponent) could not be unpacked")
             }
             guard let found = packageDirectory(under: extracted) else {
-                throw InstallError("\(url.lastPathComponent) holds no shader package "
-                    + "(\(requiredFiles.joined(separator: ", ")))")
+                throw InstallError("\(url.lastPathComponent) is missing "
+                    + requiredFiles.joined(separator: ", "))
             }
             unpacked = found
         }

@@ -104,29 +104,29 @@ nonisolated enum GameCompatVerdict {
         if let kernel = record.engines.first(where: isKernel) {
             return GameCompatBadge(
                 state: .unsupported, label: kernel,
-                reason: "\(kernel) is kernel-mode anti-cheat with no macOS module: whatever it protects, usually online play, cannot run under the bottle.",
+                reason: "\(kernel) is kernel-mode anti-cheat with no macOS module. It usually guards online play, which cannot run here.",
             )
         }
         switch record.status {
         case "Denied":
             return GameCompatBadge(
                 state: .unsupported, label: engines,
-                reason: "The publisher has declined to enable \(engines) outside Windows (AreWeAntiCheatYet: Denied).",
+                reason: "The publisher refuses to run \(engines) outside Windows. AreWeAntiCheatYet lists it as Denied.",
             )
         case "Broken":
             return GameCompatBadge(
                 state: .unsupported, label: engines,
-                reason: "\(engines) breaks the game under Wine on Linux (AreWeAntiCheatYet: Broken); expect the same here.",
+                reason: "\(engines) breaks the game under Wine on Linux. Expect the same here. AreWeAntiCheatYet lists it as Broken.",
             )
         case "Supported", "Running":
             return GameCompatBadge(
                 state: .playable, label: engines,
-                reason: "\(engines) runs under Wine on Linux (AreWeAntiCheatYet: \(record.status)); user-mode anti-cheat usually carries over.",
+                reason: "\(engines) runs under Wine on Linux. User-mode anti-cheat usually works here too. AreWeAntiCheatYet lists it as \(record.status).",
             )
         default:
             return GameCompatBadge(
                 state: .unknown, label: engines,
-                reason: "\(engines) is listed with no verdict yet (AreWeAntiCheatYet: \(record.status)).",
+                reason: "AreWeAntiCheatYet lists \(engines) as \(record.status), with no verdict yet.",
             )
         }
     }
@@ -153,12 +153,12 @@ nonisolated enum GameCompatVerdict {
             case "perfect" where blocker == nil:
                 return GameCompatBadge(
                     state: .verified, label: "Verified",
-                    reason: "AppleGamingWiki rates \(evidence.method) perfect: no known issues.\(nativeNote)",
+                    reason: "AppleGamingWiki rates \(evidence.method) perfect.\(nativeNote)",
                 )
             default:
                 // Real Mac evidence outranks the anti-cheat veto, but never
                 // past Playable: the game starts, its protected modes do not.
-                let caveat = blocker == nil ? "" : " Expect online play to be unavailable (see Anti-cheat)."
+                let caveat = blocker == nil ? "" : " Online play stays blocked. See Anti-cheat."
                 return GameCompatBadge(
                     state: .playable, label: "Playable",
                     reason: "AppleGamingWiki rates \(evidence.method) \(describe(evidence.tier)).\(caveat)\(nativeNote)",
@@ -168,7 +168,7 @@ nonisolated enum GameCompatVerdict {
         if let blocker {
             return GameCompatBadge(
                 state: .unsupported, label: "Unsupported",
-                reason: "\(blocker) has no macOS module; the game will not start under the bottle.\(nativeNote)",
+                reason: "\(blocker) has no macOS module. The game will not start here.\(nativeNote)",
             )
         }
         if let proton, proton.confidence != "inadequate", proton.tier != "pending" {
@@ -177,17 +177,17 @@ nonisolated enum GameCompatVerdict {
             case "platinum", "gold":
                 return GameCompatBadge(
                     state: .playable, label: "Playable",
-                    reason: "Untested under Wine on a Mac. Runs well under Proton on Linux (ProtonDB \(proton.tier), \(count) reports).\(nativeNote)",
+                    reason: "Untested on a Mac. Runs well under Proton on Linux. ProtonDB rates it \(proton.tier) across \(count) reports.\(nativeNote)",
                 )
             case "borked":
                 return GameCompatBadge(
                     state: .unknown, label: "Unknown",
-                    reason: "Untested under Wine on a Mac, and broken under Proton on Linux (ProtonDB borked, \(count) reports).\(nativeNote)",
+                    reason: "Untested on a Mac. Broken under Proton on Linux. ProtonDB rates it borked across \(count) reports.\(nativeNote)",
                 )
             default:
                 return GameCompatBadge(
                     state: .unknown, label: "Unknown",
-                    reason: "Untested under Wine on a Mac. Mixed results under Proton on Linux (ProtonDB \(proton.tier), \(count) reports).\(nativeNote)",
+                    reason: "Untested on a Mac. Mixed results under Proton on Linux. ProtonDB rates it \(proton.tier) across \(count) reports.\(nativeNote)",
                 )
             }
         }

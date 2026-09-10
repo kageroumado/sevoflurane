@@ -28,9 +28,9 @@ nonisolated enum KnownFailures {
     static let all: [Entry] = [
         Entry(
             id: "unity-exit-1-no-window",
-            summary: "The Unity player exited with status 1 without ever putting a window on "
-                + "screen, so it failed inside its own start-up — graphics device or Mono.",
-            fix: "Its own Player.log says which; the report zip carries it under games/.",
+            summary: "The Unity game quit with status 1 and never drew a window. It "
+                + "failed during start-up, in its graphics device or in Mono.",
+            fix: "Its own Player.log says which. The report zip carries it under games/.",
             matches: { record in
                 record.runtime == "unity" && record.exit?.code == 1
                     && record.windowAfterSeconds == nil
@@ -38,25 +38,24 @@ nonisolated enum KnownFailures {
         ),
         Entry(
             id: "unreal-exit-3",
-            summary: "Unreal took the C runtime's abort() path — status 3 is what an uncaught "
-                + "C++ exception ends in, and Unreal writes its own crash report first.",
-            fix: "Saved/Logs and Saved/Crashes in the game's directory carry the callstack; "
-                + "the report zip carries both under games/.",
+            summary: "Unreal quit with status 3, the ending of an uncaught C++ exception. "
+                + "It writes its own crash report first.",
+            fix: "Saved/Logs and Saved/Crashes in the game's folder carry the callstack. "
+                + "The report zip carries both under games/.",
             matches: { $0.runtime == "unreal" && $0.exit?.code == 3 },
         ),
         Entry(
             id: "dxmt-dropped-compute",
-            summary: "DXMT dropped compute dispatches: converting the shader to Metal failed, "
-                + "nothing was bound, and the pass did not run. What that costs depends on "
-                + "what the pass did — often a black screen or a missing effect.",
-            fix: "Try another renderer for this game: Settings › Games › the game › Renderer.",
+            summary: "DXMT dropped compute work. A shader failed to convert to Metal, so "
+                + "the pass never ran. Expect a black screen or a missing effect.",
+            fix: "Try another renderer in Settings › Games › the game › Renderer.",
             matches: { note($0, contains: "Shader not found?") },
         ),
         Entry(
             id: "dxmt-unsupported-feature",
-            summary: "DXMT answers three Direct3D 11 feature queries with E_INVALIDARG "
-                + "(instancing, markers, D3D9 options). Every well-behaved caller reads that "
-                + "as \"no\", so it is cosmetic.",
+            summary: "DXMT refuses three Direct3D 11 feature queries with E_INVALIDARG. "
+                + "They cover instancing, markers, and D3D9 options. Callers read the "
+                + "answer as a no, so the effect is cosmetic.",
             fix: nil,
             matches: { note($0, contains: "Not supported feature:") },
         ),

@@ -51,11 +51,11 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     var detail: String {
         switch self {
         case .automatic:
-            "Reports your Mac's chip on the DirectX 11 and 12 renderers. Wine's built-in renderer reports its default graphics card."
+            "Reports your Mac's chip to the DirectX 11 and 12 renderers. Wine's built-in renderer reports its own card."
         case .nvidia:
-            "Reports an NVIDIA card to help with GPU and driver checks. Performance depends on your Mac and the game."
+            "Reports an NVIDIA card, which passes most GPU and driver checks. Speed still depends on your Mac."
         case .amd:
-            "Reports an AMD card. Try this if a game has problems with the NVIDIA identity."
+            "Reports an AMD card. Try this if a game rejects the NVIDIA card."
         }
     }
 

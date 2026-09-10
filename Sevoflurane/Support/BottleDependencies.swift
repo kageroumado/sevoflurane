@@ -26,32 +26,31 @@ nonisolated enum BottleDependencies {
     static let catalog: [Dependency] = [
         Dependency(
             id: "corefonts", name: "Core fonts",
-            detail: "Blank labels or squares where text should be, in "
-                + "launchers and older games.",
+            detail: "Fixes blank labels and boxes in launchers and older games.",
             download: "4 MB", required: false,
         ),
         Dependency(
             id: "vcredist", name: "Visual C++ runtime (2015–2022)",
-            detail: "\u{201C}VCRUNTIME140.dll was not found\u{201D} or "
+            detail: "Fixes \u{201C}VCRUNTIME140.dll was not found\u{201D} and "
                 + "\u{201C}MSVCP140.dll is missing\u{201D} at launch.",
             download: "38 MB", required: true,
         ),
         Dependency(
             id: "d3dcompiler", name: "Direct3D shader compiler",
-            detail: "Shader errors, black rendering, or a crash the moment "
+            detail: "Fixes shader errors, black screens, and crashes while "
                 + "a Direct3D game compiles its shaders.",
             download: "8 MB", required: true,
         ),
         Dependency(
             id: "directx2010", name: "DirectX runtimes (June 2010)",
-            detail: "A d3dx9_43.dll error, or silence from games built on "
-                + "the old XAudio and XACT audio stacks.",
+            detail: "Fixes a d3dx9_43.dll error, and silent audio in games "
+                + "built on old XAudio and XACT.",
             download: "96 MB", required: false,
         ),
         Dependency(
             id: "cjkfonts", name: "Japanese, Chinese & Korean fonts",
-            detail: "Squares where Japanese, Chinese or Korean text should "
-                + "be. Source Han Sans, all four regions.",
+            detail: "Shows Japanese, Chinese, and Korean text. Source Han "
+                + "Sans, all four regions.",
             download: "220 MB", required: false,
         ),
     ]

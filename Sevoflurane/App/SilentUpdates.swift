@@ -104,12 +104,12 @@ final class SilentUpdates {
     func updateNow() async {
         guard manualPhase != .working else { return }
         #if DEBUG
-            manualPhase = .failed("In-place updating is disabled in development builds.")
+            manualPhase = .failed("A development build cannot update itself.")
         #else
             manualPhase = .working
             guard await github.updateNow() else {
                 manualPhase = .failed(
-                    "Couldn't download the update. Check your connection, or get it from the releases page.",
+                    "Could not download the update. Check your connection, or open the releases page.",
                 )
                 return
             }
@@ -118,7 +118,7 @@ final class SilentUpdates {
             try? await Task.sleep(for: .seconds(4))
             refresh()
             manualPhase = .failed(
-                "The update couldn't be installed. Try again, or get it from the releases page.",
+                "Could not install the update. Try again, or open the releases page.",
             )
         #endif
     }

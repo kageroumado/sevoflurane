@@ -36,7 +36,7 @@ final class AboutWindows {
         show(.acknowledgements) {
             let view = LicenseTextView(text: Acknowledgements.text)
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "Acknowledgements"
+            window.title = "Acknowledgments"
             window.styleMask = [.titled, .closable, .resizable]
             window.titlebarSeparatorStyle = .none
             window.setContentSize(NSSize(width: 640, height: 520))
@@ -134,7 +134,7 @@ struct AboutView: View {
 
     private var buttons: some View {
         HStack(spacing: 12) {
-            Button("Acknowledgements") {
+            Button("Acknowledgments") {
                 NSApp.sendAction(#selector(AppDelegate.showAcknowledgements(_:)), to: nil, from: nil)
             }
             Button("License") {

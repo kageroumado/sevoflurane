@@ -48,7 +48,7 @@ struct GameCompatTests {
             wiki: wiki(crossover: "perfect", wine: "perfect"), proton: proton("gold"),
         )
         #expect(badge.state == .playable)
-        #expect(badge.reason.contains("online play"))
+        #expect(badge.reason.contains("Online play"))
     }
 
     @Test

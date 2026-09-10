@@ -304,8 +304,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reportAnotherCopyIsRunning() {
         let alert = NSAlert()
         alert.messageText = "Sevoflurane is already running"
-        alert.informativeText = "Another copy of Sevoflurane has the app's ports — "
-            + "possibly from a different location. Quit the other copy, then open this one again."
+        alert.informativeText = "Another copy of Sevoflurane holds its ports. "
+            + "Quit that copy, then open this one again."
         alert.runModal()
         NSApp.terminate(nil)
     }

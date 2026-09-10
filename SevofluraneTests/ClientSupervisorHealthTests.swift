@@ -23,7 +23,7 @@ struct ClientSupervisorHealthTests {
     @Test
     func `a session that has never seen a client is launching, not failing`() {
         let launching = health(Inputs(lastProbe: .down))
-        #expect(launching == .launching("the client is coming up — a first launch takes a minute."))
+        #expect(launching == .launching("Steam is starting. A first launch takes a minute."))
     }
 
     @Test
@@ -104,7 +104,7 @@ struct ClientSupervisorHealthTests {
         // The default inputs are "nothing has happened yet": no client seen,
         // no probe answered. That must read as a launch, never as a fault.
         #expect(health(Inputs()) == .launching(
-            "the client is coming up — a first launch takes a minute.",
+            "Steam is starting. A first launch takes a minute.",
         ))
     }
 }

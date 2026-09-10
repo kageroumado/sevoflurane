@@ -16,7 +16,7 @@
         var body: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Space.xl) {
-                    Text("Sevoflurane — UI Gallery")
+                    Text("Sevoflurane UI Gallery")
                         .font(.system(.largeTitle, design: .rounded).weight(.bold))
 
                     section("Menu bar popover") {

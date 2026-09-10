@@ -88,7 +88,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "bottle",
                 name: "Windows environment",
-                detail: "The pretend Windows drive Steam runs inside.",
+                detail: "The Windows drive Steam runs inside.",
                 icon: "externaldrive",
                 url: bottle,
                 bytes: -1,
@@ -97,7 +97,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "engines",
                 name: "Dormison engines",
-                detail: "Sevoflurane's own Windows translator, one directory per version.",
+                detail: "Sevoflurane's own Wine engines, one folder per version.",
                 icon: "gearshape.2",
                 url: support.appendingPathComponent("Engines"),
                 bytes: -1,
@@ -128,7 +128,7 @@ nonisolated enum StorageInventory {
                 icon: "cpu",
                 url: support.appendingPathComponent("D3DMetal"),
                 bytes: -1,
-                removal: .permanent("You would download the toolkit again from Apple."),
+                removal: .permanent("Download it from Apple again to get it back."),
             ),
             Entry(
                 id: "shadow",
