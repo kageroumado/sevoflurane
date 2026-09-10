@@ -274,6 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host.showSteam()
         }
         startSilentUpdates()
+        openPendingPrograms()
     }
 
     /// Another copy of Sevoflurane holds the ports. A half-alive instance —
@@ -330,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to the wizard's finish.
         if !holdingWindows {
             startSilentUpdates()
+            openPendingPrograms()
         }
     }
 
@@ -515,12 +517,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    /// `steam://` links from browsers and other apps (CFBundleURLTypes).
-    /// The window comes up first so the routed page has somewhere to land.
+    /// `steam://` links from browsers and other apps (CFBundleURLTypes), and
+    /// Windows executables opened with Sevoflurane from Finder
+    /// (CFBundleDocumentTypes).
+    ///
+    /// A link brings Steam's window up first, so the routed page has
+    /// somewhere to land; an executable opens the adoption panel instead,
+    /// which is the whole of what this app shows for a program of its own.
     func application(_: NSApplication, open urls: [URL]) {
-        host.showSteam()
-        for url in urls where url.scheme?.lowercased() == "steam" {
-            host.executeSteamURL(url)
+        let programs = urls.filter(\.isFileURL)
+        let links = urls.filter { $0.scheme?.lowercased() == "steam" }
+        if !links.isEmpty {
+            host.showSteam()
+            for url in links {
+                host.executeSteamURL(url)
+            }
+        }
+        for url in programs {
+            openWindowsProgram(url)
+        }
+    }
+
+    /// Windows programs handed to the app before it was ready to ask about
+    /// them. Finder can open a document at launch, which arrives while the
+    /// setup wizard may still own the screen.
+    private var pendingPrograms: [URL] = []
+
+    /// Shows the adoption panel, or holds the program until the app is past
+    /// setup and has a bottle to offer it.
+    private func openWindowsProgram(_ url: URL) {
+        guard isRuntimeStarted, setupWindow == nil else {
+            pendingPrograms.append(url)
+            return
+        }
+        AdoptionPanel.shared.present(url)
+    }
+
+    /// Opens the panel for everything Finder handed over during launch.
+    private func openPendingPrograms() {
+        let waiting = pendingPrograms
+        pendingPrograms = []
+        for url in waiting {
+            AdoptionPanel.shared.present(url)
         }
     }
 

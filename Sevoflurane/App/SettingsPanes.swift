@@ -746,7 +746,10 @@ struct StorageSettings: View {
                 ForEach(store.entries) { entry in
                     if entry.id == StorageInventory.Entry.gamesID, !store.games.isEmpty {
                         DisclosureGroup { gameList } label: { row(entry) }
-                    } else {
+                    } else if entry.id == StorageInventory.Entry.programsID,
+                              !store.programs.isEmpty {
+                        DisclosureGroup { programList } label: { row(entry) }
+                    } else if entry.id != StorageInventory.Entry.programsID {
                         row(entry)
                     }
                 }
@@ -763,7 +766,7 @@ struct StorageSettings: View {
                         }
                     }
                 }
-                if let error = store.linkError {
+                if let error = store.problem {
                     Text(error).font(.callout).foregroundStyle(.orange)
                 }
             } header: {
@@ -823,6 +826,47 @@ struct StorageSettings: View {
                     ? "Remove the link — the files stay in their own bottle"
                     : "Uninstall through Steam (it asks first)")
             }
+        }
+        .font(.callout)
+    }
+
+    /// The Windows programs added by hand: what each occupies, and the one
+    /// button that forgets it.
+    private var programList: some View {
+        VStack(spacing: 4) {
+            ForEach(store.programs) { program in
+                programRow(program)
+            }
+        }
+        .padding(.leading, 28)
+        .padding(.vertical, 4)
+    }
+
+    private func programRow(_ program: StorageInventory.Program) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(program.name).lineLimit(1)
+                Text(program.isInsideBottle
+                    ? program.path
+                    : "\(program.path) — the files stay where they are")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            Spacer(minLength: Theme.Space.md)
+            Text(program.isInsideBottle ? Self.size(program.bytes) : "—")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Button {
+                store.removeProgram(program)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help(program.isInsideBottle
+                ? "Remove it and move what its installer wrote to the Trash"
+                : "Remove it — the program's own files stay where they are")
         }
         .font(.callout)
     }

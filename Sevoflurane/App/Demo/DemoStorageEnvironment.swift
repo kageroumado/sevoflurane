@@ -48,6 +48,8 @@
         /// Games another bottle has that this one does not, minus the ones
         /// already linked in this session.
         private var candidates: [SharedGames.Candidate] = []
+        /// Programs this session has been asked to forget.
+        private var removedPrograms: Set<Int> = []
 
         init(scenario: Scenario) {
             self.scenario = scenario
@@ -94,6 +96,41 @@
             sizes[entry.id] = 0
             log("would move \(entry.name.lowercased()) to the Trash")
         }
+
+        // MARK: - Added Windows programs
+
+        func addedPrograms() -> [StorageInventory.Program] {
+            guard scenario != .empty else { return [] }
+            return Self.programs.filter { !removedPrograms.contains($0.id) }
+        }
+
+        func size(of program: StorageInventory.Program) async -> Int64 {
+            try? await Task.sleep(for: .milliseconds(80))
+            return program.installedRoot == nil ? 0 : program.bytes
+        }
+
+        func remove(program: StorageInventory.Program) throws {
+            removedPrograms.insert(program.id)
+            log("would forget \(program.name) and trash what its installer wrote")
+        }
+
+        /// One program installed into the bottle and one run from a folder of
+        /// the user's own, which are the two rows this list has to draw.
+        private static let programs: [StorageInventory.Program] = [
+            .init(
+                id: AdoptedPrograms.firstID, name: "Fate/stay night",
+                path: "/demo/Bottles/Steam/drive_c/Program Files (x86)/Fate/fsn.exe",
+                installedRoot: URL(
+                    fileURLWithPath: "/demo/Bottles/Steam/drive_c/Program Files (x86)/Fate",
+                ),
+                bytes: 6_871_947_674,
+            ),
+            .init(
+                id: AdoptedPrograms.firstID + 1, name: "RPG Maker MV",
+                path: "/demo/Games/RPG Maker MV/rpgmv.exe",
+                installedRoot: nil, bytes: 0,
+            ),
+        ]
 
         // MARK: - Shared game files
 

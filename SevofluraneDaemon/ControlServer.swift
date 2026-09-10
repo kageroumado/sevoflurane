@@ -179,7 +179,20 @@ final class ControlServer {
         case ("POST", "/bottle/launch"):
             return await launchInBottle(request)
         default:
-            return .error(404, "Not Found")
+            return await programVerb(request)
+        }
+    }
+
+    /// The adopted Windows programs, which need no Steam client and so live
+    /// past the verbs that ask for one.
+    private func programVerb(_ request: HTTPRequest) async -> HTTPResponse {
+        switch (request.method, request.path) {
+        case ("POST", "/program/launch"):
+            await launchProgram(query: request.query)
+        case ("POST", "/program/run"):
+            await runProgram(request)
+        default:
+            .error(404, "Not Found")
         }
     }
 
@@ -195,6 +208,45 @@ final class ControlServer {
         let renderer = Renderer(rawValue: Self.value(of: "renderer", in: query))
         await supervisor.launch(appID: appID, name: name, renderer: renderer)
         return Self.json(#"{"ok":true,"note":"launch requested"}"#)
+    }
+
+    /// Starts an adopted Windows program. The id is one of
+    /// ``AdoptedPrograms``, not a Steam app id, and the two ranges never meet.
+    private func launchProgram(query: String) async -> HTTPResponse {
+        guard let id = Int(Self.value(of: "id", in: query)) else {
+            return .error(400, "pass ?id=<adopted program id>")
+        }
+        let renderer = Renderer(rawValue: Self.value(of: "renderer", in: query))
+        if let refusal = await supervisor.launchProgram(id: id, renderer: renderer) {
+            return .error(404, refusal)
+        }
+        return Self.json(#"{"ok":true,"note":"program started"}"#)
+    }
+
+    /// Runs one Windows program once, by path, keeping no record of it. The
+    /// body is the macOS path and then its arguments, one per line, because a
+    /// path holds characters a query string would have to survive.
+    ///
+    /// The reply waits for the program by default, which is what an installer
+    /// is asked for; `?wait=0` answers as soon as it is spawned.
+    private func runProgram(_ request: HTTPRequest) async -> HTTPResponse {
+        let tokens = Self.programLines(request.body)
+        guard let path = tokens.first else {
+            return .error(400, "expected the program's path on the first body line")
+        }
+        let url = URL(fileURLWithPath: path)
+        let arguments = Array(tokens.dropFirst())
+        guard Self.value(of: "wait", in: request.query) != "0" else {
+            await supervisor.startProgram(url, arguments: arguments)
+            return Self.json(#"{"ok":true,"note":"program started"}"#)
+        }
+        let seconds = Int(Self.value(of: "timeout", in: request.query)) ?? 1800
+        let result = await supervisor.runProgram(
+            url, arguments: arguments, timeout: .seconds(seconds),
+        )
+        let body = #"{"status":\#(result.status.map(String.init) ?? "null"),"#
+            + #""output":\#(JSLiteral.string(result.output))}"#
+        return Self.json(body)
     }
 
     /// One Windows program run to completion inside the bottle — a dependency

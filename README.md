@@ -55,6 +55,25 @@ macOS asks you to approve the helper the first time Sevoflurane runs, in
 System Settings › General › Login Items & Extensions. Without it Sevoflurane
 cannot start Steam and says so.
 
+## Other Windows programs
+
+Sevoflurane also runs Windows programs Steam knows nothing about — a game
+bought elsewhere, a visual novel, a tool.
+
+Open a `.exe` with Sevoflurane from Finder, or pick Add Windows Program in
+the menu bar. Sevoflurane reads the file's own icon, name and version, says
+whether it looks like a game or an installer, and offers to play it once or
+add it to Quick Launch. Quick Launch programs sit under your Steam library
+in the menu bar and take the same per-game settings games do.
+
+An installer runs to completion in the bottle, and Sevoflurane then lists
+the programs it added so you can keep the ones worth keeping. Settings ›
+Storage shows what each installer wrote and moves it to the Trash when you
+remove the program.
+
+Finder shows a Windows program's own icon once Sevoflurane has run at least
+once.
+
 ## Game compatibility
 
 Compatibility varies by game. Game pages show Mac and anti-cheat reports
@@ -134,6 +153,7 @@ sevo diag [--no-steam-logs]
 sevo client start|stop|restart|update|pin|unpin
 sevo recover [--deep]
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
+sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
 sevo engine list|install [--file TARBALL]|use
 sevo bottle config <key> [value]
 sevo shaders list|install|remove
@@ -190,6 +210,11 @@ and CrossOver Preview can also serve as engines.
   contains engine, bottle and game configuration code.
 - `Sevo/` and `Package.swift` — the CLI and MCP server, compiled with
   shared lifecycle, CDP and provisioning sources from the app.
+- `Shared/` — code the app, the helper and the Quick Look extension all
+  compile: reading a Windows executable's icons and version strings, and
+  drawing an icon in the macOS shape.
+- `SevofluraneThumbnail/` — the Quick Look extension that draws a Windows
+  program's icon in Finder.
 - `SevofluraneTests/` — the test bundle.
 - `Tools/` — shader packaging, debugging and performance tools.
 

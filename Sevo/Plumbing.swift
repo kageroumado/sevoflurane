@@ -52,6 +52,22 @@ nonisolated enum AppControl {
         await request(path, method: "POST", timeout: timeout)
     }
 
+    /// A POST that carries a body — the routes whose argument is a path,
+    /// which a query string would have to escape.
+    static func post(_ path: String, body: Data, timeout: TimeInterval = 30) async -> Data? {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200 ..< 300).contains(http.statusCode) else { return nil }
+        return data
+    }
+
     /// A POST whose failure body matters: the status code and the body
     /// come back together, or nil when the daemon did not answer at all.
     static func postReply(_ path: String, timeout: TimeInterval = 10) async -> (status: Int, body: Data)? {

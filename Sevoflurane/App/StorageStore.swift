@@ -12,6 +12,11 @@ final class StorageStore {
     private(set) var entries: [StorageInventory.Entry]
     /// What is installed, largest first — the detail behind the Games row.
     private(set) var games: [StorageInventory.Game] = []
+    /// The Windows programs added by hand — the detail behind the Added
+    /// programs row.
+    private(set) var programs: [StorageInventory.Program] = []
+    /// The last thing this pane could not do, for the line under the list.
+    private(set) var problem: String?
     private(set) var isMeasuring = false
     /// Whether the client has to stop before an uninstall can take the bottle.
     private(set) var isUninstalling = false
@@ -34,11 +39,27 @@ final class StorageStore {
         isMeasuring = true
         defer { isMeasuring = false }
         refreshSharing()
+        for index in programs.indices {
+            let bytes = await environment.size(of: programs[index])
+            guard index < programs.count else { return }
+            programs[index].bytes = bytes
+        }
         for index in entries.indices {
             let bytes = await environment.size(of: entries[index])
             guard index < entries.count else { return }
             entries[index].bytes = bytes
         }
+    }
+
+    /// Forgets a program and takes what its installer wrote to the Trash.
+    func removeProgram(_ program: StorageInventory.Program) {
+        do {
+            try environment.remove(program: program)
+            EventLog.shared.log(.setup, "removed \(program.name) from the added programs")
+        } catch {
+            problem = "couldn't remove \(program.name): \(error.localizedDescription)"
+        }
+        refreshSharing()
     }
 
     // MARK: - Shared game files
@@ -54,13 +75,12 @@ final class StorageStore {
     /// A link or unlink landed; Steam reads manifests at startup, so the
     /// change is invisible until the client restarts.
     private(set) var needsClientRestart = false
-    private(set) var linkError: String?
 
     func link(_ candidate: SharedGames.Candidate) {
         guard !pendingLinks.contains(candidate) else { return }
         do {
             try environment.linkGameFiles(candidate)
-            linkError = nil
+            problem = nil
             pendingLinks.append(candidate)
             needsClientRestart = true
             EventLog.shared.log(
@@ -69,7 +89,7 @@ final class StorageStore {
                     + "\u{201C}\(candidate.sourceBottle)\u{201D} — manifest lands at restart",
             )
         } catch {
-            linkError = "couldn't link \(candidate.name): \(error.localizedDescription)"
+            problem = "couldn't link \(candidate.name): \(error.localizedDescription)"
         }
         refreshSharing()
     }
@@ -90,7 +110,7 @@ final class StorageStore {
                 try environment.writeManifest(candidate)
                 EventLog.shared.log(.setup, "manifest written for \(candidate.name)")
             } catch {
-                linkError = "couldn't finish linking \(candidate.name): "
+                problem = "couldn't finish linking \(candidate.name): "
                     + error.localizedDescription
             }
         }
@@ -101,11 +121,11 @@ final class StorageStore {
     func unlink(_ game: StorageInventory.Game) {
         do {
             try environment.unlink(appID: game.id)
-            linkError = nil
+            problem = nil
             needsClientRestart = true
             EventLog.shared.log(.setup, "removed the link for \(game.name)")
         } catch {
-            linkError = "couldn't remove the link: \(error.localizedDescription)"
+            problem = "couldn't remove the link: \(error.localizedDescription)"
         }
         refreshSharing()
     }
@@ -116,6 +136,7 @@ final class StorageStore {
 
     private func refreshSharing() {
         games = environment.installedGames()
+        programs = environment.addedPrograms()
         linkedGames = Set(games.map(\.id).filter(environment.isLinked(appID:)))
         let pending = Set(pendingLinks.map(\.appID))
         linkable = environment.linkable().filter { !pending.contains($0.appID) }

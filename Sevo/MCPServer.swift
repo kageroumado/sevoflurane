@@ -193,6 +193,21 @@ final class MCPServer {
                 required: ["appid"],
             ),
             tool(
+                "program_list",
+                "The Windows programs added outside Steam (id, name, kind, path).",
+                readOnly: true,
+            ),
+            tool(
+                "program_launch",
+                "Start an added Windows program. `id` is from program_list, "
+                    + "not a Steam appid.",
+                properties: [
+                    "id": ["type": "integer", "description": "Added program id"],
+                    "renderer": ["type": "string", "description": "Run it on this renderer for once"],
+                ],
+                required: ["id"],
+            ),
+            tool(
                 "downloads_status",
                 "One DownloadOverview snapshot (current item, progress "
                     + "stages, speed).",
@@ -363,6 +378,21 @@ final class MCPServer {
         case "app_verify":
             try await SteamOps.verify(appid())
             return "verify requested — check downloads_status"
+        case "program_list":
+            return Sevo.json(["programs": AdoptedPrograms.all().map { entry in
+                [
+                    "id": entry.id, "name": entry.name, "kind": entry.kind,
+                    "path": entry.program.path, "exists": entry.program.exists,
+                ] as [String: Any]
+            }], pretty: true)
+        case "program_launch":
+            guard let id = args["id"] as? Int else {
+                throw ClientOps.Failure.message("id (integer) is required")
+            }
+            let outcome = try await ClientOps.launchProgram(
+                id: id, renderer: args["renderer"] as? String,
+            )
+            return await Self.observed(outcome, progress: progress)
         case "downloads_status":
             return try await SteamOps.downloadsStatus()
         case "downloads_pause":

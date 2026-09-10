@@ -15,6 +15,7 @@ struct MenuBarView: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
     let notifications: SteamNotifications
+    let quickLaunch: QuickLaunchStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
@@ -24,6 +25,7 @@ struct MenuBarView: View {
             BottleIncompleteChip()
             recentGames
             stagedRendererCaption
+            quickLaunchSection
             friendsRow
             notificationPermissionCard
             openSteamButton
@@ -39,8 +41,10 @@ struct MenuBarView: View {
         .animation(.smooth(duration: 0.3), value: host.activeLaunch)
         .animation(.smooth(duration: 0.3), value: host.unreadChats)
         .animation(.smooth(duration: 0.3), value: notifications.hasUnaskedNotifications)
+        .animation(.smooth(duration: 0.3), value: quickLaunch.programs)
         .onAppear {
             host.refreshRecentGames()
+            quickLaunch.refresh()
             SilentUpdates.shared.refresh()
         }
     }
@@ -408,6 +412,130 @@ struct MenuBarView: View {
                     .background(Color.accentColor, in: Circle())
                     .opacity(isHovered ? 1 : 0)
                     .scaleEffect(isHovered ? 1 : 0.7)
+            }
+        }
+    }
+
+    // MARK: - Quick Launch
+
+    /// The Windows programs the user handed to Sevoflurane. It carries a
+    /// heading where the library above does not: box art is self-evidently a
+    /// game list, while a row with an app icon needs to say what the click
+    /// will do.
+    private var quickLaunchSection: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Quick Launch")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Theme.Space.xs)
+                .padding(.top, Theme.Space.xs)
+            ForEach(quickLaunch.programs) { entry in
+                ProgramRow(
+                    entry: entry,
+                    icon: quickLaunch.icon(for: entry),
+                    launch: { quickLaunch.launch(entry) },
+                    runWith: { quickLaunch.launch(entry, renderer: $0) },
+                    reveal: { quickLaunch.showInFinder(entry) },
+                    remove: { quickLaunch.remove(entry) },
+                )
+            }
+            AddProgramRow { quickLaunch.chooseProgram() }
+        }
+    }
+
+    /// One adopted program: its own icon, its name, and a press that starts
+    /// it through the daemon.
+    private struct ProgramRow: View {
+        let entry: AdoptedPrograms.Entry
+        let icon: NSImage?
+        let launch: () -> Void
+        let runWith: (Renderer) -> Void
+        let reveal: () -> Void
+        let remove: () -> Void
+        @State private var isHovered = false
+
+        var body: some View {
+            Button(action: launch) {
+                HStack(spacing: Theme.Space.md) {
+                    artwork
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(entry.name)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                        if !entry.program.exists {
+                            Text("moved or deleted")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: Theme.Space.sm)
+                }
+                .padding(.vertical, Theme.Space.xs)
+                .contentShape(Theme.innerShape)
+            }
+            .buttonStyle(PressableStyle())
+            .disabled(!entry.program.exists)
+            .background(
+                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+            )
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+            }
+            .contextMenu {
+                Menu("Run with…") {
+                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                        Button(renderer.label) { runWith(renderer) }
+                    }
+                }
+                Divider()
+                Button("Show in Finder", action: reveal)
+                Button("Remove", action: remove)
+            }
+        }
+
+        private var artwork: some View {
+            Group {
+                if let icon {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Image(systemName: "app.dashed")
+                        .resizable()
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 27, height: 27)
+            .padding(.vertical, 6)
+        }
+    }
+
+    /// The row that adds one. It sits with the programs rather than in the
+    /// footer, because it is what an empty Quick Launch is for.
+    private struct AddProgramRow: View {
+        let choose: () -> Void
+        @State private var isHovered = false
+
+        var body: some View {
+            Button(action: choose) {
+                HStack(spacing: Theme.Space.md) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 27)
+                    Text("Add Windows Program…")
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Spacer(minLength: Theme.Space.sm)
+                }
+                .padding(.vertical, Theme.Space.xs)
+                .contentShape(Theme.innerShape)
+            }
+            .buttonStyle(PressableStyle())
+            .background(
+                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+            )
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
         }
     }

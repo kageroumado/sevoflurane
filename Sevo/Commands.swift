@@ -17,7 +17,7 @@ struct SevoCommand: AsyncParsableCommand {
             EngineCommand.self, UpdateCommand.self, ShadersCommand.self, BottleCommand.self,
             StorageCommand.self,
             ClientCommand.self, RecoverCommand.self,
-            AppCommand.self, DownloadsCommand.self,
+            AppCommand.self, ProgramCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
             RunsCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
@@ -2157,6 +2157,157 @@ struct RunCommand: AsyncParsableCommand {
         process.waitUntilExit()
         print("\(first) exited (status \(process.terminationStatus))")
         if process.terminationStatus != 0 { throw SevoExit.failed }
+    }
+}
+
+/// `sevo program`: the Windows programs added outside Steam — a visual novel
+/// bought elsewhere, a tool, an installer.
+///
+/// Adding one writes a record beside the Steam games, so every per-game
+/// setting, the launcher bundle and the Games pane reach it unchanged.
+/// Starting one goes through the daemon, which is the bottle's one parent.
+struct ProgramCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "program",
+        abstract: "Windows programs you added outside Steam.",
+        subcommands: [Add.self, List.self, Remove.self, Launch.self, Run.self],
+    )
+
+    struct Add: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "add",
+            abstract: "Add a Windows program to Quick Launch.",
+        )
+        @Argument(help: "The .exe, as a macOS path.") var path: String
+        @Option(name: .customLong("name"), help: "What to call it (default: its own name).")
+        var name: String?
+        @Option(name: .customLong("arg"), help: "An argument for the program; repeatable.")
+        var arguments: [String] = []
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
+
+        func run() async throws {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                Sevo.printError("no file at \(url.path)")
+                throw SevoExit.badInvocation
+            }
+            guard PEResources.isExecutable(url) else {
+                Sevo.printError("\(url.lastPathComponent) is not a Windows executable")
+                throw SevoExit.badInvocation
+            }
+            let verdict = ProgramDetection.classify(url)
+            let id = AdoptedPrograms.adopt(
+                exe: url, name: name, kind: verdict.kind, arguments: arguments,
+                bottle: SteamBottle.name,
+            )
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            let entry = AdoptedPrograms.entry(id)
+            if asJSON {
+                print(Sevo.json([
+                    "id": id, "name": entry?.name ?? url.lastPathComponent,
+                    "kind": verdict.kind, "path": url.path,
+                ], pretty: true))
+            } else {
+                print("added \(entry?.name ?? url.lastPathComponent) as \(id) (\(verdict.kind))")
+                if !verdict.reasons.isEmpty {
+                    print("  \(verdict.summary)")
+                }
+                print("  run it: sevo program launch \(id)")
+            }
+        }
+    }
+
+    struct List: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "list", abstract: "Every added program.",
+        )
+        @Flag(name: .customLong("json"), help: "Machine-readable listing.") var asJSON = false
+
+        func run() async throws {
+            let programs = AdoptedPrograms.all()
+            guard asJSON else {
+                guard !programs.isEmpty else {
+                    print("no added programs — sevo program add <path to .exe>")
+                    return
+                }
+                for entry in programs {
+                    print("\(entry.id)  \(entry.name)  [\(entry.kind)]  \(entry.program.path)")
+                }
+                return
+            }
+            print(Sevo.json(["programs": programs.map { entry in
+                [
+                    "id": entry.id, "name": entry.name, "kind": entry.kind,
+                    "path": entry.program.path, "arguments": entry.program.arguments,
+                    "bottle": entry.program.bottle, "exists": entry.program.exists,
+                ] as [String: Any]
+            }], pretty: true))
+        }
+    }
+
+    struct Remove: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "remove",
+            abstract: "Forget a program; an installer's files go to the Trash.",
+        )
+        @Argument(help: "The id from sevo program list.") var id: Int
+
+        func run() async throws {
+            guard let program = StorageInventory.addedPrograms().first(where: { $0.id == id })
+            else {
+                Sevo.printError("no added program with id \(id) — sevo program list")
+                throw SevoExit.badInvocation
+            }
+            do {
+                try StorageInventory.remove(program: program)
+            } catch {
+                Sevo.printError("could not remove \(program.name): \(error.localizedDescription)")
+                throw SevoExit.failed
+            }
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("removed \(program.name)"
+                + (program.isInsideBottle ? " and moved its files to the Trash" : ""))
+        }
+    }
+
+    struct Launch: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "launch", abstract: "Start an added program in the bottle.",
+        )
+        @Argument(help: "The id from sevo program list.") var id: Int
+        @Option(name: .customLong("renderer"), help: "Run it on this renderer for once.")
+        var renderer: String?
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
+
+        func run() async throws {
+            try await handlingFailures {
+                let outcome = try await ClientOps.launchProgram(id: id, renderer: renderer)
+                await StatusReport.emit(outcome, asJSON: asJSON)
+            }
+        }
+    }
+
+    struct Run: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "run",
+            abstract: "Run a Windows program once, keeping no record of it.",
+        )
+        @Argument(help: "The .exe, as a macOS path.") var path: String
+        @Argument(parsing: .captureForPassthrough, help: "Arguments for the program.")
+        var arguments: [String] = []
+        @Flag(name: .customLong("wait"), help: "Stay until it and its children exit.")
+        var wait = false
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
+
+        func run() async throws {
+            try await handlingFailures {
+                let outcome = try await ClientOps.runProgram(
+                    at: URL(fileURLWithPath: path).standardizedFileURL.path,
+                    arguments: arguments, wait: wait,
+                )
+                await StatusReport.emit(outcome, asJSON: asJSON)
+            }
+        }
     }
 }
 

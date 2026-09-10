@@ -167,6 +167,10 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var exes: [String]?
     /// Game level only: the display name, for listings.
     var name: String?
+    /// Game level only: the Windows program the user handed to Sevoflurane,
+    /// which is what makes this entry an adopted program rather than a Steam
+    /// app (``AdoptedPrograms``).
+    var program: AdoptedProgram?
 
     static let empty = ConfigValues()
 

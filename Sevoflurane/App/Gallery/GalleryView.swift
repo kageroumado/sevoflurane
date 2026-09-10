@@ -26,6 +26,7 @@
                                     host: fixture.host,
                                     supervisor: fixture.supervisor,
                                     notifications: fixture.notifications,
+                                    quickLaunch: Fixtures.quickLaunch,
                                 )
                                 .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
                                 .background(.background, in: Theme.cardShape)
@@ -372,6 +373,21 @@
             environment: DemoStorageEnvironment(scenario: .library),
         )
         static let shaders = ShaderStore(simulated: true)
+        /// Two adopted programs, so the Quick Launch group draws with rows.
+        static let quickLaunch = QuickLaunchStore(simulated: [
+            adopted(id: AdoptedPrograms.firstID, name: "Fate/stay night", exe: "fsn.exe"),
+            adopted(id: AdoptedPrograms.firstID + 1, name: "RPG Maker MV", exe: "rpgmv.exe"),
+        ])
+
+        private static func adopted(id: Int, name: String, exe: String) -> AdoptedPrograms.Entry {
+            AdoptedPrograms.Entry(
+                id: id, name: name,
+                program: AdoptedProgram(
+                    path: "/Users/demo/Games/\(name)/\(exe)", bottle: SteamBottle.name,
+                    kind: ProgramKind.game, addedAt: .now,
+                ),
+            )
+        }
         /// The wizard's own graphics step reads a store too — a separate one,
         /// so a toolkit added in a wizard tile doesn't appear in the Graphics
         /// pane tiles beside it.

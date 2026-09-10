@@ -19,12 +19,63 @@ nonisolated enum GameIcon {
     /// and the package's `window.icon` are both 32.
     static func icns(appID: Int, title: String) -> URL? {
         let manager = FileManager.default
+        if let program = AdoptedPrograms.program(appID) {
+            return shapedICNS(forProgramAt: program.url, named: "\(appID)")
+        }
         let cached = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(
             "Library/Caches/Sevoflurane/DockIcons/\(fileSafe(title)).app/Contents/Resources/icon.icns",
         )
         if manager.fileExists(atPath: cached.path) { return cached }
         guard let raster = steamIcon(appID: appID) ?? packageIcon(appID: appID) else { return nil }
         return icns(from: raster, named: "\(appID)")
+    }
+
+    /// An adopted program's icon: the artwork in its own PE resources, drawn
+    /// onto the macOS icon platter (``IconShaping``) so the Dock tile and the
+    /// Quick Look thumbnail of the same exe show one picture.
+    ///
+    /// The result is cached under the program's id and rebuilt whenever the
+    /// executable is newer than the icon, which is how a program that updates
+    /// itself in place gets its new artwork.
+    static func shapedICNS(forProgramAt exe: URL, named name: String) -> URL? {
+        let manager = FileManager.default
+        let cache = iconCache
+        let icns = cache.appendingPathComponent("\(name)-program.icns")
+        if isFresh(icns, against: exe) { return icns }
+        let artwork = PEResources.icon(at: exe)
+        let iconset = cache.appendingPathComponent("\(name)-program.iconset")
+        try? manager.removeItem(at: iconset)
+        guard (try? manager.createDirectory(at: iconset, withIntermediateDirectories: true)) != nil
+        else { return nil }
+        defer { try? manager.removeItem(at: iconset) }
+        for size in [16, 32, 128, 256, 512] {
+            for (scale, suffix) in [(1, ""), (2, "@2x")] {
+                let file = iconset.appendingPathComponent("icon_\(size)x\(size)\(suffix).png")
+                guard let png = IconShaping.png(artwork, pixels: size * scale),
+                      (try? png.write(to: file)) != nil else { return nil }
+            }
+        }
+        try? manager.removeItem(at: icns)
+        guard run("/usr/bin/iconutil", ["-c", "icns", iconset.path, "-o", icns.path]),
+              manager.fileExists(atPath: icns.path)
+        else { return nil }
+        return icns
+    }
+
+    /// Whether a cached icon was made from the executable as it stands now.
+    private static func isFresh(_ icns: URL, against exe: URL) -> Bool {
+        guard let iconDate = modified(icns) else { return false }
+        guard let exeDate = modified(exe) else { return true }
+        return iconDate >= exeDate
+    }
+
+    private static func modified(_ url: URL) -> Date? {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    }
+
+    private static var iconCache: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Caches/Sevoflurane/GameIcons")
     }
 
     /// Steam's own icon for the app, from the client's art cache: a per-app
@@ -76,8 +127,7 @@ nonisolated enum GameIcon {
     /// and shows an opaque one as the square it is.
     private static func icns(from raster: URL, named name: String) -> URL? {
         let manager = FileManager.default
-        let cache = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Caches/Sevoflurane/GameIcons")
+        let cache = iconCache
         let icns = cache.appendingPathComponent("\(name)-rgba.icns")
         if manager.fileExists(atPath: icns.path) { return icns }
         guard let source = CGImageSourceCreateWithURL(raster as CFURL, nil),

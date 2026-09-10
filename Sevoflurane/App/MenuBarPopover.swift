@@ -13,6 +13,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let host: SteamWebHost
     private let supervisor: ClientSupervisor
     private let notifications: SteamNotifications
+    /// The adopted Windows programs the popover lists beside the library.
+    private let quickLaunch = QuickLaunchStore()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: PopoverPanel?
     private var escapeMonitor: Any?
@@ -82,6 +84,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         // for the rest of the session. Asking on every open costs one page
         // evaluation and always reflects the library as it stands.
         host.refreshRecentGames()
+        quickLaunch.refresh()
         // And keep asking while the popover stays up: someone who leaves it
         // open across an install or a play session should watch the list
         // move, not have to close and reopen it. One page evaluation per
@@ -92,6 +95,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
                 try? await Task.sleep(for: .seconds(10))
                 guard !Task.isCancelled else { return }
                 self?.host.refreshRecentGames()
+                self?.quickLaunch.refresh()
             }
         }
         let panel = panel ?? makePanel()
@@ -165,6 +169,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         let content = NSHostingView(
             rootView: MenuBarView(
                 host: host, supervisor: supervisor, notifications: notifications,
+                quickLaunch: quickLaunch,
             ),
         )
         background.contentView = content

@@ -14,6 +14,12 @@ protocol StorageEnvironment: AnyObject {
     func size(of entry: StorageInventory.Entry) async -> Int64
     func trash(_ entry: StorageInventory.Entry) throws
 
+    // MARK: - Added Windows programs
+
+    func addedPrograms() -> [StorageInventory.Program]
+    func size(of program: StorageInventory.Program) async -> Int64
+    func remove(program: StorageInventory.Program) throws
+
     // MARK: - Shared game files
 
     /// Games in other bottles the active one could link.
@@ -60,6 +66,18 @@ final class LiveStorageEnvironment: StorageEnvironment {
 
     func trash(_ entry: StorageInventory.Entry) throws {
         try StorageInventory.trash(entry)
+    }
+
+    func addedPrograms() -> [StorageInventory.Program] {
+        StorageInventory.addedPrograms()
+    }
+
+    func size(of program: StorageInventory.Program) async -> Int64 {
+        await StorageInventory.size(of: program)
+    }
+
+    func remove(program: StorageInventory.Program) throws {
+        try StorageInventory.remove(program: program)
     }
 
     func linkable() -> [SharedGames.Candidate] {

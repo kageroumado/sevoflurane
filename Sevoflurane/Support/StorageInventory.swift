@@ -10,6 +10,9 @@ nonisolated enum StorageInventory {
         /// The one entry Settings' search can send someone to, and the one
         /// that opens into a list of its own.
         static let gamesID = "games"
+        /// The other entry that opens into a list: the Windows programs the
+        /// user added by hand.
+        static let programsID = "programs"
 
         let id: String
         let name: String
@@ -50,6 +53,17 @@ nonisolated enum StorageInventory {
                 detail: "Every game Steam has installed on this Mac.",
                 icon: "gamecontroller",
                 url: steam.appendingPathComponent("steamapps"),
+                bytes: -1,
+                removal: nil,
+            ),
+            Entry(
+                id: Entry.programsID,
+                name: "Added programs",
+                detail: "Windows programs you added, and what their installers wrote here.",
+                icon: "square.and.arrow.down.on.square",
+                // The size is the sum of the directories the installers made,
+                // which all sit under this drive.
+                url: bottle.appendingPathComponent("drive_c"),
                 bytes: -1,
                 removal: nil,
             ),
@@ -181,20 +195,80 @@ nonisolated enum StorageInventory {
         return Game(id: id, name: name, bytes: value("SizeOnDisk").flatMap(Int64.init) ?? 0)
     }
 
+    /// One Windows program the user added.
+    struct Program: Identifiable, Sendable, Equatable {
+        let id: Int
+        let name: String
+        /// The executable, for the row's second line.
+        let path: String
+        /// The directory an installer created inside the bottle, when there
+        /// is one — the only part of a program this app may remove.
+        let installedRoot: URL?
+        var bytes: Int64
+
+        /// Whether removing the entry also frees disk space. A program run
+        /// from a folder of the user's own leaves its files behind.
+        var isInsideBottle: Bool {
+            installedRoot != nil
+        }
+    }
+
+    /// The added programs, by name, unsized.
+    static func addedPrograms() -> [Program] {
+        AdoptedPrograms.all().map { entry in
+            Program(
+                id: entry.id,
+                name: entry.name,
+                path: entry.program.path,
+                installedRoot: entry.program.installedRoot.map { URL(fileURLWithPath: $0) },
+                bytes: -1,
+            )
+        }
+    }
+
+    /// What one added program occupies: the installer's directory, or nothing
+    /// when the program runs from files the user keeps elsewhere.
+    @concurrent
+    static func size(of program: Program) async -> Int64 {
+        guard let root = program.installedRoot else { return 0 }
+        return await bytes(at: root)
+    }
+
+    /// Forgets a program, and moves what its installer wrote to the Trash.
+    static func remove(program: Program) throws {
+        if let root = program.installedRoot,
+           FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.trashItem(at: root, resultingItemURL: nil)
+        }
+        AdoptedPrograms.remove(program.id)
+    }
+
     /// The size of one entry, or 0 when it is not there. `steamapps` is
-    /// subtracted from the client and the client from the bottle, so the
-    /// numbers add up rather than nesting.
+    /// subtracted from the client, and the client and the added programs from
+    /// the bottle, so the numbers add up rather than nesting.
     @concurrent
     static func size(of entry: Entry) async -> Int64 {
         let manager = FileManager.default
         guard manager.fileExists(atPath: entry.url.path) else { return 0 }
         switch entry.id {
+        case Entry.programsID:
+            var total: Int64 = 0
+            for program in addedPrograms() {
+                total += await size(of: program)
+            }
+            return total
         case "client":
             return await max(0, bytes(at: entry.url) - bytes(
                 at: entry.url.appendingPathComponent("steamapps"),
             ))
         case "bottle":
-            return await max(0, bytes(at: entry.url) - bytes(at: SteamBottle.steamRoot))
+            let whole = await bytes(at: entry.url)
+            let steam = await bytes(at: SteamBottle.steamRoot)
+            var programs: Int64 = 0
+            for program in addedPrograms() {
+                programs += await size(of: program)
+            }
+            return max(0, whole - steam - programs)
         case "caches":
             var total: Int64 = 0
             for cache in cacheDirectories {

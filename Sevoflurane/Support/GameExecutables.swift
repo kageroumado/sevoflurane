@@ -74,7 +74,13 @@ nonisolated enum GameExecutables {
 
     /// Lowercased exe names, shallowest first, tools left out.
     static func executables(in directory: URL) -> [String] {
-        var found: [(depth: Int, name: String)] = []
+        executableURLs(in: directory).map { $0.lastPathComponent.lowercased() }
+    }
+
+    /// The same executables as files, for a caller that has to open one
+    /// rather than name it.
+    static func executableURLs(in directory: URL) -> [URL] {
+        var found: [(depth: Int, url: URL)] = []
         var queue: [(URL, Int)] = [(directory, 0)]
         while let (folder, depth) = queue.first {
             queue.removeFirst()
@@ -85,10 +91,10 @@ nonisolated enum GameExecutables {
                 }
                 let name = entry.name.lowercased()
                 guard name.hasSuffix(".exe"), isGameLike(name) else { continue }
-                found.append((depth, name))
+                found.append((depth, entry.url))
             }
         }
-        return found.sorted { $0.depth < $1.depth }.map(\.name)
+        return found.sorted { $0.depth < $1.depth }.map(\.url)
     }
 
     static func isGameLike(_ name: String) -> Bool {

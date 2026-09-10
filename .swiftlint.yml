@@ -3,6 +3,8 @@ included:
   - Sevoflurane
   - SevofluraneDaemon
   - SevofluraneTests
+  - SevofluraneThumbnail
+  - Shared
 
 excluded:
   - build

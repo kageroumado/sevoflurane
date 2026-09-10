@@ -328,6 +328,45 @@ nonisolated enum ClientOps {
                        note: "pids \(survivors) still up after \(timeout)s")
     }
 
+    // MARK: - Adopted Windows programs
+
+    /// Starts an adopted program through the daemon, which is the bottle's
+    /// one parent. The observation is the spawn, not the program's own life:
+    /// a game has no exit worth waiting for.
+    static func launchProgram(id: Int, renderer: String?) async throws -> Outcome {
+        guard let entry = AdoptedPrograms.entry(id) else {
+            throw Failure.message("no adopted program with id \(id) — sevo program list")
+        }
+        let query = renderer.map { "&renderer=\($0)" } ?? ""
+        guard await AppControl.post("/program/launch?id=\(id)\(query)") != nil else {
+            throw Failure.message("the daemon would not start \(entry.name) — sevo status")
+        }
+        return Outcome(verdict: .confirmed, intent: "program launch",
+                       note: "\(entry.name) started")
+    }
+
+    /// Runs one Windows program once, by path. Waiting is what an installer
+    /// is asked for; anything else is started and let go.
+    static func runProgram(
+        at path: String, arguments: [String], wait: Bool,
+    ) async throws -> Outcome {
+        let body = Data(([path] + arguments).joined(separator: "\n").appending("\n").utf8)
+        let route = wait ? "/program/run?timeout=3600" : "/program/run?wait=0"
+        guard let data = await AppControl.post(
+            route, body: body, timeout: wait ? 3700 : 30,
+        ) else {
+            throw Failure.message("the daemon would not run \(path) — sevo status")
+        }
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        guard wait else {
+            return Outcome(verdict: .confirmed, intent: "program run", note: "\(name) started")
+        }
+        let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let status = (reply?["status"] as? Int).map(String.init) ?? "unknown"
+        return Outcome(verdict: .confirmed, intent: "program run",
+                       note: "\(name) exited (status \(status))")
+    }
+
     private static func ensureProvisioned() async throws {
         let detection = await SetupProbe.detect()
         guard detection.hasEngine else {
