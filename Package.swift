@@ -103,6 +103,7 @@ let package = Package(
                 "Sevoflurane/Support/GameConfig.swift",
                 "Sevoflurane/Support/GameExecutables.swift",
                 "Sevoflurane/Support/GameIcon.swift",
+                "Sevoflurane/Support/GameLogs.swift",
                 "Sevoflurane/Support/GameLaunchers.swift",
                 "Sevoflurane/Support/HostSnapshot.swift",
                 "Sevoflurane/Support/InstallDirectory.swift",
