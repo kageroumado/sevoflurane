@@ -75,6 +75,12 @@ final class AppLinkServer {
             }
             EventLog.shared.ingest(category, line.message, at: line.date)
             return Self.json(#"{"ok":true}"#)
+        case ("POST", "/daemon/repair"):
+            // Only the app can rebuild the daemon's registration
+            // (`SMAppService` acts for the bundle that registered it), so
+            // `sevo daemon repair` asks this port rather than the control port,
+            // which is exactly what is down when the helper will not launch.
+            return await repairDaemon()
         default:
             return await pageVerb(request)
         }
@@ -153,6 +159,22 @@ final class AppLinkServer {
         case .showLibrary: host.showSteam()
         }
         return Self.json(#"{"ok":true}"#)
+    }
+
+    /// Rebuilds the daemon's registration and reports the outcome, so a user
+    /// stuck on a helper that will not launch can recover from the terminal.
+    private func repairDaemon() async -> HTTPResponse {
+        let (result, note): (String, String) = switch await DaemonService.repair() {
+        case .reachable:
+            ("repaired", "the background helper was rebuilt and is answering")
+        case let .needsApproval(message):
+            ("needsApproval", message)
+        case let .failed(reason):
+            ("failed", reason)
+        }
+        return Self.json(
+            #"{"result":\#(JSLiteral.string(result)),"note":\#(JSLiteral.string(note))}"#,
+        )
     }
 
     /// Ends every menu-bar tracking session, answering which root menus were

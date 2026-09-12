@@ -99,6 +99,24 @@ nonisolated enum AppControl {
         return data
     }
 
+    /// The app's own link port, for the verbs only the app can serve. The
+    /// daemon's control port cannot proxy these when the reason they are
+    /// needed is that the daemon will not launch, so they go straight to the
+    /// app. `nil` when no app is running to answer.
+    static func appLinkPost(
+        _ path: String, timeout: TimeInterval = 60,
+    ) async -> (status: Int, body: Data)? {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.appLink)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return nil }
+        return (http.statusCode, data)
+    }
+
     /// The daemon's `/status` as a dictionary, or nil when supervision is
     /// down. One retry: the daemon's main actor can be busy past the timeout
     /// mid-restart, and a single missed probe must not read as "gone".

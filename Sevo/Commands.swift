@@ -16,7 +16,7 @@ struct SevoCommand: AsyncParsableCommand {
             DoctorCommand.self, StatusCommand.self, WaitCommand.self, SetupCommand.self,
             EngineCommand.self, UpdateCommand.self, ShadersCommand.self, BottleCommand.self,
             StorageCommand.self,
-            ClientCommand.self, RecoverCommand.self,
+            ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
             RunsCommand.self, DiagCommand.self, DebugCommand.self,
@@ -1455,6 +1455,50 @@ struct RecoverCommand: AsyncParsableCommand {
                 narrate($0, asJSON: asJSON)
             }
             await StatusReport.emit(outcome, asJSON: asJSON)
+        }
+    }
+}
+
+// MARK: - daemon
+
+struct DaemonCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "daemon",
+        abstract: "The background helper that owns the bottle.",
+        subcommands: [Repair.self],
+    )
+
+    /// Rebuilds the background helper's registration — the fix for a helper
+    /// that will not launch because a stale Background Task Management record
+    /// still carries a Development code requirement. Only the app can do it
+    /// (`SMAppService` acts for the bundle that registered the helper), so
+    /// this asks the running app rather than the daemon, which is exactly
+    /// what is down.
+    struct Repair: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "repair",
+            abstract: "Rebuild the background helper's registration (unregister, then register).",
+            discussion: "Needs Sevoflurane running: only the app can rebuild the "
+                + "registration. macOS may ask you to approve the helper again "
+                + "in Login Items afterward.",
+        )
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            guard let reply = await AppControl.appLinkPost("/daemon/repair") else {
+                Sevo.printError("Sevoflurane is not running — open it and try again "
+                    + "(only the app can rebuild the helper's registration).")
+                throw SevoExit.unreachable
+            }
+            let object = (try? JSONSerialization.jsonObject(with: reply.body)) as? [String: Any]
+            let result = object?["result"] as? String ?? "failed"
+            let note = object?["note"] as? String ?? ""
+            if asJSON {
+                print(Sevo.json(["result": result, "note": note], pretty: true))
+            } else {
+                print("daemon repair: \(result)" + (note.isEmpty ? "" : " — \(note)"))
+            }
+            if result == "failed" { throw SevoExit.failed }
         }
     }
 }
