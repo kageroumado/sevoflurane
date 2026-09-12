@@ -75,8 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// daemon installs its own set — the same seams, different answers.
     private func installSharedHooks() {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
-        ClientLifecycle.hidePopupsOverBridge = { [bridge] in
-            await bridge.hideVisibleClientPopups() ?? []
+        ClientLifecycle.hidePopupsOverBridge = { [bridge] scope in
+            await bridge.hideVisibleClientPopups(scope) ?? []
         }
         ClientLifecycle.servicesReadyOverBridge = { [bridge] in
             await bridge.clientServicesReady()

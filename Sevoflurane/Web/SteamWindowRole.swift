@@ -7,7 +7,7 @@ import Foundation
 /// content: both start as `about:blank` and are filled in by the opener. The
 /// names are stable across releases because the popup manager builds them from
 /// fixed bases (`SP Desktop`, `contextmenu_<n>`) plus a `_uid<pid>` suffix.
-enum SteamWindowRole {
+nonisolated enum SteamWindowRole {
     /// The hidden page that hosts Steam's JavaScript and opens everything else.
     case context
     /// The main desktop window — nav, library, store.
@@ -50,21 +50,68 @@ enum SteamWindowRole {
     case auxiliary
 
     init(popupName: String) {
-        // Exact match on the base, or "SP DesktopLoginWindow" would classify
-        // as the desktop window by prefix.
-        let base = if let range = popupName.range(of: "_uid") {
-            String(popupName[..<range.lowerBound])
-        } else {
-            popupName
+        let base = Self.base(ofPopupNamed: popupName)
+        self = Self.names.first { $0.match.matches(base: base) }?.role ?? .auxiliary
+    }
+
+    /// How Steam spells one popup's name.
+    enum NameMatch: Equatable, Sendable {
+        /// The whole base. Exact, or `SP DesktopLoginWindow` would classify
+        /// as the desktop window.
+        case exact(String)
+        /// The start of a base Steam numbers or suffixes per instance
+        /// (`contextmenu_10`, `notificationtoasts_1_desktop`).
+        case prefix(String)
+
+        func matches(base: String) -> Bool {
+            switch self {
+            case let .exact(name): base == name
+            case let .prefix(start): base.hasPrefix(start)
+            }
         }
-        self = switch base {
-        case "SP Desktop": .desktop
-        case "SP BPM": .bigPicture
-        case "SP DesktopLoginWindow": .login
-        case "SP Keyboard": .keyboard
-        case "SP Controller Configurator": .controllerConfig
-        default: Self.byPrefix(base) ?? .auxiliary
-        }
+    }
+
+    /// Every name Steam gives a popup, and what that popup is for.
+    ///
+    /// One table: ``init(popupName:)`` reads it, and so does the sweep that
+    /// has to tell the client's twins of this app's own windows from the
+    /// windows only the client has. The fixed bases come first, so a family's
+    /// prefix cannot take a name a fixed base already claims.
+    static let names: [(match: NameMatch, role: SteamWindowRole)] = [
+        (.exact("SP Desktop"), .desktop),
+        (.exact("SP BPM"), .bigPicture),
+        (.exact("SP DesktopLoginWindow"), .login),
+        (.exact("SP Keyboard"), .keyboard),
+        (.exact("SP Controller Configurator"), .controllerConfig),
+        (.prefix("contextmenu_"), .menu),
+        (.prefix("friendslist"), .friends),
+        (.prefix("chat_"), .chat),
+        (.prefix("notificationtoasts"), .toast),
+        (.prefix("desktopoverlay"), .gameOverlay),
+        (.prefix("gamepadoverlay"), .gameOverlay),
+        (.prefix("PopupWindow_"), .dialog),
+    ]
+
+    /// The part of a popup's name that names its kind — everything before the
+    /// `_uid<pid>` suffix Steam stamps on every one.
+    static func base(ofPopupNamed popupName: String) -> String {
+        guard let range = popupName.range(of: "_uid") else { return popupName }
+        return String(popupName[..<range.lowerBound])
+    }
+
+    /// The kinds the bottled client keeps a second copy of: this app draws
+    /// the desktop, the friends list and chat itself, and answers a toast
+    /// with a real macOS notification. The client's copy of one of these is
+    /// a window nobody should see, and hiding it costs nothing.
+    ///
+    /// Every other kind is the client's alone — an install or EULA modal, the
+    /// sign-in window, a menu, a game's own popup — and a sweep that hides
+    /// one takes away a window the user was given for a reason.
+    static let twinRoles: Set<SteamWindowRole> = [.toast, .desktop, .friends, .chat]
+
+    /// The names those windows carry, for a sweep that may hide only them.
+    static var twinNames: [NameMatch] {
+        names.filter { twinRoles.contains($0.role) }.map(\.match)
     }
 
     /// Which UI instance opened a popup, from the `_uid<n>` suffix Steam
@@ -75,22 +122,6 @@ enum SteamWindowRole {
     static func instanceUID(ofPopupNamed popupName: String) -> Int {
         guard let range = popupName.range(of: "_uid", options: .backwards) else { return 0 }
         return Int(popupName[range.upperBound...]) ?? 0
-    }
-
-    /// The popups Steam names by family rather than by a fixed title: one
-    /// per context menu, per chat window, and per notification toast, each
-    /// with its own counter or id in the name.
-    private static func byPrefix(_ base: String) -> SteamWindowRole? {
-        let families: [(prefix: String, role: SteamWindowRole)] = [
-            ("contextmenu_", .menu),
-            ("friendslist", .friends),
-            ("chat_", .chat),
-            ("notificationtoasts", .toast),
-            ("desktopoverlay", .gameOverlay),
-            ("gamepadoverlay", .gameOverlay),
-            ("PopupWindow_", .dialog),
-        ]
-        return families.first { base.hasPrefix($0.prefix) }?.role
     }
 
     /// Panels never activate the app or take key focus from other apps. The

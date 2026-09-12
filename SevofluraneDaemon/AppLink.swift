@@ -83,8 +83,9 @@ final class AppLink {
     /// Hides whatever CEF windows the client has on screen, over the bridge's
     /// connection, and answers what it hid — the sign-in window among them is
     /// how the daemon learns the machine is waiting on a human.
-    func sweepClientPopups() async -> [String] {
-        guard isAttached, let data = await post("/popups/sweep") else { return [] }
+    func sweepClientPopups(_ scope: PopupSweepScope) async -> [String] {
+        guard isAttached,
+              let data = await post("/popups/sweep?scope=\(scope.rawValue)") else { return [] }
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 

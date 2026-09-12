@@ -333,8 +333,12 @@ final class SteamWebHost {
         // arriving mid-sweep lengthens this one instead of racing it.
         Task(name: "Hide client toast twin") {
             await PopupSweeper.shared.sweepAfterNotification { hidden in
+                let names = hidden.names.joined(separator: ", ")
                 EventLog.enqueue(
-                    .client, "hid the client's toast twin: \(hidden.joined(separator: ", "))",
+                    .client,
+                    hidden.scope == .twins
+                        ? "hid the client's own copy of what this app draws: \(names)"
+                        : "hid the client's own CEF windows: \(names)",
                 )
             }
         }

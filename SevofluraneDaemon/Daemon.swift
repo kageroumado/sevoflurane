@@ -26,7 +26,9 @@ final class Daemon {
         // Both questions are the client's, and the only live connection to it
         // belongs to the app's bridge — so both travel the link rather than
         // opening a second DevTools session per ask.
-        ClientLifecycle.hidePopupsOverBridge = { [app] in await app.sweepClientPopups() }
+        ClientLifecycle.hidePopupsOverBridge = { [app] scope in
+            await app.sweepClientPopups(scope)
+        }
         ClientLifecycle.servicesReadyOverBridge = { [app] in await app.servicesReady() }
         EventLog.mirror = { [weak self] category, message, date in
             guard let self else { return }

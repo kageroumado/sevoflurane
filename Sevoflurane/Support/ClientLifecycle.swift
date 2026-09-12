@@ -443,7 +443,8 @@ nonisolated enum ClientLifecycle {
     /// there; a process without a bridge — the `sevo` CLI — has no
     /// connection to sweep through, and none of its paths ask. Same contract
     /// as ``log``.
-    nonisolated(unsafe) static var hidePopupsOverBridge: @Sendable () async -> [String] = { [] }
+    nonisolated(unsafe) static var hidePopupsOverBridge:
+        @Sendable (PopupSweepScope) async -> [String] = { _ in [] }
 
     /// Hides any CEF popup window the bottled client has put on screen, and
     /// answers the names it hid for the caller's log.
@@ -452,10 +453,12 @@ nonisolated enum ClientLifecycle {
     /// every ask for one — the supervisor's cycle, a stop's polls, a client
     /// notification's schedule — goes through ``PopupSweeper``, which is what
     /// keeps two of them from running at the same millisecond.
-    static func hideVisibleClientPopups() async -> [String] {
+    static func hideVisibleClientPopups(
+        _ scope: PopupSweepScope = .everything,
+    ) async -> [String] {
         let hide = PerfProbe.supervisor.beginInterval("PopupHide")
         defer { PerfProbe.supervisor.endInterval("PopupHide", hide) }
-        return await PopupSweeper.shared.sweep()
+        return await PopupSweeper.shared.sweep(scope).names
     }
 
     /// Runs one of the app's standing scripts in the bottled client's own

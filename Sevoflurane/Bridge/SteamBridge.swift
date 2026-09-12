@@ -238,8 +238,15 @@ actor SteamBridge {
         return await !cdp.isClosed
     }
 
-    /// Hides every visible popup the bottled client has put on screen, in
-    /// one evaluate on the connection the bridge already holds.
+    /// Hides the visible popups the bottled client has put on screen, in one
+    /// evaluate on the connection the bridge already holds.
+    ///
+    /// `scope` decides which: `.everything` for the stop path and the
+    /// supervisor's cycle, `.twins` for a sweep that came for one window and
+    /// must leave the client's install dialogs, sign-in window and
+    /// game-named popups where they are (``SteamWindowRole/twinRoles``). The
+    /// names are matched in the page, so a narrowed sweep is still one round
+    /// trip.
     ///
     /// The client's CEF windows exist to keep Steam's JS running — rendering
     /// is this app's job, and the page mirrors every popup natively
@@ -264,34 +271,60 @@ actor SteamBridge {
     ///
     /// Answers the names it hid, or nil when the bridge holds no connection
     /// — the caller's cue that no sweep happened.
-    func hideVisibleClientPopups() async -> [String]? {
+    func hideVisibleClientPopups(
+        _ scope: PopupSweepScope = .everything,
+    ) async -> [String]? {
         guard let cdp, await !cdp.isClosed else { return nil }
         let hidden = try? await withDeadline(ClientLifecycle.cdpCallCap) {
-            try await cdp.evaluate(Self.popupHideScript)
+            try await cdp.evaluate(Self.popupHideScript(scope))
         }
         guard let hidden else { return nil }
         return (hidden ?? "").split(separator: "\n").map(String.init)
     }
 
-    private static let popupHideScript = """
-    (function () {
-      var popups = window.g_PopupManager && g_PopupManager.m_mapPopups;
-      if (!popups) return "";
-      var hidden = [];
-      popups.forEach(function (record) {
-        try {
-          var win = record && record.m_popup;
-          if (!win || win === window || win.closed) return;
-          if (win.document.visibilityState !== "visible") return;
-          var client = win.SteamClient;
-          if (!client || !client.Window || !client.Window.HideWindow) return;
-          client.Window.HideWindow();
-          hidden.push(String(win.name || record.m_strName || "unnamed popup"));
-        } catch (e) {}
-      });
-      return hidden.join("\\n");
-    })()
-    """
+    /// The sweep, with the names it may hide compiled in.
+    ///
+    /// A twin sweep carries ``SteamWindowRole``'s own table rather than a
+    /// second copy of it in JavaScript: `exact` names are whole bases and
+    /// `starts` are the families Steam numbers per instance, both matched
+    /// against the part of the name before its `_uid<pid>` suffix.
+    private static func popupHideScript(_ scope: PopupSweepScope) -> String {
+        let names = scope == .twins ? SteamWindowRole.twinNames : nil
+        func list(_ keep: (SteamWindowRole.NameMatch) -> String?) -> String {
+            guard let names else { return "null" }
+            return "[\(names.compactMap(keep).map(JSLiteral.string).joined(separator: ","))]"
+        }
+        let exact = list { if case let .exact(name) = $0 { name } else { nil } }
+        let starts = list { if case let .prefix(start) = $0 { start } else { nil } }
+        return """
+        (function (exact, starts) {
+          var popups = window.g_PopupManager && g_PopupManager.m_mapPopups;
+          if (!popups) return "";
+          var allowed = function (name) {
+            if (!exact) return true;
+            var uid = name.indexOf("_uid");
+            var base = uid < 0 ? name : name.slice(0, uid);
+            if (exact.indexOf(base) >= 0) return true;
+            return starts.some(function (start) { return base.indexOf(start) === 0; });
+          };
+          var hidden = [];
+          popups.forEach(function (record) {
+            try {
+              var win = record && record.m_popup;
+              if (!win || win === window || win.closed) return;
+              if (win.document.visibilityState !== "visible") return;
+              var name = String(win.name || record.m_strName || "unnamed popup");
+              if (!allowed(name)) return;
+              var client = win.SteamClient;
+              if (!client || !client.Window || !client.Window.HideWindow) return;
+              client.Window.HideWindow();
+              hidden.push(name);
+            } catch (e) {}
+          });
+          return hidden.join("\\n");
+        })(\(exact), \(starts))
+        """
+    }
 
     /// Asks the client's own SharedJSContext once whether
     /// `GetServicesInitialized()` is true. Steam's UI checks services once at
