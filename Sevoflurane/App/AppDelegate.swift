@@ -109,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         PerfProbe.poi.emitEvent("Launch")
         installLaunchHooks()
+        // A game outlives the app that launched it, so a launch armed by a
+        // process that was force-quit is picked up here: one Steam is still
+        // running stays open under this recorder, one it has finished with is
+        // recorded now.
+        runRecorder.reattach()
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror

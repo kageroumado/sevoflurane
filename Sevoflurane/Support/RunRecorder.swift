@@ -110,8 +110,11 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             case crash
             /// The app killed the game (the stall watchdog).
             case watchdog
+            /// Sevoflurane quit, and the teardown that follows took the
+            /// bottle — and the game in it — down.
+            case appQuit = "app-quit"
             /// The run closed without the app learning an exit — the client
-            /// went away, or the app quit under it.
+            /// went away before it recorded one.
             case unknown
         }
     }
@@ -148,6 +151,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case .crash: "crashed — exit\(code)"
         case .steamTerminate: "stopped by Steam"
         case .watchdog: "killed after a stall"
+        case .appQuit: "ended when Sevoflurane quit"
         case .unknown: "ended, exit unknown"
         }
     }
@@ -161,11 +165,16 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
 
 /// The run records on disk: one JSON Lines file per month under
 /// `~/Library/Application Support/Sevoflurane/Runs`, months before the current
-/// one compressed, twelve kept.
+/// one compressed, twelve kept, and `open/` beside them holding the launches
+/// that have been armed and not yet recorded.
 ///
 /// JSON Lines rather than one document: a record is appended by a process
 /// that may be killed at any moment, and a truncated last line costs one
 /// record instead of the file.
+///
+/// Every entry point takes the directory to work in, defaulting to the one
+/// the app and the CLI share, so a test can drive a whole recorder without
+/// writing into it.
 nonisolated enum RunLog {
     static let root = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/Runs")
@@ -174,19 +183,19 @@ nonisolated enum RunLog {
     static let monthsKept = 12
 
     /// A month's file, whether or not it exists.
-    static func url(forMonth date: Date) -> URL {
+    static func url(forMonth date: Date, in root: URL = root) -> URL {
         root.appendingPathComponent("\(month(of: date)).jsonl")
     }
 
     /// Appends one record. Two games can end at the same moment, and a
     /// seek-to-end followed by a write is not atomic against another one, so
     /// every append goes through one queue.
-    static func append(_ record: RunRecord) {
+    static func append(_ record: RunRecord, in root: URL = root) {
         guard let line = try? encoder.encode(record) else { return }
         writes.sync {
             let manager = FileManager.default
             try? manager.createDirectory(at: root, withIntermediateDirectories: true)
-            let url = url(forMonth: .now)
+            let url = url(forMonth: .now, in: root)
             if !manager.fileExists(atPath: url.path) {
                 manager.createFile(atPath: url.path, contents: nil)
             }
@@ -199,9 +208,68 @@ nonisolated enum RunLog {
 
     private static let writes = DispatchQueue(label: "sevo.runlog")
 
+    // MARK: - Runs that are still open
+
+    /// A launch that has been armed and not yet closed, as it sits on disk.
+    ///
+    /// The in-memory recorder dies with its process, and a game does not: a
+    /// force-quit under a running game would otherwise leave nothing for the
+    /// next launch of the app to write. One file per app id, removed when the
+    /// run is recorded.
+    struct ArmedRun: Codable, Sendable {
+        var record: RunRecord
+        /// When the run was armed, wall clock — the elapsed time of a run
+        /// that outlived the app cannot come off a monotonic clock.
+        var started: Date
+        var wineLogOffset: UInt64
+        var steamLogOffset: UInt64
+        /// The client's error for this game action, when it showed one.
+        var steamError: String?
+    }
+
+    /// Where armed runs are parked. A directory rather than a file, so one
+    /// game's arming never rewrites another's.
+    static func openRoot(in root: URL = root) -> URL {
+        root.appendingPathComponent("open")
+    }
+
+    /// Writes an armed run, replacing whatever this app id had.
+    static func arm(_ run: ArmedRun, in root: URL = root) {
+        guard let data = try? encoder.encode(run) else { return }
+        writes.sync {
+            try? FileManager.default
+                .createDirectory(at: openRoot(in: root), withIntermediateDirectories: true)
+            try? data.write(to: openURL(forApp: run.record.appid, in: root), options: .atomic)
+        }
+    }
+
+    /// Forgets an armed run — it has been recorded, or nothing is left that
+    /// could say more about it.
+    static func disarm(appID: Int, in root: URL = root) {
+        writes.sync {
+            try? FileManager.default.removeItem(at: openURL(forApp: appID, in: root))
+        }
+    }
+
+    /// Every run left armed, oldest app id first.
+    static func armedRuns(in root: URL = root) -> [ArmedRun] {
+        let open = openRoot(in: root)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: open.path)) ?? []
+        return names.sorted().compactMap { name in
+            guard name.hasSuffix(".json"),
+                  let data = try? Data(contentsOf: open.appendingPathComponent(name))
+            else { return nil }
+            return try? decoder.decode(ArmedRun.self, from: data)
+        }
+    }
+
+    private static func openURL(forApp appID: Int, in root: URL) -> URL {
+        openRoot(in: root).appendingPathComponent("\(appID).json")
+    }
+
     /// Every record of a month, oldest first.
-    static func records(inMonth date: Date) -> [RunRecord] {
-        records(in: url(forMonth: date))
+    static func records(inMonth date: Date, in root: URL = root) -> [RunRecord] {
+        records(in: url(forMonth: date, in: root))
     }
 
     /// The most recent records across as many months as it takes, oldest
@@ -210,9 +278,9 @@ nonisolated enum RunLog {
     /// By when each launch began, not by when its record was appended: a game
     /// still up when the app quits is written after games that started and
     /// ended while it ran.
-    static func recent(_ limit: Int) -> [RunRecord] {
+    static func recent(_ limit: Int, in root: URL = root) -> [RunRecord] {
         var found: [RunRecord] = []
-        for url in monthFiles().reversed() {
+        for url in monthFiles(in: root).reversed() {
             found = records(in: url) + found
             if found.count >= limit { break }
         }
@@ -222,10 +290,10 @@ nonisolated enum RunLog {
     /// Compresses every month before this one and drops all but the newest
     /// ``monthsKept``. Cheap enough to run at each app start; it does nothing
     /// on the second call of a month.
-    static func groom() {
+    static func groom(in root: URL = root) {
         let manager = FileManager.default
         let current = month(of: .now)
-        for url in monthFiles() where url.pathExtension == "jsonl" {
+        for url in monthFiles(in: root) where url.pathExtension == "jsonl" {
             guard url.deletingPathExtension().lastPathComponent != current,
                   let data = try? Data(contentsOf: url),
                   let compressed = try? (data as NSData).compressed(using: .zlib) else { continue }
@@ -233,7 +301,7 @@ nonisolated enum RunLog {
             guard (try? compressed.write(to: target)) != nil else { continue }
             try? manager.removeItem(at: url)
         }
-        let files = monthFiles()
+        let files = monthFiles(in: root)
         guard files.count > monthsKept else { return }
         for url in files.prefix(files.count - monthsKept) {
             try? manager.removeItem(at: url)
@@ -258,7 +326,7 @@ nonisolated enum RunLog {
     }
 
     /// Every month's file, oldest first — the names sort chronologically.
-    private static func monthFiles() -> [URL] {
+    private static func monthFiles(in root: URL) -> [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         return names.filter { $0.hasSuffix(".jsonl") || $0.hasSuffix(".jsonl.\(compressedExtension)") }
             .sorted()
@@ -299,14 +367,30 @@ nonisolated struct RunInProgress: Sendable {
     let steamLogOffset: UInt64
     /// The client showed an error for this game action.
     var steamError: String?
+    /// Where the record goes when the run is over, and the two logs its
+    /// ending is read from.
+    var runsRoot = RunLog.root
+    var wineLog = WineLog.fileURL
+    var processLog = RunRecorder.steamProcessLogURL
 
     /// Reads what the two logs gained during the run, decides how it ended,
     /// and appends the record.
-    func write(lasting seconds: Double, kind: RunRecord.Exit.Kind?) {
+    ///
+    /// - Parameters:
+    ///   - kind: The ending the caller knows for a fact whatever the logs say
+    ///     — the stall watchdog's kill.
+    ///   - unrecorded: What an ending Steam never wrote down is, on this
+    ///     path. A quit takes the bottle down with the app, so Steam is gone
+    ///     before it can record the exit it caused.
+    func write(
+        lasting seconds: Double,
+        kind: RunRecord.Exit.Kind?,
+        unrecorded: RunRecord.Exit.Kind = .unknown,
+    ) {
         var record = record
         record.durationSeconds = seconds
-        let steamTail = RunRecorder.text(of: RunRecorder.steamProcessLogURL, from: steamLogOffset)
-        let wineTail = RunRecorder.text(of: WineLog.fileURL, from: wineLogOffset)
+        let steamTail = RunRecorder.text(of: processLog, from: steamLogOffset)
+        let wineTail = RunRecorder.text(of: wineLog, from: wineLogOffset)
         record.runtime = SteamGameProcessLog.runtime(
             forApp: record.appid, in: steamTail, exe: record.exe,
         )
@@ -319,20 +403,32 @@ nonisolated struct RunInProgress: Sendable {
         record.exit = RunRecord.Exit(
             kind: kind ?? Self.kind(
                 code: exit?.code, crashed: record.crash != nil, steamError: steamError,
+                unrecorded: unrecorded,
             ),
             code: exit?.code,
         )
-        RunLog.append(record)
+        RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
     }
 
     /// How a run ended, from what the client and Steam's log actually say.
     private static func kind(
-        code: Int?, crashed: Bool, steamError: String?,
+        code: Int?, crashed: Bool, steamError: String?, unrecorded: RunRecord.Exit.Kind,
     ) -> RunRecord.Exit.Kind {
         if let code { return code == 0 && !crashed ? .user : .crash }
         if crashed { return .crash }
-        return steamError == nil ? .unknown : .steamTerminate
+        return steamError == nil ? unrecorded : .steamTerminate
+    }
+
+    /// The armed form of this run, for the file that outlives the process.
+    var armed: RunLog.ArmedRun {
+        RunLog.ArmedRun(
+            record: record,
+            started: Date(timeIntervalSinceNow: -RunRecorder.seconds(since: started)),
+            wineLogOffset: wineLogOffset,
+            steamLogOffset: steamLogOffset,
+            steamError: steamError,
+        )
     }
 }
 
@@ -366,13 +462,26 @@ final nonisolated class RunRecorder {
 
     private var open: [Int: OpenRun] = [:]
     private var hasGroomed = false
+    /// The directory this recorder's records and armed runs live in, and
+    /// the two logs it reads a run's ending out of.
+    private let runs: URL
+    private let wineLog: URL
+    private let processLog: URL
 
     /// A launch in progress and everything about the machine that was true
     /// when it started. `Sendable` so closing one can leave the main actor:
     /// it reads the tails of two logs, which is disk work.
     typealias OpenRun = RunInProgress
 
-    init() {}
+    init(
+        runs: URL = RunLog.root,
+        wineLog: URL = WineLog.fileURL,
+        processLog: URL = RunRecorder.steamProcessLogURL,
+    ) {
+        self.runs = runs
+        self.wineLog = wineLog
+        self.processLog = processLog
+    }
 
     /// A launch of `appID` has begun. Re-arming an app that is already open
     /// closes the old run: the client has told us a new one started, so
@@ -406,12 +515,16 @@ final nonisolated class RunRecorder {
         open[appID] = OpenRun(
             started: .now,
             record: record,
-            wineLogOffset: Self.size(of: WineLog.fileURL),
-            steamLogOffset: Self.size(of: Self.steamProcessLogURL),
+            wineLogOffset: Self.size(of: wineLog),
+            steamLogOffset: Self.size(of: processLog),
+            runsRoot: runs,
+            wineLog: wineLog,
+            processLog: processLog,
         )
+        persist(appID: appID)
         if !hasGroomed {
             hasGroomed = true
-            Task.detached(name: "Groom the run records") { RunLog.groom() }
+            Task.detached(name: "Groom the run records") { [runs] in RunLog.groom(in: runs) }
         }
     }
 
@@ -420,6 +533,7 @@ final nonisolated class RunRecorder {
     func noteExecutable(_ exe: String, forApp appID: Int) {
         guard open[appID]?.record.exe == nil else { return }
         open[appID]?.record.exe = exe
+        persist(appID: appID)
     }
 
     /// The game's first window is on screen.
@@ -427,11 +541,14 @@ final nonisolated class RunRecorder {
         guard var run = open[appID], run.record.windowAfterSeconds == nil else { return }
         run.record.windowAfterSeconds = Self.seconds(since: run.started)
         open[appID] = run
+        persist(appID: appID)
     }
 
     /// The client raised an error for this game action.
     func noteSteamError(_ detail: String, forApp appID: Int) {
+        guard let run = open[appID], run.steamError != detail else { return }
         open[appID]?.steamError = detail
+        persist(appID: appID)
     }
 
     /// The client says the app is no longer running. The record is written on
@@ -439,6 +556,10 @@ final nonisolated class RunRecorder {
     /// disk work the caller should not wait on.
     func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
         guard let run = open.removeValue(forKey: appID) else { return }
+        // Before the write rather than after it: the same app id can be armed
+        // again in the next moment, and a disarm behind that would take the
+        // new run's file with it.
+        RunLog.disarm(appID: appID, in: runs)
         let lasted = Self.seconds(since: run.started)
         Self.closings.async { run.write(lasting: lasted, kind: kind) }
     }
@@ -446,11 +567,57 @@ final nonisolated class RunRecorder {
     /// Closes every open run, for the quit path: the app is going away and
     /// nothing will learn any more about these than is already on disk.
     /// Inline, because nothing will drain a queue after this either.
+    ///
+    /// A game still up here is one the teardown is about to take down with
+    /// the bottle, so an ending Steam never recorded is that quit.
     func closeAll() {
         for run in open.values {
-            run.write(lasting: Self.seconds(since: run.started), kind: nil)
+            RunLog.disarm(appID: run.record.appid, in: runs)
+            run.write(
+                lasting: Self.seconds(since: run.started), kind: nil, unrecorded: .appQuit,
+            )
         }
         open.removeAll()
+    }
+
+    /// Takes over the runs an earlier process of this app left open.
+    ///
+    /// A game outlives the app that launched it — a force-quit sends the
+    /// bottle nothing — so the launch is armed on disk as well as in memory
+    /// and read back here. Steam's own process log is what says which of them
+    /// is still up: it tracks every process it started for an app id, and it
+    /// is rewritten at each client start, so an app with no line in it at all
+    /// belongs to a client session that is over.
+    func reattach() {
+        for armed in RunLog.armedRuns(in: runs) {
+            let appID = armed.record.appid
+            guard open[appID] == nil else { continue }
+            let lasted = max(0, Date.now.timeIntervalSince(armed.started))
+            open[appID] = OpenRun(
+                started: .now.advanced(by: .seconds(-lasted)),
+                record: armed.record,
+                wineLogOffset: armed.wineLogOffset,
+                steamLogOffset: armed.steamLogOffset,
+                steamError: armed.steamError,
+                runsRoot: runs,
+                wineLog: wineLog,
+                processLog: processLog,
+            )
+            let tail = Self.text(of: processLog, from: armed.steamLogOffset)
+            let stillUp = SteamGameProcessLog.tracks(app: appID, in: tail)
+                && SteamGameProcessLog.exits(forApp: appID, in: tail).isEmpty
+            if stillUp {
+                Self.log("run reattached — \(armed.record.summary)")
+            } else {
+                close(appID: appID)
+            }
+        }
+    }
+
+    /// Writes an open run to disk, so the launch outlives this process.
+    private func persist(appID: Int) {
+        guard let run = open[appID] else { return }
+        RunLog.arm(run.armed, in: runs)
     }
 
     /// Where a closing run reads its logs and writes its record. Serial, so
@@ -491,7 +658,7 @@ final nonisolated class RunRecorder {
     }
 
     /// Elapsed seconds, one decimal.
-    private static func seconds(since start: ContinuousClock.Instant) -> Double {
+    fileprivate static func seconds(since start: ContinuousClock.Instant) -> Double {
         let elapsed = ContinuousClock.now - start
         let seconds = Double(elapsed.components.seconds)
             + Double(elapsed.components.attoseconds) / 1e18
@@ -563,6 +730,14 @@ nonisolated enum SteamGameProcessLog {
             $0.executable.map { !helperExecutables.contains($0) } ?? false
         }) { return match }
         return exits.last
+    }
+
+    /// Whether the log has this app in it at all. Steam rewrites the file at
+    /// each client start, so an app with no line of its own belongs to a
+    /// client session that is over.
+    static func tracks(app appID: Int, in text: String) -> Bool {
+        text.split(whereSeparator: \.isNewline)
+            .contains { body(of: $0, forApp: appID) != nil }
     }
 
     /// Every process Steam stopped tracking for this app, in order, named by
