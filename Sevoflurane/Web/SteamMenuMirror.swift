@@ -5,17 +5,29 @@ import AppKit
 /// All five of the strip's menus exist as hidden popups from the moment the UI
 /// boots — `Steam Root Menu` through `Help Root Menu` — with their items
 /// already rendered and localized. The mirror reads each popup's DOM through
-/// the context page into a cache, and rebuilds the native menus from that
-/// cache; choosing a native item clicks the corresponding element, which
-/// reaches React's root listener even while the element is hidden. The
-/// in-window strip itself is hidden by ``SteamDesktopChrome``, so the native
-/// menu bar is the only visible strip.
+/// the context page into a cache; choosing a native item clicks the
+/// corresponding element, which reaches React's root listener even while the
+/// element is hidden. The in-window strip itself is hidden by
+/// ``SteamDesktopChrome``, so the native menu bar is the only visible strip.
+///
+/// **The native menus change in `menuNeedsUpdate(_:)` and nowhere else.** A
+/// read of the page updates the cache and stops there; AppKit calls
+/// `menuNeedsUpdate(_:)` synchronously in the instant before the menu is
+/// shown, and that is the one moment at which the menu bar — which on recent
+/// macOS is another process holding handles on our items — expects the items
+/// to move. A menu mutated at any other moment can leave that process waiting
+/// on an item that no longer exists, with the app parked inside
+/// `NSMenuTrackingSession` and no lever from this side that ends it.
+///
+/// Inside that window the mirror still prefers the smallest change it can
+/// make: while the section's shape holds — same count, rules in the same
+/// places — labels, states and enablement are written into the items the menu
+/// already has, so every item keeps its identity. Items are removed and
+/// re-inserted only when the shape itself changed.
 ///
 /// The page is read on the events that can change the strip and never from a
 /// menu delegate: `menuNeedsUpdate(_:)` must leave the menu populated before
-/// it returns, and a fetch that answers a frame later cannot. Rebuilding from
-/// the cache is synchronous, always finishes before the menu-bar agent looks,
-/// and always yields at least one item.
+/// it returns, and a fetch that answers a frame later cannot.
 @MainActor
 final class SteamMenuMirror: NSObject {
     /// The strip's menus, left to right. Each names a `<title> Root Menu`
@@ -26,6 +38,15 @@ final class SteamMenuMirror: NSObject {
     /// Marks a menu item the mirror must leave alone: the app's own items
     /// appended after the mirrored section.
     static let nativeTag = 1
+
+    /// Marks an item the mirror itself made. The mirrored section is the set
+    /// of items carrying this tag, not a range of positions: AppKit puts its
+    /// own search item into the Help menu, and a section defined by position
+    /// would sweep that item away on every update and AppKit would put it
+    /// back — a structural change to a menu, twice, every time Help opens.
+    /// The value is arbitrary and far from the small integers a framework
+    /// hands out, so ownership stays a question with one answer.
+    static let mirroredTag = 0x5E70
 
     /// The single disabled item a title carries until the page has answered
     /// for it. A root menu with no items gives the menu-bar agent no menu
@@ -40,6 +61,19 @@ final class SteamMenuMirror: NSObject {
         var label: String?
         var on: Bool?
         var disabled: Bool?
+    }
+
+    /// What one update of a native menu did, which is what the log says and
+    /// what the tests assert on.
+    enum Update: Equatable {
+        /// The menu already said what the cache says.
+        case unchanged(items: Int)
+        /// Written into the items the menu already had; every item, and every
+        /// handle another process holds on one, survived.
+        case patched(items: Int)
+        /// The section's shape changed, so its items were removed and new ones
+        /// inserted. The expensive one, and the one the menu bar can notice.
+        case rebuilt(from: Int, to: Int)
     }
 
     private enum Timing {
@@ -68,7 +102,6 @@ final class SteamMenuMirror: NSObject {
     private var refreshing = false
     private var retriesLeft = 0
     private var openTitles: Set<String> = []
-    private var rebuildDeferred = false
     private var frontmostTick: Timer?
     private let watchdog = MenuTrackingWatchdog()
 
@@ -82,13 +115,9 @@ final class SteamMenuMirror: NSObject {
             // responder chain.
             menu.autoenablesItems = false
             menus[title] = menu
-            Self.rebuild(menu, from: [], target: self)
+            Self.apply([], to: menu, target: self)
         }
         observeActivation()
-        watchdog.onTrackingEnded = { [weak self] in
-            guard let self, rebuildDeferred else { return }
-            rebuildIdleMenus()
-        }
     }
 
     /// The native menu for one strip title, carrying the placeholder until
@@ -127,107 +156,185 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Reading the strip
 
-    /// One read of the strip into the cache. Answers whether every root menu
-    /// was present.
+    /// One read of the strip into the cache, which is all it touches. Answers
+    /// whether every root menu was present.
     private func fetch() async -> Bool {
         guard let raw = await host?.evaluateInContext(Self.fetchScript),
               let data = raw.data(using: .utf8),
               let roots = try? JSONDecoder()
               .decode([String: [MirroredItem]].self, from: data) else { return false }
-        var changed = false
-        for title in Self.rootTitles {
-            guard let items = roots[title], items != model[title] else { continue }
-            model[title] = items
-            changed = true
+        let moved = Self.merge(roots, into: &model)
+        if DebugModeSwitch.shared.isOn {
+            for title in moved {
+                EventLog.shared.log(
+                    .menu,
+                    "\(title) cache changed: \(model[title]?.count ?? 0) items — the menu follows at its next update",
+                )
+            }
         }
-        if changed { rebuildIdleMenus() }
         return Self.rootTitles.allSatisfy { !(roots[$0] ?? []).isEmpty }
     }
 
-    /// Pushes cache changes into the native menus, skipping the push while a
-    /// tracking session is up: removing a menu's items out from under the
-    /// menu-bar agent is what leaves it opening a menu that no longer has
-    /// anything to show. The gate is the watchdog's run-loop probe rather than
-    /// `menuWillOpen`/`menuDidClose`, which report a menu closed while the
-    /// agent goes on tracking it.
-    private func rebuildIdleMenus() {
-        guard !watchdog.isTracking else {
-            rebuildDeferred = true
-            return
+    /// Takes one page read into the cache, answering the titles whose entries
+    /// moved. Nothing here can reach a native menu, which is the point: the
+    /// strip is read on a timer, on activation and on every popup adoption,
+    /// and a menu changed at one of those moments is a menu changed behind
+    /// the menu bar's back.
+    static func merge(
+        _ roots: [String: [MirroredItem]], into model: inout [String: [MirroredItem]],
+    ) -> [String] {
+        var moved: [String] = []
+        for title in rootTitles {
+            guard let items = roots[title], items != model[title] else { continue }
+            model[title] = items
+            moved.append(title)
         }
-        rebuildDeferred = false
-        for title in Self.rootTitles {
-            rebuild(title)
-        }
+        return moved
     }
 
-    private func rebuild(_ title: String) {
+    // MARK: - Writing the menus
+
+    /// Brings one title's native menu up to date with the cache, and says in
+    /// the log what that took.
+    private func update(_ title: String) {
         guard let menu = menus[title] else { return }
-        let before = menu.numberOfItems
-        Self.rebuild(menu, from: model[title] ?? [], target: self)
-        guard before != menu.numberOfItems else { return }
-        EventLog.shared.log(
-            .menu, "\(title) menu rebuilt: \(before) → \(menu.numberOfItems) items",
-        )
+        log(Self.apply(model[title] ?? [], to: menu, target: self), for: title)
     }
 
-    /// Replaces `menu`'s mirrored section with `items`, leaving items tagged
-    /// ``nativeTag`` — the app's own commands — where they are. An empty
-    /// `items` yields the placeholder, so the rebuilt menu is never empty.
-    static func rebuild(_ menu: NSMenu, from items: [MirroredItem], target: AnyObject?) {
-        let wanted = items.isEmpty ? [placeholderModel] : items
-        guard wanted != mirrored(in: menu) else { return }
-        for item in menu.items where item.tag != nativeTag {
-            menu.removeItem(item)
+    /// A structural rebuild is always written down — it is rare, and a
+    /// rebuild that happened while a session was live is the first thing to
+    /// look for in a report of a menu that stopped responding. The in-place
+    /// updates are the normal case and are written down only in debug mode.
+    private func log(_ update: Update, for title: String) {
+        switch update {
+        case let .rebuilt(from, to):
+            let live = watchdog.isTracking ? " — a menu session was live" : ""
+            EventLog.shared.log(.menu, "\(title) menu rebuilt: \(from) → \(to) items\(live)")
+        case let .patched(items):
+            guard DebugModeSwitch.shared.isOn else { return }
+            EventLog.shared.log(.menu, "\(title) menu patched in place: \(items) items")
+        case let .unchanged(items):
+            guard DebugModeSwitch.shared.isOn else { return }
+            EventLog.shared.log(.menu, "\(title) menu already matched the cache: \(items) items")
         }
-        for native in nativeItems(for: items, target: target).reversed() {
-            menu.insertItem(native, at: 0)
+    }
+
+    /// Writes `items` into `menu`'s mirrored section, in place while the shape
+    /// allows it, leaving the app's own items and AppKit's own alone. An empty
+    /// `items` yields the placeholder, so the menu is never left empty.
+    @discardableResult
+    static func apply(
+        _ items: [MirroredItem], to menu: NSMenu, target: AnyObject?,
+    ) -> Update {
+        let wanted = resolved(items)
+        let existing = mirroredItems(in: menu)
+        guard sameShape(wanted, as: existing) else {
+            // The section keeps its place: in the View menu it sits above the
+            // app's own commands, in the Help menu below AppKit's search item.
+            let insertion = menu.items.firstIndex { $0.tag == mirroredTag } ?? 0
+            for item in existing {
+                menu.removeItem(item)
+            }
+            for native in nativeItems(for: wanted, target: target).reversed() {
+                menu.insertItem(native, at: insertion)
+            }
+            return .rebuilt(from: existing.count, to: wanted.count)
         }
+        return patch(existing, to: wanted, target: target)
+            ? .patched(items: wanted.count)
+            : .unchanged(items: wanted.count)
+    }
+
+    /// Whether `items` can be written over `existing` with nothing added,
+    /// removed or reordered: the counts match and the rules fall in the same
+    /// places. Steam's own churn is labels — `View Friends List (2 Online)`,
+    /// the status marks — which this covers.
+    static func sameShape(_ items: [MirroredItem], as existing: [NSMenuItem]) -> Bool {
+        items.count == existing.count
+            && zip(items, existing).allSatisfy { ($0.sep == true) == $1.isSeparatorItem }
+    }
+
+    /// Writes each cache entry into the item already standing in its place,
+    /// answering whether any of them moved.
+    @discardableResult
+    static func patch(
+        _ existing: [NSMenuItem], to items: [MirroredItem], target: AnyObject?,
+    ) -> Bool {
+        var moved = false
+        for (index, item) in items.enumerated() where item.sep != true {
+            let changed = write(item, at: index, into: existing[index], target: target)
+            moved = moved || changed
+        }
+        return moved
     }
 
     /// The native items one title's cache entry becomes, the placeholder when
     /// the entry is empty.
     static func nativeItems(for items: [MirroredItem], target: AnyObject?) -> [NSMenuItem] {
-        guard !items.isEmpty else { return [placeholderItem()] }
-        return items.enumerated().map { childIndex, item in
-            guard item.sep != true else { return .separator() }
-            let label = item.label ?? ""
-            let native = NSMenuItem(
-                title: label,
-                action: #selector(activate(_:)),
-                keyEquivalent: keyEquivalents[label] ?? "",
-            )
-            native.target = target
-            native.state = item.on == true ? .on : .off
-            native.isEnabled = item.disabled != true
-            native.representedObject = childIndex
+        resolved(items).enumerated().map { index, item in
+            guard item.sep != true else {
+                let separator = NSMenuItem.separator()
+                separator.tag = mirroredTag
+                return separator
+            }
+            let native = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            native.tag = mirroredTag
+            write(item, at: index, into: native, target: target)
             return native
         }
     }
 
+    /// Everything one cache entry says about one native item, answering
+    /// whether any of it differed from what the item already said.
+    @discardableResult
+    private static func write(
+        _ item: MirroredItem, at index: Int, into native: NSMenuItem, target: AnyObject?,
+    ) -> Bool {
+        let label = item.label ?? ""
+        let state: NSControl.StateValue = item.on == true ? .on : .off
+        let enabled = item.disabled != true
+        let keyEquivalent = keyEquivalents[label] ?? ""
+        var changed = false
+        if native.title != label {
+            native.title = label
+            changed = true
+        }
+        if native.state != state {
+            native.state = state
+            changed = true
+        }
+        if native.isEnabled != enabled {
+            native.isEnabled = enabled
+            changed = true
+        }
+        if native.keyEquivalent != keyEquivalent {
+            native.keyEquivalent = keyEquivalent
+            changed = true
+        }
+        if native.representedObject as? Int != index {
+            native.representedObject = index
+            changed = true
+        }
+        native.action = #selector(activate(_:))
+        native.target = target
+        return changed
+    }
+
+    /// The items a cache entry stands for: the placeholder when it is empty.
+    private static func resolved(_ items: [MirroredItem]) -> [MirroredItem] {
+        items.isEmpty ? [placeholderModel] : items
+    }
+
+    /// The placeholder is disabled, so the action it carries with every other
+    /// mirrored item is never sent. Carrying one is what lets the first real
+    /// item Steam answers with be written straight into it.
     private static let placeholderModel = MirroredItem(
         sep: nil, label: placeholderTitle, on: false, disabled: true,
     )
 
-    private static func placeholderItem() -> NSMenuItem {
-        let item = NSMenuItem(title: placeholderTitle, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
-    }
-
-    /// The mirrored section of a menu, re-encoded so a rebuild that would
-    /// change nothing can be skipped — every open of every title asks for one,
-    /// and the strip mostly stands still.
-    private static func mirrored(in menu: NSMenu) -> [MirroredItem] {
-        menu.items.filter { $0.tag != nativeTag }.map { item in
-            item.isSeparatorItem
-                ? MirroredItem(sep: true)
-                : MirroredItem(
-                    label: item.title,
-                    on: item.state == .on,
-                    disabled: !item.isEnabled,
-                )
-        }
+    /// The section of a menu the mirror owns.
+    static func mirroredItems(in menu: NSMenu) -> [NSMenuItem] {
+        menu.items.filter { $0.tag == mirroredTag }
     }
 
     private static let fetchScript = """
@@ -275,8 +382,7 @@ final class SteamMenuMirror: NSObject {
     /// tick while the app is in front. The tick runs in `.common` modes: a
     /// menu-bar tracking session runs the run loop in
     /// `NSEventTrackingRunLoopMode`, where a `.default`-mode timer would stop,
-    /// and a read landing mid-tracking is harmless because
-    /// ``rebuildIdleMenus()`` holds the push back.
+    /// and a read landing mid-tracking touches nothing but the cache.
     private func updateFrontmostTick() {
         guard NSApp.isActive else {
             frontmostTick?.invalidate()
@@ -335,9 +441,18 @@ final class SteamMenuMirror: NSObject {
 }
 
 extension SteamMenuMirror: NSMenuDelegate {
-    /// Rebuilds the menu from the cache, synchronously, which is the contract:
-    /// the menu-bar agent reads the menu the moment this returns, and an
-    /// accessibility query resolves items through it without opening anything.
+    /// Brings the menu up to date with the cache, synchronously, which is the
+    /// contract: the menu-bar agent reads the menu the moment this returns,
+    /// and an accessibility query resolves items through it without opening
+    /// anything. It is also the only place the mirror changes a menu.
+    ///
+    /// A title whose shape changed is restructured here even while a session
+    /// is live — a menu still carrying the placeholder when Steam's UI comes
+    /// up is the case, and the alternative is showing the user a menu that
+    /// says `Steam is starting…` after it has started. The menu being
+    /// restructured is the one AppKit is about to read, which is what makes
+    /// this moment the safe one; the log line says a session was live so a
+    /// report can be read against it.
     ///
     /// The lazy protocol (`numberOfItems(in:)` + `menu(_:update:at:shouldCancel:)`)
     /// would be the better shape for a strip this size, but it cannot express
@@ -346,7 +461,7 @@ extension SteamMenuMirror: NSMenuDelegate {
     /// between its groups have nowhere to go.
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let title = title(of: menu) else { return }
-        rebuild(title)
+        update(title)
     }
 
     func menuWillOpen(_ menu: NSMenu) {

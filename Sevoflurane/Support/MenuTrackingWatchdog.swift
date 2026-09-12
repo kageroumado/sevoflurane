@@ -10,11 +10,26 @@ import AppKit
 /// nothing about it. A `.default`-mode timer is not serviced, and the gap
 /// between the two probes is therefore the length of the session.
 ///
+/// What the probes measure is the **session**, not the menu: one session
+/// covers every title the pointer crosses, and the run loop is the only thing
+/// that can say so, since `menuDidClose` arrives for a menu the menu bar goes
+/// on tracking. The clock therefore starts at the first menu of a session and
+/// a later title inside it changes nothing — neither the clock nor the levers
+/// already pulled.
+///
+/// The one thing this can honestly report is that the default mode has been
+/// starved for longer than two probe intervals. A session that began within
+/// the last two intervals reads exactly like an idle app, so ``isTracking``
+/// is an observation — for the log, and for the levers below — and never a
+/// gate another type's correctness rests on.
+///
 /// Past ``stallLimit`` the session is taken as stuck and broken from inside.
 /// The levers, in order: `cancelTrackingWithoutAnimation()` on the *main*
 /// menu, then a synthetic Escape, which the session's `nextEventMatchingMask:`
 /// loop takes. A menu the user has deliberately left open for that long is
 /// closed under them, which is the price of not leaving the app frozen.
+/// Where the menu bar is another process, both levers can be swallowed by it:
+/// they are worth pulling, and they are not a recovery anything may assume.
 @MainActor
 final class MenuTrackingWatchdog {
     /// How long a tracking session may hold the default run-loop mode before
@@ -38,6 +53,46 @@ final class MenuTrackingWatchdog {
         case escaped
     }
 
+    /// What the probes know about the session in progress. It is made fresh
+    /// when a session's clock starts and carried across every title inside it.
+    struct State: Equatable {
+        var healthyTicks = 0
+        var stage = Stage.watching
+        var isTracking = false
+    }
+
+    /// What one tick of the `.common`-mode probe concluded.
+    struct Tick: Equatable {
+        var state: State
+        /// The lever this tick earned.
+        var lever: Stage?
+        /// Whether the default mode has been running freely long enough that
+        /// the probes can stand down until the next session.
+        var standDown: Bool
+    }
+
+    /// One probe tick, as arithmetic: what a session starved for
+    /// `starvedSeconds` makes of `state`.
+    static func tick(starvedSeconds: Double, state: State) -> Tick {
+        var state = state
+        guard starvedSeconds > Probe.interval * 2 else {
+            state.isTracking = false
+            state.healthyTicks += 1
+            return Tick(
+                state: state,
+                lever: nil,
+                standDown: state.healthyTicks >= Probe.healthyTicksBeforeStop,
+            )
+        }
+        state.isTracking = true
+        state.healthyTicks = 0
+        guard let lever = lever(starvedSeconds: starvedSeconds, stage: state.stage) else {
+            return Tick(state: state, lever: nil, standDown: false)
+        }
+        state.stage = lever
+        return Tick(state: state, lever: lever, standDown: false)
+    }
+
     /// The lever a session that has starved the default mode for
     /// `starvedSeconds` has earned, given how far it has been pushed already.
     static func lever(starvedSeconds: Double, stage: Stage) -> Stage? {
@@ -48,29 +103,34 @@ final class MenuTrackingWatchdog {
         }
     }
 
-    /// Called once the probes have seen the default mode running freely
-    /// again — the honest end of a tracking session.
-    var onTrackingEnded: (() -> Void)?
-
-    /// Whether a nested loop is holding the default run-loop mode. The menu
-    /// delegate cannot answer this: `menuDidClose` arrives for a menu the
-    /// menu-bar agent went on to keep tracking, so a menu is reported closed
-    /// while its session is still live.
-    private(set) var isTracking = false
+    /// Whether a nested loop has been holding the default run-loop mode for
+    /// longer than two probe intervals. The menu delegate cannot answer this:
+    /// `menuDidClose` arrives for a menu the menu-bar agent went on to keep
+    /// tracking, so a menu is reported closed while its session is still live.
+    var isTracking: Bool {
+        state.isTracking
+    }
 
     private var defaultProbe: Timer?
     private var commonProbe: Timer?
     private var lastDefaultTick = ContinuousClock.now
-    private var healthyTicks = 0
-    private var stage = Stage.watching
+    private var state = State()
 
-    /// Starts watching, from the moment a menu is about to open. The probes
-    /// stand down once the default mode has been running freely again.
+    /// Whether a session is being timed. The probes stand down once the
+    /// default mode has been running freely again, so armed probes mean the
+    /// title the pointer has just crossed into belongs to the session already
+    /// on the clock.
+    var isTimingSession: Bool {
+        commonProbe != nil
+    }
+
+    /// Starts watching, from the moment a menu is about to open. A menu
+    /// opening inside a session already on the clock leaves that clock, and
+    /// the levers already pulled at it, exactly where they are.
     func menuOpened() {
+        guard !isTimingSession else { return }
         lastDefaultTick = .now
-        healthyTicks = 0
-        stage = .watching
-        guard commonProbe == nil else { return }
+        state = State()
         let inDefault = Timer(timeInterval: Probe.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.lastDefaultTick = .now }
         }
@@ -91,26 +151,23 @@ final class MenuTrackingWatchdog {
     }
 
     private func evaluate() {
-        let starved = ContinuousClock.now - lastDefaultTick
-        guard starved > .seconds(Probe.interval * 2) else {
-            isTracking = false
-            healthyTicks += 1
-            if healthyTicks >= Probe.healthyTicksBeforeStop {
-                stop()
-                onTrackingEnded?()
-            }
-            return
+        let starved = Self.seconds(ContinuousClock.now - lastDefaultTick)
+        let tick = Self.tick(starvedSeconds: starved, state: state)
+        state = tick.state
+        if let lever = tick.lever {
+            pull(lever, starvedSeconds: starved)
         }
-        isTracking = true
-        healthyTicks = 0
-        let seconds = Double(starved.components.seconds)
-        guard let lever = Self.lever(starvedSeconds: seconds, stage: stage) else { return }
-        stage = lever
+        if tick.standDown {
+            stop()
+        }
+    }
+
+    private func pull(_ lever: Stage, starvedSeconds: Double) {
         switch lever {
         case .cancelled:
             EventLog.shared.log(
                 .menu,
-                "a menu has held the run loop for \(Int(seconds))s — cancelling menu tracking",
+                "a menu has held the run loop for \(Int(starvedSeconds))s — cancelling menu tracking",
             )
             Self.cancelMenuBarTracking()
         case .escaped:
@@ -121,6 +178,11 @@ final class MenuTrackingWatchdog {
         case .watching:
             return
         }
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 
     private static func postEscape() {
@@ -144,8 +206,6 @@ final class MenuTrackingWatchdog {
         defaultProbe = nil
         commonProbe?.invalidate()
         commonProbe = nil
-        healthyTicks = 0
-        isTracking = false
-        stage = .watching
+        state = State()
     }
 }
