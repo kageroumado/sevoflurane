@@ -1041,6 +1041,9 @@ struct BottleCommand: AsyncParsableCommand {
     /// drives, against the same store (`Sevoflurane/Support/BottleGraphics.swift`).
     private func config() async throws {
         var selection = current()
+        // Debug mode folds its own channels into what a game carries, so the
+        // effective set the operator sees has to account for its file.
+        let debugMode = DebugMode.isWritten(prefix: SteamBottle.root)
         guard let key else {
             if asJSON {
                 print(Sevo.json([
@@ -1050,8 +1053,10 @@ struct BottleCommand: AsyncParsableCommand {
                     "upscaler": GameConfig.upscaler(bottle: SteamBottle.name).value,
                     "filter": GameConfig.filter(bottle: SteamBottle.name).value.rawValue,
                     "mouse": GameConfig.mouse(bottle: SteamBottle.name).value.rawValue,
-                    "wine-debug": WineLog.isDiagnosing,
+                    "wine-debug": debugMode || WineLog.isDiagnosing,
                     "wine-debug-channels": WineLog.channels,
+                    "wine-debug-effective": WineLog.effectiveChannels(debugMode: debugMode),
+                    "debug-mode": debugMode,
                 ], pretty: true))
             } else {
                 print("renderer \(selection.renderer.rawValue)")
@@ -1060,7 +1065,7 @@ struct BottleCommand: AsyncParsableCommand {
                 print("upscaler \(Self.upscalerSummary)")
                 print("filter \(Self.filterSummary)")
                 print("mouse \(Self.mouseSummary)")
-                print("wine-debug \(WineLog.summary)")
+                print("wine-debug \(WineLog.summary(debugMode: debugMode))")
             }
             return
         }
@@ -1072,7 +1077,7 @@ struct BottleCommand: AsyncParsableCommand {
             case "upscaler": print(Self.upscalerSummary)
             case "filter": print(Self.filterSummary)
             case "mouse": print(Self.mouseSummary)
-            case "wine-debug": print(WineLog.summary)
+            case "wine-debug": print(WineLog.summary(debugMode: debugMode))
             default:
                 Sevo.printError("unknown key '\(key)' \(Self.keys)")
                 throw SevoExit.badInvocation
@@ -1124,8 +1129,8 @@ struct BottleCommand: AsyncParsableCommand {
             default: WineLog.setChannels(value)
             }
             ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-            print("wine-debug \(WineLog.summary) — \(Self.gameReach); in the client from its next "
-                + "boot: sevo client restart; trail at \(WineLog.fileURL.path)")
+            print("wine-debug \(WineLog.summary(debugMode: debugMode)) — \(Self.gameReach); in the "
+                + "client from its next boot: sevo client restart; trail at \(WineLog.fileURL.path)")
             return
         }
         switch key {

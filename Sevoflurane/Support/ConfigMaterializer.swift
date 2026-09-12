@@ -51,6 +51,14 @@ nonisolated enum ConfigMaterializer {
                 write(lines, to: appsDir.appendingPathComponent(file))
             }
         }
+        // Debug mode's file folds the bottle's wine-debug channels in, so a
+        // change to them has to reach the file the engine reads after
+        // bottle.env; without this a new `+d3d` set while the mode is on would
+        // stand in bottle.env yet stay dropped by a stale debug.env.
+        if DebugMode.isWritten(prefix: prefix) {
+            writeDebugEnv(DebugMode.lines(), prefix: prefix)
+        }
+
         removeStale(in: appsDir, keeping: wanted)
         GameLaunchers.remove(keeping: launchers)
         // A game switched back to wine keeps its browsing-data link (the two

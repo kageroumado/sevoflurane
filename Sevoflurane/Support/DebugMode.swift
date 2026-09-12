@@ -50,9 +50,15 @@ nonisolated enum DebugMode {
     /// What the file says: every library load in the Wine log, the renderer's
     /// own errors in a file of its own, and the three engine logs that
     /// describe how a frame reached the screen.
+    ///
+    /// The channels are Debug mode's own set folded together with the bottle's
+    /// `wine-debug` channels (``WineLog/debugModeChannels``), so a custom
+    /// channel string set by hand survives the mode instead of being replaced
+    /// by it — `debug.env` is read after `bottle.env`, so a bare level-one set
+    /// here would drop the bottle's `+d3d`.
     static func lines() -> [String] {
         [
-            "WINEDEBUG=\(WineLog.levelOne)",
+            "WINEDEBUG=\(WineLog.debugModeChannels)",
             "DXMT_LOG_LEVEL=error",
             "DXMT_LOG_PATH=\(rendererLogWindowsPath)",
             "SEVO_PRESENTATION_LOG=1",

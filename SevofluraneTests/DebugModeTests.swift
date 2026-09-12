@@ -23,9 +23,10 @@ struct DebugModeTests {
         #expect(DebugMode.isWritten(prefix: prefix))
         let text = try String(contentsOf: file, encoding: .utf8)
         // Every key the engine and the renderer read, and the channels the
-        // diagnostics switch sets — the file is the whole engine half.
+        // diagnostics switch sets folded with the bottle's — the file is the
+        // whole engine half.
         for key in [
-            "WINEDEBUG=\(WineLog.levelOne)",
+            "WINEDEBUG=\(WineLog.debugModeChannels)",
             "DXMT_LOG_LEVEL=error",
             "DXMT_LOG_PATH=",
             "SEVO_PRESENTATION_LOG=1",
