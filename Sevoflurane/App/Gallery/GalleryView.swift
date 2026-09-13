@@ -116,11 +116,15 @@
                         }
                     }
 
-                    section("Settings — Repair") {
+                    section("Settings — Recovery", minimum: 500) {
                         ForEach(Fixtures.repairs, id: \.label) { pane in
                             tile(pane.label) {
-                                RepairSettings(provisioner: pane.provisioner, highlighted: nil)
-                                    .frame(width: 420, height: 210)
+                                RecoverySettings(
+                                    provisioner: pane.provisioner,
+                                    supervisor: ClientSupervisor(previewHealth: .healthy),
+                                    highlighted: nil,
+                                )
+                                .frame(width: 480, height: 820)
                             }
                         }
                     }

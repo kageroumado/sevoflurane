@@ -11,6 +11,9 @@ struct SteamActions {
     /// arrives as a native window.
     var uninstall: (_ appID: Int) -> Void
     var restartClient: () -> Void
+    /// Ends a stuck menu-bar tracking session, answering which root menus were
+    /// open — the way out of the macOS 27 menu hang from Settings.
+    var cancelStuckMenus: () -> [String]
 }
 
 /// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
@@ -78,6 +81,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case engine
     case games
     case storage
+    case recovery
     case about
 
     var id: String {
@@ -91,6 +95,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .engine: "Engine"
         case .games: "Games"
         case .storage: "Storage"
+        case .recovery: "Recovery"
         case .about: "About"
         }
     }
@@ -102,6 +107,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .engine: "wrench.and.screwdriver.fill"
         case .games: "gamecontroller.fill"
         case .storage: "internaldrive.fill"
+        case .recovery: "cross.case.fill"
         case .about: "info.circle.fill"
         }
     }
@@ -299,6 +305,87 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
             ]
+        case .recovery:
+            [
+                SearchableSetting(
+                    id: .recoveryRestartSteam,
+                    title: "Restart Steam",
+                    keywords: ["restart", "steam", "reboot", "relaunch", "reopen", "frozen", "stuck"],
+                ),
+                SearchableSetting(
+                    id: .recoveryForceQuit,
+                    title: "Force-quit Steam",
+                    keywords: ["force", "quit", "kill", "unresponsive", "hung", "frozen", "stuck"],
+                ),
+                SearchableSetting(
+                    id: .recoveryCancelMenus,
+                    title: "Cancel stuck menus",
+                    keywords: [
+                        "menu", "menus", "stuck", "frozen", "hang", "hung",
+                        "menu bar", "tracking", "macos 27",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryHelper,
+                    title: "Repair the background helper",
+                    keywords: [
+                        "background", "helper", "daemon", "supervision", "login items",
+                        "launch", "register", "repair",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryBottleRepair,
+                    title: "Repair Windows components",
+                    keywords: [
+                        "repair", "bottle", "windows", "components", "provision",
+                        "reinstall", "setup", "fix", "broken",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryShaderCompiler,
+                    title: "Reinstall the Direct3D shader compiler",
+                    keywords: [
+                        "d3dcompiler", "shader", "compiler", "direct3d", "d3d",
+                        "missing", "dll", "reinstall",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryWineRestart,
+                    title: "Restart Windows",
+                    keywords: [
+                        "wine", "wineserver", "windows", "restart", "cold", "machine",
+                        "reboot", "fresh",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryClearShaderCache,
+                    title: "Clear the shader cache",
+                    keywords: [
+                        "shader", "cache", "clear", "black screen", "pipeline",
+                        "dxmt", "dxvk", "reset", "stuck load",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryWinecfg,
+                    title: "Wine configuration",
+                    keywords: ["wine", "winecfg", "windows version", "configuration", "recovery"],
+                ),
+                SearchableSetting(
+                    id: .recoveryDiagnostics,
+                    title: "Save Diagnostics",
+                    keywords: [
+                        "diagnostics", "diagnostic", "report", "logs", "log", "zip",
+                        "bug", "crash", "support", "send",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .recoveryDebugMode,
+                    title: "Debug mode",
+                    keywords: [
+                        "debug", "verbose", "logging", "trace", "logs", "diagnostics",
+                    ],
+                ),
+            ]
         case .about:
             [
                 SearchableSetting(
@@ -362,6 +449,17 @@ enum SettingsAnchor: String, CaseIterable {
     case gamesUpscaler = "games.upscaler"
     case storageGames = "storage.games"
     case storageSharing = "storage.sharing"
+    case recoveryRestartSteam = "recovery.restartSteam"
+    case recoveryForceQuit = "recovery.forceQuit"
+    case recoveryCancelMenus = "recovery.cancelMenus"
+    case recoveryHelper = "recovery.helper"
+    case recoveryBottleRepair = "recovery.bottleRepair"
+    case recoveryShaderCompiler = "recovery.shaderCompiler"
+    case recoveryWineRestart = "recovery.wineRestart"
+    case recoveryClearShaderCache = "recovery.clearShaderCache"
+    case recoveryWinecfg = "recovery.winecfg"
+    case recoveryDiagnostics = "recovery.diagnostics"
+    case recoveryDebugMode = "recovery.debugMode"
     case aboutDiagnostics = "about.diagnostics"
     case aboutVersion = "about.version"
 }
@@ -475,6 +573,11 @@ private struct SettingsPane: View {
                 GamesSettings(shaders: shaders, highlighted: highlighted)
             case .storage:
                 StorageSettings(store: storage, steam: steam, highlighted: highlighted)
+            case .recovery:
+                RecoverySettings(
+                    provisioner: provisioner, compatibility: compatibility,
+                    supervisor: supervisor, steam: steam, highlighted: highlighted,
+                )
             case .about: AboutSettings(highlighted: highlighted)
             }
         }

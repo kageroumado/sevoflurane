@@ -84,6 +84,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                     host?.executeSteamURL(URL(string: "steam://uninstall/\(appID)")!)
                 },
                 restartClient: { [weak supervisor] in supervisor?.restartNow() },
+                cancelStuckMenus: { [weak host] in host?.menuMirror?.cancelTracking() ?? [] },
             )
         }
         let controller = NSHostingController(
