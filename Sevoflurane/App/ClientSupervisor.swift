@@ -202,6 +202,13 @@ final class ClientSupervisor {
         _ = await DaemonService.post("/client/stop", timeout: 120)
     }
 
+    /// Trashes Steam's shader cache and brings the client back — the daemon
+    /// stops the bottle, clears the cache, and relaunches. Only
+    /// `steamapps/shadercache` is removed; saves and game files stay.
+    func clearShaderCache() {
+        send("/bottle/clear-shader-cache", called: "clear the shader cache")
+    }
+
     func startForControl() {
         send("/client/start", called: "start")
     }

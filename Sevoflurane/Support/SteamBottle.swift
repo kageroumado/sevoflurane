@@ -82,6 +82,17 @@ nonisolated enum SteamBottle {
         steamRoot.appendingPathComponent("steam.cfg")
     }
 
+    /// Steam's downloaded and precompiled GPU shader cache, under `steamapps`
+    /// beside `common`. Steam refetches and recompiles it on demand, so
+    /// trashing it forces a rebuild and loses nothing: it holds no saves and
+    /// no game files. A shader glitch — a black screen, a stuck load — that a
+    /// plain restart does not clear is what clearing it is for. The path stays
+    /// inside `steamapps/shadercache` so a reset built on it can never reach
+    /// `common` (games) or `userdata` (saves).
+    static var shaderCache: URL {
+        steamRoot.appendingPathComponent("steamapps/shadercache")
+    }
+
     /// The client executable, as the Windows side names it.
     static let exeWindowsPath = #"C:\Program Files (x86)\Steam\Steam.exe"#
 

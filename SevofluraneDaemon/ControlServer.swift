@@ -172,6 +172,9 @@ final class ControlServer {
             // a crash leaves the game running.
             await onQuit()
             return Self.json(#"{"ok":true,"note":"bottle down"}"#)
+        case ("POST", "/bottle/clear-shader-cache"):
+            supervisor.clearShaderCache()
+            return Self.json(#"{"ok":true,"note":"clearing shader cache; restarting — poll /status"}"#)
         case ("POST", "/game/launch"):
             return await launchGame(query: request.query)
         case ("POST", "/bottle/run"):

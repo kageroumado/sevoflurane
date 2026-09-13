@@ -112,16 +112,53 @@ nonisolated enum ClientOps {
                       note: "pids \(survivors) survived the kill ladder — sevo client force-quit all")
     }
 
-    static func restart(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
+    /// `windows` tears the whole fake Windows down — wineserver included — and
+    /// boots it fresh, rather than keeping it warm across the client restart.
+    /// A direct restart already brings everything down, so the flag only
+    /// changes the supervised path.
+    static func restart(
+        noApp: Bool, windows: Bool = false, progress: (String) -> Void,
+    ) async throws -> Outcome {
         if await supervisionIsRunning(noApp: noApp) {
-            guard await AppControl.post("/client/restart") != nil else {
+            let path = windows ? "/client/restart?windows=1" : "/client/restart"
+            guard await AppControl.post(path) != nil else {
                 throw Failure.message("the daemon's control endpoint refused /client/restart")
             }
-            progress("restart begun via the daemon — waiting for healthy")
+            progress(windows
+                ? "Windows restart begun via the daemon — waiting for healthy"
+                : "restart begun via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "restart", progress: progress)
         }
         _ = try await stop(noApp: true, progress: progress)
         return try await start(noApp: true, progress: progress).renamed("restart")
+    }
+
+    /// Trashes Steam's shader cache and brings the client back. Through the
+    /// daemon it is one verb — the supervisor stops the bottle, clears the
+    /// cache, and relaunches, so nothing holds the cache while it goes. Direct
+    /// mode stops the bottle and clears, leaving the relaunch to `sevo client
+    /// start` (there is no supervisor to bring it back). Never reaches saves or
+    /// game files: only `steamapps/shadercache` is removed.
+    static func clearShaderCache(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
+        if await supervisionIsRunning(noApp: noApp) {
+            guard await AppControl.post("/bottle/clear-shader-cache", timeout: 120) != nil else {
+                throw Failure.message("the daemon refused /bottle/clear-shader-cache")
+            }
+            progress("shader cache clear requested via the daemon — waiting for healthy")
+            return await pollAppHealthy(intent: "clear shader cache", progress: progress)
+        }
+        let alive = await ClientLifecycle.bottleProcessIDs()
+        if !alive.isEmpty {
+            progress("stopping the bottle before clearing the cache")
+            await ClientLifecycle.stopAll(gracePolls: 10) { progress($0) }
+        }
+        let cleared = ClientLifecycle.clearShaderCache()
+        return Outcome(
+            verdict: cleared ? .confirmed : .noEffect, intent: "clear shader cache",
+            note: cleared
+                ? "shader cache cleared — sevo client start to relaunch"
+                : "no shader cache to clear",
+        )
     }
 
     /// `sevo engine use`: point the active engine (and optionally the bottle)

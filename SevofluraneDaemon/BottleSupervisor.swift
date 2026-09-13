@@ -445,6 +445,23 @@ final class BottleSupervisor {
         }
     }
 
+    /// Trashes Steam's shader cache and brings the client back: the bottle
+    /// comes down first so nothing holds the cache, it is cleared, then the
+    /// client relaunches if one is still wanted. Only `steamapps/shadercache`
+    /// is removed — saves and game files stay — and Steam rebuilds it.
+    func clearShaderCache() {
+        recentRestarts.removeAll()
+        hygieneTried = false
+        Task(name: "Clear the shader cache") {
+            await app.duringClientStop {
+                await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
+            }
+            let cleared = ClientLifecycle.clearShaderCache()
+            log.log(.supervisor, cleared ? "shader cache cleared" : "no shader cache to clear")
+            await restartClient(reason: "shader cache cleared")
+        }
+    }
+
     /// Whether the restart ladder is mid-flight — control verbs that would
     /// race it (`sevo client stop`) refuse instead of interleaving.
     var isBusyRestarting: Bool {

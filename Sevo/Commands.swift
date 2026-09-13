@@ -1234,7 +1234,7 @@ struct ClientCommand: AsyncParsableCommand {
         abstract: "Client lifecycle: full ladder semantics, never raw wine calls.",
         subcommands: [
             Start.self, Stop.self, Restart.self, ForceQuit.self, Update.self,
-            Pin.self, Unpin.self, Logs.self,
+            ClearShaderCache.self, Pin.self, Unpin.self, Logs.self,
         ],
     )
 
@@ -1370,12 +1370,42 @@ struct ClientCommand: AsyncParsableCommand {
             commandName: "restart", abstract: "Stop, then start.",
         )
         @Flag(name: .customLong("no-app")) var noApp = false
+        @Flag(name: .customLong("windows"), help: "Bring the whole fake Windows (wineserver included) down and boot it fresh.")
+        var windows = false
         @Flag(name: .customLong("json"), help: "Machine-readable observation.")
         var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                let outcome = try await ClientOps.restart(noApp: noApp) { narrate($0, asJSON: asJSON) }
+                let outcome = try await ClientOps.restart(
+                    noApp: noApp, windows: windows,
+                ) { narrate($0, asJSON: asJSON) }
+                await StatusReport.emit(outcome, asJSON: asJSON)
+            }
+        }
+    }
+
+    struct ClearShaderCache: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "clear-shader-cache",
+            abstract: "Trash Steam's shader cache and relaunch (fixes a black screen or stuck load).",
+            discussion: """
+            Removes steamapps/shadercache only; Steam rebuilds it on the next \
+            launch. Saves and game files are untouched. With supervision \
+            running the bottle is stopped, cleared, and brought back in one \
+            step; --no-app stops and clears, then leaves the relaunch to \
+            `sevo client start`.
+            """,
+        )
+        @Flag(name: .customLong("no-app")) var noApp = false
+        @Flag(name: .customLong("json"), help: "Machine-readable observation.")
+        var asJSON = false
+
+        func run() async throws {
+            try await handlingFailures {
+                let outcome = try await ClientOps.clearShaderCache(noApp: noApp) {
+                    narrate($0, asJSON: asJSON)
+                }
                 await StatusReport.emit(outcome, asJSON: asJSON)
             }
         }

@@ -558,6 +558,19 @@ nonisolated enum ClientLifecycle {
         (try? FileManager.default.trashItem(at: SteamBottle.htmlcache, resultingItemURL: nil)) != nil
     }
 
+    /// Trashes Steam's shader cache so the next launch rebuilds it — the
+    /// response to a black screen or a stuck load a plain restart does not
+    /// clear. Only safe with the client stopped; the caller brings the bottle
+    /// down first. Answers whether a cache was there to trash. Only
+    /// ``SteamBottle/shaderCache`` (`steamapps/shadercache`) is removed, so
+    /// saves and game files are never reached.
+    @discardableResult
+    static func clearShaderCache() -> Bool {
+        let cache = SteamBottle.shaderCache
+        guard FileManager.default.fileExists(atPath: cache.path) else { return false }
+        return (try? FileManager.default.trashItem(at: cache, resultingItemURL: nil)) != nil
+    }
+
     /// Headless client refresh (the lancache-prefill trick): re-downloads the
     /// full client package and exits without logging in. Only safe with the
     /// client stopped. Returns whether the updater exited cleanly.
