@@ -344,3 +344,38 @@ struct EnginePreferenceTests {
         #expect(!Engine.managed(version: "x").isCrossOver)
     }
 }
+
+/// How a run record names the engine that booted the client, and how that
+/// name is recovered from the boot record's root path.
+struct EngineRecordIdentifierTests {
+    @Test
+    func `the record names the engine's directory, not its display form`() {
+        #expect(Engine.crossover.recordIdentifier == "crossover")
+        #expect(Engine.crossoverPreview.recordIdentifier == "crossover-preview")
+        #expect(Engine.managed(version: "dormison-r7").recordIdentifier == "dormison-r7")
+    }
+
+    @Test
+    func `a managed boot root resolves to that version`() {
+        let root = Engine.managed(version: "dormison-r7").root.path
+        #expect(Engine.booted(fromRoot: root) == .managed(version: "dormison-r7"))
+        // The record made from it names the managed version, not whatever the
+        // active selection was later staged to.
+        #expect(Engine.booted(fromRoot: root)?.recordIdentifier == "dormison-r7")
+    }
+
+    @Test
+    func `a CrossOver boot root resolves to CrossOver`() {
+        #expect(Engine.booted(fromRoot: Engine.crossover.root.path) == .crossover)
+        #expect(Engine.booted(fromRoot: Engine.crossoverPreview.root.path) == .crossoverPreview)
+        // A CrossOver-booted client recorded while a managed engine is staged
+        // must still say `crossover`.
+        #expect(Engine.booted(fromRoot: Engine.crossover.root.path)?.recordIdentifier == "crossover")
+    }
+
+    @Test
+    func `a root that names no engine resolves to nothing`() {
+        #expect(Engine.booted(fromRoot: "/Applications/Something Else.app") == nil)
+        #expect(Engine.booted(fromRoot: "") == nil)
+    }
+}

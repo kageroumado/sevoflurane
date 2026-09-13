@@ -225,6 +225,10 @@ nonisolated enum RunLog {
         var steamLogOffset: UInt64
         /// The client's error for this game action, when it showed one.
         var steamError: String?
+        /// Steam's process log for the engine that booted the client, so a
+        /// reattached run reads its exit from the same bottle it armed
+        /// against. Absent for a run armed before this was recorded.
+        var steamLog: String?
     }
 
     /// Where armed runs are parked. A directory rather than a file, so one
@@ -428,6 +432,7 @@ nonisolated struct RunInProgress: Sendable {
             wineLogOffset: wineLogOffset,
             steamLogOffset: steamLogOffset,
             steamError: steamError,
+            steamLog: processLog.path,
         )
     }
 }
@@ -466,7 +471,11 @@ final nonisolated class RunRecorder {
     /// the two logs it reads a run's ending out of.
     private let runs: URL
     private let wineLog: URL
-    private let processLog: URL
+    /// A fixed Steam process-log to read a run's ending from. Nil in
+    /// production, where each `arm` resolves the booted engine's bottle log
+    /// at launch time (the engine can change between launches); a test injects
+    /// a concrete file so its fixtures, not a real bottle, decide the run.
+    private let processLogOverride: URL?
 
     /// A launch in progress and everything about the machine that was true
     /// when it started. `Sendable` so closing one can leave the main actor:
@@ -476,11 +485,11 @@ final nonisolated class RunRecorder {
     init(
         runs: URL = RunLog.root,
         wineLog: URL = WineLog.fileURL,
-        processLog: URL = RunRecorder.steamProcessLogURL,
+        processLog: URL? = nil,
     ) {
         self.runs = runs
         self.wineLog = wineLog
-        self.processLog = processLog
+        self.processLogOverride = processLog
     }
 
     /// A launch of `appID` has begun. Re-arming an app that is already open
@@ -497,12 +506,20 @@ final nonisolated class RunRecorder {
             let current = BottleGraphics.currentSelection()
             return (current.renderer, current.msync, current.d3dMetalVersion)
         }()
+        // The engine the running client booted from, which is what actually
+        // ran the game — never Engine.active, which may already name the next
+        // restart's staged selection. Its bottle is where Steam wrote this
+        // run's exit, so the record and the log it reads name the same engine.
+        let bootedEngine = BottleGraphics.bootedEngineRoot().flatMap(Engine.booted(fromRoot:))
+        let steamLog = processLogOverride
+            ?? bootedEngine.map(Self.steamProcessLogURL(forEngine:))
+            ?? Self.steamProcessLogURL
         let now = Date.now
         let record = RunRecord(
             t: runRecordStamp.string(from: now),
             appid: appID,
             name: values.name,
-            engine: Self.engineIdentifier,
+            engine: (bootedEngine ?? Engine.active).recordIdentifier,
             renderer: selection.renderer.rawValue,
             runner: values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
@@ -516,10 +533,10 @@ final nonisolated class RunRecorder {
             started: .now,
             record: record,
             wineLogOffset: Self.size(of: wineLog),
-            steamLogOffset: Self.size(of: processLog),
+            steamLogOffset: Self.size(of: steamLog),
             runsRoot: runs,
             wineLog: wineLog,
-            processLog: processLog,
+            processLog: steamLog,
         )
         persist(appID: appID)
         if !hasGroomed {
@@ -593,6 +610,8 @@ final nonisolated class RunRecorder {
             let appID = armed.record.appid
             guard open[appID] == nil else { continue }
             let lasted = max(0, Date.now.timeIntervalSince(armed.started))
+            let steamLog = armed.steamLog.map { URL(fileURLWithPath: $0) }
+                ?? processLogOverride ?? Self.steamProcessLogURL
             open[appID] = OpenRun(
                 started: .now.advanced(by: .seconds(-lasted)),
                 record: armed.record,
@@ -601,9 +620,9 @@ final nonisolated class RunRecorder {
                 steamError: armed.steamError,
                 runsRoot: runs,
                 wineLog: wineLog,
-                processLog: processLog,
+                processLog: steamLog,
             )
-            let tail = Self.text(of: processLog, from: armed.steamLogOffset)
+            let tail = Self.text(of: steamLog, from: armed.steamLogOffset)
             let stillUp = SteamGameProcessLog.tracks(app: appID, in: tail)
                 && SteamGameProcessLog.exits(forApp: appID, in: tail).isEmpty
             if stillUp {
@@ -626,16 +645,6 @@ final nonisolated class RunRecorder {
     private static let closings = DispatchQueue(label: "sevo.runrecorder", qos: .utility)
 
     // MARK: - The machine
-
-    /// The engine directory's own name, which is what an issue can be matched
-    /// against — the display name drops the `dormison-` prefix a report needs.
-    private static var engineIdentifier: String {
-        switch Engine.active {
-        case .crossover: "crossover"
-        case .crossoverPreview: "crossover-preview"
-        case let .managed(version): version
-        }
-    }
 
     private static var macOSVersion: String {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -669,6 +678,14 @@ final nonisolated class RunRecorder {
 
     static var steamProcessLogURL: URL {
         SteamBottle.steamRoot.appendingPathComponent("logs/gameprocess_log.txt")
+    }
+
+    /// The same log inside a named engine's own bottle, for a run recorded
+    /// against the engine that booted the client rather than ``Engine/active``.
+    static func steamProcessLogURL(forEngine engine: Engine) -> URL {
+        SteamBottle
+            .steamRoot(inBottle: engine.bottlesRoot.appendingPathComponent(SteamBottle.name))
+            .appendingPathComponent("logs/gameprocess_log.txt")
     }
 
     /// A file shorter than the offset was truncated under us (Steam rewrites

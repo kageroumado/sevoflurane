@@ -237,6 +237,30 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             : "Dormison \(version)"
     }
 
+    /// How a run record names this engine: the managed directory's version
+    /// (`dormison-r7`) or the CodeWeavers app's short id. It is matched against
+    /// an issue, so it keeps the directory name the display form prettifies.
+    var recordIdentifier: String {
+        switch self {
+        case .crossover: "crossover"
+        case .crossoverPreview: "crossover-preview"
+        case let .managed(version): version
+        }
+    }
+
+    /// The engine a boot record's root path names, reversing ``root``: the
+    /// wineserver a game inherited was booted from this directory, which is the
+    /// engine that actually ran it. `nil` when the path matches no engine.
+    static func booted(fromRoot path: String) -> Engine? {
+        if path.hasPrefix(managedRoot.path + "/") {
+            return .managed(version: URL(fileURLWithPath: path).lastPathComponent)
+        }
+        for engine: Engine in [.crossover, .crossoverPreview] where engine.root.path == path {
+            return engine
+        }
+        return nil
+    }
+
     // MARK: - Paths
 
     /// The CodeWeavers app this engine runs out of; `nil` for managed.
