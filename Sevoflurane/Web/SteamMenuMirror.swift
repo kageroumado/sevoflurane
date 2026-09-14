@@ -118,6 +118,12 @@ final class SteamMenuMirror: NSObject {
             Self.apply([], to: menu, target: self)
         }
         observeActivation()
+        // The watchdog's private stop lever inspects the open menus' tracking
+        // sessions; the mirror is the one place that knows which are open.
+        watchdog.trackedMenus = { [weak self] in
+            guard let self else { return [] }
+            return openTitles.compactMap { menus[$0] }
+        }
     }
 
     /// The native menu for one strip title, carrying the placeholder until
@@ -147,10 +153,24 @@ final class SteamMenuMirror: NSObject {
     /// Ends any menu-bar tracking session and answers which root menus were
     /// open. A stuck session leaves the app looking frozen while its control
     /// port still answers, so this is the way out from outside.
+    ///
+    /// On macOS 27+ this also pulls the watchdog's private stop lever, so
+    /// `POST /menu/cancel` and the Settings button reach the leaked remote
+    /// session the public cancel cannot. This runs on the main actor, so it
+    /// can only free a live freeze if the tracking loop is draining main-queue
+    /// work — the same property the watchdog's `.common`-mode probe relies on,
+    /// and the reason that probe, not this call, is the lever we count on. Its
+    /// value here is external: it lets a tester fire the lever on demand, and
+    /// its log lines say whether the handler ran during a freeze at all.
     @discardableResult
     func cancelTracking() -> [String] {
         let open = openTitles.sorted()
         MenuTrackingWatchdog.cancelMenuBarTracking()
+        if MenuTrackingWatchdog.privateLeverEngages {
+            let candidates = [NSApp.mainMenu].compactMap { $0 } + open.compactMap { menus[$0] }
+            let outcome = MenuTrackingWatchdog.stopPrivateSession(candidateMenus: candidates)
+            EventLog.shared.log(.menu, "control port /menu/cancel — private lever: \(outcome.summary)")
+        }
         return open
     }
 
