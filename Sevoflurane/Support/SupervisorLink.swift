@@ -20,6 +20,42 @@ nonisolated enum SupervisorLink {
     static let launchAgentPlistName = "SevofluraneDaemon.plist"
 }
 
+/// Where the app process stands relative to the daemon, as `sevo status` and
+/// `sevo doctor` report it.
+///
+/// The daemon knows only whether the app is attached to its link, so its
+/// `/status` says "running" only for an attached app. An app whose process is
+/// alive but has not re-attached — the window after a daemon rebuild, before
+/// the app posts its facts again — answers its own link port while the daemon
+/// reports it gone. That app is detached and reattaching, which is a running
+/// app, so the CLI probes the link port and reports it as running rather than
+/// repeating the daemon's blind spot as "not running".
+nonisolated enum AppRunState: String, Equatable, Sendable {
+    case notRunning = "not running"
+    case detached = "running, reattaching"
+    case attached = "running"
+
+    /// `daemonReportsAttached` is the daemon `/status` `app` field reading
+    /// "running"; `appLinkAlive` is the app answering its own link port.
+    static func classify(daemonReportsAttached: Bool, appLinkAlive: Bool) -> AppRunState {
+        if daemonReportsAttached { return .attached }
+        return appLinkAlive ? .detached : .notRunning
+    }
+
+    /// The app process is answering, whether or not the daemon still holds it.
+    var isRunning: Bool { self != .notRunning }
+
+    /// The `sevo doctor` line for this state, with the reassurance that a
+    /// missing app leaves the daemon keeping the client up on its own.
+    var doctorLabel: String {
+        switch self {
+        case .attached: "Sevoflurane app: running"
+        case .detached: "Sevoflurane app: running, reattaching to the background helper"
+        case .notRunning: "Sevoflurane app: not running (the daemon keeps the client up without it)"
+        }
+    }
+}
+
 /// What the app knows and the daemon cannot see for itself: the page's login
 /// window and the bridge's socket to the client. Posted whenever either
 /// changes, and once on every attach.

@@ -113,8 +113,13 @@ enum StatusReport {
         } else {
             "not running"
         }
-        let appRunning = (snapshot.appStatus?["app"] as? String) == "running"
-        let app = appRunning ? "running" : "not running"
+        // Supervision above is the daemon; this is the app process. The daemon
+        // sees only an attached app, so a live-but-detached one is read off its
+        // own link port instead of inheriting the daemon's blind spot.
+        let appState = AppRunState.classify(
+            daemonReportsAttached: (snapshot.appStatus?["app"] as? String) == "running",
+            appLinkAlive: snapshot.appLinkAlive,
+        )
         // A bottle missing a required dependency still runs games, so this is
         // a note beside the client's state rather than a state of its own.
         let incomplete = BottleReadiness.incompleteSummary()
@@ -128,13 +133,14 @@ enum StatusReport {
             "services_up": snapshot.servicesUp ?? NSNull(),
             "bridge": snapshot.bridgeUp,
             "app": snapshot.appStatus ?? NSNull(),
-            "app_running": appRunning,
+            "app_running": appState.isRunning,
+            "app_attached": appState == .attached,
             "dump_rate_10m": snapshot.dumpCount,
             "client_pinned": snapshot.pinned,
         ]
         var line = "engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
-            + " · supervision \(supervision) · app \(app)"
+            + " · supervision \(supervision) · app \(appState.rawValue)"
         if incomplete != nil { line += " · bottle incomplete" }
         if snapshot.appStatus?["debug"] as? Bool == true { line += " · debug mode on" }
         return (dict, line)

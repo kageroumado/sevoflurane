@@ -69,3 +69,39 @@ struct SupervisorLinkTests {
         #expect(SupervisorHealth(wireName: "somethingNewer", detail: "") == .starting)
     }
 }
+
+/// How `sevo status` reads the app process from two signals: the daemon's
+/// attachment claim and the app's own link port. The bug this guards: a live
+/// app the daemon lost after a rebuild must never read as "not running".
+struct AppRunStateTests {
+    @Test
+    func `an app the daemon vouches for is attached`() {
+        #expect(AppRunState.classify(daemonReportsAttached: true, appLinkAlive: false) == .attached)
+        // Its own port need not be re-probed once the daemon confirms it.
+        #expect(AppRunState.classify(daemonReportsAttached: true, appLinkAlive: true) == .attached)
+    }
+
+    @Test
+    func `an app alive on its link port but not attached is detached, not gone`() {
+        #expect(AppRunState.classify(daemonReportsAttached: false, appLinkAlive: true) == .detached)
+    }
+
+    @Test
+    func `an app answering nowhere is not running`() {
+        #expect(AppRunState.classify(daemonReportsAttached: false, appLinkAlive: false) == .notRunning)
+    }
+
+    @Test
+    func `detached and attached are both running; only silence is not`() {
+        #expect(AppRunState.attached.isRunning)
+        #expect(AppRunState.detached.isRunning)
+        #expect(!AppRunState.notRunning.isRunning)
+    }
+
+    @Test
+    func `the state prints the words sevo status shows`() {
+        #expect(AppRunState.attached.rawValue == "running")
+        #expect(AppRunState.detached.rawValue == "running, reattaching")
+        #expect(AppRunState.notRunning.rawValue == "not running")
+    }
+}

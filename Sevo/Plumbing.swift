@@ -117,6 +117,23 @@ nonisolated enum AppControl {
         return (http.statusCode, data)
     }
 
+    /// Whether the app process is answering its own link port, regardless of
+    /// whether the daemon still holds its attachment. A detached-but-alive app
+    /// — the window after a daemon rebuild, before the app re-posts its facts —
+    /// answers here while the daemon's `/status` reports it gone. Any HTTP
+    /// reply is proof of life; the `/game/window` read is side-effect-free.
+    static func appIsAlive(timeout: TimeInterval = 2) async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.appLink)/game/window") else {
+            return false
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeout
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              response is HTTPURLResponse else { return false }
+        return true
+    }
+
     /// The daemon's `/status` as a dictionary, or nil when supervision is
     /// down. One retry: the daemon's main actor can be busy past the timeout
     /// mid-restart, and a single missed probe must not read as "gone".

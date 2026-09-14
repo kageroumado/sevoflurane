@@ -26,6 +26,10 @@ nonisolated enum Doctor {
         let bottleProcesses: [pid_t]
         let bridgeUp: Bool
         let appStatus: [String: Any]?
+        /// The app process answers its own link port. Set even when the daemon
+        /// reports the app detached, so a live-but-detached app reads as
+        /// running rather than gone.
+        let appLinkAlive: Bool
         let servicesUp: Bool?
         let dumpCount: Int
         let pinned: Bool
@@ -40,6 +44,10 @@ nonisolated enum Doctor {
         let clientState = await ClientLifecycle.probeClient()
         let bottleProcesses = await ClientLifecycle.bottleProcessIDs()
         let appStatus = await AppControl.status()
+        // Probe the app's own link port only when the daemon does not already
+        // vouch for the app, so a healthy attached app costs no extra request.
+        let daemonReportsAttached = (appStatus?["app"] as? String) == "running"
+        let appLinkAlive = daemonReportsAttached ? true : await AppControl.appIsAlive()
         var bridgeUp = false
         var servicesUp: Bool?
         if let reply = try? await BridgeEval.eval(
@@ -59,6 +67,7 @@ nonisolated enum Doctor {
             bottleProcesses: bottleProcesses,
             bridgeUp: bridgeUp,
             appStatus: appStatus,
+            appLinkAlive: appLinkAlive,
             servicesUp: servicesUp,
             dumpCount: ClientLifecycle.recentDumpCount(),
             pinned: ClientLifecycle.isPinned(),
@@ -147,17 +156,16 @@ nonisolated enum Doctor {
             hint: "sevo client start", provisioning: false,
         ))
 
-        let appRunning = (s.appStatus?["app"] as? String) == "running"
+        let appState = AppRunState.classify(
+            daemonReportsAttached: (s.appStatus?["app"] as? String) == "running",
+            appLinkAlive: s.appLinkAlive,
+        )
         checks.append(Check(
-            id: "app",
-            ok: true,
-            label: appRunning
-                ? "Sevoflurane app: running"
-                : "Sevoflurane app: not running (the daemon keeps the client up without it)",
+            id: "app", ok: true, label: appState.doctorLabel,
             hint: "sevo logs --tail 50", provisioning: false,
         ))
 
-        if appRunning {
+        if appState.isRunning {
             checks.append(Check(
                 id: "bridge", ok: s.bridgeUp,
                 label: "bridge :\(BridgePorts.steamUI)",
@@ -262,6 +270,10 @@ nonisolated enum Doctor {
         ]
         report["provisioning"] = s.provision?.dictionary ?? NSNull()
         report["app"] = s.appStatus ?? ["app": "not running"]
+        report["app_state"] = AppRunState.classify(
+            daemonReportsAttached: (s.appStatus?["app"] as? String) == "running",
+            appLinkAlive: s.appLinkAlive,
+        ).rawValue
         let d = s.detection
         report["detection"] = [
             "rosetta": d.rosetta,
