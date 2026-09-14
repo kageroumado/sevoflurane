@@ -365,6 +365,8 @@ struct RecoverySettings: View {
             switch await DaemonService.repair() {
             case .reachable:
                 helper = .done("The background helper is running.")
+            case .alreadyHealthy:
+                helper = .done("The background helper is already healthy.")
             case let .needsApproval(message):
                 helper = .failed(message)
             case let .failed(reason):

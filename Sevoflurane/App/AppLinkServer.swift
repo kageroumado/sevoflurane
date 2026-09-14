@@ -80,7 +80,7 @@ final class AppLinkServer {
             // (`SMAppService` acts for the bundle that registered it), so
             // `sevo daemon repair` asks this port rather than the control port,
             // which is exactly what is down when the helper will not launch.
-            return await repairDaemon()
+            return await repairDaemon(force: Self.value(of: "force", in: request.query) == "1")
         default:
             return await pageVerb(request)
         }
@@ -162,11 +162,14 @@ final class AppLinkServer {
     }
 
     /// Rebuilds the daemon's registration and reports the outcome, so a user
-    /// stuck on a helper that will not launch can recover from the terminal.
-    private func repairDaemon() async -> HTTPResponse {
-        let (result, note): (String, String) = switch await DaemonService.repair() {
+    /// stuck on a helper that will not launch can recover from the terminal. A
+    /// daemon that is already answering is left running unless `force` is set.
+    private func repairDaemon(force: Bool) async -> HTTPResponse {
+        let (result, note): (String, String) = switch await DaemonService.repair(force: force) {
         case .reachable:
             ("repaired", "the background helper was rebuilt and is answering")
+        case .alreadyHealthy:
+            ("alreadyHealthy", "the background helper is already healthy — nothing to repair")
         case let .needsApproval(message):
             ("needsApproval", message)
         case let .failed(reason):

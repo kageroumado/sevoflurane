@@ -1513,14 +1513,19 @@ struct DaemonCommand: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "repair",
             abstract: "Rebuild the background helper's registration (unregister, then register).",
-            discussion: "Needs Sevoflurane running: only the app can rebuild the "
+            discussion: "A no-op when the helper is already answering — repairing a "
+                + "healthy helper would detach the running app. Pass --force to rebuild "
+                + "anyway. Needs Sevoflurane running: only the app can rebuild the "
                 + "registration. macOS may ask you to approve the helper again "
                 + "in Login Items afterward.",
         )
         @Flag(name: .customLong("json")) var asJSON = false
+        @Flag(name: .customLong("force"), help: "Rebuild even when the helper is already healthy.")
+        var force = false
 
         func run() async throws {
-            guard let reply = await AppControl.appLinkPost("/daemon/repair") else {
+            let path = force ? "/daemon/repair?force=1" : "/daemon/repair"
+            guard let reply = await AppControl.appLinkPost(path) else {
                 Sevo.printError("Sevoflurane is not running — open it and try again "
                     + "(only the app can rebuild the helper's registration).")
                 throw SevoExit.unreachable

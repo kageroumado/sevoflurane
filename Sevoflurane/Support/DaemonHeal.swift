@@ -42,6 +42,24 @@ nonisolated enum DaemonHeal {
         case restartStale
     }
 
+    /// What a manual `repair()` should do. Repair is the escape hatch for a
+    /// daemon that will not answer; run against one that is already answering
+    /// it would tear a healthy helper down and detach the running app for
+    /// nothing. So it rebuilds only when the daemon is silent — the same
+    /// signal `decide` splits `.none` from `.rebuild` on — unless the caller
+    /// forces a rebuild anyway.
+    enum RepairAction: Equatable {
+        /// The daemon is answering; leave it and the app's attachment alone.
+        case alreadyHealthy
+        /// Tear the registration down and rebuild it from this bundle.
+        case rebuild
+    }
+
+    static func repairAction(isAnswering: Bool, force: Bool) -> RepairAction {
+        if force { return .rebuild }
+        return isAnswering ? .alreadyHealthy : .rebuild
+    }
+
     static func decide(_ inputs: Inputs) -> Action {
         if inputs.isAnswering {
             if let daemonVersion = inputs.daemonVersion,

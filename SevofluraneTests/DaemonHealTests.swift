@@ -65,6 +65,24 @@ struct DaemonHealTests {
     }
 
     @Test
+    func `repair leaves an answering daemon alone`() {
+        // The escape hatch run on a healthy system must not rebuild — that
+        // would detach the running app.
+        #expect(DaemonHeal.repairAction(isAnswering: true, force: false) == .alreadyHealthy)
+    }
+
+    @Test
+    func `repair rebuilds a silent daemon`() {
+        #expect(DaemonHeal.repairAction(isAnswering: false, force: false) == .rebuild)
+    }
+
+    @Test
+    func `force rebuilds even a daemon that is answering`() {
+        #expect(DaemonHeal.repairAction(isAnswering: true, force: true) == .rebuild)
+        #expect(DaemonHeal.repairAction(isAnswering: false, force: true) == .rebuild)
+    }
+
+    @Test
     func `version ordering compares component by component`() {
         #expect(DaemonHeal.isOlder("1.5", than: "1.6"))
         #expect(DaemonHeal.isOlder("1.6", than: "1.6.1"))

@@ -28,6 +28,10 @@ enum DaemonService {
     enum RepairResult: Equatable {
         /// Rebuilt, and the daemon answered.
         case reachable
+        /// The daemon was already answering, so nothing was rebuilt — the
+        /// common case for a `repair` run out of curiosity, which must not
+        /// tear a healthy helper down.
+        case alreadyHealthy
         /// Rebuilt, and macOS is waiting on the user to approve it again.
         case needsApproval(String)
         /// The rebuild itself failed, or the daemon did not come back.
@@ -88,7 +92,9 @@ enum DaemonService {
         case .none:
             return reachable
         case .rebuild:
-            return outcome(of: await repair())
+            // The decision above already found the daemon silent, so the
+            // rebuild runs directly rather than re-probing through `repair()`.
+            return outcome(of: await rebuild())
         case .restartStale:
             await restartStaleDaemonOnce()
             return reachable
@@ -97,13 +103,27 @@ enum DaemonService {
         }
     }
 
+    /// The user-driven escape hatch, from `sevo daemon repair` and Settings.
+    /// A daemon that is already answering is left running — rebuilding it would
+    /// only detach the live app and force a relaunch — and only a silent one is
+    /// rebuilt. `force` rebuilds regardless, for a daemon that answers but is
+    /// still wrong.
+    static func repair(force: Bool = false) async -> RepairResult {
+        switch DaemonHeal.repairAction(isAnswering: await isAnswering(), force: force) {
+        case .alreadyHealthy:
+            return .alreadyHealthy
+        case .rebuild:
+            return await rebuild()
+        }
+    }
+
     /// Rebuilds the registration from this bundle's identity: `unregister()`
     /// then `register()`. This is the fix for a daemon that will not launch
     /// because a stale record still carries a Development code requirement —
     /// re-registering over an enabled record leaves that requirement in place,
     /// so the record has to be torn down first. Reached from the launch
-    /// self-heal, `sevo daemon repair`, and Settings.
-    static func repair() async -> RepairResult {
+    /// self-heal and from ``repair(force:)``.
+    private static func rebuild() async -> RepairResult {
         healAttempted = true
         await unregister()
         do {
@@ -149,7 +169,7 @@ enum DaemonService {
 
     private static func outcome(of result: RepairResult) -> Outcome {
         switch result {
-        case .reachable:
+        case .reachable, .alreadyHealthy:
             reachable
         case let .needsApproval(message):
             Outcome(isReachable: false, message: message, needsApproval: true)
