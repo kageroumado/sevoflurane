@@ -154,6 +154,41 @@ struct RunRecorderTests {
     }
 
     @Test
+    func `the renderer that answered the game's own process names the run`() {
+        let trail = """
+        sevo:run pid=6350 exe=steamwebhelper.exe appid=none engine=dormison-r9
+        sevo:gfx pid=6350 renderer=d3dmetal toolkit=4.0 beta 2 presenter=off upscaler=off msync=1
+        sevo:run pid=6360 exe=HuniePop.exe appid=339800 engine=dormison-r9
+        sevo:gfx pid=6360 renderer=wined3d-gl toolkit=4.0 beta 2 presenter=off upscaler=off msync=1
+        sevo:gfx pid=6360 first present +74629ms surface=0x600003729730 layer=on-screen
+        """
+        #expect(WineProvenance.renderer(forApp: 339_800, exe: "huniepop.exe", in: trail) == "wined3d-gl")
+    }
+
+    @Test
+    func `an executable with spaces in its name is still the game's own`() {
+        let trail = """
+        sevo:run pid=8749 exe=Aka Manto.exe appid=1130620 engine=dormison-r9
+        sevo:gfx pid=8749 renderer=dxmt toolkit=none presenter=off upscaler=off msync=1
+        """
+        #expect(WineProvenance.renderer(forApp: 1_130_620, exe: "aka manto.exe", in: trail) == "dxmt")
+    }
+
+    @Test
+    func `a helper process attributed to the app names the run when its own has no line`() {
+        let trail = """
+        sevo:run pid=41 exe=UnityCrashHandler64.exe appid=508440 engine=dormison-r9
+        sevo:gfx pid=41 renderer=dxmt toolkit=none presenter=off upscaler=off msync=1
+        sevo:run pid=42 exe=totallyaccuratebattlesimulator.exe appid=508440 engine=dormison-r9
+        """
+        #expect(
+            WineProvenance.renderer(forApp: 508_440, exe: "totallyaccuratebattlesimulator.exe", in: trail)
+                == "dxmt",
+        )
+        #expect(WineProvenance.renderer(forApp: 1, exe: nil, in: trail) == nil)
+    }
+
+    @Test
     func `the renderer's complaints are counted, not repeated`() {
         let trail = String(repeating: "err:   Shader not found?\n", count: 16)
             + "err:   Not supported feature: 11\nerr:   Not supported feature: 12\n"
