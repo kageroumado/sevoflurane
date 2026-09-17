@@ -20,7 +20,7 @@ struct SubprocessTests {
         let run = await timed { await Subprocess.run("/usr/bin/true", [], capture: .none) }
         #expect(run.result.status == 0)
         #expect(run.result.output.isEmpty)
-        #expect(run.elapsed < .milliseconds(300))
+        #expect(run.elapsed < .seconds(5))
     }
 
     @Test

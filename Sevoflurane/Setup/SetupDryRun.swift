@@ -123,6 +123,9 @@
         private let stepDelay: Duration
         private var loginItem = true
         private var detectCount = 0
+        var installedDependencies: Set<String> = []
+        var dependencyFailure: String?
+        private(set) var dependencyInstalls: [String] = []
 
         init(
             scenario: SetupScenario,
@@ -263,6 +266,19 @@
             log(#"would run: wine --bottle \#(name) reg add "#
                 + #"HKLM\System\CurrentControlSet\Services\winebus "#
                 + #"/v "Enable SDL" /t REG_DWORD /d 0 /f"#)
+        }
+
+        func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool {
+            installedDependencies.contains(dependency.id)
+        }
+
+        func installDependency(_ dependency: BottleDependencies.Dependency) async -> SetupCommandOutcome {
+            dependencyInstalls.append(dependency.id)
+            log("would install \(dependency.name) in \(SteamBottle.name)")
+            await pause()
+            if let dependencyFailure { return .failure(dependencyFailure) }
+            installedDependencies.insert(dependency.id)
+            return .success()
         }
 
         func setOpenAtLogin(_ enabled: Bool) throws {

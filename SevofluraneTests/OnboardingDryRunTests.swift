@@ -23,6 +23,36 @@ struct OnboardingDryRunTests {
         #expect(provisioner.activity == .done)
         #expect(env.state.steamBottles.count == 1)
         #expect(!provisioner.needsSetup)
+        #expect(env.installedDependencies == ["vcredist", "d3dcompiler"])
+    }
+
+    @Test
+    func `provisioning preserves installed dependencies`() async {
+        let (provisioner, env) = makeProvisioner(.provisioned)
+        env.installedDependencies = ["vcredist", "d3dcompiler"]
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.dependencyInstalls.isEmpty)
+    }
+
+    @Test
+    func `shader compiler failure can resume without reinstalling completed runtimes`() async {
+        let (provisioner, env) = makeProvisioner(.provisioned)
+        env.installedDependencies = ["vcredist"]
+        env.dependencyFailure = "download interrupted"
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        guard case let .failed(reason) = provisioner.activity else {
+            Issue.record("expected a dependency failure, got \(provisioner.activity)")
+            return
+        }
+        #expect(reason.contains("Direct3D shader compiler"))
+        env.dependencyFailure = nil
+        await provisioner.retry()
+        #expect(provisioner.activity == .done)
+        #expect(env.installedDependencies == ["vcredist", "d3dcompiler"])
+        #expect(env.dependencyInstalls == ["d3dcompiler", "d3dcompiler"])
     }
 
     @Test

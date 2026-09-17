@@ -51,6 +51,12 @@ protocol SetupEnvironment: AnyObject {
     /// The idempotent per-bottle registry configuration (tray suppression).
     func configureBottle(named name: String) async
 
+    /// Whether the active bottle contains the dependency's installed payload.
+    func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool
+
+    /// Installs a required game runtime in the active bottle.
+    func installDependency(_ dependency: BottleDependencies.Dependency) async -> SetupCommandOutcome
+
     func setOpenAtLogin(_ enabled: Bool) throws
     var openAtLogin: Bool { get }
 }
@@ -299,6 +305,17 @@ final class LiveSetupEnvironment: SetupEnvironment {
         } else {
             try SMAppService.mainApp.unregister()
         }
+    }
+
+    func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool {
+        BottleDependencies.isInstalled(dependency)
+    }
+
+    func installDependency(_ dependency: BottleDependencies.Dependency) async -> SetupCommandOutcome {
+        let failure = await BottleDependencies.install(dependency.id) { phase in
+            SetupLog.log("provision: \(dependency.name): \(phase)")
+        }
+        return failure.map(SetupCommandOutcome.failure) ?? .success()
     }
 
     var openAtLogin: Bool {

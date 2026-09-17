@@ -1,0 +1,46 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - name: Check out Sevoflurane
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          path: sevoflurane
+          persist-credentials: false
+      - name: Check out Propofol
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: kageroumado/propofol
+          ref: 6730464c9bd21eb79b17c8bb00709a4ed7eac4ce
+          path: propofol
+          persist-credentials: false
+      - name: Build the app and run every test
+        working-directory: sevoflurane
+        run: >-
+          xcodebuild -project Sevoflurane.xcodeproj -scheme Sevoflurane
+          -destination 'platform=macOS' -derivedDataPath build
+          -resultBundlePath TestResults.xcresult
+          CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= test
+      - name: Save test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macos-test-results
+          path: sevoflurane/TestResults.xcresult
+          if-no-files-found: ignore

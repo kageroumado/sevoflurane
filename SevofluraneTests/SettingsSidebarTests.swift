@@ -45,6 +45,7 @@ struct SettingsSidebarTests {
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 420),
             styleMask: [.titled], backing: .buffered, defer: false,
         )
+        window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: Harness(bindings: bindings))
         window.orderFrontRegardless()
         defer { window.close() }

@@ -26,7 +26,7 @@ final class Provisioner {
     /// honest because the sequence itself never changes.
     struct Stage: Equatable {
         let index: Int
-        static let count = 5
+        static let count = 6
     }
 
     private(set) var detection: SetupDetection?
@@ -122,6 +122,7 @@ final class Provisioner {
             try await createBottleIfMissing(bottleName)
             try await installBootstrapperIfMissing(inBottle: bottleName)
             try await updateClient(inBottle: bottleName)
+            try await installGameDependencies()
             activity = .done
             if !environment.isSimulation { BottleReadiness.recordProvisionSucceeded() }
             SetupLog.log("provision: Steam client present in bottle \(bottleName)")
@@ -152,6 +153,17 @@ final class Provisioner {
         stage = Stage(index: index)
         stageFraction = nil
         activity = .working(phase)
+    }
+
+    private func installGameDependencies() async throws {
+        for dependency in BottleDependencies.catalog where dependency.required {
+            guard !environment.isDependencyInstalled(dependency) else { continue }
+            beginStage(6, "Installing \(dependency.name)…")
+            let result = await environment.installDependency(dependency)
+            guard result.succeeded, environment.isDependencyInstalled(dependency) else {
+                throw ProvisionError("\(dependency.name) installation failed: \(result.output.suffix(300))")
+            }
+        }
     }
 
     /// The whole stack is x86_64; without Rosetta neither cxbottle nor the
