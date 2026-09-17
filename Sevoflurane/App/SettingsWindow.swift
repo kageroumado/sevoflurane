@@ -12,6 +12,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private weak var supervisor: ClientSupervisor?
     private weak var host: SteamWebHost?
     private var window: NSWindow?
+    private let navigation = SettingsNavigation()
     private let makeGraphics: () -> GraphicsStore
     private let makeStorage: () -> StorageStore
     private let makeShaders: () -> ShaderStore
@@ -70,6 +71,11 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         NSApp.activate()
     }
 
+    func showRecovery() {
+        navigation.showRecovery()
+        show()
+    }
+
     private func makeWindow() -> NSWindow {
         let steam = host.map { host in
             SteamActions(
@@ -97,6 +103,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 compatibility: compatibilityStore,
                 steam: steam,
                 supervisor: supervisor,
+                navigation: navigation,
             ),
         )
         let window = NSWindow(contentViewController: controller)

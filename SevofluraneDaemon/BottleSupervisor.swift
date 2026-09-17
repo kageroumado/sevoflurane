@@ -57,7 +57,7 @@ final class BottleSupervisor {
             isPaused: isPaused || !wantsClient,
             isRestarting: isRestarting,
             restartPhase: restartPhase,
-            progressPhase: progressPhase,
+            progressPhase: progressPhase ?? boot.progressText(elapsedSeconds: bootSeconds),
             isPageBooting: boot == .pageBooting,
             lastProbe: lastProbe,
             pageServicesUp: pageServicesUp,
@@ -404,6 +404,7 @@ final class BottleSupervisor {
     /// what distinguishes "try again" from a loop. A ladder already in flight
     /// runs again rather than being fought or refused.
     func restartNow(reason: String = "manual restart from the menu bar") {
+        setPaused(false, note: "auto-restart resumed (manual restart)")
         recentRestarts.removeAll()
         hygieneTried = false
         Task(name: "Manual client restart") {
@@ -414,6 +415,7 @@ final class BottleSupervisor {
     /// The heavier menu-bar restart: the whole fake Windows comes down and
     /// boots fresh — for when the machine itself is suspect, not just Steam.
     func restartWindowsNow() {
+        setPaused(false, note: "auto-restart resumed (Windows restart)")
         recentRestarts.removeAll()
         hygieneTried = false
         Task(name: "Manual Windows restart") {
@@ -429,6 +431,7 @@ final class BottleSupervisor {
     /// takes the whole fake machine — games and services included — down
     /// first. The crash-loop budget resets because the user asked.
     func forceQuit(_ scope: ClientLifecycle.ForceScope) {
+        setPaused(false, note: "auto-restart resumed (force-quit and restart)")
         recentRestarts.removeAll()
         hygieneTried = false
         Task(name: "Force quit \(scope == .steam ? "Steam" : "everything")") {
@@ -638,10 +641,10 @@ final class BottleSupervisor {
             await app.connectToClient()
             await sweepClientPopups(duringStartup: true)
             enterBoot(.awaitingServices)
-            progressPhase = "waiting for Steam's services…"
+            progressPhase = boot.progressText(elapsedSeconds: bootSeconds)
             return true
         case .awaitingServices:
-            progressPhase = "waiting for Steam's services…"
+            progressPhase = boot.progressText(elapsedSeconds: bootSeconds)
             guard app.isAttached else {
                 log.log(.client, "client is up with no app attached — the boot ends here")
                 endBoot()
@@ -884,7 +887,7 @@ final class BottleSupervisor {
             endBoot()
             return
         }
-        progressPhase = "waiting for the client (\(waited)s)"
+        progressPhase = boot.progressText(elapsedSeconds: waited)
     }
 
     /// The page answers but Steam's stores never initialized. Boot and reload

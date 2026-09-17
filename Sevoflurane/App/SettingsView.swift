@@ -34,21 +34,19 @@ struct SettingsView: View {
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
-    @State private var category: SettingsCategory = .general
-    @State private var searchText = ""
-    @State private var highlighted: SettingsAnchor?
+    @Bindable var navigation = SettingsNavigation()
 
     var body: some View {
         NavigationSplitView {
             SettingsSidebar(
-                category: $category,
-                searchText: $searchText,
-                highlighted: $highlighted,
+                category: $navigation.category,
+                searchText: $navigation.searchText,
+                highlighted: $navigation.highlighted,
             )
             .toolbar(removing: .sidebarToggle)
         } detail: {
             SettingsPane(
-                category: category,
+                category: navigation.category,
                 provisioner: provisioner,
                 graphics: graphics,
                 storage: storage,
@@ -56,15 +54,15 @@ struct SettingsView: View {
                 shaders: shaders,
                 compatibility: compatibility,
                 steam: steam,
-                highlighted: highlighted,
+                highlighted: navigation.highlighted,
                 supervisor: supervisor,
             )
         }
         .navigationSplitViewStyle(.balanced)
-        .onChange(of: category, initial: true) { _, category in
+        .onChange(of: navigation.category, initial: true) { _, category in
             EventLog.shared.log(.window, "settings: showing \(category.title)")
         }
-        .onChange(of: searchText.isEmpty) { _, isEmpty in
+        .onChange(of: navigation.searchText.isEmpty) { _, isEmpty in
             EventLog.shared.log(
                 .window,
                 isEmpty ? "settings: sidebar search cleared" : "settings: sidebar search active",

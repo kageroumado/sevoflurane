@@ -108,6 +108,17 @@ nonisolated enum SupervisorBootPhase: Equatable, Sendable {
     case awaitingServices
     /// The page has been sent to the client and is converging.
     case pageBooting
+
+    func progressText(elapsedSeconds: Int) -> String? {
+        let phase: String
+        switch self {
+        case .idle: return nil
+        case .awaitingClient: phase = "Starting Windows and Steam"
+        case .awaitingServices: phase = "Waiting for Steam’s services"
+        case .pageBooting: phase = "Opening your library"
+        }
+        return "\(phase)… (\(max(0, elapsedSeconds))s)"
+    }
 }
 
 /// Everything the health verdict is a function of.

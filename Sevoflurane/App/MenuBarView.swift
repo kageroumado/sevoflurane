@@ -158,6 +158,9 @@ struct MenuBarView: View {
                 detail: supervisor.statusText,
                 tint: .red,
                 action: ("Restart Now", { supervisor.restartNow() }),
+                alternative: ("Recovery…", {
+                    NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
+                }),
             )
         case .paused:
             HealthCard(

@@ -627,6 +627,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show()
     }
 
+    @objc
+    func showRecovery(_: Any?) {
+        settingsWindow.showRecovery()
+    }
+
     /// About, and the two documents its buttons open. The Settings About
     /// pane reaches the same windows through the responder chain.
     @objc

@@ -115,6 +115,7 @@
 				App/MenuBarView.swift,
 				App/QuickLaunchStore.swift,
 				App/RepairSettings.swift,
+				App/SettingsNavigation.swift,
 				App/SettingsView.swift,
 				App/SettingsWindow.swift,
 				App/SevofluraneMainMenu.swift,

@@ -28,6 +28,14 @@ struct FooterBar: View {
         GlassEffectContainer(spacing: Theme.Space.xs) {
             HStack(spacing: Theme.Space.xs) {
                 StatusChip(host: host, supervisor: supervisor)
+                if case .gaveUp = supervisor.health {
+                    Button("Recovery…") {
+                        NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                    .fixedSize()
+                    .help("Open Settings › Recovery: restart, repair, or report")
+                }
                 DebugChip()
                 UpdateChip()
                 Spacer(minLength: 0)
