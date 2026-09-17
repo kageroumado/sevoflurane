@@ -5,7 +5,7 @@ import Testing
 struct MenuTrackingWatchdogTests {
     private typealias Watchdog = MenuTrackingWatchdog
     private let limit = MenuTrackingWatchdog.stallLimit
-    private let escapeDelay = MenuTrackingWatchdog.escapeDelay
+    private let dismissDelay = MenuTrackingWatchdog.dismissDelay
     private let stopThreshold = MenuTrackingWatchdog.stopThreshold
     private let abandonThreshold = MenuTrackingWatchdog.abandonThreshold
 
@@ -21,24 +21,24 @@ struct MenuTrackingWatchdogTests {
     }
 
     @Test
-    func `the escape follows only once the cancel has been given its delay`() {
+    func `the dismissal lever follows only once the cancel has been given its delay`() {
         #expect(Watchdog.lever(starvedSeconds: limit, stage: .cancelled, privateLeverEngages: true) == nil)
         #expect(Watchdog.lever(
-            starvedSeconds: limit + escapeDelay, stage: .cancelled, privateLeverEngages: true,
-        ) == .escaped)
+            starvedSeconds: limit + dismissDelay, stage: .cancelled, privateLeverEngages: true,
+        ) == .dismissed)
     }
 
     @Test
-    func `the stop lever follows only once the escape has been given its delay`() {
-        #expect(Watchdog.lever(starvedSeconds: stopThreshold - 1, stage: .escaped, privateLeverEngages: true) == nil)
+    func `the stop lever follows only once the dismissal lever has been given its delay`() {
+        #expect(Watchdog.lever(starvedSeconds: stopThreshold - 1, stage: .dismissed, privateLeverEngages: true) == nil)
         #expect(Watchdog.lever(
-            starvedSeconds: stopThreshold, stage: .escaped, privateLeverEngages: true,
+            starvedSeconds: stopThreshold, stage: .dismissed, privateLeverEngages: true,
         ) == .stopped)
     }
 
     @Test
-    func `the escape is the last lever where the private path does not engage`() {
-        #expect(Watchdog.lever(starvedSeconds: 600, stage: .escaped, privateLeverEngages: false) == nil)
+    func `the dismissal lever is the last where the private path does not engage`() {
+        #expect(Watchdog.lever(starvedSeconds: 600, stage: .dismissed, privateLeverEngages: false) == nil)
     }
 
     @Test
@@ -73,7 +73,7 @@ struct MenuTrackingWatchdogTests {
                 levers.append(lever)
             }
         }
-        #expect(levers == [.cancelled, .escaped, .stopped, .abandoned])
+        #expect(levers == [.cancelled, .dismissed, .stopped, .abandoned])
         #expect(state.isTracking)
         #expect(state.stage == .abandoned)
     }
@@ -91,8 +91,8 @@ struct MenuTrackingWatchdogTests {
                 levers.append(lever)
             }
         }
-        #expect(levers == [.cancelled, .escaped])
-        #expect(state.stage == .escaped)
+        #expect(levers == [.cancelled, .dismissed])
+        #expect(state.stage == .dismissed)
     }
 
     /// A title the pointer crosses inside a live session is not a new
@@ -141,8 +141,8 @@ struct MenuTrackingWatchdogTests {
     @Test
     func `the stop outcome reads the same wherever the lever fired`() {
         #expect(
-            Watchdog.StopOutcome(sessionSource: "currentSession", enderSent: "endRemoteTracking").summary
-                == "found the tracking session via currentSession, sent endRemoteTracking",
+            Watchdog.StopOutcome(sessionSource: "currentSession", enderSent: "dismissAnimated:NO").summary
+                == "found the tracking session via currentSession, sent dismissAnimated:NO",
         )
         #expect(
             Watchdog.StopOutcome(sessionSource: "menu ‘Help’", enderSent: nil).summary

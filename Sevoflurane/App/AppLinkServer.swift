@@ -118,6 +118,14 @@ final class AppLinkServer {
             return Self.json(#"{"ok":true,"note":"Steam window torn down"}"#)
         case ("POST", "/menu/cancel"):
             return cancelMenuTracking()
+        case ("GET", "/menu/session"):
+            // Which menu-bar impl is in use and whether a tracking session
+            // is live, with the two flags the watchdog's levers turn on —
+            // readable from outside while the main thread is stuck in it.
+            guard let data = try? JSONSerialization.data(
+                withJSONObject: MenuTrackingWatchdog.diagnostics(), options: [.sortedKeys],
+            ) else { return .error(500, "diagnostics failed") }
+            return Self.json(String(decoding: data, as: UTF8.self))
         case ("GET", "/debug"), ("POST", "/debug/on"), ("POST", "/debug/off"):
             return DebugModeSwitch.shared.handleControl(request)
         case ("POST", "/benchmark/smoke"):
