@@ -165,7 +165,7 @@ final class AppLinkServer {
     /// stuck on a helper that will not launch can recover from the terminal. A
     /// daemon that is already answering is left running unless `force` is set.
     private func repairDaemon(force: Bool) async -> HTTPResponse {
-        let (result, note): (String, String) = switch await DaemonService.repair(force: force) {
+        let (result, note): (String, String) = switch await supervisor.repairDaemon(force: force) {
         case .reachable:
             ("repaired", "the background helper was rebuilt and is answering")
         case .alreadyHealthy:

@@ -115,11 +115,15 @@ final class ControlServer {
             guard let facts = try? JSONDecoder().decode(PageFacts.self, from: request.body) else {
                 return .error(400, "expected a PageFacts body")
             }
-            if app.attach(facts) {
+            // `hello` tells the app whether this daemon had it already: an
+            // app that believed itself attached and is greeted as new has
+            // posted to a daemon that was rebuilt or relaunched under it.
+            let isNew = app.attach(facts)
+            if isNew {
                 supervisor.appDidAttach()
             }
             supervisor.wantClient(because: "Sevoflurane is running")
-            return Self.json(#"{"ok":true}"#)
+            return Self.json(#"{"ok":true,"hello":\#(isNew)}"#)
         case ("POST", "/app/detach"):
             app.detach(reason: "the app said goodbye")
             return Self.json(#"{"ok":true}"#)

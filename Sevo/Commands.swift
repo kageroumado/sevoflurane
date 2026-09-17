@@ -1519,9 +1519,10 @@ struct DaemonCommand: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "repair",
             abstract: "Rebuild the background helper's registration (unregister, then register).",
-            discussion: "A no-op when the helper is already answering — repairing a "
-                + "healthy helper would detach the running app. Pass --force to rebuild "
-                + "anyway. Needs Sevoflurane running: only the app can rebuild the "
+            discussion: "A no-op when the helper is already answering. Pass --force to "
+                + "rebuild anyway: the helper is replaced, Steam goes down with it, and "
+                + "the app attaches to the new helper and brings the client back. "
+                + "Needs Sevoflurane running: only the app can rebuild the "
                 + "registration. macOS may ask you to approve the helper again "
                 + "in Login Items afterward.",
         )

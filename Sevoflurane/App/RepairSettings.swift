@@ -362,7 +362,12 @@ struct RecoverySettings: View {
     private func repairHelper() {
         helper = .working
         Task(name: "Repair the background helper") {
-            switch await DaemonService.repair() {
+            let result: DaemonService.RepairResult = if let supervisor {
+                await supervisor.repairDaemon()
+            } else {
+                await DaemonService.repair()
+            }
+            switch result {
             case .reachable:
                 helper = .done("The background helper is running.")
             case .alreadyHealthy:

@@ -86,9 +86,9 @@ final class ClientSupervisor {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
                 await postFacts()
-                // A daemon that died and was brought back by launchd knows
-                // nothing about this app, so a run of failures is answered by
-                // saying hello again rather than by waiting for a human.
+                // A daemon that stays silent is brought back by the attach —
+                // it registers, rebuilds, or restarts as the silence warrants
+                // — rather than by waiting for a human.
                 missed = daemonIsUnreachable ? missed + 1 : 0
                 if missed >= Timing.reattachAfterMissedFacts {
                     missed = 0
@@ -96,6 +96,16 @@ final class ClientSupervisor {
                 }
             }
         }
+    }
+
+    /// The user-driven rebuild of the daemon's registration, from `sevo daemon
+    /// repair` and Settings › Recovery. A rebuild replaces the daemon process,
+    /// and the new one knows nothing of this app until it is greeted, so a
+    /// rebuild that came back is followed by the hello an attach makes.
+    func repairDaemon(force: Bool = false) async -> DaemonService.RepairResult {
+        let result = await DaemonService.repair(force: force)
+        if result == .reachable { await attach() }
+        return result
     }
 
     /// Brings the daemon up if it is not, then says hello. The registration is
@@ -136,6 +146,13 @@ final class ClientSupervisor {
         ))
     }
 
+    /// Posts the facts, every tick. The post is the app's heartbeat as much as
+    /// its news: the daemon answers `hello` for an app it had not seen, and a
+    /// hello to an app that believed itself attached means the daemon was
+    /// rebuilt or relaunched underneath it — a repair, or launchd bringing a
+    /// crashed helper back — and knows nothing of this app's page. Its
+    /// verdict is read again then, since the new daemon pushes nothing to an
+    /// app it has only just met.
     private func postFacts() async {
         guard !isQuitting else { return }
         let current = await PageFacts(
@@ -145,13 +162,23 @@ final class ClientSupervisor {
             appVersion: Bundle.main
                 .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
         )
-        guard current != posted else { return }
         guard let body = try? JSONEncoder().encode(current),
-              await DaemonService.post("/app/facts", body: body) != nil else {
+              let reply = await DaemonService.post("/app/facts", body: body) else {
             daemonIsUnreachable = true
             return
         }
+        daemonIsUnreachable = false
+        let greetedAsNew = (try? JSONSerialization.jsonObject(with: reply) as? [String: Any])?["hello"]
+            as? Bool ?? false
+        let wasAttached = posted != nil
         posted = current
+        if greetedAsNew, wasAttached {
+            log.log(
+                .supervisor,
+                "the background helper was replaced under the app — attached to the new one",
+            )
+            await refreshFromDaemon()
+        }
     }
 
     /// The daemon's probe cycle wakes on what this app saw. A wake is a hint,
