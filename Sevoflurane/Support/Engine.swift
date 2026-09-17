@@ -230,6 +230,22 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         }
     }
 
+    /// The release number of a managed engine, `11` for `dormison-r11`; nil for
+    /// CrossOver and for a managed directory that is not `dormison-r<N>`.
+    var managedRelease: Int? {
+        guard case let .managed(version) = self, version.hasPrefix("dormison-r") else { return nil }
+        return Int(version.dropFirst("dormison-r".count))
+    }
+
+    /// Whether winebus keeps its SDL backend. From r11 the SDL bus polls instead
+    /// of waking every millisecond, and it is the backend that delivers an Xbox
+    /// Wireless Controller over Bluetooth to a game; the IOHID backend alone
+    /// never does. Older engines pay about 2.6 % CPU at idle for the SDL bus, so
+    /// they run without it.
+    var keepsSDLBus: Bool {
+        (managedRelease ?? 0) >= 11
+    }
+
     /// "Dormison r3" for the engine directory `dormison-r3`.
     static func managedDisplayName(_ version: String) -> String {
         version.hasPrefix("dormison-")

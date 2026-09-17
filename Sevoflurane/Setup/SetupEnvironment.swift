@@ -248,15 +248,20 @@ final class LiveSetupEnvironment: SetupEnvironment {
                 "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
             ])
         }
-        // winebus's SDL backend, with no video subsystem to wait on, polls
-        // every millisecond forever — measured 2.6 % CPU and ~1,200 wakeups/s
-        // in winedevice.exe at idle under Rosetta; zero with the backend off.
-        // Controllers keep the IOHID backend, and Steam Input reads raw HID
-        // anyway — the same default Proton ships (hidraw first,
-        // PROTON_PREFER_SDL to opt back in).
-        if !registry(
+        // The SDL bus is on or off by engine (`Engine.keepsSDLBus`): on, it is
+        // the backend that reaches a Bluetooth Xbox pad; off, an older engine's
+        // bus would wake winedevice.exe every millisecond. The value is only
+        // ever written or removed, so a bottle that moves between engines
+        // follows the engine it boots on.
+        let sdlOff = registry(
             of: bottleURL, file: "system.reg", contains: #""Enable SDL"=dword:00000000"#,
-        ) {
+        )
+        if Engine.active.keepsSDLBus, sdlOff {
+            _ = await runWine(bottle: name, args: [
+                "reg", "delete", #"HKLM\System\CurrentControlSet\Services\winebus"#,
+                "/v", "Enable SDL", "/f",
+            ])
+        } else if !Engine.active.keepsSDLBus, !sdlOff {
             _ = await runWine(bottle: name, args: [
                 "reg", "add", #"HKLM\System\CurrentControlSet\Services\winebus"#,
                 "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",

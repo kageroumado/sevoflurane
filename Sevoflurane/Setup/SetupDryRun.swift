@@ -263,9 +263,14 @@
         func configureBottle(named name: String) async {
             log(#"would run: wine --bottle \#(name) reg add HKCU\Software\Wine\Explorer "#
                 + "/v ShowSystray /t REG_SZ /d N /f")
-            log(#"would run: wine --bottle \#(name) reg add "#
-                + #"HKLM\System\CurrentControlSet\Services\winebus "#
-                + #"/v "Enable SDL" /t REG_DWORD /d 0 /f"#)
+            if Engine.active.keepsSDLBus {
+                log(#"would run: wine --bottle \#(name) reg delete "#
+                    + #"HKLM\System\CurrentControlSet\Services\winebus /v "Enable SDL" /f"#)
+            } else {
+                log(#"would run: wine --bottle \#(name) reg add "#
+                    + #"HKLM\System\CurrentControlSet\Services\winebus "#
+                    + #"/v "Enable SDL" /t REG_DWORD /d 0 /f"#)
+            }
         }
 
         func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool {
