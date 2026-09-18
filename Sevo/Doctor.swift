@@ -250,7 +250,7 @@ nonisolated enum Doctor {
                     : "last setup pass: failed \(when) — \(provision.reason)",
                 hint: provision.blocksClientStart
                     ? "the client stays down until this is fixed — sevo setup, "
-                        + "or Settings › Engine › Try Again"
+                    + "or Settings › Engine › Try Again"
                     : "sevo setup, or Settings › Engine › Repair",
                 provisioning: true,
             ))

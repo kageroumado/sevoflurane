@@ -155,9 +155,9 @@ nonisolated enum WebProxy {
     /// through a URL that passes the check at the door.
     private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         func urlSession(
-            _ session: URLSession,
-            task: URLSessionTask,
-            willPerformHTTPRedirection response: HTTPURLResponse,
+            _: URLSession,
+            task _: URLSessionTask,
+            willPerformHTTPRedirection _: HTTPURLResponse,
             newRequest request: URLRequest,
             completionHandler: @escaping (URLRequest?) -> Void,
         ) {

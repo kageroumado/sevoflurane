@@ -171,8 +171,8 @@
                 onFinished: {},
             )
             .frame(width: 680, height: step == .graphics ? 640 : 500)
-                .background(.background, in: Theme.cardShape)
-                .clipShape(Theme.cardShape)
+            .background(.background, in: Theme.cardShape)
+            .clipShape(Theme.cardShape)
         }
 
         private func section(

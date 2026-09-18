@@ -140,7 +140,7 @@ struct SetupView: View {
         if case .managed = Engine.active { true } else { false }
     }
 
-    @ViewBuilder private var graphics: some View {
+    private var graphics: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("DirectX 12 games")
                 .font(.system(size: 24, weight: .bold))
@@ -454,8 +454,7 @@ struct SetupView: View {
                         }
                     }
                     if case .working = provisioner.activity,
-                        let stage = provisioner.stage
-                    {
+                       let stage = provisioner.stage {
                         ProgressView(value: overallProgress(stage))
                         Text(stageCaption(stage))
                             .font(.caption)

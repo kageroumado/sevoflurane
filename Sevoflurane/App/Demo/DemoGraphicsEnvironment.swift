@@ -143,7 +143,7 @@
         }
 
         func installRendererVersion(
-            _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+            _ component: RendererVersions.Component, from source: URL, version: String?, sha256 _: String?,
         ) async throws -> RendererVersions.Installed {
             log("would fetch \(source.lastPathComponent) into the \(component.label) store")
             try await Task.sleep(for: stepDelay)

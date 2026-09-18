@@ -36,11 +36,11 @@ struct GeneralSettings: View {
         Form {
             Section {
                 Toggle("Open at login", isOn: $openAtLogin)
-                .toggleStyle(.switch)
-                .onChange(of: openAtLogin) { _, enabled in
-                    provisioner.setOpenAtLogin(enabled)
-                }
-                .highlightable(.generalOpenAtLogin, highlighted: highlighted)
+                    .toggleStyle(.switch)
+                    .onChange(of: openAtLogin) { _, enabled in
+                        provisioner.setOpenAtLogin(enabled)
+                    }
+                    .highlightable(.generalOpenAtLogin, highlighted: highlighted)
                 if let steam {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {

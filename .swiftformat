@@ -15,18 +15,22 @@
 
 # Disabled rules. redundantSelf is off: under Swift 6 strict concurrency it strips `self.` that the
 # compiler REQUIRES in escaping/Sendable closures, breaking the build. Leave self management to the
-# author. wrapIfStatementBodies/wrapIfExpressionBodies (default-on since SwiftFormat 0.62) and
-# wrapPropertyBodies (default-on since 0.63) are off: the codebase uses one-line `if cond { return }`
-# bodies, compact single-line `if case` expression predicates, and one-line computed properties
-# (`var id: String { rawValue }`) deliberately.
---disable wrapMultilineStatementBraces,wrapMultilineConditionalAssignment,blankLinesBetweenScopes,redundantInternal,redundantSelf,wrapIfStatementBodies,wrapIfExpressionBodies,wrapPropertyBodies
+# author.
+#
+# The whole `wrap*Bodies` family is off. SwiftFormat turned them on by default across 0.62 and 0.63,
+# and every one of them expands a body this codebase writes on one line deliberately:
+# `if cond { return }`, `for pid in tree { kill(pid, SIGCONT) }`, `var isActive: Bool { NSApp.isActive }`,
+# `func id() -> String { rawValue }`. A single-line body is the house style wherever the body is one
+# expression; the rules disagree, and they are the ones that are wrong here.
+--disable wrapMultilineStatementBraces,wrapMultilineConditionalAssignment,blankLinesBetweenScopes,redundantInternal,redundantSelf,wrapIfStatementBodies,wrapIfExpressionBodies,wrapLoopBodies,wrapPropertyBodies,wrapFunctionBodies
 
 # Header stripping
 --header strip
 
-# Numeric formatting — group size 3, but only from 5 digits up, so 4-digit
-# port numbers (8081) stay unbroken.
---decimalgrouping 3,5
+# Numeric formatting — left as written. No threshold serves both `8081`, which is
+# a port and must not be broken up, and `5_000`, which is a byte count and reads
+# better grouped; the author knows which one a literal is.
+--decimalgrouping ignore
 
 # Import grouping
 --importgrouping testable-last

@@ -10,7 +10,10 @@ import Foundation
 nonisolated struct MacChip: Equatable, Sendable {
     /// How wide the GPU is, in Apple's own ladder.
     enum Tier: String, Sendable, CaseIterable {
-        case base, pro, max, ultra
+        case base
+        case pro
+        case max
+        case ultra
     }
 
     /// The generation number: 1 for M1, 3 for M3. `nil` on a Mac whose brand

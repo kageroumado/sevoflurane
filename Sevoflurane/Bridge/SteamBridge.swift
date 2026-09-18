@@ -464,7 +464,7 @@ actor SteamBridge {
     /// reconnects a second after close, and by then the supervisor may have
     /// the client back.
     private func closeUnlessClientReachable(_ ws: WSConnection) async {
-        guard (try? await ensureCDP()) == nil else { return }
+        guard await (try? ensureCDP()) == nil else { return }
         ws.close()
     }
 

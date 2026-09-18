@@ -151,7 +151,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         dxgi.customDeviceId = \(String(format: "%04x", card.deviceID))
         dxgi.customDeviceDesc = "\(card.name)"
         dxgi.maxDeviceMemory = \(card.videoMemoryMB)
-
+        
         """
     }
 

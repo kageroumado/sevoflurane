@@ -327,8 +327,11 @@ private struct RunSummaryCard: View {
             Text(run.summary)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), alignment: .leading)],
-                      alignment: .leading, spacing: Theme.Space.sm) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 180), alignment: .leading)],
+                alignment: .leading,
+                spacing: Theme.Space.sm,
+            ) {
                 ForEach(facts, id: \.label) { fact in
                     LabeledContent(fact.label) {
                         Text(fact.value).foregroundStyle(.secondary)

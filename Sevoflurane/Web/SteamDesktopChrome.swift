@@ -127,10 +127,10 @@ enum SteamDesktopChrome {
     static let popupScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-
+    
       var STYLE_ID = "sevo-macos-chrome";
       var CSS = ".TitleBar.title-area .title-bar-actions { display: none !important; }";
-
+    
       function apply() {
         if (!document.head) return;
         var style = document.getElementById(STYLE_ID);
@@ -142,13 +142,13 @@ enum SteamDesktopChrome {
         }
         reportDragRegions();
       }
-
+    
       function rectOf(el) {
         var r = el.getBoundingClientRect();
         return [Math.round(r.left), Math.round(r.top),
                 Math.round(r.width), Math.round(r.height)];
       }
-
+    
       /* The strip's empty stretch is the drag surface — on the login window
          that is `.title-area-children`, which spans the strip minus the
          controls and renders nothing. `.title-area-highlight` never qualifies:
@@ -167,7 +167,7 @@ enum SteamDesktopChrome {
         }
         return out;
       }
-
+    
       var pending = 0;
       function reportDragRegions() {
         var handler = window.webkit && window.webkit.messageHandlers
@@ -175,18 +175,18 @@ enum SteamDesktopChrome {
         if (!handler) return;
         handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
       }
-
+    
       function schedule() {
         if (pending) return;
         pending = setTimeout(function () { pending = 0; apply(); }, 150);
       }
-
+    
       new MutationObserver(function () {
         if (document.head && !document.getElementById(STYLE_ID)) apply();
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-
+    
       window.__sevoChrome = { apply: apply };
       apply();
       return "installed";
@@ -207,7 +207,7 @@ enum SteamDesktopChrome {
     static let popupChromeScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }
-
+    
       var STYLE_ID = "sevo-macos-chrome";
       var BAR = 28;              /* the macOS title bar */
       var TRAFFIC_LIGHTS = 80;   /* the strip the buttons and their margin occupy */
@@ -218,7 +218,7 @@ enum SteamDesktopChrome {
         "div:has(> .TitleBar.title-area) { box-sizing: content-box !important; padding-top: " + BAR + "px !important; }",
         "div:has(> .TitleBar.title-area) svg[class*=\\"Gradient\\"], div:has(> .TitleBar.title-area) > .currentUserContainer > svg { top: 0 !important; height: 100% !important; }"
       ].join("\\n");
-
+    
       function apply() {
         if (!document.head) return;
         var style = document.getElementById(STYLE_ID);
@@ -230,7 +230,7 @@ enum SteamDesktopChrome {
         }
         reportDragRegions();
       }
-
+    
       function dragRegions() {
         var area = document.querySelector(".TitleBar.title-area");
         var header = area && area.parentElement;
@@ -241,7 +241,7 @@ enum SteamDesktopChrome {
         if (width <= 0) return [];
         return [[left, Math.round(r.top), width, BAR]];
       }
-
+    
       var pending = 0;
       function reportDragRegions() {
         var handler = window.webkit && window.webkit.messageHandlers
@@ -249,18 +249,18 @@ enum SteamDesktopChrome {
         if (!handler) return;
         handler.postMessage({ fn: "__dragRegions", args: [dragRegions()] });
       }
-
+    
       function schedule() {
         if (pending) return;
         pending = setTimeout(function () { pending = 0; apply(); }, 150);
       }
-
+    
       new MutationObserver(function () {
         if (document.head && !document.getElementById(STYLE_ID)) apply();
         else schedule();
       }).observe(document, { childList: true, subtree: true });
       window.addEventListener("resize", schedule);
-
+    
       window.__sevoChrome = { apply: apply };
       apply();
       return "installed";

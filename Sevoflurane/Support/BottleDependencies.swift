@@ -507,7 +507,8 @@ nonisolated enum BottleDependencies {
                 try? FileManager.default.removeItem(at: temp)
                 throw InstallFailure(
                     message: "\(name): the download is not the file it should be "
-                        + "(sha256 \(digest))")
+                        + "(sha256 \(digest))",
+                )
             }
         }
         // Again, because the move is where a missing directory is felt: the
@@ -521,7 +522,6 @@ nonisolated enum BottleDependencies {
         try FileManager.default.moveItem(at: temp, to: destination)
         return destination
     }
-
 
     private static func replaceFile(at destination: URL, with source: URL) throws {
         try? FileManager.default.removeItem(at: destination)
@@ -557,7 +557,7 @@ nonisolated enum BottleDependencies {
         let regFile = scratch.directory("overrides.reg")
         let contents = """
         Windows Registry Editor Version 5.00
-
+        
         [HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]
         \(body)
         """

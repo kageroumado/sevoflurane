@@ -63,7 +63,7 @@ final class AppLinkServer {
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/popups/sweep"):
             let scope = PopupSweepScope(rawValue: Self.value(of: "scope", in: request.query))
-            return Self.json(await ClientLifecycle.hideVisibleClientPopups(scope ?? .everything))
+            return await Self.json(ClientLifecycle.hideVisibleClientPopups(scope ?? .everything))
         case ("POST", "/services/ready"):
             let ready = await bridge.clientServicesReady()
             return Self.json(#"{"ready":\#(ready.map(String.init) ?? "null")}"#)

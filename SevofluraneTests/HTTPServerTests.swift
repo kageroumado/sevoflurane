@@ -16,7 +16,7 @@ struct HTTPServerTests {
     }
 
     @Test
-    func `parses request with body and leftover`() throws {
+    func `parses request with body and leftover`() {
         let raw = "POST /__eval HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\nhelloGET /"
         guard case let .complete(request, rest) = parse(raw) else {
             Issue.record("expected a complete request")
@@ -29,7 +29,7 @@ struct HTTPServerTests {
     }
 
     @Test
-    func `pipelined requests come out one at a time`() throws {
+    func `pipelined requests come out one at a time`() {
         let first = "POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc"
         let second = "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"
         guard case let .complete(requestA, rest) = parse(first + second) else {

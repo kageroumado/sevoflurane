@@ -244,7 +244,7 @@ nonisolated enum NWJSRunner {
         // derives its save directory from the main module's path, so the
         // game's own page goes back before anything reads it.
         process.mainModule.filename = \(quoted(pagePath));
-
+        
         """
         let file = directory.appendingPathComponent(nodeMain)
         let data = Data(source.utf8)
@@ -298,7 +298,7 @@ nonisolated enum NWJSRunner {
     static func title(appID: Int, info: NWJSInfo?) -> String {
         if let name = GameConfig.game(appID).name, !name.isEmpty { return name }
         if let info, let package = (try? Data(contentsOf: URL(fileURLWithPath: info.dir)
-            .appendingPathComponent("package.json")))
+                .appendingPathComponent("package.json")))
             .flatMap({ try? JSONSerialization.jsonObject(with: $0) }) as? [String: Any],
             let window = package["window"] as? [String: Any],
             let title = window["title"] as? String, !title.isEmpty { return title }
@@ -325,7 +325,7 @@ nonisolated enum NWJSRunner {
     /// helper apps through our `Contents` and lands on the real ones.
     @discardableResult
     static func writeAppBundle(
-        appID: Int, title: String, runtime: URL, in wrapper: URL,
+        appID: Int, title: String, runtime: URL, in _: URL,
     ) -> URL? {
         let manager = FileManager.default
         // `<runtime>/nwjs.app/Contents/MacOS/nwjs` → the bundle it lives in.
@@ -356,7 +356,7 @@ nonisolated enum NWJSRunner {
         }
 
         let contents = bundle.appendingPathComponent("Contents")
-        let ownEntries: Set<String> = ["MacOS", "Resources", "Info.plist", "PkgInfo"]
+        let ownEntries: Set = ["MacOS", "Resources", "Info.plist", "PkgInfo"]
         do {
             try manager.createDirectory(
                 at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true,

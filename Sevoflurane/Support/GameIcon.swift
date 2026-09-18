@@ -101,7 +101,7 @@ nonisolated enum GameIcon {
     private static func packageIcon(appID: Int) -> URL? {
         guard let info = GameConfig.game(appID).nwjs,
               let package = (try? Data(contentsOf: URL(fileURLWithPath: info.dir)
-                  .appendingPathComponent("package.json")))
+                      .appendingPathComponent("package.json")))
               .flatMap({ try? JSONSerialization.jsonObject(with: $0) }) as? [String: Any],
               let window = package["window"] as? [String: Any],
               let relative = window["icon"] as? String

@@ -183,9 +183,9 @@ private final nonisolated class LogFile: Sendable {
     private let url: URL
     private let queue: DispatchQueue
     /// Confined to `queue`.
-    nonisolated(unsafe) private var handle: FileHandle?
+    private nonisolated(unsafe) var handle: FileHandle?
     /// Confined to `queue`: bytes written since the last size check.
-    nonisolated(unsafe) private var sinceSizeCheck = 0
+    private nonisolated(unsafe) var sinceSizeCheck = 0
 
     init(url: URL) {
         self.url = url

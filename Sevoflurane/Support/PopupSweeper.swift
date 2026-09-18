@@ -86,7 +86,7 @@ actor PopupSweeper {
             if let since, since < interval {
                 try? await Task.sleep(for: interval - since)
             }
-            return PopupSweep(scope: scope, names: await hide(scope))
+            return await PopupSweep(scope: scope, names: hide(scope))
         }
         inFlight = sweep
         let hidden = await sweep.value

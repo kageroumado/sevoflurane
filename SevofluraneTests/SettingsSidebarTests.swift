@@ -108,7 +108,7 @@ struct SettingsSearchTests {
 
     @Test
     func `the holes the playtest found are closed`() {
-        let searchable = SettingsCategory.allCases.flatMap { $0.searchableItems }
+        let searchable = SettingsCategory.allCases.flatMap(\.searchableItems)
         for anchor in [
             SettingsAnchor.gamesUpscaler, .aboutDiagnostics, .engineMouse, .engineWineDiagnostics,
         ] {

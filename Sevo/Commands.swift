@@ -2283,16 +2283,19 @@ struct AppCommand: AsyncParsableCommand {
         /// a non-empty list before the ask is the likeliest reason the launch
         /// that follows does nothing at all.
         private func warnAboutRunningApps() async {
-            let running = (try? await SteamOps.runningApps()) ?? []
+            let running = await (try? SteamOps.runningApps()) ?? []
             guard !running.isEmpty else { return }
             let others = running.filter { $0 != appid }
             guard !others.isEmpty else {
                 narrate("\(appid) is already listed as running", asJSON: asJSON)
                 return
             }
-            narrate("Steam still lists \(others.map(String.init).joined(separator: ", ")) "
-                + "as running — this launch is a no-op until that clears "
-                + "(sevo app terminate <appid>)", asJSON: asJSON)
+            narrate(
+                "Steam still lists \(others.map(String.init).joined(separator: ", ")) "
+                    + "as running — this launch is a no-op until that clears "
+                    + "(sevo app terminate <appid>)",
+                asJSON: asJSON,
+            )
         }
     }
 
@@ -2317,10 +2320,13 @@ struct AppCommand: AsyncParsableCommand {
                 // record — the process itself is asked here.
                 let native = GameConfig.game(appid).runsNatively
                     ? NWJSRunner.terminate(appID: appid) : []
-                narrate("terminate requested for \(appid)"
-                    + (native.isEmpty ? "" : " — and \(native.count) native "
-                        + "process\(native.count == 1 ? "" : "es") asked to quit")
-                    + " — waiting up to \(timeout)s for it to go", asJSON: asJSON)
+                narrate(
+                    "terminate requested for \(appid)"
+                        + (native.isEmpty ? "" : " — and \(native.count) native "
+                            + "process\(native.count == 1 ? "" : "es") asked to quit")
+                        + " — waiting up to \(timeout)s for it to go",
+                    asJSON: asJSON,
+                )
                 var sighting = await GameStop.waitUntilGone(appid: appid, seconds: timeout)
                 var verdict = GameStop.Verdict.terminated
                 if !sighting.isGone {
@@ -2329,8 +2335,11 @@ struct AppCommand: AsyncParsableCommand {
                     // no-op, and only the client clears it, so what can be
                     // signaled here is the tree.
                     for pid in sighting.processes { kill(pid, SIGKILL) }
-                    narrate("it did not go — SIGKILL'd \(sighting.processes.count) "
-                        + "process\(sighting.processes.count == 1 ? "" : "es")", asJSON: asJSON)
+                    narrate(
+                        "it did not go — SIGKILL'd \(sighting.processes.count) "
+                            + "process\(sighting.processes.count == 1 ? "" : "es")",
+                        asJSON: asJSON,
+                    )
                     sighting = await GameStop.waitUntilGone(appid: appid, seconds: 5)
                     verdict = sighting.isGone ? .killed : .stillRunning
                 }

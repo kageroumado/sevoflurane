@@ -182,7 +182,7 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a type with no words here is dropped`() throws {
-        #expect(SteamNotifications.Presentation(try Self.payload(kind: 44)) == nil)
+        #expect(try SteamNotifications.Presentation(Self.payload(kind: 44)) == nil)
     }
 
     @Test
@@ -251,21 +251,21 @@ struct SteamNotificationPostingTests {
     @Test
     func `a message with nobody asked yet raises the popover's prompt`() throws {
         let relay = SteamNotifications.preview(authorization: .notDetermined)
-        relay.post(try Self.payload(kind: 8, source: 1))
+        try relay.post(Self.payload(kind: 8, source: 1))
         #expect(relay.hasUnaskedNotifications)
     }
 
     @Test
     func `a server-sourced notification is left to Steam's own surfaces`() throws {
         let relay = SteamNotifications.preview(authorization: .notDetermined)
-        relay.post(try Self.payload(kind: 8, source: 2))
+        try relay.post(Self.payload(kind: 8, source: 2))
         #expect(!relay.hasUnaskedNotifications)
     }
 
     @Test
     func `a type with no words here never reaches macOS`() throws {
         let relay = SteamNotifications.preview(authorization: .notDetermined)
-        relay.post(try Self.payload(kind: 44, source: 1))
+        try relay.post(Self.payload(kind: 44, source: 1))
         #expect(!relay.hasUnaskedNotifications)
     }
 }

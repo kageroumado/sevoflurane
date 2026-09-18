@@ -53,7 +53,7 @@ final class GraphicsStore {
 
         /// The releases not yet on disk and not the default, for the download menu.
         var downloadable: [RendererVersions.Release] {
-            let have = Set(installed.map(\.version) + [defaultVersion].compactMap { $0 })
+            let have = Set(installed.map(\.version) + [defaultVersion].compactMap(\.self))
             return releases.filter { !have.contains($0.version) }
         }
     }

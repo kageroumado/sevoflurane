@@ -10,7 +10,7 @@ struct BottleDependencyInstallTests {
     /// removing it when it ended, so whichever was still downloading found
     /// its destination gone.
     @Test
-    func `every install keeps its own scratch until it ends`() async throws {
+    func `every install keeps its own scratch until it ends`() async {
         let manager = FileManager.default
         let root = manager.temporaryDirectory
             .appendingPathComponent("sevo-deps-test-\(UUID().uuidString)")
@@ -244,7 +244,7 @@ private final class StubProtocol: URLProtocol, @unchecked Sendable {
         return URLSession(configuration: configuration)
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
+    override class func canInit(with _: URLRequest) -> Bool {
         true
     }
 
@@ -302,7 +302,7 @@ struct BottleRunRoutingTests {
     func `a path with spaces stays one argument and is never quoted`() throws {
         let program = [#"C:\Program Files\vc_redist.x64.exe"#, "/install", "/quiet"]
         let request = try #require(request(program))
-        let body = String(decoding: try #require(request.httpBody), as: UTF8.self)
+        let body = try String(decoding: #require(request.httpBody), as: UTF8.self)
         #expect(body.split(separator: "\n").map(String.init) == program)
         #expect(!body.contains("\""))
     }

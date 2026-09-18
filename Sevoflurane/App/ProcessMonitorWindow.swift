@@ -193,7 +193,8 @@ struct ProcessMonitorView: View {
         .tableStyle(.inset)
     }
 
-    @ViewBuilder private func rowActions(for selected: Set<pid_t>) -> some View {
+    @ViewBuilder
+    private func rowActions(for selected: Set<pid_t>) -> some View {
         if let process = watch.processes.first(where: { selected.contains($0.pid) }) {
             Button("Bring to front") { actions.bringToFront(process) }
             Button("Collect reports now") { actions.collectReports(process) }

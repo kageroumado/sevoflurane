@@ -439,7 +439,7 @@ final class SteamWebHost {
           return (app && app.display_name) || "";
         } catch (e) { return ""; }
       }
-
+    
       /* Steam's own answer to "does this make a sound", asked here because
          only the page can ask it: a friend's message honors the per-friend
          override on top of Friends & Chat's bSounds_PlayMessage, and a group
@@ -459,7 +459,7 @@ final class SteamWebHost {
           return !!app.SettingsStore.FriendsSettings.bSounds_PlayMessage;
         } catch (e) { return false; }
       }
-
+    
       store.CurrentToastSubscribableValue.Subscribe(function (toast) {
         if (!toast) return;
         var data = toast.data;
@@ -1452,7 +1452,7 @@ final class SteamWebHost {
                     samples.append(skippedSample(target: target, iteration: iteration))
                     continue
                 }
-                samples.append(try await benchmark(target: target, iteration: iteration))
+                try await samples.append(benchmark(target: target, iteration: iteration))
             }
         }
         load.stop()
@@ -1696,7 +1696,7 @@ final class SteamWebHost {
     private func requireBenchmarkCommand(_ reply: String?) throws {
         guard let reply,
               !["false", "0", "unavailable", "no browser context", "no navigator", "not ready"]
-                  .contains(reply)
+              .contains(reply)
         else { throw BenchmarkFailure.commandRejected(reply ?? "no reply") }
     }
 

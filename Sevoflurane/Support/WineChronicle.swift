@@ -83,7 +83,7 @@ nonisolated enum WineChronicle {
 /// interested in what happens after a launch is armed, so a tail starts at
 /// the file's current end. A file shorter than the offset has been replaced
 /// or truncated and is read from its start.
-nonisolated final class WineChronicleTail {
+final nonisolated class WineChronicleTail {
     private let url: URL
     private var offset: UInt64
     /// What a read carried that had no newline yet — the shim writes a line

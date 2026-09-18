@@ -50,7 +50,7 @@ nonisolated enum ClientOps {
             }
         }
         if await supervisionIsRunning(noApp: noApp) {
-            let alreadyHealthy = (await AppControl.status())?["health"] as? String == "healthy"
+            let alreadyHealthy = await (AppControl.status())?["health"] as? String == "healthy"
             guard await AppControl.post("/client/start") != nil else {
                 throw Failure.message("the daemon's control endpoint refused /client/start")
             }
@@ -97,8 +97,11 @@ nonisolated enum ClientOps {
             let survivors = await ClientLifecycle.bottleProcessIDs()
             return survivors.isEmpty
                 ? Outcome(verdict: .confirmed, intent: "stop", note: "client stopped, auto-restart paused")
-                : Outcome(verdict: .unverifiable, intent: "stop",
-                          note: "stop requested; pids \(survivors) still up — poll sevo status")
+                : Outcome(
+                    verdict: .unverifiable,
+                    intent: "stop",
+                    note: "stop requested; pids \(survivors) still up — poll sevo status",
+                )
         }
         let before = await ClientLifecycle.bottleProcessIDs()
         guard !before.isEmpty else {
@@ -108,8 +111,11 @@ nonisolated enum ClientOps {
         let survivors = await ClientLifecycle.bottleProcessIDs()
         return survivors.isEmpty
             ? Outcome(verdict: .confirmed, intent: "stop", note: "client stopped")
-            : Outcome(verdict: .unverifiable, intent: "stop",
-                      note: "pids \(survivors) survived the kill ladder — sevo client force-quit all")
+            : Outcome(
+                verdict: .unverifiable,
+                intent: "stop",
+                note: "pids \(survivors) survived the kill ladder — sevo client force-quit all",
+            )
     }
 
     /// `windows` tears the whole fake Windows down — wineserver included — and
@@ -181,8 +187,11 @@ nonisolated enum ClientOps {
             case .notInstalled:
                 Engine.choose(engine)
                 if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
-                return Outcome(verdict: .confirmed, intent: "engine use",
-                               note: "engine set to \(version); Sevoflurane is not installed here, so nothing was started")
+                return Outcome(
+                    verdict: .confirmed,
+                    intent: "engine use",
+                    note: "engine set to \(version); Sevoflurane is not installed here, so nothing was started",
+                )
             case let .refused(reason):
                 throw Failure.message("the daemon would not start: \(reason)")
             }
@@ -213,8 +222,11 @@ nonisolated enum ClientOps {
         // A restart always moves the client, so its verdict is about health,
         // not about the switch; when nothing actually changed, say so.
         if alreadyActive, bottle == nil, outcome.verdict == .confirmed {
-            return Outcome(verdict: .noEffect, intent: "engine use",
-                           note: "already on \(version); restarted, healthy")
+            return Outcome(
+                verdict: .noEffect,
+                intent: "engine use",
+                note: "already on \(version); restarted, healthy",
+            )
         }
         return outcome
     }
@@ -230,8 +242,11 @@ nonisolated enum ClientOps {
         progress("running the headless client update (takes ~1–5 min)")
         return await ClientLifecycle.headlessUpdate()
             ? Outcome(verdict: .confirmed, intent: "update", note: "client updated")
-            : Outcome(verdict: .unverifiable, intent: "update",
-                      note: "updater did not exit cleanly — sevo logs")
+            : Outcome(
+                verdict: .unverifiable,
+                intent: "update",
+                note: "updater did not exit cleanly — sevo logs",
+            )
     }
 
     /// The wedge playbook: probe → reload/restart ladder. Recover fixes a
@@ -247,8 +262,11 @@ nonisolated enum ClientOps {
                 "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
             )
             if services?.contains("true") == true {
-                return Outcome(verdict: .noEffect, intent: "recover",
-                               note: "client healthy (services initialized) — nothing to do")
+                return Outcome(
+                    verdict: .noEffect,
+                    intent: "recover",
+                    note: "client healthy (services initialized) — nothing to do",
+                )
             }
             progress("CDP up but services dead — restarting the client")
         } else if !deep {
@@ -300,13 +318,19 @@ nonisolated enum ClientOps {
         for waited in stride(from: 3, through: timeout, by: 3) {
             try? await Task.sleep(for: .seconds(3))
             if await ClientLifecycle.probeClient() == .up {
-                return Outcome(verdict: .confirmed, intent: intent,
-                               note: "client up — CDP + SharedJSContext after ~\(waited)s")
+                return Outcome(
+                    verdict: .confirmed,
+                    intent: intent,
+                    note: "client up — CDP + SharedJSContext after ~\(waited)s",
+                )
             }
             if waited % 15 == 0 { progress("waiting for the client (\(waited)s)") }
         }
-        return Outcome(verdict: .unverifiable, intent: intent,
-                       note: "client not up within \(timeout)s — sevo status / sevo doctor")
+        return Outcome(
+            verdict: .unverifiable,
+            intent: intent,
+            note: "client not up within \(timeout)s — sevo status / sevo doctor",
+        )
     }
 
     /// Daemon mode: the supervisor's own healthy verdict (client + bridge +
@@ -322,22 +346,31 @@ nonisolated enum ClientOps {
         for waited in stride(from: 3, through: timeout, by: 3) {
             try? await Task.sleep(for: .seconds(3))
             guard let status = await AppControl.status() else {
-                return Outcome(verdict: .unverifiable, intent: intent,
-                               note: "the daemon went away mid-operation — sevo logs")
+                return Outcome(
+                    verdict: .unverifiable,
+                    intent: intent,
+                    note: "the daemon went away mid-operation — sevo logs",
+                )
             }
             let health = status["health"] as? String ?? "?"
             if health == "healthy" {
                 healthyStreak += 1
                 if healthyStreak >= 2 {
-                    return Outcome(verdict: .confirmed, intent: intent,
-                                   note: "healthy after ~\(waited)s")
+                    return Outcome(
+                        verdict: .confirmed,
+                        intent: intent,
+                        note: "healthy after ~\(waited)s",
+                    )
                 }
                 continue
             }
             healthyStreak = 0
             if health == "gaveUp" {
-                return Outcome(verdict: .unverifiable, intent: intent,
-                               note: "supervisor gave up: \(status["detail"] as? String ?? "") — sevo logs")
+                return Outcome(
+                    verdict: .unverifiable,
+                    intent: intent,
+                    note: "supervisor gave up: \(status["detail"] as? String ?? "") — sevo logs",
+                )
             }
             let detail = status["detail"] as? String ?? health
             if detail != lastDetail {
@@ -345,24 +378,33 @@ nonisolated enum ClientOps {
                 progress(detail)
             }
         }
-        return Outcome(verdict: .unverifiable, intent: intent,
-                       note: "not healthy within \(timeout)s — sevo doctor")
+        return Outcome(
+            verdict: .unverifiable,
+            intent: intent,
+            note: "not healthy within \(timeout)s — sevo doctor",
+        )
     }
 
     /// Blocks until no bottle process remains, or the timeout — the `--gone`
     /// half of `sevo wait`.
     static func waitGone(timeout: Int, progress: (String) -> Void) async -> Outcome {
         for waited in stride(from: 2, through: timeout, by: 2) {
-            if (await ClientLifecycle.bottleProcessIDs()).isEmpty {
-                return Outcome(verdict: .confirmed, intent: "wait",
-                               note: "client gone after ~\(waited)s")
+            if await (ClientLifecycle.bottleProcessIDs()).isEmpty {
+                return Outcome(
+                    verdict: .confirmed,
+                    intent: "wait",
+                    note: "client gone after ~\(waited)s",
+                )
             }
             try? await Task.sleep(for: .seconds(2))
             if waited % 10 == 0 { progress("waiting for the client to go (\(waited)s)") }
         }
         let survivors = await ClientLifecycle.bottleProcessIDs()
-        return Outcome(verdict: .unverifiable, intent: "wait",
-                       note: "pids \(survivors) still up after \(timeout)s")
+        return Outcome(
+            verdict: .unverifiable,
+            intent: "wait",
+            note: "pids \(survivors) still up after \(timeout)s",
+        )
     }
 
     // MARK: - Adopted Windows programs
@@ -378,8 +420,11 @@ nonisolated enum ClientOps {
         guard await AppControl.post("/program/launch?id=\(id)\(query)") != nil else {
             throw Failure.message("the daemon would not start \(entry.name) — sevo status")
         }
-        return Outcome(verdict: .confirmed, intent: "program launch",
-                       note: "\(entry.name) started")
+        return Outcome(
+            verdict: .confirmed,
+            intent: "program launch",
+            note: "\(entry.name) started",
+        )
     }
 
     /// Runs one Windows program once, by path. Waiting is what an installer
@@ -400,8 +445,11 @@ nonisolated enum ClientOps {
         }
         let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let status = (reply?["status"] as? Int).map(String.init) ?? "unknown"
-        return Outcome(verdict: .confirmed, intent: "program run",
-                       note: "\(name) exited (status \(status))")
+        return Outcome(
+            verdict: .confirmed,
+            intent: "program run",
+            note: "\(name) exited (status \(status))",
+        )
     }
 
     private static func ensureProvisioned() async throws {

@@ -252,7 +252,7 @@ final class MenuTrackingWatchdog {
     /// The candidate menus the private levers inspect: the app's main menu
     /// first, then the mirror's open titles.
     private func candidateMenus() -> [NSMenu] {
-        [NSApp.mainMenu].compactMap { $0 } + trackedMenus()
+        [NSApp.mainMenu].compactMap(\.self) + trackedMenus()
     }
 
     private func pull(_ lever: Stage, starvedSeconds: Double) {

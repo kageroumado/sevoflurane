@@ -216,7 +216,7 @@
             } else {
                 log("would download the managed engine from the stable manifest channel")
                 version = "dry-run-engine"
-                for step in 1...4 {
+                for step in 1 ... 4 {
                     progress("Downloading the engine…", Double(step) / 4)
                     await pause()
                 }

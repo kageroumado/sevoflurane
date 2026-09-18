@@ -957,7 +957,7 @@ final class SteamWindow: NSObject {
           return false;
         })()
         """
-        return ((try? await webView.evaluateJavaScript(script)) as? Bool) ?? false
+        return await ((try? webView.evaluateJavaScript(script)) as? Bool) ?? false
     }
 
     /// Ends the popup from our side. Closing the `NSWindow` alone would leave

@@ -144,7 +144,7 @@ struct GamesSettings: View {
 
     /// Which level the resolved value comes from, read the way the resolver
     /// reads it.
-    private func level<Value>(_ key: KeyPath<ConfigValues, Value?>) -> String {
+    private func level(_ key: KeyPath<ConfigValues, (some Any)?>) -> String {
         if values[keyPath: key] != nil { return "This game" }
         if GameConfig.bottle(SteamBottle.name)[keyPath: key] != nil { return "Engine" }
         if GameConfig.global()[keyPath: key] != nil { return "All games" }
@@ -155,9 +155,9 @@ struct GamesSettings: View {
     /// a change costs, and the chip the fix table earns when it names a value
     /// this game does not have. Nothing applies itself; the chip is the click.
     @ViewBuilder
-    private func settingRow<Value: Equatable, Control: View>(
-        _ key: WritableKeyPath<ConfigValues, Value?>, cost: SettingReach, for entry: Entry,
-        @ViewBuilder control: () -> Control,
+    private func settingRow(
+        _ key: WritableKeyPath<ConfigValues, (some Equatable)?>, cost: SettingReach, for entry: Entry,
+        @ViewBuilder control: () -> some View,
     ) -> some View {
         let fix = recommendation.fix(setting: key)
         let wanted = fix?.values[keyPath: key]

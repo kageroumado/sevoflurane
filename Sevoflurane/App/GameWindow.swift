@@ -66,7 +66,10 @@ enum GameWindow {
         }
         let primary = NSScreen.screens.first
         let f = primary?.frame ?? .zero
-        return (0, primary?.backingScaleFactor ?? 2,
-                CGRect(x: f.minX, y: flip - f.maxY, width: f.width, height: f.height))
+        return (
+            0,
+            primary?.backingScaleFactor ?? 2,
+            CGRect(x: f.minX, y: flip - f.maxY, width: f.width, height: f.height),
+        )
     }
 }

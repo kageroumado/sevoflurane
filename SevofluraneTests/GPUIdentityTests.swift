@@ -38,7 +38,7 @@ struct MacChipTests {
 }
 
 struct GPUEquivalenceTests {
-    private static let everyChip: [MacChip] = (1...GPUEquivalence.newestGeneration).flatMap {
+    private static let everyChip: [MacChip] = (1 ... GPUEquivalence.newestGeneration).flatMap {
         generation in
         MacChip.Tier.allCases.map {
             MacChip(generation: generation, tier: $0, name: "Apple M\(generation) \($0)")
@@ -216,9 +216,9 @@ struct DXVKConfigFileTests {
                 character == " " || character == "\t" || character == "\r"
             }
             func isValidKeyCharacter(_ character: Character) -> Bool {
-                ("0"..."9").contains(character)
-                    || ("A"..."Z").contains(character)
-                    || ("a"..."z").contains(character)
+                ("0" ... "9").contains(character)
+                    || ("A" ... "Z").contains(character)
+                    || ("a" ... "z").contains(character)
                     || character == "." || character == "_"
             }
             func skipWhitespace() {
@@ -265,8 +265,8 @@ struct DXVKConfigFileTests {
         let file = try #require(GPUIdentity.nvidia.dxvkConfigFile)
         let options = parse(file)
         let card = try #require(GPUIdentity.nvidia.card)
-        #expect(parsePciID(try #require(options["dxgi.customVendorId"])) == Int32(card.vendorID))
-        #expect(parsePciID(try #require(options["dxgi.customDeviceId"])) == Int32(card.deviceID))
+        #expect(try parsePciID(#require(options["dxgi.customVendorId"])) == Int32(card.vendorID))
+        #expect(try parsePciID(#require(options["dxgi.customDeviceId"])) == Int32(card.deviceID))
         #expect(options["dxgi.customDeviceDesc"] == card.name)
         #expect(options["dxgi.maxDeviceMemory"] == String(card.videoMemoryMB))
     }
@@ -275,7 +275,7 @@ struct DXVKConfigFileTests {
     /// one — the failure that reached DXMT as `customDeviceDesc = "NVIDIA"`.
     @Test
     func `the card's whole name survives the parser`() throws {
-        let options = parse(try #require(GPUIdentity.nvidia.dxvkConfigFile))
+        let options = try parse(#require(GPUIdentity.nvidia.dxvkConfigFile))
         #expect(options["dxgi.customDeviceDesc"]?.contains(" ") == true)
     }
 

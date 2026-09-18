@@ -24,7 +24,7 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     let managedEngineVersions: [String]
     /// CodeWeavers' preview app, when installed alongside stable. It shares
     /// the license, so usability follows the same rule.
-    var crossoverPreview: CrossOver? = nil
+    var crossoverPreview: CrossOver?
 
     /// Every bottle with a Steam install; the wizard adopts one outright when
     /// this has exactly one entry and asks otherwise.

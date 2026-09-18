@@ -167,7 +167,7 @@ final class SteamMenuMirror: NSObject {
         let open = openTitles.sorted()
         MenuTrackingWatchdog.cancelMenuBarTracking()
         if MenuTrackingWatchdog.privateLeverEngages {
-            let candidates = [NSApp.mainMenu].compactMap { $0 } + open.compactMap { menus[$0] }
+            let candidates = [NSApp.mainMenu].compactMap(\.self) + open.compactMap { menus[$0] }
             let outcome = MenuTrackingWatchdog.stopPrivateSession(candidateMenus: candidates)
             EventLog.shared.log(.menu, "control port /menu/cancel — private lever: \(outcome.summary)")
         }

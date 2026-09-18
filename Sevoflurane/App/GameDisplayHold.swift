@@ -15,7 +15,7 @@ import IOKit.pwr_mgt
 /// the app quits. System sleep is left to the user's settings.
 @MainActor
 enum GameDisplayHold {
-    private static var assertion: IOPMAssertionID = IOPMAssertionID(kIOPMNullAssertionID)
+    private static var assertion: IOPMAssertionID = .init(kIOPMNullAssertionID)
 
     /// A game's window is up. Idempotent.
     static func gameDidAppear() {

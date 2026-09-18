@@ -18,7 +18,7 @@ struct ProcessMonitorTests {
     }
 
     @Test
-    func `collecting a report for something that is not a game says so`() throws {
+    func `collecting a report for something that is not a game says so`() {
         let watch = StallWatch()
         let actions = ProcessMonitorActions(watch: watch)
         actions.collectReports(Self.process(role: .helper, appID: nil))

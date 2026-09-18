@@ -151,12 +151,11 @@ enum AgentIntegration {
     /// Registers the server with one agent. Answers a failure description
     /// for the row to show, or `nil` on success.
     static func register(_ harness: Harness) async -> String? {
-        let failure: String?
-        switch harness {
-        case .claudeCode: failure = await registerClaudeCode()
-        case .claudeDesktop: failure = registerClaudeDesktop()
-        case .codex: failure = await registerCodex()
-        case .hermes: failure = registerHermes()
+        let failure: String? = switch harness {
+        case .claudeCode: await registerClaudeCode()
+        case .claudeDesktop: registerClaudeDesktop()
+        case .codex: await registerCodex()
+        case .hermes: registerHermes()
         }
         if failure == nil {
             EventLog.enqueue(.app, "sevo MCP registered with \(harness.displayName)")
@@ -351,8 +350,8 @@ enum AgentIntegration {
         hermesDirectory.appendingPathComponent("config.yaml")
     }
 
-    nonisolated private static let hermesMarkerStart = "# >>> sevo (managed)"
-    nonisolated private static let hermesMarkerEnd = "# <<< sevo"
+    private nonisolated static let hermesMarkerStart = "# >>> sevo (managed)"
+    private nonisolated static let hermesMarkerEnd = "# <<< sevo"
 
     private static func registerHermes() -> String? {
         let existing = fileText(hermesConfig) ?? ""
@@ -378,7 +377,7 @@ enum AgentIntegration {
     }
 
     /// Our `mcp_servers` entry at the given child indent, markers included.
-    nonisolated private static func hermesBlock(indent: String) -> String {
+    private nonisolated static func hermesBlock(indent: String) -> String {
         """
         \(indent)\(hermesMarkerStart)
         \(indent)\(serverName):

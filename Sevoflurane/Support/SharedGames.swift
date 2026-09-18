@@ -68,7 +68,8 @@ nonisolated enum SharedGames {
             guard let fields = read(manifest: manifest),
                   FileManager.default.fileExists(
                       atPath: steamapps
-                          .appendingPathComponent("common/\(fields.installdir)").path)
+                          .appendingPathComponent("common/\(fields.installdir)").path,
+                  )
             else { return nil }
             return Candidate(
                 appID: fields.appID,

@@ -122,8 +122,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
             // A page that went backwards is a new process under the same app
             // id — the count starts again, and so does the interval.
             if let previous = lastCount, let then = lastSampledAt,
-               page.count >= previous, now > then
-            {
+               page.count >= previous, now > then {
                 let seconds = now - then
                 let frames = page.count - previous
                 countedFrames += frames
@@ -215,7 +214,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
         }
         guard word(0) == magic, half(48) == version else { return nil }
         let pid = pid_t(half(52))
-        let exe = data[64..<96]
+        let exe = data[64 ..< 96]
         return Page(
             pid: pid,
             appid: Int(half(60)),
@@ -274,4 +273,3 @@ final nonisolated class PresentStats: @unchecked Sendable {
 private nonisolated func rounded(_ value: Double) -> Double {
     (value * 10).rounded() / 10
 }
-

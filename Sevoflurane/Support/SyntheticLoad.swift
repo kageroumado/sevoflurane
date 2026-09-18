@@ -44,7 +44,7 @@ final nonisolated class SyntheticLoad: Sendable {
                 defer { finished.leave() }
                 // A linear congruential step the optimizer cannot fold away
                 // between checks of the stop flag.
-                var value: UInt64 = UInt64(index) &+ 1
+                var value = UInt64(index) &+ 1
                 while !isStopped {
                     for _ in 0 ..< 50_000 {
                         value = value &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407

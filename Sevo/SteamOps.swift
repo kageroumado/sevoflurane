@@ -195,8 +195,8 @@ nonisolated enum GameStop {
     }
 
     static func sighting(ofApp appid: Int) async -> Sighting {
-        let listed = (try? await SteamOps.runningApps())?.contains(appid) ?? false
-        return Sighting(steamListsIt: listed, processes: await processes(ofApp: appid))
+        let listed = await (try? SteamOps.runningApps())?.contains(appid) ?? false
+        return await Sighting(steamListsIt: listed, processes: processes(ofApp: appid))
     }
 
     /// Polls until the game is gone or the seconds run out.

@@ -69,8 +69,8 @@ struct AgentIntegrationTests {
     }
 
     @Test
-    func `removal restores the empty map and survives a damaged block`() {
-        let alone = AgentIntegration.addingHermesServer(to: "mcp_servers: {}")!
+    func `removal restores the empty map and survives a damaged block`() throws {
+        let alone = try #require(AgentIntegration.addingHermesServer(to: "mcp_servers: {}"))
         #expect(AgentIntegration.removingHermesServer(from: alone) == "mcp_servers: {}")
 
         // End marker deleted by hand: only recognizably-ours lines go, and

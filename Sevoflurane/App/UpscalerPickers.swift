@@ -9,7 +9,7 @@ struct UpscalerPicker: View {
     let shaders: ShaderStore
     /// The level above's value, as stored; `nil` at the bottle level, which
     /// the picker cannot make inherit.
-    var inherited: String? = nil
+    var inherited: String?
     @Binding var selection: String?
     /// The catalog entry chosen while its fetch runs, so the picker shows it
     /// rather than snapping back.
@@ -86,7 +86,7 @@ struct UpscalerPicker: View {
 /// The final filter picker both levels share. A `nil` selection is the
 /// inherit entry, offered when `inherited` is the level above's value.
 struct FinalFilterPicker: View {
-    var inherited: FinalFilter? = nil
+    var inherited: FinalFilter?
     @Binding var selection: FinalFilter?
 
     var body: some View {

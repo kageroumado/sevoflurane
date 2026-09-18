@@ -667,7 +667,7 @@ nonisolated enum ClientLifecycle {
     static func daemonRunResult(_ data: Data) -> (status: Int32?, output: String)? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let output = object["output"] as? String else { return nil }
-        return ((object["status"] as? NSNumber).map { $0.int32Value }, output)
+        return ((object["status"] as? NSNumber).map(\.int32Value), output)
     }
 
     /// Starts one windowed Windows program inside the Steam bottle — winecfg,
