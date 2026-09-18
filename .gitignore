@@ -53,3 +53,6 @@ __pycache__/
 
 ## Engine tarballs
 dormison-*.tar.xz
+
+## Renderer probe droppings
+*.dxvk-cache
