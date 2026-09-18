@@ -479,6 +479,9 @@ final nonisolated class RunRecorder {
     /// at launch time (the engine can change between launches); a test injects
     /// a concrete file so its fixtures, not a real bottle, decide the run.
     private let processLogOverride: URL?
+    /// The driver's present counters, sampled for as long as a run is open;
+    /// what fills the record's ``RunRecord/fps``.
+    let presentStats: PresentStats
 
     /// A launch in progress and everything about the machine that was true
     /// when it started. `Sendable` so closing one can leave the main actor:
@@ -489,10 +492,12 @@ final nonisolated class RunRecorder {
         runs: URL = RunLog.root,
         wineLog: URL = WineLog.fileURL,
         processLog: URL? = nil,
+        presentStats: PresentStats = PresentStats(),
     ) {
         self.runs = runs
         self.wineLog = wineLog
         self.processLogOverride = processLog
+        self.presentStats = presentStats
     }
 
     /// A launch of `appID` has begun. Re-arming an app that is already open
@@ -542,6 +547,7 @@ final nonisolated class RunRecorder {
             processLog: steamLog,
         )
         persist(appID: appID)
+        presentStats.arm(appID: appID)
         if !hasGroomed {
             hasGroomed = true
             Task.detached(name: "Groom the run records") { [runs] in RunLog.groom(in: runs) }
@@ -575,7 +581,8 @@ final nonisolated class RunRecorder {
     /// the closing queue: finishing it reads the tails of two logs, which is
     /// disk work the caller should not wait on.
     func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
-        guard let run = open.removeValue(forKey: appID) else { return }
+        guard var run = open.removeValue(forKey: appID) else { return }
+        run.record.fps = presentStats.disarm(appID: appID)
         // Before the write rather than after it: the same app id can be armed
         // again in the next moment, and a disarm behind that would take the
         // new run's file with it.
@@ -591,7 +598,8 @@ final nonisolated class RunRecorder {
     /// A game still up here is one the teardown is about to take down with
     /// the bottle, so an ending Steam never recorded is that quit.
     func closeAll() {
-        for run in open.values {
+        for var run in open.values {
+            run.record.fps = presentStats.disarm(appID: run.record.appid)
             RunLog.disarm(appID: run.record.appid, in: runs)
             run.write(
                 lasting: Self.seconds(since: run.started), kind: nil, unrecorded: .appQuit,
@@ -629,6 +637,9 @@ final nonisolated class RunRecorder {
             let stillUp = SteamGameProcessLog.tracks(app: appID, in: tail)
                 && SteamGameProcessLog.exits(forApp: appID, in: tail).isEmpty
             if stillUp {
+                // The counter starts from this moment: the frames of the run
+                // before the app went away are in no page this process read.
+                presentStats.arm(appID: appID)
                 Self.log("run reattached — \(armed.record.summary)")
             } else {
                 close(appID: appID)

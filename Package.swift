@@ -115,6 +115,7 @@ let package = Package(
                 "Sevoflurane/Support/PerformanceProbes.swift",
                 "Sevoflurane/Support/PopupSweeper.swift",
                 "Sevoflurane/Support/Preferences.swift",
+                "Sevoflurane/Support/PresentStats.swift",
                 "Sevoflurane/Support/ProgramDetection.swift",
                 "Sevoflurane/Support/Redaction.swift",
                 "Sevoflurane/Support/RendererVersions.swift",
