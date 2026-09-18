@@ -207,10 +207,36 @@ nonisolated enum BottleGraphics {
         let wanted = currentSelection()
         return GraphicsChange(
             restage: wanted.renderer != booted.renderer
-                || wanted.d3dMetalVersion != booted.d3dMetalVersion,
+                || wanted.d3dMetalVersion != booted.d3dMetalVersion
+                || rendererVersionsChangedSinceBoot(),
             bounce: wanted.msync != booted.msync
                 || bootedEngineRoot() != Engine.active.root.path,
         )
+    }
+
+    /// Whether the DXMT or DXVK version picked in Settings differs from the
+    /// one the running client's tree was staged from. A version change is a
+    /// restage like any other — the stager reads the chosen directory, so the
+    /// next game to launch loads the new DLLs — and it only counts as one
+    /// because the choice is recorded at every spawn.
+    ///
+    /// A client booted before this was recorded reads as no change: the first
+    /// spawn after an update stages from the desired versions regardless.
+    static func rendererVersionsChangedSinceBoot() -> Bool {
+        guard let booted = Preferences.shared.string(forKey: bootedRenderersKey) else {
+            return false
+        }
+        return booted != rendererVersionRecord()
+    }
+
+    private static let bootedRenderersKey = "bootedRendererVersions"
+
+    /// `dxmt=0.80|dxvk=` — one field per component, an empty value meaning
+    /// the engine's own. Compared as a whole, never parsed back.
+    private static func rendererVersionRecord() -> String {
+        RendererVersions.Component.allCases
+            .map { "\($0.rawValue)=\(RendererVersions.chosen($0) ?? "")" }
+            .joined(separator: "|")
     }
 
     /// Brings the active managed engine's Wine tree in line with the desired
@@ -261,6 +287,9 @@ nonisolated enum BottleGraphics {
                 + "|\(selection.d3dMetalVersion ?? "")|\(Engine.active.root.path)",
             forKey: bootedKey,
         )
+        // Its own key: the versions are a per-component list, and the record
+        // above ends in a path that may hold any separator.
+        Preferences.shared.set(rendererVersionRecord(), forKey: bootedRenderersKey)
     }
 
     static func bootedSelection() -> (renderer: Renderer, msync: Bool, d3dMetalVersion: String?)? {

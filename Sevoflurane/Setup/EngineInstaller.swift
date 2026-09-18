@@ -8,10 +8,11 @@ import Foundation
 /// at all, which is what lets ``SetupProbe/managedEngineVersions()`` treat
 /// presence as installed.
 ///
-/// The tarball can also come from disk, ``install(fromFile:into:progress:)``:
+/// An engine can also come from this Mac, ``install(from:into:progress:)``:
 /// the release asset someone saved by hand on a Mac the release feed does
-/// not reach, or the copy a disk image ships with the app
-/// (``bundledTarball(resources:beside:)``).
+/// not reach, the copy a disk image ships with the app
+/// (``bundledTarball(resources:beside:)``), or the tree `package-engine.sh`
+/// left behind for whoever built it.
 nonisolated enum EngineInstaller {
     /// Fetches the manifest's stable release, or reports why the machine
     /// can't use it.
@@ -77,22 +78,72 @@ nonisolated enum EngineInstaller {
         _ = try await unpack(tarball, expecting: release.version, in: staging, into: Engine.managedRoot)
     }
 
-    /// Installs the engine tarball at `tarball` — `dormison-r<N>.tar.xz` as
-    /// the release ships it — and returns the version it carried. A
-    /// `<name>.sig` beside the file is verified against the pinned key, and
-    /// one that fails refuses the install; a tarball with nothing beside it
-    /// is the operator's own choice and is installed as such, logged. The
-    /// tarball's single top-level directory names the version, and the
-    /// version has to be new: an installed engine is never replaced.
+    /// Installs an engine already on this Mac and returns the version it
+    /// carried: `dormison-r<N>.tar.xz` as the release ships it, or the
+    /// directory `package-engine.sh` assembled, which is what is inside that
+    /// tarball. Either way the version has to be new — an installed engine is
+    /// never replaced.
     static func install(
-        fromFile tarball: URL,
+        from source: URL,
         into root: URL = Engine.managedRoot,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws -> String {
-        let manager = FileManager.default
-        guard manager.fileExists(atPath: tarball.path) else {
-            throw InstallError("no engine tarball at \(tarball.path)")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDirectory) else {
+            throw InstallError("no engine at \(source.path)")
         }
+        return isDirectory.boolValue
+            ? try await install(fromFolder: source, into: root, progress: progress)
+            : try await install(fromTarball: source, into: root, progress: progress)
+    }
+
+    /// An engine tree built here: named for its version, holding `wine/bin`,
+    /// and left where its author put it — the copy is staged and moved in, so
+    /// an interrupted one never leaves a half tree that reads as installed.
+    /// `cp` rather than `rsync`, which maps each file it reads and so gets a
+    /// process running a signed Mach-O under Rosetta killed.
+    private static func install(
+        fromFolder folder: URL, into root: URL,
+        progress: @escaping @Sendable (String, Double?) -> Void,
+    ) async throws -> String {
+        let manager = FileManager.default
+        let version = folder.lastPathComponent
+        guard !version.isEmpty, !version.hasPrefix(".") else {
+            throw InstallError("an engine folder has to be named for its version")
+        }
+        guard manager.fileExists(atPath: folder.appendingPathComponent("wine/bin").path) else {
+            throw InstallError("\(version) is not an engine: no wine/bin inside")
+        }
+        let destination = root.appendingPathComponent(version)
+        guard !manager.fileExists(atPath: destination.path) else {
+            throw InstallError("engine \(version) is already installed")
+        }
+        progress("Copying \(version)…", nil)
+        let staging = try makeStaging()
+        defer { try? manager.removeItem(at: staging) }
+        let tree = staging.appendingPathComponent(version)
+        let copy = await Subprocess.run(
+            "/bin/cp", ["-Rp", folder.path, tree.path],
+            capture: .combined, timeout: .seconds(600),
+        )
+        guard copy.status == 0 else {
+            throw InstallError("engine copy failed: \(copy.output.suffix(200))")
+        }
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        try manager.moveItem(at: tree, to: destination)
+        SetupLog.log("engine folder \(folder.path): installed as \(version)")
+        return version
+    }
+
+    /// A `<name>.sig` beside the tarball is verified against the pinned key,
+    /// and one that fails refuses the install; a tarball with nothing beside
+    /// it is the operator's own choice and is installed as such, logged. The
+    /// tarball's single top-level directory names the version.
+    private static func install(
+        fromTarball tarball: URL, into root: URL,
+        progress: @escaping @Sendable (String, Double?) -> Void,
+    ) async throws -> String {
+        let manager = FileManager.default
         let named = versionName(of: tarball)
         guard !manager.fileExists(atPath: root.appendingPathComponent(named).path) else {
             throw InstallError("engine \(named) is already installed")

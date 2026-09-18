@@ -35,21 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    /// Launches that do something other than run the app: the test host, and
-    /// the helper-unregistering pass a worktree build ends with. Answers
-    /// whether one of them took the launch.
+    // Launches that do something other than run the app: the
+    // helper-unregistering pass a worktree build ends with. Answers whether
+    // one of them took the launch.
     #if DEBUG
         private func handledDebugLaunch() -> Bool {
-            // The unit tests link against this binary, so running them
-            // launches the app. Anything started here would boot the bottle,
-            // take the ports off a copy the user is running, and stage into
-            // their Steam install — from a test that only wanted to call a
-            // function. Before everything, so a test run leaves nothing at
-            // all behind it.
-            if Self.isHostingTests {
-                isSimulatedBoot = true
-                return true
-            }
             // Leaves the machine as a test run found it: a build run from a
             // worktree registers its own background helper, and a stale
             // registration would start that build's daemon at the next login
@@ -91,6 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        // The unit tests link against this binary, so running them launches
+        // the app. Anything started here would boot the bottle, take the ports
+        // off a copy the user is running, and stage into their Steam install —
+        // from a test that only wanted to call a function. Before everything,
+        // so a test run leaves nothing at all behind it.
+        if TestHost.isHosting { return }
         #if DEBUG
             if handledDebugLaunch() { return }
         #endif
@@ -104,8 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // gets a real Aqua session) strips the environment.
         if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
             ?? Preferences.shared.string(forKey: "engineManifestOverride"),
-            let url = URL(string: manifest)
-        {
+            let url = URL(string: manifest) {
             EngineManifest.overrideURL = url
             EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
         }
@@ -430,13 +425,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// launch, or a test run) rather than as the real app.
         private var isSimulatedBoot = false
 
-        /// Whether this process is the unit tests' host. `xctest` puts its
-        /// configuration path in the environment of the process it loads the
-        /// bundle into, which is this one.
-        private static var isHostingTests: Bool {
-            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-        }
-
         /// Retains the harness provisioner for the wizard's lifetime; the app's
         /// own `provisioner` keeps driving Settings › Repair untouched.
         private var dryRunProvisioner: Provisioner?
@@ -540,9 +528,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// only path that asks — a crash or a force-quit sends nothing, which is
     /// why a game survives one.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // A test host never started the client — and the bottle it would tear
+        // down belongs to whatever real instance is running alongside.
+        if TestHost.isHosting { return .terminateNow }
         #if DEBUG
-            // A harness boot never started the client — and the bottle it would
-            // tear down belongs to whatever real instance is running alongside.
+            // Same for a harness boot.
             if isSimulatedBoot { return .terminateNow }
         #endif
         guard quitTask == nil else { return .terminateCancel }

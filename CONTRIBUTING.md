@@ -32,7 +32,10 @@ and answers whether a chat window Steam is showing was asked for;
 those directly — `SevofluraneTests/IncomingChatTests.swift` is the worked
 example. Running the tests launches the app, because they link against it,
 so the app returns immediately when `XCTestConfigurationFilePath` is in its
-environment: a test run starts no bridge, no supervisor, and no client.
+environment (`TestHost.isHosting`): a test run starts no bridge, no
+supervisor, and no client, and never registers or restarts the background
+helper. The guard is in the app, not behind `#if DEBUG`, because the
+configuration a test action builds is the scheme's to choose.
 
 The `Test` workflow runs the complete bundle on GitHub's arm64
 [`xcode-27` macOS 27 image](https://github.blog/changelog/2026-09-10-xcode-27-runner-image-now-runs-on-macos-27/).
@@ -272,9 +275,14 @@ Mach service for the prefix until the client restarts.
   line never comes. Use an epoch-seconds loop
   (`deadline=$(($(date +%s)+150))`; zsh's `$SECONDS` is a float and breaks
   `[ -lt ]`).
-- **Do not run `xcodebuild test` while the live app runs**: the test host
-  runs app code and has knocked the healthy client over. Build with `build`;
-  test when the client is stopped.
+- **`xcodebuild test` beside a live client**: the test host is a second copy
+  of the app under the same bundle identifier, carrying the same
+  `SevofluraneDaemon` LaunchAgent label. `TestHost.isHosting` keeps the host
+  itself inert, so run the suites you touched with `-only-testing:`. What no
+  guard in the app reaches is the build: it re-signs that LaunchAgent and
+  `lsregister`s the DerivedData bundle, and if launchd boots the running
+  daemon out over it, the daemon's SIGTERM contract brings the bottle down
+  with it. Check `sevo status` before and after.
 - **Two apps, two bottles**: `/Applications/Sevoflurane.app` is a Release
   build; the dev build lives in
   `~/Library/Developer/Xcode/DerivedData/Sevoflurane-*/Build/Products/Debug/`

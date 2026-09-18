@@ -46,6 +46,7 @@ struct MenuBarView: View {
             host.refreshRecentGames()
             quickLaunch.refresh()
             SilentUpdates.shared.refresh()
+            UpdateSummary.shared.checkOnce()
         }
     }
 

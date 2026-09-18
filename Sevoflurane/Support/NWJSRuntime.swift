@@ -77,31 +77,56 @@ nonisolated enum NWJSRuntime {
     /// Falls back to the game's exact version when NW.js' index cannot be
     /// reached, which is also when nothing could be downloaded anyway.
     static func release(forGameVersion version: String) async -> String {
-        guard let series = series(of: version),
-              let url = URL(string: "https://nwjs.io/versions.json"),
+        guard let url = URL(string: "https://nwjs.io/versions.json"),
               let (data, response) = try? await URLSession.shared.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200,
-              let index = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let entries = index["versions"] as? [[String: Any]]
+              let chosen = release(
+                  forGameVersion: version, in: index(from: data), flavor: nativeFlavor,
+              )
         else { return version }
-        let flavor = nativeFlavor
-        let native = entries.compactMap { entry -> String? in
-            guard let raw = entry["version"] as? String,
-                  let files = entry["files"] as? [String], files.contains(flavor)
-            else { return nil }
+        return chosen
+    }
+
+    /// One release as NW.js' published index names it: the version, and the
+    /// build flavors that release shipped.
+    struct IndexEntry: Sendable, Equatable {
+        let version: String
+        let flavors: [String]
+    }
+
+    /// `versions.json` reduced to the releases a game could be sent to.
+    /// Prereleases are dropped: a version carrying a suffix ("0.29.0-beta1")
+    /// is never what a shipped game was built against.
+    static func index(from data: Data) -> [IndexEntry] {
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let entries = object["versions"] as? [[String: Any]]
+        else { return [] }
+        return entries.compactMap { entry in
+            guard let raw = entry["version"] as? String else { return nil }
             let number = raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
-            // Prereleases carry a suffix ("0.29.0-beta1") and are never what a
-            // shipped game was built against.
-            return number.contains("-") ? nil : number
+            guard !number.contains("-") else { return nil }
+            return IndexEntry(version: number, flavors: entry["files"] as? [String] ?? [])
         }
-        func newest(_ versions: [String]) -> String? {
-            versions.max { $0.compare($1, options: .numeric) == .orderedAscending }
+    }
+
+    /// The release out of `index` a game should run on: the newest patch of
+    /// its own series when that series ships `flavor`, and otherwise the
+    /// oldest release that does — which on an Apple Silicon Mac is 0.77, the
+    /// first NW.js with an arm64 build. `nil` when the version names no series
+    /// or the index names no build of this flavor, and the caller then has
+    /// nothing better than the game's own version.
+    static func release(
+        forGameVersion version: String, in index: [IndexEntry], flavor: String,
+    ) -> String? {
+        guard let wanted = series(of: version) else { return nil }
+        let native = index.filter { $0.flavors.contains(flavor) }.map(\.version)
+        let ascending = { (first: String, second: String) in
+            first.compare(second, options: .numeric) == .orderedAscending
         }
-        func oldest(_ versions: [String]) -> String? {
-            versions.min { $0.compare($1, options: .numeric) == .orderedAscending }
+        if let own = native.filter({ series(of: $0) == wanted }).max(by: ascending) {
+            return own
         }
-        if let own = newest(native.filter { Self.series(of: $0) == series }) { return own }
-        return oldest(native) ?? version
+        return native.min(by: ascending)
     }
 
     /// The build flavor this Mac runs without translation. Rosetta would run
@@ -167,6 +192,54 @@ nonisolated enum NWJSRuntime {
             throw RuntimeError("the NW.js \(version) tree has no runnable binary")
         }
         return binary
+    }
+
+    /// Adds a runtime from a folder already on this Mac — the unpacked
+    /// `nwjs-v<version>-<flavor>` directory NW.js publishes, or the
+    /// `nwjs.app` inside one. The route for a Mac that cannot reach
+    /// `dl.nwjs.io`, and for a build someone made themselves.
+    ///
+    /// `ditto`, because the bundle is full of symlinks into its own
+    /// `Versions` directory and a copy that flattens them will not launch.
+    @discardableResult
+    static func install(fromFolder folder: URL, version: String? = nil) async throws -> String {
+        let manager = FileManager.default
+        let app = folder.lastPathComponent == "nwjs.app" ? folder : findApp(under: folder)
+        guard let app else {
+            throw RuntimeError("no nwjs.app inside \(folder.lastPathComponent)")
+        }
+        guard let number = version ?? versionName(ofFolder: folder) else {
+            throw RuntimeError(
+                "could not tell the NW.js version from \(folder.lastPathComponent); pass one",
+            )
+        }
+        guard !isInstalled(version: number) else {
+            throw RuntimeError("NW.js \(number) is already installed")
+        }
+        let destination = directory(version: number)
+        try? manager.removeItem(at: destination)
+        try manager.createDirectory(at: destination, withIntermediateDirectories: true)
+        let copy = await Subprocess.run(
+            "/usr/bin/ditto", [app.path, destination.appendingPathComponent("nwjs.app").path],
+            capture: .combined, timeout: .seconds(600),
+        )
+        guard copy.status == 0 else {
+            throw RuntimeError("could not copy the runtime: \(copy.output.suffix(200))")
+        }
+        guard isInstalled(version: number) else {
+            try? manager.removeItem(at: destination)
+            throw RuntimeError("\(folder.lastPathComponent) holds no runnable NW.js binary")
+        }
+        return number
+    }
+
+    /// `nwjs-v0.77.0-osx-arm64` → `0.77.0`. A bundle's own Info.plist is no
+    /// help here: it carries Chromium's version, not NW.js'.
+    static func versionName(ofFolder folder: URL) -> String? {
+        let name = folder.lastPathComponent
+        guard name.hasPrefix("nwjs-v") else { return nil }
+        let number = name.dropFirst("nwjs-v".count).prefix { $0.isNumber || $0 == "." }
+        return number.isEmpty ? nil : String(number)
     }
 
     /// The archive nests the bundle one directory down

@@ -52,6 +52,13 @@ enum DaemonService {
     /// once (the poisoned Background Task Management record), and a helper
     /// older than this app is restarted once (an app updated under it).
     static func ensureRunning() async -> Outcome {
+        // A test host carries the shipping app's bundle identifier and the
+        // same `AssociatedBundleIdentifiers`, so registering from one rewrites
+        // the live install's helper record and launchd boots the running
+        // daemon out. That bootout is a SIGTERM, and the daemon's SIGTERM
+        // contract is to bring the bottle down — a unit test would close the
+        // Steam client somebody is playing on.
+        if TestHost.isHosting { return reachable }
         // A registration has to exist before launchd can bring the agent up:
         // the never-registered machine registers now, an unapproved one is
         // sent to Login Items, and an enabled-but-stopped one is given launchd
@@ -94,7 +101,7 @@ enum DaemonService {
         case .rebuild:
             // The decision above already found the daemon silent, so the
             // rebuild runs directly rather than re-probing through `repair()`.
-            return outcome(of: await rebuild())
+            return await outcome(of: rebuild())
         case .restartStale:
             await restartStaleDaemonOnce()
             return reachable
@@ -109,7 +116,8 @@ enum DaemonService {
     /// rebuilt. `force` rebuilds regardless, for a daemon that answers but is
     /// still wrong.
     static func repair(force: Bool = false) async -> RepairResult {
-        switch DaemonHeal.repairAction(isAnswering: await isAnswering(), force: force) {
+        if TestHost.isHosting { return .alreadyHealthy }
+        switch await DaemonHeal.repairAction(isAnswering: isAnswering(), force: force) {
         case .alreadyHealthy:
             return .alreadyHealthy
         case .rebuild:

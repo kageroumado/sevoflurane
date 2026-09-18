@@ -27,6 +27,13 @@ final class EngineStore {
     private(set) var isSwitching = false
     private(set) var switchPhase: String?
     private(set) var switchError: String?
+    /// The release the feed calls stable: the engine a fresh install gets, so
+    /// the default the pane measures "newer" against and the one Reset
+    /// returns to. `nil` until the feed answers, and on a Mac that cannot
+    /// reach it.
+    private(set) var stableRelease: EngineManifest.Release?
+    /// The download's progress while the pane is fetching the default engine.
+    private(set) var engineFetchFraction: Double?
     /// The failure the pane keeps showing: this session's switch error, or
     /// the last provisioning pass's, which the pane is usually not open for
     /// and which a rebuild used to erase.
@@ -59,6 +66,94 @@ final class EngineStore {
         !bottles.contains { $0.name == stagedBottle }
     }
 
+    /// The managed engines on this Mac, oldest first.
+    private var installedVersions: [String] {
+        provisioner.detection?.managedEngineVersions ?? []
+    }
+
+    /// The default release when it is newer than every engine installed here —
+    /// the pane's "a newer engine is available" line. A Mac with no managed
+    /// engine at all is not told: the picker's own Dormison entry already
+    /// offers to fetch one.
+    var newerEngine: EngineManifest.Release? {
+        guard let stableRelease, !installedVersions.isEmpty,
+              UpdateSummary.isNewer(stableRelease.version, thanAll: installedVersions)
+        else { return nil }
+        return stableRelease
+    }
+
+    /// Whether the staged engine is something other than the default, so
+    /// there is a default to go back to.
+    var canResetToDefault: Bool {
+        guard let stableRelease else { return false }
+        return stagedEngine != .managed(version: stableRelease.version)
+    }
+
+    /// The name to say for the default engine, for the pane's Reset.
+    var defaultEngineLabel: String? {
+        stableRelease.map { Engine.managedDisplayName($0.version) }
+    }
+
+    /// Stages the default engine, fetching it first when this Mac does not
+    /// have it. Reset and installing the newer release are the same move:
+    /// both land on the version the feed calls stable. Switch still decides
+    /// when it runs.
+    func useDefaultEngine() {
+        guard let release = stableRelease, !isSwitching else { return }
+        isSwitching = true
+        switchError = nil
+        Task(name: "Install engine \(release.version)") { [weak self] in
+            guard let self else { return }
+            if !EngineInstaller.isInstalled(release) {
+                switchPhase = "Downloading \(Engine.managedDisplayName(release.version))…"
+                do {
+                    try await EngineInstaller.install(release, progress: fetchProgress())
+                } catch {
+                    switchError = "\(error)"
+                }
+            }
+            switchPhase = nil
+            engineFetchFraction = nil
+            isSwitching = false
+            await refresh()
+            guard switchError == nil else { return }
+            stagedEngine = .managed(version: release.version)
+        }
+    }
+
+    /// The installer reports from whatever thread its download landed on, and
+    /// a progress tick is synchronous work on main — no Task semantics are
+    /// wanted, so none are paid for.
+    private func fetchProgress() -> @Sendable (String, Double?) -> Void {
+        { [weak self] phase, fraction in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.switchPhase = phase
+                    self?.engineFetchFraction = fraction
+                }
+            }
+        }
+    }
+
+    private var isLookingUpDefault = false
+
+    /// The feed is asked until it answers, and then left alone: it is a
+    /// signed fetch over the network, and the stable release does not move
+    /// while Settings is open. Off to the side of ``refresh()``, which a
+    /// switch awaits and which must not wait on a network that may be gone.
+    private func refreshStableRelease() {
+        guard !environment.isSimulation, stableRelease == nil, !isLookingUpDefault else {
+            return
+        }
+        isLookingUpDefault = true
+        Task(name: "Look up the default engine") { [weak self] in
+            let release = try? await EngineManifest.fetch().stable
+            guard let self else { return }
+            stableRelease = release
+            isLookingUpDefault = false
+        }
+    }
+
     func refresh() async {
         await provisioner.refreshDetection()
         rebuildOptions()
@@ -68,6 +163,7 @@ final class EngineStore {
         }
         refreshBottles(resetChoice: false)
         refreshStandingFailure()
+        refreshStableRelease()
     }
 
     /// Whether a failed pass is holding the client down — the pane's cue to

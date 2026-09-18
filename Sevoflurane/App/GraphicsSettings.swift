@@ -197,10 +197,25 @@ struct GraphicsSettings: View {
             ForEach(RendererVersions.Component.allCases) { component in
                 RendererVersionRow(store: store, component: component)
             }
+            if BottleGraphics.rendererVersionsChangedSinceBoot() {
+                // The renderer picker above says this for a renderer change;
+                // a version change is the same restage and was saying
+                // nothing at all.
+                HStack {
+                    Text(applyRendererCopy)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if let steam {
+                        Button("Restart Steam") { steam.restartClient() }
+                    }
+                }
+            }
         } header: {
             Text("Renderer versions")
         } footer: {
-            Text("Restart Steam to apply a DXMT or DXVK change. Reset restores the engine's own version.")
+            Text("\(applyRendererCopy) Reset restores the engine's own version.")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }

@@ -182,7 +182,8 @@ final class Provisioner {
                 "Rosetta install failed: \(result.output.suffix(200)). "
                     + "If this account isn't an administrator, run "
                     + "\"softwareupdate --install-rosetta --agree-to-license\" "
-                    + "in Terminal as one, then Try Again.")
+                    + "in Terminal as one, then Try Again.",
+            )
         }
         await refreshDetection()
     }
@@ -217,18 +218,18 @@ final class Provisioner {
         }
     }
 
-    /// Installs an engine from a tarball on disk outside the provisioning
-    /// sequence — Settings › Engine's route for adding a release by hand.
-    /// Narrates through `activity` while it runs and rests at `.idle`
-    /// after; the version installed comes back, and the caller decides
-    /// whether to switch to it.
-    func installEngine(fromFile tarball: URL) async throws -> String {
+    /// Installs an engine already on disk — a release tarball or a tree built
+    /// here — outside the provisioning sequence, which is Settings › Engine's
+    /// route for adding a release by hand. Narrates through `activity` while
+    /// it runs and rests at `.idle` after; the version installed comes back,
+    /// and the caller decides whether to switch to it.
+    func installEngine(from source: URL) async throws -> String {
         guard !isWorking else {
             throw ProvisionError("setup is already running")
         }
         beginStage(2, "Installing the game engine…")
-        SetupLog.log("installing engine from \(tarball.path)")
-        let result = await environment.installEngine(from: tarball, progress: engineProgress())
+        SetupLog.log("installing engine from \(source.path)")
+        let result = await environment.installEngine(from: source, progress: engineProgress())
         stage = nil
         stageFraction = nil
         activity = .idle
@@ -302,9 +303,12 @@ final class Provisioner {
     /// `-forcesteamupdate -forcepackagedownload` brings a client of any age
     /// up to current, which is why adoption and Repair both run it.
     private func updateClient(inBottle bottleName: String) async throws {
-        beginStage(5, steamPresent(inBottle: bottleName)
-            ? "Updating Steam…"
-            : "Downloading Steam (this is the long step)…")
+        beginStage(
+            5,
+            steamPresent(inBottle: bottleName)
+                ? "Updating Steam…"
+                : "Downloading Steam (this is the long step)…",
+        )
         // The CDN's bootstrapper is old enough that its first update replaces
         // the updater itself, and the new updater then wants the separate
         // win64 client package. One pass leaves that package for the user's

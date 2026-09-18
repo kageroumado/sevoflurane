@@ -67,7 +67,7 @@ extension SetupEnvironment {
     }
 
     /// Nothing boots in a simulation, so nothing has to settle.
-    func settleBottle(named name: String) async {}
+    func settleBottle(named _: String) async {}
 }
 
 nonisolated struct SetupCommandOutcome: Sendable {
@@ -113,7 +113,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
         do {
             if let tarball = tarball ?? EngineInstaller.bundledTarball() {
                 SetupLog.log("engine install from \(tarball.path)")
-                let version = try await EngineInstaller.install(fromFile: tarball, progress: progress)
+                let version = try await EngineInstaller.install(from: tarball, progress: progress)
                 return .success(version)
             }
             let release = try await EngineInstaller.stableRelease()

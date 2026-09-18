@@ -44,6 +44,11 @@ nonisolated enum PEResources {
         var fileVersion: String? {
             versionStrings["FileVersion"]
         }
+        /// The version the product declares, falling back to the file's own —
+        /// the two differ only where a build stamps them separately.
+        var productVersion: String? {
+            versionStrings["ProductVersion"] ?? fileVersion
+        }
         var companyName: String? {
             versionStrings["CompanyName"]
         }

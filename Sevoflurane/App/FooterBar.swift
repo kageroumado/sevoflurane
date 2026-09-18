@@ -40,11 +40,7 @@ struct FooterBar: View {
                 UpdateChip()
                 Spacer(minLength: 0)
                 actionsMenu
-                Button {
-                    NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
-                } label: { utilityIcon("gearshape") }
-                    .help("Settings")
-                    .accessibilityLabel("Settings")
+                settingsButton
                 Button { NSApplication.shared.terminate(nil) } label: { utilityIcon("xmark") }
                     .keyboardShortcut("q")
                     .help("Quit Sevoflurane and close Steam")
@@ -54,6 +50,27 @@ struct FooterBar: View {
             .buttonBorderShape(.capsule)
             .controlSize(.small)
         }
+    }
+
+    /// The gear, wearing a dot when the release feed has an engine or a renderer version this Mac
+    /// does not — which is where the update check gets said out loud, since everything under the app
+    /// is fetched from Settings.
+    private var settingsButton: some View {
+        let summary = UpdateSummary.shared.summary
+        return Button {
+            NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
+        } label: { utilityIcon("gearshape") }
+            .help(summary ?? "Settings")
+            .accessibilityLabel(summary.map { "Settings — \($0)" } ?? "Settings")
+            .overlay(alignment: .topTrailing) {
+                if summary != nil {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 2, y: -2)
+                        .allowsHitTesting(false)
+                }
+            }
     }
 
     /// `Menu` draws its own background and sizes to its label, so however it is styled it comes

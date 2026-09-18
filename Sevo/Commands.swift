@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
-import Synchronization
 import os
+import Synchronization
 
 /// `sevo` — one management surface, three consumers: us (testing and
 /// debugging), terminal-comfortable end users, and AI agents (via `sevo mcp`
@@ -17,7 +17,7 @@ struct SevoCommand: AsyncParsableCommand {
             EngineCommand.self, UpdateCommand.self, ShadersCommand.self, BottleCommand.self,
             StorageCommand.self,
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
-            AppCommand.self, ProgramCommand.self, DownloadsCommand.self,
+            AppCommand.self, ProgramCommand.self, NWJSCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
             RunsCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
@@ -424,7 +424,7 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines (CrossOver, managed OSS).",
     )
 
-    @Argument(help: "list | install [--file TARBALL] | d3dmetal | use | check-manifest") var verb: String = "list"
+    @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | check-manifest") var verb: String = "list"
     @Argument(
         help: "For use: the engine to switch to (a name from `sevo engine list`); for check-manifest: the engine.json to check.",
     )
@@ -459,7 +459,7 @@ struct EngineCommand: AsyncParsableCommand {
     ) var manifest: String?
     @Option(
         name: .customLong("file"),
-        help: "For install: an engine tarball on disk (dormison-r<N>.tar.xz) in place of the download; a .sig beside it is verified.",
+        help: "For install: an engine tarball (dormison-r<N>.tar.xz) or an engine folder on disk, in place of the download; a .sig beside a tarball is verified.",
     ) var file: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
@@ -505,7 +505,7 @@ struct EngineCommand: AsyncParsableCommand {
                 let sigPath = (signatureFile as NSString).expandingTildeInPath
                 do {
                     try EngineSignature.verify(
-                        data, signatureFile: try Data(contentsOf: URL(fileURLWithPath: sigPath)),
+                        data, signatureFile: Data(contentsOf: URL(fileURLWithPath: sigPath)),
                         subject: path.lastPathComponent,
                     )
                     summary["signature"] = "verified"
@@ -525,7 +525,9 @@ struct EngineCommand: AsyncParsableCommand {
             print("manifest ok: schema \(summary["schema"] ?? "?"), \(channels)"
                 + ((summary["signature"] as? String).map { ", signature \($0)" } ?? ""))
         } else {
-            for problem in problems { Sevo.printError("manifest: \(problem)") }
+            for problem in problems {
+                Sevo.printError("manifest: \(problem)")
+            }
         }
         if !problems.isEmpty { throw SevoExit.failed }
     }
@@ -631,13 +633,13 @@ struct EngineCommand: AsyncParsableCommand {
 
     /// Downloads and installs the manifest's stable release — the CLI face
     /// of the wizard's built-in-engine stage — or, with `--file`, installs
-    /// the tarball on disk, the route for a Mac the release feed does not
-    /// reach.
+    /// the tarball or engine folder on disk, the route for a Mac the release
+    /// feed does not reach and for a tree built here.
     private func install() async throws {
         if let file {
-            let tarball = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
+            let source = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
             do {
-                let version = try await EngineInstaller.install(fromFile: tarball, progress: phasePrinter())
+                let version = try await EngineInstaller.install(from: source, progress: phasePrinter())
                 print("engine \(version) installed")
             } catch {
                 Sevo.printError("engine install failed: \(error)")
@@ -1301,8 +1303,8 @@ struct ClientCommand: AsyncParsableCommand {
             let stillRunning = before.filter { afterSet.contains($0) }
             let recovered = after.filter { !beforeSet.contains($0) }
             // killed/still-running from the pre-kill read, recovered from a live one.
-            let names = beforeNames.merging(
-                await ClientLifecycle.processNames(recovered),
+            let names = await beforeNames.merging(
+                ClientLifecycle.processNames(recovered),
             ) { _, new in new }
             let clientText = switch clientState {
             case .up: "running"
@@ -1310,7 +1312,9 @@ struct ClientCommand: AsyncParsableCommand {
             case .busy: "running, CDP too busy to answer"
             case .down: "down"
             }
-            func label(_ pid: pid_t) -> String { "\(names[pid] ?? "?")(\(pid))" }
+            func label(_ pid: pid_t) -> String {
+                "\(names[pid] ?? "?")(\(pid))"
+            }
             func rows(_ pids: [pid_t]) -> [[String: Any]] {
                 pids.map { ["pid": Int($0), "name": names[$0] ?? "?"] }
             }
@@ -1940,7 +1944,9 @@ struct AppCommand: AsyncParsableCommand {
                     print(Sevo.json(payload, pretty: true))
                 } else if let window {
                     print("app launch: confirmed — game window up")
-                    for line in WindowReport.lines(window) { print("  \(line)") }
+                    for line in WindowReport.lines(window) {
+                        print("  \(line)")
+                    }
                 } else {
                     print("app launch: unverifiable — no game window within \(timeout)s"
                         + " (is Sevoflurane running? poll: sevo status)")
@@ -2609,6 +2615,66 @@ struct InstallCLICommand: AsyncParsableCommand {
         } catch {
             Sevo.printError("could not install (\(error.localizedDescription)) — run:")
             Sevo.printError("  sudo ln -sf '\(source.path)' \(target.path)")
+            throw SevoExit.failed
+        }
+    }
+}
+
+/// The NW.js runtime store. Games are pointed at a runtime by
+/// `sevo app config <id> runner nwjs`, which fetches the release the game's
+/// own build calls for; this is the store behind it, and the way to fill it
+/// on a Mac that cannot reach `dl.nwjs.io`.
+struct NWJSCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "nwjs",
+        abstract: "The NW.js runtimes games run natively on.",
+    )
+
+    @Argument(help: "list | add") var verb: String = "list"
+    @Argument(help: "For add: an unpacked nwjs-v<version>-<flavor> folder, or the nwjs.app in one.")
+    var path: String?
+    /// Not `--version`: the root command already owns that word, and a
+    /// subcommand that takes it over makes `sevo nwjs --version` mean two
+    /// things at once.
+    @Option(
+        name: .customLong("release"),
+        help: "For add: the NW.js version, when the folder's name does not say.",
+    ) var release: String?
+
+    func run() async throws {
+        switch verb {
+        case "list":
+            list()
+        case "add":
+            try await add()
+        default:
+            Sevo.printError("nwjs \(verb): unknown verb (list | add)")
+            throw SevoExit.badInvocation
+        }
+    }
+
+    private func list() {
+        let installed = NWJSRuntime.installed()
+        guard !installed.isEmpty else {
+            print("no NW.js runtimes — one is fetched when a game is switched to the native runner")
+            return
+        }
+        for version in installed {
+            print("nwjs \(version)  \(NWJSRuntime.directory(version: version).path)")
+        }
+    }
+
+    private func add() async throws {
+        guard let path, !path.isEmpty else {
+            Sevo.printError("nwjs add: name the folder to add")
+            throw SevoExit.badInvocation
+        }
+        let folder = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        do {
+            let installed = try await NWJSRuntime.install(fromFolder: folder, version: release)
+            print("nwjs \(installed) installed")
+        } catch {
+            Sevo.printError("\(error)")
             throw SevoExit.failed
         }
     }

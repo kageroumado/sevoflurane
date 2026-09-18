@@ -37,7 +37,8 @@ struct EngineManifestTests {
     }
 
     /// The shape `publish-engine.sh` writes: schema 2, a tested component
-    /// with no hash, and a channel on the engine repository's release.
+    /// with its digest and the engine it ships with, and a channel on the
+    /// engine repository's release.
     private let publishedJSON = """
     {
       "schema": 2,
@@ -54,7 +55,8 @@ struct EngineManifestTests {
       "components": {
         "dxmt": [
           {"version": "0.80", "url": "https://github.com/3Shain/dxmt/releases/download/v0.80/dxmt-v0.80-builtin.tar.gz",
-           "sha256": null, "notes": "run with r3"}
+           "sha256": "5f2d8f9a1c4b6e07d3a95c18be2470fa6cd91b3e08475a26cf9d14b7e3a05c62",
+           "notes": "run with dormison-r3"}
         ]
       }
     }
@@ -66,7 +68,19 @@ struct EngineManifestTests {
         #expect(manifest.problems().isEmpty)
         #expect(manifest.verified)
         #expect(manifest.stable?.fromVerifiedManifest == true)
-        #expect(manifest.components?["dxmt"]?.first?.sha256 == nil)
+        #expect(manifest.components?["dxmt"]?.first?.sha256?.count == 64)
+    }
+
+    /// A component the app would download and install without checking
+    /// anything but TLS.
+    @Test
+    func `the publish gate refuses a component without a digest`() throws {
+        let unhashed = publishedJSON.replacingOccurrences(
+            of: "\"sha256\": \"5f2d8f9a1c4b6e07d3a95c18be2470fa6cd91b3e08475a26cf9d14b7e3a05c62\",",
+            with: "\"sha256\": null,",
+        )
+        let problems = try EngineManifest.decode(Data(unhashed.utf8)).problems()
+        #expect(problems.contains { $0.contains("components.dxmt 0.80: sha256 is missing") })
     }
 
     @Test
@@ -173,7 +187,7 @@ struct EngineInstallerTests {
         let (dir, tarball) = try await makeTarball(version: "dormison-r99")
         defer { try? manager.removeItem(at: dir) }
         let root = dir.appendingPathComponent("Engines")
-        let version = try await EngineInstaller.install(fromFile: tarball, into: root)
+        let version = try await EngineInstaller.install(from: tarball, into: root)
         #expect(version == "dormison-r99")
         #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/wine/bin/wine").path))
         #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/engine-info.json").path))
@@ -184,9 +198,9 @@ struct EngineInstallerTests {
         let (dir, tarball) = try await makeTarball(version: "dormison-r98")
         defer { try? manager.removeItem(at: dir) }
         let root = dir.appendingPathComponent("Engines")
-        _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+        _ = try await EngineInstaller.install(from: tarball, into: root)
         await #expect(throws: (any Error).self) {
-            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+            _ = try await EngineInstaller.install(from: tarball, into: root)
         }
     }
 
@@ -196,7 +210,7 @@ struct EngineInstallerTests {
         defer { try? manager.removeItem(at: dir) }
         let root = dir.appendingPathComponent("Engines")
         await #expect(throws: (any Error).self) {
-            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+            _ = try await EngineInstaller.install(from: tarball, into: root)
         }
         #expect(!manager.fileExists(atPath: root.appendingPathComponent("dormison-r97").path))
     }
@@ -211,13 +225,42 @@ struct EngineInstallerTests {
         let signature = try stranger.signature(for: Data(contentsOf: tarball))
         try Data(signature.base64EncodedString().utf8).write(to: EngineSignature.signatureURL(for: tarball))
         await #expect(throws: EngineSignature.Failure.signatureInvalid("dormison-r96.tar.xz")) {
-            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+            _ = try await EngineInstaller.install(from: tarball, into: root)
         }
         try Data("not base64!".utf8).write(to: EngineSignature.signatureURL(for: tarball))
         await #expect(throws: EngineSignature.Failure.signatureMalformed) {
-            _ = try await EngineInstaller.install(fromFile: tarball, into: root)
+            _ = try await EngineInstaller.install(from: tarball, into: root)
         }
         #expect(!manager.fileExists(atPath: root.appendingPathComponent("dormison-r96").path))
+    }
+
+    /// The other half of the from-disk route: the tree `package-engine.sh`
+    /// leaves behind, which is what the tarball holds unpacked.
+    @Test
+    func `an engine folder installs under its own name and is left where it was`() async throws {
+        let (dir, _) = try await makeTarball(version: "dormison-r95")
+        defer { try? manager.removeItem(at: dir) }
+        let folder = dir.appendingPathComponent("src/dormison-r95")
+        let root = dir.appendingPathComponent("Engines")
+        let version = try await EngineInstaller.install(from: folder, into: root)
+        #expect(version == "dormison-r95")
+        #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r95/wine/bin/wine").path))
+        #expect(manager.fileExists(atPath: folder.appendingPathComponent("wine/bin/wine").path))
+        await #expect(throws: (any Error).self) {
+            _ = try await EngineInstaller.install(from: folder, into: root)
+        }
+    }
+
+    @Test
+    func `a folder with no wine in it is not an engine`() async throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        let folder = dir.appendingPathComponent("dormison-r94")
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("engine-info.json"))
+        await #expect(throws: (any Error).self) {
+            _ = try await EngineInstaller.install(from: folder, into: dir.appendingPathComponent("Engines"))
+        }
     }
 
     @Test

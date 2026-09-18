@@ -59,6 +59,7 @@ struct EngineSettings: View {
             if bottleChoice == Self.newBottleTag {
                 newBottleField
             }
+            engineUpdateRow
             engineFileRow
             if store.hasChanges || store.isSwitching {
                 switchRow
@@ -113,7 +114,8 @@ struct EngineSettings: View {
             }
             .disabled(store.isSwitching)
             if let detail = store.options.first(
-                where: { $0.engine == store.stagedEngine })?.detail {
+                where: { $0.engine == store.stagedEngine },
+            )?.detail {
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -156,14 +158,47 @@ struct EngineSettings: View {
         }
     }
 
-    /// Dormison from a file — the route for a Mac the release feed does
-    /// not reach, or for adding a release by hand. The engine lands beside
-    /// the installed ones and is staged in the picker; Switch still decides
-    /// when it runs.
+    /// What the release feed has that this Mac does not, and the way back to
+    /// it. Both buttons do the same thing — land on the version the feed
+    /// calls stable — so the row says whichever of the two is true.
+    @ViewBuilder private var engineUpdateRow: some View {
+        if let newer = store.newerEngine {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(Engine.managedDisplayName(newer.version)) is available")
+                    Text(newer.notes ?? "A newer Dormison than any installed here.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button("Update") { store.useDefaultEngine() }
+                    .disabled(store.isSwitching)
+            }
+        } else if store.canResetToDefault, let label = store.defaultEngineLabel {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Default engine")
+                    Text("\(label) is what a fresh installation runs.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button("Reset") { store.useDefaultEngine() }
+                    .disabled(store.isSwitching)
+            }
+        }
+    }
+
+    /// Dormison from a file or a folder — the route for a Mac the release
+    /// feed does not reach, for adding a release by hand, or for running a
+    /// tree built here. The engine lands beside the installed ones and is
+    /// staged in the picker; Switch still decides when it runs.
     private var engineFileRow: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Engine from a file")
+                Text("Engine from a file or folder")
                 Text(engineFileDetail)
                     .font(.callout)
                     .foregroundStyle(engineFileError == nil ? Color.secondary : Color.orange)
@@ -183,16 +218,17 @@ struct EngineSettings: View {
             return phase
         }
         return engineFileError
-            ?? "A dormison-r<N>.tar.xz you downloaded. Sevoflurane checks the .sig beside it."
+            ?? "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built. "
+            + "Sevoflurane checks the .sig beside a tarball."
     }
 
     private func installEngineFile() {
-        guard let tarball = EngineFilePanel.choose() else { return }
+        guard let source = EngineFilePanel.choose() else { return }
         isInstallingEngineFile = true
         engineFileError = nil
-        Task(name: "Install engine from file") {
+        Task(name: "Install engine from disk") {
             do {
-                let version = try await provisioner.installEngine(fromFile: tarball)
+                let version = try await provisioner.installEngine(from: source)
                 await store.refresh()
                 store.stagedEngine = .managed(version: version)
                 bottleChoice = store.stagedBottle
@@ -212,9 +248,10 @@ struct EngineSettings: View {
                         .font(.callout)
                     Spacer()
                 }
-                // The engine download reports a real fraction; the other
+                // The engine download reports a real fraction, whether the
+                // provisioner or the pane's own Update started it; the other
                 // stages spin.
-                if let fraction = provisioner.stageFraction {
+                if let fraction = provisioner.stageFraction ?? store.engineFetchFraction {
                     ProgressView(value: fraction)
                 }
             }

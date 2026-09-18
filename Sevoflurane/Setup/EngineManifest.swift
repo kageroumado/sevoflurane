@@ -164,8 +164,12 @@ nonisolated struct EngineManifest: Decodable, Sendable {
                 if release.url.scheme?.lowercased() != "https" {
                     problems.append("components.\(component) \(release.version): url is not https")
                 }
-                if let sha = release.sha256, !Self.isSHA256(sha) {
-                    problems.append("components.\(component) \(release.version): sha256 is not 64 hex digits")
+                // A component payload comes from someone else's release feed,
+                // so its digest is the only thing tying the download to what
+                // was tested — and ``RendererVersions/install(_:from:version:sha256:)``
+                // skips the check entirely when the manifest does not carry one.
+                if release.sha256.map({ !Self.isSHA256($0) }) ?? true {
+                    problems.append("components.\(component) \(release.version): sha256 is missing or not 64 hex digits")
                 }
             }
         }
