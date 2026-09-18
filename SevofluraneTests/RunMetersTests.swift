@@ -20,8 +20,10 @@ struct RunMetersTests {
         #expect(usage.pid == getpid())
         #expect(usage.cpuTimeNanoseconds > 0)
         #expect(usage.cpuSeconds > 0)
-        #expect(usage.energyNanojoules > 0)
-        #expect(usage.instructions > 0)
+        // Energy and instructions come off hardware performance counters, so
+        // a virtualized Mac reports neither: assert they are read together
+        // rather than asserting this host has the counters.
+        #expect((usage.energyNanojoules > 0) == (usage.instructions > 0))
         #expect(usage.footprintBytes > 0)
         #expect(usage.startAbsoluteTime > 0)
         #expect(usage.pCoreShare >= 0 && usage.pCoreShare <= 1)
@@ -176,8 +178,10 @@ struct RunMetersTests {
 
         let record = try #require(await records(in: root, waitingFor: 1).first)
         let energy = try #require(record.energy)
-        #expect(energy.nanojoules > 0)
-        #expect(energy.instructions > 0)
+        if try #require(ProcessUsage.read(pid: getpid())).energyNanojoules > 0 {
+            #expect(energy.nanojoules > 0)
+            #expect(energy.instructions > 0)
+        }
         #expect(record.gameMode != nil)
     }
 

@@ -87,7 +87,14 @@ struct PopupSweeperTests {
             return ["notificationtoasts_1_desktop"]
         }
         await sweeper.sweepAfterNotification { _ in }
-        try? await Task.sleep(for: .seconds(1))
+        // The schedule waits out `firstSweepDelay` and then sweeps on a task
+        // of its own, so how soon the first scope arrives is up to the
+        // machine: waiting a fixed span asserts that this Mac dispatches
+        // promptly. Wait for the scope instead, and only give up on it after
+        // long enough that a busy host is not the reason.
+        for _ in 0 ..< 200 where scopes.taken.isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
         #expect(!scopes.taken.isEmpty)
         #expect(scopes.taken.allSatisfy { $0 == .twins })
     }

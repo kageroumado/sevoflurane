@@ -81,7 +81,11 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     /// engine patch makes it prefer these instead.
     /// An engine without that patch ignores them.
     var environment: [String: String] {
-        guard let card else {
+        environment(for: MacChip.current)
+    }
+
+    func environment(for chip: MacChip) -> [String: String] {
+        guard let card = card(for: chip) else {
             return Self.environmentKeys.reduce(into: [:]) { $0[$1] = "" }
         }
         let vendor = String(format: "0x%04X", card.vendorID)
@@ -176,7 +180,11 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     /// Wine's own renderer keeps the same numbers in the registry rather than
     /// the environment: `HKCU\Software\Wine\Direct3D`.
     var wineD3DRegistry: [(value: String, data: String)] {
-        guard let card else { return [] }
+        wineD3DRegistry(for: MacChip.current)
+    }
+
+    func wineD3DRegistry(for chip: MacChip) -> [(value: String, data: String)] {
+        guard let card = card(for: chip) else { return [] }
         return [
             ("VideoPciVendorID", String(card.vendorID)),
             ("VideoPciDeviceID", String(card.deviceID)),

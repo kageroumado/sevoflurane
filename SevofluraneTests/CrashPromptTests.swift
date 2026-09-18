@@ -106,6 +106,7 @@ struct CrashPromptTests {
         try Data().write(to: wine)
         let processLog = root.appendingPathComponent("gameprocess_log.txt")
 
+        let appID = 413_150
         let closed = Closed()
         let previous = RunRecorder.didClose
         defer { RunRecorder.didClose = previous }
@@ -113,17 +114,17 @@ struct CrashPromptTests {
 
         // Armed first, so the log Steam writes during the run is the tail the
         // closing reads — the order a real launch happens in.
-        RunRecorder(runs: root, wineLog: wine, processLog: processLog).arm(appID: 367_520)
+        RunRecorder(runs: root, wineLog: wine, processLog: processLog).arm(appID: appID)
         try Data("""
-        [2026-09-18 03:10:01] AppID 367520 adding PID 1400 as a tracked process ""C:\\game.exe""
-        [2026-09-18 03:11:42] AppID 367520 no longer tracking PID 1400, exit code 3
+        [2026-09-18 03:10:01] AppID 413150 adding PID 1400 as a tracked process ""C:\\game.exe""
+        [2026-09-18 03:11:42] AppID 413150 no longer tracking PID 1400, exit code 3
         
         """.utf8).write(to: processLog)
         RunRecorder(runs: root, wineLog: wine, processLog: processLog).reattach()
 
         var record: RunRecord?
         for _ in 0 ..< 100 {
-            if let first = closed.first { record = first; break }
+            if let mine = closed.first(forApp: appID) { record = mine; break }
             try? await Task.sleep(for: .milliseconds(20))
         }
         let crashed = try #require(record)
@@ -145,8 +146,12 @@ struct CrashPromptTests {
             lock.withLock { records.append(record) }
         }
 
-        var first: RunRecord? {
-            lock.withLock { records.first }
+        /// Only this test's own run. `RunRecorder.didClose` is one hook for
+        /// the whole process, so while this test holds it every suite closing
+        /// a run in parallel arrives here too; the app id is what tells them
+        /// apart.
+        func first(forApp appID: Int) -> RunRecord? {
+            lock.withLock { records.first { $0.appid == appID } }
         }
     }
 

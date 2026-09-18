@@ -128,7 +128,7 @@ struct GPUIdentityEnvironmentTests {
 
     @Test
     func `a GeForce reaches every renderer with the same numbers`() throws {
-        let environment = GPUIdentity.nvidia.environment
+        let environment = GPUIdentity.nvidia.environment(for: chip)
         #expect(environment["D3DM_VENDOR_ID"] == "0x10DE")
         #expect(environment["D3DM_DEVICE_ID"] == "0x2786")
         #expect(environment["D3DM_DEVICE_DESCRIPTION"] == "NVIDIA GeForce RTX 4070")
@@ -145,7 +145,7 @@ struct GPUIdentityEnvironmentTests {
 
     @Test
     func `the engine gets the whole identity`() {
-        let environment = GPUIdentity.nvidia.environment
+        let environment = GPUIdentity.nvidia.environment(for: chip)
         #expect(environment["SEVO_GPU_VENDOR_ID"] == "0x10DE")
         #expect(environment["SEVO_GPU_DEVICE_ID"] == "0x2786")
         #expect(environment["SEVO_GPU_NAME"] == "NVIDIA GeForce RTX 4070")
@@ -157,7 +157,7 @@ struct GPUIdentityEnvironmentTests {
 
     @Test
     func `a Radeon carries AMD's own driver`() {
-        let environment = GPUIdentity.amd.environment
+        let environment = GPUIdentity.amd.environment(for: chip)
         #expect(environment["SEVO_GPU_DRIVER_PROVIDER"] == "Advanced Micro Devices, Inc.")
         #expect(environment["SEVO_GPU_DRIVER_VERSION"] == GPUEquivalence.amdDriver.version)
         #expect(environment["D3DM_VENDOR_ID"] == "0x1002")
@@ -167,21 +167,21 @@ struct GPUIdentityEnvironmentTests {
     /// set, or a bottle keeps whichever card it was told about last.
     @Test
     func `the Apple chip clears every name the others write`() {
-        let apple = GPUIdentity.automatic.environment
+        let apple = GPUIdentity.automatic.environment(for: chip)
         #expect(apple.count == GPUIdentity.environmentKeys.count)
         #expect(apple.values.filter { !$0.isEmpty } == [])
         for identity in [GPUIdentity.nvidia, .amd] {
-            #expect(Set(identity.environment.keys) == Set(GPUIdentity.environmentKeys))
+            #expect(Set(identity.environment(for: chip).keys) == Set(GPUIdentity.environmentKeys))
         }
     }
 
     @Test
     func `wined3d gets the same card as a decimal pair`() {
-        let entries = GPUIdentity.nvidia.wineD3DRegistry
+        let entries = GPUIdentity.nvidia.wineD3DRegistry(for: chip)
         #expect(entries.count == 2)
         #expect(entries.first { $0.value == "VideoPciVendorID" }?.data == "4318")
         #expect(entries.first { $0.value == "VideoPciDeviceID" }?.data == "10118")
-        #expect(GPUIdentity.automatic.wineD3DRegistry.isEmpty)
+        #expect(GPUIdentity.automatic.wineD3DRegistry(for: chip).isEmpty)
     }
 
     @Test
