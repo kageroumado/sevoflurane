@@ -59,6 +59,12 @@ nonisolated enum ConfigMaterializer {
             writeDebugEnv(DebugMode.lines(), prefix: prefix)
         }
 
+        // The registry's own settings, which no env file carries. Queued
+        // rather than written here: they take a `reg.exe` inside the bottle,
+        // and the record beside these files is what keeps a pass that changes
+        // nothing from spawning anything.
+        ConfigRegistry.apply(bottle: name, prefix: prefix)
+
         removeStale(in: appsDir, keeping: wanted)
         GameLaunchers.remove(keeping: launchers)
         // A game switched back to wine keeps its browsing-data link (the two
@@ -94,7 +100,7 @@ nonisolated enum ConfigMaterializer {
 
     /// The bottle level: the resolved value of every setting the engine takes
     /// from the environment.
-    private static func bottleLines(_ name: String) -> [String] {
+    static func bottleLines(_ name: String) -> [String] {
         var lines = [
             "SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)",
             "SEVO_UPSCALER=\(GameConfig.upscaler(bottle: name).value)",
@@ -104,16 +110,49 @@ nonisolated enum ConfigMaterializer {
         if GameConfig.mouse(bottle: name).value == .linear {
             lines.append("SEVO_LINEAR_MOUSE=1")
         }
+        lines += switches.map { key, resolve in
+            "\(key)=\(resolve(name, nil) ? "1" : "0")"
+        }
         lines.append("WINEDEBUG=\(WineLog.channels)")
         return lines
+    }
+
+    /// The switches that reach a game as one environment variable each, and
+    /// the resolver behind each one. The bottle writes all of them and a game
+    /// writes the ones it sets, both ways: the bottle's file is read first, so
+    /// an absent key leaves its value standing.
+    ///
+    /// `SEVO_LARGE_ADDRESS_AWARE` is the one nothing reads yet — the engine
+    /// takes a 32-bit image's address space from the image's own characteristic
+    /// (``ConfigValues/largeAddressAware``).
+    private static let switches: [(key: String, resolve: @Sendable (String, Int?) -> Bool)] = [
+        ("MTL_HUD_ENABLED", { GameConfig.hud(bottle: $0, game: $1).value }),
+        ("SEVO_LARGE_ADDRESS_AWARE", { GameConfig.largeAddressAware(bottle: $0, game: $1).value }),
+        ("ROSETTA_ADVERTISE_AVX", { GameConfig.avx(bottle: $0, game: $1).value }),
+        ("SEVO_CURSOR_CONFINE", { GameConfig.cursorConfine(bottle: $0, game: $1).value }),
+    ]
+
+    /// Which of ``switches`` this level sets for itself, by key.
+    private static func ownSwitches(_ values: ConfigValues) -> [String: Bool] {
+        var own: [String: Bool] = [:]
+        own["MTL_HUD_ENABLED"] = values.hud
+        own["SEVO_LARGE_ADDRESS_AWARE"] = values.largeAddressAware
+        own["ROSETTA_ADVERTISE_AVX"] = values.avx
+        own["SEVO_CURSOR_CONFINE"] = values.cursorConfine
+        return own
     }
 
     /// A game's file carries only what the game sets; everything else falls
     /// through to the bottle's file, which the engine reads first. What the
     /// game sets is written even when it equals the bottle's value: the
     /// bottle's file can change under it, and the game's own choice holds.
-    static func gameLines(_ appID: Int, _ values: ConfigValues) -> [String] {
+    static func gameLines(
+        _ appID: Int, _ values: ConfigValues, engine: URL = Engine.active.root,
+    ) -> [String] {
         var lines = ["# app \(appID)" + (values.name.map { " \($0)" } ?? "")]
+        if let renderer = values.renderer {
+            lines += rendererLines(renderer, engine: engine)
+        }
         if let windows = values.windows {
             lines.append("SEVO_RESIZABLE_WINDOWS=\(windows.rawValue)")
         }
@@ -128,6 +167,37 @@ nonisolated enum ConfigMaterializer {
         // an absent key leaves its value standing.
         if let mouse = values.mouse {
             lines.append("SEVO_LINEAR_MOUSE=\(mouse == .linear ? "1" : "0")")
+        }
+        let own = ownSwitches(values)
+        lines += switches.compactMap { key, _ in
+            own[key].map { "\(key)=\($0 ? "1" : "0")" }
+        }
+        return lines
+    }
+
+    /// What gives one game a renderer of its own: the payload's own directory
+    /// ahead of the Wine tree on the dll path, builtin resolution forced for
+    /// the DLLs that directory carries, and D3DMetal's two unix-call variables
+    /// where the payload is the toolkit's — the pair ``Engine/environment(bottle:)``
+    /// hands the client for the bottle-wide choice.
+    ///
+    /// Empty for a renderer this engine cannot hand to one game
+    /// (``EngineRenderers/supportsPerGame(_:)``), which leaves the game on the
+    /// bottle's staged tree until the client restarts on its renderer.
+    private static func rendererLines(_ renderer: Renderer, engine: URL) -> [String] {
+        guard let directory = EngineRenderers.prependDirectory(
+            for: renderer, engine: engine,
+        ) else { return [] }
+        var lines = ["WINEDLLPATH_PREPEND=\(directory.path)"]
+        if let overrides = EngineRenderers.perGameDLLOverrides(in: directory) {
+            lines.append("WINEDLLOVERRIDES=\(overrides)")
+        }
+        if renderer == .d3dmetal {
+            let shared = D3DMetalInstaller.bridgeLibrary(inEngine: engine)
+            if FileManager.default.fileExists(atPath: shared.path) {
+                lines.append("SEVO_LIBD3DSHARED_PATH=\(shared.path)")
+            }
+            lines.append("D3DM_WINE_UNIX_CALL=1")
         }
         return lines
     }

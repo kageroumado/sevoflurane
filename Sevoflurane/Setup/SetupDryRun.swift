@@ -136,6 +136,9 @@
         private var detectCount = 0
         var installedDependencies: Set<String> = []
         var dependencyFailure: String?
+        /// Catalog ids whose install refuses, for the difference between a
+        /// package that is worth ending a setup over and one that is not.
+        var failingDependencies: Set<String> = []
         private(set) var dependencyInstalls: [String] = []
 
         init(
@@ -297,6 +300,9 @@
             dependencyInstalls.append(dependency.id)
             log("would install \(dependency.name) in \(bottleName)")
             await pause()
+            if failingDependencies.contains(dependency.id) {
+                return .failure("\(dependency.name) refused to install")
+            }
             if let dependencyFailure { return .failure(dependencyFailure) }
             installedDependencies.insert(dependency.id)
             return .success()

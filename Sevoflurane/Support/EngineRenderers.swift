@@ -122,6 +122,98 @@ nonisolated enum EngineRenderers {
         return staged
     }
 
+    // MARK: - One game's own renderer
+
+    /// Whether GPTk's DLLs load from a `WINEDLLPATH_PREPEND` directory the way
+    /// DXMT's and DXVK's builtin-flavored ones do — `find_builtin_dll` demands
+    /// Wine's builtin signature of anything it takes off the dll path
+    /// (`ntdll/unix/loader.c`), and the toolkit's `d3d12.dll` has not been put
+    /// through that route yet. The probe is `dxgiprobe12.exe` under a per-exe
+    /// D3DMetal env file while the bottle runs another renderer, judged by the
+    /// adapter string.
+    static let gptkLoadsFromPrependPath = false
+
+    /// Whether this renderer can answer one game alone, through a
+    /// ``prependDirectory(for:engine:)`` in that game's env file, rather than
+    /// the whole bottle through the staged tree.
+    static func supportsPerGame(_ renderer: Renderer) -> Bool {
+        switch renderer {
+        case .dxmt, .dxvk: true
+        case .d3dmetal: gptkLoadsFromPrependPath
+        case .auto, .wined3d: false
+        }
+    }
+
+    /// The directory a game's `WINEDLLPATH_PREPEND` names to load `renderer`
+    /// while the rest of the bottle loads the staged one:
+    /// `<engine>/renderers/<name>`, holding a `x86_64-windows` symlink — and
+    /// an `i386-windows` one where the payload has 32-bit builds — to the
+    /// payload directory.
+    ///
+    /// The loader appends the machine directory to every dll path entry and
+    /// searches the prepend entries ahead of the tree (`set_dll_path`), so the
+    /// link's name is what makes the payload reachable under its own path.
+    /// Answers nil for a renderer this engine has no payload for.
+    static func prependDirectory(for renderer: Renderer, engine: URL) -> URL? {
+        prependDirectory(
+            for: renderer, engine: engine,
+            toolkit: D3DMetalInstaller.active(inEngine: engine),
+        )
+    }
+
+    /// `toolkit` is the D3DMetal version to link; the preference-free entry
+    /// point for tests.
+    static func prependDirectory(
+        for renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
+    ) -> URL? {
+        guard supportsPerGame(renderer) else { return nil }
+        let manager = FileManager.default
+        let directory = engine.appendingPathComponent("renderers/\(renderer.rawValue)")
+        var linked = false
+        for architecture in Architecture.all {
+            guard let source = libraries(
+                for: renderer, engine: engine, toolkit: toolkit, architecture: architecture,
+            ) else { continue }
+            let link = directory.appendingPathComponent(architecture.modules)
+            let destination = source.standardizedFileURL.path
+            if (try? manager.destinationOfSymbolicLink(atPath: link.path)) == destination {
+                linked = true
+                continue
+            }
+            try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? manager.removeItem(at: link)
+            guard (try? manager.createSymbolicLink(
+                atPath: link.path, withDestinationPath: destination,
+            )) != nil else { continue }
+            linked = true
+        }
+        return linked ? directory : nil
+    }
+
+    /// The `WINEDLLOVERRIDES` a game loading a renderer from `directory`
+    /// carries: every DLL that directory supplies, forced builtin.
+    ///
+    /// The bottle's own renderer has a copy of its DLLs in the prefix's
+    /// `system32`, and the bottle-wide override asks for those as native — so
+    /// without this a game with a renderer of its own would import the
+    /// bottle's file under its own name. Builtin resolution searches the dll
+    /// path instead, where the prepend directory sits first.
+    static func perGameDLLOverrides(in directory: URL) -> String? {
+        // Resolved, because the machine directory is a symlink to the payload
+        // and `contentsOfDirectory(at:)` answers nil for a symlink URL rather
+        // than following it.
+        let modules = directory
+            .appendingPathComponent(Architecture.x86_64.modules)
+            .resolvingSymlinksInPath()
+        let names = ((try? FileManager.default.contentsOfDirectory(
+            at: modules, includingPropertiesForKeys: nil,
+        )) ?? [])
+            .filter { $0.pathExtension.lowercased() == "dll" }
+            .map { $0.deletingPathExtension().lastPathComponent.lowercased() }
+        guard !names.isEmpty else { return nil }
+        return names.sorted().joined(separator: ",") + "=b"
+    }
+
     // MARK: - Provenance
 
     /// The file `winemac.drv` reads at every process start to print which

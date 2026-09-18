@@ -264,15 +264,14 @@ struct MenuBarView: View {
                         game: game,
                         launchDetail: host.activeLaunch
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
-                        pinned: BottleGraphics.overrides()[game.id]?.renderer,
+                        pinned: GameConfig.game(game.id).renderer,
                         setPin: { renderer in
-                            BottleGraphics.setOverride(
-                                renderer.map {
-                                    BottleGraphics.Override(renderer: $0, name: game.name)
-                                },
-                                forApp: game.id,
-                                named: game.name,
-                            )
+                            GameConfig.update(
+                                game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root,
+                            ) {
+                                $0.renderer = renderer
+                                if $0.name == nil { $0.name = game.name }
+                            }
                         },
                         launch: {
                             claimActivationRight()

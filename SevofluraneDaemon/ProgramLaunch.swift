@@ -60,7 +60,7 @@ extension BottleSupervisor {
     /// renderer only has to be staged, never bounced: the DLLs it loads are
     /// the ones on disk when it starts.
     private func stageGraphics(for name: String, renderer explicit: Renderer?, appID: Int) {
-        let desired = explicit ?? BottleGraphics.overrides()[appID]?.renderer
+        let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         guard let desired, desired != BottleGraphics.currentSelection().renderer else { return }
         do {
             let current = BottleGraphics.currentSelection()

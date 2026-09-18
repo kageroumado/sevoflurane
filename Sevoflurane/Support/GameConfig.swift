@@ -150,6 +150,51 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var upscaler: String?
     /// How the upscaler's last pass is resampled into the window.
     var filter: FinalFilter?
+    /// Game level only: the translation layer this game renders through, over
+    /// the bottle's own choice. An engine that reads the env files hands it to
+    /// the game at its next launch, through a `WINEDLLPATH_PREPEND` directory
+    /// of that renderer's payload; an engine without them takes a client
+    /// restart, which is what ``BottleGraphics/rendererNeedingRestart(forApp:)``
+    /// answers.
+    var renderer: Renderer?
+    /// Whether the prefix draws at the display's full resolution, which
+    /// doubles what a game is told the screen measures
+    /// (`Mac Driver\RetinaMode`).
+    ///
+    /// Bottle-wide: `winemac.drv` reads it with no app key so that the DPI and
+    /// the monitor sizes are one answer for every process in the prefix.
+    var retina: Bool?
+    /// Whether a game that switches the display mode gets the switch faked and
+    /// its picture in a window the user can resize
+    /// (win32u `X11 Driver\EmulateModeset`).
+    var emulateModeset: Bool?
+    /// Per DLL, the load order Wine gives it, in the registry's own spelling:
+    /// `n,b`, `b,n`, `n`, `b`, or the empty string for disabled
+    /// (`DllOverrides`, per program under `AppDefaults\<exe>`).
+    var dllOverrides: [String: String]?
+    /// Whether Metal draws its performance HUD over the game
+    /// (`MTL_HUD_ENABLED`) — frame time, GPU time and memory, from the driver
+    /// itself rather than from anything the game exposes.
+    var hud: Bool?
+    /// Whether a 32-bit game gets the whole 4 GB of address space rather than
+    /// the low 2 GB.
+    ///
+    /// The engine reads the image's own `IMAGE_FILE_LARGE_ADDRESS_AWARE` bit
+    /// and nothing else: in dormison's `virtual_set_large_address_space`
+    /// (`ntdll/unix/virtual.c`) an image without the bit keeps
+    /// `user_space_wow_limit = limit_2g - 1`. Honoring this key is a `getenv`
+    /// there that takes `SEVO_LARGE_ADDRESS_AWARE` as the bit — Proton's
+    /// `PROTON_FORCE_LARGE_ADDRESS_AWARE`. Until that patch lands the
+    /// variable is written and read by nobody, and Settings says so.
+    var largeAddressAware: Bool?
+    /// Whether Rosetta tells the game the CPU has AVX and AVX2
+    /// (`ROSETTA_ADVERTISE_AVX`). Rosetta translates those instructions
+    /// either way; the advertisement is what a game's CPU check reads.
+    var avx: Bool?
+    /// Whether the window server holds the pointer inside the game's window
+    /// while the game has the cursor clipped (`SEVO_CURSOR_CONFINE`), which is
+    /// what keeps mouse-look from walking onto a second display.
+    var cursorConfine: Bool?
     /// Game level only: which runtime the game runs on — the bottle's engine
     /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
@@ -178,6 +223,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// detection record are bookkeeping, not settings).
     var hasSettings: Bool {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
+            || renderer != nil || retina != nil || emulateModeset != nil
+            || dllOverrides?.isEmpty == false
+            || hud != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
@@ -190,6 +238,58 @@ nonisolated enum GameRunner {
     static let wine = "wine"
     static let nwjs = "nwjs"
     static let all = [wine, nwjs]
+}
+
+/// What a changed setting costs to reach the game — the badge Settings shows
+/// beside every control, and the sentence `sevo` prints after a write.
+nonisolated enum SettingReach: Equatable, Sendable {
+    /// The game reads it when it next starts; Steam keeps running.
+    case nextLaunch
+    /// The client itself carries the value, so it restarts around the next
+    /// launch.
+    case clientRestart
+    /// Written down and waiting on an engine that reads it.
+    case recorded
+
+    var label: String {
+        switch self {
+        case .nextLaunch: "Next launch"
+        case .clientRestart: "Steam restart"
+        case .recorded: "Recorded"
+        }
+    }
+
+    /// The sentence behind the badge, and what a command line prints.
+    var detail: String {
+        switch self {
+        case .nextLaunch:
+            "reaches the game the next time it starts; Steam keeps running"
+        case .clientRestart:
+            "the Steam client carries this value, so it restarts (about 30 s) "
+                + "around the next launch"
+        case .recorded:
+            "stored for this game; the built-in engine does not read it yet"
+        }
+    }
+
+    /// What a setting carried by a game's env file costs: the next launch on an
+    /// engine that reads those files, a client restart on one that does not.
+    static var env: SettingReach {
+        Engine.active.supportsEnvFiles ? .nextLaunch : .clientRestart
+    }
+
+    /// The registry is live in wineserver and read at every process start, so
+    /// a value written now is what the next game process sees.
+    static let registry = SettingReach.nextLaunch
+
+    /// What a renderer costs this game: a layer a `WINEDLLPATH_PREPEND`
+    /// directory can carry rides in the game's own env file; every other one
+    /// is the client's to hand down.
+    static func renderer(_ own: Renderer?) -> SettingReach {
+        guard let own else { return env }
+        return Engine.active.supportsEnvFiles && EngineRenderers.supportsPerGame(own)
+            ? .nextLaunch : .clientRestart
+    }
 }
 
 /// Where a resolved value came from.
@@ -226,6 +326,12 @@ nonisolated enum GameConfig {
     /// What every level inherits when nothing is set anywhere.
     static let defaults = ConfigValues(
         windows: .fixed, mouse: .system, upscaler: UpscalerChoice.off.rawValue, filter: .lanczos,
+        retina: false, emulateModeset: false,
+        // AVX on: the bottle has advertised it since the translation defaults
+        // were written, and a growing number of titles read the CPUID answer
+        // and refuse to start without it. A game that misbehaves with the
+        // advertisement turns it off for itself.
+        hud: false, largeAddressAware: true, avx: true, cursorConfine: false,
     )
 
     // MARK: - Levels
@@ -249,7 +355,8 @@ nonisolated enum GameConfig {
     }
 
     static func game(_ appID: Int) -> ConfigValues {
-        read(gameURL(appID))
+        migrateIfNeeded()
+        return read(gameURL(appID))
     }
 
     static func setGame(_ appID: Int, _ values: ConfigValues) {
@@ -258,6 +365,7 @@ nonisolated enum GameConfig {
 
     /// Every game with a file, by app id.
     static func games() -> [Int: ConfigValues] {
+        migrateIfNeeded()
         let manager = FileManager.default
         guard let entries = try? manager.contentsOfDirectory(
             at: gamesRoot, includingPropertiesForKeys: nil,
@@ -295,6 +403,54 @@ nonisolated enum GameConfig {
     /// when its id is known, otherwise the bottle's own value.
     static func filter(bottle: String, game appID: Int? = nil) -> Resolved<FinalFilter> {
         resolve(\.filter, bottle: bottle, game: appID)
+    }
+
+    /// Whether the prefix draws at the display's full resolution. One answer
+    /// for the whole prefix, so there is no game to ask for.
+    static func retina(bottle: String) -> Resolved<Bool> {
+        resolve(\.retina, bottle: bottle, game: nil)
+    }
+
+    /// Whether a game that switches the display mode gets the switch faked:
+    /// for a specific game when its id is known, otherwise the bottle's own
+    /// value.
+    static func emulateModeset(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.emulateModeset, bottle: bottle, game: appID)
+    }
+
+    /// The env-carried switches, each resolved for a specific game when its id
+    /// is known and for the bottle otherwise.
+    static func hud(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.hud, bottle: bottle, game: appID)
+    }
+
+    static func largeAddressAware(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.largeAddressAware, bottle: bottle, game: appID)
+    }
+
+    static func avx(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.avx, bottle: bottle, game: appID)
+    }
+
+    static func cursorConfine(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.cursorConfine, bottle: bottle, game: appID)
+    }
+
+    /// The renderer a launch gets: the game's own choice when it has one,
+    /// otherwise the bottle's.
+    ///
+    /// The bottle's renderer lives in the graphics store rather than in this
+    /// hierarchy — it is negotiated with the staged Wine tree and with msync,
+    /// which have not moved here yet — so this resolver reaches across to it
+    /// instead of falling through to ``defaults``.
+    static func renderer(game appID: Int? = nil) -> Resolved<Renderer> {
+        if let appID, let pinned = game(appID).renderer {
+            return Resolved(value: pinned, source: .game(appID))
+        }
+        return Resolved(
+            value: BottleGraphics.currentSelection().renderer,
+            source: .bottle(SteamBottle.name),
+        )
     }
 
     /// The game's own value wins, then the bottle's, then the global level's,
@@ -391,10 +547,17 @@ nonisolated enum GameConfig {
 
     // MARK: - Migration
 
+    /// Every settings key that used to live in the shared defaults, moved into
+    /// the hierarchy. Each pass clears the keys it read, so none runs twice.
+    private static func migrateIfNeeded() {
+        migrateWindowSwitches()
+        migrateRendererPins()
+    }
+
     /// The two window switches that lived in the shared defaults become the
     /// global level's `windows`, once; the keys are then removed so this
     /// cannot run twice.
-    private static func migrateIfNeeded() {
+    private static func migrateWindowSwitches() {
         let defaults = Preferences.shared
         let resizableKey = "resizableGameWindows"
         let fullscreenKey = "fullscreenGamesInWindows"
@@ -408,5 +571,32 @@ nonisolated enum GameConfig {
         }
         defaults.removeObject(forKey: resizableKey)
         defaults.removeObject(forKey: fullscreenKey)
+    }
+
+    /// The per-app renderer pins that lived in the shared defaults become each
+    /// game's own `renderer`, once. The key goes first: a pin nobody can
+    /// decode is still a pin this hierarchy now owns, and leaving the key
+    /// would make every read of every game file try it again.
+    private static func migrateRendererPins() {
+        let defaults = Preferences.shared
+        let pinsKey = "rendererOverrides"
+        guard let data = defaults.data(forKey: pinsKey) else { return }
+        defaults.removeObject(forKey: pinsKey)
+        guard let pins = try? JSONDecoder().decode([String: RendererPin].self, from: data)
+        else { return }
+        for (key, pin) in pins {
+            guard let appID = Int(key) else { continue }
+            var values = read(gameURL(appID))
+            guard values.renderer == nil else { continue }
+            values.renderer = pin.renderer
+            if values.name == nil { values.name = pin.name }
+            write(values, to: gameURL(appID))
+        }
+    }
+
+    /// One entry of the shared defaults' old per-app renderer map.
+    private struct RendererPin: Decodable {
+        let renderer: Renderer
+        let name: String
     }
 }

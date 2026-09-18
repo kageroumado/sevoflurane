@@ -345,18 +345,18 @@ final class BottleSupervisor {
         if !paused { wake(.control(note)) }
     }
 
-    /// Starts a game, restarting the client first when that game is pinned to
-    /// a renderer the running session does not have.
+    /// Starts a game, restarting the client first when that game asks for a
+    /// renderer the running session does not have.
     ///
-    /// The renderer reaches a game through the environment of the process
-    /// tree Steam already lives in, so there is no way to change it for one
-    /// game without a new tree. The menu bar says so before the click; this
-    /// is the click.
+    /// A renderer the env files can carry reaches the game on its own, in its
+    /// per-program file; every other one reaches it through the environment of
+    /// the process tree Steam already lives in, so it takes a new tree. The
+    /// menu bar says so before the click; this is the click.
     func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
-        // The desired renderer for this launch — an explicit "Run with X" wins
-        // over a persistent pin, and neither persists past the launch beyond
-        // the bottle default it sets.
-        let desired = explicit ?? BottleGraphics.overrides()[appID]?.renderer
+        // The renderer this launch has to move the bottle onto — an explicit
+        // "Run with X" wins over the game's own choice, and neither persists
+        // past the launch beyond the bottle default it sets.
+        let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         if let desired, desired != BottleGraphics.currentSelection().renderer {
             do {
                 let current = BottleGraphics.currentSelection()

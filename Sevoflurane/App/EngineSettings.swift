@@ -24,6 +24,14 @@ struct EngineSettings: View {
     @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
     @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
     @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
+    @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
+    @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
+    @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
+    @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
+    @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
+    @State private var largeAddressAware = GameConfig
+        .largeAddressAware(bottle: SteamBottle.name).value
+    @State private var downloadEverything = BottleDependencies.installsEverything
     @State private var wineDiagnostics = WineLog.isDiagnosing
     @State private var isInstallingEngineFile = false
     @State private var engineFileError: String?
@@ -377,10 +385,96 @@ struct EngineSettings: View {
             FinalFilterPicker(selection: filterBinding)
                 .highlightable(.engineFilter, highlighted: highlighted)
             mousePicker
+            retinaToggle
+            modesetToggle
+            bottleSwitch(
+                "Performance HUD", detail: "Metal draws frame time, GPU time and memory "
+                    + "over the game.", value: $hud, key: \.hud,
+            )
+            bottleSwitch(
+                "Keep the pointer in the window",
+                detail: "While a game holds the cursor for mouse-look, the pointer stays "
+                    + "inside its window instead of reaching another display.",
+                value: $cursorConfine, key: \.cursorConfine,
+            )
+            bottleSwitch(
+                "Report AVX to games",
+                detail: "Rosetta tells the game the CPU has AVX and AVX2, which games "
+                    + "that check refuse to start without.",
+                value: $avx, key: \.avx,
+            )
+            bottleSwitch(
+                "Full address space for 32-bit games",
+                detail: "Recorded, and waiting on an engine that reads it: the built-in "
+                    + "engine still takes a game's address space from the game's own "
+                    + "executable.",
+                value: $largeAddressAware, key: \.largeAddressAware,
+            )
         } footer: {
             Text(Engine.active.supportsEnvFiles
                 ? "Defaults for Dormison games. Change one game in Games. A change applies at the next launch."
                 : "Defaults for Dormison games. Change one game in Games. Restart Steam to apply a change.")
+        }
+    }
+
+    /// One of the bottle's own switches, written straight into the hierarchy's
+    /// bottle level. The same key is a game's to override in Settings › Games.
+    private func bottleSwitch(
+        _ title: String, detail: String, value: Binding<Bool>,
+        key: WritableKeyPath<ConfigValues, Bool?>,
+    ) -> some View {
+        Toggle(isOn: value) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: value.wrappedValue) { _, new in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0[keyPath: key] = new
+            }
+        }
+    }
+
+    /// The prefix's HiDPI switch. It has no per-game rung: Wine reads it with
+    /// no app key so that the DPI and the monitor sizes are one answer for
+    /// every process in the prefix.
+    private var retinaToggle: some View {
+        Toggle(isOn: $retina) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Draw at full resolution")
+                Text("Games see a Retina display and draw at its full pixel size. "
+                    + "Sharper, and heavier on the GPU.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: retina) { _, value in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.retina = value
+            }
+        }
+    }
+
+    private var modesetToggle: some View {
+        Toggle(isOn: $emulateModeset) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Fake display-mode changes")
+                Text("A game that switches the screen's resolution gets the switch "
+                    + "faked and its picture in a window instead.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: emulateModeset) { _, value in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.emulateModeset = value
+            }
         }
     }
 
@@ -438,6 +532,19 @@ struct EngineSettings: View {
 
     private var dependenciesSection: some View {
         Section {
+            Toggle(isOn: $downloadEverything) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Download everything")
+                    Text("A new bottle gets the fonts and legacy runtimes too, not the "
+                        + "required ones alone.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .onChange(of: downloadEverything) { _, value in
+                BottleDependencies.installsEverything = value
+            }
             ForEach(compatibility.rows) { row in
                 dependencyRow(row)
             }

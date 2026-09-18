@@ -55,6 +55,12 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The layers a game can be given for itself, plus the level-clearing
+    /// value the config commands accept.
+    static var gameRungs: String {
+        allCases.filter { $0 != .auto }.map(\.rawValue).joined(separator: " | ") + " | inherit"
+    }
+
     /// `WINEDLLOVERRIDES` for a managed engine, whose renderer DLLs are
     /// copied into the prefix as native overrides; nil when built-in Wine
     /// should keep its own DLLs.
@@ -127,48 +133,42 @@ nonisolated enum BottleGraphics {
         }
     }
 
-    // MARK: - Per-game overrides
+    // MARK: - Per-game renderers
 
-    /// A game that wants a renderer of its own, and the name to show for it.
-    struct Override: Codable, Equatable, Sendable {
-        var renderer: Renderer
-        var name: String
-    }
-
-    /// Games pinned to a renderer, by Steam app id.
+    /// Whether this game's own renderer reaches it at its next launch through
+    /// its env file, leaving the bottle's default and the staged tree alone.
     ///
-    /// The bottle's renderer reaches a game through the environment of the
-    /// process tree Steam already lives in, so a game cannot be given its own
-    /// without restarting the client first. That is what the menu bar warns
-    /// about before it launches one.
-    static func overrides() -> [Int: Override] {
-        guard let data = Preferences.shared.data(forKey: overridesKey),
-              let stored = try? JSONDecoder().decode([String: Override].self, from: data)
-        else { return [:] }
-        return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
-            Int(key).map { ($0, value) }
-        })
+    /// Two things have to hold: the engine reads the env files at process
+    /// start, and the renderer is one a `WINEDLLPATH_PREPEND` directory can
+    /// supply (``EngineRenderers/supportsPerGame(_:)``).
+    static func perGameRendererIsLive(forApp appID: Int) -> Bool {
+        guard Engine.active.supportsEnvFiles, let own = GameConfig.game(appID).renderer
+        else { return false }
+        return EngineRenderers.supportsPerGame(own)
     }
 
-    static func setOverride(_ override: Override?, forApp appID: Int, named name: String) {
-        var stored = overrides()
-        stored[appID] = override.map { Override(renderer: $0.renderer, name: name) }
-        let encodable = Dictionary(
-            uniqueKeysWithValues: stored.map { (String($0.key), $0.value) },
-        )
-        guard let data = try? JSONEncoder().encode(encodable) else { return }
-        Preferences.shared.set(data, forKey: overridesKey)
-    }
-
-    /// The renderer this game must run under, when that is not what the
-    /// running client can give it. Games inherit the client's environment,
-    /// so a per-game pin and a changed bottle default both mean a restart —
-    /// the comparison is against what the client *booted* with, never the
-    /// stored selection.
+    /// The renderer this game must run under, when the running client cannot
+    /// hand it over at the next launch.
+    ///
+    /// Where the env files cannot carry it, a game inherits the client's
+    /// environment and the staged tree, so a per-game choice and a changed
+    /// bottle default both mean a restart — and the comparison is against what
+    /// the client *booted* with, never the stored selection.
     static func rendererNeedingRestart(forApp appID: Int) -> Renderer? {
-        let wanted = overrides()[appID]?.renderer ?? currentSelection().renderer
+        guard !perGameRendererIsLive(forApp: appID) else { return nil }
+        let wanted = GameConfig.renderer(game: appID).value
         let booted = bootedSelection()?.renderer ?? currentSelection().renderer
         return wanted == booted ? nil : wanted
+    }
+
+    /// The renderer a launch has to move the bottle onto for this game: its
+    /// own choice, where that choice cannot ride in its env file. `explicit`
+    /// is a one-off "Run with", which moves the bottle whatever the game is
+    /// pinned to.
+    static func rendererToStage(forApp appID: Int, explicit: Renderer?) -> Renderer? {
+        if let explicit { return explicit }
+        guard !perGameRendererIsLive(forApp: appID) else { return nil }
+        return GameConfig.game(appID).renderer
     }
 
     // MARK: - Desired vs booted
@@ -309,7 +309,6 @@ nonisolated enum BottleGraphics {
         return String(parts[3])
     }
 
-    private static let overridesKey = "rendererOverrides"
     private static let gpuKey = "SEVO_GPU_IDENTITY"
     private static let gpuAdoptedKey = "gpuIdentityDefaultAdopted"
 

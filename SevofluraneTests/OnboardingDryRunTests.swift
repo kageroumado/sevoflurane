@@ -6,11 +6,15 @@ import Testing
 /// `Provisioner` policy the wizard drives, machine untouched.
 @MainActor
 struct OnboardingDryRunTests {
+    /// `everything` is the "Download everything" switch, named here rather
+    /// than read from the stored one so a test says what it is testing.
     private func makeProvisioner(
-        _ scenario: SetupScenario,
+        _ scenario: SetupScenario, everything: Bool = false,
     ) -> (Provisioner, DryRunSetupEnvironment) {
         let env = DryRunSetupEnvironment(scenario: scenario, stepDelay: .zero)
-        return (Provisioner(environment: env), env)
+        let provisioner = Provisioner(environment: env)
+        provisioner.installsEveryDependency = everything
+        return (provisioner, env)
     }
 
     @Test
@@ -24,6 +28,28 @@ struct OnboardingDryRunTests {
         #expect(env.state.steamBottles.count == 1)
         #expect(!provisioner.needsSetup)
         #expect(env.installedDependencies == ["vcredist", "d3dcompiler"])
+    }
+
+    @Test
+    func `download everything stocks the bottle with the whole catalog`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle, everything: true)
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.installedDependencies == Set(BottleDependencies.catalog.map(\.id)))
+    }
+
+    @Test
+    func `a font pack that will not install does not end the setup`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle, everything: true)
+        env.failingDependencies = ["cjkfonts"]
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        // Steam and its games run without it, so the run finishes and the
+        // package stays installable from Settings.
+        #expect(provisioner.activity == .done)
+        #expect(!env.installedDependencies.contains("cjkfonts"))
+        #expect(env.installedDependencies.contains("vcredist"))
     }
 
     @Test

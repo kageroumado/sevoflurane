@@ -61,6 +61,28 @@ nonisolated enum BottleDependencies {
         catalog.filter { $0.required && !isInstalled($0) }
     }
 
+    // MARK: - What a new bottle gets
+
+    /// Whether setting up a bottle installs the whole catalog rather than the
+    /// required entries alone.
+    ///
+    /// On by default: the optional entries are the ones whose absence shows up
+    /// as a symptom nobody can trace — boxes instead of glyphs, silent audio,
+    /// an old title that names a d3dx9 file. A few hundred megabytes during a
+    /// setup that is already downloading Steam buys a bottle that does not ask
+    /// again.
+    static var installsEverything: Bool {
+        get { Preferences.shared.object(forKey: everythingKey) as? Bool ?? true }
+        set { Preferences.shared.set(newValue, forKey: everythingKey) }
+    }
+
+    private static let everythingKey = "installAllDependencies"
+
+    /// What provisioning installs, in catalog order.
+    static func provisioned(all: Bool = installsEverything) -> [Dependency] {
+        catalog.filter { $0.required || all }
+    }
+
     // MARK: - Detection
 
     static func isInstalled(_ dependency: Dependency) -> Bool {

@@ -55,6 +55,7 @@ struct SetupView: View {
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
     @State private var newBottleName = SteamBottle.defaultName
+    @State private var downloadEverything = BottleDependencies.installsEverything
 
     /// A real run always opens on the welcome. The gallery draws every step at
     /// once, and each tile starts on the one it is there to show.
@@ -334,9 +335,34 @@ struct SetupView: View {
             .pickerStyle(.radioGroup)
             .labelsHidden()
             if bottleChoice == nil { newBottleField }
+            Divider()
+            downloadEverythingToggle
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// The one question about what a new bottle is stocked with, asked on the
+    /// last screen before provisioning starts. The same switch lives in
+    /// Settings › Engine afterwards.
+    private var downloadEverythingToggle: some View {
+        Toggle(isOn: $downloadEverything) {
+            VStack(alignment: .leading) {
+                Text("Download everything").font(.headline)
+                Text("Installs the fonts and the legacy runtimes games ask for, "
+                    + "about \(Self.optionalDownloadSize), alongside the ones every "
+                    + "bottle needs.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+    }
+
+    /// What the optional half of the catalog weighs, rounded the way its own
+    /// rows are written.
+    private static let optionalDownloadSize = "320 MB"
 
     private var newBottleField: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -556,6 +582,11 @@ struct SetupView: View {
                         named: bottleChoice
                             ?? newBottleName.trimmingCharacters(in: .whitespaces),
                     )
+                    // Before the stage that reads it: provisioning starts on
+                    // this press and installs the catalog it names.
+                    if !provisioner.isDryRun {
+                        BottleDependencies.installsEverything = downloadEverything
+                    }
                     beginProvisioning()
                 }
                 .keyboardShortcut(.defaultAction)

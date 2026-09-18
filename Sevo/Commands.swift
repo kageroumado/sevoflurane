@@ -848,6 +848,50 @@ struct UpdateCommand: AsyncParsableCommand {
     }
 }
 
+/// The switches that are one env key each, by the name the command line
+/// calls them. One table, so the two config commands, their help and their
+/// JSON cannot name different sets.
+enum ConfigSwitches {
+    struct Entry: Sendable {
+        let key: String
+        let path: WritableKeyPath<ConfigValues, Bool?> & Sendable
+    }
+
+    static let all: [Entry] = [
+        Entry(key: "hud", path: \.hud),
+        Entry(key: "cursor-confine", path: \.cursorConfine),
+        Entry(key: "avx", path: \.avx),
+        Entry(key: "large-address-aware", path: \.largeAddressAware),
+    ]
+
+    static var names: String {
+        all.map(\.key).joined(separator: " | ")
+    }
+
+    static func path(for key: String) -> (WritableKeyPath<ConfigValues, Bool?> & Sendable)? {
+        all.first { $0.key == key }?.path
+    }
+
+    /// The resolved value and the level it came from, for a game when its id
+    /// is known and for the bottle otherwise.
+    static func resolved(_ key: String, bottle: String, game appID: Int?) -> Resolved<Bool>? {
+        switch key {
+        case "hud": GameConfig.hud(bottle: bottle, game: appID)
+        case "cursor-confine": GameConfig.cursorConfine(bottle: bottle, game: appID)
+        case "avx": GameConfig.avx(bottle: bottle, game: appID)
+        case "large-address-aware": GameConfig.largeAddressAware(bottle: bottle, game: appID)
+        default: nil
+        }
+    }
+
+    /// What a switch costs beyond the next launch, where it costs anything.
+    static func caveat(_ key: String) -> String? {
+        key == "large-address-aware"
+            ? "recorded; the engine still takes a game's address space from the game's own exe"
+            : nil
+    }
+}
+
 /// The values `sevo bottle config` and `sevo app config` accept for the keys
 /// the settings hierarchy resolves; `inherit` clears the level.
 enum ConfigKeyParsing {
@@ -867,6 +911,53 @@ enum ConfigKeyParsing {
             throw SevoExit.badInvocation
         }
         return curve
+    }
+
+    /// A switch: on, off, or the level-clearing value.
+    static func flag(_ value: String, key: String) throws -> Bool? {
+        switch value {
+        case "inherit": nil
+        case "on", "true", "yes": true
+        case "off", "false", "no": false
+        default:
+            Sevo.printError("\(key) must be on, off or inherit")
+            throw SevoExit.badInvocation
+        }
+    }
+
+    /// One `<dll>=<mode>` pair for a game's own load order, `<dll>=` to drop
+    /// the entry, or `inherit` to drop the whole table. The modes are Wine's
+    /// own spelling, so what is typed is what the registry holds.
+    static let overrideModes = ["n,b", "b,n", "n", "b", ""]
+
+    static func dllOverride(_ value: String) throws -> (dll: String, mode: String?)? {
+        if value == "inherit" { return nil }
+        let parts = value.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty else {
+            Sevo.printError("dll takes <name>=<mode>, <name>= to drop one, or inherit; "
+                + "mode is one of n,b | b,n | n | b | \"\" (disabled)")
+            throw SevoExit.badInvocation
+        }
+        let dll = String(parts[0]).lowercased()
+        let mode = String(parts[1])
+        if mode.isEmpty { return (dll, nil) }
+        guard overrideModes.contains(mode) else {
+            Sevo.printError("\(dll): mode must be one of n,b | b,n | n | b")
+            throw SevoExit.badInvocation
+        }
+        return (dll, mode)
+    }
+
+    /// A game's own translation layer. `auto` is the bottle's business — it
+    /// consults CrossOver's per-game database — so a game names a layer or
+    /// inherits.
+    static func renderer(_ value: String) throws -> Renderer? {
+        if value == "inherit" { return nil }
+        guard let renderer = Renderer(rawValue: value), renderer != .auto else {
+            Sevo.printError("renderer must be \(Renderer.gameRungs)")
+            throw SevoExit.badInvocation
+        }
+        return renderer
     }
 
     static func filter(_ value: String) throws -> FinalFilter? {
@@ -1027,7 +1118,7 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | retina | emulate-modeset | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
@@ -1061,6 +1152,13 @@ struct BottleCommand: AsyncParsableCommand {
                     "upscaler": GameConfig.upscaler(bottle: SteamBottle.name).value,
                     "filter": GameConfig.filter(bottle: SteamBottle.name).value.rawValue,
                     "mouse": GameConfig.mouse(bottle: SteamBottle.name).value.rawValue,
+                    "retina": GameConfig.retina(bottle: SteamBottle.name).value,
+                    "emulate-modeset": GameConfig.emulateModeset(bottle: SteamBottle.name).value,
+                    "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {
+                        ($0.key, ConfigSwitches.resolved(
+                            $0.key, bottle: SteamBottle.name, game: nil,
+                        )?.value ?? false)
+                    }),
                     "wine-debug": debugMode || WineLog.isDiagnosing,
                     "wine-debug-channels": WineLog.channels,
                     "wine-debug-effective": WineLog.effectiveChannels(debugMode: debugMode),
@@ -1073,6 +1171,11 @@ struct BottleCommand: AsyncParsableCommand {
                 print("upscaler \(Self.upscalerSummary)")
                 print("filter \(Self.filterSummary)")
                 print("mouse \(Self.mouseSummary)")
+                print("retina \(Self.retinaSummary)")
+                print("emulate-modeset \(Self.modesetSummary)")
+                for entry in ConfigSwitches.all {
+                    print("\(entry.key) \(Self.switchSummary(entry.key))")
+                }
                 print("wine-debug \(WineLog.summary(debugMode: debugMode))")
             }
             return
@@ -1081,6 +1184,10 @@ struct BottleCommand: AsyncParsableCommand {
             switch key {
             case "renderer": print(selection.renderer.rawValue)
             case "msync": print(selection.msync)
+            case _ where ConfigSwitches.path(for: key) != nil:
+                print(Self.switchSummary(key))
+            case "retina": print(Self.retinaSummary)
+            case "emulate-modeset": print(Self.modesetSummary)
             case "windows": print(Self.windowsSummary)
             case "upscaler": print(Self.upscalerSummary)
             case "filter": print(Self.filterSummary)
@@ -1115,6 +1222,33 @@ struct BottleCommand: AsyncParsableCommand {
             let filter = try ConfigKeyParsing.filter(value)
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.filter = filter }
             print("filter \(Self.filterSummary) — \(Self.gameReach)")
+            return
+        }
+        if let path = ConfigSwitches.path(for: key) {
+            let flag = try ConfigKeyParsing.flag(value, key: key)
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0[keyPath: path] = flag
+            }
+            print("\(key) \(Self.switchSummary(key))"
+                + (ConfigSwitches.caveat(key).map { " — \($0)" } ?? " — \(Self.gameReach)"))
+            return
+        }
+        if key == "retina" {
+            // The prefix's own HiDPI switch, written to the bottle's
+            // `Mac Driver\\RetinaMode`; one answer for every process in it.
+            let retina = try ConfigKeyParsing.flag(value, key: "retina")
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.retina = retina }
+            await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("retina \(Self.retinaSummary) — \(Self.gameReach)")
+            return
+        }
+        if key == "emulate-modeset" {
+            // Whether a game that switches the display mode has the switch
+            // faked and its picture put in a window it can be resized in.
+            let modeset = try ConfigKeyParsing.flag(value, key: "emulate-modeset")
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) { $0.emulateModeset = modeset }
+            await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            print("emulate-modeset \(Self.modesetSummary) — \(Self.gameReach)")
             return
         }
         if key == "mouse" {
@@ -1174,7 +1308,28 @@ struct BottleCommand: AsyncParsableCommand {
             : BottleGraphics.managedSelection()
     }
 
-    private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | wine-debug)"
+    private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | "
+        + "retina | emulate-modeset | \(ConfigSwitches.names) | wine-debug)"
+
+    /// One switch's resolved value and where it comes from.
+    static func switchSummary(_ key: String) -> String {
+        guard let resolved = ConfigSwitches.resolved(key, bottle: SteamBottle.name, game: nil)
+        else { return "unknown" }
+        return "\(resolved.value) (\(resolved.source))"
+    }
+
+    /// Whether the prefix draws at the display's full resolution, and where
+    /// that comes from.
+    static var retinaSummary: String {
+        let resolved = GameConfig.retina(bottle: SteamBottle.name)
+        return "\(resolved.value) (\(resolved.source))"
+    }
+
+    /// Whether a display-mode switch is faked, and where that comes from.
+    static var modesetSummary: String {
+        let resolved = GameConfig.emulateModeset(bottle: SteamBottle.name)
+        return "\(resolved.value) (\(resolved.source))"
+    }
 
     /// The bottle's window treatment, where it comes from, and what it
     /// covers — the rung a reader cannot compare against its neighbors
@@ -1561,8 +1716,8 @@ struct AppCommand: AsyncParsableCommand {
         commandName: "app",
         abstract: "Library and per-app actions via the client's own API.",
         subcommands: [
-            List.self, Info.self, Compat.self, Config.self, Detect.self, Launch.self,
-            Terminate.self, Install.self, Uninstall.self, Verify.self,
+            List.self, Info.self, Compat.self, Config.self, RepairDLL.self, Detect.self,
+            Launch.self, Terminate.self, Install.self, Uninstall.self, Verify.self,
         ],
     )
 
@@ -1676,7 +1831,15 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "config",
             abstract: "A game's own settings, over the bottle's and the global defaults.",
             discussion: """
-            Keys: windows (\(WindowTreatment.help)), upscaler (off | \
+            Keys: renderer (\(Renderer.gameRungs) — the translation layer \
+            this game renders through, over the bottle's), emulate-modeset \
+            (on | off | inherit — fakes a display-mode switch and shows the \
+            result in a window), dll <name>=<mode> (n,b | b,n | n | b | \
+            empty for disabled; <name>= drops one, inherit drops the \
+            table), the switches \(ConfigSwitches.names) (on | off | \
+            inherit), recommended to print what the fix table knows about \
+            this game, windows \
+            (\(WindowTreatment.help)), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
             shaders list names the packages), filter (nearest | bilinear | \
             lanczos | inherit — how the upscaler's last pass reaches the \
@@ -1691,7 +1854,7 @@ struct AppCommand: AsyncParsableCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "windows | upscaler | filter | mouse | runner | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | dll | \(ConfigSwitches.names) | runner | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -1705,6 +1868,46 @@ struct AppCommand: AsyncParsableCommand {
             }
             let values = GameConfig.game(appid)
             switch key {
+            case "renderer":
+                guard let value else {
+                    let resolved = GameConfig.renderer(game: appid)
+                    print("\(resolved.value.rawValue) (\(resolved.source)) — \(Self.rendererReach(appid))")
+                    return
+                }
+                let renderer = try ConfigKeyParsing.renderer(value)
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.renderer = renderer }
+            case _ where ConfigSwitches.path(for: key) != nil:
+                guard let value else {
+                    let resolved = ConfigSwitches.resolved(key, bottle: bottle, game: appid)
+                    print("\(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))")
+                    return
+                }
+                let flag = try ConfigKeyParsing.flag(value, key: key)
+                let path = ConfigSwitches.path(for: key)!
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) {
+                    $0[keyPath: path] = flag
+                }
+            case "emulate-modeset":
+                guard let value else {
+                    let resolved = GameConfig.emulateModeset(bottle: bottle, game: appid)
+                    print("\(resolved.value) (\(resolved.source))")
+                    return
+                }
+                let modeset = try ConfigKeyParsing.flag(value, key: "emulate-modeset")
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.emulateModeset = modeset }
+                await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            case "recommended":
+                // Read-only on purpose: a recommendation is something to judge,
+                // so it is printed and the user writes the key they agree with.
+                print(Self.recommendedLines(appid, exes: values.exes ?? []))
+                return
+            case "dll":
+                guard let value else {
+                    print(Self.overrideLines(values))
+                    return
+                }
+                try setDLLOverride(value, bottle: bottle)
+                await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
             case "windows":
                 guard let value else {
                     let resolved = GameConfig.windows(bottle: bottle, game: appid)
@@ -1755,10 +1958,57 @@ struct AppCommand: AsyncParsableCommand {
                 GameConfig.noteExecutable(value, forApp: appid)
                 ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
             default:
-                Sevo.printError("unknown key '\(key)' (windows | upscaler | filter | mouse | runner | detect | exe)")
+                Sevo.printError("unknown key '\(key)' (renderer | windows | upscaler | filter | "
+                    + "mouse | emulate-modeset | dll | \(ConfigSwitches.names) | runner | "
+                    + "recommended | detect | exe)")
                 throw SevoExit.badInvocation
             }
             report(bottle: bottle)
+        }
+
+        /// Writes, changes or drops one DLL's load order for this game. An
+        /// empty table is removed rather than left as a key that says nothing.
+        private func setDLLOverride(_ value: String, bottle: String) throws {
+            let parsed = try ConfigKeyParsing.dllOverride(value)
+            GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { values in
+                guard let parsed else {
+                    values.dllOverrides = nil
+                    return
+                }
+                var table = values.dllOverrides ?? [:]
+                table[parsed.dll] = parsed.mode
+                values.dllOverrides = table.isEmpty ? nil : table
+            }
+        }
+
+        /// What the fix table says about this game: the keys it names, the
+        /// values it names them with, and the measurement behind each.
+        private static func recommendedLines(_ appid: Int, exes: [String]) -> String {
+            let recommendation = KnownFixes.recommended(for: appid, exes: exes)
+            guard !recommendation.isEmpty else {
+                return "nothing — no entry in the fix table names this game"
+            }
+            return recommendation.fixes.map { fix in
+                let keys = ConfigMaterializer.gameLines(appid, fix.values)
+                    .dropFirst()
+                    .joined(separator: " ")
+                return "\(fix.title): \(keys.isEmpty ? "see below" : keys)\n  \(fix.reason)"
+            }.joined(separator: "\n")
+        }
+
+        /// This game's own load orders, one per line.
+        private static func overrideLines(_ values: ConfigValues) -> String {
+            let table = values.dllOverrides ?? [:]
+            guard !table.isEmpty else { return "none — the bottle's own overrides apply" }
+            return table.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value.isEmpty ? "disabled" : $0.value)" }
+                .joined(separator: "\n")
+        }
+
+        /// What a renderer set for this game costs to reach it: its own env
+        /// file at the next launch, or the client restart the menu bar offers.
+        private static func rendererReach(_ appid: Int) -> String {
+            SettingReach.renderer(GameConfig.game(appid).renderer).detail
         }
 
         /// Switches the game between the bottle's engine and native NW.js,
@@ -1806,6 +2056,8 @@ struct AppCommand: AsyncParsableCommand {
         }
 
         private func report(bottle: String) {
+            let renderer = GameConfig.renderer(game: appid)
+            let modeset = GameConfig.emulateModeset(bottle: bottle, game: appid)
             let windows = GameConfig.windows(bottle: bottle, game: appid)
             let upscaler = GameConfig.upscaler(bottle: bottle, game: appid)
             let filter = GameConfig.filter(bottle: bottle, game: appid)
@@ -1816,6 +2068,10 @@ struct AppCommand: AsyncParsableCommand {
             if asJSON {
                 var payload: [String: Any] = [
                     "appid": appid,
+                    "renderer": [
+                        "value": renderer.value.rawValue, "source": renderer.source.description,
+                        "reach": Self.rendererReach(appid),
+                    ],
                     "windows": [
                         "value": windows.value.rawValue, "source": windows.source.description,
                     ],
@@ -1828,6 +2084,15 @@ struct AppCommand: AsyncParsableCommand {
                     "mouse": [
                         "value": mouse.value.rawValue, "source": mouse.source.description,
                     ],
+                    "emulate-modeset": [
+                        "value": modeset.value, "source": modeset.source.description,
+                    ],
+                    "dll-overrides": values.dllOverrides ?? [:],
+                    "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {
+                        ($0.key, ConfigSwitches.resolved(
+                            $0.key, bottle: bottle, game: appid,
+                        )?.value ?? false)
+                    }),
                     "runner": runner,
                     "exes": exes,
                 ]
@@ -1843,10 +2108,18 @@ struct AppCommand: AsyncParsableCommand {
                 print(Sevo.json(payload, pretty: true))
                 return
             }
+            print("renderer \(renderer.value.rawValue) (\(renderer.source)) — \(Self.rendererReach(appid))")
             print("windows \(windows.value.rawValue) (\(windows.source)) — \(windows.value.summary)")
             print("upscaler \(upscaler.value) (\(upscaler.source))")
             print("filter \(filter.value.rawValue) (\(filter.source))")
             print("mouse \(mouse.value.rawValue) (\(mouse.source))")
+            print("emulate-modeset \(modeset.value) (\(modeset.source))")
+            print("dll \(Self.overrideLines(values).replacingOccurrences(of: "\n", with: " "))")
+            for entry in ConfigSwitches.all {
+                let resolved = ConfigSwitches.resolved(entry.key, bottle: bottle, game: appid)
+                print("\(entry.key) \(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))"
+                    + (ConfigSwitches.caveat(entry.key).map { " — \($0)" } ?? ""))
+            }
             print("runner \(runner)")
             if let info = values.nwjs {
                 print(info.summary)
@@ -1864,6 +2137,56 @@ struct AppCommand: AsyncParsableCommand {
                 reach += "; its exe is not known yet, so a value lands one launch late"
             }
             print("— \(reach)")
+        }
+    }
+
+    /// Puts a DLL a run said was missing back: installs the package that
+    /// carries it, then gives this game the native copy.
+    struct RepairDLL: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "repair-dll",
+            abstract: "Install what carries a missing DLL and take it for one game.",
+            discussion: """
+            For a launch that ended in 0xc0000135 or "X.dll was not found". \
+            The package is installed in the bottle once; the load order is \
+            this game's alone and reaches it at its next launch.
+            """,
+        )
+        @Argument var appid: Int
+        @Argument(help: "The DLL the game could not find, with or without .dll.")
+        var dll: String
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            guard let repair = KnownFixes.dllRepair(for: dll) else {
+                Sevo.printError("no package in the dependency catalog carries \(dll) "
+                    + "(sevo doctor lists what a bottle has)")
+                throw SevoExit.badInvocation
+            }
+            if BottleDependencies.catalog.first(where: { $0.id == repair.dependency })
+                .map(BottleDependencies.isInstalled) == true {
+                print("\(repair.packageName) is already installed")
+            } else {
+                print("installing \(repair.packageName)…")
+                if let failure = await BottleDependencies.install(repair.dependency, phase: {
+                    FileHandle.standardError.write(Data("  \($0)\n".utf8))
+                }) {
+                    Sevo.printError("\(repair.packageName): \(failure)")
+                    throw SevoExit.failed
+                }
+            }
+            GameConfig.update(game: appid, bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                KnownFixes.apply(repair, to: &$0)
+            }
+            await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            if asJSON {
+                print(Sevo.json([
+                    "appid": appid, "dll": repair.dll, "mode": repair.mode,
+                    "package": repair.dependency,
+                ], pretty: true))
+                return
+            }
+            print("\(repair.dll)=\(repair.mode) for app \(appid) — reaches it at its next launch")
         }
     }
 

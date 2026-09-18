@@ -40,6 +40,11 @@ final class Provisioner {
     /// saved by hand on a Mac the release feed does not reach. The engine
     /// stage consumes it.
     var engineTarball: URL?
+    /// Whether this run installs the whole dependency catalog rather than the
+    /// required entries alone. `nil` reads
+    /// ``BottleDependencies/installsEverything`` when the stage runs, which is
+    /// what the wizard needs: its switch is pressed after this object exists.
+    var installsEveryDependency: Bool?
     private let environment: any SetupEnvironment
 
     init(environment: (any SetupEnvironment)? = nil) {
@@ -174,11 +179,21 @@ final class Provisioner {
     }
 
     private func installGameDependencies() async throws {
-        for dependency in BottleDependencies.catalog where dependency.required {
+        let all = installsEveryDependency ?? BottleDependencies.installsEverything
+        for dependency in BottleDependencies.provisioned(all: all) {
             guard !environment.isDependencyInstalled(dependency) else { continue }
             beginStage(6, "Installing \(dependency.name)…")
             let result = await environment.installDependency(dependency)
             guard result.succeeded, environment.isDependencyInstalled(dependency) else {
+                // A bottle without a font pack or a legacy runtime still runs
+                // Steam and its games, so only a required entry is worth
+                // ending the whole setup over; the rest are installable again
+                // from Settings › Engine.
+                guard dependency.required else {
+                    SetupLog.log("provision: \(dependency.name) did not install: "
+                        + "\(result.output.suffix(200))")
+                    continue
+                }
                 throw ProvisionError("\(dependency.name) installation failed: \(result.output.suffix(300))")
             }
         }
