@@ -416,6 +416,7 @@ nonisolated struct RunInProgress: Sendable {
         )
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
+        RunRecorder.didClose(record)
     }
 
     /// How a run ended, from what the client and Steam's log actually say.
@@ -467,6 +468,11 @@ nonisolated let runRecordStamp: DateFormatter = {
 final nonisolated class RunRecorder {
     /// Where the recorder narrates. The app points it at its own event log.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
+
+    /// A record has been written, complete with how the run ended. Called on
+    /// the closing queue; the app hops to the main actor from here to decide
+    /// whether the ending deserves a word with the user.
+    nonisolated(unsafe) static var didClose: @Sendable (RunRecord) -> Void = { _ in }
 
     private var open: [Int: OpenRun] = [:]
     private var hasGroomed = false

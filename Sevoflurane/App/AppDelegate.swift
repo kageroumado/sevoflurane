@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }
         GameExecutables.log = { EventLog.enqueue(.client, $0) }
         RunRecorder.log = { EventLog.enqueue(.client, $0) }
+        Diagnostics.faceReport = { await Diagnostics.appFaceReport() }
+        CrashPrompt.shared.install()
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
@@ -147,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         + "nothing on this Mac will be touched",
                 )
                 startDemo()
+                if CrashPrompt.wasRequestedAtLaunch { CrashPrompt.shared.offerFixture() }
                 return
             }
         #endif

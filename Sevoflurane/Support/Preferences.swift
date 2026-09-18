@@ -61,3 +61,36 @@ nonisolated extension Preferences {
         shared.object(forKey: key) as? Bool ?? fallback
     }
 }
+
+// MARK: - Crash reports
+
+nonisolated extension Preferences {
+    /// Whether a run that ends in a crash opens the offer to send a report.
+    /// "Never ask again" on the prompt turns it off.
+    static var asksAfterCrash: Bool {
+        get { asksAfterCrash(in: shared) }
+        set { shared.set(newValue, forKey: asksAfterCrashKey) }
+    }
+
+    static let asksAfterCrashKey = "asksAfterCrash"
+
+    static func asksAfterCrash(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: asksAfterCrashKey) as? Bool ?? true
+    }
+
+    /// The token a sent report carries so two reports from one installation
+    /// can be told apart on the receiving end. Random the first time it is
+    /// asked for, then kept; it names nothing about the machine or the account.
+    static var installToken: String {
+        installToken(in: shared)
+    }
+
+    static let installTokenKey = "installToken"
+
+    static func installToken(in defaults: UserDefaults) -> String {
+        if let token = defaults.string(forKey: installTokenKey), !token.isEmpty { return token }
+        let token = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+        defaults.set(token, forKey: installTokenKey)
+        return token
+    }
+}

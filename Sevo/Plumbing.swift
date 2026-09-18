@@ -25,13 +25,7 @@ nonisolated enum Sevo {
     /// JSON-encodes any JSON-representable value; dictionaries get sorted
     /// keys so `--json` output is diffable.
     static func json(_ value: Any, pretty: Bool = false) -> String {
-        var options: JSONSerialization.WritingOptions = [.fragmentsAllowed, .sortedKeys]
-        if pretty { options.insert(.prettyPrinted) }
-        guard let data = try? JSONSerialization.data(withJSONObject: value, options: options),
-              let text = String(data: data, encoding: .utf8) else {
-            return "null"
-        }
-        return text
+        JSONText.string(value, pretty: pretty)
     }
 
     static func jsonObject(_ text: String) -> [String: Any]? {
