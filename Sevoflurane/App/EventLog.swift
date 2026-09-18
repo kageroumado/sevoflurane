@@ -171,10 +171,11 @@ private nonisolated let eventStamp: DateFormatter = {
 /// in tens of milliseconds — on the main thread every log line would be a
 /// UI stall of that length.
 private final nonisolated class LogFile: Sendable {
-    /// Rotation threshold. One boot's worth of transitions is a few KB; a
-    /// debug-mode session writing a window inventory per adoption is the case
-    /// this bounds.
-    private static let rotateOverBytes = 5_000_000
+    /// Rotation threshold, the cap the diagnostics plan gives this trail. One
+    /// boot's worth of transitions is a few KB; a debug-mode session writing a
+    /// window inventory per adoption, or a level-two run writing the machine's
+    /// state every ten seconds, is the case this bounds.
+    private static let rotateOverBytes = 10_000_000
     /// How much is written between size checks: a `stat` per line would cost
     /// more than the write it guards.
     private static let checkSizeEveryBytes = 64_000

@@ -113,7 +113,9 @@ nonisolated enum ConfigMaterializer {
         lines += switches.map { key, resolve in
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
-        lines.append("WINEDEBUG=\(WineLog.channels)")
+        let level = DiagnosticLevel.current
+        lines.append("WINEDEBUG=\(level.channels())")
+        lines += level.rendererLines
         return lines
     }
 

@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let notifications = SteamNotifications()
     private let gameLaunchWatch = GameLaunchWatch()
     private let runRecorder = RunRecorder()
+    private let stallWatch = StallWatch()
+    private var runMeter: Task<Void, Never>?
     private lazy var appLinkServer = AppLinkServer(
         supervisor: supervisor, host: host, bridge: bridge,
     )
@@ -21,9 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPopover: MenuBarPopover?
     private var setupWindow: NSWindow?
     private lazy var aboutWindows = AboutWindows()
-    private lazy var liveSettingsWindow = SettingsWindow(
-        provisioner: provisioner, supervisor: supervisor, host: host,
-    )
+    private lazy var reportWindows = ReportWindows()
+    private lazy var processMonitorWindows = ProcessMonitorWindows(watch: stallWatch)
+    private lazy var liveSettingsWindow: SettingsWindow = {
+        let window = SettingsWindow(
+            provisioner: provisioner, supervisor: supervisor, host: host,
+        )
+        window.showReports = { [weak self] in self?.reportWindows.show() }
+        return window
+    }()
 
     /// The settings window the gear and ⌘, open. A demo boot points this at
     /// one built on simulated stores instead.
@@ -78,6 +86,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunRecorder.log = { EventLog.enqueue(.client, $0) }
         Diagnostics.faceReport = { await Diagnostics.appFaceReport() }
         CrashPrompt.shared.install()
+        RunRecorder.didRecord = Self.collectReports
+    }
+
+    /// What a finished run leaves on disk beyond its record: a report at level
+    /// zero when it ended badly, after every run above that, with a doctor
+    /// pass and compression at level two.
+    ///
+    /// Runs on the recorder's closing queue, which is where the record was
+    /// just written and the Wine log just read.
+    private nonisolated static func collectReports(_ record: RunRecord, wineTail: String) {
+        let level = DiagnosticLevel.current
+        let report = CrashCollector.collectIfWanted(
+            for: record, wineTail: wineTail, level: level,
+        ) { report in
+            guard level == .two else { return }
+            _ = CrashCollector.addDoctorReport(to: report)
+        }
+        if let report {
+            EventLog.enqueue(
+                .client,
+                "collected \(report.manifest.sources.count) sources into "
+                    + "\(report.directory.lastPathComponent)",
+            )
+        }
+        // Level two is set to catch one crash; leaving it on is a gigabyte of
+        // logs nobody asked for.
+        if DiagnosticLevel.expireAfterRun() {
+            EventLog.enqueue(.app, "diagnostics back to \(DiagnosticLevel.current.summary)")
+        }
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
@@ -111,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // running stays open under this recorder, one it has finished with is
         // recorded now.
         runRecorder.reattach()
+        startRunMeter()
+        startStallWatch()
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
@@ -215,9 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A process of the launch loaded winemac.drv. This is the attribution
         // that survives a game which dies before it draws.
-        gameLaunchWatch.onGameProcessArmed = { [weak self] exe in
+        gameLaunchWatch.onGameProcessArmed = { [weak self] exe, pid in
             guard let self, let appID = host.activeLaunch?.appID else { return }
-            runRecorder.noteExecutable(exe, forApp: appID)
+            runRecorder.noteExecutable(exe, pid: pid, forApp: appID)
             record(exe, forApp: appID, detectingRuntime: false)
         }
         gameLaunchWatch.onGameWindowUp = { [weak self] owner in
@@ -248,6 +287,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await DiscordPresence.shared.clear()
             }
         }
+    }
+
+    /// Reads every open run's meters on a timer. Energy, retired instructions
+    /// and the Game Mode session exist only while the game's process does, so
+    /// they are sampled during the run rather than read at its close.
+    private func startRunMeter() {
+        runMeter?.cancel()
+        runMeter = Task(name: "Sample the open runs' meters") { [runRecorder] in
+            var ticks = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: RunRecorder.meterInterval)
+                runRecorder.sample()
+                ticks += 1
+                guard runRecorder.isRecording,
+                      let every = DiagnosticLevel.current.hostSampleInterval else { continue }
+                let period = max(1, Int(every / RunRecorder.meterInterval))
+                if ticks.isMultiple(of: period) { Self.logHostState() }
+            }
+        }
+    }
+
+    /// Watches every process the app owns and unwedges a game that has stopped
+    /// doing anything. It is on at every level: a killed game is a session
+    /// lost either way, and the ladder is what turns a freeze into an ending
+    /// the record can name.
+    private func startStallWatch() {
+        stallWatch.recorder = runRecorder
+        stallWatch.restartClient = { [weak self] reason in
+            self?.supervisor.restartNow(reason: reason)
+        }
+        stallWatch.start()
+    }
+
+    /// The machine while a game runs, at the level that asks for it. It goes
+    /// to the event log rather than into the run record: one line per ten
+    /// seconds is a trail, and the record holds the state at the start.
+    private nonisolated static func logHostState() {
+        let host = HostSnapshot.take()
+        EventLog.enqueue(
+            .app,
+            "host: thermal \(host.thermalState), load \(host.loadAverage1m), "
+                + "\(host.activeProcessors) processors, \(host.freeMemoryMB) MB free, "
+                + "\(host.compressedMemoryMB) MB compressed",
+        )
     }
 
     /// Tells Discord which game is on screen, under that game's own Discord
@@ -538,6 +621,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard quitTask == nil else { return .terminateCancel }
         // Before the bottle comes down: a game still up ends here, and after
         // the teardown nothing is left that could say how.
+        runMeter?.cancel()
+        stallWatch.stop()
         runRecorder.closeAll()
         quitTask = Task(name: "Quit teardown") {
             GameDisplayHold.gameDidExit()
@@ -623,6 +708,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showRecovery(_: Any?) {
         settingsWindow.showRecovery()
+    }
+
+    /// The last runs, what each of them left behind, and the two ways to
+    /// share one. Settings › Recovery and the app menu both open it.
+    @objc
+    func showReports(_: Any?) {
+        reportWindows.show()
+    }
+
+    /// Every process the app owns, with what each is doing and what can be
+    /// done to it.
+    @objc
+    func showProcesses(_: Any?) {
+        processMonitorWindows.show()
     }
 
     /// About, and the two documents its buttons open. The Settings About

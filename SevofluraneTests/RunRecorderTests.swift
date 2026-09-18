@@ -15,6 +15,7 @@ struct RunRecorderTests {
             engine: "dormison-r4",
             renderer: "dxmt",
             runner: "wine",
+            arch: 64,
             windows: "fixed",
             msync: true,
             d3dmetal: "4.0 beta 2",
@@ -35,6 +36,7 @@ struct RunRecorderTests {
         )
         #expect(json["appid"] as? Int == 508_440)
         #expect(json["engine"] as? String == "dormison-r4")
+        #expect(json["arch"] as? Int == 64)
         #expect(json["renderer"] as? String == "dxmt")
         #expect(json["windows"] as? String == "fixed")
         #expect(json["msync"] as? Bool == true)

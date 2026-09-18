@@ -36,8 +36,9 @@ final class GameLaunchWatch {
     var onGameWindowUp: ((_ owner: String) -> Void)?
 
     /// A bottle process the launch started reached winemac.drv, named by the
-    /// shim's chronicle. Fires whether or not that process ever draws.
-    var onGameProcessArmed: ((_ exe: String) -> Void)?
+    /// shim's chronicle with the macOS pid it runs under. Fires whether or
+    /// not that process ever draws.
+    var onGameProcessArmed: ((_ exe: String, _ pid: pid_t) -> Void)?
 
     /// The window a launch may claim, and how its program was named.
     struct Sighting {
@@ -93,7 +94,7 @@ final class GameLaunchWatch {
             guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe) else {
                 continue
             }
-            onGameProcessArmed?(exe)
+            onGameProcessArmed?(exe, entry.pid)
         }
     }
 

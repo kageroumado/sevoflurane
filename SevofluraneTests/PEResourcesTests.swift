@@ -47,6 +47,24 @@ struct PEResourcesTests {
         #expect(info.companyName == "kageroumado")
     }
 
+    /// The fixture is built by x86_64-w64-mingw32, so its COFF header says
+    /// `0x8664`.
+    @Test
+    func `the COFF header names the fixture a 64-bit image`() {
+        #expect(PEResources.machine(of: Self.fixture) == .x64)
+        #expect(PEResources.machine(of: Self.fixture)?.bits == 64)
+        #expect(PEResources.Machine.x86.bits == 32)
+    }
+
+    @Test
+    func `a file that is not a PE image has no machine`() throws {
+        let temporary = FileManager.default.temporaryDirectory
+            .appending(path: "not-a-pe-\(UUID().uuidString).exe")
+        try Data("MZ but nothing behind it".utf8).write(to: temporary)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        #expect(PEResources.machine(of: temporary) == nil)
+    }
+
     @Test
     func `the manifest's requested execution level is read`() throws {
         let info = try #require(Self.info)

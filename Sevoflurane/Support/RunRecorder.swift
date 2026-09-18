@@ -23,6 +23,10 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     var renderer: String
     /// `wine` or `nwjs` (``GameRunner``).
     var runner: String
+    /// The executable's address width, 32 or 64, from its COFF header
+    /// (``PEResources/machine(of:)``). Absent until the launch's executable
+    /// is known and found on disk.
+    var arch: Int? = nil
     /// The driver's window treatment for this game (``WindowTreatment``).
     var windows: String
     var msync: Bool
@@ -45,6 +49,13 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     var crash: Crash? = nil
     /// The renderer's own complaints during the run, deduplicated with counts.
     var notes: [String]? = nil
+    /// Whether macOS ran a Game Mode session at any point during the run
+    /// (``GameModeSignal``). Absent until the run has been observed at all.
+    var gameMode: Bool? = nil
+    /// What the game's own process cost, as the kernel billed it
+    /// (``ProcessUsage``), from the last sample taken while it was alive.
+    /// Absent for a run whose process was never named.
+    var energy: Energy? = nil
     var host: Host
 
     enum CodingKeys: String, CodingKey {
@@ -55,6 +66,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case engine
         case renderer
         case runner
+        case arch
         case windows
         case msync
         case d3dmetal
@@ -68,6 +80,8 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case exit
         case crash
         case notes
+        case gameMode = "game_mode"
+        case energy
         case host
     }
 
@@ -132,6 +146,37 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     struct Host: Codable, Equatable, Sendable {
         var thermal: String
         var load: Double
+    }
+
+    /// The game process's bill from the kernel: energy in nanojoules, retired
+    /// instructions, and the share of its CPU time that ran on performance
+    /// cores. The three together say whether a slow run was starved,
+    /// throttled, or scheduled onto efficiency cores.
+    struct Energy: Codable, Equatable, Sendable {
+        var nanojoules: UInt64
+        var instructions: UInt64
+        /// 0 to 1, two decimals.
+        var pCoreShare: Double
+
+        enum CodingKeys: String, CodingKey {
+            case nanojoules = "nj"
+            case instructions
+            case pCoreShare = "p_core_share"
+        }
+
+        init(nanojoules: UInt64, instructions: UInt64, pCoreShare: Double) {
+            self.nanojoules = nanojoules
+            self.instructions = instructions
+            self.pCoreShare = pCoreShare
+        }
+
+        init(_ usage: ProcessUsage) {
+            self.init(
+                nanojoules: usage.energyNanojoules,
+                instructions: usage.instructions,
+                pCoreShare: (usage.pCoreShare * 100).rounded() / 100,
+            )
+        }
     }
 
     /// The level-0 summary: one line naming the game, what it ran on, how
@@ -365,6 +410,11 @@ nonisolated enum RunLog {
 nonisolated struct RunInProgress: Sendable {
     let started: ContinuousClock.Instant
     var record: RunRecord
+    /// The macOS pid of the launch's own executable, from the dock shim's
+    /// chronicle. It is what the run's meters are read from, and it is not
+    /// carried in the armed file: a pid outlives nothing, and the next
+    /// process to hold that number is somebody else's.
+    var gamePID: pid_t?
     /// Where the two logs ended when the run began; what they gained since is
     /// the run's own output.
     let wineLogOffset: UInt64
@@ -417,6 +467,7 @@ nonisolated struct RunInProgress: Sendable {
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
         RunRecorder.didClose(record)
+        RunRecorder.didRecord?(record, wineTail)
     }
 
     /// How a run ended, from what the client and Steam's log actually say.
@@ -473,6 +524,14 @@ final nonisolated class RunRecorder {
     /// the closing queue; the app hops to the main actor from here to decide
     /// whether the ending deserves a word with the user.
     nonisolated(unsafe) static var didClose: @Sendable (RunRecord) -> Void = { _ in }
+
+    /// A run that has just been written, with what the Wine log gained while
+    /// it ran. The app hangs report collection off it (``CrashCollector``);
+    /// the CLI leaves it unset, since a `sevo` process only ever reads
+    /// records somebody else wrote.
+    ///
+    /// Called on the closing queue, after the record is on disk.
+    nonisolated(unsafe) static var didRecord: (@Sendable (RunRecord, String) -> Void)?
 
     private var open: [Int: OpenRun] = [:]
     private var hasGroomed = false
@@ -561,11 +620,97 @@ final nonisolated class RunRecorder {
     }
 
     /// One of the launch's processes reached the Mac driver, named by the
-    /// dock shim's chronicle.
-    func noteExecutable(_ exe: String, forApp appID: Int) {
+    /// dock shim's chronicle. The executable's file, found in the game's
+    /// install or given by the caller, says whether it is a 32- or 64-bit
+    /// image; the chronicle's pid is what the run's meters are read from.
+    func noteExecutable(
+        _ exe: String, pid: pid_t? = nil, forApp appID: Int, at url: URL? = nil,
+    ) {
+        if let pid { open[appID]?.gamePID = pid }
         guard open[appID]?.record.exe == nil else { return }
         open[appID]?.record.exe = exe
+        let file = url ?? Self.executableURL(named: exe, forApp: appID)
+        open[appID]?.record.arch = file.flatMap(PEResources.machine(of:))?.bits
         persist(appID: appID)
+    }
+
+    /// Reads the meters that only exist while a run is up: what the kernel
+    /// has billed the game's own process, and whether macOS is running a Game
+    /// Mode session.
+    ///
+    /// Sampled rather than read at the close, because by then the process is
+    /// gone and `proc_pid_rusage` has nothing to answer with; the last
+    /// reading that came back is what the record keeps, and the counters only
+    /// grow. Called every ``meterInterval`` while any run is open.
+    ///
+    /// Memory only: a sample every two seconds is not worth a write to the
+    /// armed file, whose job is to name the launch a killed app left running.
+    func sample() {
+        guard !open.isEmpty else { return }
+        let gameMode = GameModeSignal.isActive()
+        for (appID, run) in open {
+            // Sticky: a session that began when the game went full screen and
+            // ended before the game did is still a fact about the run.
+            open[appID]?.record.gameMode = gameMode || run.record.gameMode == true
+            guard let pid = run.gamePID, let usage = ProcessUsage.read(pid: pid) else { continue }
+            open[appID]?.record.energy = RunRecord.Energy(usage)
+        }
+    }
+
+    /// How often ``sample`` is worth calling: two system calls per open run,
+    /// which is the same cadence the stall watchdog samples at.
+    static let meterInterval: Duration = .seconds(2)
+
+    /// Whether any run is open, which is what makes the meters worth reading
+    /// and the machine worth sampling.
+    var isRecording: Bool {
+        !open.isEmpty
+    }
+
+    /// The macOS process each open run is running under, for the watchdog that
+    /// samples them and for the monitor that lists them. A run whose
+    /// executable never reached the Mac driver is not in it.
+    var runningPIDs: [Int: pid_t] {
+        open.compactMapValues(\.gamePID)
+    }
+
+    /// An open run's record as it stands, for anything that wants to act on a
+    /// game that is still playing — the process monitor collecting its report
+    /// without waiting for it to end.
+    func openRecord(forApp appID: Int) -> RunRecord? {
+        guard var run = open[appID] else { return nil }
+        run.record.durationSeconds = Self.seconds(since: run.started)
+        return run.record
+    }
+
+    /// One rung of the stall ladder, written into the run it happened in.
+    ///
+    /// `at` is measured from the run's own start rather than passed in: the
+    /// watchdog knows how long the game has been still, and the record wants
+    /// to know when in the session that was.
+    func noteStall(lasting duration: Double, unwedged: String?, forApp appID: Int) {
+        guard let run = open[appID] else { return }
+        // Clamped: a rung cannot have happened before the run it is in, and
+        // the two clocks that decide this are not the same one.
+        let stall = RunRecord.Stall(
+            at: max(0, Self.seconds(since: run.started) - duration), duration: duration,
+            unwedged: unwedged,
+        )
+        open[appID]?.record.stalls = (run.record.stalls ?? []) + [stall]
+        persist(appID: appID)
+    }
+
+    /// Where the executable a launch named sits on disk: in the app's Steam
+    /// install, or, for an adopted program, wherever it was adopted from.
+    private static func executableURL(named exe: String, forApp appID: Int) -> URL? {
+        let wanted = exe.lowercased()
+        if let program = GameConfig.game(appID).program,
+           program.url.lastPathComponent.lowercased() == wanted {
+            return program.url
+        }
+        guard let directory = SharedGames.installDirectory(appID: appID) else { return nil }
+        return GameExecutables.executableURLs(in: directory)
+            .first { $0.lastPathComponent.lowercased() == wanted }
     }
 
     /// The game's first window is on screen.
@@ -851,7 +996,7 @@ nonisolated enum WineProvenance {
         }
         let wanted = exe?.lowercased()
         let own = pidsByExe.last { $0.exe == wanted }
-        let candidates = [own].compactMap { $0 } + pidsByExe.reversed()
+        let candidates = [own].compactMap(\.self) + pidsByExe.reversed()
         for candidate in candidates {
             if let renderer = renderers[candidate.pid] { return String(renderer) }
         }

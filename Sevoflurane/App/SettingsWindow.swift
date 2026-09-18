@@ -22,6 +22,9 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private lazy var engineStore = makeEngine()
     private let makeEngine: () -> EngineStore
     private let makeCompatibility: () -> CompatibilityStore
+    /// Opens the report window, which lives beside Settings rather than in a
+    /// pane of it. Nil in a simulated build, where no second window opens.
+    var showReports: (() -> Void)?
     /// Kept alongside the engine store: an install running in the
     /// dependencies section must survive the window closing over it.
     private lazy var compatibilityStore = makeCompatibility()
@@ -104,6 +107,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 compatibility: compatibilityStore,
                 steam: steam,
                 supervisor: supervisor,
+                showReports: showReports,
                 navigation: navigation,
             ),
         )

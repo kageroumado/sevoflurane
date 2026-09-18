@@ -33,7 +33,7 @@ struct RunReattachTests {
         var text = """
         [2026-09-11 17:23:09] AppID \(appID) adding PID 1400 as a tracked process \
         ""C:\\Program Files (x86)\\Steam\\steamapps\\common\\HK\\hollow_knight.exe""
-
+        
         """
         if let code {
             text += "[2026-09-11 17:23:34] AppID \(appID) "
@@ -130,6 +130,34 @@ struct RunReattachTests {
         #expect(armed.record.exe == "hollow_knight.exe")
         #expect(armed.record.windowAfterSeconds != nil)
         #expect(armed.started.timeIntervalSinceNow < 1)
+    }
+
+    /// `SevofluraneTests/Fixtures/fixture.exe`, a 64-bit mingw image.
+    private static let fixtureExecutable = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .appending(path: "Fixtures/fixture.exe")
+
+    @Test
+    func `the executable's file says whether the run is 32- or 64-bit`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 367_520)
+        recorder.noteExecutable("fixture.exe", forApp: 367_520, at: Self.fixtureExecutable)
+        let armed = try #require(RunLog.armedRuns(in: root).first)
+        #expect(armed.record.arch == 64)
+    }
+
+    @Test
+    func `an executable nowhere on disk leaves the width unsaid`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 367_520)
+        recorder.noteExecutable("nowhere.exe", forApp: 367_520)
+        let armed = try #require(RunLog.armedRuns(in: root).first)
+        #expect(armed.record.exe == "nowhere.exe")
+        #expect(armed.record.arch == nil)
     }
 
     @Test

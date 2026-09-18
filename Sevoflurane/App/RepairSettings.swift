@@ -14,6 +14,8 @@ struct RecoverySettings: View {
     var supervisor: ClientSupervisor?
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
+    /// Opens the report window. Absent in the gallery, where no window opens.
+    var showReports: (() -> Void)?
 
     /// The resets that stop the client, so each confirms before it runs. The
     /// set is fixed, and none of them can reach saves or game files.
@@ -294,6 +296,15 @@ struct RecoverySettings: View {
                     .disabled(savingDiagnostics)
             }
             .highlightable(.recoveryDiagnostics, highlighted: highlighted)
+            if let showReports {
+                actionRow(
+                    "Reports",
+                    detail: "Every game you have run, what it left behind, and the two ways "
+                        + "to share one: a zip on the Desktop, or an issue already filled in.",
+                    button: "Open…",
+                ) { showReports() }
+                    .highlightable(.recoveryReports, highlighted: highlighted)
+            }
             Toggle(isOn: debugModeBinding) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Debug mode")

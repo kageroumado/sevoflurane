@@ -186,6 +186,16 @@ enum SevofluraneMainMenu {
         )
         menu.addItem(.separator())
         menu.addItem(
+            withTitle: "Reports",
+            action: #selector(AppDelegate.showReports(_:)),
+            keyEquivalent: "",
+        )
+        menu.addItem(
+            withTitle: "Processes",
+            action: #selector(AppDelegate.showProcesses(_:)),
+            keyEquivalent: "",
+        )
+        menu.addItem(
             withTitle: "Bring All to Front",
             action: #selector(NSApplication.arrangeInFront(_:)),
             keyEquivalent: "",

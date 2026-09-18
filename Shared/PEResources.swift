@@ -86,6 +86,34 @@ nonisolated enum PEResources {
         return info
     }
 
+    /// The processor an image is built for, from the COFF header's machine
+    /// field.
+    enum Machine: Int, Sendable {
+        case x86 = 0x14C
+        case x64 = 0x8664
+        case arm64 = 0xAA64
+
+        /// The address width the image runs with: what a run record calls
+        /// `arch`, and what decides which of Wine's two loaders takes it.
+        var bits: Int {
+            self == .x86 ? 32 : 64
+        }
+    }
+
+    /// The machine one executable is built for, read from its first bytes
+    /// without mapping the file. `nil` for a file that is not a PE image or
+    /// names a machine this app does not run.
+    static func machine(of url: URL) -> Machine? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let head = try? handle.read(upToCount: 0x40), head.count == 0x40,
+              u16(head, 0) == 0x5A4D, let peOffset = u32(head, 0x3C) else { return nil }
+        guard (try? handle.seek(toOffset: UInt64(peOffset))) != nil,
+              let header = try? handle.read(upToCount: 6), header.count == 6,
+              u32(header, 0) == 0x0000_4550, let machine = u16(header, 4) else { return nil }
+        return Machine(rawValue: machine)
+    }
+
     /// Whether the file carries the two signatures every PE image has.
     static func isExecutable(_ url: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }

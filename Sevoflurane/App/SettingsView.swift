@@ -37,6 +37,9 @@ struct SettingsView: View {
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
+    /// Opens the report window, which lives beside Settings rather than in
+    /// it. Absent in the gallery, where no second window opens.
+    var showReports: (() -> Void)?
     @Bindable var navigation = SettingsNavigation()
 
     var body: some View {
@@ -59,6 +62,7 @@ struct SettingsView: View {
                 steam: steam,
                 highlighted: navigation.highlighted,
                 supervisor: supervisor,
+                showReports: showReports,
             )
         }
         .navigationSplitViewStyle(.balanced)
@@ -83,6 +87,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case games
     case storage
     case recovery
+    case diagnostics
     case about
 
     var id: String {
@@ -97,6 +102,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .games: "Games"
         case .storage: "Storage"
         case .recovery: "Recovery"
+        case .diagnostics: "Diagnostics"
         case .about: "About"
         }
     }
@@ -109,6 +115,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .games: "gamecontroller.fill"
         case .storage: "internaldrive.fill"
         case .recovery: "cross.case.fill"
+        case .diagnostics: "stethoscope"
         case .about: "info.circle.fill"
         }
     }
@@ -402,6 +409,41 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "debug", "verbose", "logging", "trace", "logs", "diagnostics",
                     ],
                 ),
+                SearchableSetting(
+                    id: .recoveryReports,
+                    title: "Reports",
+                    keywords: [
+                        "report", "reports", "runs", "run", "history", "issue", "github",
+                        "bug", "crash", "share", "fps", "frame rate",
+                    ],
+                ),
+            ]
+        case .diagnostics:
+            [
+                SearchableSetting(
+                    id: .diagnosticsLevel,
+                    title: "How much a run records",
+                    keywords: [
+                        "diagnostics", "level", "logging", "verbose", "trace", "seh",
+                        "wine", "channels", "loaddll", "record", "run",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .diagnosticsReports,
+                    title: "Collected reports",
+                    keywords: [
+                        "report", "reports", "crash", "collected", "folder", "finder",
+                        "dump", "minidump", "ips", "share",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .diagnosticsCaps,
+                    title: "What diagnostics may take",
+                    keywords: [
+                        "cap", "caps", "limit", "size", "disk", "space", "rotation",
+                        "months", "budget",
+                    ],
+                ),
             ]
         case .about:
             [
@@ -479,6 +521,10 @@ enum SettingsAnchor: String, CaseIterable {
     case recoveryWinecfg = "recovery.winecfg"
     case recoveryDiagnostics = "recovery.diagnostics"
     case recoveryDebugMode = "recovery.debugMode"
+    case recoveryReports = "recovery.reports"
+    case diagnosticsLevel = "diagnostics.level"
+    case diagnosticsReports = "diagnostics.reports"
+    case diagnosticsCaps = "diagnostics.caps"
     case aboutDiagnostics = "about.diagnostics"
     case aboutVersion = "about.version"
 }
@@ -572,6 +618,7 @@ private struct SettingsPane: View {
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
     var supervisor: ClientSupervisor?
+    var showReports: (() -> Void)?
 
     var body: some View {
         Group {
@@ -596,7 +643,10 @@ private struct SettingsPane: View {
                 RecoverySettings(
                     provisioner: provisioner, compatibility: compatibility,
                     supervisor: supervisor, steam: steam, highlighted: highlighted,
+                    showReports: showReports,
                 )
+            case .diagnostics:
+                DiagnosticsSettings(highlighted: highlighted, showReports: showReports)
             case .about: AboutSettings(highlighted: highlighted)
             }
         }
