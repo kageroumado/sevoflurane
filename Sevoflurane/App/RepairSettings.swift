@@ -21,6 +21,7 @@ struct RecoverySettings: View {
         case forceQuitSteam
         case restartWindows
         case clearShaderCache
+        case rebuildSteamEnvironment
 
         var id: String { rawValue }
 
@@ -29,6 +30,7 @@ struct RecoverySettings: View {
             case .forceQuitSteam: "Force-quit Steam?"
             case .restartWindows: "Restart Windows?"
             case .clearShaderCache: "Clear the shader cache?"
+            case .rebuildSteamEnvironment: "Rebuild the Steam environment?"
             }
         }
 
@@ -42,6 +44,10 @@ struct RecoverySettings: View {
             case .clearShaderCache:
                 "Steam stops, its shader cache is trashed, and it reopens and rebuilds "
                     + "the shaders. Your games and saves stay."
+            case .rebuildSteamEnvironment:
+                "Steam stops, its installer runs over the bottle again, and the client "
+                    + "downloads itself fresh. Long — tens of minutes on a slow line. "
+                    + "Your games and saves stay."
             }
         }
 
@@ -50,6 +56,7 @@ struct RecoverySettings: View {
             case .forceQuitSteam: "Force-quit"
             case .restartWindows: "Restart Windows"
             case .clearShaderCache: "Clear cache"
+            case .rebuildSteamEnvironment: "Rebuild"
             }
         }
     }
@@ -217,6 +224,12 @@ struct RecoverySettings: View {
             ) { pendingReset = .clearShaderCache }
                 .highlightable(.recoveryClearShaderCache, highlighted: highlighted)
             actionRow(
+                "Rebuild the Steam environment",
+                detail: rebuildDetail,
+                button: "Rebuild…", disabled: isRebuilding,
+            ) { pendingReset = .rebuildSteamEnvironment }
+                .highlightable(.recoveryRebuildSteam, highlighted: highlighted)
+            actionRow(
                 "Wine configuration",
                 detail: "Opens winecfg: Windows version, drives, audio, and DLL overrides.",
                 button: "Open…",
@@ -356,7 +369,34 @@ struct RecoverySettings: View {
         case .forceQuitSteam: supervisor?.forceQuit(.steam)
         case .restartWindows: supervisor?.restartWindowsNow()
         case .clearShaderCache: supervisor?.clearShaderCache()
+        case .rebuildSteamEnvironment: rebuildSteamEnvironment()
         }
+    }
+
+    /// Reinstalls the client over the bottle it already has: the installer
+    /// must not run under a live Steam, so the client is stopped first and
+    /// brought back when the stages finish.
+    private func rebuildSteamEnvironment() {
+        Task(name: "Rebuild the Steam environment") {
+            await supervisor?.stopForControl()
+            await provisioner.refreshDetection()
+            await provisioner.provisionAndConfigure(rebuildingSteam: true)
+            supervisor?.startForControl()
+        }
+    }
+
+    private var isRebuilding: Bool {
+        if case .working = provisioner.activity { true } else { false }
+    }
+
+    private var rebuildDetail: String {
+        if case let .working(phase) = provisioner.activity { return phase }
+        if case let .failed(reason) = provisioner.activity {
+            return "The last attempt stopped: \(reason)"
+        }
+        return "Stops Steam and installs the client over this bottle again — for a "
+            + "client whose own files are damaged and that Repair leaves alone. "
+            + "Your games and saves stay."
     }
 
     private func repairHelper() {
@@ -380,15 +420,22 @@ struct RecoverySettings: View {
         }
     }
 
+    /// The `sevo` helper inside this bundle. The report is written by the
+    /// same binary the terminal runs, so a zip saved from here and one from a
+    /// hand-run `sevo diag` are the same report.
+    static var diagnosticsHelper: URL {
+        Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
+    }
+
     /// The bundled CLI writes the zip (`sevo diag`), so the app and the
     /// terminal produce the same report; Finder then shows it.
     private func saveDiagnostics() {
         savingDiagnostics = true
         diagnosticsError = nil
         Task(name: "Save diagnostics") {
-            let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
             let result = await Subprocess.run(
-                helper.path, ["diag", "--steam-logs"], capture: .combined, timeout: .seconds(90),
+                Self.diagnosticsHelper.path, ["diag", "--steam-logs"],
+                capture: .combined, timeout: .seconds(90),
             )
             savingDiagnostics = false
             let path = result.output.split(separator: "\n").last.map(String.init) ?? ""

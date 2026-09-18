@@ -8,8 +8,24 @@ import Testing
 @MainActor
 struct RecoveryTests {
     @Test
-    func `the pane offers exactly the three confirming resets`() {
-        #expect(RecoverySettings.Reset.allCases == [.forceQuitSteam, .restartWindows, .clearShaderCache])
+    func `the pane offers exactly the four confirming resets`() {
+        #expect(RecoverySettings.Reset.allCases == [
+            .forceQuitSteam, .restartWindows, .clearShaderCache, .rebuildSteamEnvironment,
+        ])
+    }
+
+    @Test
+    func `the rebuild says how long it takes and what it keeps`() {
+        let rebuild = RecoverySettings.Reset.rebuildSteamEnvironment
+        #expect(rebuild.message.contains("games and saves stay"))
+        #expect(rebuild.message.lowercased().contains("minutes"))
+    }
+
+    @Test
+    func `the report is written by the sevo helper inside this bundle`() {
+        let helper = RecoverySettings.diagnosticsHelper
+        #expect(helper.path.hasSuffix("/Contents/Helpers/sevo"))
+        #expect(helper.path.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path + "/"))
     }
 
     @Test

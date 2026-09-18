@@ -14,6 +14,9 @@ struct SteamActions {
     /// Ends a stuck menu-bar tracking session, answering which root menus were
     /// open — the way out of the macOS 27 menu hang from Settings.
     var cancelStuckMenus: () -> [String]
+    /// Draws or removes the Mac compatibility strip on the game page that is
+    /// already open, so the switch shows its result where it is about.
+    var applyCompatibilityStrip: () -> Void
 }
 
 /// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
@@ -129,6 +132,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     id: .generalCli,
                     title: "Command-line tool",
                     keywords: ["cli", "sevo", "command", "terminal", "path"],
+                ),
+                SearchableSetting(
+                    id: .generalCompatStrip,
+                    title: "Mac compatibility strip",
+                    keywords: [
+                        "compatibility", "compat", "strip", "badge", "verified",
+                        "playable", "anti-cheat", "anticheat", "game page", "library",
+                    ],
                 ),
                 SearchableSetting(
                     id: .generalDiscordBridge,
@@ -364,6 +375,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
+                    id: .recoveryRebuildSteam,
+                    title: "Rebuild the Steam environment",
+                    keywords: [
+                        "rebuild", "reinstall", "steam", "client", "environment",
+                        "corrupt", "damaged", "broken", "fresh",
+                    ],
+                ),
+                SearchableSetting(
                     id: .recoveryWinecfg,
                     title: "Wine configuration",
                     keywords: ["wine", "winecfg", "windows version", "configuration", "recovery"],
@@ -425,6 +444,7 @@ enum SettingsAnchor: String, CaseIterable {
     case generalOpenAtLogin = "general.openAtLogin"
     case generalSteamSettings = "general.steamSettings"
     case generalCli = "general.cli"
+    case generalCompatStrip = "general.compatStrip"
     case generalDiscordBridge = "general.discordBridge"
     case generalDiscordPresence = "general.discordPresence"
     case generalAgents = "general.agents"
@@ -455,6 +475,7 @@ enum SettingsAnchor: String, CaseIterable {
     case recoveryShaderCompiler = "recovery.shaderCompiler"
     case recoveryWineRestart = "recovery.wineRestart"
     case recoveryClearShaderCache = "recovery.clearShaderCache"
+    case recoveryRebuildSteam = "recovery.rebuildSteam"
     case recoveryWinecfg = "recovery.winecfg"
     case recoveryDiagnostics = "recovery.diagnostics"
     case recoveryDebugMode = "recovery.debugMode"

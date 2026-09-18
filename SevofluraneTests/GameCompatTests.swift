@@ -195,3 +195,34 @@ struct GameCompatTests {
         #expect(try decoder.decode(GameCompatRecord.self, from: data) == record)
     }
 }
+
+/// The switch over the strip. Turning it off has to reach the page already on
+/// screen, and it must leave the injected script installed so turning it back
+/// on needs nothing more than the script it already has.
+@MainActor
+@Suite(.serialized)
+struct CompatibilityStripSwitchTests {
+    @Test
+    func `the strip is drawn until someone turns it off`() {
+        let chosen = Preferences.compatibilityStrip
+        defer { Preferences.compatibilityStrip = chosen }
+        Preferences.shared.removeObject(forKey: "compatibilityStrip")
+        #expect(Preferences.compatibilityStrip)
+        Preferences.compatibilityStrip = false
+        #expect(!Preferences.compatibilityStrip)
+        Preferences.compatibilityStrip = true
+        #expect(Preferences.compatibilityStrip)
+    }
+
+    @Test
+    func `removal stands the script down rather than uninstalling it`() {
+        #expect(SteamCompatBadge.script.contains("enabled: true"))
+        #expect(SteamCompatBadge.removalScript.contains("__sevoCompat.enabled = false"))
+        // It asks the script to redraw, which is what takes the strip off the
+        // page that is open — a flag nobody acts on would change nothing
+        // until the next navigation.
+        #expect(SteamCompatBadge.removalScript.contains("__sevoCompat.apply()"))
+        // And the observer that puts the strip back has to read the flag.
+        #expect(SteamCompatBadge.script.contains("!window.__sevoCompat.enabled"))
+    }
+}

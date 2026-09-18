@@ -618,6 +618,58 @@ nonisolated enum ClientLifecycle {
         )
     }
 
+    /// The same command, run by the daemon that owns the bottle whenever one
+    /// answers, and in this process when none does.
+    ///
+    /// A dependency installer is a minutes-long wine tree. Started from the
+    /// app it belongs to the window that asked for it; started from `sevo` it
+    /// belongs to a process that exits as soon as the command returns. The
+    /// daemon outlives both and is the one owner of bottle processes, so the
+    /// tree survives whatever closes above it. The direct fall-back is the
+    /// machine with no daemon answering: the first run, before the app has
+    /// registered one, and `--no-app`.
+    @discardableResult
+    static func runSupervisedInBottle(
+        _ program: [String],
+        timeout: Duration = .seconds(600),
+    ) async -> (status: Int32?, output: String) {
+        if let request = daemonRunRequest(program, timeout: timeout),
+           let (data, response) = try? await URLSession.shared.data(for: request),
+           let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode),
+           let result = daemonRunResult(data) {
+            return result
+        }
+        return await runInBottle(program, timeout: timeout)
+    }
+
+    /// The `/bottle/run` request one bottle command becomes: one argument per
+    /// body line, so a Windows path with spaces stays one argument with no
+    /// quoting to undo. The socket's deadline sits past the bottle's own, so
+    /// what comes back is the program's answer rather than the socket's.
+    static func daemonRunRequest(_ program: [String], timeout: Duration) -> URLRequest? {
+        guard !program.isEmpty, !program.contains(where: { $0.contains("\n") }) else { return nil }
+        let seconds = timeout.components.seconds
+        guard let url = URL(
+            string: "http://127.0.0.1:\(BridgePorts.control)/bottle/run?timeout=\(seconds)",
+        ) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = Data(program.joined(separator: "\n").utf8)
+        request.timeoutInterval = TimeInterval(seconds) + Self.daemonRunGrace
+        return request
+    }
+
+    /// How much longer than the bottle's own deadline the socket waits.
+    private static let daemonRunGrace: TimeInterval = 30
+
+    /// The daemon's answer: the program's exit status, absent where it was
+    /// killed, and everything it printed.
+    static func daemonRunResult(_ data: Data) -> (status: Int32?, output: String)? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let output = object["output"] as? String else { return nil }
+        return ((object["status"] as? NSNumber).map { $0.int32Value }, output)
+    }
+
     /// Starts one windowed Windows program inside the Steam bottle — winecfg,
     /// the control panel — and returns as soon as it's spawned, because a
     /// window the user is going to interact with has no useful exit to wait

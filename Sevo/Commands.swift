@@ -1927,6 +1927,7 @@ struct AppCommand: AsyncParsableCommand {
         func run() async throws {
             try await handlingFailures {
                 let before = await WindowReport.currentWindow()
+                await warnAboutRunningApps()
                 try await SteamOps.launch(appid)
                 narrate("launch requested for \(appid) — waiting for its window", asJSON: asJSON)
                 let window = await WindowReport.awaitWindow(
@@ -1953,13 +1954,37 @@ struct AppCommand: AsyncParsableCommand {
                 }
             }
         }
+
+        /// Steam refuses a second game while it believes one is running, and
+        /// it believes that of any game whose entry outlived its process — so
+        /// a non-empty list before the ask is the likeliest reason the launch
+        /// that follows does nothing at all.
+        private func warnAboutRunningApps() async {
+            let running = (try? await SteamOps.runningApps()) ?? []
+            guard !running.isEmpty else { return }
+            let others = running.filter { $0 != appid }
+            guard !others.isEmpty else {
+                narrate("\(appid) is already listed as running", asJSON: asJSON)
+                return
+            }
+            narrate("Steam still lists \(others.map(String.init).joined(separator: ", ")) "
+                + "as running — this launch is a no-op until that clears "
+                + "(sevo app terminate <appid>)", asJSON: asJSON)
+        }
     }
 
     struct Terminate: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "terminate", abstract: "Apps.TerminateApp.",
+            commandName: "terminate",
+            abstract: "Apps.TerminateApp, then wait for the game to actually go.",
         )
         @Argument var appid: Int
+        @Option(
+            name: .customLong("timeout"),
+            help: "Seconds to wait before signaling the game's processes (default 20).",
+        )
+        var timeout = 20
+        @Flag(name: .customLong("json"), help: "Machine-readable verdict.") var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
@@ -1969,9 +1994,42 @@ struct AppCommand: AsyncParsableCommand {
                 // record — the process itself is asked here.
                 let native = GameConfig.game(appid).runsNatively
                     ? NWJSRunner.terminate(appID: appid) : []
-                print("terminate requested for \(appid)"
+                narrate("terminate requested for \(appid)"
                     + (native.isEmpty ? "" : " — and \(native.count) native "
-                        + "process\(native.count == 1 ? "" : "es") asked to quit"))
+                        + "process\(native.count == 1 ? "" : "es") asked to quit")
+                    + " — waiting up to \(timeout)s for it to go", asJSON: asJSON)
+                var sighting = await GameStop.waitUntilGone(appid: appid, seconds: timeout)
+                var verdict = GameStop.Verdict.terminated
+                if !sighting.isGone {
+                    // The record and the processes are separate survivors: a
+                    // stale entry is what makes every later RunGame a silent
+                    // no-op, and only the client clears it, so what can be
+                    // signaled here is the tree.
+                    for pid in sighting.processes { kill(pid, SIGKILL) }
+                    narrate("it did not go — SIGKILL'd \(sighting.processes.count) "
+                        + "process\(sighting.processes.count == 1 ? "" : "es")", asJSON: asJSON)
+                    sighting = await GameStop.waitUntilGone(appid: appid, seconds: 5)
+                    verdict = sighting.isGone ? .killed : .stillRunning
+                }
+                report(verdict, sighting)
+            }
+        }
+
+        private func report(_ verdict: GameStop.Verdict, _ sighting: GameStop.Sighting) {
+            guard !asJSON else {
+                print(Sevo.json([
+                    "verdict": verdict.rawValue,
+                    "intent": "app terminate",
+                    "appid": appid,
+                    "steam_lists_it": sighting.steamListsIt,
+                    "processes": sighting.processes.map(Int.init),
+                ], pretty: true))
+                return
+            }
+            print("app terminate: \(verdict.rawValue) — \(sighting.description)")
+            if verdict == .stillRunning, sighting.steamListsIt, sighting.processes.isEmpty {
+                print("  Steam's entry outlived the game: every later launch is a "
+                    + "silent no-op until it clears. Restart the client: sevo client restart")
             }
         }
     }

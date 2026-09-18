@@ -232,7 +232,7 @@ nonisolated enum BottleDependencies {
                 "https://github.com/pushcx/corefonts/raw/master/\(archive)",
                 as: archive, into: scratch,
             )
-            let result = await ClientLifecycle.runInBottle([
+            let result = await ClientLifecycle.runSupervisedInBottle([
                 SteamBottle.windowsPath(for: file),
                 "/T:\(scratch.windowsPath("fonts"))", "/C", "/Q",
             ], timeout: .seconds(120))
@@ -257,7 +257,7 @@ nonisolated enum BottleDependencies {
                 as: "vc_redist.\(arch).exe", into: scratch,
             )
             phase("installing VC++ (\(arch))")
-            let result = await ClientLifecycle.runInBottle([
+            let result = await ClientLifecycle.runSupervisedInBottle([
                 SteamBottle.windowsPath(for: installer),
                 "/install", "/quiet", "/norestart",
             ])
@@ -316,7 +316,7 @@ nonisolated enum BottleDependencies {
             as: "directx_Jun2010_redist.exe", into: scratch,
         )
         phase("extracting")
-        let extract = await ClientLifecycle.runInBottle([
+        let extract = await ClientLifecycle.runSupervisedInBottle([
             SteamBottle.windowsPath(for: redist),
             "/Q", "/T:\(scratch.windowsPath("dx"))",
         ], timeout: .seconds(300))
@@ -324,7 +324,7 @@ nonisolated enum BottleDependencies {
             throw InstallFailure(message: "the redistributable refused to extract")
         }
         phase("running DXSETUP")
-        let setup = await ClientLifecycle.runInBottle([
+        let setup = await ClientLifecycle.runSupervisedInBottle([
             scratch.windowsPath(#"dx\DXSETUP.exe"#), "/silent",
         ], timeout: .seconds(900))
         guard setup.status == 0 else {
@@ -394,7 +394,7 @@ nonisolated enum BottleDependencies {
     }
 
     static func setOverride(dll: String, mode: String) async -> String? {
-        let result = await ClientLifecycle.runInBottle([
+        let result = await ClientLifecycle.runSupervisedInBottle([
             "reg", "add", #"HKCU\Software\Wine\DllOverrides"#,
             "/v", dll, "/d", mode == "disabled" ? "" : mode, "/f",
         ], timeout: .seconds(60))
@@ -402,7 +402,7 @@ nonisolated enum BottleDependencies {
     }
 
     static func removeOverride(dll: String) async -> String? {
-        let result = await ClientLifecycle.runInBottle([
+        let result = await ClientLifecycle.runSupervisedInBottle([
             "reg", "delete", #"HKCU\Software\Wine\DllOverrides"#,
             "/v", dll, "/f",
         ], timeout: .seconds(60))
@@ -543,7 +543,7 @@ nonisolated enum BottleDependencies {
             at: scratch.url, withIntermediateDirectories: true,
         )
         try contents.write(to: regFile, atomically: true, encoding: .utf8)
-        let result = await ClientLifecycle.runInBottle([
+        let result = await ClientLifecycle.runSupervisedInBottle([
             "regedit", "/S", SteamBottle.windowsPath(for: regFile),
         ], timeout: .seconds(60))
         guard result.status == 0 else {

@@ -76,7 +76,7 @@ final class Provisioner {
     /// Steam sitting in some other bottle is not a provisioned machine.
     var needsSetup: Bool {
         guard detection != nil else { return false }
-        let ours = bottleRecord(named: SteamBottle.name)?.hasSteam == true
+        let ours = bottleRecord(named: environment.bottleName)?.hasSteam == true
         return !(detection?.hasEngine == true && ours)
     }
 
@@ -85,11 +85,16 @@ final class Provisioner {
     /// active engine's one counts — matching by name alone let CrossOver's
     /// "Steam" satisfy a managed-engine check and skip provisioning
     /// entirely.
+    ///
+    /// The roots are compared as paths: `appendingPathComponent` gives a
+    /// directory URL a trailing slash only when that directory is already on
+    /// disk, so on a Mac whose bottle root does not exist yet the one
+    /// directory spelled two ways is two unequal URLs.
     private func bottleRecord(named name: String) -> SetupDetection.Bottle? {
-        detection?.bottles.first {
+        let root = environment.bottlesRoot.standardizedFileURL.path
+        return detection?.bottles.first {
             $0.name == name
-                && $0.url.deletingLastPathComponent().standardizedFileURL
-                == Engine.active.bottlesRoot.standardizedFileURL
+                && $0.url.deletingLastPathComponent().standardizedFileURL.path == root
         }
     }
 
@@ -99,7 +104,14 @@ final class Provisioner {
     var engineInstallPending: Bool {
         guard let detection else { return false }
         return detection.managedEngineVersions.isEmpty
-            && (detection.usableCrossOver == nil || Engine.preferenceWantsManaged)
+            && (detection.usableCrossOver == nil || environment.wantsManagedEngine)
+    }
+
+    /// Names the bottle the remaining stages address. The wizard asks only
+    /// where detection found more than one Steam; a dry run's answer stays
+    /// inside the fixture.
+    func chooseBottle(named name: String) {
+        environment.chooseBottle(named: name)
     }
 
     func refreshDetection() async {
@@ -111,16 +123,22 @@ final class Provisioner {
     /// Creates the Steam bottle if missing, silent-installs the Steam
     /// bootstrapper, then runs the headless full-client update. Each stage is
     /// skipped when detection says its product already exists.
-    func provisionSteam() async {
+    ///
+    /// `rebuildingSteam` runs the two Steam stages over a bottle detection
+    /// already calls provisioned: the bootstrapper is fetched and run again
+    /// and the headless update follows it, which is how a client whose own
+    /// files are damaged is made whole. Rosetta, the engine and the prefix
+    /// stay as they are, and so do the games and saves inside it.
+    func provisionSteam(rebuildingSteam: Bool = false) async {
         guard detection != nil else { return }
         let interval = PerfProbe.setup.beginInterval("Provision")
         defer { PerfProbe.setup.endInterval("Provision", interval) }
-        let bottleName = SteamBottle.name
+        let bottleName = environment.bottleName
         do {
             try await installRosettaIfMissing()
             try await installEngineIfMissing()
             try await createBottleIfMissing(bottleName)
-            try await installBootstrapperIfMissing(inBottle: bottleName)
+            try await installBootstrapper(inBottle: bottleName, force: rebuildingSteam)
             try await updateClient(inBottle: bottleName)
             try await installGameDependencies()
             activity = .done
@@ -195,7 +213,7 @@ final class Provisioner {
     private func installEngineIfMissing() async throws {
         guard let detection else { return }
         let managedWanted = detection.usableCrossOver == nil
-            || Engine.preferenceWantsManaged
+            || environment.wantsManagedEngine
         if managedWanted, detection.managedEngineVersions.isEmpty {
             beginStage(2, "Installing the game engine…")
             SetupLog.log("provision: installing managed engine")
@@ -274,8 +292,10 @@ final class Provisioner {
         await refreshDetection()
     }
 
-    private func installBootstrapperIfMissing(inBottle bottleName: String) async throws {
-        guard !steamPresent(inBottle: bottleName) else { return }
+    private func installBootstrapper(
+        inBottle bottleName: String, force: Bool,
+    ) async throws {
+        guard force || !steamPresent(inBottle: bottleName) else { return }
 
         beginStage(4, "Downloading the Steam installer…")
         SetupLog.log("provision: downloading SteamSetup.exe")
@@ -348,7 +368,7 @@ final class Provisioner {
     }
 
     private func steamExePath(inBottle name: String) -> String {
-        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        let bottle = environment.bottlesRoot.appendingPathComponent(name)
         return SteamBottle.steamRoot(inBottle: bottle)
             .appendingPathComponent("Steam.exe").path
     }
@@ -356,7 +376,7 @@ final class Provisioner {
     /// Bytes sitting in the client's `package/` staging directory — the
     /// updater's visible progress between self-replacements.
     private func packagePayloadBytes(inBottle name: String) -> Int64 {
-        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        let bottle = environment.bottlesRoot.appendingPathComponent(name)
         let package = SteamBottle.steamRoot(inBottle: bottle)
             .appendingPathComponent("package")
         let names = (try? FileManager.default
@@ -377,7 +397,7 @@ final class Provisioner {
             return steamPresent(inBottle: name)
         }
         guard steamPresent(inBottle: name) else { return false }
-        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        let bottle = environment.bottlesRoot.appendingPathComponent(name)
         let manifest = SteamBottle.steamRoot(inBottle: bottle)
             .appendingPathComponent("package/steam_client_win64.installed")
         return FileManager.default.fileExists(atPath: manifest.path)
@@ -399,10 +419,10 @@ final class Provisioner {
 
     /// The wizard's whole sequence: install Steam, then apply the idempotent
     /// bottle configuration the boot path also reasserts.
-    func provisionAndConfigure() async {
-        await provisionSteam()
+    func provisionAndConfigure(rebuildingSteam: Bool = false) async {
+        await provisionSteam(rebuildingSteam: rebuildingSteam)
         if case .done = activity {
-            await configureBottle(named: SteamBottle.name)
+            await configureBottle(named: environment.bottleName)
         }
     }
 

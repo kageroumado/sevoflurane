@@ -552,8 +552,9 @@ struct SetupView: View {
                         && provisioner.detection?.usableCrossOver == nil)
             case .bottle:
                 Button("Continue") {
-                    SteamBottle.choose(
-                        bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces),
+                    provisioner.chooseBottle(
+                        named: bottleChoice
+                            ?? newBottleName.trimmingCharacters(in: .whitespaces),
                     )
                     beginProvisioning()
                 }

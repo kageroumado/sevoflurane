@@ -22,7 +22,11 @@ import Foundation
 enum SteamCompatBadge {
     static let script = """
     (function () {
-      if (window.__sevoCompat) { window.__sevoCompat.apply(); return "reapplied"; }
+      if (window.__sevoCompat) {
+        window.__sevoCompat.enabled = true;
+        window.__sevoCompat.apply();
+        return "reapplied";
+      }
     
       var STYLE_ID = "sevo-compat-style";
       var SLOT_ID = "sevo-compat-slot";
@@ -266,9 +270,15 @@ enum SteamCompatBadge {
       }
     
       function apply() {
+        var slot;
+        if (window.__sevoCompat && !window.__sevoCompat.enabled) {
+          slot = document.getElementById(SLOT_ID);
+          if (slot) slot.remove();
+          return;
+        }
         if (!ensureStyle()) return;
         var appid = currentAppID();
-        var slot = document.getElementById(SLOT_ID);
+        slot = document.getElementById(SLOT_ID);
         var where = appid && placement();
         var o = appid && overview(appid);
         /* Only games get a strip: shortcuts, mods, tools and soundtracks have
@@ -309,9 +319,21 @@ enum SteamCompatBadge {
       new MutationObserver(schedule).observe(document, { childList: true, subtree: true });
       document.addEventListener("click", onClick, true);
     
-      window.__sevoCompat = { apply: apply };
+      window.__sevoCompat = { apply: apply, enabled: true };
       apply();
       return "installed";
+    })()
+    """
+
+    /// Takes the strip off the page and stops the observer putting it back.
+    /// The script itself stays installed, so turning the strip on again is
+    /// one evaluation of ``script`` away.
+    static let removalScript = """
+    (function () {
+      if (!window.__sevoCompat) { return "not installed"; }
+      window.__sevoCompat.enabled = false;
+      window.__sevoCompat.apply();
+      return "removed";
     })()
     """
 }

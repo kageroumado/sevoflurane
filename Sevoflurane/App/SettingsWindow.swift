@@ -91,6 +91,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 },
                 restartClient: { [weak supervisor] in supervisor?.restartNow() },
                 cancelStuckMenus: { [weak host] in host?.menuMirror?.cancelTracking() ?? [] },
+                applyCompatibilityStrip: { [weak host] in host?.applyCompatibilityStrip() },
             )
         }
         let controller = NSHostingController(

@@ -11,6 +11,23 @@ protocol SetupEnvironment: AnyObject {
     /// a badge so a screenshot can never be mistaken for a real run.
     var isSimulation: Bool { get }
 
+    /// The bottle every stage addresses: the stored choice on a live run, the
+    /// fixture's own bottle in a dry run.
+    var bottleName: String { get }
+
+    /// Names the bottle the remaining stages address — the wizard's answer to
+    /// "which of these Steam-bearing bottles is ours".
+    func chooseBottle(named name: String)
+
+    /// Where the engine behind this environment keeps its bottles. Detection's
+    /// bottle records are matched against it, so the two have to describe the
+    /// same machine — this one, or the simulated one.
+    var bottlesRoot: URL { get }
+
+    /// Whether the engine choice asks for the built-in engine, installed or
+    /// not: the engine stage installs one even where CrossOver is usable.
+    var wantsManagedEngine: Bool { get }
+
     /// Re-reads the machine facts every stage decision runs on.
     func detect() async -> SetupDetection
 
@@ -64,6 +81,24 @@ protocol SetupEnvironment: AnyObject {
 extension SetupEnvironment {
     var isSimulation: Bool {
         false
+    }
+
+    /// The live machine's own answers: the stored bottle, the active engine's
+    /// bottle directory, the stored engine choice.
+    var bottleName: String {
+        SteamBottle.name
+    }
+
+    func chooseBottle(named name: String) {
+        SteamBottle.choose(name)
+    }
+
+    var bottlesRoot: URL {
+        Engine.active.bottlesRoot
+    }
+
+    var wantsManagedEngine: Bool {
+        Engine.preferenceWantsManaged
     }
 
     /// Nothing boots in a simulation, so nothing has to settle.

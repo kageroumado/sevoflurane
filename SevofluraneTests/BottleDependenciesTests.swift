@@ -276,3 +276,56 @@ private final class StubProtocol: URLProtocol, @unchecked Sendable {
 
     override func stopLoading() {}
 }
+
+/// Where a dependency installer's wine tree hangs from. The daemon owns the
+/// bottle and outlives both the app and a CLI invocation, so the installers
+/// address it rather than spawning from whichever process pressed the button.
+struct BottleRunRoutingTests {
+    private func request(_ program: [String], timeout: Duration = .seconds(600)) -> URLRequest? {
+        ClientLifecycle.daemonRunRequest(program, timeout: timeout)
+    }
+
+    @Test
+    func `an installer is posted to the daemon's bottle run, carrying its deadline`() throws {
+        let request = try #require(request(["wine", "setup.exe"], timeout: .seconds(120)))
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.host == "127.0.0.1")
+        #expect(request.url?.port == Int(BridgePorts.control))
+        #expect(request.url?.path == "/bottle/run")
+        #expect(request.url?.query == "timeout=120")
+        // Past the bottle's own deadline, so a slow installer is never cut
+        // short by the socket that is waiting for it.
+        #expect(request.timeoutInterval > 120)
+    }
+
+    @Test
+    func `a path with spaces stays one argument and is never quoted`() throws {
+        let program = [#"C:\Program Files\vc_redist.x64.exe"#, "/install", "/quiet"]
+        let request = try #require(request(program))
+        let body = String(decoding: try #require(request.httpBody), as: UTF8.self)
+        #expect(body.split(separator: "\n").map(String.init) == program)
+        #expect(!body.contains("\""))
+    }
+
+    @Test
+    func `a command that cannot survive the line encoding is not sent`() {
+        #expect(request([]) == nil)
+        #expect(request(["wine", "a\nb"]) == nil)
+    }
+
+    @Test
+    func `the daemon's answer is the program's exit and its output`() throws {
+        let reply = try #require(ClientLifecycle.daemonRunResult(
+            Data(#"{"status":1638,"output":"already installed"}"#.utf8),
+        ))
+        #expect(reply.status == 1638)
+        #expect(reply.output == "already installed")
+        // A killed program has no status, and the caller must see that rather
+        // than a zero it would read as success.
+        let killed = try #require(ClientLifecycle.daemonRunResult(
+            Data(#"{"status":null,"output":""}"#.utf8),
+        ))
+        #expect(killed.status == nil)
+        #expect(ClientLifecycle.daemonRunResult(Data("not json".utf8)) == nil)
+    }
+}

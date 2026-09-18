@@ -49,16 +49,22 @@
             version: "26.3", licensed: false, expires: nil, trialExpired: true,
         )
 
-        /// Fixture bottles sit under the *active engine's* root — the
-        /// provisioner scopes bottle matching to it, and a dry run never
-        /// changes `Engine.active`, so this is the one root its checks
-        /// accept whatever engine the host machine happens to run.
+        /// Where the fixture machine keeps its bottles: a directory on no
+        /// Mac, never read and never written. The flow under test scopes its
+        /// bottle matching to the environment's root, so a dry run reaches the
+        /// same conclusions whatever this machine's engine store holds.
+        static let bottlesRoot = URL(fileURLWithPath: "/private/var/empty/Sevoflurane/Bottles")
+
+        /// The bottle the fixture machine drives, until the wizard's bottle
+        /// step names another.
+        static let bottleName = SteamBottle.defaultName
+
         private static func bottle(
-            named name: String = SteamBottle.defaultName, hasSteam: Bool,
+            named name: String = SetupScenario.bottleName, hasSteam: Bool,
         ) -> SetupDetection.Bottle {
             SetupDetection.Bottle(
                 name: name,
-                url: Engine.active.bottlesRoot.appendingPathComponent(name),
+                url: bottlesRoot.appendingPathComponent(name),
                 hasSteam: hasSteam,
             )
         }
@@ -116,6 +122,11 @@
     @MainActor
     final class DryRunSetupEnvironment: SetupEnvironment {
         let isSimulation = true
+        private(set) var bottleName = SetupScenario.bottleName
+        let bottlesRoot = SetupScenario.bottlesRoot
+        /// The fixture's own CrossOver decides the engine stage: a simulated
+        /// machine must not follow the engine this Mac's owner chose.
+        let wantsManagedEngine = false
 
         private(set) var state: SetupDetection
         private let scenario: SetupScenario
@@ -140,6 +151,11 @@
             // scenario's fixture would make those two disagree.
             state = detection ?? scenario.fixture
             log("scenario '\(scenario.rawValue)' — nothing on this machine will be touched")
+        }
+
+        func chooseBottle(named name: String) {
+            log("would name \(name) the bottle this installation drives")
+            bottleName = name
         }
 
         func detect() async -> SetupDetection {
@@ -219,7 +235,7 @@
                 crossover: state.crossover,
                 bottles: state.bottles + [SetupDetection.Bottle(
                     name: name,
-                    url: Engine.active.bottlesRoot.appendingPathComponent(name),
+                    url: bottlesRoot.appendingPathComponent(name),
                     hasSteam: false,
                 )],
                 managedEngineVersions: state.managedEngineVersions,
@@ -279,7 +295,7 @@
 
         func installDependency(_ dependency: BottleDependencies.Dependency) async -> SetupCommandOutcome {
             dependencyInstalls.append(dependency.id)
-            log("would install \(dependency.name) in \(SteamBottle.name)")
+            log("would install \(dependency.name) in \(bottleName)")
             await pause()
             if let dependencyFailure { return .failure(dependencyFailure) }
             installedDependencies.insert(dependency.id)

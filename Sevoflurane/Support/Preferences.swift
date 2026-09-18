@@ -40,6 +40,17 @@ nonisolated enum Preferences {
     }
 }
 
+// MARK: - The Steam pages
+
+nonisolated extension Preferences {
+    /// Whether game pages carry the Mac compatibility strip. Off leaves
+    /// Steam's own page exactly as the client draws it.
+    static var compatibilityStrip: Bool {
+        get { bool(forKey: "compatibilityStrip", default: true) }
+        set { shared.set(newValue, forKey: "compatibilityStrip") }
+    }
+}
+
 // MARK: - Discord
 
 nonisolated extension Preferences {

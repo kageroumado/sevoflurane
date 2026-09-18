@@ -1984,7 +1984,7 @@ final class SteamWebHost {
         window.webView.evaluateJavaScript(SteamDesktopChrome.script)
         // The Mac compatibility strip on game pages, in the slot Steam's own
         // Deck strip leaves empty on a desktop client.
-        window.webView.evaluateJavaScript(SteamCompatBadge.script)
+        applyCompatibilityStrip()
         Task(name: "Register game-action events") {
             let result = await evaluateInContext(Self.gameActionScript)
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")
@@ -2002,6 +2002,18 @@ final class SteamWebHost {
     func windowDidHide(_ window: SteamWindow) {
         guard window === desktop else { return }
         ActivationPolicy.recedeIfLastWindow(closing: window.nsWindow)
+    }
+
+    /// Draws the Mac compatibility strip on game pages, or takes it off, to
+    /// match the stored choice. Called at adoption and whenever Settings
+    /// changes it, so a switch is visible on the page already open.
+    func applyCompatibilityStrip() {
+        guard let webView = desktop?.webView else { return }
+        webView.evaluateJavaScript(
+            Preferences.compatibilityStrip
+                ? SteamCompatBadge.script
+                : SteamCompatBadge.removalScript,
+        )
     }
 
     // MARK: - Menu dismissal guard

@@ -16,6 +16,7 @@ struct GeneralSettings: View {
     @State private var cliError: String?
     @State private var agents: [AgentRow] = []
     @State private var confirmingUninstall = false
+    @State private var compatibilityStrip = true
     @State private var discordBridge = false
     @State private var discordPresence = false
 
@@ -75,6 +76,7 @@ struct GeneralSettings: View {
                     Text("Let each assistant control Steam through MCP.")
                 }
             }
+            steamPagesSection
             discordSection
             uninstallSection
         }
@@ -82,11 +84,34 @@ struct GeneralSettings: View {
         .onAppear {
             openAtLogin = provisioner.openAtLogin
             cliInstalled = AgentIntegration.isCLIInstalled
+            compatibilityStrip = Preferences.compatibilityStrip
             discordBridge = Preferences.discordBridge
             discordPresence = Preferences.discordPresence
             refreshAgents()
         }
         .task { await store.measure() }
+    }
+
+    // MARK: - The Steam pages
+
+    private var steamPagesSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Mac compatibility strip", isOn: $compatibilityStrip)
+                    .toggleStyle(.switch)
+                    .onChange(of: compatibilityStrip) { _, enabled in
+                        Preferences.compatibilityStrip = enabled
+                        steam?.applyCompatibilityStrip()
+                    }
+                Text("A game's page says how it runs on a Mac and what its anti-cheat "
+                    + "does, in the slot Steam's own Deck strip leaves empty here.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalCompatStrip, highlighted: highlighted)
+        } header: {
+            Text("Steam pages")
+        }
     }
 
     // MARK: - Discord

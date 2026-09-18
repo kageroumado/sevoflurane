@@ -126,6 +126,29 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `the fixture's bottle root is one no Mac has on disk`() async {
+        // `appendingPathComponent` gives a directory URL a trailing slash only
+        // where that directory already exists, so an absent root is the state
+        // every Mac is in before its first bottle — and the state the GitHub
+        // runner is always in.
+        #expect(!FileManager.default.fileExists(atPath: SetupScenario.bottlesRoot.path))
+        let (provisioner, _) = makeProvisioner(.provisioned)
+        await provisioner.refreshDetection()
+        #expect(!provisioner.needsSetup)
+    }
+
+    @Test
+    func `choosing a bottle in a dry run stays inside the fixture`() async {
+        let stored = SteamBottle.name
+        let (provisioner, env) = makeProvisioner(.multipleBottles)
+        provisioner.chooseBottle(named: "Steam Beta")
+        await provisioner.refreshDetection()
+        #expect(env.bottleName == "Steam Beta")
+        #expect(!provisioner.needsSetup)
+        #expect(SteamBottle.name == stored)
+    }
+
+    @Test
     func `expired trial is not a usable engine`() async {
         let (provisioner, _) = makeProvisioner(.trialExpired)
         await provisioner.refreshDetection()
