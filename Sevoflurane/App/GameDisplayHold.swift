@@ -17,8 +17,13 @@ import IOKit.pwr_mgt
 enum GameDisplayHold {
     private static var assertion: IOPMAssertionID = .init(kIOPMNullAssertionID)
 
+    /// The program whose window the hold was taken for. A window a probe
+    /// mistakes for a game's is otherwise indistinguishable in the log from a
+    /// game that really started, and the hold that follows is the symptom.
+    private static var heldFor: String?
+
     /// A game's window is up. Idempotent.
-    static func gameDidAppear() {
+    static func gameDidAppear(for program: String) {
         guard assertion == IOPMAssertionID(kIOPMNullAssertionID) else { return }
         var id = IOPMAssertionID(kIOPMNullAssertionID)
         let status = IOPMAssertionCreateWithName(
@@ -32,7 +37,8 @@ enum GameDisplayHold {
             return
         }
         assertion = id
-        EventLog.shared.log(.app, "display held awake for the running game")
+        heldFor = program
+        EventLog.shared.log(.app, "display held awake for \(program)")
     }
 
     /// No game window remains.
@@ -40,6 +46,7 @@ enum GameDisplayHold {
         guard assertion != IOPMAssertionID(kIOPMNullAssertionID) else { return }
         IOPMAssertionRelease(assertion)
         assertion = IOPMAssertionID(kIOPMNullAssertionID)
-        EventLog.shared.log(.app, "display hold released")
+        EventLog.shared.log(.app, "display hold released — \(heldFor ?? "the game") is gone")
+        heldFor = nil
     }
 }

@@ -127,18 +127,38 @@ nonisolated enum WineWindowWatch {
     /// Wine's plumbing: an on-screen `.exe` window owned by none of these is
     /// a game. `GameLaunchWatch` uses the same set to spot a launch's first
     /// window.
-    static let gameInfrastructureOwners: Set<String> = [
+    static let gameInfrastructureOwners = clientOwners.union(bottleOwners)
+
+    /// Steam's own processes in the bottle.
+    private static let clientOwners: Set<String> = [
         "steam.exe", "steamwebhelper.exe", "steamservice.exe",
         "steamerrorreporter.exe", "steamerrorreporter64.exe",
         "explorer.exe", "conhost.exe", "tabtip.exe",
         "gameoverlayui.exe", "gameoverlayui64.exe",
     ]
 
-    /// One pass over the window list: the anomalous Wine windows, and
-    /// whether a game's window is up.
+    /// Wine's own services, and the programs Sevoflurane runs in the bottle
+    /// beside the client. Each of these can put a window on screen for a
+    /// moment — a service starting, the Discord relay reconnecting — and a
+    /// window of theirs is not a game starting: taken for one, it holds the
+    /// display awake and spends the launch's activation right on nothing.
+    private static let bottleOwners: Set<String> = [
+        "services.exe", "winedevice.exe", "plugplay.exe", "svchost.exe",
+        "rpcss.exe", "wineboot.exe", "winemenubuilder.exe", "start.exe",
+        "rundll32.exe",
+        "sevo-discord-bridge.exe", "sevo-steamstub.exe", "sevo-steamstub32.exe",
+    ]
+
+    /// One pass over the window list: the anomalous Wine windows, and the
+    /// game window if one is up.
     struct Scan: Sendable {
         let wineWindows: [Window]
-        let gameWindowUp: Bool
+        /// The first game window the pass found. It names what holds the
+        /// display awake, so a window mistaken for a game's says which
+        /// program it belonged to.
+        let game: Window?
+
+        var gameWindowUp: Bool { game != nil }
     }
 
     /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
@@ -150,9 +170,9 @@ nonisolated enum WineWindowWatch {
         defer { PerfProbe.system.endInterval("WineWindowScan", interval) }
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
-            as? [[String: Any]] else { return Scan(wineWindows: [], gameWindowUp: false) }
+            as? [[String: Any]] else { return Scan(wineWindows: [], game: nil) }
         var wineWindows: [Window] = []
-        var gameWindowUp = false
+        var game: Window?
         var resolved: [pid_t: String] = [:]
         for entry in list {
             guard entry[kCGWindowLayer as String] as? Int == 0,
@@ -160,20 +180,23 @@ nonisolated enum WineWindowWatch {
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t else { continue }
             guard let name = resolved[pid] ?? program(owner: owner, pid: pid) else { continue }
             resolved[pid] = name
-            if isGameProgram(name) {
-                gameWindowUp = true
-            }
-            guard clientPrograms.contains(name),
-                  let bounds = entry[kCGWindowBounds as String] as? [String: Any] else { continue }
-            wineWindows.append(Window(
+            let isGame = isGameProgram(name)
+            guard isGame || clientPrograms.contains(name) else { continue }
+            let bounds = entry[kCGWindowBounds as String] as? [String: Any] ?? [:]
+            let window = Window(
                 owner: name,
                 pid: pid,
                 title: entry[kCGWindowName as String] as? String,
                 width: (bounds["Width"] as? NSNumber)?.intValue ?? 0,
                 height: (bounds["Height"] as? NSNumber)?.intValue ?? 0,
-            ))
+            )
+            if isGame {
+                game = game ?? window
+            } else {
+                wineWindows.append(window)
+            }
         }
-        return Scan(wineWindows: wineWindows, gameWindowUp: gameWindowUp)
+        return Scan(wineWindows: wineWindows, game: game)
     }
 
     /// The game's on-screen window: its owning process and its frame, in

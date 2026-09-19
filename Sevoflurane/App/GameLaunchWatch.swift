@@ -105,7 +105,7 @@ final class GameLaunchWatch {
     /// The launch's own story ends the moment the window is up, so the
     /// callback fires before the activation, which can take five seconds.
     private func activate(_ game: Sighting) async {
-        GameDisplayHold.gameDidAppear()
+        GameDisplayHold.gameDidAppear(for: "\(game.owner) (pid \(game.pid))")
         onGameWindowUp?(game.owner)
         let bundled = game.viaBundle ? ", via its own bundle" : ""
         EventLog.shared.log(.window, "game window up (\(game.owner))\(bundled)")

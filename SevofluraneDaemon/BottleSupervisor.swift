@@ -786,8 +786,8 @@ final class BottleSupervisor {
             // The launch watch holds the display the moment the window
             // appears; this scan is the authoritative edge for games it
             // missed and for the exit.
-            if scan.gameWindowUp {
-                GameDisplayHold.gameDidAppear()
+            if let game = scan.game {
+                GameDisplayHold.gameDidAppear(for: "\(game.owner) (pid \(game.pid))")
             } else {
                 GameDisplayHold.gameDidExit()
             }
