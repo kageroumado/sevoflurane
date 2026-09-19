@@ -1185,9 +1185,7 @@ final class SteamWebHost {
         // by then cooperative activation no longer sees an event to attribute
         // the request to: it declines, and the window arrives behind whatever
         // was frontmost with its traffic lights gray.
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-        }
+        ActivationPolicy.becomeRegular(forAWindowWithin: ActivationPolicy.graceForAPromisedWindow)
         NSApp.activate()
         guard !isAwaitingSignIn else {
             // Signed out, the window the user is asking for is the login

@@ -239,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // takes the activation right it will spend on the game's window.
             // A minute later, when that window finally arrives, there is no
             // event left for the window server to attribute the request to.
-            Activation().claimRight()
+            ActivationPolicy.claimRightForALaunch()
             // The run record opens here rather than at the first window:
             // a game that dies before it draws is the one worth recording.
             runRecorder.arm(appID: appID)

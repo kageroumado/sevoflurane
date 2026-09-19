@@ -245,7 +245,7 @@ struct MenuBarView: View {
     /// would pull focus off whatever the user was doing — so the press says
     /// so explicitly instead.
     private func claimActivationRight() {
-        Activation().claimRight()
+        ActivationPolicy.claimRightForALaunch()
     }
 
     @ViewBuilder private var recentGames: some View {

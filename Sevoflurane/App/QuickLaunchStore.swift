@@ -45,7 +45,7 @@ final class QuickLaunchStore {
     /// Starts a program through the daemon, which is the bottle's one parent.
     func launch(_ entry: AdoptedPrograms.Entry, renderer: Renderer? = nil) {
         guard simulated == nil else { return }
-        Activation().claimRight()
+        ActivationPolicy.claimRightForALaunch()
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
             guard await DaemonService.post("/program/launch?id=\(entry.id)\(query)") != nil else {
