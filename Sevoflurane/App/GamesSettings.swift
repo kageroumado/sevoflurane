@@ -114,6 +114,13 @@ struct GamesSettings: View {
                         inherited: GameConfig.avx(bottle: SteamBottle.name).value, for: entry,
                     )
                 }
+                settingRow(\.unifiedMemory, cost: .env, for: entry) {
+                    inheritableSwitch(
+                        "Share memory with the graphics card", key: \.unifiedMemory,
+                        inherited: GameConfig.unifiedMemory(bottle: SteamBottle.name).value,
+                        for: entry,
+                    )
+                }
                 settingRow(\.largeAddressAware, cost: .recorded, for: entry) {
                     inheritableSwitch(
                         "Full address space (32-bit games)", key: \.largeAddressAware,

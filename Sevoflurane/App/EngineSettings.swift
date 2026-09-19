@@ -28,6 +28,7 @@ struct EngineSettings: View {
     @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
     @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
     @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
+    @State private var unifiedMemory = GameConfig.unifiedMemory(bottle: SteamBottle.name).value
     @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
     @State private var largeAddressAware = GameConfig
         .largeAddressAware(bottle: SteamBottle.name).value
@@ -402,6 +403,17 @@ struct EngineSettings: View {
                 detail: "Rosetta tells the game the CPU has AVX and AVX2, which games "
                     + "that check refuse to start without.",
                 value: $avx, key: \.avx,
+            )
+            bottleSwitch(
+                "Share memory with the graphics card (experimental)",
+                detail: "Your Mac has one pool of memory that the processor and the "
+                    + "graphics chip both use. Windows games expect a separate graphics "
+                    + "card, so they copy everything twice — once to hand it over, once "
+                    + "to store it — and on a Mac both copies land in the same memory. "
+                    + "This tells a game the truth, so it writes each texture once. "
+                    + "Games that load large scenes gain the most, and a few may show "
+                    + "wrong textures or refuse to start: turn it off again if one does.",
+                value: $unifiedMemory, key: \.unifiedMemory,
             )
             bottleSwitch(
                 "Full address space for 32-bit games",

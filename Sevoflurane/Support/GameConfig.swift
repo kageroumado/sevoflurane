@@ -191,6 +191,18 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// (`ROSETTA_ADVERTISE_AVX`). Rosetta translates those instructions
     /// either way; the advertisement is what a game's CPU check reads.
     var avx: Bool?
+    /// Experimental: whether the game is told the Mac's memory is one pool
+    /// shared by the CPU and the GPU, which it is (`SEVO_FORCE_UMA`).
+    ///
+    /// D3DMetal answers `ARCHITECTURE1.UMA` with 0, so every engine writes
+    /// each upload into a staging buffer and then copies it into a second
+    /// allocation that is the same physical memory. Skipping that copy is
+    /// worth 27-107% of a bandwidth-bound frame, measured in
+    /// `bispectral/gamebench --uma`; dormison's `winemac.drv` reports the
+    /// unified answer when this is on. Off by default because a game that
+    /// believes it takes every unified path, and the texture layouts among
+    /// them are the least tested.
+    var unifiedMemory: Bool?
     /// Whether the window server holds the pointer inside the game's window
     /// while the game has the cursor clipped (`SEVO_CURSOR_CONFINE`), which is
     /// what keeps mouse-look from walking onto a second display.
@@ -226,6 +238,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
             || hud != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
+            || unifiedMemory != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
@@ -331,7 +344,8 @@ nonisolated enum GameConfig {
         // were written, and a growing number of titles read the CPUID answer
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
-        hud: false, largeAddressAware: true, avx: true, cursorConfine: false,
+        hud: false, largeAddressAware: true, avx: true, unifiedMemory: false,
+        cursorConfine: false,
     )
 
     // MARK: - Levels
@@ -397,6 +411,12 @@ nonisolated enum GameConfig {
     /// otherwise the bottle's own value.
     static func upscaler(bottle: String, game appID: Int? = nil) -> Resolved<String> {
         resolve(\.upscaler, bottle: bottle, game: appID)
+    }
+
+    /// Whether a launch in this bottle is told the memory is unified: for a
+    /// specific game when its id is known, otherwise the bottle's own value.
+    static func unifiedMemory(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.unifiedMemory, bottle: bottle, game: appID)
     }
 
     /// The final filter a launch in this bottle gets: for a specific game

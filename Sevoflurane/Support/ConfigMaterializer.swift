@@ -132,6 +132,7 @@ nonisolated enum ConfigMaterializer {
         ("SEVO_LARGE_ADDRESS_AWARE", { GameConfig.largeAddressAware(bottle: $0, game: $1).value }),
         ("ROSETTA_ADVERTISE_AVX", { GameConfig.avx(bottle: $0, game: $1).value }),
         ("SEVO_CURSOR_CONFINE", { GameConfig.cursorConfine(bottle: $0, game: $1).value }),
+        ("SEVO_FORCE_UMA", { GameConfig.unifiedMemory(bottle: $0, game: $1).value }),
     ]
 
     /// Which of ``switches`` this level sets for itself, by key.
@@ -141,6 +142,7 @@ nonisolated enum ConfigMaterializer {
         own["SEVO_LARGE_ADDRESS_AWARE"] = values.largeAddressAware
         own["ROSETTA_ADVERTISE_AVX"] = values.avx
         own["SEVO_CURSOR_CONFINE"] = values.cursorConfine
+        own["SEVO_FORCE_UMA"] = values.unifiedMemory
         return own
     }
 
