@@ -61,7 +61,14 @@ final class SilentUpdates {
             .gate("a game is running") { await Self.noGameRunning() }
             .installsAutomatically(false)
         github.onChecksFailing = { error in
-            EventLog.enqueue(.update, "update checks have been failing: \(error.localizedDescription)")
+            let now = Date.now
+            if let last = Preferences.updateFailureLoggedAt,
+               now.timeIntervalSince(last) < Self.checkInterval { return }
+            Preferences.updateFailureLoggedAt = now
+            EventLog.enqueue(
+                .update,
+                "update checks are failing (said once a day): \(error.localizedDescription)",
+            )
         }
         justUpdatedVersion = github.tiptoe.justUpdatedTo
     }

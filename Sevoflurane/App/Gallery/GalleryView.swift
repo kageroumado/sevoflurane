@@ -341,6 +341,32 @@
                 notifications: .preview(authorization: .notDetermined, unasked: true),
             ),
             Popover(
+                label: "Mac busy — other apps",
+                host: .preview(games: games),
+                supervisor: ClientSupervisor(
+                    previewHealth: .healthy,
+                    hostPressure: HostPressure(otherProcessorShare: 0.85, busiestProcess: "Xcode"),
+                ),
+            ),
+            Popover(
+                label: "Mac busy — memory",
+                host: .preview(games: games),
+                supervisor: ClientSupervisor(previewHealth: .healthy, hostPressure: HostPressure(memory: .critical)),
+            ),
+            Popover(
+                label: "Mac busy — heat",
+                host: .preview(games: games),
+                supervisor: ClientSupervisor(
+                    previewHealth: .healthy,
+                    hostPressure: HostPressure(temperature: 97, isThrottling: true),
+                ),
+            ),
+            Popover(
+                label: "Mac busy — Low Power Mode",
+                host: .preview(games: games),
+                supervisor: ClientSupervisor(previewHealth: .healthy, hostPressure: HostPressure(isLowPowerMode: true)),
+            ),
+            Popover(
                 label: "Notifications refused",
                 host: .preview(games: games, unreadChats: 2),
                 supervisor: ClientSupervisor(previewHealth: .healthy),

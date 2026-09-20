@@ -51,6 +51,17 @@ nonisolated extension Preferences {
     }
 }
 
+// MARK: - Updates
+
+nonisolated extension Preferences {
+    /// When failing update checks were last written to the log. Every launch checks once, so a
+    /// Mac that cannot reach the releases would otherwise say so at every boot.
+    static var updateFailureLoggedAt: Date? {
+        get { shared.object(forKey: "updateFailureLoggedAt") as? Date }
+        set { shared.set(newValue, forKey: "updateFailureLoggedAt") }
+    }
+}
+
 // MARK: - Discord
 
 nonisolated extension Preferences {

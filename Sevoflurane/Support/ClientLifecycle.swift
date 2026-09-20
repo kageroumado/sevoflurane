@@ -38,6 +38,24 @@ nonisolated enum ClientLifecycle {
     /// client once went unnoticed. Same contract as ``log``.
     nonisolated(unsafe) static var clientDidExit: @Sendable (Int32) -> Void = { _ in }
 
+    /// When this process last began bringing the bottle's programs down. What exits within
+    /// ``stopWindow`` of it was asked to: the launcher by SIGTERM (status 15), the Discord
+    /// relay by losing its wineserver (status 1).
+    nonisolated(unsafe) static var stopRequestedAt: Date?
+
+    /// A client stop takes about 80 s and a restart up to 150 s.
+    static let stopWindow: TimeInterval = 300
+
+    /// The log line for a program of ours that exited.
+    static func exitLine(
+        of name: String, status: Int32, stopRequestedAt: Date?, now: Date = .now,
+    ) -> String {
+        if let stopRequestedAt, now.timeIntervalSince(stopRequestedAt) < stopWindow {
+            return "\(name) went down with the stop we asked for (status \(status))"
+        }
+        return "\(name) exited (status \(status))"
+    }
+
     enum ClientState: Equatable {
         case up
         /// CDP answers but lists no `SharedJSContext` — the half-wedged client.
@@ -246,6 +264,7 @@ nonisolated enum ClientLifecycle {
     ) async {
         let existing = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
         guard !existing.isEmpty else { return }
+        stopRequestedAt = .now
         log("stopping the client — Windows stays up (pids \(existing))")
         phase("stopping the client")
         let stopBegan = ContinuousClock.now
@@ -291,6 +310,7 @@ nonisolated enum ClientLifecycle {
     ) async {
         let existing = await bottleProcessIDs()
         guard !existing.isEmpty else { return }
+        stopRequestedAt = .now
         log("bottle processes running (pids \(existing)) — shutting them down")
         phase("stopping the client")
         // `steam.exe -shutdown` only means anything to a live client. When the
@@ -395,7 +415,7 @@ nonisolated enum ClientLifecycle {
         process.standardOutput = trail
         process.standardError = trail
         process.terminationHandler = { finished in
-            log("wine launcher exited (status \(finished.terminationStatus))")
+            log(exitLine(of: "wine launcher", status: finished.terminationStatus, stopRequestedAt: stopRequestedAt))
             try? trail.close()
             clientDidExit(finished.terminationStatus)
         }
@@ -692,7 +712,7 @@ nonisolated enum ClientLifecycle {
         process.standardOutput = trail
         process.standardError = trail
         process.terminationHandler = { finished in
-            log("\(name) exited (status \(finished.terminationStatus))")
+            log(exitLine(of: name, status: finished.terminationStatus, stopRequestedAt: stopRequestedAt))
             try? trail.close()
         }
         do {

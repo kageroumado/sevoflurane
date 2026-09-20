@@ -65,9 +65,10 @@ final class ClientSupervisor {
     #if DEBUG
         /// A supervisor bound to no daemon, fixed in one state — the gallery
         /// draws every state side by side and starts no client.
-        convenience init(previewHealth: Health) {
+        convenience init(previewHealth: Health, hostPressure: HostPressure? = nil) {
             self.init(host: SteamWebHost())
             health = previewHealth
+            self.hostPressure = hostPressure
         }
     #endif
 

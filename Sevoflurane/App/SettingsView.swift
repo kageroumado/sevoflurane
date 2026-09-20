@@ -551,14 +551,21 @@ struct SettingsSidebar: View {
         var id: SettingsAnchor { item.id }
     }
 
+    @Environment(\.controlActiveState) private var controlActiveState
+
     var body: some View {
         List(selection: $category) {
             if searchText.isEmpty {
-                // The sidebar tints a row's icon itself, and turns it to the
-                // selection's label color on the selected row.
-                ForEach(SettingsCategory.allCases) { category in
-                    Label(category.title, systemImage: category.icon)
-                        .tag(category)
+                // The sidebar tints a row's icon itself. On the selected row of a key
+                // window the fill is the gold accent, where the system's white label is
+                // hard to read; an inactive window's selection is gray and keeps its own.
+                ForEach(SettingsCategory.allCases) { item in
+                    Label(item.title, systemImage: item.icon)
+                        .foregroundStyle(
+                            item == category && controlActiveState != .inactive
+                                ? AnyShapeStyle(Theme.onAccent) : AnyShapeStyle(.primary),
+                        )
+                        .tag(item)
                 }
             } else {
                 ForEach(matches) { match in

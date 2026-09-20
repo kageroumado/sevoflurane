@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Settings › Games: every game with a file in the settings hierarchy, and
-/// for the selected one the values it sets over the bottle's. A game gets a
-/// file at its first launch, when its executables are recorded, so the list
-/// is the games that have run. Writes take the path `sevo app config` takes.
+/// Settings › Games: the installed games and adopted programs with a file in
+/// the settings hierarchy, and for the selected one the values it sets over
+/// the bottle's. A game gets a file at its first launch, when its executables
+/// are recorded, and keeps it through an uninstall, so its settings are there
+/// when it comes back. Writes take the path `sevo app config` takes.
 struct GamesSettings: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
@@ -50,7 +51,9 @@ struct GamesSettings: View {
 
     /// By name, then id, so two games without a name keep a stable order.
     private func reload() {
+        let installed = SharedGames.installedAppIDs(in: SharedGames.activeSteamapps)
         games = GameConfig.games()
+            .filter { id, _ in installed.contains(id) || AdoptedPrograms.isAdopted(id) }
             .map { id, values in
                 Entry(id: id, name: values.name ?? "App \(id)", exes: values.exes ?? [])
             }
@@ -104,7 +107,18 @@ private struct GameListRow: View {
 private struct GamesPlaceholder: View {
     let hasGames: Bool
 
+    /// In a scroll view, so the toolbar draws the same edge over this side as over the list
+    /// and the form.
     var body: some View {
+        GeometryReader { pane in
+            ScrollView {
+                message.frame(width: pane.size.width, height: pane.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    @ViewBuilder private var message: some View {
         if hasGames {
             ContentUnavailableView(
                 "Choose a game", systemImage: "gamecontroller",
