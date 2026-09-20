@@ -16,7 +16,10 @@ nonisolated enum Sevo {
     /// Contents/Helpers/sevo`), which is what a bug report should name; a copy
     /// built with `swift build` says so.
     static let version: String = {
-        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        // Bundle.main rather than argv[0], which is the bare word `sevo` when the
+        // shell found the symlink on PATH.
+        let executable = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+            .resolvingSymlinksInPath()
         let contents = executable.deletingLastPathComponent().deletingLastPathComponent()
         guard let info = NSDictionary(contentsOf: contents.appending(path: "Info.plist")),
               let version = info["CFBundleShortVersionString"] as? String
