@@ -22,7 +22,7 @@ struct AboutSettings: View {
                 .resizable()
                 .frame(width: 72, height: 72)
             Text("Sevoflurane")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 18, weight: .semibold))
             Text("Version \(Self.version)")
                 .font(.callout)
                 .foregroundStyle(.secondary)

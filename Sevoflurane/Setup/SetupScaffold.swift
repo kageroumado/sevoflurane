@@ -31,7 +31,7 @@ struct SetupPage<Content: View>: View {
                 .frame(height: SetupMetrics.glyphSize + 8, alignment: .bottomLeading)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.title2.bold())
+                .font(.title2.weight(.semibold))
                 .padding(.top, Theme.Space.xl)
             Text(subtitle)
                 .font(.title3)
@@ -61,7 +61,7 @@ struct SetupHero<Picture: View, Content: View>: View {
         VStack(spacing: 0) {
             picture
             Text(title)
-                .font(.title.bold())
+                .font(.title.weight(.semibold))
                 .padding(.top, Theme.Space.lg)
             caption
                 .font(.title3)
@@ -220,7 +220,7 @@ struct SetupPrimaryButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(.body.weight(.semibold))
+                .font(.body.weight(.medium))
                 .foregroundStyle(Theme.onAccent)
                 .padding(.horizontal, Theme.Space.xl)
                 .frame(minHeight: 36)

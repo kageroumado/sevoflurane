@@ -34,7 +34,7 @@ struct SettingHelpPopover: View {
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(help.entries, id: \.name) { entry in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.name).font(.callout.weight(.semibold))
+                    Text(entry.name).font(.callout.weight(.medium))
                     Text(entry.text)
                         .font(.callout)
                         .foregroundStyle(.secondary)

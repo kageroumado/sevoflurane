@@ -32,7 +32,7 @@ struct FooterBar: View {
                     Button("Recovery…") {
                         NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
                     }
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11))
                     .fixedSize()
                     .help("Open Settings › Recovery: restart, repair, or report")
                 }
@@ -210,7 +210,7 @@ private struct StatusChip: View {
                 Text(status.word)
             }
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 11))
         .foregroundStyle(.secondary)
         // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
         // the width its label asks for and the bar is sized to afford it.
@@ -233,7 +233,7 @@ private struct DebugChip: View {
         let debug = DebugModeSwitch.shared
         if debug.isOn {
             Label("Debug", systemImage: "ladybug.fill")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 .fixedSize()

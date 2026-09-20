@@ -304,7 +304,7 @@ struct GraphicsSettings: View {
     private var dx12HostNotice: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Update the engine for DirectX 12")
-                .font(.callout.weight(.semibold))
+                .font(.callout.weight(.medium))
             Text("Choose an engine with D3DMetal in Engine settings. Toolkits you downloaded stay installed.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

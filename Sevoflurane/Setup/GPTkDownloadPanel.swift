@@ -42,7 +42,7 @@ struct GPTkDownloadPanel: View {
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
             Text("Apple's sign-in page appears here")
-                .font(.callout.weight(.semibold))
+                .font(.callout.weight(.medium))
             Text("A real run signs in with your Apple Account and downloads the "
                 + "toolkit. This one loads nothing.")
                 .font(.callout)

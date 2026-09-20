@@ -52,7 +52,7 @@ private struct SettingGroupHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             if let heading {
-                Text(heading).font(.title3.weight(.semibold))
+                Text(heading).font(.title3.weight(.medium))
             }
             Text(title)
         }

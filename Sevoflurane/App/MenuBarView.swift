@@ -358,7 +358,7 @@ private struct GameRow: View {
                 capsuleArt
                 VStack(alignment: .leading, spacing: 1) {
                     Text(game.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12))
                         .lineLimit(1)
                     if let launchDetail {
                         Text(launchDetail)
@@ -378,9 +378,9 @@ private struct GameRow: View {
                     }
                 }
                 Spacer(minLength: Theme.Space.sm)
-                // The row is flush with the popover's own padding, so the
-                // play badge needs its own inset or it rides the edge.
-                trailing.padding(.trailing, Theme.Space.lg)
+                // Flush with the trailing edge the footer's buttons and the
+                // cards above keep: the badge is all a hovered row shows.
+                trailing
             }
             // No horizontal inset: the art, the Open Steam button and the
             // footer chips all start at the popover's own padding, so the
@@ -390,9 +390,6 @@ private struct GameRow: View {
             .contentShape(Theme.innerShape)
         }
         .buttonStyle(PressableStyle())
-        .background(
-            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-        )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
@@ -523,7 +520,7 @@ private struct QuickLaunchSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Quick Launch")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, Theme.Space.xs)
                 .padding(.top, Theme.Space.xs)
@@ -555,7 +552,7 @@ private struct ProgramRow: View {
                 artwork
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12))
                         .lineLimit(1)
                     if !entry.program.exists {
                         Text("moved or deleted")
@@ -616,11 +613,11 @@ private struct AddProgramRow: View {
         } label: {
             HStack(spacing: Theme.Space.md) {
                 Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 27)
                 Text("Add Windows Program…")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12))
                     .lineLimit(1)
                 Spacer(minLength: Theme.Space.sm)
             }
@@ -628,9 +625,6 @@ private struct AddProgramRow: View {
             .contentShape(Theme.innerShape)
         }
         .buttonStyle(PressableStyle())
-        .background(
-            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-        )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
@@ -665,7 +659,7 @@ private struct FriendsRow: View {
                 // say the same number twice, which is the one thing this
                 // popover's rows never do.
                 Text(MenuBarView.friendsLabel(unreadChats: unreadChats))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12))
                     .lineLimit(1)
                 Spacer(minLength: Theme.Space.sm)
             }
@@ -673,9 +667,6 @@ private struct FriendsRow: View {
             .contentShape(Theme.innerShape)
         }
         .buttonStyle(PressableStyle())
-        .background(
-            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-        )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
@@ -734,7 +725,7 @@ private struct OpenSteamButton: View {
         let canOpenSteam = supervisor.health.canOpenSteam
         Button { host.showSteam() } label: {
             Text("Open Steam")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Space.sm)

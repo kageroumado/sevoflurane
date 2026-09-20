@@ -76,7 +76,7 @@ struct NoticeCard<Actions: View>: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(.body, design: .rounded).weight(.semibold))
+                    .font(.system(.body, design: .rounded).weight(.medium))
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
