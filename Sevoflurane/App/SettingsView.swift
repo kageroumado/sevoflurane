@@ -590,7 +590,6 @@ struct SettingsSidebar: View {
             }
         }
         .searchable(text: $searchText, placement: .sidebar, prompt: "Search Settings")
-        .navigationTitle("Settings")
         .frame(minWidth: 190)
     }
 

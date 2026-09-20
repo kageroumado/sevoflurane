@@ -222,7 +222,6 @@ private struct AgentToggleRow: View {
                 ))
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .controlSize(.small)
                 .disabled(row.busy)
             }
             if let error = row.error {
