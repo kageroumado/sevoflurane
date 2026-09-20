@@ -112,7 +112,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
             ),
         )
         let window = NSWindow(contentViewController: controller)
-        window.title = "Settings"
+        titleByPane(window)
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
@@ -138,6 +138,20 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
             }
         }
         return window
+    }
+
+    /// The window is titled by the pane it shows, as a settings window is.
+    /// An AppKit window takes no title from the split view's
+    /// `navigationTitle`, so the selection is observed here.
+    private func titleByPane(_ window: NSWindow) {
+        withObservationTracking {
+            window.title = navigation.category.title
+        } onChange: { [weak self, weak window] in
+            DispatchQueue.main.async {
+                guard let window else { return }
+                self?.titleByPane(window)
+            }
+        }
     }
 
     // MARK: - NSToolbarDelegate
