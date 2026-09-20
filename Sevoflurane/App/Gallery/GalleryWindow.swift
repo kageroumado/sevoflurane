@@ -48,7 +48,9 @@
 
     /// The gallery written to disk as PNG strips, for a visual pass that needs
     /// no one to scroll a window: `SEVO_GALLERY_EXPORT=<directory>` beside
-    /// `SEVO_GALLERY=1`. The process quits when the last strip is written.
+    /// `SEVO_GALLERY=1`, in the dark appearance with
+    /// `SEVO_GALLERY_APPEARANCE=dark`. The process quits when the last strip
+    /// is written.
     @MainActor
     enum GalleryExport {
         private static let width: CGFloat = 1320
@@ -71,6 +73,10 @@
                 styleMask: [.borderless], backing: .buffered, defer: false,
             )
             window.contentView = host
+            if ProcessInfo.processInfo.environment["SEVO_GALLERY_APPEARANCE"] == "dark" {
+                window.appearance = NSAppearance(named: .darkAqua)
+                window.backgroundColor = .windowBackgroundColor
+            }
             window.orderBack(nil)
             self.window = window
             Task(name: "Gallery export") {
