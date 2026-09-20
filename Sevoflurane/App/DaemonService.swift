@@ -94,6 +94,8 @@ enum DaemonService {
             healAlreadyAttempted: healAttempted,
             daemonVersion: current?["version"] as? String,
             appVersion: appVersion,
+            daemonBuild: current?["build"] as? String,
+            bundledDaemonBuild: MachOIdentity.ofFile(bundledDaemon),
         ))
         switch action {
         case .none:
@@ -166,7 +168,7 @@ enum DaemonService {
         staleRestartAttempted = true
         EventLog.enqueue(
             .supervisor,
-            "the background helper is older than the app — restarting it",
+            "the background helper is another build than this app's — restarting it",
         )
         let target = "gui/\(getuid())/\(SupervisorLink.label)"
         _ = await Subprocess.run(
@@ -203,6 +205,11 @@ enum DaemonService {
                 + "Repair it in Settings, or run: sevo daemon repair.",
             needsApproval: false,
         )
+    }
+
+    /// The daemon this app ships, which is the one that should be running.
+    private static var bundledDaemon: URL {
+        Bundle.main.bundleURL.appending(path: "Contents/Library/LaunchAgents/SevofluraneDaemon")
     }
 
     private static var appVersion: String {

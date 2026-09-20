@@ -63,8 +63,12 @@ final class Daemon {
             health,
             isBusyRestarting: supervisor.isBusyRestarting,
             version: Daemon.bundledAppVersion,
+            build: Daemon.build,
         )
     }
+
+    /// This process's own build, read from its image in memory.
+    static let build = MachOIdentity.ofThisProcess
 
     /// The version of the app this daemon was copied into.
     ///

@@ -115,6 +115,9 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
     var isBusyRestarting = false
     /// The daemon's short version, which is the app version it shipped with.
     var version = "0"
+    /// The running daemon's own build (``MachOIdentity``): what tells a
+    /// rebuilt daemon of the same version from the one still in memory.
+    var build: String?
 
     init(
         health: String = "starting",
@@ -122,21 +125,24 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
         needsAttention: Bool = false,
         isBusyRestarting: Bool = false,
         version: String = "0",
+        build: String? = nil,
     ) {
         self.health = health
         self.detail = detail
         self.needsAttention = needsAttention
         self.isBusyRestarting = isBusyRestarting
         self.version = version
+        self.build = build
     }
 
-    init(_ health: SupervisorHealth, isBusyRestarting: Bool, version: String) {
+    init(_ health: SupervisorHealth, isBusyRestarting: Bool, version: String, build: String? = nil) {
         self.init(
             health: health.wireName,
             detail: health.statusText,
             needsAttention: health.needsAttention,
             isBusyRestarting: isBusyRestarting,
             version: version,
+            build: build,
         )
     }
 

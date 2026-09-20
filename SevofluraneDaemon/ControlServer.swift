@@ -333,6 +333,7 @@ final class ControlServer {
         let debug = await app.debugIsOn()
         let body = #"{"app":\#(JSLiteral.string(app.isAttached ? "running" : "not running")),"#
             + #""daemon":"running","version":\#(JSLiteral.string(version)),"#
+            + #""build":\#(JSLiteral.string(Daemon.build ?? "")),"#
             + #""health":\#(JSLiteral.string(supervisor.health.wireName)),"#
             + #""detail":\#(JSLiteral.string(supervisor.statusText)),"#
             + #""debug":\#(debug),"#

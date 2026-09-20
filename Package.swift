@@ -126,6 +126,7 @@ let package = Package(
                 "Sevoflurane/Support/JSONText.swift",
                 "Sevoflurane/Support/KnownFailures.swift",
                 "Sevoflurane/Support/KnownFixes.swift",
+                "Sevoflurane/Support/MachOIdentity.swift",
                 "Sevoflurane/Support/NWJSGames.swift",
                 "Sevoflurane/Support/NWJSRunner.swift",
                 "Sevoflurane/Support/NWJSRuntime.swift",

@@ -46,6 +46,32 @@ struct DaemonHealTests {
     }
 
     @Test
+    func `a helper of the same version and another build is restarted`() {
+        func decide(running: String?, bundled: String?) -> DaemonHeal.Action {
+            DaemonHeal.decide(DaemonHeal.Inputs(
+                isRegistered: true, isAnswering: true, healAlreadyAttempted: false,
+                daemonVersion: "1.11", appVersion: "1.11",
+                daemonBuild: running, bundledDaemonBuild: bundled,
+            ))
+        }
+        #expect(decide(running: "A", bundled: "A") == .none)
+        #expect(decide(running: "A", bundled: "B") == .restartStale)
+        // launchd keeps a daemon across an update; one from before builds
+        // were reported says nothing, and is another build for that.
+        #expect(decide(running: nil, bundled: "B") == .restartStale)
+        // An app that cannot read its own daemon decides by version alone.
+        #expect(decide(running: "A", bundled: nil) == .none)
+    }
+
+    @Test
+    func `this process and its file on disk are one build`() throws {
+        let inMemory = try #require(MachOIdentity.ofThisProcess)
+        let executable = try #require(Bundle.main.executableURL)
+        #expect(MachOIdentity.ofFile(executable) == inMemory)
+        #expect(MachOIdentity.ofFile(URL(fileURLWithPath: "/etc/hosts")) == nil)
+    }
+
+    @Test
     func `a helper newer than the app is left alone`() {
         // A daemon ahead of the app is not this launch's problem to fix; only
         // an older one gets restarted.

@@ -26,6 +26,10 @@ nonisolated enum DaemonHeal {
         var daemonVersion: String?
         /// This app's version.
         var appVersion: String
+        /// The running daemon's build, when it reports one.
+        var daemonBuild: String?
+        /// The build of the daemon inside this app's bundle.
+        var bundledDaemonBuild: String?
     }
 
     enum Action: Equatable {
@@ -37,8 +41,10 @@ nonisolated enum DaemonHeal {
         /// The rebuild already ran and the daemon is still silent — a stuck
         /// state the user is shown, not one the app keeps retrying.
         case surfaceFailure
-        /// Answering, but older than this app: relaunch it so the app is never
-        /// driving a stale helper.
+        /// Answering, but older than this app or another build than the one
+        /// this app ships: relaunch it so the app is never driving a stale
+        /// helper. launchd keeps a daemon's process across an update of the
+        /// bundle it came from.
         case restartStale
     }
 
@@ -64,6 +70,11 @@ nonisolated enum DaemonHeal {
         if inputs.isAnswering {
             if let daemonVersion = inputs.daemonVersion,
                isOlder(daemonVersion, than: inputs.appVersion) {
+                return .restartStale
+            }
+            // A daemon that reports no build predates the report, which makes
+            // it another build than any this app ships.
+            if let bundled = inputs.bundledDaemonBuild, inputs.daemonBuild ?? "" != bundled {
                 return .restartStale
             }
             return .none
