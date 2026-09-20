@@ -98,6 +98,20 @@ nonisolated enum ConfigMaterializer {
         return true
     }
 
+    /// The `sevo` inside the app bundle, whether this code runs in the app or
+    /// in that `sevo` itself.
+    private static var bundledCLI: URL? {
+        let bundle = Bundle.main.bundleURL
+        let candidate: URL? = bundle.pathExtension == "app"
+            ? bundle.appendingPathComponent("Contents/Helpers/sevo")
+            : Bundle.main.executableURL?.resolvingSymlinksInPath()
+        var isDirectory: ObjCBool = false
+        guard let candidate, FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue, FileManager.default.isExecutableFile(atPath: candidate.path)
+        else { return nil }
+        return candidate
+    }
+
     static func debugEnvURL(prefix: URL) -> URL {
         prefix.appendingPathComponent(".sevo/debug.env")
     }
@@ -118,6 +132,10 @@ nonisolated enum ConfigMaterializer {
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
         lines += GameConfig.tuning(bottle: name).value.environment.map { "\($0.key)=\($0.value)" }
+        // What a running game's View menu needs: the engine's name for its
+        // readout, and the `sevo` that stores a choice made there.
+        lines.append("SEVO_ENGINE_NAME=\(Engine.active.recordIdentifier)")
+        if let cli = bundledCLI { lines.append("SEVO_CLI=\(cli.path)") }
         let level = DiagnosticLevel.current
         lines.append("WINEDEBUG=\(level.channels())")
         lines += level.rendererLines
