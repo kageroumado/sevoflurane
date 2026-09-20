@@ -66,4 +66,15 @@ struct RedactionTests {
         let line = "err:seh:NtRaiseException Unhandled exception code c0000005 flags 0 addr 0x140"
         #expect(Redaction.apply(to: line) == line)
     }
+
+    @Test
+    func `a long log is redacted on the lines that carry something and left alone elsewhere`() {
+        let quiet = String(repeating: "0024:trace:seh:dispatch_exception code=c0000005\n", count: 4000)
+        let text = quiet + "loading \(NSHomeDirectory())/Library/x.dll for 76561198000000001\n" + quiet
+        let redacted = Redaction.apply(to: text)
+        #expect(!redacted.contains(NSHomeDirectory()))
+        #expect(!redacted.contains("76561198000000001"))
+        #expect(redacted.hasPrefix(quiet))
+        #expect(redacted.hasSuffix(quiet))
+    }
 }

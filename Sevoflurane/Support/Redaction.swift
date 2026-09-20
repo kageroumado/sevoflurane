@@ -22,6 +22,47 @@ nonisolated enum Redaction {
     /// `text` with this Mac's account, any home directory, the bottle's
     /// Windows user, the machine's name and every Steam id taken out.
     static func apply(to text: String, personas: [String] = []) -> String {
+        guard text.utf8.count > lineWiseThreshold else { return redact(text, personas: personas) }
+        return redactingMatchingLines(of: text, personas: personas)
+    }
+
+    /// Texts past this size are redacted line by line, and only the lines a
+    /// cheap search says can carry something: a bug report's logs run to tens
+    /// of megabytes, nearly all of it lines with nothing to take out, and the
+    /// patterns below cost seconds per megabyte.
+    private static let lineWiseThreshold = 64 * 1024
+
+    private static func redactingMatchingLines(of text: String, personas: [String]) -> String {
+        let needles = ([
+            "sers/",
+            "sers\\",
+            "7656119",
+            NSUserName(),
+            NSFullUserName(),
+            ProcessInfo.processInfo.hostName,
+            Host.current().localizedName ?? "",
+        ] + personas)
+            .filter { $0.count > 2 }
+            .map(NSRegularExpression.escapedPattern(for:))
+        guard let search = try? NSRegularExpression(
+            pattern: needles.joined(separator: "|"), options: [.caseInsensitive],
+        ) else { return redact(text, personas: personas) }
+
+        let source = text as NSString
+        let result = NSMutableString(capacity: source.length)
+        var copied = 0
+        search.enumerateMatches(in: text, range: NSRange(location: 0, length: source.length)) { match, _, _ in
+            guard let match, match.range.location >= copied else { return }
+            let line = source.lineRange(for: match.range)
+            result.append(source.substring(with: NSRange(location: copied, length: line.location - copied)))
+            result.append(redact(source.substring(with: line), personas: personas))
+            copied = NSMaxRange(line)
+        }
+        result.append(source.substring(from: copied))
+        return result as String
+    }
+
+    private static func redact(_ text: String, personas: [String]) -> String {
         var result = text
         for name in personas where name.count > 2 {
             result = result.replacingOccurrences(of: name, with: persona)
