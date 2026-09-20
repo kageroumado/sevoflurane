@@ -535,9 +535,11 @@ nonisolated enum GameConfig {
     /// from the result — the one write path Settings › Engine and `sevo
     /// bottle config` share.
     static func update(bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void) {
-        var values = bottle(name)
+        let before = bottle(name)
+        var values = before
         change(&values)
         setBottle(name, values)
+        noteChanges(from: before, to: values, of: "bottle \(name)")
         ConfigMaterializer.materialize(bottle: name, prefix: prefix)
     }
 
@@ -547,10 +549,81 @@ nonisolated enum GameConfig {
     static func update(
         game appID: Int, bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void,
     ) {
-        var values = game(appID)
+        let before = game(appID)
+        var values = before
         change(&values)
         setGame(appID, values)
+        noteChanges(from: before, to: values, of: "game \(appID)")
         ConfigMaterializer.materialize(bottle: name, prefix: prefix)
+    }
+
+    // MARK: - The trail of changes
+
+    /// Where a changed setting is written down. The app points this at its
+    /// event log; `sevo`, which has none, appends the same line to the file.
+    nonisolated(unsafe) static var logChange: @Sendable (String) -> Void = appendToLogFile
+
+    /// One line per setting that changed: what it was, what it is, and which
+    /// process wrote it and on whose behalf. A setting can be written from
+    /// Settings, from `sevo`, and from a running game's View menu (which runs
+    /// `sevo`), and a value nobody remembers choosing is only explained here.
+    private static func noteChanges(from before: ConfigValues, to after: ConfigValues, of level: String) {
+        let writer = "\(ProcessInfo.processInfo.processName), started by \(parentProcessName())"
+        for change in changes(from: before, to: after) {
+            logChange("settings: \(level) \(change) (\(writer))")
+        }
+    }
+
+    /// Each setting that differs between two levels, as `key was → is`, with
+    /// `inherit` for a level that does not set it.
+    static func changes(from before: ConfigValues, to after: ConfigValues) -> [String] {
+        guard before != after else { return [] }
+        let old = fields(of: before), new = fields(of: after)
+        return Set(old.keys).union(new.keys).sorted().compactMap { key in
+            let was = old[key] ?? "inherit", now = new[key] ?? "inherit"
+            return bookkeepingKeys.contains(key) || was == now ? nil : "\(key) \(was) → \(now)"
+        }
+    }
+
+    /// What a level records about a game rather than sets for it.
+    private static let bookkeepingKeys: Set<String> = ["exes", "name", "detected", "program"]
+
+    private static func fields(of values: ConfigValues) -> [String: String] {
+        guard let data = try? JSONEncoder().encode(values),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        return object.mapValues { value in
+            if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return number.boolValue ? "on" : "off"
+            }
+            guard JSONSerialization.isValidJSONObject(value),
+                  let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+            else { return "\(value)" }
+            return String(decoding: data, as: UTF8.self)
+        }
+    }
+
+    private static func parentProcessName() -> String {
+        var name = [CChar](repeating: 0, count: 256)
+        let length = proc_name(getppid(), &name, UInt32(name.count))
+        return length > 0 ? String(cString: name) : "pid \(getppid())"
+    }
+
+    private static let changeStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
+    private static func appendToLogFile(_ message: String) {
+        // A test run changes settings in scratch folders by the hundred.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        let url = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Sevoflurane.log")
+        let line = "\(changeStamp.string(from: .now)) [app] \(message)\n"
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data(line.utf8))
     }
 
     // MARK: - Executables
