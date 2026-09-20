@@ -1147,8 +1147,13 @@ struct BottleCommand: AsyncParsableCommand {
             }
             if asJSON {
                 print(Sevo.json(rows.map { dependency, installed in
-                    ["id": dependency.id, "name": dependency.name, "required": dependency.required,
-                     "installed": installed, "download": dependency.download]
+                    [
+                        "id": dependency.id,
+                        "name": dependency.name,
+                        "required": dependency.required,
+                        "installed": installed,
+                        "download": dependency.download,
+                    ]
                 }))
                 return
             }
