@@ -1940,6 +1940,17 @@ struct AppCommand: AsyncParsableCommand {
                 }
                 let curve = try ConfigKeyParsing.mouse(value)
                 GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.mouse = curve }
+            case "tuning":
+                guard let value else {
+                    let resolved = GameConfig.tuning(bottle: bottle, game: appid)
+                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    return
+                }
+                let tuning = PerformanceTuning(rawValue: value)
+                guard tuning != nil || value == "inherit" else {
+                    throw ValidationError("tuning is standard, experimental or inherit")
+                }
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.tuning = tuning }
             case "runner":
                 guard let value else {
                     print(values.runner ?? GameRunner.wine)

@@ -115,6 +115,39 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// How the engine's threads wait for each other while a game runs — one
+/// choice that stands for a set of engine switches, so the set can change
+/// with the engine while a game's stored choice keeps its meaning.
+nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
+    /// A waiting thread goes to sleep at once, as Wine does it.
+    case standard
+    /// A waiting thread looks for its wake-up for two microseconds before it
+    /// sleeps, and stops looking where that keeps failing. Hand-offs between
+    /// threads get up to ten times quicker (`bispectral/syncprof`); a game
+    /// that runs more busy threads than the Mac has cores pays for it in
+    /// processor time.
+    case experimental
+
+    var label: String {
+        switch self {
+        case .standard: "Standard"
+        case .experimental: "Experimental"
+        }
+    }
+
+    /// The engine switches this choice stands for. Every key appears in every
+    /// case: a game's file is read over the bottle's, and an absent key would
+    /// leave the bottle's value standing.
+    var environment: [(key: String, value: String)] {
+        switch self {
+        case .standard:
+            [("SEVO_WAIT_SPIN", "0"), ("SEVO_WAIT_SPIN_ADAPT", "0"), ("SEVO_OBJECT_SPIN", "0")]
+        case .experimental:
+            [("SEVO_WAIT_SPIN", "5200"), ("SEVO_WAIT_SPIN_ADAPT", "1"), ("SEVO_OBJECT_SPIN", "5200")]
+        }
+    }
+}
+
 /// What a game holding the cursor for mouse-look is given as mouse movement —
 /// the driver's `LinearMouse` option (dormison winemac.drv).
 nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
@@ -143,6 +176,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// What the game is given as mouse movement while it holds the cursor for
     /// mouse-look.
     var mouse: MouseCurve?
+    /// Experimental: how the engine's threads wait for each other
+    /// (``PerformanceTuning``).
+    var tuning: PerformanceTuning?
     /// The present-time upscaler: one of ``UpscalerChoice`` by raw value, or
     /// the name of a shader package. Stored as text so a file written by a
     /// later version, naming a package this one does not know, still reads;
@@ -238,7 +274,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
             || hud != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
-            || unifiedMemory != nil
+            || unifiedMemory != nil || tuning != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
@@ -338,7 +374,7 @@ nonisolated enum GameConfig {
 
     /// What every level inherits when nothing is set anywhere.
     static let defaults = ConfigValues(
-        windows: .fixed, mouse: .system, upscaler: UpscalerChoice.off.rawValue, filter: .lanczos,
+        windows: .fixed, mouse: .system, tuning: .standard, upscaler: UpscalerChoice.off.rawValue, filter: .lanczos,
         retina: false, emulateModeset: false,
         // AVX on: the bottle has advertised it since the translation defaults
         // were written, and a growing number of titles read the CPUID answer
@@ -404,6 +440,12 @@ nonisolated enum GameConfig {
     /// its id is known, otherwise the bottle's own value.
     static func mouse(bottle: String, game appID: Int? = nil) -> Resolved<MouseCurve> {
         resolve(\.mouse, bottle: bottle, game: appID)
+    }
+
+    /// The performance tuning a launch in this bottle gets: for a specific
+    /// game when its id is known, otherwise the bottle's own value.
+    static func tuning(bottle: String, game appID: Int? = nil) -> Resolved<PerformanceTuning> {
+        resolve(\.tuning, bottle: bottle, game: appID)
     }
 
     /// The upscaler a launch in this bottle gets — an ``UpscalerChoice`` raw

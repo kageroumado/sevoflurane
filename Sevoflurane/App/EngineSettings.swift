@@ -24,6 +24,7 @@ struct EngineSettings: View {
     @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
     @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
     @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
+    @State private var tuning = GameConfig.tuning(bottle: SteamBottle.name).value
     @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
     @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
     @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
@@ -386,6 +387,7 @@ struct EngineSettings: View {
             FinalFilterPicker(selection: filterBinding)
                 .highlightable(.engineFilter, highlighted: highlighted)
             mousePicker
+            tuningPicker
             retinaToggle
             modesetToggle
             bottleSwitch(
@@ -516,6 +518,28 @@ struct EngineSettings: View {
                 }
             },
         )
+    }
+
+    private var tuningPicker: some View {
+        Picker(selection: $tuning) {
+            ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
+                Text(tuning.label).tag(tuning)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Performance tuning")
+                Text("Experimental shortens the waits between a game's threads, which can raise "
+                    + "frame rates and smooth stutter. Applies from a game's next launch.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: tuning) { _, tuning in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.tuning = tuning
+            }
+        }
     }
 
     private var mousePicker: some View {

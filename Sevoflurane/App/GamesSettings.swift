@@ -114,6 +114,7 @@ struct GamesSettings: View {
                         inherited: GameConfig.avx(bottle: SteamBottle.name).value, for: entry,
                     )
                 }
+                settingRow(\.tuning, cost: .env, for: entry) { tuningPicker(for: entry) }
                 settingRow(\.unifiedMemory, cost: .env, for: entry) {
                     inheritableSwitch(
                         "Share memory with the graphics card", key: \.unifiedMemory,
@@ -385,6 +386,22 @@ struct GamesSettings: View {
             }
         } label: {
             Text("Mouse")
+        }
+    }
+
+    private func tuningPicker(for entry: Entry) -> some View {
+        let inherited = GameConfig.tuning(bottle: SteamBottle.name).value
+        let selection = binding(\.tuning, for: entry)
+        return Picker(selection: Binding(
+            get: { selection.wrappedValue?.rawValue ?? "" },
+            set: { selection.wrappedValue = PerformanceTuning(rawValue: $0) },
+        )) {
+            Text("Inherit (\(inherited.label))").tag("")
+            ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
+                Text(tuning.label).tag(tuning.rawValue)
+            }
+        } label: {
+            Text("Performance tuning")
         }
     }
 

@@ -117,6 +117,7 @@ nonisolated enum ConfigMaterializer {
         lines += switches.map { key, resolve in
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
+        lines += GameConfig.tuning(bottle: name).value.environment.map { "\($0.key)=\($0.value)" }
         let level = DiagnosticLevel.current
         lines.append("WINEDEBUG=\(level.channels())")
         lines += level.rendererLines
@@ -179,6 +180,9 @@ nonisolated enum ConfigMaterializer {
         let own = ownSwitches(values)
         lines += switches.compactMap { key, _ in
             own[key].map { "\(key)=\($0 ? "1" : "0")" }
+        }
+        if let tuning = values.tuning {
+            lines += tuning.environment.map { "\($0.key)=\($0.value)" }
         }
         return lines
     }
