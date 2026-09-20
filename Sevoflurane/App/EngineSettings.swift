@@ -17,6 +17,8 @@ struct EngineSettings: View {
     /// The bottle picker's selection. The pane seeds it once the store has
     /// refreshed; the selection section's rows read and write it.
     @State private var bottleChoice = ""
+    /// The bottle level of the settings hierarchy: every game's defaults.
+    @State private var defaults = SettingsStore(scope: .bottle(SteamBottle.name))
 
     var body: some View {
         Form {
@@ -31,7 +33,7 @@ struct EngineSettings: View {
             }
             MsyncSection(graphics: graphics, highlighted: highlighted)
             if !store.stagedEngine.isCrossOver {
-                BottleDefaultsSection(shaders: shaders, highlighted: highlighted)
+                SettingSections(store: defaults, shaders: shaders, highlighted: highlighted)
             }
             DependenciesSection(
                 store: store,
@@ -412,217 +414,6 @@ private struct MsyncSection: View {
                 graphics.update(selection)
             },
         )
-    }
-}
-
-// MARK: - Game defaults
-
-/// The bottle level of the config hierarchy: the defaults every Dormison game
-/// starts from, in the three groups Settings › Games shows for one game. Each
-/// row writes its own key as it changes.
-private struct BottleDefaultsSection: View {
-    let shaders: ShaderStore
-    let highlighted: SettingsAnchor?
-
-    var body: some View {
-        Section {
-            ResizableWindowsRow()
-                .highlightable(.engineWindows, highlighted: highlighted)
-            BottleUpscalerRow(shaders: shaders)
-                .highlightable(.engineUpscaler, highlighted: highlighted)
-            BottleFinalFilterRow()
-                .highlightable(.engineFilter, highlighted: highlighted)
-            RetinaToggle()
-            BottleSwitchRow(copy: .modeset, key: \.emulateModeset, initial: GameConfig.emulateModeset)
-            BottleSwitchRow(copy: .fps, key: \.fps, initial: GameConfig.fps)
-            BottleSwitchRow(copy: .hud, key: \.hud, initial: GameConfig.hud)
-        } header: {
-            Text("Picture")
-        }
-        Section("Mouse") {
-            MouseCurveRow()
-                .highlightable(.engineMouse, highlighted: highlighted)
-            BottleSwitchRow(copy: .cursorConfine, key: \.cursorConfine, initial: GameConfig.cursorConfine)
-        }
-        Section {
-            PerformanceTuningRow()
-            BottleSwitchRow(copy: .unifiedMemory, key: \.unifiedMemory, initial: GameConfig.unifiedMemory)
-            BottleSwitchRow(
-                copy: .largeAddressAware, key: \.largeAddressAware, initial: GameConfig.largeAddressAware,
-            )
-            BottleSwitchRow(copy: .avx, key: \.avx, initial: GameConfig.avx)
-        } header: {
-            Text("Performance and compatibility")
-        } footer: {
-            Text(Engine.active.supportsEnvFiles
-                ? "Defaults for every game on Dormison. Settings › Games changes one game. A change applies at a game's next launch."
-                : "Defaults for every game on Dormison. Settings › Games changes one game. Restart Steam to apply a change.")
-        }
-    }
-}
-
-/// One of the bottle's own switches, written straight into the hierarchy's
-/// bottle level. The same key is a game's to override in Settings › Games.
-private struct BottleSwitchRow: View {
-    let copy: SettingCopy
-    let key: WritableKeyPath<ConfigValues, Bool?>
-    @State private var isOn: Bool
-
-    init(
-        copy: SettingCopy, key: WritableKeyPath<ConfigValues, Bool?>,
-        initial: (String, Int?) -> Resolved<Bool>,
-    ) {
-        self.copy = copy
-        self.key = key
-        _isOn = State(initialValue: initial(SteamBottle.name, nil).value)
-    }
-
-    var body: some View {
-        HelpedRow(caption: copy.caption, help: copy.help) {
-            Toggle(copy.title, isOn: $isOn)
-        }
-        .onChange(of: isOn) { _, new in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0[keyPath: key] = new
-            }
-        }
-    }
-}
-
-/// How the bottle's games treat a resized window.
-private struct ResizableWindowsRow: View {
-    @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
-
-    var body: some View {
-        HelpedRow(caption: SettingCopy.windows.caption, help: SettingCopy.windows.help) {
-            Picker(SettingCopy.windows.title, selection: $windowTreatment) {
-                ForEach(WindowTreatment.allCases, id: \.self) { treatment in
-                    Text(treatment.label).tag(treatment)
-                }
-            }
-        }
-        .onChange(of: windowTreatment) { _, treatment in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.windows = treatment
-            }
-        }
-    }
-}
-
-/// The bottle's upscaler, chosen from the installed shader packages.
-private struct BottleUpscalerRow: View {
-    let shaders: ShaderStore
-
-    @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
-
-    var body: some View {
-        UpscalerPicker(shaders: shaders, selection: upscalerBinding)
-    }
-
-    /// The bottle level has no inherit entry, so a `nil` from the picker
-    /// cannot happen; a value is written when it differs from the one shown.
-    private var upscalerBinding: Binding<String?> {
-        Binding(
-            get: { upscaler },
-            set: { value in
-                guard let value, value != upscaler else { return }
-                upscaler = value
-                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                    $0.upscaler = value
-                }
-            },
-        )
-    }
-}
-
-/// The bottle's final filter, written when it differs from the one shown.
-private struct BottleFinalFilterRow: View {
-    @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
-
-    var body: some View {
-        FinalFilterPicker(selection: filterBinding)
-    }
-
-    private var filterBinding: Binding<FinalFilter?> {
-        Binding(
-            get: { finalFilter },
-            set: { value in
-                guard let value, value != finalFilter else { return }
-                finalFilter = value
-                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                    $0.filter = value
-                }
-            },
-        )
-    }
-}
-
-/// The pointer curve a game gets while it controls the mouse.
-private struct MouseCurveRow: View {
-    @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
-
-    var body: some View {
-        HelpedRow(caption: SettingCopy.mouse.caption, help: SettingCopy.mouse.help) {
-            Picker("Movement", selection: $mouseCurve) {
-                ForEach(MouseCurve.allCases, id: \.self) { curve in
-                    Text(curve.label).tag(curve)
-                }
-            }
-        }
-        .onChange(of: mouseCurve) { _, curve in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.mouse = curve
-            }
-        }
-    }
-}
-
-/// The bottle's thread-wait preset, and its parameters when the preset is
-/// Custom.
-private struct PerformanceTuningRow: View {
-    @State private var tuning = GameConfig.tuning(bottle: SteamBottle.name).value
-    @State private var parameters = GameConfig.bottle(SteamBottle.name).tuningParameters ?? .experimental
-
-    var body: some View {
-        HelpedRow(caption: SettingCopy.tuning.caption, help: SettingCopy.tuning.help) {
-            Picker(SettingCopy.tuning.title, selection: $tuning) {
-                ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
-                    Text(tuning.label).tag(tuning)
-                }
-            }
-        }
-        .onChange(of: tuning) { _, tuning in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.tuning = tuning
-                $0.tuningParameters = tuning == .custom ? parameters : nil
-            }
-        }
-        if tuning == .custom {
-            TuningParametersFields(parameters: $parameters)
-                .onChange(of: parameters) { _, parameters in
-                    GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                        $0.tuningParameters = parameters
-                    }
-                }
-        }
-    }
-}
-
-/// The prefix's HiDPI switch. It has no per-game rung: Wine reads it with
-/// no app key so that the DPI and the monitor sizes are one answer for
-/// every process in the prefix.
-private struct RetinaToggle: View {
-    @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
-
-    var body: some View {
-        HelpedRow(caption: SettingCopy.retina.caption, help: SettingCopy.retina.help) {
-            Toggle(SettingCopy.retina.title, isOn: $retina)
-        }
-        .onChange(of: retina) { _, value in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.retina = value
-            }
-        }
     }
 }
 

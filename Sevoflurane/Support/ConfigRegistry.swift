@@ -60,22 +60,30 @@ nonisolated enum ConfigRegistry {
             ),
         ]
         for values in GameConfig.games().values {
-            for exe in values.exes ?? [] {
-                if let modeset = values.emulateModeset {
-                    entries.append(Entry(
-                        key: #"AppDefaults\\#(exe)\X11 Driver"#,
-                        name: "EmulateModeset", value: flag(modeset),
-                    ))
-                }
-                for (dll, mode) in values.dllOverrides ?? [:] {
-                    entries.append(Entry(
-                        key: #"AppDefaults\\#(exe)\DllOverrides"#,
-                        name: dll, value: mode,
-                    ))
-                }
-            }
+            entries += gameEntries(values)
         }
         return entries.sorted { $0.place < $1.place }
+    }
+
+    /// What one game's own values ask the registry to hold, under each
+    /// executable the game is known to run as.
+    static func gameEntries(_ values: ConfigValues) -> [Entry] {
+        var entries: [Entry] = []
+        for exe in values.exes ?? [] {
+            if let modeset = values.emulateModeset {
+                entries.append(Entry(
+                    key: #"AppDefaults\\#(exe)\X11 Driver"#,
+                    name: "EmulateModeset", value: flag(modeset),
+                ))
+            }
+            for (dll, mode) in values.dllOverrides ?? [:] {
+                entries.append(Entry(
+                    key: #"AppDefaults\\#(exe)\DllOverrides"#,
+                    name: dll, value: mode,
+                ))
+            }
+        }
+        return entries
     }
 
     // MARK: - Applying

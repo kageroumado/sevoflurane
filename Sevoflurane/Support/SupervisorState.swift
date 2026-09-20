@@ -150,7 +150,12 @@ nonisolated extension SupervisorHealth {
     static func evaluate(_ inputs: SupervisorHealthInputs) -> SupervisorHealth {
         if inputs.isPaused { return .paused }
         if case let .gaveUp(reason)? = inputs.fault { return .gaveUp(reason) }
-        if inputs.isRestarting { return .restarting(inputs.restartPhase) }
+        // The ladder is how a client is started as well as restarted: it is a
+        // restart only where there was a client to lose.
+        if inputs.isRestarting {
+            return inputs.hasSeenClientUp
+                ? .restarting(inputs.restartPhase) : .launching(inputs.restartPhase)
+        }
         if inputs.isAwaitingSignIn { return .waitingForSignIn }
         if let phase = inputs.progressPhase {
             return inputs.hasSeenClientUp ? .restarting(phase) : .launching(phase)

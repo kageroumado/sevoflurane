@@ -29,7 +29,7 @@ final class BottleSupervisor {
 
     /// Whether the client has answered at all since the app started. Until it
     /// has, every failure is the first launch still happening.
-    @ObservationIgnored private var hasSeenClientUp = false
+    @ObservationIgnored var hasSeenClientUp = false
 
     private var isPaused = false
 

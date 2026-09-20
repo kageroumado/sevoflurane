@@ -74,40 +74,6 @@ struct UpscalerPicker: View {
     }
 }
 
-/// The final filter picker both levels share. A `nil` selection is the
-/// inherit entry, offered when `inherited` is the level above's value.
-struct FinalFilterPicker: View {
-    var inherited: FinalFilter?
-    @Binding var selection: FinalFilter?
-
-    var body: some View {
-        HelpedRow(caption: caption, help: SettingCopy.scaling) {
-            Picker("Final filter", selection: pickerSelection) {
-                if let inherited {
-                    Text("Inherit").tag("")
-                }
-                ForEach(FinalFilter.allCases, id: \.self) { filter in
-                    Text(filter.label).tag(filter.rawValue)
-                }
-            }
-        }
-    }
-
-    /// One line on the filter in force — the inherited one's when inheriting.
-    private var caption: String {
-        if let selection { return selection.detail }
-        guard let inherited else { return "" }
-        return "Engine's value: \(inherited.label). \(inherited.detail)"
-    }
-
-    private var pickerSelection: Binding<String> {
-        Binding(
-            get: { selection?.rawValue ?? "" },
-            set: { selection = FinalFilter(rawValue: $0) },
-        )
-    }
-}
-
 /// The fetch in flight and the last failure, under whichever control started it.
 struct ShaderFetchStatus: View {
     let shaders: ShaderStore

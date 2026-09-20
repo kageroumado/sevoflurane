@@ -575,7 +575,7 @@ nonisolated enum GameConfig {
 
     /// The game's own value wins, then the bottle's, then the global level's,
     /// then ``defaults``, which sets every key.
-    private static func resolve<Value: Sendable>(
+    static func resolve<Value: Sendable>(
         _ key: KeyPath<ConfigValues, Value?>, bottle: String, game appID: Int?,
     ) -> Resolved<Value> {
         if let appID, let value = game(appID)[keyPath: key] {

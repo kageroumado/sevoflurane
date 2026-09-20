@@ -2,13 +2,24 @@ import Foundation
 
 /// The words Settings › Engine and Settings › Games share for a setting both
 /// can set: its title, the one line under its row, and what its (i) says.
-struct SettingCopy {
+nonisolated struct SettingCopy: Sendable {
     let title: String
     var caption = ""
     var help: SettingHelp?
 }
 
-extension SettingCopy {
+nonisolated extension SettingCopy {
+    /// What each renderer is for, in the words ``Renderer/guidance`` holds:
+    /// the popover Settings › Graphics and a game's Renderer row both open.
+    static func renderers(_ available: [Renderer], footnote: String? = nil) -> SettingHelp {
+        SettingHelp(
+            title: "Choosing a renderer",
+            summary: "These renderers translate Direct3D for macOS. Try another if a game looks wrong.",
+            entries: available.map { .init(name: $0.label, text: $0.guidance) },
+            footnote: footnote,
+        )
+    }
+
     static let windows = SettingCopy(
         title: "Resizable windows",
         caption: "A resizable window scales the game's picture to fit.",
@@ -130,7 +141,7 @@ extension SettingCopy {
                     text: "Everything keeps a readable size, and the upscaler sharpens the result.",
                 ),
             ],
-            footnote: "One setting for the whole bottle. Restart Steam to apply it.",
+            footnote: "One setting for the whole bottle, read by each game as it starts.",
         ),
     )
 

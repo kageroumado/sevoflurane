@@ -200,6 +200,9 @@ extension BottleSupervisor {
                 ? "quit: bottle is down"
                 : "quit: pids \(survivors) survived SIGKILL",
         )
+        // The next client is a start: the one this session saw is gone on
+        // purpose, and the daemon outlives the app that asked.
+        hasSeenClientUp = false
         isQuitting = false
         refreshHealth()
     }

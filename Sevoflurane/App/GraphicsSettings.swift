@@ -14,7 +14,6 @@ struct GraphicsSettings: View {
     let shaders: ShaderStore
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
-    @State private var showingRendererHelp = false
     @State private var removingShaderPackage: ShaderPackages.Package?
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
@@ -45,15 +44,9 @@ struct GraphicsSettings: View {
                                 Text(renderer.label).tag(renderer)
                             }
                         }
-                        Button { showingRendererHelp = true } label: {
-                            Image(systemName: "info.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("What each renderer is for")
-                        .accessibilityLabel("About the renderers")
-                        .popover(isPresented: $showingRendererHelp, arrowEdge: .bottom) {
-                            RendererHelp(available: store.availableRenderers)
-                        }
+                        SettingHelpButton(
+                            help: SettingCopy.renderers(store.availableRenderers, footnote: applyRendererCopy),
+                        )
                     }
                     Text(store.selection.renderer.detail)
                         .font(.callout)
@@ -462,35 +455,5 @@ private struct RendererVersionRow: View {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let source = panel.url else { return }
         store.addRendererVersion(component, from: source)
-    }
-}
-
-/// What the five renderers are, in the order someone would try them.
-private struct RendererHelp: View {
-    let available: [Renderer]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Choosing a renderer")
-                .font(.headline)
-            Text("These renderers translate Direct3D for macOS. Try another if a game looks wrong.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(available, id: \.self) { renderer in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(renderer.label).font(.callout.weight(.semibold))
-                    Text(renderer.guidance)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Text(applyRendererCopy)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(16)
-        .frame(width: 380)
     }
 }

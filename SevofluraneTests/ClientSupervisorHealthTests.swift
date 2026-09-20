@@ -38,7 +38,7 @@ struct ClientSupervisorHealthTests {
 
     @Test
     func `a crash loop stands until something clears it`() {
-        var inputs = Inputs(fault: .gaveUp("client keeps dying"))
+        var inputs = Inputs(hasSeenClientUp: true, fault: .gaveUp("client keeps dying"))
         #expect(health(inputs) == .gaveUp("client keeps dying"))
         // A restart in flight does not hide it; clearing the fault is what
         // ends it, which is why the ladder clears it by name.
@@ -106,6 +106,14 @@ struct ClientSupervisorHealthTests {
         #expect(health(Inputs()) == .launching(
             "Steam is starting. A first launch takes a minute.",
         ))
+    }
+
+    @Test
+    func `the ladder starting the first client reads as a launch, and as a restart once one has been up`() {
+        var inputs = Inputs(isRestarting: true, restartPhase: "Starting Windows and Steam")
+        #expect(health(inputs) == .launching("Starting Windows and Steam"))
+        inputs.hasSeenClientUp = true
+        #expect(health(inputs) == .restarting("Starting Windows and Steam"))
     }
 }
 
