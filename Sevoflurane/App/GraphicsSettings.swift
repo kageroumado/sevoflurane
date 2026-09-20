@@ -223,7 +223,7 @@ struct GraphicsSettings: View {
         } header: {
             Text("Renderer versions")
         } footer: {
-            Text("\(applyRendererCopy) Reset restores the engine's own version.")
+            Text("A change applies the same way. Reset restores the engine's own version.")
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }

@@ -562,14 +562,11 @@ struct SettingsSidebar: View {
     var body: some View {
         List(selection: $category) {
             if searchText.isEmpty {
+                // The sidebar tints a row's icon itself, and turns it to the
+                // selection's label color on the selected row.
                 ForEach(SettingsCategory.allCases) { category in
-                    Label {
-                        Text(category.title)
-                    } icon: {
-                        Image(systemName: category.icon)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .tag(category)
+                    Label(category.title, systemImage: category.icon)
+                        .tag(category)
                 }
             } else {
                 ForEach(matches) { match in

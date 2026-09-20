@@ -27,7 +27,17 @@ struct AboutSettings: View {
         }
     }
 
+    /// A scroll view like every other pane: the split view hangs its title
+    /// bar and its sidebar on the detail's scroll view, and a detail without
+    /// one leaves the sidebar's rows above the top of the window.
     var body: some View {
+        ScrollView {
+            card
+                .containerRelativeFrame(.vertical, alignment: .center)
+        }
+    }
+
+    private var card: some View {
         VStack(spacing: 10) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
@@ -73,7 +83,7 @@ struct AboutSettings: View {
         }
         .highlightable(.aboutVersion, highlighted: highlighted)
         .padding(.vertical, 28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity)
     }
 
     private static var version: String {
