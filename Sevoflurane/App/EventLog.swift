@@ -10,9 +10,19 @@ import os
 final class EventLog {
     static let shared = EventLog()
 
-    /// Where Console.app and testers look.
+    /// Where Console.app and testers look. A process that stands in for the
+    /// app (the test host, the gallery, a simulated boot) writes beside it, so
+    /// the log a bug report carries holds only what the app really did.
     nonisolated static let fileURL = FileManager.default.homeDirectoryForCurrentUser
-        .appending(path: "Library/Logs/Sevoflurane.log")
+        .appending(path: isSimulatedProcess ? "Library/Logs/Sevoflurane-simulated.log" : "Library/Logs/Sevoflurane.log")
+
+    private nonisolated static var isSimulatedProcess: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return TestHost.isHosting
+            || environment["SEVO_GALLERY"] == "1"
+            || environment["SEVO_DEMO"] != nil
+            || environment["SEVO_SETUP_DRY_RUN"] != nil
+    }
 
     enum Category: String {
         case client

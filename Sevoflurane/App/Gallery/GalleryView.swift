@@ -23,167 +23,167 @@
         /// Every tile at its full height, outside any scroll view: what the
         /// window scrolls and what ``GalleryExport`` writes to disk.
         var tiles: some View {
-                VStack(alignment: .leading, spacing: Theme.Space.xl) {
-                    Text("Sevoflurane UI Gallery")
-                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+            VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                Text("Sevoflurane UI Gallery")
+                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
 
-                    section("Menu bar popover") {
-                        ForEach(Fixtures.popovers, id: \.label) { fixture in
-                            tile(fixture.label) {
-                                MenuBarView(
-                                    host: fixture.host,
-                                    supervisor: fixture.supervisor,
-                                    notifications: fixture.notifications,
-                                    quickLaunch: Fixtures.quickLaunch,
-                                )
-                                .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
-                                .background(.background, in: Theme.cardShape)
-                            }
-                        }
-                    }
-
-                    section("Settings — the whole window", minimum: 740) {
-                        tile("Window") {
-                            SettingsView(
-                                provisioner: Fixtures.settings,
-                                graphics: Fixtures.graphics,
-                                storage: Fixtures.storage,
-                                engine: Fixtures.engine,
-                                shaders: Fixtures.shaders,
-                                compatibility: Fixtures.compatibility,
+                section("Menu bar popover") {
+                    ForEach(Fixtures.popovers, id: \.label) { fixture in
+                        tile(fixture.label) {
+                            MenuBarView(
+                                host: fixture.host,
+                                supervisor: fixture.supervisor,
+                                notifications: fixture.notifications,
+                                quickLaunch: Fixtures.quickLaunch,
                             )
-                            .frame(width: 800, height: 560)
-                        }
-                    }
-
-                    section("Settings — General") {
-                        tile("Open at login, the CLI, uninstall") {
-                            GeneralSettings(
-                                provisioner: Fixtures.settings,
-                                store: Fixtures.storage,
-                                highlighted: nil,
-                            )
-                            .frame(width: 460, height: 620)
-                        }
-                    }
-
-                    section("Settings — Graphics", minimum: 480) {
-                        ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
-                            tile(pane.scenario.title) {
-                                // Tall enough for the toolkit section below
-                                // the fold: a tile that clips the state it
-                                // exists to show is worse than no tile.
-                                GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
-                                    .frame(width: 460, height: 620)
-                            }
-                        }
-                    }
-
-                    section("Settings — Storage", minimum: 480) {
-                        ForEach(Fixtures.storagePanes, id: \.scenario) { pane in
-                            tile(pane.scenario.title) {
-                                StorageSettings(store: pane.store, highlighted: nil)
-                                    .frame(width: 460, height: 620)
-                            }
-                        }
-                    }
-
-                    // Each engine tile draws the whole pane, because the
-                    // sections answer one question together — the switch at
-                    // the top is what makes the ones below it apply to a
-                    // different bottle.
-                    section("Settings — Engine", minimum: 500) {
-                        ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
-                            tile(pane.scenario.title) {
-                                EngineSettings(
-                                    store: pane.store,
-                                    graphics: Fixtures.graphics,
-                                    shaders: Fixtures.shaders,
-                                    compatibility: Fixtures.compatibility,
-                                    provisioner: pane.provisioner,
-                                    highlighted: nil,
-                                )
-                                .frame(width: 480, height: 820)
-                            }
-                        }
-                    }
-
-                    section("Settings — Engine, dependencies", minimum: 500) {
-                        ForEach(Fixtures.compatibilityPanes, id: \.scenario) { pane in
-                            tile(pane.scenario.title) {
-                                EngineSettings(
-                                    store: Fixtures.engine,
-                                    graphics: Fixtures.graphics,
-                                    shaders: Fixtures.shaders,
-                                    compatibility: pane.store,
-                                    provisioner: Fixtures.settings,
-                                    highlighted: nil,
-                                )
-                                .frame(width: 480, height: 820)
-                            }
-                        }
-                    }
-
-                    section("Settings — Recovery", minimum: 500) {
-                        ForEach(Fixtures.repairs, id: \.label) { pane in
-                            tile(pane.label) {
-                                RecoverySettings(
-                                    provisioner: pane.provisioner,
-                                    supervisor: ClientSupervisor(previewHealth: .healthy),
-                                    highlighted: nil,
-                                )
-                                .frame(width: 480, height: 820)
-                            }
-                        }
-                    }
-
-                    // The detail column of the real window: 800 less the sidebar.
-                    section("Settings — Games, Diagnostics", minimum: 620) {
-                        tile("Games, this Mac's own list") {
-                            GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
-                                .frame(width: 610, height: 1100)
-                        }
-                        tile("Diagnostics") {
-                            DiagnosticsSettings(highlighted: nil)
-                                .frame(width: 610, height: 1100)
-                        }
-                    }
-
-                    section("Reports window", minimum: 800) {
-                        tile("This Mac's own runs") {
-                            ReportView()
-                                .frame(width: 780, height: 520)
-                        }
-                    }
-
-                    section("Settings — About") {
-                        tile("About") {
-                            AboutSettings(highlighted: nil)
-                                .frame(width: 420, height: 230)
-                        }
-                    }
-
-                    // The wizard is a fixed-size window and is shown at that
-                    // size: a scaled-down tile is a picture of the UI
-                    // rather than the UI, and this gallery exists to be
-                    // clicked through.
-                    section("First-run assistant — every step", minimum: 700) {
-                        ForEach(Fixtures.wizardSteps, id: \.step) { entry in
-                            tile(entry.step.title) {
-                                wizard(entry.provisioner, startingAt: entry.step)
-                            }
-                        }
-                    }
-
-                    section("First-run assistant — every machine", minimum: 700) {
-                        ForEach(Fixtures.wizards, id: \.scenario) { entry in
-                            tile(entry.scenario.title) {
-                                wizard(entry.provisioner, startingAt: .welcome)
-                            }
+                            .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
+                            .background(.background, in: Theme.cardShape)
                         }
                     }
                 }
-                .padding(Theme.Space.xl)
+
+                section("Settings — the whole window", minimum: 740) {
+                    tile("Window") {
+                        SettingsView(
+                            provisioner: Fixtures.settings,
+                            graphics: Fixtures.graphics,
+                            storage: Fixtures.storage,
+                            engine: Fixtures.engine,
+                            shaders: Fixtures.shaders,
+                            compatibility: Fixtures.compatibility,
+                        )
+                        .frame(width: 800, height: 560)
+                    }
+                }
+
+                section("Settings — General") {
+                    tile("Open at login, the CLI, uninstall") {
+                        GeneralSettings(
+                            provisioner: Fixtures.settings,
+                            store: Fixtures.storage,
+                            highlighted: nil,
+                        )
+                        .frame(width: 460, height: 620)
+                    }
+                }
+
+                section("Settings — Graphics", minimum: 480) {
+                    ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
+                        tile(pane.scenario.title) {
+                            // Tall enough for the toolkit section below
+                            // the fold: a tile that clips the state it
+                            // exists to show is worse than no tile.
+                            GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
+                                .frame(width: 460, height: 620)
+                        }
+                    }
+                }
+
+                section("Settings — Storage", minimum: 480) {
+                    ForEach(Fixtures.storagePanes, id: \.scenario) { pane in
+                        tile(pane.scenario.title) {
+                            StorageSettings(store: pane.store, highlighted: nil)
+                                .frame(width: 460, height: 620)
+                        }
+                    }
+                }
+
+                // Each engine tile draws the whole pane, because the
+                // sections answer one question together — the switch at
+                // the top is what makes the ones below it apply to a
+                // different bottle.
+                section("Settings — Engine", minimum: 500) {
+                    ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
+                        tile(pane.scenario.title) {
+                            EngineSettings(
+                                store: pane.store,
+                                graphics: Fixtures.graphics,
+                                shaders: Fixtures.shaders,
+                                compatibility: Fixtures.compatibility,
+                                provisioner: pane.provisioner,
+                                highlighted: nil,
+                            )
+                            .frame(width: 480, height: 820)
+                        }
+                    }
+                }
+
+                section("Settings — Engine, dependencies", minimum: 500) {
+                    ForEach(Fixtures.compatibilityPanes, id: \.scenario) { pane in
+                        tile(pane.scenario.title) {
+                            EngineSettings(
+                                store: Fixtures.engine,
+                                graphics: Fixtures.graphics,
+                                shaders: Fixtures.shaders,
+                                compatibility: pane.store,
+                                provisioner: Fixtures.settings,
+                                highlighted: nil,
+                            )
+                            .frame(width: 480, height: 820)
+                        }
+                    }
+                }
+
+                section("Settings — Recovery", minimum: 500) {
+                    ForEach(Fixtures.repairs, id: \.label) { pane in
+                        tile(pane.label) {
+                            RecoverySettings(
+                                provisioner: pane.provisioner,
+                                supervisor: ClientSupervisor(previewHealth: .healthy),
+                                highlighted: nil,
+                            )
+                            .frame(width: 480, height: 820)
+                        }
+                    }
+                }
+
+                // The detail column of the real window: 800 less the sidebar.
+                section("Settings — Games, Diagnostics", minimum: 620) {
+                    tile("Games, this Mac's own list") {
+                        GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
+                            .frame(width: 610, height: 1100)
+                    }
+                    tile("Diagnostics") {
+                        DiagnosticsSettings(highlighted: nil)
+                            .frame(width: 610, height: 1100)
+                    }
+                }
+
+                section("Reports window", minimum: 800) {
+                    tile("This Mac's own runs") {
+                        ReportView()
+                            .frame(width: 780, height: 520)
+                    }
+                }
+
+                section("Settings — About") {
+                    tile("About") {
+                        AboutSettings(highlighted: nil)
+                            .frame(width: 420, height: 230)
+                    }
+                }
+
+                // The wizard is a fixed-size window and is shown at that
+                // size: a scaled-down tile is a picture of the UI
+                // rather than the UI, and this gallery exists to be
+                // clicked through.
+                section("First-run assistant — every step", minimum: 700) {
+                    ForEach(Fixtures.wizardSteps, id: \.step) { entry in
+                        tile(entry.step.title) {
+                            wizard(entry.provisioner, startingAt: entry.step)
+                        }
+                    }
+                }
+
+                section("First-run assistant — every machine", minimum: 700) {
+                    ForEach(Fixtures.wizards, id: \.scenario) { entry in
+                        tile(entry.scenario.title) {
+                            wizard(entry.provisioner, startingAt: .welcome)
+                        }
+                    }
+                }
+            }
+            .padding(Theme.Space.xl)
         }
 
         private func wizard(
