@@ -209,7 +209,7 @@ sevo bottle list|config <key> [value]|deps [install ID]
 sevo shaders list|install|remove
 sevo storage [--games]
 sevo nwjs
-sevo downloads status|pause|resume|throttle KBPS
+sevo downloads status [--json]|pause|resume|throttle KBPS
 sevo run PROGRAM [ARGS]
 sevo debug on|off|status
 sevo eval 'JS'

@@ -2492,13 +2492,38 @@ struct DownloadsCommand: AsyncParsableCommand {
 
     struct Status: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            commandName: "status", abstract: "One DownloadOverview snapshot (JSON).",
+            commandName: "status", abstract: "What Steam is downloading now, in a line; --json for Steam's whole snapshot.",
         )
+
+        @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
             try await handlingFailures {
-                try await print(SteamOps.downloadsStatus())
+                let snapshot = try await SteamOps.downloadsStatus()
+                print(asJSON ? snapshot : Self.summary(of: snapshot))
             }
+        }
+
+        /// Steam's overview as a sentence: the app, the state, how far along
+        /// and how fast. The snapshot itself carries two minutes of history.
+        static func summary(of snapshot: String) -> String {
+            guard let overview = (try? JSONSerialization.jsonObject(with: Data(snapshot.utf8))) as? [String: Any]
+            else { return "no answer from Steam's download queue" }
+            let paused = overview["paused"] as? Bool == true
+            guard let appID = overview["update_appid"] as? Int, appID != 0 else {
+                return paused ? "downloads paused, nothing queued" : "nothing downloading"
+            }
+            let state = (overview["update_state"] as? String ?? "").lowercased()
+            let percent = overview["overall_percent_complete"] as? Int ?? 0
+            let rate = overview["update_network_bytes_per_second"] as? Int64 ?? 0
+            var line = "app \(appID): \(state.isEmpty ? "queued" : state), \(percent)%"
+            if rate > 0 {
+                line += " at \(ByteCountFormatter.string(fromByteCount: rate, countStyle: .file))/s"
+            }
+            if let seconds = overview["overall_estimated_time_remaining_sec"] as? Int, seconds > 0 {
+                line += ", about \(seconds / 60 + 1) min left"
+            }
+            return paused ? line + " (paused)" : line
         }
     }
 
