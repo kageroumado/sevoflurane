@@ -97,6 +97,12 @@ struct GamesSettings: View {
                         for: entry,
                     )
                 }
+                settingRow(\.fps, cost: .env, for: entry) {
+                    inheritableSwitch(
+                        "Frame rate counter", key: \.fps,
+                        inherited: GameConfig.fps(bottle: SteamBottle.name).value, for: entry,
+                    )
+                }
                 settingRow(\.hud, cost: .env, for: entry) {
                     inheritableSwitch(
                         "Performance HUD", key: \.hud,
@@ -124,7 +130,7 @@ struct GamesSettings: View {
                         for: entry,
                     )
                 }
-                settingRow(\.largeAddressAware, cost: .recorded, for: entry) {
+                settingRow(\.largeAddressAware, cost: .env, for: entry) {
                     inheritableSwitch(
                         "Full address space (32-bit games)", key: \.largeAddressAware,
                         inherited: GameConfig.largeAddressAware(bottle: SteamBottle.name).value,

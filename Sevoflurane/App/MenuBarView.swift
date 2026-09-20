@@ -178,7 +178,7 @@ struct MenuBarView: View {
         if let card = healthCardModel {
             NoticeCard(
                 symbol: card.symbol, tint: card.tint, isSpinning: isRestarting,
-                title: card.title, detail: card.detail,
+                title: card.title, detail: card.detail.sentenceCased,
             ) {
                 if let action = card.action {
                     Button(action.label, action: action.run)

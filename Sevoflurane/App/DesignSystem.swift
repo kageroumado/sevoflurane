@@ -79,3 +79,11 @@ struct NoticeCard<Actions: View>: View {
         .glassCard()
     }
 }
+
+extension String {
+    /// The supervisor's status phrases are written for a log line; a card
+    /// shows them as a sentence.
+    var sentenceCased: String {
+        prefix(1).uppercased() + dropFirst()
+    }
+}

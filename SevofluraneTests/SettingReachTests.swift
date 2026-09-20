@@ -7,7 +7,7 @@ import Testing
 struct SettingReachTests {
     @Test
     func `each cost says what it is, in one line`() {
-        for reach in [SettingReach.nextLaunch, .clientRestart, .recorded] {
+        for reach in [SettingReach.nextLaunch, .clientRestart] {
             #expect(!reach.label.isEmpty)
             #expect(!reach.detail.isEmpty)
         }

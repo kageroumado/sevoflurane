@@ -212,16 +212,17 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// (`MTL_HUD_ENABLED`) — frame time, GPU time and memory, from the driver
     /// itself rather than from anything the game exposes.
     var hud: Bool?
+    /// Whether the engine draws its frame-rate counter at the top right of the
+    /// game's window (`SEVO_FPS`): one number, from the engine's own count of
+    /// presented frames, whichever renderer draws them.
+    var fps: Bool?
     /// Whether a 32-bit game gets the whole 4 GB of address space rather than
     /// the low 2 GB.
     ///
-    /// The engine reads the image's own `IMAGE_FILE_LARGE_ADDRESS_AWARE` bit
-    /// and nothing else: in dormison's `virtual_set_large_address_space`
-    /// (`ntdll/unix/virtual.c`) an image without the bit keeps
-    /// `user_space_wow_limit = limit_2g - 1`. Honoring this key is a `getenv`
-    /// there that takes `SEVO_LARGE_ADDRESS_AWARE` as the bit — Proton's
-    /// `PROTON_FORCE_LARGE_ADDRESS_AWARE`. Until that patch lands the
-    /// variable is written and read by nobody, and Settings says so.
+    /// An image carrying `IMAGE_FILE_LARGE_ADDRESS_AWARE` gets it either way;
+    /// `SEVO_LARGE_ADDRESS_AWARE=1` gives it to one without the flag, in
+    /// dormison's `virtual_set_large_address_space` (`ntdll/unix/virtual.c`),
+    /// as Proton's `PROTON_FORCE_LARGE_ADDRESS_AWARE` does.
     var largeAddressAware: Bool?
     /// Whether Rosetta tells the game the CPU has AVX and AVX2
     /// (`ROSETTA_ADVERTISE_AVX`). Rosetta translates those instructions
@@ -273,7 +274,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
-            || hud != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
+            || hud != nil || fps != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
             || unifiedMemory != nil || tuning != nil
     }
 
@@ -297,14 +298,11 @@ nonisolated enum SettingReach: Equatable, Sendable {
     /// The client itself carries the value, so it restarts around the next
     /// launch.
     case clientRestart
-    /// Written down and waiting on an engine that reads it.
-    case recorded
 
     var label: String {
         switch self {
         case .nextLaunch: "Next launch"
         case .clientRestart: "Steam restart"
-        case .recorded: "Recorded"
         }
     }
 
@@ -316,8 +314,6 @@ nonisolated enum SettingReach: Equatable, Sendable {
         case .clientRestart:
             "the Steam client carries this value, so it restarts (about 30 s) "
                 + "around the next launch"
-        case .recorded:
-            "stored for this game; the built-in engine does not read it yet"
         }
     }
 
@@ -380,7 +376,7 @@ nonisolated enum GameConfig {
         // were written, and a growing number of titles read the CPUID answer
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
-        hud: false, largeAddressAware: true, avx: true, unifiedMemory: false,
+        hud: false, fps: false, largeAddressAware: true, avx: true, unifiedMemory: false,
         cursorConfine: false,
     )
 
@@ -484,6 +480,10 @@ nonisolated enum GameConfig {
     /// is known and for the bottle otherwise.
     static func hud(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.hud, bottle: bottle, game: appID)
+    }
+
+    static func fps(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.fps, bottle: bottle, game: appID)
     }
 
     static func largeAddressAware(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {

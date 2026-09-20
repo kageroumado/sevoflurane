@@ -859,6 +859,7 @@ enum ConfigSwitches {
 
     static let all: [Entry] = [
         Entry(key: "hud", path: \.hud),
+        Entry(key: "fps", path: \.fps),
         Entry(key: "cursor-confine", path: \.cursorConfine),
         Entry(key: "avx", path: \.avx),
         Entry(key: "large-address-aware", path: \.largeAddressAware),
@@ -877,6 +878,7 @@ enum ConfigSwitches {
     static func resolved(_ key: String, bottle: String, game appID: Int?) -> Resolved<Bool>? {
         switch key {
         case "hud": GameConfig.hud(bottle: bottle, game: appID)
+        case "fps": GameConfig.fps(bottle: bottle, game: appID)
         case "cursor-confine": GameConfig.cursorConfine(bottle: bottle, game: appID)
         case "avx": GameConfig.avx(bottle: bottle, game: appID)
         case "large-address-aware": GameConfig.largeAddressAware(bottle: bottle, game: appID)
@@ -886,9 +888,7 @@ enum ConfigSwitches {
 
     /// What a switch costs beyond the next launch, where it costs anything.
     static func caveat(_ key: String) -> String? {
-        key == "large-address-aware"
-            ? "recorded; the engine still takes a game's address space from the game's own exe"
-            : nil
+        key == "large-address-aware" ? "needs Dormison r14 or later" : nil
     }
 }
 

@@ -28,6 +28,7 @@ struct EngineSettings: View {
     @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
     @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
     @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
+    @State private var fps = GameConfig.fps(bottle: SteamBottle.name).value
     @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
     @State private var unifiedMemory = GameConfig.unifiedMemory(bottle: SteamBottle.name).value
     @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
@@ -370,6 +371,12 @@ struct EngineSettings: View {
             retinaToggle
             modesetToggle
             bottleSwitch(
+                "Frame rate counter",
+                detail: "One number at the top right of the game's window. "
+                    + "View › Show Frame Rate switches it while a game runs.",
+                value: $fps, key: \.fps,
+            )
+            bottleSwitch(
                 "Performance HUD", detail: "Metal draws frame time, GPU time and memory "
                     + "over the game.", value: $hud, key: \.hud,
             )
@@ -398,9 +405,8 @@ struct EngineSettings: View {
             )
             bottleSwitch(
                 "Full address space for 32-bit games",
-                detail: "Recorded, and waiting on an engine that reads it: the built-in "
-                    + "engine still takes a game's address space from the game's own "
-                    + "executable.",
+                detail: "A 32-bit game gets 4 GB of address space even when its "
+                    + "executable asks for 2. Turn it off for a game that crashes with it.",
                 value: $largeAddressAware, key: \.largeAddressAware,
             )
         } footer: {

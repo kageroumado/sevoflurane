@@ -146,12 +146,9 @@ nonisolated enum ConfigMaterializer {
     /// the resolver behind each one. The bottle writes all of them and a game
     /// writes the ones it sets, both ways: the bottle's file is read first, so
     /// an absent key leaves its value standing.
-    ///
-    /// `SEVO_LARGE_ADDRESS_AWARE` is the one nothing reads yet — the engine
-    /// takes a 32-bit image's address space from the image's own characteristic
-    /// (``ConfigValues/largeAddressAware``).
     private static let switches: [(key: String, resolve: @Sendable (String, Int?) -> Bool)] = [
         ("MTL_HUD_ENABLED", { GameConfig.hud(bottle: $0, game: $1).value }),
+        ("SEVO_FPS", { GameConfig.fps(bottle: $0, game: $1).value }),
         ("SEVO_LARGE_ADDRESS_AWARE", { GameConfig.largeAddressAware(bottle: $0, game: $1).value }),
         ("ROSETTA_ADVERTISE_AVX", { GameConfig.avx(bottle: $0, game: $1).value }),
         ("SEVO_CURSOR_CONFINE", { GameConfig.cursorConfine(bottle: $0, game: $1).value }),
@@ -162,6 +159,7 @@ nonisolated enum ConfigMaterializer {
     private static func ownSwitches(_ values: ConfigValues) -> [String: Bool] {
         var own: [String: Bool] = [:]
         own["MTL_HUD_ENABLED"] = values.hud
+        own["SEVO_FPS"] = values.fps
         own["SEVO_LARGE_ADDRESS_AWARE"] = values.largeAddressAware
         own["ROSETTA_ADVERTISE_AVX"] = values.avx
         own["SEVO_CURSOR_CONFINE"] = values.cursorConfine
