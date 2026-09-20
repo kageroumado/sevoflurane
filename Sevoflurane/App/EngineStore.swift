@@ -219,7 +219,7 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .crossover,
                 label: "CrossOver \(crossover.version)",
-                detail: crossover.licensed ? "licensed" : "trial",
+                detail: crossover.licensed ? "Licensed" : "Trial",
             ))
         }
         if let preview = detection.usableCrossOverPreview {

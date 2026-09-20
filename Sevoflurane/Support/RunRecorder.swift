@@ -196,12 +196,21 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     /// The level-0 summary: one line naming the game, what it ran on, how
     /// long it lasted and how it ended.
     var summary: String {
-        var parts = [name.map { "\($0) (\(appid))" } ?? "app \(appid)", engine, renderer]
+        ([name.map { "\($0) (\(appid))" } ?? "app \(appid)"] + outcomeParts).joined(separator: " · ")
+    }
+
+    /// The summary without the game's name, for a list whose rows are titled with it.
+    var outcome: String {
+        outcomeParts.joined(separator: " · ")
+    }
+
+    private var outcomeParts: [String] {
+        var parts = [engine, renderer]
         if tuning == PerformanceTuning.experimental.rawValue { parts.append("experimental tuning") }
         if let upscaler, upscaler != UpscalerChoice.off.rawValue { parts.append("upscaler \(upscaler)") }
         if let durationSeconds { parts.append(Self.duration(durationSeconds)) }
         parts.append(exitSummary)
-        return parts.joined(separator: " · ")
+        return parts
     }
 
     private var exitSummary: String {

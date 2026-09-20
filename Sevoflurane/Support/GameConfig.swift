@@ -26,9 +26,9 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .off: "Never"
-        case .fixed: "Games that run in a window"
-        case .window: "Games that run in a window or full screen"
-        case .all: "Every game window"
+        case .fixed: "Windowed games"
+        case .window: "Windowed and full-screen games"
+        case .all: "Every window"
         }
     }
 

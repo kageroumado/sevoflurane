@@ -38,3 +38,44 @@ struct ProminentFillStyle: ButtonStyle {
         }
     }
 }
+
+/// A notice in the popover: what happened, one line on it, and what can be
+/// done, under the words. Buttons beside the words leave a column a word wide
+/// in a popover 320 points across.
+struct NoticeCard<Actions: View>: View {
+    let symbol: String
+    var tint: Color?
+    /// Turns the symbol while the thing it reports is under way.
+    var isSpinning = false
+    let title: String
+    let detail: String
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.md) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint ?? Color.secondary)
+                .symbolEffect(.rotate, options: .repeat(.continuous), isActive: isSpinning)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: Theme.Space.sm) {
+                    actions
+                }
+                .controlSize(.small)
+                .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(Theme.Space.md)
+        .glassCard()
+    }
+}

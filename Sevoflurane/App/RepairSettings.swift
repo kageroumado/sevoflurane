@@ -41,8 +41,8 @@ struct RecoverySettings: View {
             case .forceQuitSteam:
                 "Steam closes at once and reopens clean. A running game keeps playing."
             case .restartWindows:
-                "The whole fake Windows shuts down to a fresh Wine server, then Steam "
-                    + "reopens. Slower than restarting Steam alone."
+                "Every Windows process in the bottle stops, Wine's server included, then "
+                    + "Steam reopens. Slower than restarting Steam alone."
             case .clearShaderCache:
                 "Steam stops, its shader cache is trashed, and it reopens and rebuilds "
                     + "the shaders. Your games and saves stay."
@@ -213,8 +213,8 @@ struct RecoverySettings: View {
             shaderCompilerRow
             actionRow(
                 "Restart Windows",
-                detail: "Brings the whole fake Windows down — Wine server included — and "
-                    + "starts it fresh. Try this when restarting Steam hasn't helped.",
+                detail: "Stops every Windows process in the bottle, Wine's server included, and "
+                    + "starts again. For when restarting Steam has not helped.",
                 button: "Restart", disabled: supervisor == nil,
             ) { pendingReset = .restartWindows }
                 .highlightable(.recoveryWineRestart, highlighted: highlighted)
@@ -241,7 +241,7 @@ struct RecoverySettings: View {
             Text("Bottle & Wine")
         } footer: {
             Text("Repair reinstalls the Windows components Steam needs and leaves your "
-                + "games and saves alone. A full bottle reset is not offered here.")
+                + "games and saves alone.")
         }
     }
 
@@ -272,7 +272,7 @@ struct RecoverySettings: View {
         if let error = row.error { return error }
         return row.installed
             ? "Installed. Reinstall it if the doctor still reports it missing."
-            : "Missing — a game that needs it won't start."
+            : "Missing. A game that needs it will not start."
     }
 
     // MARK: - Diagnostics

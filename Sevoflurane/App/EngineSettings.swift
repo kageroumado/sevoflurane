@@ -300,20 +300,12 @@ struct EngineSettings: View {
     /// for the tools below on a bottle CrossOver manages.
     private var crossoverCard: some View {
         Section {
-            HStack(spacing: Theme.Space.md) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
-                Text("\(store.stagedEngine.description) manages this bottle's dependencies and Windows settings too.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-                Button("Open \(store.stagedEngine == .crossoverPreview ? "Preview" : "CrossOver")") {
-                    if let app = store.stagedEngine.crossoverApp {
-                        NSWorkspace.shared.openApplication(
-                            at: app, configuration: .init(),
-                        )
+            CaptionedRow(caption: "Its dependencies and Windows settings are CrossOver's to change.") {
+                LabeledContent("\(store.stagedEngine.description) manages this bottle") {
+                    Button("Open \(store.stagedEngine == .crossoverPreview ? "Preview" : "CrossOver")") {
+                        if let app = store.stagedEngine.crossoverApp {
+                            NSWorkspace.shared.openApplication(at: app, configuration: .init())
+                        }
                     }
                 }
             }
@@ -357,7 +349,7 @@ struct EngineSettings: View {
     private var windowsSection: some View {
         Section {
             CaptionedRow(caption: "A resizable window scales the picture to fit. The game keeps drawing at its own size.") {
-                Picker("Make game windows resizable", selection: $windowTreatment) {
+                Picker("Resizable windows", selection: $windowTreatment) {
                     ForEach(WindowTreatment.allCases, id: \.self) { treatment in
                         Text(treatment.label).tag(treatment)
                     }
@@ -394,7 +386,7 @@ struct EngineSettings: View {
                 value: $avx, key: \.avx,
             )
             bottleSwitch(
-                "Share memory with the graphics card (experimental)",
+                "Unified memory (experimental)",
                 detail: "Your Mac has one pool of memory that the processor and the "
                     + "graphics chip both use. Windows games expect a separate graphics "
                     + "card, so they copy everything twice — once to hand it over, once "

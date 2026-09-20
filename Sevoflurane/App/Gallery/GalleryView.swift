@@ -52,7 +52,7 @@
                                 shaders: Fixtures.shaders,
                                 compatibility: Fixtures.compatibility,
                             )
-                            .frame(width: 720, height: 460)
+                            .frame(width: 800, height: 560)
                         }
                     }
 
@@ -134,6 +134,25 @@
                                 )
                                 .frame(width: 480, height: 820)
                             }
+                        }
+                    }
+
+                    // The detail column of the real window: 800 less the sidebar.
+                    section("Settings — Games, Diagnostics", minimum: 620) {
+                        tile("Games, this Mac's own list") {
+                            GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
+                                .frame(width: 610, height: 1100)
+                        }
+                        tile("Diagnostics") {
+                            DiagnosticsSettings(highlighted: nil)
+                                .frame(width: 610, height: 1100)
+                        }
+                    }
+
+                    section("Reports window", minimum: 800) {
+                        tile("This Mac's own runs") {
+                            ReportView()
+                                .frame(width: 780, height: 520)
                         }
                     }
 

@@ -252,7 +252,7 @@ struct ReportView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(run.name ?? "App \(run.appid)")
                     .font(.body)
-                Text(run.summary)
+                Text(run.outcome)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

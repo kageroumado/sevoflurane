@@ -124,8 +124,8 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         window.toolbar = toolbar
         // A hosting controller sizes itself from the view, and the view sizes
         // itself from the window — so somebody has to name a number first.
-        window.setContentSize(NSSize(width: 720, height: 460))
-        window.minSize = NSSize(width: 660, height: 420)
+        window.setContentSize(NSSize(width: 800, height: 560))
+        window.minSize = NSSize(width: 720, height: 460)
         window.isMovableByWindowBackground = true
         window.isRestorable = false
         NotificationCenter.default.addObserver(

@@ -220,7 +220,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
                 SearchableSetting(
                     id: .engineWindows,
-                    title: "Make game windows resizable",
+                    title: "Resizable windows",
                     keywords: [
                         "window", "resizable", "resize", "move", "fullscreen",
                         "full screen", "fixed", "scale",

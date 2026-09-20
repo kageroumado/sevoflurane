@@ -176,40 +176,20 @@ struct MenuBarView: View {
 
     @ViewBuilder private var healthCard: some View {
         if let card = healthCardModel {
-            HStack(spacing: Theme.Space.md) {
-                Image(systemName: card.symbol)
-                    .font(.system(size: 18))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(card.tint ?? Color.secondary)
-                    .symbolEffect(
-                        .rotate,
-                        options: .repeat(.continuous),
-                        isActive: isRestarting,
-                    )
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(card.title)
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(card.detail)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if let alternative = card.alternative {
-                    Button(alternative.label, action: alternative.run)
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                }
+            NoticeCard(
+                symbol: card.symbol, tint: card.tint, isSpinning: isRestarting,
+                title: card.title, detail: card.detail,
+            ) {
                 if let action = card.action {
                     Button(action.label, action: action.run)
                         .buttonStyle(.glassProminent)
-                        .controlSize(.small)
                         .foregroundStyle(Theme.onAccent)
                 }
+                if let alternative = card.alternative {
+                    Button(alternative.label, action: alternative.run)
+                        .buttonStyle(.glass)
+                }
             }
-            .padding(Theme.Space.md)
-            .glassCard()
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }
@@ -615,26 +595,14 @@ struct MenuBarView: View {
     @ViewBuilder private var notificationPermissionCard: some View {
         if notifications.hasUnaskedNotifications || notifications.authorization == .denied {
             let denied = notifications.authorization == .denied
-            HStack(spacing: Theme.Space.md) {
-                Image(systemName: "bell.badge")
-                    .font(.system(size: 18))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(denied ? "Notifications are off" : "Steam has something to tell you")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(
-                        denied
-                            ? "Turn Sevoflurane on in System Settings to see messages here."
-                            : "Let Sevoflurane post Steam's messages to Notification Center.",
-                    )
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Button(denied ? "Open Settings" : "Turn On") {
+            NoticeCard(
+                symbol: "bell.badge",
+                title: denied ? "Notifications are off" : "Steam has a message",
+                detail: denied
+                    ? "Allow Sevoflurane in System Settings to see Steam's messages."
+                    : "Sevoflurane can post Steam's messages to Notification Center.",
+            ) {
+                Button(denied ? "Open System Settings" : "Allow Notifications") {
                     if denied {
                         notifications.openSystemSettings()
                     } else {
@@ -644,11 +612,8 @@ struct MenuBarView: View {
                     }
                 }
                 .buttonStyle(.glassProminent)
-                .controlSize(.small)
                 .foregroundStyle(Theme.onAccent)
             }
-            .padding(Theme.Space.md)
-            .glassCard()
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }

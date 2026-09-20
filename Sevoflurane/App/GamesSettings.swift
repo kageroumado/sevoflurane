@@ -9,6 +9,8 @@ struct GamesSettings: View {
     let highlighted: SettingsAnchor?
     @State private var games: [Entry] = []
     @State private var selected: Int?
+    /// Opens on the first game, for the gallery, which has nobody to pick one.
+    var selectsFirstGame = false
     /// The selected game's own values, the form's model.
     @State private var values = ConfigValues.empty
     @State private var newOverrideDLL = ""
@@ -49,7 +51,7 @@ struct GamesSettings: View {
             }
         }
         .listStyle(.sidebar)
-        .frame(width: 220)
+        .frame(width: 200)
     }
 
     @ViewBuilder private var placeholder: some View {
@@ -117,7 +119,7 @@ struct GamesSettings: View {
                 settingRow(\.tuning, cost: .env, for: entry) { tuningPicker(for: entry) }
                 settingRow(\.unifiedMemory, cost: .env, for: entry) {
                     inheritableSwitch(
-                        "Share memory with the graphics card", key: \.unifiedMemory,
+                        "Unified memory", key: \.unifiedMemory,
                         inherited: GameConfig.unifiedMemory(bottle: SteamBottle.name).value,
                         for: entry,
                     )
@@ -296,8 +298,9 @@ struct GamesSettings: View {
 
     private func addOverrideRow(for entry: Entry) -> some View {
         HStack {
-            TextField("DLL name", text: $newOverrideDLL)
+            TextField("DLL name", text: $newOverrideDLL, prompt: Text("d3dcompiler_47"))
                 .textFieldStyle(.roundedBorder)
+                .labelsHidden()
             Picker("", selection: $newOverrideMode) {
                 ForEach(Self.overrideModes, id: \.mode) { choice in
                     Text(choice.label).tag(choice.mode)
@@ -369,7 +372,7 @@ struct GamesSettings: View {
                 Text(treatment.label).tag(treatment.rawValue)
             }
         } label: {
-            Text("Make game windows resizable")
+            Text("Resizable windows")
         }
     }
 
@@ -434,6 +437,7 @@ struct GamesSettings: View {
         if let selected, !games.contains(where: { $0.id == selected }) {
             self.selected = nil
         }
+        if selectsFirstGame, selected == nil { selected = games.first?.id }
         select(selected)
     }
 }

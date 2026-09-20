@@ -65,6 +65,7 @@ struct AboutSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 380)
             if let diagnosticsError {
                 Text(diagnosticsError).font(.caption).foregroundStyle(.red)
