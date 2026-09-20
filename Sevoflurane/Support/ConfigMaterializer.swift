@@ -31,12 +31,13 @@ nonisolated enum ConfigMaterializer {
         // Mode, and a game nobody has configured wants those too.
         for (appID, values) in GameConfig.games() where values.hasSettings || values.exes != nil {
             var lines = gameLines(appID, values)
+            var loaderLine: String?
             if let title = values.name, !values.runsNatively,
                let loader = GameLaunchers.materialize(
                    appID: appID, title: title, engine: Engine.active,
                ) {
                 launchers.insert(appID)
-                lines.append("SEVO_LOADER=\(loader.path)")
+                loaderLine = "SEVO_LOADER=\(loader.path)"
             }
             if values.runsNatively, let info = values.nwjs,
                let environment = NWJSRunner.environment(
@@ -48,7 +49,10 @@ nonisolated enum ConfigMaterializer {
             for exe in values.exes ?? [] {
                 let file = "\(exe).env"
                 wanted.insert(file)
-                write(lines, to: appsDir.appendingPathComponent(file))
+                // The loader is the game's Dock identity, which a companion
+                // program never takes (``GameConfig/isCompanionExecutable(_:)``).
+                let identity = GameConfig.isCompanionExecutable(exe) ? [] : [loaderLine].compactMap(\.self)
+                write(lines + identity, to: appsDir.appendingPathComponent(file))
             }
         }
         // Debug mode's file folds the bottle's wine-debug channels in, so a

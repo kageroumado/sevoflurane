@@ -527,6 +527,23 @@ nonisolated enum GameConfig {
         setGame(appID, values)
     }
 
+    /// Whether `exe` is a program a game starts beside itself rather than the
+    /// game: an embedded browser's processes, a crash reporter, a
+    /// redistributable's installer. It takes the game's settings and never the
+    /// game's Dock identity — Unreal's `EpicWebHelper.exe` alone is three to
+    /// five processes, some of them living for under a second.
+    static func isCompanionExecutable(_ exe: String) -> Bool {
+        let name = exe.lowercased()
+        return companionExecutables.contains(name)
+            || name.hasSuffix("webhelper.exe") || name.hasSuffix("subprocess.exe")
+            || name.hasPrefix("unitycrashhandler") || name.hasPrefix("vc_redist")
+            || name.hasPrefix("vcredist") || name.hasPrefix("ndp4")
+    }
+
+    private static let companionExecutables: Set<String> = [
+        "crashreportclient.exe", "crashpad_handler.exe", "dxsetup.exe", "dotnetfx35setup.exe",
+    ]
+
     // MARK: - Files
 
     private static var globalURL: URL { root.appendingPathComponent("global.json") }
