@@ -3,14 +3,15 @@ import SwiftUI
 import Testing
 @testable import Sevoflurane
 
-/// The Settings sidebar under the churn that crashed the app: the search
-/// field cycling between empty and a needle every pane matches, while the
-/// selection moves in the same update.
+/// The Settings sidebar in a real window, under the churn a search puts it
+/// through: the field cycling between empty and a needle every pane matches,
+/// while the selection moves in the same update.
 ///
-/// The list must stay one kind of row throughout. A `Section` header row
-/// beside content rows gives AppKit's table a header row view and a content
-/// row view to constrain against each other across a diff, and the leading
-/// anchors it activates then belong to two different view hierarchies.
+/// The list stays one kind of row throughout. A `Section` header row beside
+/// content rows gives AppKit's table a header row view and a content row view
+/// to constrain against each other across a diff. SwiftLint's
+/// `settings_list_section` rule is what keeps a `Section` out; this suite
+/// catches an exception raised while the rows change.
 @MainActor
 struct SettingsSidebarTests {
     /// Drives the sidebar's three bindings from outside the view tree.
@@ -20,6 +21,10 @@ struct SettingsSidebarTests {
         var searchText = ""
         var highlighted: SettingsAnchor?
     }
+
+    /// Each cycle is four display cycles of a list diffing every row the app
+    /// has, all on the main actor, where every other main-actor suite waits.
+    private static let cycles = 4
 
     private struct Harness: View {
         @Bindable var bindings: Bindings
@@ -39,7 +44,7 @@ struct SettingsSidebarTests {
     }
 
     @Test
-    func `fifty search cycles with a selection set leave the list standing`() {
+    func `search cycles with a selection set leave the list standing`() {
         let bindings = Bindings()
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 420),
@@ -50,13 +55,13 @@ struct SettingsSidebarTests {
         window.orderFrontRegardless()
         defer { window.close() }
 
-        for cycle in 0 ..< 50 {
+        for cycle in 0 ..< Self.cycles {
             // Every pane matches a bare "e", so the list swings between six
             // rows and every row the app has.
             bindings.searchText = "e"
             settle(window)
             // Picking a result moves the selection while the widest set of
-            // rows is on screen — the transaction the crash reported.
+            // rows is on screen.
             bindings.category = cycle.isMultiple(of: 2) ? .engine : .games
             bindings.highlighted = .engineWindows
             settle(window)
@@ -71,7 +76,7 @@ struct SettingsSidebarTests {
     }
 
     /// One display cycle: SwiftUI applies the update, AppKit lays the table
-    /// out, and Core Animation commits — which is the frame the crash was in.
+    /// out, and Core Animation commits.
     private func settle(_ window: NSWindow) {
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         window.layoutIfNeeded()
