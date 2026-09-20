@@ -597,19 +597,27 @@ final class SteamWebHost {
     /// the launch rather than the game exiting on its own.
     var onGameActionError: ((_ appID: Int, _ detail: String) -> Void)?
 
+    /// The launch task the log last carried, as `appid:task`.
+    private var lastLoggedLaunchTask: String?
+
     /// One `__gameAction` event from the context page's registrations
     /// (``gameActionScript``). The trail also lands in the log, so a slow
     /// launch explains itself after the fact.
     func noteGameAction(phase: String, appID: String, task: String) {
         switch phase {
         case "start":
+            lastLoggedLaunchTask = nil
             EventLog.shared.log(.client, "launch \(appID): \(task.isEmpty ? "begun" : task)")
             let id = Int(appID) ?? 0
             setLaunch(GameLaunch(appID: id, detail: "Preparing…"), clearAfter: 180)
             if id != 0 { onGameLaunchStart?(id) }
         case "task":
             guard !task.isEmpty, task != "None" else { return }
-            EventLog.shared.log(.client, "launch \(appID): \(task)")
+            // Steam reports the same task several times a second while it runs.
+            if lastLoggedLaunchTask != "\(appID):\(task)" {
+                lastLoggedLaunchTask = "\(appID):\(task)"
+                EventLog.shared.log(.client, "launch \(appID): \(task)")
+            }
             let id = Int(appID) ?? activeLaunch?.appID ?? 0
             setLaunch(GameLaunch(appID: id, detail: Self.launchTaskText(task)), clearAfter: 180)
         case "end":

@@ -104,7 +104,15 @@ nonisolated enum Doctor {
             ))
         }
 
-        let bottleNames = d.bottles.map(\.name).joined(separator: ", ")
+        // Two engines can each hold a bottle of one name; the folder tells them apart.
+        let duplicated = Set(d.bottles.map(\.name).filter { name in d.bottles.count { $0.name == name } > 1 })
+        let bottleNames = d.bottles
+            .map { bottle in
+                duplicated.contains(bottle.name)
+                    ? "\(bottle.name) (\((bottle.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath))"
+                    : bottle.name
+            }
+            .joined(separator: ", ")
         checks.append(Check(
             id: "bottles", ok: !d.bottles.isEmpty,
             label: "bottles: \(bottleNames.isEmpty ? "none" : bottleNames)",
