@@ -196,12 +196,37 @@ struct SetupFooter<Secondary: View, Primary: View>: View {
                     .buttonBorderShape(.capsule)
                 Spacer(minLength: Theme.Space.md)
                 primary
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
+                    .buttonStyle(SetupPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.extraLarge)
             .padding(SetupMetrics.footerPadding)
+        }
+    }
+}
+
+/// The one primary action of a step: the accent in a capsule, with the dark
+/// label the accent needs. The system's prominent style drops its fill in a
+/// window that is not key, which leaves that dark label on a dark button.
+struct SetupPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Face(configuration: configuration)
+    }
+
+    private struct Face: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Theme.onAccent)
+                .padding(.horizontal, Theme.Space.xl)
+                .frame(minHeight: 36)
+                .background(Color.accentColor.opacity(isHovered ? 1 : 0.92), in: Capsule())
+                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+                .onHover { isHovered = $0 }
         }
     }
 }

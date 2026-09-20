@@ -141,7 +141,6 @@ struct SetupView: View {
             secondaryActions
         } primary: {
             primaryAction
-                .foregroundStyle(Theme.onAccent)
         }
     }
 
