@@ -98,8 +98,6 @@ final class StallWatch {
             Double(DispatchTime.now().uptimeNanoseconds) / 1e9
         }
         var log: @Sendable (String) -> Void = { EventLog.enqueue(.app, $0) }
-
-        init() {}
     }
 
     /// Whether a game may be killed when nothing can say whether it presented.

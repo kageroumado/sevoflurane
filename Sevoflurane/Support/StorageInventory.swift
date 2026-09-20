@@ -42,8 +42,11 @@ nonisolated enum StorageInventory {
     /// Everything worth showing, unsized. Sizing is the slow part and is done
     /// separately so the list can be drawn immediately.
     static func entries() -> [Entry] {
-        let support = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support/Sevoflurane")
+        bottleEntries() + supportEntries()
+    }
+
+    /// What lives inside the bottle: Steam, its games, and the Windows drive.
+    private static func bottleEntries() -> [Entry] {
         let bottle = SteamBottle.root
         let steam = SteamBottle.steamRoot
         return [
@@ -94,6 +97,14 @@ nonisolated enum StorageInventory {
                 bytes: -1,
                 removal: nil,
             ),
+        ]
+    }
+
+    /// What Sevoflurane keeps for itself: engines, graphics layers, and logs.
+    private static func supportEntries() -> [Entry] {
+        let support = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Application Support/Sevoflurane")
+        return [
             Entry(
                 id: "engines",
                 name: "Dormison engines",

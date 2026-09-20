@@ -133,14 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before anything can start a bottle process, so the client this
         // launch brings up is not the killed session's verbose one.
         DebugModeSwitch.shared.clearStaleFile()
-        // The defaults key exists because `open` (the only launch path that
-        // gets a real Aqua session) strips the environment.
-        if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
-            ?? Preferences.shared.string(forKey: "engineManifestOverride"),
-            let url = URL(string: manifest) {
-            EngineManifest.overrideURL = url
-            EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
-        }
+        applyEngineManifestOverride()
         PerfProbe.poi.emitEvent("Launch")
         installLaunchHooks()
         // A game outlives the app that launched it, so a launch armed by a
@@ -150,6 +143,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runRecorder.reattach()
         startRunMeter()
         startStallWatch()
+        installMenuBar()
+        #if DEBUG
+            if bootedOnFixtures() { return }
+        #endif
+        // A person opened the app — the Dock, the Finder, `open` — rather
+        // than the system opening it as a login item or to handle a file.
+        // The window is what they came for, so it comes up as soon as the
+        // client is healthy; a login-item launch stays a menu-bar app.
+        if note.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
+            EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
+            supervisor.showLibraryWhenHealthy()
+        }
+        startServices()
+    }
+
+    /// Points the engine manifest at the URL a developer named, from the
+    /// environment or from the defaults key.
+    private func applyEngineManifestOverride() {
+        // The defaults key exists because `open` (the only launch path that
+        // gets a real Aqua session) strips the environment.
+        if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
+            ?? Preferences.shared.string(forKey: "engineManifestOverride"),
+            let url = URL(string: manifest) {
+            EngineManifest.overrideURL = url
+            EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
+        }
+    }
+
+    /// The app's own menus, its notifications, and the menu bar popover.
+    private func installMenuBar() {
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
@@ -163,14 +186,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarPopover = MenuBarPopover(
             host: host, supervisor: supervisor, notifications: notifications,
         )
-        #if DEBUG
+    }
+
+    #if DEBUG
+        /// Whether this launch asked for the gallery or the demo, both of
+        /// which run on fixtures and start nothing else.
+        private func bootedOnFixtures() -> Bool {
             if GalleryWindow.wasRequestedAtLaunch {
                 // Nothing else starts: the gallery is fixtures all the way
                 // down, and a client coming up behind it would only compete
                 // for the ports.
                 isSimulatedBoot = true
                 galleryWindow.show()
-                return
+                return true
             }
             if DemoMode.isOn {
                 // No control server (a live instance may own the port), no
@@ -184,17 +212,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 startDemo()
                 if CrashPrompt.wasRequestedAtLaunch { CrashPrompt.shared.offerFixture() }
-                return
+                return true
             }
-        #endif
-        // A person opened the app — the Dock, the Finder, `open` — rather
-        // than the system opening it as a login item or to handle a file.
-        // The window is what they came for, so it comes up as soon as the
-        // client is healthy; a login-item launch stays a menu-bar app.
-        if note.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
-            EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
-            supervisor.showLibraryWhenHealthy()
+            return false
         }
+    #endif
+
+    /// Takes the daemon link port, stocks the shader store, and then either
+    /// walks the user through setup or brings the client up.
+    private func startServices() {
         // Up before provisioning gates so the daemon can reach the page even
         // while the setup wizard is waiting for the user.
         Task(name: "Take the daemon link port") {

@@ -278,7 +278,11 @@ private struct RecentGames: View {
     let supervisor: ClientSupervisor
 
     var body: some View {
-        let _ = trackGraphicsStorage(host: host, supervisor: supervisor)
+        trackGraphicsStorage(host: host, supervisor: supervisor)
+        return content
+    }
+
+    @ViewBuilder private var content: some View {
         if host.recentGames.isEmpty {
             // A popover with nothing between the header and the button reads
             // as a failure; a library with no installed games is not one.
@@ -428,7 +432,7 @@ private struct GameRow: View {
 
     private var capsuleArt: some View {
         AsyncImage(url: game.artURL) { image in
-            image.resizable().aspectRatio(contentMode: .fill)
+            image.resizable().scaledToFill()
         } placeholder: {
             Rectangle().fill(.quaternary.opacity(0.5))
         }
@@ -465,7 +469,11 @@ private struct StagedRendererCaption: View {
     let supervisor: ClientSupervisor
 
     var body: some View {
-        let _ = trackGraphicsStorage(host: host, supervisor: supervisor)
+        trackGraphicsStorage(host: host, supervisor: supervisor)
+        return content
+    }
+
+    @ViewBuilder private var content: some View {
         if !host.recentGames.isEmpty, let booted = BottleGraphics.bootedSelection() {
             let version = booted.renderer == .d3dmetal
                 ? (booted.d3dMetalVersion.map { " \($0)" } ?? "")

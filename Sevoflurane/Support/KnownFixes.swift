@@ -196,9 +196,7 @@ nonisolated enum KnownFixes {
                 if let retina = fix.values.retina { merged.retina = retina }
                 if let modeset = fix.values.emulateModeset { merged.emulateModeset = modeset }
                 if let overrides = fix.values.dllOverrides {
-                    merged.dllOverrides = (merged.dllOverrides ?? [:]).merging(overrides) {
-                        _, new in new
-                    }
+                    merged.dllOverrides = (merged.dllOverrides ?? [:]).merging(overrides) { _, new in new }
                 }
                 if let hud = fix.values.hud { merged.hud = hud }
                 if let large = fix.values.largeAddressAware { merged.largeAddressAware = large }

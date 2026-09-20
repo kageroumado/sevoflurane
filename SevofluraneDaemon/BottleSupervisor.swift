@@ -41,12 +41,12 @@ final class BottleSupervisor {
     /// is adopting — the cycle probes and reports but launches nothing.
     /// Without it, quitting Sevoflurane would bring the bottle down and the
     /// next probe would put it straight back up.
-    private var wantsClient = false
-    @ObservationIgnored private var restartPhase = ""
+    var wantsClient = false
+    @ObservationIgnored var restartPhase = ""
     @ObservationIgnored private var progressPhase: String?
     @ObservationIgnored private var lastProbe: ClientLifecycle.ClientState = .down
     @ObservationIgnored private var pageServicesUp = false
-    @ObservationIgnored private var fault: Fault?
+    @ObservationIgnored var fault: Fault?
     @ObservationIgnored private var boot: BootPhase = .idle
     /// When the current boot phase began: `.awaitingClient` and
     /// `.awaitingServices` have budgets of their own, so each starts a clock.
@@ -69,7 +69,7 @@ final class BottleSupervisor {
 
     /// Re-derives health from the inputs as they stand. Every input change
     /// ends here, so no path can leave a stale state behind it.
-    private func refreshHealth() {
+    func refreshHealth() {
         let derived = Health.evaluate(healthInputs)
         guard health != derived else { return }
         health = derived
@@ -100,8 +100,8 @@ final class BottleSupervisor {
 
     /// The app's half of supervision: the page, Steam's popups, and the
     /// bridge's socket to the client.
-    private let app: AppLink
-    private let log = EventLog.shared
+    let app: AppLink
+    let log = EventLog.shared
 
     /// Whether the machine is waiting on a human to sign in: the page holds
     /// Steam's login popup, or the client's own boot showed its sign-in
@@ -120,7 +120,7 @@ final class BottleSupervisor {
     }
 
     @ObservationIgnored private var loop: Task<Void, Never>?
-    @ObservationIgnored private var clientFailures = 0
+    @ObservationIgnored var clientFailures = 0
     /// When the current run of consecutive client-probe failures began; the
     /// restart decision needs a duration, not just a count.
     @ObservationIgnored private var firstClientFailure = Date.distantPast
@@ -131,30 +131,30 @@ final class BottleSupervisor {
     /// Reloads given to the current page outage. Two that changed nothing
     /// mean the web view itself is what is wedged, and the third try rebuilds it.
     @ObservationIgnored private var pageReloads = 0
-    @ObservationIgnored private var isRestarting = false
+    @ObservationIgnored var isRestarting = false
     /// A restart asked for while the ladder is mid-flight, with its reason.
     /// The running ladder stops waiting on the client it is bringing up and
     /// runs again from the top, so an engine switch that lands during a boot
     /// boots the new engine instead of finishing the old one first.
-    @ObservationIgnored private var restartAgain: String?
-    @ObservationIgnored private var recentRestarts: [Date] = []
+    @ObservationIgnored var restartAgain: String?
+    @ObservationIgnored var recentRestarts: [Date] = []
     /// The restart whose boot has not been classified yet. A boot that ends
     /// at the login window is a user who signed out, not a crash, so its
     /// entry comes back out of the crash-loop budget.
-    @ObservationIgnored private var pendingRestart: Date?
+    @ObservationIgnored var pendingRestart: Date?
     /// The client's own sign-in window, seen by the boot's popup sweep two
     /// seconds after launch — long before the page has adopted anything. It
     /// ends the wait for Steam's services, which a signed-out client never
     /// initializes, and hands over to the page's own login popup as soon as
     /// that exists.
-    @ObservationIgnored private var clientShowsLoginWindow = false
+    @ObservationIgnored var clientShowsLoginWindow = false
     @ObservationIgnored private var lastPageRecovery = Date.distantPast
     /// Whether the current services outage already got its one page reload —
     /// the next escalation is a client restart.
     @ObservationIgnored private var serviceRecoveryTried = false
     /// Whether the current crash loop already got its one hygiene pass
     /// (htmlcache purge + headless client repair) — the next stop is `gaveUp`.
-    @ObservationIgnored private var hygieneTried = false
+    @ObservationIgnored var hygieneTried = false
     /// Whether the login window was up on a previous cycle. Its going away
     /// with the services still down is the "the user just signed in" edge,
     /// which needs the page reloaded rather than waited out.
@@ -188,10 +188,10 @@ final class BottleSupervisor {
     @ObservationIgnored private var wineWindowsVisible = false
     /// When the current client launch began, for the boot-audit line at the
     /// healthy transition.
-    @ObservationIgnored private var clientStartedAt: ContinuousClock.Instant?
+    @ObservationIgnored var clientStartedAt: ContinuousClock.Instant?
     /// Set once quit teardown begins; blocks every path that could relaunch
     /// the client mid-teardown.
-    @ObservationIgnored private var isQuitting = false
+    @ObservationIgnored var isQuitting = false
 
     init(app: AppLink) {
         self.app = app
@@ -331,7 +331,7 @@ final class BottleSupervisor {
     /// a health value: a health value is overwritten by whatever assigns
     /// health next, and a pause that a restart ladder can silently undo is
     /// not a pause.
-    private func setPaused(_ paused: Bool, note: String) {
+    func setPaused(_ paused: Bool, note: String) {
         guard isPaused != paused else { return }
         isPaused = paused
         if !paused {
@@ -343,209 +343,6 @@ final class BottleSupervisor {
         log.log(.supervisor, note)
         refreshHealth()
         if !paused { wake(.control(note)) }
-    }
-
-    /// Starts a game, restarting the client first when that game asks for a
-    /// renderer the running session does not have.
-    ///
-    /// A renderer the env files can carry reaches the game on its own, in its
-    /// per-program file; every other one reaches it through the environment of
-    /// the process tree Steam already lives in, so it takes a new tree. The
-    /// menu bar says so before the click; this is the click.
-    func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
-        // The renderer this launch has to move the bottle onto — an explicit
-        // "Run with X" wins over the game's own choice, and neither persists
-        // past the launch beyond the bottle default it sets.
-        let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
-        if let desired, desired != BottleGraphics.currentSelection().renderer {
-            do {
-                let current = BottleGraphics.currentSelection()
-                try BottleGraphics.applyToActiveEngine(
-                    BottleGraphics.Selection(
-                        renderer: desired, msync: current.msync, gpu: current.gpu,
-                    ),
-                )
-            } catch {
-                log.log(.client, "could not set \(desired.label) for \(name): \(error)")
-            }
-        }
-
-        let change = BottleGraphics.graphicsChangeSinceBoot()
-        let mustBounce = change.bounce
-            || (change.restage && !BottleGraphics.hotRestageSupported)
-
-        if mustBounce {
-            // msync or the engine moved: a fresh wineserver is owed, so the
-            // client restarts and the spawn reconciles the tree.
-            log.log(.client, "\(name) needs a client restart for its graphics")
-            recentRestarts.removeAll()
-            hygieneTried = false
-            await restartClient(reason: "graphics change for \(name)")
-            // The client is up and the page reloaded; Steam's own services
-            // need a moment more before a launch request means anything.
-            for _ in 0 ..< 40 where health != .healthy {
-                try? await Task.sleep(for: .seconds(3))
-            }
-        } else if change.restage {
-            // Hot: only the renderer or D3DMetal version moved. Restage the
-            // tree under the running client; the game loads the new DLLs when
-            // it launches, and the booted record now matches.
-            log.log(.client, "restaging graphics for \(name) without a restart")
-            if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
-                log.log(.client, note)
-            }
-            BottleGraphics.recordBootedSelection()
-        }
-        await app.launchGame(appID: appID)
-    }
-
-    /// The menu-bar button and the control endpoint: restarts
-    /// unconditionally, with a fresh crash-loop budget — the user asking is
-    /// what distinguishes "try again" from a loop. A ladder already in flight
-    /// runs again rather than being fought or refused.
-    func restartNow(reason: String = "manual restart from the menu bar") {
-        setPaused(false, note: "auto-restart resumed (manual restart)")
-        recentRestarts.removeAll()
-        hygieneTried = false
-        Task(name: "Manual client restart") {
-            await restartClient(reason: reason)
-        }
-    }
-
-    /// The heavier menu-bar restart: the whole fake Windows comes down and
-    /// boots fresh — for when the machine itself is suspect, not just Steam.
-    func restartWindowsNow() {
-        setPaused(false, note: "auto-restart resumed (Windows restart)")
-        recentRestarts.removeAll()
-        hygieneTried = false
-        Task(name: "Manual Windows restart") {
-            await restartClient(
-                reason: "manual Windows restart from the menu bar",
-                fullWindows: true,
-            )
-        }
-    }
-
-    /// The escape hatch when a graceful restart is itself hung: SIGKILL the
-    /// Steam client straight away, then bring it back clean. `everything`
-    /// takes the whole fake machine — games and services included — down
-    /// first. The crash-loop budget resets because the user asked.
-    func forceQuit(_ scope: ClientLifecycle.ForceScope) {
-        setPaused(false, note: "auto-restart resumed (force-quit and restart)")
-        recentRestarts.removeAll()
-        hygieneTried = false
-        Task(name: "Force quit \(scope == .steam ? "Steam" : "everything")") {
-            let killed = await ClientLifecycle.forceQuit(scope)
-            log.log(
-                .client,
-                "force-quit \(scope == .steam ? "Steam" : "everything")"
-                    + " — \(killed.count) process(es) killed, restarting clean",
-            )
-            await restartClient(
-                reason: "force-quit from the menu bar",
-                fullWindows: scope == .everything,
-            )
-        }
-    }
-
-    /// Trashes Steam's shader cache and brings the client back: the bottle
-    /// comes down first so nothing holds the cache, it is cleared, then the
-    /// client relaunches if one is still wanted. Only `steamapps/shadercache`
-    /// is removed — saves and game files stay — and Steam rebuilds it.
-    func clearShaderCache() {
-        recentRestarts.removeAll()
-        hygieneTried = false
-        Task(name: "Clear the shader cache") {
-            await app.duringClientStop {
-                await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
-            }
-            let cleared = ClientLifecycle.clearShaderCache()
-            log.log(.supervisor, cleared ? "shader cache cleared" : "no shader cache to clear")
-            await restartClient(reason: "shader cache cleared")
-        }
-    }
-
-    /// Whether the restart ladder is mid-flight — control verbs that would
-    /// race it (`sevo client stop`) refuse instead of interleaving.
-    var isBusyRestarting: Bool {
-        isRestarting
-    }
-
-    /// `sevo client stop`: pauses supervision (so nothing relaunches the
-    /// client behind the CLI's back) and brings the bottle down.
-    func stopForControl() async {
-        guard !isQuitting, !isRestarting else { return }
-        endBoot()
-        setPaused(true, note: "auto-restart paused (sevo client stop)")
-        // A deliberate stop should look like one: the app's own library
-        // window comes down first (left up it freezes dimmed over the whole
-        // stop), and the client's shutdown dialog is hidden as it exits.
-        await app.send(.dismissWindows)
-        await app.duringClientStop {
-            await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
-        }
-        log.log(.supervisor, "client stopped (sevo)")
-    }
-
-    /// Whether a provisioning failure is holding the client down: the last
-    /// setup pass for this engine and bottle stopped at a stage that leaves
-    /// nothing to start, and nobody has retried it or asked for the client
-    /// anyway (Settings › Engine). Says so in the log once per attempt,
-    /// because a client that never comes up is otherwise a mystery.
-    func provisioningBlocksStart(reason: String) -> Bool {
-        guard let failure = BottleReadiness.clientStartBlock else { return false }
-        log.log(
-            .supervisor,
-            "not starting the client (\(reason)): the bottle is unfinished — \(failure)",
-        )
-        return true
-    }
-
-    /// `sevo client start`: resumes supervision, and restarts the client if
-    /// it is not already up — the supervisor's ladder, not a bare launch.
-    func startForControl() {
-        setPaused(false, note: "auto-restart resumed (sevo client start)")
-        Task(name: "sevo client start") {
-            if await ClientLifecycle.probeClient() != .up {
-                await restartClient(reason: "sevo client start")
-            }
-        }
-    }
-
-    /// Quit teardown: quitting Sevoflurane quits Steam. Stops wanting a client
-    /// so nothing relaunches it, then brings every bottle process down — the
-    /// client's processes are launched detached, so without this they outlive
-    /// the session (and a leaked webhelper window parks a dead icon in the
-    /// Dock). Reached only from `/quit` and `SIGTERM`: a bottle that nobody
-    /// asked to come down keeps running, which is the whole of what surviving
-    /// an app crash means.
-    ///
-    /// The daemon itself stays up and idle afterwards — it still answers
-    /// `sevo status`, and the next ask starts a client again.
-    func shutdownForQuit() async {
-        guard !isQuitting else { return }
-        isQuitting = true
-        wantsClient = false
-        endBoot()
-        refreshHealth()
-        log.log(.supervisor, "quit: bringing the bottle down")
-        // The last thing a user sees of this app is the teardown, so the
-        // popup sweep runs here too: the client puts up "Shutting down
-        // Steam…" on its way out, and a quit is the one moment nothing else
-        // is left to hide it.
-        await app.send(.dismissWindowsForQuit)
-        await app.duringClientStop {
-            await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
-        }
-        let survivors = await ClientLifecycle.bottleProcessIDs()
-        log.log(
-            .supervisor,
-            survivors.isEmpty
-                ? "quit: bottle is down"
-                : "quit: pids \(survivors) survived SIGKILL",
-        )
-        isQuitting = false
-        refreshHealth()
     }
 
     // MARK: - Probe cycle
@@ -672,12 +469,12 @@ final class BottleSupervisor {
     }
 
     /// Starts a boot phase and its clock.
-    private func enterBoot(_ phase: BootPhase) {
+    func enterBoot(_ phase: BootPhase) {
         boot = phase
         bootBegan = .now
     }
 
-    private func endBoot() {
+    func endBoot() {
         boot = .idle
         bootBegan = nil
     }
@@ -693,82 +490,95 @@ final class BottleSupervisor {
                 "in-process bridge on :\(BridgePorts.steamUI) is unreachable",
             )
         case let .notAnswering(detail):
-            endBoot()
-            pageServicesUp = false
-            pageFailures += 1
-            if pageFailures >= 2,
-               Date.now.timeIntervalSince(lastPageRecovery) > Timing.servicesGrace {
-                lastPageRecovery = .now
-                pageFailures = 0
-                if pageReloads >= 2 {
-                    log.log(
-                        .page,
-                        "page not answering with a healthy client after \(pageReloads) reloads "
-                            + "(\(detail)) — rebuilding the UI page",
-                    )
-                    pageReloads = 0
-                    await app.send(.rebuild)
-                    fault = .degraded("rebuilding the UI…")
-                } else {
-                    log.log(.page, "page not answering with a healthy client (\(detail)) — reloading the UI")
-                    pageReloads += 1
-                    await app.send(.reload)
-                    fault = .degraded("reloading the UI…")
-                }
-            } else {
-                fault = .degraded("page not answering (\(detail))")
-                transition(logging: .page, "page not answering: \(detail)")
-            }
+            await recoverSilentPage(detail: detail)
         case .answering(servicesUp: false):
             endBoot()
             pageServicesUp = false
             await recoverDeadServices(wineWindows: wineWindows)
         case .answering(servicesUp: true):
-            endBoot()
-            pageServicesUp = true
+            await noteEverythingUp(wineWindows: wineWindows)
+        }
+    }
+
+    /// The page is up but not answering: a second failure in a row reloads the
+    /// UI, and a page two reloads did not fix is rebuilt.
+    private func recoverSilentPage(detail: String) async {
+        endBoot()
+        pageServicesUp = false
+        pageFailures += 1
+        if pageFailures >= 2,
+           Date.now.timeIntervalSince(lastPageRecovery) > Timing.servicesGrace {
+            lastPageRecovery = .now
             pageFailures = 0
-            pageReloads = 0
-            serviceRecoveryTried = false
-            hygieneTried = false
-            wasAwaitingSignIn = false
-            clientShowsLoginWindow = false
-            pendingRestart = nil
-            // steam.exe windows are VGUI dialogs (rescue/update/EULA) and
-            // worth surfacing as a state; webhelper windows are leaked client
-            // web UI (notification toasts) — logged on appearance, not a
-            // health downgrade.
-            if wineWindows.contains(where: { $0.owner.lowercased() == "steam.exe" }) {
-                fault = .degraded("Steam surfaced a dialog — see the log")
-                transition(
-                    logging: .supervisor,
-                    "everything probes healthy but a steam.exe dialog is up — reporting, not acting",
+            if pageReloads >= 2 {
+                log.log(
+                    .page,
+                    "page not answering with a healthy client after \(pageReloads) reloads "
+                        + "(\(detail)) — rebuilding the UI page",
                 )
+                pageReloads = 0
+                await app.send(.rebuild)
+                fault = .degraded("rebuilding the UI…")
             } else {
-                let becameHealthy = health != .healthy
-                fault = nil
-                transition(
-                    logging: .supervisor,
-                    "healthy: client, bridge, page, and Steam services all up",
+                log.log(.page, "page not answering with a healthy client (\(detail)) — reloading the UI")
+                pageReloads += 1
+                await app.send(.reload)
+                fault = .degraded("reloading the UI…")
+            }
+        } else {
+            fault = .degraded("page not answering (\(detail))")
+            transition(logging: .page, "page not answering: \(detail)")
+        }
+    }
+
+    /// Client, bridge, page and Steam's services all answer: the recovery
+    /// counters reset, and a boot that just finished is audited and followed
+    /// by whatever was waiting on it.
+    private func noteEverythingUp(wineWindows: [WineWindowWatch.Window]) async {
+        endBoot()
+        pageServicesUp = true
+        pageFailures = 0
+        pageReloads = 0
+        serviceRecoveryTried = false
+        hygieneTried = false
+        wasAwaitingSignIn = false
+        clientShowsLoginWindow = false
+        pendingRestart = nil
+        // steam.exe windows are VGUI dialogs (rescue/update/EULA) and
+        // worth surfacing as a state; webhelper windows are leaked client
+        // web UI (notification toasts) — logged on appearance, not a
+        // health downgrade.
+        if wineWindows.contains(where: { $0.owner.lowercased() == "steam.exe" }) {
+            fault = .degraded("Steam surfaced a dialog — see the log")
+            transition(
+                logging: .supervisor,
+                "everything probes healthy but a steam.exe dialog is up — reporting, not acting",
+            )
+        } else {
+            let becameHealthy = health != .healthy
+            fault = nil
+            transition(
+                logging: .supervisor,
+                "healthy: client, bridge, page, and Steam services all up",
+            )
+            if becameHealthy, let began = clientStartedAt {
+                clientStartedAt = nil
+                log.log(
+                    .supervisor,
+                    "boot audit: \(began.duration(to: .now).components.seconds)s "
+                        + "from launch to healthy",
                 )
-                if becameHealthy, let began = clientStartedAt {
-                    clientStartedAt = nil
-                    log.log(
-                        .supervisor,
-                        "boot audit: \(began.duration(to: .now).components.seconds)s "
-                            + "from launch to healthy",
-                    )
-                }
-                if becameHealthy, let opening = showLibraryOnHealthy {
-                    showLibraryOnHealthy = nil
-                    log.log(.supervisor, opening.note)
-                    await app.send(.showLibrary)
-                }
-                // Explorer exists to suppress right after the client comes
-                // up; afterwards an occasional sweep catches a respawn
-                // (whether a game launch respawns it is an open watch item).
-                if !gameIsUp, becameHealthy || probeCycleCount.isMultiple(of: 8) {
-                    Task(name: "Wine tray suppression") { await Self.suppressWineTray() }
-                }
+            }
+            if becameHealthy, let opening = showLibraryOnHealthy {
+                showLibraryOnHealthy = nil
+                log.log(.supervisor, opening.note)
+                await app.send(.showLibrary)
+            }
+            // Explorer exists to suppress right after the client comes
+            // up; afterwards an occasional sweep catches a respawn
+            // (whether a game launch respawns it is an open watch item).
+            if !gameIsUp, becameHealthy || probeCycleCount.isMultiple(of: 8) {
+                Task(name: "Wine tray suppression") { await Self.suppressWineTray() }
             }
         }
     }
@@ -1032,171 +842,10 @@ final class BottleSupervisor {
     /// Re-derives health after a caller has changed the inputs, and logs the
     /// message only if the verdict actually moved: the cycle re-asserts the
     /// same state every second and the log is for transitions.
-    private func transition(logging category: EventLog.Category, _ message: String) {
+    func transition(logging category: EventLog.Category, _ message: String) {
         let before = health
         refreshHealth()
         guard health != before else { return }
         log.log(category, message)
-    }
-
-    // MARK: - Restart ladder
-
-    private func restartClient(reason: String, fullWindows: Bool = false) async {
-        guard wantsClient else { return }
-        guard !isQuitting, !provisioningBlocksStart(reason: reason) else { return }
-        if isRestarting {
-            restartAgain = reason
-            log.log(.supervisor, "restart requested mid-restart (\(reason)); the ladder runs again")
-            return
-        }
-        isRestarting = true
-        defer {
-            isRestarting = false
-            refreshHealth()
-        }
-        var reason = reason, fullWindows = fullWindows
-        while true {
-            await runRestartLadder(reason: reason, fullWindows: fullWindows)
-            guard let again = restartAgain, !isQuitting else { return }
-            restartAgain = nil
-            reason = again
-            fullWindows = false
-        }
-    }
-
-    /// One pass of the ladder: stop what is up, launch under `Engine.active`
-    /// as it is at launch time, wait for the client. A restart asked for on
-    /// the way (`restartAgain`) ends the pass early, before the launch when
-    /// it can, so the next pass decides afresh what has to come down.
-    private func runRestartLadder(reason: String, fullWindows: Bool) async {
-        let ladder = PerfProbe.supervisor.beginInterval("ClientRestart")
-        defer { PerfProbe.supervisor.endInterval("ClientRestart", ladder) }
-
-        recentRestarts.removeAll { $0.timeIntervalSinceNow < -600 }
-        guard recentRestarts.count < 3 else {
-            await escalateCrashLoop()
-            return
-        }
-        let stamp = Date.now
-        recentRestarts.append(stamp)
-        pendingRestart = stamp
-        clientFailures = 0
-        clientShowsLoginWindow = false
-        // A pass that will launch is a fresh try, so the last one's verdict —
-        // a crash loop included — stops being the state to report.
-        fault = nil
-        log.log(.supervisor, "restarting client: \(reason)")
-
-        // Take the dead client's frozen windows off screen now, rather than
-        // leaving a dimmed, unresponsive library up for the whole teardown.
-        await app.send(.dismissWindows)
-
-        setRestartPhase("checking for a running client")
-        // Windows stays booted through a plain client restart — the ~20s
-        // machine boot is the biggest slice of a restart, and the resident
-        // wineserver only has to go when the next launch actually needs a
-        // different one: another engine's, or new sync primitives (esync/
-        // msync are negotiated with the server at spawn).
-        let windowsCanStay = !fullWindows
-            && BottleGraphics.bootedEngineRoot() == Engine.active.root.path
-            && BottleGraphics.bootedSelection()?.msync
-            == BottleGraphics.currentSelection().msync
-        if windowsCanStay {
-            await ClientLifecycle.stopClient(gracePolls: 10) { phase in
-                setRestartPhase(phase)
-            }
-        } else {
-            await app.duringClientStop {
-                await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true) { phase in
-                    setRestartPhase(phase)
-                }
-            }
-        }
-
-        // The launcher can time out and *still* spawn a client later; a
-        // steam.exe that survived everything above means launching now could
-        // stack a second instance on top of it. This guard plus
-        // `isRestarting` is the entire double-start defense: restart
-        // generation tags were considered and dropped because
-        // `-nocrashdialog` removed Steam's own watchdog — the only other
-        // writer that could race a relaunch. If a double-start ever appears
-        // in the log again, tags are the next step.
-        let leftovers = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe")
-        guard leftovers.isEmpty else {
-            fault = .degraded("a steam.exe survived kill -9 — not launching a second client")
-            transition(
-                logging: .client,
-                "steam.exe pids \(leftovers) survived SIGKILL — manual intervention needed",
-            )
-            return
-        }
-        guard !isQuitting else { return }
-        // The engine may have changed under this pass; the next one settles
-        // what has to come down for it before anything is launched.
-        guard restartAgain == nil else { return }
-
-        setRestartPhase("launching the client")
-        log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
-        clientStartedAt = .now
-        await ClientLifecycle.launchClient()
-        // The ladder's work ends with the spawn. Everything the client does
-        // next — CDP arriving, its services, its sign-in window, the page
-        // booting — is a state of the probe cycle, which has the guards and
-        // the cadence for it.
-        enterBoot(.awaitingClient)
-    }
-
-    /// The rung the ladder is on, as the menu bar and the footer show it.
-    private func setRestartPhase(_ phase: String) {
-        restartPhase = phase
-        refreshHealth()
-    }
-
-    /// Three restarts in ten minutes is the crash-loop signature; another
-    /// plain restart would only stack crash dumps. The proven response is one
-    /// hygiene pass — trash the Chromium cache, headless client repair — and
-    /// a crash loop that survives *that* gets `gaveUp`: the machine needs a
-    /// human.
-    private func escalateCrashLoop() async {
-        let hygiene = PerfProbe.supervisor.beginInterval("CrashLoopHygiene")
-        defer { PerfProbe.supervisor.endInterval("CrashLoopHygiene", hygiene) }
-        let dumps = ClientLifecycle.recentDumpCount()
-        guard !hygieneTried else {
-            fault = .gaveUp("client keeps dying — likely crash-looping; see the log")
-            transition(
-                logging: .supervisor,
-                "giving up: still crash-looping after the hygiene pass "
-                    + "(\(dumps) fresh dumps in 10 min) — manual repair needed",
-            )
-            return
-        }
-        hygieneTried = true
-        log.log(
-            .supervisor,
-            "3 restarts in 10 minutes (\(dumps) fresh dumps) — crash loop; "
-                + "running the hygiene pass: htmlcache purge + headless client repair",
-        )
-        setRestartPhase("crash loop: stopping the client")
-        await app.duringClientStop {
-            await ClientLifecycle.stopAll(gracePolls: 10) { phase in
-                setRestartPhase(phase)
-            }
-        }
-        guard !isQuitting else { return }
-        if ClientLifecycle.purgeHTMLCache() {
-            log.log(.client, "trashed the bottle's htmlcache")
-        }
-        setRestartPhase("crash loop: repairing the client (takes minutes)")
-        let updated = await ClientLifecycle.headlessUpdate()
-        log.log(
-            .client,
-            updated ? "headless client repair finished"
-                : "headless client repair did not exit cleanly",
-        )
-        guard !isQuitting else { return }
-        setRestartPhase("launching the client")
-        clientStartedAt = .now
-        await ClientLifecycle.launchClient()
-        enterBoot(.awaitingClient)
     }
 }

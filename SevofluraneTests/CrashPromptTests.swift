@@ -3,7 +3,8 @@ import Testing
 @testable import Sevoflurane
 
 /// When the app speaks up after a run, and when it holds its tongue.
-// Serialized: three of these install `RunRecorder.didClose`, which is one static hook.
+///
+/// Serialized: three of these install `RunRecorder.didClose`, which is one static hook.
 @MainActor
 @Suite(.serialized)
 struct CrashPromptTests {

@@ -38,8 +38,7 @@ struct MacChipTests {
 }
 
 struct GPUEquivalenceTests {
-    private static let everyChip: [MacChip] = (1 ... GPUEquivalence.newestGeneration).flatMap {
-        generation in
+    private static let everyChip: [MacChip] = (1 ... GPUEquivalence.newestGeneration).flatMap { generation in
         MacChip.Tier.allCases.map {
             MacChip(generation: generation, tier: $0, name: "Apple M\(generation) \($0)")
         }

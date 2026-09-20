@@ -53,7 +53,9 @@ struct DaemonMembershipTests {
                 .split(separator: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { $0.hasSuffix(",") }
-                .map { String($0.dropLast()) },
+                // The project file quotes a path holding anything outside its
+                // bare-word characters, a `+` among them.
+                .map { $0.dropLast().trimmingCharacters(in: ["\""]) },
         )
     }()
 

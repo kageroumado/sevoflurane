@@ -48,18 +48,7 @@ nonisolated enum EngineRenderers {
         let manager = FileManager.default
         if isGPTkFlavor(engine) {
             guard renderer == .d3dmetal else { return [] }
-            let source = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
-            let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
-            var staged: [String] = []
-            for name in ["nvngx.dll", "nvapi64.dll"] {
-                let dll = source.appendingPathComponent(name)
-                guard manager.fileExists(atPath: dll.path) else { continue }
-                let target = system32.appendingPathComponent(name)
-                try? manager.removeItem(at: target)
-                guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
-                staged.append(name)
-            }
-            return staged
+            return stageGPTkCompanions(engine: engine, bottle: bottle)
         }
         guard manager.fileExists(atPath: Architecture.x86_64.tree(in: engine).path)
         else { return [] }
@@ -93,22 +82,7 @@ nonisolated enum EngineRenderers {
                     .filter { $0.pathExtension.lowercased() == "dll" }
             } ?? []
 
-            for dll in dlls {
-                let name = dll.lastPathComponent
-                let target = canonical.appendingPathComponent(name)
-                let keep = originals.appendingPathComponent(name)
-                if manager.fileExists(atPath: target.path),
-                   !manager.fileExists(atPath: keep.path),
-                   !isPayload(target, among: payloads) {
-                    try? manager.createDirectory(
-                        at: originals, withIntermediateDirectories: true,
-                    )
-                    try? manager.copyItem(at: target, to: keep)
-                }
-                try? manager.removeItem(at: target)
-                guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
-                staged.append(name)
-            }
+            staged += place(dlls, into: canonical, keepingOriginalsIn: originals, payloads: payloads)
             // Every architecture, whether this renderer has a payload for it
             // or not: an architecture that gets no DLLs is exactly the one
             // whose prefix still holds the last renderer's loader files, and
@@ -119,6 +93,51 @@ nonisolated enum EngineRenderers {
             )
         }
         writeProvenance(renderer: renderer, toolkit: toolkit, staged: staged, engine: engine)
+        return staged
+    }
+
+    /// Copies the NVIDIA libraries a GPTk-flavored engine ships into the
+    /// bottle's `system32`, and names the ones that landed.
+    private static func stageGPTkCompanions(engine: URL, bottle: URL) -> [String] {
+        let manager = FileManager.default
+        let source = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
+        let system32 = bottle.appendingPathComponent("drive_c/windows/system32")
+        var staged: [String] = []
+        for name in ["nvngx.dll", "nvapi64.dll"] {
+            let dll = source.appendingPathComponent(name)
+            guard manager.fileExists(atPath: dll.path) else { continue }
+            let target = system32.appendingPathComponent(name)
+            try? manager.removeItem(at: target)
+            guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
+            staged.append(name)
+        }
+        return staged
+    }
+
+    /// Copies a renderer's DLLs over the engine's own in `canonical`, setting
+    /// each engine DLL aside in `originals` the first time it is covered, and
+    /// names the ones that landed.
+    private static func place(
+        _ dlls: [URL], into canonical: URL, keepingOriginalsIn originals: URL, payloads: [String: [URL]],
+    ) -> [String] {
+        let manager = FileManager.default
+        var staged: [String] = []
+        for dll in dlls {
+            let name = dll.lastPathComponent
+            let target = canonical.appendingPathComponent(name)
+            let keep = originals.appendingPathComponent(name)
+            if manager.fileExists(atPath: target.path),
+               !manager.fileExists(atPath: keep.path),
+               !isPayload(target, among: payloads) {
+                try? manager.createDirectory(
+                    at: originals, withIntermediateDirectories: true,
+                )
+                try? manager.copyItem(at: target, to: keep)
+            }
+            try? manager.removeItem(at: target)
+            guard (try? manager.copyItem(at: dll, to: target)) != nil else { continue }
+            staged.append(name)
+        }
         return staged
     }
 
