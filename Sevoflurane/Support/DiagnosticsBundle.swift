@@ -232,17 +232,18 @@ nonisolated enum Diagnostics {
             try? manager.removeItem(at: root)
         }
 
+        /// Everything the zip carries is text, and all of it goes through
+        /// ``Redaction``: the zip is what people attach to a public issue.
         func write(_ text: String, as file: String) {
             let url = root.appendingPathComponent(file)
             try? manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if (try? text.write(to: url, atomically: true, encoding: .utf8)) != nil { contents.append(file) }
+            let redacted = Redaction.apply(to: text)
+            if (try? redacted.write(to: url, atomically: true, encoding: .utf8)) != nil { contents.append(file) }
         }
 
         func copy(_ source: URL, as file: String) {
-            let target = root.appendingPathComponent(file)
-            guard manager.fileExists(atPath: source.path) else { return }
-            try? manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if (try? manager.copyItem(at: source, to: target)) != nil { contents.append(file) }
+            guard let data = try? Data(contentsOf: source, options: .mappedIfSafe) else { return }
+            write(String(decoding: data, as: UTF8.self), as: file)
         }
 
         func writeContents() {

@@ -166,8 +166,9 @@ for sample results and their limits.
 
 **Settings › About › Save Diagnostics…** saves a ZIP containing logs,
 a `sevo doctor` report, engine details, Steam's own logs and recent crash
-reports. Review the contents before sharing; logs and file paths can identify
-your account. You can also run `sevo diag` from the terminal.
+reports. Your account name, home folder paths, the Mac's name and Steam ids are
+taken out of every file in it; look through it before sharing all the same.
+You can also run `sevo diag` from the terminal.
 
 The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`. The Wine log always records errors and

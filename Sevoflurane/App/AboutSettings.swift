@@ -61,7 +61,7 @@ struct AboutSettings: View {
             }
             .controlSize(.small)
             .padding(.top, 6)
-            Text("Saves logs, system details, and recent crashes to a ZIP on your Desktop. Read it before sharing.")
+            Text("Saves logs, system details, and recent crashes to a ZIP on your Desktop, with your name, paths and Steam ids taken out.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
