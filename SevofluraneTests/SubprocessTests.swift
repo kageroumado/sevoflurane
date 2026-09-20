@@ -3,24 +3,16 @@ import Testing
 @testable import Sevoflurane
 
 /// The one subprocess runner, against real children: the shell for output,
-/// `sleep` for the watchdog. Elapsed-time bounds are loose on purpose — they
-/// separate a prompt return from a runner that waits on an end-of-file that
-/// never comes.
+/// `sleep` for the watchdog. Every outcome is read off the exit status rather
+/// than off the clock — a runner that waited on an end-of-file that never came
+/// would be SIGKILLed by its own watchdog and report that, and a watchdog that
+/// never fired would report the child's own clean exit.
 struct SubprocessTests {
-    private func timed(
-        _ body: () async -> (status: Int32?, output: String),
-    ) async -> (result: (status: Int32?, output: String), elapsed: Duration) {
-        let began = ContinuousClock.now
-        let result = await body()
-        return (result, began.duration(to: .now))
-    }
-
     @Test
     func `an uncaptured child returns as soon as it exits`() async {
-        let run = await timed { await Subprocess.run("/usr/bin/true", [], capture: .none) }
-        #expect(run.result.status == 0)
-        #expect(run.result.output.isEmpty)
-        #expect(run.elapsed < .seconds(5))
+        let result = await Subprocess.run("/usr/bin/true", [], capture: .none, timeout: .seconds(20))
+        #expect(result.status == 0)
+        #expect(result.output.isEmpty)
     }
 
     @Test
@@ -44,11 +36,10 @@ struct SubprocessTests {
 
     @Test
     func `a child past its timeout is killed`() async {
-        let run = await timed {
-            await Subprocess.run("/bin/sleep", ["30"], capture: .none, timeout: .milliseconds(200))
-        }
-        #expect(run.result.status == SIGKILL)
-        #expect(run.elapsed < .seconds(5))
+        let result = await Subprocess.run(
+            "/bin/sleep", ["30"], capture: .none, timeout: .milliseconds(200),
+        )
+        #expect(result.status == SIGKILL)
     }
 
     @Test

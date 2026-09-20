@@ -23,9 +23,12 @@ struct RecoveryTests {
 
     @Test
     func `the report is written by the sevo helper inside this bundle`() {
-        let helper = RecoverySettings.diagnosticsHelper
-        #expect(helper.path.hasSuffix("/Contents/Helpers/sevo"))
-        #expect(helper.path.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path + "/"))
+        // Both sides are standardized: `standardizedFileURL` shortens a
+        // leading /private, so a bundle built under /tmp or /var reads as
+        // outside itself when only the prefix is put through it.
+        let helper = RecoverySettings.diagnosticsHelper.standardizedFileURL.path
+        #expect(helper.hasSuffix("/Contents/Helpers/sevo"))
+        #expect(helper.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path + "/"))
     }
 
     @Test
