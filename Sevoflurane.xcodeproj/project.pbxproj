@@ -858,7 +858,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.10;
-				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.thumbnail;
+				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.thumbnail.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
