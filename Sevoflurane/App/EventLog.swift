@@ -21,7 +21,6 @@ final class EventLog {
         return TestHost.isHosting
             || environment["SEVO_GALLERY"] == "1"
             || environment["SEVO_DEMO"] != nil
-            || environment["SEVO_SETUP_DRY_RUN"] != nil
     }
 
     enum Category: String {
