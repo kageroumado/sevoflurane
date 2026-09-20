@@ -32,6 +32,8 @@ struct GeneralSettings: View {
         }
     }
 
+    @State private var steamLinksComeHere = SteamLinks.comeHere
+
     var body: some View {
         Form {
             Section {
@@ -54,6 +56,7 @@ struct GeneralSettings: View {
                     }
                     .highlightable(.generalSteamSettings, highlighted: highlighted)
                 }
+                steamLinksRow
             }
             Section {
                 cliRow
@@ -90,6 +93,28 @@ struct GeneralSettings: View {
             refreshAgents()
         }
         .task { await store.measure() }
+    }
+
+    // MARK: - Steam links
+
+    private var steamLinksRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Steam links")
+                Text(steamLinksComeHere
+                    ? "Install buttons and invitations on the web open here."
+                    : "Install buttons and invitations on the web open in "
+                    + "\(SteamLinks.handlerName ?? "another app").")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !steamLinksComeHere {
+                Button("Open Them Here") {
+                    Task(name: "Claim steam links") { steamLinksComeHere = await SteamLinks.claim() }
+                }
+            }
+        }
     }
 
     // MARK: - The Steam pages
