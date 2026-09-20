@@ -31,6 +31,11 @@ final class StallWatch {
         /// A process using less than this share of one core counts as using
         /// none: a spin-wait at a few micros a second is not progress.
         static let idleCPUShare = 0.005
+        /// One thread that never yields reads as one whole core, sample after sample. A game
+        /// at work moves: over a core with its workers, under it while it waits for a frame.
+        static let oneCoreBand = 0.93 ... 1.07
+        /// How long a process stays inside ``oneCoreBand`` before the monitor says so.
+        static let oneCoreAfter: TimeInterval = 60
     }
 
     /// What a process is to us.
@@ -76,6 +81,9 @@ final class StallWatch {
         let state: State
         /// The app id of the run this process belongs to, when it is a game's.
         let appID: Int?
+        /// The process has held exactly one core for ``Rules/oneCoreAfter``: a busy loop,
+        /// which a game at rest on a menu should not be in.
+        var holdsOneCore = false
     }
 
     /// Everything we own, most CPU first — what the process monitor lists.
@@ -218,6 +226,13 @@ final class StallWatch {
         var lastMoved: TimeInterval
         /// When it was last read, for the share.
         var lastRead: TimeInterval
+        /// Since when every sample has been inside ``Rules/oneCoreBand``.
+        var oneCoreSince: TimeInterval?
+    }
+
+    /// Since when a process has held one core, given where the newest sample falls.
+    nonisolated static func oneCoreSince(_ previous: TimeInterval?, share: Double, at now: TimeInterval) -> TimeInterval? {
+        Rules.oneCoreBand.contains(share) ? (previous ?? now) : nil
     }
 
     private func judge(_ pid: pid_t, usage: ProcessUsage, at now: TimeInterval) -> Process {
@@ -229,21 +244,26 @@ final class StallWatch {
         let drew = presents != nil && presents != previous?.presents
         let moved = previous == nil || share > Rules.idleCPUShare || drew
         let lastMoved = moved ? now : (previous?.lastMoved ?? now)
+        let oneCoreSince = Self.oneCoreSince(previous?.oneCoreSince, share: share, at: now)
         tracked[pid] = Tracked(
             cpuNanoseconds: usage.cpuTimeNanoseconds, presents: presents,
-            lastMoved: lastMoved, lastRead: now,
+            lastMoved: lastMoved, lastRead: now, oneCoreSince: oneCoreSince,
         )
         let name = exeByPID[pid] ?? probes.name(pid) ?? "pid \(pid)"
+        let role = role(of: name, pid: pid)
+        let holdsOneCore = (role == .game || role == .gameChild)
+            && oneCoreSince.map { now - $0 >= Rules.oneCoreAfter } ?? false
         return Process(
             pid: pid,
             name: name,
-            role: role(of: name, pid: pid),
+            role: role,
             cpuSeconds: usage.cpuSeconds,
             cpuShare: (share * 1000).rounded() / 1000,
             footprintBytes: usage.footprintBytes,
             presents: presents,
             state: state(pid: pid, moved: moved, still: now - lastMoved),
             appID: appID(of: pid),
+            holdsOneCore: holdsOneCore,
         )
     }
 

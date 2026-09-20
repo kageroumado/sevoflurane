@@ -183,9 +183,16 @@ struct ProcessMonitorView: View {
             }
             .width(80)
             TableColumn("State") { process in
-                StateChip(text: process.state.rawValue, tint: process.state.tint)
+                if process.holdsOneCore {
+                    StateChip(text: "one core at 100 %", tint: .orange)
+                        .help("This game has held exactly one core for over a minute. A game at rest on a menu "
+                            + "should use far less: it is usually a busy loop in the game, and sometimes a sign "
+                            + "that something it waits for never arrives.")
+                } else {
+                    StateChip(text: process.state.rawValue, tint: process.state.tint)
+                }
             }
-            .width(90)
+            .width(min: 90, ideal: 130)
         }
         .contextMenu(forSelectionType: pid_t.self) { selected in
             rowActions(for: selected)
