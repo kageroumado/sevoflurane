@@ -76,13 +76,55 @@ nonisolated enum SteamOps {
         _ = try await SteamJS.eval("SteamClient.Apps.VerifyApp(\(appid)); 'ok'")
     }
 
-    /// The promptless install flow: open the wizard for the appid, give the
-    /// dialog stores a moment to populate, then continue with the defaults —
-    /// the same two-step the bridge's `install` command uses.
-    static func install(_ appid: Int) async throws {
-        _ = try await SteamJS.eval("SteamClient.Installs.OpenInstallWizard([\(appid)]); 'ok'")
-        try? await Task.sleep(for: .milliseconds(500))
-        _ = try await SteamJS.eval("SteamClient.Installs.ContinueInstall(); 'ok'")
+    /// The promptless install flow: open the wizard for the appid, wait until it
+    /// holds the app, then continue with the defaults through each of its pages
+    /// (folder, shortcuts, license) until the wizard closes. Returns what the
+    /// wizard said when it stopped: `ok`, `no-wizard` when it never took the app
+    /// (an app the account holds no license for), `license` when Steam is showing
+    /// the game's license agreement and `acceptLicense` is off, `ok license-accepted`
+    /// when it was on and the agreement was accepted on the way, or
+    /// `error <code> <detail>`.
+    ///
+    /// The agreement page is install state 8. Its dialog lives in one of the
+    /// client's popup documents and its Accept is that dialog's primary button;
+    /// the state is what identifies it, so the client's language does not matter.
+    @discardableResult
+    static func install(_ appid: Int, acceptLicense: Bool = false) async throws -> String {
+        let js = """
+        (async () => {
+          const pause = ms => new Promise(r => setTimeout(r, ms));
+          SteamClient.Installs.OpenInstallWizard([\(appid)]);
+          let info;
+          for (let i = 0; i < 20; i++) {
+            await pause(500);
+            info = await SteamClient.Installs.GetInstallManagerInfo();
+            if (info.rgApps?.some(a => a.nAppID === \(appid))) break;
+          }
+          if (!info.rgApps?.some(a => a.nAppID === \(appid))) return 'no-wizard';
+          SteamClient.Installs.SetCreateShortcuts(false, false);
+          let accepted = false;
+          for (let i = 0; i < 6 && info.eInstallState !== 0; i++) {
+            if (info.eInstallState === 8) {
+              if (!\(acceptLicense)) return 'license';
+              const button = g_PopupManager.GetPopups()
+                .map(p => p.window?.document).filter(Boolean)
+                .flatMap(d => [...d.querySelectorAll('button')])
+                .find(b => /Primary/.test(b.className) && b.offsetParent);
+              if (!button) return 'license';
+              button.click();
+              accepted = true;
+            } else {
+              SteamClient.Installs.ContinueInstall();
+            }
+            await pause(2000);
+            info = await SteamClient.Installs.GetInstallManagerInfo();
+            if (info.eAppError) return `error ${info.eAppError} ${info.errorDetail}`;
+          }
+          if (info.eInstallState !== 0) return `stuck in state ${info.eInstallState}`;
+          return accepted ? 'ok license-accepted' : 'ok';
+        })()
+        """
+        return try await SteamJS.eval(js) ?? "no-wizard"
     }
 
     /// Uninstall wants the caller to have echoed the app's name; the CLI and

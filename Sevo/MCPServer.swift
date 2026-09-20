@@ -358,8 +358,12 @@ final class MCPServer {
             try await SteamOps.terminate(appid())
             return "terminate requested"
         case "app_install":
-            try await SteamOps.install(appid())
-            return "install queued — check downloads_status"
+            let outcome = try await SteamOps.install(appid())
+            switch outcome {
+            case "ok": return "install queued — check downloads_status"
+            case "license": return "Steam is showing the game's license agreement; the user accepts it in the Steam window, then the download starts"
+            default: return "install did not start: \(outcome)"
+            }
         case "app_uninstall":
             let appid = try appid()
             guard let name = args["name"] as? String else {

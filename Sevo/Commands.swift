@@ -2371,11 +2371,21 @@ struct AppCommand: AsyncParsableCommand {
             commandName: "install", abstract: "Queue an install with the default folder.",
         )
         @Argument var appid: Int
+        @Flag(help: "Accept the game's license agreement when Steam shows one.")
+        var acceptLicense = false
 
         func run() async throws {
             try await handlingFailures {
-                try await SteamOps.install(appid)
-                print("install queued for \(appid) — watch: sevo downloads status")
+                let outcome = try await SteamOps.install(appid, acceptLicense: acceptLicense)
+                switch outcome {
+                case "ok": print("install queued for \(appid) — watch: sevo downloads status")
+                case "ok license-accepted":
+                    print("install queued for \(appid), its license agreement accepted — watch: sevo downloads status")
+                case "no-wizard": print("Steam did not open an install for \(appid): the account holds no license for it. Add it to the library from its store page first.")
+                case "license":
+                    print("Steam is showing the license agreement for \(appid). Accept it in the Steam window, or run this again with --accept-license.")
+                default: print("install of \(appid) stopped: \(outcome)")
+                }
             }
         }
     }
