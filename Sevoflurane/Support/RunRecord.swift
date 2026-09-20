@@ -138,6 +138,9 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             case exitError = "exit-error"
             /// The app killed the game (the stall watchdog).
             case watchdog
+            /// The game left a close or a Quit unanswered, the engine asked, and the user chose
+            /// End Game (`sevo:exit … ended by the user while not responding`).
+            case endedNotResponding = "ended-not-responding"
             /// Sevoflurane quit, and the teardown that follows took the
             /// bottle — and the game in it — down.
             case appQuit = "app-quit"
@@ -220,6 +223,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case .user: "exited normally"
         case .crash: "crashed — exit\(code)"
         case .stopped: "stopped on request"
+        case .endedNotResponding: "ended by the user while it was not responding"
         case .exitError: "exited with an error — exit\(code)"
         case .steamTerminate: "stopped by Steam"
         case .watchdog: "killed after a stall"

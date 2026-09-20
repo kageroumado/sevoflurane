@@ -17,6 +17,7 @@ struct StallWatchTests {
         var children: [pid_t: [pid_t]] = [:]
         var names: [pid_t: String] = [:]
         var presents: [pid_t: UInt64] = [:]
+        var mainThreadSilence: [pid_t: TimeInterval] = [:]
         var signals: [(pid: pid_t, signal: Int32)] = []
         var lines: [String] = []
         var now: TimeInterval = 1000
@@ -35,6 +36,7 @@ struct StallWatchTests {
             probes.children = { [self] in children[$0] ?? [] }
             probes.name = { [self] in names[$0] }
             probes.presents = { [self] in presents[$0] }
+            probes.mainThreadSilence = { [self] in mainThreadSilence[$0] }
             probes.signal = { [self] pid, signal in
                 signals.append((pid, signal))
                 if signal == SIGCONT { stopped.remove(pid) }
@@ -97,6 +99,54 @@ struct StallWatchTests {
     }
 
     // MARK: - Judging
+
+    @Test
+    func `a busy game whose main thread went silent is not answering, said once, and killed only at the user's word`()
+        throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+        var reported: [StallWatch.Process] = []
+        watch.onNotAnswering = { reported.append($0) }
+
+        watch.sample()
+        machine.advance(2, busy: [900])
+        machine.mainThreadSilence[900] = 1
+        watch.sample()
+        #expect(watch.processes.first?.state == .running)
+
+        // Still burning a core, which is why the stall ladder would leave it alone.
+        machine.advance(2, busy: [900])
+        machine.mainThreadSilence[900] = StallWatch.Rules.notAnsweringAfter
+        watch.sample()
+        machine.advance(2, busy: [900])
+        watch.sample()
+        #expect(watch.processes.first?.state == .notAnswering)
+        #expect(reported.map(\.pid) == [900])
+        #expect(machine.signals.isEmpty)
+
+        watch.end(reported[0])
+        #expect(machine.signals.contains { $0.pid == 900 && $0.signal == SIGKILL })
+    }
+
+    @Test
+    func `an engine that writes no beat has no opinion`() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+        watch.sample()
+        machine.advance(60, busy: [900])
+        watch.sample()
+        #expect(watch.processes.first?.state == .running)
+    }
 
     @Test
     func `a busy process is running and a quiet one only goes stalled after fifteen seconds`()

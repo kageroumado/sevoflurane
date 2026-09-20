@@ -253,7 +253,7 @@ extension StallWatch.State {
         case .running: .green
         case .idle: .secondary
         case .stopped: .orange
-        case .stalled: .red
+        case .stalled, .notAnswering: .red
         }
     }
 }

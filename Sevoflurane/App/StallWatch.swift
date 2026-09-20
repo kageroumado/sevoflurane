@@ -36,6 +36,9 @@ final class StallWatch {
         static let oneCoreBand = 0.93 ... 1.07
         /// How long a process stays inside ``oneCoreBand`` before the monitor says so.
         static let oneCoreAfter: TimeInterval = 60
+        /// The engine beats once a second from the game's Cocoa main thread. This long
+        /// without one and the window answers nothing: no click, no key, no close.
+        static let notAnsweringAfter: TimeInterval = 10
     }
 
     /// What a process is to us.
@@ -61,6 +64,9 @@ final class StallWatch {
         case stopped
         /// No CPU and no present for ``Rules/candidateAfter``.
         case stalled
+        /// The window's main thread has stopped while the process runs on: the picture may
+        /// still move, and nothing the user does reaches the game.
+        case notAnswering = "not answering"
     }
 
     /// One process we own, as the last sample saw it.
@@ -86,6 +92,20 @@ final class StallWatch {
         var holdsOneCore = false
     }
 
+    /// Called once for each process whose window stops answering. The app asks the user
+    /// whether to end it; nothing is killed on this signal alone, since a debugger or a
+    /// sleeping Mac stops a main thread too.
+    @ObservationIgnored var onNotAnswering: ((Process) -> Void)?
+    @ObservationIgnored private var reportedNotAnswering: Set<pid_t> = []
+
+    /// Ends a game the user gave up on: the whole tree under it, and the run closes as a
+    /// watchdog ending.
+    func end(_ process: Process) {
+        for pid in tree(under: [process.pid]) { probes.signal(pid, SIGKILL) }
+        probes.log("stall: ended \(process.name) (pid \(process.pid)) at the user's word")
+        if let appID = process.appID { recorder?.close(appID: appID, kind: .watchdog) }
+    }
+
     /// Everything we own, most CPU first — what the process monitor lists.
     private(set) var processes: [Process] = []
 
@@ -100,6 +120,8 @@ final class StallWatch {
         /// answers today, which is why the watchdog will not kill on CPU
         /// alone — see ``killsOnCPUAlone``.
         var presents: @Sendable (pid_t) -> UInt64? = { _ in nil }
+        /// How long the process's Cocoa main thread has been silent, when its engine says.
+        var mainThreadSilence: @Sendable (pid_t) -> TimeInterval? = { PresentStats.mainThreadSilence(of: $0) }
         var signal: @Sendable (pid_t, Int32) -> Void = { kill($0, $1) }
         /// Seconds on a monotonic clock.
         var now: @Sendable () -> TimeInterval = {
@@ -172,6 +194,16 @@ final class StallWatch {
         }
         tracked = tracked.filter { seen.contains($0.key) }
         processes = found.sorted { $0.cpuShare > $1.cpuShare }
+        reportedNotAnswering.formIntersection(seen)
+        for process in found where process.state == .notAnswering
+            && (process.role == .game || process.role == .gameChild)
+            && !reportedNotAnswering.contains(process.pid) {
+            reportedNotAnswering.insert(process.pid)
+            probes.log("stall: \(process.name) (pid \(process.pid)) has stopped answering — its main thread "
+                + "is silent while the process runs")
+            if let appID = process.appID { note(appID: appID, for: Rules.notAnsweringAfter, unwedged: "not answering") }
+            onNotAnswering?(process)
+        }
         for process in found where process.state == .stalled {
             climb(for: process, at: now)
         }
@@ -261,7 +293,8 @@ final class StallWatch {
             cpuShare: (share * 1000).rounded() / 1000,
             footprintBytes: usage.footprintBytes,
             presents: presents,
-            state: state(pid: pid, moved: moved, still: now - lastMoved),
+            state: (probes.mainThreadSilence(pid) ?? 0) >= Rules.notAnsweringAfter
+                ? .notAnswering : state(pid: pid, moved: moved, still: now - lastMoved),
             appID: appID(of: pid),
             holdsOneCore: holdsOneCore,
         )

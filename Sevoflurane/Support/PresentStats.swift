@@ -169,6 +169,11 @@ final nonisolated class PresentStats: @unchecked Sendable {
         var source: Source
         var lastPresentUptime: TimeInterval
         var startedUptime: TimeInterval
+        /// When the Cocoa main thread's run loop last turned; the engine writes it once a
+        /// second. `nil` on a page from an engine that does not. Presents keep counting from the
+        /// game's own threads while the main thread is blocked or gone, and the window then
+        /// answers nothing: this is the field that stops.
+        var mainBeatUptime: TimeInterval?
         /// The process that wrote the page is still running. A killed
         /// process cannot unlink its own page.
         var alive: Bool
@@ -188,6 +193,17 @@ final nonisolated class PresentStats: @unchecked Sendable {
             if source == .presenter { return frames }
             return drawables > 0 ? drawables : frames
         }
+    }
+
+    /// How long a process's main thread has gone without turning its run loop: `nil` when
+    /// the process has no page, is gone, or runs on an engine that writes no beat.
+    static func mainThreadSilence(
+        of pid: pid_t, in directory: URL = SteamBottle.root.appendingPathComponent(".sevo/run"),
+    ) -> TimeInterval? {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("\(pid).stats")),
+              let page = page(from: data), page.alive, let beat = page.mainBeatUptime
+        else { return nil }
+        return max(0, uptime - beat)
     }
 
     /// Every page in a bottle's run directory, stale ones dropped.
@@ -225,6 +241,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
             source: Page.Source(rawValue: half(56)) ?? .none,
             lastPresentUptime: seconds(word(24)),
             startedUptime: seconds(word(32)),
+            mainBeatUptime: data.count >= 104 && word(96) != 0 ? seconds(word(96)) : nil,
             alive: kill(pid, 0) == 0 || errno != ESRCH,
         )
     }
