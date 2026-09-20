@@ -164,6 +164,15 @@ nonisolated enum WineWindowWatch {
     /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
     /// to the window server, which answers in its own time on a busy host —
     /// on the main thread that time would be a UI stall every probe cycle.
+    /// The smallest side a game's own window has. The engine's frame-rate
+    /// counter is a child window of the game's, 22 points tall and in front
+    /// of it, and would otherwise be the first window a scan meets.
+    static let smallestGameWindowSide = 64
+
+    static func isOverlay(width: Int, height: Int) -> Bool {
+        min(width, height) < smallestGameWindowSide
+    }
+
     @concurrent
     static func scan() async -> Scan {
         let interval = PerfProbe.system.beginInterval("WineWindowScan")
@@ -191,7 +200,7 @@ nonisolated enum WineWindowWatch {
                 height: (bounds["Height"] as? NSNumber)?.intValue ?? 0,
             )
             if isGame {
-                game = game ?? window
+                if !isOverlay(width: window.width, height: window.height) { game = game ?? window }
             } else {
                 wineWindows.append(window)
             }

@@ -27,7 +27,9 @@ enum GameWindow {
             else { continue }
             guard let exe = WineWindowWatch.program(owner: ownerName, pid: pid),
                   exe.hasSuffix(".exe"),
-                  !WineWindowWatch.gameInfrastructureOwners.contains(exe) else { continue }
+                  !WineWindowWatch.gameInfrastructureOwners.contains(exe),
+                  !WineWindowWatch.isOverlay(width: Int(bounds.width), height: Int(bounds.height))
+            else { continue }
 
             let (index, scale, displayTopLeft) = display(for: bounds)
             // kCGWindowName needs the Screen Recording permission; the app
