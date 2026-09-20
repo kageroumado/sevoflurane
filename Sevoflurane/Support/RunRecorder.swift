@@ -206,7 +206,7 @@ final nonisolated class RunRecorder {
             appid: appID,
             name: values.name,
             engine: (bootedEngine ?? Engine.active).recordIdentifier,
-            renderer: selection.renderer.rawValue,
+            renderer: values.runner == GameRunner.nwjs ? GameRunner.nwjs : selection.renderer.rawValue,
             runner: values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
             tuning: GameConfig.tuning(bottle: SteamBottle.name, game: appID).value.rawValue,
@@ -269,6 +269,30 @@ final nonisolated class RunRecorder {
             open[appID]?.record.gameMode = gameMode || run.record.gameMode == true
             guard let pid = run.gamePID, let usage = ProcessUsage.read(pid: pid) else { continue }
             open[appID]?.record.energy = RunRecord.Energy(usage)
+        }
+    }
+
+    /// Every how many meter ticks the native runs' processes are looked for.
+    static let nativeCheckEvery = 3
+
+    /// The open runs on the native NW.js runner, whose end only their own
+    /// processes tell.
+    var nativeRuns: [Int] {
+        open.filter { $0.value.record.runner == GameRunner.nwjs }.map(\.key)
+    }
+
+    /// Native runs whose processes have been seen alive.
+    private var nativeSeen: Set<Int> = []
+
+    /// A native run's processes were looked for. Seen and then gone is the
+    /// end of the run; never seen yet is a game still starting.
+    func noteNativeProcesses(alive: Bool, forApp appID: Int) {
+        if alive {
+            nativeSeen.insert(appID)
+        } else if nativeSeen.remove(appID) != nil {
+            // No exit code exists for a process Steam never tracked: it was
+            // asked to stop, or the player closed it.
+            close(appID: appID, kind: RunLog.takeStopRequest(forApp: appID, in: runs) ? .stopped : .user)
         }
     }
 
@@ -369,6 +393,7 @@ final nonisolated class RunRecorder {
     func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
         guard var run = open.removeValue(forKey: appID) else { return }
         confirmedRunning.remove(appID)
+        nativeSeen.remove(appID)
         run.record.fps = presentStats.disarm(appID: appID)
         // Before the write rather than after it: the same app id can be armed
         // again in the next moment, and a disarm behind that would take the

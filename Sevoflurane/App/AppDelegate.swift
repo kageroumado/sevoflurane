@@ -329,11 +329,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
                 runRecorder.sample()
                 ticks += 1
+                if ticks.isMultiple(of: RunRecorder.nativeCheckEvery) {
+                    await Self.checkNativeRuns(runRecorder)
+                }
                 guard runRecorder.isRecording,
                       let every = DiagnosticLevel.current.hostSampleInterval else { continue }
                 let period = max(1, Int(every / RunRecorder.meterInterval))
                 if ticks.isMultiple(of: period) { Self.logHostState() }
             }
+        }
+    }
+
+    /// A game on the native NW.js runner is a macOS process Steam does not
+    /// track, and the client sends no lifetime edge for it: the run ends when
+    /// its processes are gone. `ps` runs off the main actor.
+    private static func checkNativeRuns(_ recorder: RunRecorder) async {
+        for appID in recorder.nativeRuns {
+            let alive = await Task.detached(name: "Look for the native game's processes") {
+                let running = NWJSRunner.runningProcesses(appID: appID)
+                return !running.browser.isEmpty || !running.helpers.isEmpty
+            }.value
+            recorder.noteNativeProcesses(alive: alive, forApp: appID)
         }
     }
 

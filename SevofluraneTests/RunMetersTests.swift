@@ -207,6 +207,21 @@ struct RunMetersTests {
     }
 
     @Test
+    func `a native run ends when its processes have been seen and are gone`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 1_933_660)
+        // Still starting: nothing to see yet is no ending.
+        recorder.noteNativeProcesses(alive: false, forApp: 1_933_660)
+        #expect(recorder.openRecord(forApp: 1_933_660) != nil)
+        recorder.noteNativeProcesses(alive: true, forApp: 1_933_660)
+        recorder.noteNativeProcesses(alive: false, forApp: 1_933_660)
+        #expect(recorder.openRecord(forApp: 1_933_660) == nil)
+        #expect(try await records(in: root, waitingFor: 1).count == 1)
+    }
+
+    @Test
     func `a game the client reports running without a launch gets a run`() throws {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }
