@@ -1,15 +1,15 @@
 import AppKit
 
-/// The menu-bar glyph: the app icon's vaporizer reduced to its outline — the
-/// dial ring sitting above the body, a gap of clear bar between them, and the
-/// hose leaving to the left. It resembles nothing else in a menu bar, which is
-/// the point: the shape is learned once, from the app icon, and then owned.
-/// Drawn programmatically as a template image so it stays sharp at any
-/// backing scale and follows the menu bar's light/dark tinting.
+/// The menu-bar glyph: a vaporizer's dial that flows into its outlet — a ring
+/// with its pointer at the top right, its rim sweeping down and left into a
+/// hose that ends in a rounded foot. One continuous shape, so it reads at
+/// menu-bar size, and it resembles nothing else in a menu bar: the shape is
+/// learned once and then owned. Drawn programmatically as a template image so
+/// it stays sharp at any backing scale and follows the menu bar's tinting.
 ///
-/// The badged variant carries a corner dot — punched out of the body with a
-/// cleared disc so it reads at menu-bar size — for health states that need
-/// the user (degraded, gave up) and for waiting conversations.
+/// The badged variant carries a corner dot — punched out with a cleared disc
+/// so it reads at menu-bar size — for health states that need the user
+/// (degraded, gave up) and for waiting conversations.
 @MainActor
 enum MenuBarIcon {
     static func image(badged: Bool) -> NSImage {
@@ -19,32 +19,40 @@ enum MenuBarIcon {
     private static let plainImage = draw(badged: false)
     private static let badgedImage = draw(badged: true)
 
+    /// The glyph on its 24-unit design grid, y downward; ``draw(badged:)``
+    /// scales it to the 18-point image.
     private enum Geometry {
         static let size = NSSize(width: 18, height: 18)
-        /// The dial: a ring above the body.
-        static let dialCenter = NSPoint(x: 11.0, y: 5.6)
-        static let dialRadius: CGFloat = 3.7
-        static let dialStroke: CGFloat = 1.8
-        /// Clear bar between the ring's outer edge and the body, so the dial
-        /// reads as a separate part rather than a bump on the body.
-        static let dialGap: CGFloat = 1.3
-        /// The body: a rounded block under the dial.
-        static let body = NSRect(x: 6.4, y: 7.6, width: 9.2, height: 9.8)
-        static let bodyCorner: CGFloat = 2.2
-        /// The hose: a rounded stub leaving the body to the left.
-        static let hoseY: CGFloat = 13.6
-        static let hoseEnd: CGFloat = 2.8
-        static let hoseStroke: CGFloat = 2.4
+        static let grid: CGFloat = 24
+        static let dialCenter = CGPoint(x: 15, y: 8.5)
+        static let dialOuterRadius: CGFloat = 6.5
+        static let dialInnerRadius: CGFloat = 4.5
+        /// Where the hose's upper edge meets the dial's rim, and where the rim
+        /// hands over to the hose's lower edge.
+        static let rimStart = CGPoint(x: 8.8, y: 10.45)
+        static let rimEnd = CGPoint(x: 15, y: 15)
+        /// The hose's rounded foot.
+        static let footCenter = CGPoint(x: 2.9, y: 20.35)
+        static let footRadius: CGFloat = 1.65
+        static let pointer = (from: CGPoint(x: 15, y: 6.1), to: CGPoint(x: 15, y: 10.9))
+        static let pointerStroke: CGFloat = 2.05
     }
 
     private static func draw(badged: Bool) -> NSImage {
         let image = NSImage(size: Geometry.size, flipped: true) { _ in
-            NSColor.black.setStroke()
-            NSColor.black.setFill()
-            drawBody()
-            clearDialGap()
-            drawDial()
-            drawHose()
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.saveGState()
+            context.scaleBy(x: Geometry.size.width / Geometry.grid, y: Geometry.size.height / Geometry.grid)
+            context.setFillColor(.black)
+            context.setStrokeColor(.black)
+            context.addPath(body)
+            context.fillPath(using: .evenOdd)
+            context.setLineWidth(Geometry.pointerStroke)
+            context.setLineCap(.round)
+            context.move(to: Geometry.pointer.from)
+            context.addLine(to: Geometry.pointer.to)
+            context.strokePath()
+            context.restoreGState()
             if badged { drawBadge() }
             return true
         }
@@ -52,41 +60,49 @@ enum MenuBarIcon {
         return image
     }
 
-    private static func drawBody() {
-        NSBezierPath(
-            roundedRect: Geometry.body,
-            xRadius: Geometry.bodyCorner, yRadius: Geometry.bodyCorner,
-        ).fill()
-    }
-
-    private static func clearDialGap() {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let radius = Geometry.dialRadius + Geometry.dialStroke / 2 + Geometry.dialGap
-        context.setBlendMode(.clear)
-        context.fillEllipse(in: CGRect(
-            x: Geometry.dialCenter.x - radius, y: Geometry.dialCenter.y - radius,
-            width: radius * 2, height: radius * 2,
+    /// The dial's rim and the hose as one outline, with the dial's opening as
+    /// a second subpath for the even-odd fill to leave clear.
+    private static var body: CGPath {
+        let path = CGMutablePath()
+        let top = Geometry.footCenter.y - Geometry.footRadius
+        let bottom = Geometry.footCenter.y + Geometry.footRadius
+        path.move(to: CGPoint(x: Geometry.footCenter.x, y: top))
+        path.addLine(to: CGPoint(x: 5.3, y: top))
+        path.addCurve(
+            to: CGPoint(x: 7.8, y: 14),
+            control1: CGPoint(x: 6.8, y: top), control2: CGPoint(x: 7.2, y: 16.5),
+        )
+        path.addLine(to: Geometry.rimStart)
+        // The long way round the dial, from the hose's upper edge to its lower one.
+        path.addArc(
+            center: Geometry.dialCenter, radius: Geometry.dialOuterRadius,
+            startAngle: angle(of: Geometry.rimStart), endAngle: angle(of: Geometry.rimEnd),
+            clockwise: false,
+        )
+        path.addCurve(
+            to: CGPoint(x: 10.7, y: 19.1),
+            control1: CGPoint(x: 12.7, y: 15.4), control2: CGPoint(x: 11.4, y: 17),
+        )
+        path.addCurve(
+            to: CGPoint(x: 5.8, y: bottom),
+            control1: CGPoint(x: 10.1, y: 21.2), control2: CGPoint(x: 8.5, y: bottom),
+        )
+        path.addLine(to: CGPoint(x: Geometry.footCenter.x, y: bottom))
+        path.addArc(
+            center: Geometry.footCenter, radius: Geometry.footRadius,
+            startAngle: .pi / 2, endAngle: .pi * 3 / 2, clockwise: false,
+        )
+        path.closeSubpath()
+        path.addEllipse(in: CGRect(
+            x: Geometry.dialCenter.x - Geometry.dialInnerRadius,
+            y: Geometry.dialCenter.y - Geometry.dialInnerRadius,
+            width: Geometry.dialInnerRadius * 2, height: Geometry.dialInnerRadius * 2,
         ))
-        context.setBlendMode(.normal)
+        return path
     }
 
-    private static func drawDial() {
-        let radius = Geometry.dialRadius
-        let ring = NSBezierPath(ovalIn: NSRect(
-            x: Geometry.dialCenter.x - radius, y: Geometry.dialCenter.y - radius,
-            width: radius * 2, height: radius * 2,
-        ))
-        ring.lineWidth = Geometry.dialStroke
-        ring.stroke()
-    }
-
-    private static func drawHose() {
-        let hose = NSBezierPath()
-        hose.lineWidth = Geometry.hoseStroke
-        hose.lineCapStyle = .round
-        hose.move(to: NSPoint(x: Geometry.body.minX + 0.5, y: Geometry.hoseY))
-        hose.line(to: NSPoint(x: Geometry.hoseEnd, y: Geometry.hoseY))
-        hose.stroke()
+    private static func angle(of point: CGPoint) -> CGFloat {
+        atan2(point.y - Geometry.dialCenter.y, point.x - Geometry.dialCenter.x)
     }
 
     private static func drawBadge() {
