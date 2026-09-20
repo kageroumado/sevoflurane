@@ -69,10 +69,10 @@ nonisolated extension SettingCopy {
     )
 
     static let mouse = SettingCopy(
-        title: "Mouse",
+        title: "Movement",
         caption: "What a game gets while it holds the pointer for mouse-look.",
         help: SettingHelp(
-            title: "Mouse",
+            title: "Mouse movement",
             summary: "Applies while a game has taken the pointer, as a first-person camera does. "
                 + "Menus and the desktop keep the Mac's pointer.",
             entries: [

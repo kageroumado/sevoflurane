@@ -92,7 +92,7 @@ private struct GameListRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(name).lineLimit(1)
-            Text(exes.isEmpty ? "no executable yet" : exes.joined(separator: ", "))
+            Text(exes.isEmpty ? "not launched here yet" : exes.joined(separator: ", "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

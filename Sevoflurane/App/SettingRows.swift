@@ -135,7 +135,10 @@ private struct SettingControlView: View {
     var body: some View {
         switch (setting.control, store.level) {
         case (.toggle, .bottle):
+            // Said aloud: inside a row's stack the switch loses the title the
+            // form would have read for it.
             Toggle(setting.title, isOn: store.flagBinding(setting))
+                .accessibilityLabel(setting.title)
         case (.toggle, .game):
             Picker(setting.title, selection: tag) {
                 Text("Inherit (\(setting.label(of: store.inherited(setting))))").tag(Self.inheritTag)

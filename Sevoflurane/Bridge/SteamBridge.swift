@@ -82,6 +82,8 @@ actor SteamBridge {
     /// Loopback paths already reported unanswered, so one broken image does
     /// not fill the log with the same line.
     var loopbackMisses: Set<String> = []
+    /// Whether the log already says the client is refusing calls as it closes.
+    private var saidClientIsClosing = false
     let shim: String
 
     /// Fired on `SteamClient.Apps.RunGame` — the one choke point every game
@@ -520,7 +522,18 @@ actor SteamBridge {
                 }
             }
         } catch {
-            log(.bridge, "dispatch \(cmd) failed: \(error)")
+            // A client on its way out refuses every call the page still
+            // makes, a dozen in a second: said once per closing.
+            let closing = "\(error)" == "closed"
+            if !closing || !saidClientIsClosing {
+                log(
+                    .bridge,
+                    closing
+                        ? "the client is closing — the page's calls are refused until it is back"
+                        : "dispatch \(cmd) failed: \(error)",
+                )
+            }
+            saidClientIsClosing = closing
             if cmd == "sc", let rid = request["id"] as? Int {
                 // The shim's promise must settle: a call that timed out or
                 // lost its connection rejects there like a Steam error does.

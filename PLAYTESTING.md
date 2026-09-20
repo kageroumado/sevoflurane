@@ -41,9 +41,9 @@ templates ask for the subset that matters.
    renderer that answered it, and a renderer switch from the menu bar restarts
    Steam, so write the time down.
 
-4. **Note the window mode.** Settings › Engine › *Resizable windows*.
+4. **Note the window mode.** Settings › Engine › Picture › *Resizable windows*.
    The default covers games that run in a window; a game that covers the screen
-   needs the third option before it can be moved or resized.
+   needs *Fixed-size and full-screen* before it can be moved or resized.
 
 5. **Keep the app running.** Quit it with ⌘Q, never Force Quit, unless force
    quitting is the thing under test. A force-quit leaves the bottle running with
@@ -79,7 +79,7 @@ it. Killing the app tests something else.
 
 ## After the session
 
-1. **Save the report.** Settings › About › *Save Diagnostics…*, or from a
+1. **Save the report.** Settings › Diagnostics › *Diagnostics archive*, or from a
    terminal:
 
    ```bash
