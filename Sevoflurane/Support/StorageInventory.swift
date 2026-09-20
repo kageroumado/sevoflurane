@@ -17,7 +17,6 @@ nonisolated enum StorageInventory {
         let id: String
         let name: String
         let detail: String
-        let icon: String
         let url: URL
         var bytes: Int64
         /// Whether removing it is this app's business. Games are Steam's, and
@@ -54,7 +53,6 @@ nonisolated enum StorageInventory {
                 id: Entry.gamesID,
                 name: "Games",
                 detail: "Every game Steam has installed on this Mac.",
-                icon: "gamecontroller",
                 url: steam.appendingPathComponent("steamapps"),
                 bytes: -1,
                 removal: nil,
@@ -63,7 +61,6 @@ nonisolated enum StorageInventory {
                 id: Entry.programsID,
                 name: "Added programs",
                 detail: "Windows programs you added, and what their installers wrote here.",
-                icon: "square.and.arrow.down.on.square",
                 // The size is the sum of the directories the installers made,
                 // which all sit under this drive.
                 url: bottle.appendingPathComponent("drive_c"),
@@ -74,7 +71,6 @@ nonisolated enum StorageInventory {
                 id: "client",
                 name: "Steam client",
                 detail: "The client itself, without its games.",
-                icon: "shippingbox",
                 url: steam,
                 bytes: -1,
                 removal: nil,
@@ -83,7 +79,6 @@ nonisolated enum StorageInventory {
                 id: "caches",
                 name: "Client caches",
                 detail: "Web cache, library art, and crash dumps.",
-                icon: "trash.slash",
                 url: steam.appendingPathComponent("appcache"),
                 bytes: -1,
                 removal: .regenerated("Steam rebuilds these as it runs."),
@@ -92,7 +87,6 @@ nonisolated enum StorageInventory {
                 id: "bottle",
                 name: "Windows environment",
                 detail: "The Windows drive Steam runs inside.",
-                icon: "externaldrive",
                 url: bottle,
                 bytes: -1,
                 removal: nil,
@@ -109,7 +103,6 @@ nonisolated enum StorageInventory {
                 id: "engines",
                 name: "Dormison engines",
                 detail: "Sevoflurane's own Wine engines, one folder per version.",
-                icon: "gearshape.2",
                 url: support.appendingPathComponent("Engines"),
                 bytes: -1,
                 removal: .permanent("Setup downloads one again if you need it."),
@@ -118,7 +111,6 @@ nonisolated enum StorageInventory {
                 id: "renderers",
                 name: "Renderer versions",
                 detail: "DXMT and DXVK versions added beside the engine's own.",
-                icon: "square.stack.3d.up",
                 url: RendererVersions.root,
                 bytes: -1,
                 removal: .permanent("Settings › Graphics downloads or adds them again."),
@@ -127,7 +119,6 @@ nonisolated enum StorageInventory {
                 id: "shaders",
                 name: "Shader packages",
                 detail: "Upscalers downloaded for Dormison.",
-                icon: "wand.and.stars",
                 url: ShaderPackages.root,
                 bytes: -1,
                 removal: .permanent("Settings › Graphics downloads them again."),
@@ -136,7 +127,6 @@ nonisolated enum StorageInventory {
                 id: "toolkits",
                 name: "Apple's Game Porting Toolkit",
                 detail: "The DirectX 12 translator versions you added.",
-                icon: "cpu",
                 url: support.appendingPathComponent("D3DMetal"),
                 bytes: -1,
                 removal: .permanent("Download it from Apple again to get it back."),
@@ -145,7 +135,6 @@ nonisolated enum StorageInventory {
                 id: "shadow",
                 name: "CrossOver links",
                 detail: "Shortcuts that point CrossOver at the toolkit you added.",
-                icon: "link",
                 url: CrossOverShadow.root,
                 bytes: -1,
                 removal: .regenerated("Rebuilt the next time a game starts."),
@@ -154,7 +143,6 @@ nonisolated enum StorageInventory {
                 id: "logs",
                 name: "Logs",
                 detail: "The event log this app writes.",
-                icon: "doc.text",
                 // Named here rather than taken from `EventLog`, which lives in
                 // the app: `sevo` reports storage too, and shares this file.
                 url: FileManager.default.homeDirectoryForCurrentUser
@@ -163,6 +151,36 @@ nonisolated enum StorageInventory {
                 removal: .regenerated("A new one starts on the next launch."),
             ),
         ]
+    }
+
+    /// The disk the bottle sits on: what it is called and how full it is.
+    struct Volume: Sendable, Equatable {
+        let name: String
+        let capacity: Int64
+        let available: Int64
+
+        var used: Int64 {
+            max(0, capacity - available)
+        }
+    }
+
+    /// The volume that holds the Steam bottle, or the home directory's while
+    /// no bottle exists. Available space is the figure Finder reports, which
+    /// counts what the system would purge to make room.
+    static func volume() -> Volume? {
+        let manager = FileManager.default
+        let root = manager.fileExists(atPath: SteamBottle.root.path)
+            ? SteamBottle.root
+            : manager.homeDirectoryForCurrentUser
+        guard let values = try? root.resourceValues(forKeys: [
+            .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeNameKey,
+        ]), let capacity = values.volumeTotalCapacity,
+        let available = values.volumeAvailableCapacityForImportantUsage else { return nil }
+        return Volume(
+            name: values.volumeName ?? root.path,
+            capacity: Int64(capacity),
+            available: available,
+        )
     }
 
     /// One installed game, as Steam itself accounts for it.

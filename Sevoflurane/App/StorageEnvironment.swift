@@ -10,6 +10,8 @@ protocol StorageEnvironment: AnyObject {
     var isSimulation: Bool { get }
 
     func entries() -> [StorageInventory.Entry]
+    /// The disk the bottle sits on, or `nil` when the system will not say.
+    func volume() -> StorageInventory.Volume?
     func installedGames() -> [StorageInventory.Game]
     func size(of entry: StorageInventory.Entry) async -> Int64
     func trash(_ entry: StorageInventory.Entry) throws
@@ -54,6 +56,10 @@ extension StorageEnvironment {
 final class LiveStorageEnvironment: StorageEnvironment {
     func entries() -> [StorageInventory.Entry] {
         StorageInventory.entries()
+    }
+
+    func volume() -> StorageInventory.Volume? {
+        StorageInventory.volume()
     }
 
     func installedGames() -> [StorageInventory.Game] {

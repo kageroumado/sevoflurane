@@ -10,6 +10,8 @@ import Foundation
 @Observable
 final class StorageStore {
     private(set) var entries: [StorageInventory.Entry]
+    /// The disk all of it sits on, for the bar above the list.
+    private(set) var volume: StorageInventory.Volume?
     /// What is installed, largest first — the detail behind the Games row.
     private(set) var games: [StorageInventory.Game] = []
     /// The Windows programs added by hand — the detail behind the Added
@@ -26,6 +28,15 @@ final class StorageStore {
         let environment = environment ?? LiveStorageEnvironment()
         self.environment = environment
         entries = environment.entries()
+        volume = environment.volume()
+    }
+
+    /// The volume divided between what is measured so far and everything
+    /// else, or `nil` when the volume could not be read.
+    var breakdown: StorageBreakdown? {
+        volume.map {
+            StorageBreakdown.make(entries: entries, volumeUsed: $0.used, volumeTotal: $0.capacity)
+        }
     }
 
     var total: Int64 {
@@ -38,6 +49,7 @@ final class StorageStore {
         guard !isMeasuring else { return }
         isMeasuring = true
         defer { isMeasuring = false }
+        volume = environment.volume()
         refreshSharing()
         for index in programs.indices {
             let bytes = await environment.size(of: programs[index])

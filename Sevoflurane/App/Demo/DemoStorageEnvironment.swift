@@ -62,7 +62,8 @@
                 ]
             case .library, .measuringSlowly, .linkableGames, .alreadyLinked:
                 [
-                    "games": 214_863_953_920, "client": 1_932_735_283, "caches": 3_221_225_472,
+                    "games": 214_863_953_920, "programs": 6_871_947_674,
+                    "client": 1_932_735_283, "caches": 3_221_225_472,
                     "bottle": 692_060_160, "engines": 1_395_864_371, "renderers": 61_865_984,
                     "shaders": 38_797_312, "toolkits": 205_520_896, "shadow": 4096, "logs": 2_411_724,
                 ]
@@ -73,6 +74,13 @@
 
         func entries() -> [StorageInventory.Entry] {
             StorageInventory.entries()
+        }
+
+        /// A 1 TB internal disk, a little under two thirds full.
+        func volume() -> StorageInventory.Volume? {
+            StorageInventory.Volume(
+                name: "Macintosh HD", capacity: 994_662_584_320, available: 382_662_584_320,
+            )
         }
 
         func installedGames() -> [StorageInventory.Game] {

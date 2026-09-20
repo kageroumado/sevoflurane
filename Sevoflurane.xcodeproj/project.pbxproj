@@ -130,6 +130,8 @@
 				App/SilentUpdates.swift,
 				App/StallWatch.swift,
 				App/SteamNotifications.swift,
+				App/StorageBreakdown.swift,
+				App/StorageCapacityViews.swift,
 				App/StorageEnvironment.swift,
 				App/StorageSettings.swift,
 				App/StorageStore.swift,

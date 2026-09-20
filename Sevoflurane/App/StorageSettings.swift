@@ -11,18 +11,25 @@ struct StorageSettings: View {
     @State private var showsPrograms = false
 
     var body: some View {
-        Form {
+        let breakdown = store.breakdown
+        return Form {
+            if let volume = store.volume, let breakdown {
+                Section {
+                    StorageVolumeOverview(volume: volume, breakdown: breakdown)
+                }
+            }
             Section {
                 ForEach(store.entries) { entry in
+                    let dot = breakdown?.kind(of: entry)?.color
                     if entry.id == StorageInventory.Entry.gamesID, !store.games.isEmpty {
-                        row(entry, isExpanded: $showsGames)
+                        row(entry, dot: dot, isExpanded: $showsGames)
                         if showsGames { gameList }
                     } else if entry.id == StorageInventory.Entry.programsID,
                               !store.programs.isEmpty {
-                        row(entry, isExpanded: $showsPrograms)
+                        row(entry, dot: dot, isExpanded: $showsPrograms)
                         if showsPrograms { programList }
                     } else if entry.id != StorageInventory.Entry.programsID {
-                        row(entry)
+                        row(entry, dot: dot)
                     }
                 }
                 if store.needsClientRestart, let steam {
@@ -42,12 +49,7 @@ struct StorageSettings: View {
                     Text(error).font(.callout).foregroundStyle(.orange)
                 }
             } header: {
-                HStack {
-                    Text("On this Mac")
-                    Spacer()
-                    if store.isMeasuring { ProgressView().controlSize(.small) }
-                    Text(Self.size(store.total)).monospacedDigit().foregroundStyle(.secondary)
-                }
+                StorageOwnTotalHeader(total: store.total, isMeasuring: store.isMeasuring)
             } footer: {
                 Text("Caches and downloads go to the Trash. Uninstall games through Steam.")
             }
@@ -65,7 +67,7 @@ struct StorageSettings: View {
                 gameRow(game)
             }
         }
-        .padding(.leading, Self.iconColumnWidth + Theme.Space.md)
+        .padding(.leading, Self.titleIndent)
         .padding(.vertical, Theme.Space.xs)
     }
 
@@ -113,7 +115,7 @@ struct StorageSettings: View {
                 programRow(program)
             }
         }
-        .padding(.leading, Self.iconColumnWidth + Theme.Space.md)
+        .padding(.leading, Self.titleIndent)
         .padding(.vertical, Theme.Space.xs)
     }
 
@@ -203,22 +205,28 @@ struct StorageSettings: View {
     /// The column at the trailing edge that holds a row's one control, kept
     /// for a row with none so the sizes share an edge.
     private static let actionColumnWidth: CGFloat = 20
-    private static let iconColumnWidth: CGFloat = 20
+    /// Where a row's title starts, past its dot: the edge the detail line and
+    /// the expanded lists share.
+    private static let titleIndent = StorageDot.diameter + Theme.Space.sm
 
-    /// One category. A row that opens a list carries a chevron where the
-    /// others carry their trash button, so every icon, name and size sits in
-    /// one column whichever kind of row it is.
-    private func row(_ entry: StorageInventory.Entry, isExpanded: Binding<Bool>? = nil) -> some View {
+    /// One category. `dot` is the color of the bar segment that holds the
+    /// entry. A row that opens a list carries a chevron where the others
+    /// carry their trash button, so every dot, name and size sits in one
+    /// column whichever kind of row it is.
+    private func row(
+        _ entry: StorageInventory.Entry, dot: Color?, isExpanded: Binding<Bool>? = nil,
+    ) -> some View {
         HStack(spacing: Theme.Space.md) {
-            Image(systemName: entry.icon)
-                .foregroundStyle(.secondary)
-                .frame(width: Self.iconColumnWidth)
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.name)
+                HStack(spacing: Theme.Space.sm) {
+                    StorageDot(color: dot)
+                    Text(entry.name)
+                }
                 Text(entry.removal?.caution ?? entry.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, Self.titleIndent)
             }
             Spacer(minLength: Theme.Space.sm)
             // A dash for both "not measured yet" and "nothing there":
@@ -261,5 +269,20 @@ struct StorageSettings: View {
     /// Sizes are formatted here for every pane that shows one.
     static func size(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
+/// The header over the list of what Sevoflurane itself occupies.
+struct StorageOwnTotalHeader: View {
+    let total: Int64
+    let isMeasuring: Bool
+
+    var body: some View {
+        HStack {
+            Text("Sevoflurane")
+            Spacer()
+            if isMeasuring { ProgressView().controlSize(.small) }
+            Text(StorageSettings.size(total)).monospacedDigit().foregroundStyle(.secondary)
+        }
     }
 }
