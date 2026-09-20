@@ -510,6 +510,7 @@ actor SteamBridge {
             default:
                 guard let template = BridgeJS.commands[cmd],
                       let appid = request["appid"] as? Int else { return }
+                if cmd == "terminate" { RunLog.noteStopRequest(forApp: appid) }
                 _ = try await cdp.evaluate(
                     template.replacingOccurrences(of: "%ID%", with: String(appid)),
                 )
@@ -580,6 +581,12 @@ actor SteamBridge {
                 BottleGraphics.recordBootedSelection()
             }
             onGameLaunch?()
+        }
+        if path == "SteamClient.Apps.TerminateApp",
+           let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {
+            // Every stop asked for in the page — the library's Stop button, the
+            // menu bar — passes here. The run that ends next ended on request.
+            RunLog.noteStopRequest(forApp: appID)
         }
         let call = PerfProbe.bridge.beginInterval(
             "SteamClientCall",

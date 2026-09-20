@@ -42,6 +42,7 @@ nonisolated enum SteamOps {
     }
 
     static func terminate(_ appid: Int) async throws {
+        RunLog.noteStopRequest(forApp: appid)
         _ = try await SteamJS.eval(
             "SteamClient.Apps.TerminateApp('\(appid)', false); 'ok'",
         )

@@ -119,9 +119,17 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             /// The client raised an error for the game action and no process
             /// exit followed: Steam ended the run itself.
             case steamTerminate = "steam-terminate"
-            /// A non-zero exit status, or an unhandled exception in the Wine
-            /// log during the run.
+            /// An unhandled exception in the Wine log during the run. A crash
+            /// leaves one; being ended from outside does not.
             case crash
+            /// The game was asked to stop, through Sevoflurane or `sevo`, and
+            /// went. Steam ends a game with `TerminateProcess`, which reads as
+            /// exit status 1 with no exception behind it.
+            case stopped
+            /// A non-zero exit status with no exception behind it and no stop
+            /// on record: the game gave up by itself, or Steam's own Stop
+            /// button ended it — the two read the same from here.
+            case exitError = "exit-error"
             /// The app killed the game (the stall watchdog).
             case watchdog
             /// Sevoflurane quit, and the teardown that follows took the
@@ -194,6 +202,8 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         return switch exit.kind {
         case .user: "exited normally"
         case .crash: "crashed — exit\(code)"
+        case .stopped: "stopped on request"
+        case .exitError: "exited with an error — exit\(code)"
         case .steamTerminate: "stopped by Steam"
         case .watchdog: "killed after a stall"
         case .appQuit: "ended when Sevoflurane quit"
@@ -226,6 +236,31 @@ nonisolated enum RunLog {
 
     /// How many months are kept.
     static let monthsKept = 12
+
+    /// How long a stop request stands for the run that ends after it.
+    static let stopRequestLife: TimeInterval = 60
+
+    private static func stopRequestURL(forApp appID: Int, in root: URL) -> URL {
+        root.appendingPathComponent(".stop-\(appID)")
+    }
+
+    /// Leaves word that this app is about to be stopped on purpose, for the
+    /// recorder that will see its process exit with status 1. A file, because
+    /// the request can come from `sevo` and the recorder lives in the app.
+    static func noteStopRequest(forApp appID: Int, in root: URL = root) {
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try? Data().write(to: stopRequestURL(forApp: appID, in: root))
+    }
+
+    /// Whether a stop was asked for within ``stopRequestLife``; the word is
+    /// taken, so it answers for one ending.
+    static func takeStopRequest(forApp appID: Int, in root: URL = root) -> Bool {
+        let url = stopRequestURL(forApp: appID, in: root)
+        guard let written = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        else { return false }
+        try? FileManager.default.removeItem(at: url)
+        return Date().timeIntervalSince(written) <= stopRequestLife
+    }
 
     /// A month's file, whether or not it exists.
     static func url(forMonth date: Date, in root: URL = root) -> URL {
@@ -459,8 +494,9 @@ nonisolated struct RunInProgress: Sendable {
         record.notes = notes.isEmpty ? nil : notes
         record.exit = RunRecord.Exit(
             kind: kind ?? Self.kind(
-                code: exit?.code, crashed: record.crash != nil, steamError: steamError,
-                unrecorded: unrecorded,
+                code: exit?.code, crashed: record.crash != nil,
+                stopRequested: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
+                steamError: steamError, unrecorded: unrecorded,
             ),
             code: exit?.code,
         )
@@ -472,10 +508,14 @@ nonisolated struct RunInProgress: Sendable {
 
     /// How a run ended, from what the client and Steam's log actually say.
     private static func kind(
-        code: Int?, crashed: Bool, steamError: String?, unrecorded: RunRecord.Exit.Kind,
+        code: Int?, crashed: Bool, stopRequested: Bool, steamError: String?,
+        unrecorded: RunRecord.Exit.Kind,
     ) -> RunRecord.Exit.Kind {
-        if let code { return code == 0 && !crashed ? .user : .crash }
         if crashed { return .crash }
+        if let code {
+            if code == 0 { return .user }
+            return stopRequested ? .stopped : .exitError
+        }
         return steamError == nil ? unrecorded : .steamTerminate
     }
 
