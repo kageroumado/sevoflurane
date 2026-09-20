@@ -685,7 +685,9 @@ nonisolated enum ClientLifecycle {
         if let environment = invocation.environment {
             process.environment = environment
         }
-        let name = program.first ?? "?"
+        // The program's own name: a full path in a log line is the account's
+        // name in a bug report, and nobody reads past it.
+        let name = program.first.map { ($0 as NSString).lastPathComponent } ?? "?"
         let trail = WineLog.handle(labeled: name) ?? FileHandle.nullDevice
         process.standardOutput = trail
         process.standardError = trail
