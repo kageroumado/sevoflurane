@@ -12,7 +12,17 @@ nonisolated enum SevoExit {
 }
 
 nonisolated enum Sevo {
-    static let version = "0.1.0"
+    /// The version of the app this executable shipped in (`Sevoflurane.app/
+    /// Contents/Helpers/sevo`), which is what a bug report should name; a copy
+    /// built with `swift build` says so.
+    static let version: String = {
+        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        let contents = executable.deletingLastPathComponent().deletingLastPathComponent()
+        guard let info = NSDictionary(contentsOf: contents.appending(path: "Info.plist")),
+              let version = info["CFBundleShortVersionString"] as? String
+        else { return "development build" }
+        return (info["CFBundleVersion"] as? String).map { "\(version) (\($0))" } ?? version
+    }()
 
     /// The app's event log — one trail whether the app or the CLI drove.
     static let logFile = FileManager.default.homeDirectoryForCurrentUser
