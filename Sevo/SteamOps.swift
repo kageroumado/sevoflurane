@@ -29,10 +29,24 @@ nonisolated enum SteamOps {
             size_on_disk: a.size_on_disk || null,
             minutes_playtime: a.minutes_playtime || 0,
             deck_compat_category: a.steam_deck_compat_category ?? null,
-            update_state: a.per_client_data?.clientdata?.status ?? null });
+            update_state: a.per_client_data?.clientdata?.status ?? null,
+            display_status: a.display_status ?? null });
         })()
         """
         return try await SteamJS.eval(js) ?? "null"
+    }
+
+    /// What Steam's library shows under an app's name, by the client's own numbering.
+    nonisolated enum DisplayStatus {
+        /// A Steam Cloud sync is in progress. A game force-ended during its sync keeps this
+        /// status, and the client accepts and drops every later launch of it until it restarts.
+        static let synchronizing = 8
+    }
+
+    /// An app's display status, `nil` when the appid is not in the library.
+    static func displayStatus(_ appid: Int) async throws -> Int? {
+        let js = "(() => String(appStore.GetAppOverviewByAppID(\(appid))?.display_status ?? ''))()"
+        return try await SteamJS.eval(js).flatMap { Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "\""))) }
     }
 
     static func launch(_ appid: Int) async throws {

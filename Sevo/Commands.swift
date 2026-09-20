@@ -2316,6 +2316,7 @@ struct AppCommand: AsyncParsableCommand {
             try await handlingFailures {
                 let before = await WindowReport.currentWindow()
                 await warnAboutRunningApps()
+                let stuckInSync = await isStuckInCloudSync()
                 try await SteamOps.launch(appid)
                 narrate("launch requested for \(appid) — waiting for its window", asJSON: asJSON)
                 let window = await WindowReport.awaitWindow(
@@ -2325,7 +2326,7 @@ struct AppCommand: AsyncParsableCommand {
                 }
                 if asJSON {
                     var payload: [String: Any] = [
-                        "verdict": window != nil ? "confirmed" : "unverifiable",
+                        "verdict": window != nil ? "confirmed" : stuckInSync ? "noEffect" : "unverifiable",
                         "intent": "app launch",
                         "appid": appid,
                     ]
@@ -2336,11 +2337,28 @@ struct AppCommand: AsyncParsableCommand {
                     for line in WindowReport.lines(window) {
                         print("  \(line)")
                     }
+                } else if stuckInSync {
+                    print("app launch: no effect — Steam kept \(appid) at Synchronizing and dropped the launch"
+                        + " (sevo client restart)")
                 } else {
                     print("app launch: unverifiable — no game window within \(timeout)s"
                         + " (is Sevoflurane running? poll: sevo status)")
                 }
             }
+        }
+
+        /// A game force-ended during its Steam Cloud sync stays at Synchronizing, and the
+        /// client accepts and drops every later launch of it. Restarting the client clears it.
+        private func isStuckInCloudSync() async -> Bool {
+            guard await (try? SteamOps.displayStatus(appid)) == SteamOps.DisplayStatus.synchronizing else {
+                return false
+            }
+            narrate(
+                "Steam shows \(appid) as Synchronizing before this launch — a sync that was cut off holds "
+                    + "it there, and the client drops launches until it restarts (sevo client restart)",
+                asJSON: asJSON,
+            )
+            return true
         }
 
         /// Steam refuses a second game while it believes one is running, and

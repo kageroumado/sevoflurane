@@ -321,6 +321,7 @@ private struct RecentGames: View {
                         launchDetail: host.activeLaunch
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: GameConfig.game(game.id).renderer,
+                        isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
                         supervisor: supervisor,
                     )
                 }
@@ -337,6 +338,8 @@ private struct GameRow: View {
     let launchDetail: String?
     /// The renderer this game is pinned to, if any.
     let pinned: Renderer?
+    /// The client has kept this game at Synchronizing for longer than a sync takes.
+    let isHeldInCloudSync: Bool
     let supervisor: ClientSupervisor
     @State private var isHovered = false
     /// Instant acknowledgment for the click; the client's first
@@ -366,6 +369,13 @@ private struct GameRow: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .transition(.opacity)
+                    } else if game.isInCloudSync {
+                        Text(isHeldInCloudSync
+                            ? "Steam holds it at Synchronizing · restart Steam to play"
+                            : "Synchronizing with Steam Cloud")
+                            .font(.system(size: 10))
+                            .foregroundStyle(isHeldInCloudSync ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                            .lineLimit(1)
                     } else if let restartFor {
                         // Pinned to a renderer the running client did not
                         // boot with: the launch path restages it (or

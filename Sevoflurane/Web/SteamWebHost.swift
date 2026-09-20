@@ -125,10 +125,35 @@ final class SteamWebHost {
     struct RecentGame: Identifiable, Decodable, Equatable {
         let id: Int
         let name: String
+        /// What Steam's library shows under the name, by the client's own numbering.
+        var displayStatus: Int?
+
+        /// Synchronizing (8): Steam Cloud has the game's saves in hand.
+        var isInCloudSync: Bool { displayStatus == 8 }
+
         /// Capsule art, served by the bridge (local cache, CDN fallback).
         var artURL: URL {
             URL(string: "http://127.0.0.1:\(BridgePorts.art)/art/\(id).jpg")!
         }
+    }
+
+    /// When each game was first seen at Synchronizing.
+    @ObservationIgnored private var cloudSyncSince: [Int: Date] = [:]
+
+    /// The games the client has held at Synchronizing for longer than a sync takes. A game
+    /// force-ended during its Steam Cloud sync stays there, and the client accepts and drops
+    /// every launch of it until it restarts.
+    private(set) var gamesHeldInCloudSync: Set<Int> = []
+
+    /// How long a sync may run before its row says the client is holding the game.
+    static let longestCloudSync: TimeInterval = 60
+
+    private func noteCloudSyncs(in games: [RecentGame], at now: Date) {
+        let syncing = Set(games.filter(\.isInCloudSync).map(\.id))
+        cloudSyncSince = cloudSyncSince.filter { syncing.contains($0.key) }
+        for id in syncing where cloudSyncSince[id] == nil { cloudSyncSince[id] = now }
+        let held = Set(cloudSyncSince.filter { now.timeIntervalSince($0.value) > Self.longestCloudSync }.keys)
+        if held != gamesHeldInCloudSync { gamesHeldInCloudSync = held }
     }
 
     func refreshRecentGames() {
@@ -140,13 +165,16 @@ final class SteamWebHost {
                 return (y.rt_last_time_played || 0) - (x.rt_last_time_played || 0);
               })
               .slice(0, 5)
-              .map(function (a) { return { id: a.appid, name: a.display_name }; }))
+              .map(function (a) {
+                return { id: a.appid, name: a.display_name, displayStatus: a.display_status };
+              }))
             """
             guard let raw = await evaluateInContext(script),
                   let data = raw.data(using: .utf8),
-                  let games = try? JSONDecoder().decode([RecentGame].self, from: data),
-                  games != recentGames else { return }
-            recentGames = games
+                  let games = try? JSONDecoder().decode([RecentGame].self, from: data)
+            else { return }
+            noteCloudSyncs(in: games, at: .now)
+            if games != recentGames { recentGames = games }
         }
     }
 
