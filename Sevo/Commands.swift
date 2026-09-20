@@ -421,7 +421,7 @@ private extension String {
 struct EngineCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "engine",
-        abstract: "Wine engines (CrossOver, managed OSS).",
+        abstract: "Wine engines: Dormison releases and CrossOver.",
     )
 
     @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | check-manifest") var verb: String = "list"
@@ -1113,7 +1113,7 @@ struct ShadersCommand: AsyncParsableCommand {
 struct BottleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bottle",
-        abstract: "CrossOver bottles and whether Steam is installed in each.",
+        abstract: "Bottles, whether Steam is installed in each, and their settings.",
         discussion: "windows takes \(WindowTreatment.help).",
     )
 
@@ -1394,7 +1394,7 @@ struct BottleCommand: AsyncParsableCommand {
 struct ClientCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "client",
-        abstract: "Client lifecycle: full ladder semantics, never raw wine calls.",
+        abstract: "Start, stop, restart and update the Steam client, through the supervisor.",
         subcommands: [
             Start.self, Stop.self, Restart.self, ForceQuit.self, Update.self,
             ClearShaderCache.self, Pin.self, Unpin.self, Logs.self,
@@ -1641,7 +1641,7 @@ struct ClientCommand: AsyncParsableCommand {
 struct RecoverCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "recover",
-        abstract: "The wedge playbook: probe → reload → restart.",
+        abstract: "Bring a stuck client back: probe, reload the interface, restart.",
         discussion: "--deep adds htmlcache hygiene and a headless client repair pass.",
     )
 

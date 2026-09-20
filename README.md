@@ -37,7 +37,13 @@ With Dormison, you can:
 
 - Give games their own Dock name and icon, with Game Mode support when the
   game is frontmost and fills the screen.
-- Run full-screen or fixed-size games in resizable windows.
+- Run full-screen or fixed-size games in resizable windows, and upscale
+  the picture to the window with Lanczos, MetalFX, Anime4K or CuNNy. A
+  running game's own View menu switches the upscaler and the final filter
+  while you play.
+- Show a frame rate counter in a game's window (View › Show Frame Rate,
+  ⌥⌘F), or see the source and target size, upscaler and filter over the
+  picture (View › Show Picture Details, ⌥⌘I).
 - Choose a renderer, upscaler and mouse behavior for each game.
 - Run supported NW.js games, including RPG Maker MV and MZ games, with a
   macOS runtime while retaining Steam playtime and achievement support.
@@ -118,7 +124,9 @@ selected unless you choose another. DXMT and DXVK versions can also be
 installed separately.
 
 Dormison's presenter can upscale games with Lanczos, MetalFX or shader
-packages such as Anime4K and CuNNy. Window, upscaler and mouse settings take
+packages such as Anime4K and CuNNy. It covers games drawn through Metal
+(D3DMetal), through OpenGL (Wine's built-in renderer, which is what most
+Direct3D 9 visual novels use) and plain GDI windows. Window, upscaler and mouse settings take
 effect at the next game launch when the engine supports per-game
 configuration files. Engines without that support need a Steam restart
 for inherited settings.
@@ -131,6 +139,29 @@ restarts.
 See [Dormison's testing notes](https://github.com/kageroumado/dormison#directx-12-testing)
 for sample results and their limits.
 
+## Known limits
+
+- Games and online modes that need Windows kernel anti-cheat do not run.
+- The Windows side runs under Rosetta, so it needs Rosetta installed and
+  pays its translation cost. Setup installs Rosetta when it is missing.
+- DirectX 12 needs Apple's Game Porting Toolkit, which only Apple may
+  distribute; setup downloads it through your Apple Account. 32-bit
+  DirectX 12 games do not run.
+- The upscaler joins a game when the game starts. Switching between
+  upscalers applies at once; turning it on or off for a game that started
+  the other way applies at the next launch.
+- OpenGL drawables that are multisampled, stereo, floating-point or 10-bit
+  are shown without the upscaler. DXMT and DXVK through the presenter are
+  untested.
+- The Experimental performance tuning shortens waits between threads in
+  synthetic tests and has not raised the frame rate of any game measured
+  (Black Myth: Wukong, Rise of the Tomb Raider). It is off by default.
+- Media Foundation video decodes in software.
+- Unity games on Mono that crash within seconds of launch (TABS, Aka Manto)
+  are an open engine bug.
+- Steam's in-game overlay is a window Sevoflurane hosts beside the game; it
+  does not draw inside the game's own picture.
+
 ## Reporting a problem
 
 **Settings › About › Save Diagnostics…** saves a ZIP containing logs,
@@ -140,9 +171,11 @@ your account. You can also run `sevo diag` from the terminal.
 
 The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`. The Wine log always records errors and
-exceptions, so a game that exits on its own still leaves a trail; Settings ›
-Engine › *Log every library a game loads* adds exception traces and each library load when that is
-not enough. `sevo runs` lists what every launch ran on and how it ended.
+exceptions, so a game that exits on its own still leaves a trail. Settings ›
+Diagnostics sets how much a run records, and Settings › Engine › *Log every
+library a game loads* adds each library load when that is not enough.
+`sevo runs` lists what every launch ran on and how it ended, and the Reports
+window shows the same records with what each crash left behind.
 
 Use the [issue templates](https://github.com/kageroumado/sevoflurane/issues/new/choose)
 to report a problem. See [CONTRIBUTING.md](CONTRIBUTING.md) for debugging
@@ -161,16 +194,23 @@ and output options.
 sevo doctor [--json]
 sevo setup [--engine E]
 sevo status [--json]
+sevo wait [--gone]
 sevo diag [--no-steam-logs]
+sevo runs
 sevo client start|stop|restart|update|pin|unpin
 sevo recover [--deep]
+sevo daemon repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
 sevo engine list|install [--file TARBALL]|use
+sevo update
 sevo bottle config <key> [value]
 sevo shaders list|install|remove
+sevo storage [--games]
+sevo nwjs
 sevo downloads status|pause|resume|throttle KBPS
 sevo run PROGRAM [ARGS]
+sevo debug on|off|status
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo logs [--tail N] [-f] [--wine]

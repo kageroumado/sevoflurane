@@ -139,7 +139,7 @@ final class MCPServer {
             ),
             tool(
                 "recover",
-                "The wedge playbook: probe, then restart what is actually stuck. "
+                "Bring a stuck client back: probe, then restart what is actually stuck. "
                     + "deep=true also trashes the web cache and repairs the client (minutes).",
                 properties: ["deep": [
                     "type": "boolean",
