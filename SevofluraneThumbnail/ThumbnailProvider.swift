@@ -24,9 +24,10 @@ final nonisolated class ThumbnailProvider: QLThumbnailProvider {
         let side = min(request.maximumSize.width, request.maximumSize.height)
         let size = CGSize(width: side, height: side)
         let reply = QLThumbnailReply(contextSize: size) { context in
-            IconShaping.draw(
-                artwork, into: context, in: CGRect(origin: .zero, size: size),
-            )
+            // The context's own bounds, not `size`: at a request scale of 2 the
+            // canvas is twice `size` across in the space this draws in, and an
+            // icon drawn into `size` fills its bottom-left quarter.
+            IconShaping.draw(artwork, into: context, in: context.boundingBoxOfClipPath)
             return true
         }
         handler(reply, nil)
