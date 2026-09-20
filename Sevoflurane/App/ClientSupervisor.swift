@@ -78,9 +78,15 @@ final class ClientSupervisor {
 
     // MARK: - Attaching
 
+    /// Whether the launch's attach has settled which daemon the app talks to.
+    @ObservationIgnored private var hasAttached = false
+    /// Verbs asked for before that, in order.
+    @ObservationIgnored private var heldVerbs: [(path: String, verb: String)] = []
+
     func start() {
-        Task(name: "Attach to the daemon") { await self.attach() }
+        let attachment = Task(name: "Attach to the daemon") { await self.attach() }
         facts = Task(name: "Post page facts") { [weak self] in
+            await attachment.value
             var missed = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -122,6 +128,10 @@ final class ClientSupervisor {
         posted = nil
         await postFacts()
         await refreshFromDaemon()
+        hasAttached = true
+        let verbs = heldVerbs
+        heldVerbs = []
+        for held in verbs { send(held.path, called: held.verb) }
     }
 
     /// Takes the verdict the daemon pushed. The app renders it and stores
@@ -274,6 +284,13 @@ final class ClientSupervisor {
     }
 
     private func send(_ path: String, called verb: String) {
+        // A verb sent before the attach has settled reaches whichever daemon
+        // is answering, and one of another build is about to be replaced: a
+        // client it starts dies with it, half booted. The attach sends it.
+        guard hasAttached else {
+            heldVerbs.append((path, verb))
+            return
+        }
         Task(name: "Send \(verb) to the daemon") {
             guard await DaemonService.post(path, timeout: 120) != nil else {
                 self.daemonIsUnreachable = true
