@@ -49,6 +49,8 @@ let package = Package(
                 "Sevoflurane/Setup/GPTkDownload.swift",
                 "Sevoflurane/Setup/GPTkDownloadPanel.swift",
                 "Sevoflurane/Setup/SetupDryRun.swift",
+                "Sevoflurane/Setup/SetupScaffold.swift",
+                "Sevoflurane/Setup/SetupSteps.swift",
                 "Sevoflurane/Setup/SetupView.swift",
                 "Sevoflurane/Sevoflurane.icon",
                 "Sevoflurane/Support/AgentIntegration.swift",

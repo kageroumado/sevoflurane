@@ -7,16 +7,20 @@ struct StorageSettings: View {
     let store: StorageStore
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
+    @State private var showsGames = false
+    @State private var showsPrograms = false
 
     var body: some View {
         Form {
             Section {
                 ForEach(store.entries) { entry in
                     if entry.id == StorageInventory.Entry.gamesID, !store.games.isEmpty {
-                        DisclosureGroup { gameList } label: { row(entry) }
+                        row(entry, isExpanded: $showsGames)
+                        if showsGames { gameList }
                     } else if entry.id == StorageInventory.Entry.programsID,
                               !store.programs.isEmpty {
-                        DisclosureGroup { programList } label: { row(entry) }
+                        row(entry, isExpanded: $showsPrograms)
+                        if showsPrograms { programList }
                     } else if entry.id != StorageInventory.Entry.programsID {
                         row(entry)
                     }
@@ -61,13 +65,13 @@ struct StorageSettings: View {
                 gameRow(game)
             }
         }
-        .padding(.leading, 28)
-        .padding(.vertical, 4)
+        .padding(.leading, Self.iconColumnWidth + Theme.Space.md)
+        .padding(.vertical, Theme.Space.xs)
     }
 
     private func gameRow(_ game: StorageInventory.Game) -> some View {
         let linked = store.linkedGames.contains(game.id)
-        return HStack {
+        return HStack(spacing: Theme.Space.md) {
             Text(game.name).lineLimit(1)
             if linked {
                 Image(systemName: "link")
@@ -79,21 +83,24 @@ struct StorageSettings: View {
             Text(Self.size(game.bytes))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            if steam != nil || linked {
-                Button {
-                    if linked {
-                        store.unlink(game)
-                    } else {
-                        steam?.uninstall(game.id)
+            Group {
+                if steam != nil || linked {
+                    Button {
+                        if linked {
+                            store.unlink(game)
+                        } else {
+                            steam?.uninstall(game.id)
+                        }
+                    } label: {
+                        Image(systemName: linked ? "link.badge.minus" : "trash")
                     }
-                } label: {
-                    Image(systemName: linked ? "link.badge.minus" : "trash")
+                    .buttonStyle(.borderless)
+                    .help(linked
+                        ? "Remove the link. The files stay in their own bottle."
+                        : "Uninstall through Steam. It asks first.")
                 }
-                .buttonStyle(.borderless)
-                .help(linked
-                    ? "Remove the link. The files stay in their own bottle."
-                    : "Uninstall through Steam. It asks first.")
             }
+            .frame(width: Self.actionColumnWidth)
         }
         .font(.callout)
     }
@@ -106,12 +113,12 @@ struct StorageSettings: View {
                 programRow(program)
             }
         }
-        .padding(.leading, 28)
-        .padding(.vertical, 4)
+        .padding(.leading, Self.iconColumnWidth + Theme.Space.md)
+        .padding(.vertical, Theme.Space.xs)
     }
 
     private func programRow(_ program: StorageInventory.Program) -> some View {
-        HStack {
+        HStack(spacing: Theme.Space.md) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(program.name).lineLimit(1)
                 Text(program.isInsideBottle
@@ -132,6 +139,7 @@ struct StorageSettings: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .frame(width: Self.actionColumnWidth)
             .help(program.isInsideBottle
                 ? "Remove it and move what its installer wrote to the Trash."
                 : "Remove it. The program's own files stay where they are.")
@@ -192,11 +200,19 @@ struct StorageSettings: View {
         }
     }
 
-    private func row(_ entry: StorageInventory.Entry) -> some View {
+    /// The column at the trailing edge that holds a row's one control, kept
+    /// for a row with none so the sizes share an edge.
+    private static let actionColumnWidth: CGFloat = 20
+    private static let iconColumnWidth: CGFloat = 20
+
+    /// One category. A row that opens a list carries a chevron where the
+    /// others carry their trash button, so every icon, name and size sits in
+    /// one column whichever kind of row it is.
+    private func row(_ entry: StorageInventory.Entry, isExpanded: Binding<Bool>? = nil) -> some View {
         HStack(spacing: Theme.Space.md) {
             Image(systemName: entry.icon)
                 .foregroundStyle(.secondary)
-                .frame(width: 20)
+                .frame(width: Self.iconColumnWidth)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name)
                 Text(entry.removal?.caution ?? entry.detail)
@@ -210,12 +226,29 @@ struct StorageSettings: View {
             Text(entry.bytes <= 0 ? "—" : Self.size(entry.bytes))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            if entry.removal != nil {
-                Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
-                    .buttonStyle(.borderless)
-                    .disabled(entry.bytes <= 0)
-                    .help("Move \(entry.name.lowercased()) to the Trash")
+            Group {
+                if let isExpanded {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
+                    }
+                    .help(isExpanded.wrappedValue ? "Hide the list" : "Show each one")
+                    .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(entry.name)" : "Show \(entry.name)")
+                } else if entry.removal != nil {
+                    Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
+                        .disabled(entry.bytes <= 0)
+                        .help("Move \(entry.name.lowercased()) to the Trash")
+                }
             }
+            .buttonStyle(.borderless)
+            .frame(width: Self.actionColumnWidth)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard let isExpanded else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
         }
         // Games is the one row search can reach; the rest are read, not
         // navigated to.

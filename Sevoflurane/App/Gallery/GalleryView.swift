@@ -15,6 +15,14 @@
     struct GalleryView: View {
         var body: some View {
             ScrollView {
+                tiles
+            }
+            .frame(minWidth: 1200, minHeight: 900)
+        }
+
+        /// Every tile at its full height, outside any scroll view: what the
+        /// window scrolls and what ``GalleryExport`` writes to disk.
+        var tiles: some View {
                 VStack(alignment: .leading, spacing: Theme.Space.xl) {
                     Text("Sevoflurane UI Gallery")
                         .font(.system(.largeTitle, design: .rounded).weight(.bold))
@@ -136,8 +144,8 @@
                         }
                     }
 
-                    // The wizard is a fixed 680x500 window and is shown at
-                    // that size: a scaled-down tile is a picture of the UI
+                    // The wizard is a fixed-size window and is shown at that
+                    // size: a scaled-down tile is a picture of the UI
                     // rather than the UI, and this gallery exists to be
                     // clicked through.
                     section("First-run assistant — every step", minimum: 700) {
@@ -157,8 +165,6 @@
                     }
                 }
                 .padding(Theme.Space.xl)
-            }
-            .frame(minWidth: 1200, minHeight: 900)
         }
 
         private func wizard(
@@ -170,7 +176,6 @@
                 makeGraphics: { Fixtures.wizardGraphics },
                 onFinished: {},
             )
-            .frame(width: 680, height: step == .graphics ? 640 : 500)
             .background(.background, in: Theme.cardShape)
             .clipShape(Theme.cardShape)
         }

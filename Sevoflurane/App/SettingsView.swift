@@ -1,3 +1,4 @@
+import Propofol
 import SwiftUI
 
 /// What Settings can ask of the running Steam client — injected by the
@@ -656,17 +657,41 @@ private struct SettingsPane: View {
 }
 
 /// Flashes a row the search sent the user to.
+/// A control with its caption under the whole row. A caption inside a
+/// picker's own label shares the row with the value, and a long value leaves
+/// it a column a few words wide.
+struct CaptionedRow<Control: View>: View {
+    let caption: String
+    /// Orange for a caption that reports a failure.
+    var isWarning = false
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            control
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.callout)
+                    .foregroundStyle(isWarning ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 private struct HighlightModifier: ViewModifier {
     let anchor: SettingsAnchor?
     let highlighted: SettingsAnchor?
 
     func body(content: Content) -> some View {
+        // The light spreads past the row instead of the row making room for
+        // it, so a row search can reach lines up with one it cannot.
         content
-            .padding(.vertical, 4)
-            .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                     .fill(isLit ? Color.accentColor.opacity(0.2) : .clear)
+                    .padding(.horizontal, -Theme.Space.sm)
+                    .padding(.vertical, -Theme.Space.xs)
                     .animation(.easeInOut(duration: 0.3), value: highlighted),
             )
     }
@@ -679,8 +704,7 @@ private struct HighlightModifier: ViewModifier {
 
 extension View {
     /// Marks this row as the one search flashes for `anchor`. A `nil` anchor
-    /// keeps the row's padding and gives it nothing to light up for — the
-    /// shape of a list whose other rows are reachable and this one is not.
+    /// gives it nothing to light up for.
     func highlightable(_ anchor: SettingsAnchor?, highlighted: SettingsAnchor?) -> some View {
         modifier(HighlightModifier(anchor: anchor, highlighted: highlighted))
     }

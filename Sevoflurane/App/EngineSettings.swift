@@ -206,20 +206,14 @@ struct EngineSettings: View {
     /// tree built here. The engine lands beside the installed ones and is
     /// staged in the picker; Switch still decides when it runs.
     private var engineFileRow: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Engine from a file or folder")
-                Text(engineFileDetail)
-                    .font(.callout)
-                    .foregroundStyle(engineFileError == nil ? Color.secondary : Color.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+        CaptionedRow(caption: engineFileDetail, isWarning: engineFileError != nil) {
+            LabeledContent("Engine from a file or folder") {
+                if isInstallingEngineFile {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Choose…") { installEngineFile() }
+                    .disabled(isInstallingEngineFile || store.isSwitching)
             }
-            Spacer()
-            if isInstallingEngineFile {
-                ProgressView().controlSize(.small)
-            }
-            Button("Choose…") { installEngineFile() }
-                .disabled(isInstallingEngineFile || store.isSwitching)
         }
     }
 
@@ -362,18 +356,11 @@ struct EngineSettings: View {
 
     private var windowsSection: some View {
         Section {
-            Picker(selection: $windowTreatment) {
-                ForEach(WindowTreatment.allCases, id: \.self) { treatment in
-                    Text(treatment.label).tag(treatment)
-                }
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Make game windows resizable")
-                    Text("A resizable window scales the picture to fit. The game "
-                        + "keeps drawing at its own size.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            CaptionedRow(caption: "A resizable window scales the picture to fit. The game keeps drawing at its own size.") {
+                Picker("Make game windows resizable", selection: $windowTreatment) {
+                    ForEach(WindowTreatment.allCases, id: \.self) { treatment in
+                        Text(treatment.label).tag(treatment)
+                    }
                 }
             }
             .onChange(of: windowTreatment) { _, treatment in
@@ -521,18 +508,11 @@ struct EngineSettings: View {
     }
 
     private var tuningPicker: some View {
-        Picker(selection: $tuning) {
-            ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
-                Text(tuning.label).tag(tuning)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Performance tuning")
-                Text("Experimental shortens the waits between a game's threads, which can raise "
-                    + "frame rates and smooth stutter. Applies from a game's next launch.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        CaptionedRow(caption: "Experimental shortens the waits between a game's threads, which can raise frame rates and smooth stutter. Applies from a game's next launch.") {
+            Picker("Performance tuning", selection: $tuning) {
+                ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
+                    Text(tuning.label).tag(tuning)
+                }
             }
         }
         .onChange(of: tuning) { _, tuning in
@@ -543,17 +523,11 @@ struct EngineSettings: View {
     }
 
     private var mousePicker: some View {
-        Picker(selection: $mouseCurve) {
-            ForEach(MouseCurve.allCases, id: \.self) { curve in
-                Text(curve.label).tag(curve)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Mouse")
-                Text("Linear removes acceleration while a game controls the mouse.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        CaptionedRow(caption: "Linear removes acceleration while a game controls the mouse.") {
+            Picker("Mouse", selection: $mouseCurve) {
+                ForEach(MouseCurve.allCases, id: \.self) { curve in
+                    Text(curve.label).tag(curve)
+                }
             }
         }
         .onChange(of: mouseCurve) { _, curve in

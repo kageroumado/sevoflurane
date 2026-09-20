@@ -27,6 +27,14 @@ struct GraphicsSettings: View {
         Binding(get: { store.selection }, set: { store.update($0) })
     }
 
+    /// The renderer the running Steam came up on, while it differs from the
+    /// one chosen here.
+    private var bootedRenderer: Renderer? {
+        guard let booted = BottleGraphics.bootedSelection()?.renderer,
+              booted != store.selection.renderer else { return nil }
+        return booted
+    }
+
     var body: some View {
         Form {
             Section {
@@ -63,10 +71,9 @@ struct GraphicsSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 .highlightable(.graphicsGpu, highlighted: highlighted)
-                if let booted = BottleGraphics.bootedSelection()?.renderer,
-                   booted != store.selection.renderer {
+                if let bootedRenderer {
                     HStack {
-                        Text(applyRendererCopy)
+                        Text("Steam started on \(bootedRenderer.label). \(applyRendererCopy)")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +86,8 @@ struct GraphicsSettings: View {
             } header: {
                 Text("Renderer")
             } footer: {
-                Text(applyRendererCopy)
+                // The row above says it, with the button, while a change waits.
+                if bootedRenderer == nil { Text(applyRendererCopy) }
             }
             rendererVersionsSection
             shaderPackagesSection

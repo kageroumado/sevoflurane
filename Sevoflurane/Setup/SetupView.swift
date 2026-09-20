@@ -1,3 +1,4 @@
+import Propofol
 import SwiftUI
 
 /// The first-run assistant. Zero questions on the happy path: every step has
@@ -41,21 +42,18 @@ struct SetupView: View {
         }
     }
 
-    private enum EngineChoice {
-        case builtIn
-        case crossover
-    }
-
     @State private var step: Step
     @State private var openAtLogin = true
     @State private var connectAgents = false
-    @State private var engineChoice: EngineChoice = .builtIn
+    @State private var engineChoice: SetupEngineChoice = .builtIn
     /// The engine tarball this copy of the app ships with, when it does.
     @State private var bundledEngine: URL?
     /// The bottle to adopt, or `nil` to build a fresh one.
     @State private var bottleChoice: String?
     @State private var newBottleName = SteamBottle.defaultName
     @State private var downloadEverything = BottleDependencies.installsEverything
+    @State private var graphicsStore: GraphicsStore?
+    @State private var gptk = GPTkDownload()
 
     /// A real run always opens on the welcome. The gallery draws every step at
     /// once, and each tile starts on the one it is there to show.
@@ -80,16 +78,10 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 44)
-                .padding(.top, 28)
+            page
             footer
-                .padding(.horizontal, 44)
-                .padding(.top, 16)
-                .padding(.bottom, 28)
         }
-        .frame(width: 680, height: step == .graphics ? 640 : 500)
+        .frame(width: SetupMetrics.windowSize.width, height: SetupMetrics.windowSize.height)
         .task {
             if !provisioner.isDryRun {
                 bundledEngine = EngineInstaller.bundledTarball()
@@ -108,197 +100,113 @@ struct SetupView: View {
     /// be mistaken for a real provisioning pass.
     private var demoBadge: some View {
         Text("DEMO")
-            .font(.system(size: 10, weight: .bold))
+            .font(.caption2.bold())
             .foregroundStyle(.orange)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, Theme.Space.sm)
             .padding(.vertical, 3)
-            .background(Capsule().fill(.orange.opacity(0.15)))
-            .padding(10)
+            .background(.orange.opacity(0.15), in: Capsule())
+            .padding(Theme.Space.md)
             .help("Simulated setup. Nothing on this Mac changes.")
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private var page: some View {
         switch step {
-        case .welcome: welcome
-        case .engine: engine
-        case .bottle: bottle
-        case .steam: steam
-        case .graphics: graphics
-        case .options: options
-        case .done: done
+        case .welcome:
+            SetupWelcomeStep()
+        case .engine:
+            SetupEngineStep(provisioner: provisioner, choice: $engineChoice, bundledEngine: bundledEngine)
+        case .bottle:
+            SetupBottleStep(
+                candidates: bottleCandidates,
+                choice: $bottleChoice,
+                newName: $newBottleName,
+                newNameObjection: newBottleObjection,
+                downloadEverything: $downloadEverything,
+            )
+        case .steam:
+            SetupInstallStep(provisioner: provisioner, isAdoptingSteam: isAdoptingSteam)
+        case .graphics:
+            SetupGraphicsStep(download: gptk, store: graphicsStore, isSimulated: provisioner.isDryRun)
+        case .options:
+            SetupOptionsStep(openAtLogin: $openAtLogin, installsCommand: $connectAgents)
+        case .done:
+            SetupDoneStep(signInPending: signInPending())
         }
     }
 
-    /// The managed engine can't ship Apple's D3DMetal, so this step offers to
-    /// fetch it — in-app, through Apple's own sign-in. Skippable: DXMT is the
-    /// default renderer and covers most DirectX 11 titles. CrossOver brings
-    /// its own D3DMetal, so this step never shows for it.
-    @State private var graphicsStore: GraphicsStore?
-    @State private var gptk = GPTkDownload()
+    // MARK: - Footer
+
+    private var footer: some View {
+        SetupFooter {
+            secondaryActions
+        } primary: {
+            primaryAction
+                .foregroundStyle(Theme.onAccent)
+        }
+    }
+
+    @ViewBuilder private var secondaryActions: some View {
+        switch step {
+        case .engine where engineChoice == .builtIn:
+            Button(provisioner.engineTarball == nil ? "Choose an Engine File…" : "Change the Engine File…") {
+                chooseEngineFile()
+            }
+        case .engine:
+            Link("Get CrossOver", destination: URL(string: "https://www.codeweavers.com/crossover")!)
+            Button("Check Again") {
+                Task { await provisioner.refreshDetection() }
+            }
+        case .steam where hasFailed:
+            if provisioner.engineInstallPending {
+                Button("Use a Downloaded Engine…") {
+                    guard chooseEngineFile() else { return }
+                    Task { await provisioner.retry() }
+                }
+            }
+            Button("Try Again") {
+                Task { await provisioner.retry() }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var primaryAction: some View {
+        switch step {
+        case .welcome:
+            Button("Get Started") { advanceFromWelcome() }
+        case .engine:
+            Button("Continue") { advanceFromEngine() }
+                .disabled(engineChoice == .crossover && provisioner.detection?.usableCrossOver == nil)
+        case .bottle:
+            Button("Continue") { advanceFromBottle() }
+                .disabled(bottleChoice == nil && newBottleObjection != nil)
+        case .steam:
+            Button("Continue") { advanceFromSteam() }
+                .disabled(provisioner.activity != .done)
+        case .graphics:
+            Button(graphicsStore?.d3dMetalVersions.isEmpty == false ? "Continue" : "Skip for Now") {
+                step = .options
+            }
+            .disabled(gptk.isBusy)
+        case .options:
+            Button("Continue") { advanceFromOptions() }
+        case .done:
+            Button(signInPending() ? "Log In to Steam" : "Open My Library") { onFinished() }
+        }
+    }
+
+    // MARK: - What the steps ask
 
     private var usesManagedEngine: Bool {
         if case .managed = Engine.active { true } else { false }
     }
 
-    private var graphics: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("DirectX 12 games")
-                .font(.system(size: 24, weight: .bold))
-            Text("This step is optional. Add Apple's Game Porting Toolkit to play DirectX 12 games. Download it with your Apple account. Graphics settings can add it later.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            GPTkDownloadPanel(
-                download: gptk,
-                install: { url in await graphicsStore?.installD3DMetal(from: url) },
-                isSimulated: provisioner.isDryRun,
-            )
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var welcome: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 96, height: 96)
-            Text("Welcome to Sevoflurane")
-                .font(.system(size: 26, weight: .bold))
-            Text("Play Windows Steam games with a Mac interface. Setup installs the engine and Steam. Then you sign in.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var engine: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Choose an engine")
-                .font(.system(size: 24, weight: .bold))
-            Text("A Wine engine runs Windows games on your Mac. Choose Dormison or CrossOver.")
-                .foregroundStyle(.secondary)
-            if let crossover = provisioner.detection?.crossover, crossover.trialExpired {
-                Text("The CrossOver \(crossover.version) trial on this Mac has ended. "
-                    + "License it at codeweavers.com, or use Dormison.")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-            }
-            engineOption(
-                .builtIn,
-                title: "Dormison (free, recommended)",
-                detail: "Sevoflurane's own Wine engine. It supports Apple's DirectX 12 toolkit and game upscaling.",
-            )
-            if engineChoice == .builtIn {
-                engineSource
-                    .padding(.leading, 30)
-            }
-            engineOption(.crossover, title: crossOverTitle, detail: crossOverDetail)
-            // Shown rather than disclosed: the step has room for it, and a
-            // chevron the size of a chevron is a poor place to keep the one
-            // paragraph that answers "why would I pay for this?".
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Why pay for CrossOver?").font(.callout.weight(.semibold))
-                Text("CodeWeavers develops Wine, and both engines use it. CrossOver adds per-game fixes and paid support. Switch engines later in Settings.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.quaternary.opacity(0.5)),
-            )
-            if engineChoice == .crossover {
-                Link(
-                    "Get CrossOver at codeweavers.com",
-                    destination: URL(string: "https://www.codeweavers.com/crossover")!,
-                )
-                Button("Check again") {
-                    Task { await provisioner.refreshDetection() }
-                }
-                .buttonStyle(.glass)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Where Dormison comes from: the download, the tarball this copy of the
-    /// app ships with, or a file someone chose — the route for a Mac the
-    /// release feed does not reach.
-    @ViewBuilder private var engineSource: some View {
-        if let tarball = provisioner.engineTarball {
-            HStack(spacing: 6) {
-                Image(systemName: "doc.zipper")
-                    .foregroundStyle(.secondary)
-                Text("Installs from \(tarball.lastPathComponent) instead of downloading.")
-                Button("Change…") { chooseEngineFile() }
-                    .buttonStyle(.link)
-            }
-            .font(.callout)
-        } else if let bundledEngine {
-            Text("This copy of Sevoflurane includes "
-                + "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine)))"
-                + ". Nothing to download.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        } else {
-            Button("Choose an Engine File…") { chooseEngineFile() }
-                .buttonStyle(.link)
-                .font(.callout)
-        }
-    }
-
-    private func chooseEngineFile() {
-        guard let tarball = EngineFilePanel.choose() else { return }
+    @discardableResult
+    private func chooseEngineFile() -> Bool {
+        guard let tarball = EngineFilePanel.choose() else { return false }
         provisioner.engineTarball = tarball
-    }
-
-    /// What the CrossOver option is worth saying: whether a copy is on the
-    /// machine and what its license state is. CodeWeavers sets the price.
-    private var crossOverTitle: String {
-        guard let crossover = provisioner.detection?.crossover else {
-            return "Use CrossOver (14-day free trial)"
-        }
-        if crossover.licensed { return "Use CrossOver \(crossover.version) (already licensed)" }
-        if crossover.trialExpired { return "Use CrossOver (this Mac's trial has ended)" }
-        return "Use CrossOver \(crossover.version) (trial)"
-    }
-
-    private var crossOverDetail: String {
-        "The paid version of the same engine. It adds per-game fixes "
-            + "and a support team."
-    }
-
-    private func engineOption(
-        _ choice: EngineChoice, title: String, detail: String,
-    ) -> some View {
-        Button {
-            engineChoice = choice
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: engineChoice == choice
-                    ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(engineChoice == choice ? Color.accentColor : .secondary)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.headline)
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(engineChoice == choice
-                        ? Color.accentColor.opacity(0.08) : Color.clear),
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
+        return true
     }
 
     /// The Steam installations already on the machine. Only ever shown when
@@ -313,73 +221,6 @@ struct SetupView: View {
             || (bottleCandidates.first.map { $0.name != SteamBottle.defaultName } ?? false)
     }
 
-    private var bottle: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Which Steam?")
-                .font(.system(size: 24, weight: .bold))
-            Text("Choose an existing Steam install, or start a new bottle. Each bottle keeps its own games and settings.")
-                .foregroundStyle(.secondary)
-            Picker("", selection: $bottleChoice) {
-                ForEach(bottleCandidates, id: \.name) { candidate in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(candidate.name)
-                        Text((candidate.url.path as NSString).abbreviatingWithTildeInPath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .tag(String?.some(candidate.name))
-                }
-                Text("Start a new one")
-                    .tag(String?.none)
-            }
-            .pickerStyle(.radioGroup)
-            .labelsHidden()
-            if bottleChoice == nil { newBottleField }
-            Divider()
-            downloadEverythingToggle
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The one question about what a new bottle is stocked with, asked on the
-    /// last screen before provisioning starts. The same switch lives in
-    /// Settings › Engine afterwards.
-    private var downloadEverythingToggle: some View {
-        Toggle(isOn: $downloadEverything) {
-            VStack(alignment: .leading) {
-                Text("Download everything").font(.headline)
-                Text("Installs the fonts and the legacy runtimes games ask for, "
-                    + "about \(Self.optionalDownloadSize), alongside the ones every "
-                    + "bottle needs.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .toggleStyle(.switch)
-    }
-
-    /// What the optional half of the catalog weighs, rounded the way its own
-    /// rows are written.
-    private static let optionalDownloadSize = "320 MB"
-
-    private var newBottleField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField("Bottle name", text: $newBottleName)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 260)
-            if let objection = newBottleObjection {
-                Text(objection).font(.caption).foregroundStyle(.orange)
-            } else {
-                Text("The new bottle's folder takes this name.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.leading, 20)
-    }
-
     /// Why the typed name cannot be used, if it cannot. A bottle is a
     /// directory, and one that already exists belongs to whatever put it
     /// there — installing Steam into it is not ours to decide.
@@ -390,7 +231,7 @@ struct SetupView: View {
             return "Use a name without / or : in it."
         }
         if provisioner.detection?.bottles.contains(where: { $0.name == name }) == true {
-            return "There is already a bottle named “\(name)”. Pick another name."
+            return "A bottle named “\(name)” already exists."
         }
         return nil
     }
@@ -403,225 +244,11 @@ struct SetupView: View {
         provisioner.detection?.steamBottles.contains { $0.name == SteamBottle.name } == true
     }
 
-    private var steam: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam")
-                .font(.system(size: 24, weight: .bold))
-            Text(isAdoptingSteam
-                ? "Checking the Steam installed here and updating it. An old copy "
-                + "takes a few minutes to catch up."
-                : "Downloading and installing the Steam client. It is the longest "
-                + "step. Most connections take a few minutes.")
-                .foregroundStyle(.secondary)
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 10) {
-                        switch provisioner.activity {
-                        case let .working(phase):
-                            ProgressView().controlSize(.small)
-                            Text(phase)
-                        case let .failed(reason):
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Setup could not finish.")
-                                Text(reason)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        case .done:
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text("Steam is ready.")
-                        case .idle:
-                            Text("Starting…")
-                        }
-                        Spacer()
-                        if case .failed = provisioner.activity {
-                            if provisioner.engineInstallPending {
-                                Button("Use a Downloaded Engine…") {
-                                    guard let tarball = EngineFilePanel.choose() else { return }
-                                    provisioner.engineTarball = tarball
-                                    Task { await provisioner.retry() }
-                                }
-                                .buttonStyle(.glass)
-                            }
-                            Button("Try Again") {
-                                Task { await provisioner.retry() }
-                            }
-                            .buttonStyle(.glass)
-                        }
-                    }
-                    if case .working = provisioner.activity,
-                       let stage = provisioner.stage {
-                        ProgressView(value: overallProgress(stage))
-                        Text(stageCaption(stage))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(8)
-            }
-            Text(steamStepCaption)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var steamStepCaption: String {
-        guard hasFailed else {
-            return "Close this window any time. Setup carries on in the menu bar, "
-                + "and resumes where it stopped."
-        }
-        if provisioner.engineInstallPending {
-            return "The engine also installs from a file. Get dormison-r<N>.tar.xz "
-                + "and its .sig from the Dormison release."
-        }
-        return "A second try keeps what already downloaded. It is usually much "
-            + "shorter than the first."
-    }
-
-    /// The overall bar: completed stages plus the current stage's own
-    /// fraction, over the fixed sequence length.
-    private func overallProgress(_ stage: Provisioner.Stage) -> Double {
-        (Double(stage.index - 1) + (provisioner.stageFraction ?? 0))
-            / Double(Provisioner.Stage.count)
-    }
-
-    private func stageCaption(_ stage: Provisioner.Stage) -> String {
-        var caption = "Step \(stage.index) of \(Provisioner.Stage.count)"
-        if let fraction = provisioner.stageFraction {
-            caption += ", \(Int(fraction * 100))% downloaded"
-        }
-        return caption
-    }
-
-    private var options: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Startup and automation")
-                .font(.system(size: 24, weight: .bold))
-            Text("Change any of this later.")
-                .foregroundStyle(.secondary)
-            Toggle(isOn: $openAtLogin) {
-                VStack(alignment: .leading) {
-                    Text("Open at login").font(.headline)
-                    Text("Start Sevoflurane in the menu bar.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                // The label takes the width so the switch sits at the window's
-                // trailing edge, where every other switch in the app sits.
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .toggleStyle(.switch)
-            Toggle(isOn: $connectAgents) {
-                VStack(alignment: .leading) {
-                    Text("Install the sevo command").font(.headline)
-                    Text("Adds sevo and connects AI assistants to Steam through MCP. Needs an administrator password. Manage connections in Settings.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .toggleStyle(.switch)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var done: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(.green)
-            Text("Ready to play")
-                .font(.system(size: 26, weight: .bold))
-            doneCaption
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// Where to find the app once setup closes, with the menu-bar glyph itself set into the
-    /// sentence so the eye has something to match against the menu bar.
-    private var doneCaption: Text {
-        let icon = Image(nsImage: MenuBarIcon.image(badged: false))
-        if signInPending() {
-            return Text(
-                "Your library lives in the menu bar, behind \(icon) at the top right. Steam is ready. Sign in and your library opens.",
-            )
-        }
-        return Text("Your library lives in the menu bar, behind \(icon) at the top right.")
-    }
-
     private var hasFailed: Bool {
         if case .failed = provisioner.activity { true } else { false }
     }
 
-    private var footer: some View {
-        HStack {
-            Spacer()
-            switch step {
-            case .welcome:
-                Button("Get Started") { advanceFromWelcome() }
-                    .keyboardShortcut(.defaultAction)
-            case .engine:
-                Button("Continue") { advanceFromEngine() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(engineChoice == .crossover
-                        && provisioner.detection?.usableCrossOver == nil)
-            case .bottle:
-                Button("Continue") {
-                    provisioner.chooseBottle(
-                        named: bottleChoice
-                            ?? newBottleName.trimmingCharacters(in: .whitespaces),
-                    )
-                    // Before the stage that reads it: provisioning starts on
-                    // this press and installs the catalog it names.
-                    if !provisioner.isDryRun {
-                        BottleDependencies.installsEverything = downloadEverything
-                    }
-                    beginProvisioning()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(bottleChoice == nil && newBottleObjection != nil)
-            case .steam:
-                Button("Continue") { advanceFromSteam() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(provisioner.activity != .done)
-            case .graphics:
-                Button(graphicsStore?.d3dMetalVersions.isEmpty == false
-                    ? "Continue" : "Skip for now") { step = .options }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(gptk.isBusy)
-            case .options:
-                Button("Continue") {
-                    provisioner.setOpenAtLogin(openAtLogin)
-                    if connectAgents, !provisioner.isDryRun {
-                        Task {
-                            if let failure = await AgentIntegration.install() {
-                                EventLog.shared.log(.app, "sevo CLI install: \(failure)")
-                            }
-                        }
-                    }
-                    step = .done
-                }
-                .keyboardShortcut(.defaultAction)
-            case .done:
-                Button(signInPending() ? "Log In to Steam" : "Open My Library") {
-                    onFinished()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
-    }
+    // MARK: - Moving on
 
     private func advanceFromWelcome() {
         guard provisioner.detection?.usableCrossOver != nil else {
@@ -639,6 +266,18 @@ struct SetupView: View {
         bottleChoice = bottleCandidates
             .first { $0.name == SteamBottle.name }?.name ?? bottleCandidates.first?.name
         step = .bottle
+    }
+
+    private func advanceFromBottle() {
+        provisioner.chooseBottle(
+            named: bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces),
+        )
+        // Before the stage that reads it: provisioning starts on this press
+        // and installs the catalog it names.
+        if !provisioner.isDryRun {
+            BottleDependencies.installsEverything = downloadEverything
+        }
+        beginProvisioning()
     }
 
     private func beginProvisioning() {
@@ -659,5 +298,17 @@ struct SetupView: View {
             graphicsStore = makeGraphics?() ?? GraphicsStore()
         }
         step = .graphics
+    }
+
+    private func advanceFromOptions() {
+        provisioner.setOpenAtLogin(openAtLogin)
+        if connectAgents, !provisioner.isDryRun {
+            Task {
+                if let failure = await AgentIntegration.install() {
+                    EventLog.shared.log(.app, "sevo CLI install: \(failure)")
+                }
+            }
+        }
+        step = .done
     }
 }

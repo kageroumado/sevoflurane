@@ -43,7 +43,7 @@ struct GPTkDownloadPanel: View {
                 .foregroundStyle(.secondary)
             Text("Apple's sign-in page appears here")
                 .font(.callout.weight(.semibold))
-            Text("A real run signs in with your Apple ID and downloads the "
+            Text("A real run signs in with your Apple Account and downloads the "
                 + "toolkit. This one loads nothing.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -64,10 +64,9 @@ struct GPTkDownloadPanel: View {
                 ? "hand.point.up.left" : "info.circle")
                 .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
             Text(download.autoPhase == .manual
-                ? "The versions couldn't be picked automatically — click "
-                + "Download on the release and beta you want. They still "
-                + "install here by themselves."
-                : "Sign in with your Apple ID; the newest release and beta "
+                ? "Click Download on the release and the beta you want. "
+                + "Each installs here when its download ends."
+                : "Sign in with your Apple Account. The newest release and beta "
                 + "toolkits then download and install here automatically.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

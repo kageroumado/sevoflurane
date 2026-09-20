@@ -476,6 +476,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Welcome to Sevoflurane"
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.center()
         window.isReleasedWhenClosed = false
         setupWindow = window

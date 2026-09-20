@@ -17,25 +17,19 @@ struct UpscalerPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker(selection: pickerSelection) {
-                if let inherited {
-                    Text("Inherit (\(label(forToken: inherited)))").tag("")
-                }
-                ForEach(shaders.choices) { choice in
-                    Text(label(for: choice)).tag(choice.token)
-                }
-                if let selection, shaders.choices.allSatisfy({ $0.token != selection }) {
-                    // A package the settings name and the store lacks keeps
-                    // its row, so the picker never shows an empty selection.
-                    Text("\(selection) (not installed)").tag(selection)
-                }
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Upscaler")
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            CaptionedRow(caption: detail) {
+                Picker("Upscaler", selection: pickerSelection) {
+                    if let inherited {
+                        Text("Inherit (\(label(forToken: inherited)))").tag("")
+                    }
+                    ForEach(shaders.choices) { choice in
+                        Text(label(for: choice)).tag(choice.token)
+                    }
+                    if let selection, shaders.choices.allSatisfy({ $0.token != selection }) {
+                        // A package the settings name and the store lacks keeps
+                        // its row, so the picker never shows an empty selection.
+                        Text("\(selection) (not installed)").tag(selection)
+                    }
                 }
             }
             .disabled(shaders.busy != nil)
@@ -90,20 +84,14 @@ struct FinalFilterPicker: View {
     @Binding var selection: FinalFilter?
 
     var body: some View {
-        Picker(selection: pickerSelection) {
-            if let inherited {
-                Text("Inherit (\(inherited.label))").tag("")
-            }
-            ForEach(FinalFilter.allCases, id: \.self) { filter in
-                Text(filter.label).tag(filter.rawValue)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Final filter")
-                Text((selection ?? inherited)?.detail ?? "")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        CaptionedRow(caption: (selection ?? inherited)?.detail ?? "") {
+            Picker("Final filter", selection: pickerSelection) {
+                if let inherited {
+                    Text("Inherit (\(inherited.label))").tag("")
+                }
+                ForEach(FinalFilter.allCases, id: \.self) { filter in
+                    Text(filter.label).tag(filter.rawValue)
+                }
             }
         }
     }

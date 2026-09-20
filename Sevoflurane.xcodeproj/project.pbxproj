@@ -167,6 +167,8 @@
 				Setup/GPTkDownload.swift,
 				Setup/GPTkDownloadPanel.swift,
 				Setup/SetupDryRun.swift,
+				Setup/SetupScaffold.swift,
+				Setup/SetupSteps.swift,
 				Setup/SetupView.swift,
 				Sevoflurane.icon,
 				Support/AgentIntegration.swift,
