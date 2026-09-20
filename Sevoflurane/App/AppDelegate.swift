@@ -281,8 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The client's own notification is the exit edge: a game Steam started
         // is not a process this app can wait on.
         host.onGameRunningChanged = { [weak self] appID, running in
-            guard !running else { return }
-            self?.runRecorder.close(appID: appID)
+            guard !running else {
+                self?.runRecorder.noteRunning(appID: appID)
+                return
+            }
+            self?.runRecorder.noteStopped(appID: appID)
             Task.detached(name: "Clear the Discord activity") {
                 await DiscordPresence.shared.clear()
             }

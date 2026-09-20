@@ -299,6 +299,8 @@ final class StallWatch {
     /// When each stalled process's ladder began, so the kill rung waits its
     /// own ``Rules/killAfter`` rather than firing on the sample that found it.
     private var laddersBegan: [pid_t: TimeInterval] = [:]
+    /// Processes already reported as still and left alone.
+    private var leftAlone: Set<pid_t> = []
 
     /// The rungs, in order, for a game that has stopped doing anything.
     private func unwedge(_ process: Process, at now: TimeInterval) {
@@ -329,11 +331,15 @@ final class StallWatch {
         //    so it waits for the present counter to say the game drew nothing.
         guard stalledFor >= Rules.killAfter else { return }
         guard Self.killsOnCPUAlone || process.presents != nil else {
-            note(appID: appID, for: stalledFor, unwedged: nil)
-            probes.log(
-                "stall: \(process.name) has been still for \(Int(stalledFor)) s; "
-                    + "nothing counts its frames, so it is left alone",
-            )
+            // Said once per process: a crash handler sits still for a whole
+            // session, and a line every ladder buries the log it is written to.
+            if leftAlone.insert(process.pid).inserted {
+                note(appID: appID, for: stalledFor, unwedged: nil)
+                probes.log(
+                    "stall: \(process.name) has been still for \(Int(stalledFor)) s; "
+                        + "nothing counts its frames, so it is left alone",
+                )
+            }
             laddersBegan[process.pid] = nil
             return
         }

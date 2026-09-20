@@ -622,12 +622,24 @@ final nonisolated class RunRecorder {
         self.presentStats = presentStats
     }
 
+    /// Apps whose open run the client has confirmed running.
+    private var confirmedRunning: Set<Int> = []
+    /// When a launch of an app took over from a run of it that was still open:
+    /// a game's launcher starting the game. The stop edge that follows within
+    /// ``handoverWindow`` is the launcher's, and the new run outlives it.
+    private var handovers: [Int: ContinuousClock.Instant] = [:]
+    private static let handoverWindow: Duration = .seconds(5)
+
     /// A launch of `appID` has begun. Re-arming an app that is already open
     /// closes the old run: the client has told us a new one started, so
     /// whatever the old one did, it is over and nobody said how.
     func arm(appID: Int) {
         guard appID != 0 else { return }
-        if open[appID] != nil { close(appID: appID, kind: .unknown) }
+        if open[appID] != nil {
+            close(appID: appID, kind: .unknown)
+            handovers[appID] = .now
+        }
+        confirmedRunning.remove(appID)
         let values = GameConfig.game(appID)
         let booted = BottleGraphics.bootedSelection()
         let selection = booted.map {
@@ -787,11 +799,32 @@ final nonisolated class RunRecorder {
         persist(appID: appID)
     }
 
-    /// The client says the app is no longer running. The record is written on
-    /// the closing queue: finishing it reads the tails of two logs, which is
-    /// disk work the caller should not wait on.
+    /// The client says the app is running. A run it never announced a launch
+    /// for (the game a launcher started, after the launcher's own run closed)
+    /// opens here.
+    func noteRunning(appID: Int) {
+        if open[appID] == nil { arm(appID: appID) }
+        confirmedRunning.insert(appID)
+        handovers[appID] = nil
+    }
+
+    /// The client says the app stopped running. Right after a hand-over that
+    /// is the old instance going, and the run just armed has yet to start.
+    func noteStopped(appID: Int) {
+        if let handover = handovers.removeValue(forKey: appID),
+           !confirmedRunning.contains(appID),
+           ContinuousClock.now - handover < Self.handoverWindow {
+            return
+        }
+        close(appID: appID)
+    }
+
+    /// Ends the open run of `appID`. The record is written on the closing
+    /// queue: finishing it reads the tails of two logs, which is disk work
+    /// the caller should not wait on.
     func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
         guard var run = open.removeValue(forKey: appID) else { return }
+        confirmedRunning.remove(appID)
         run.record.fps = presentStats.disarm(appID: appID)
         // Before the write rather than after it: the same app id can be armed
         // again in the next moment, and a disarm behind that would take the

@@ -186,6 +186,37 @@ struct RunMetersTests {
     }
 
     @Test
+    func `a launcher handing over to its game leaves two runs, and the second stays open`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        // The launcher's run.
+        recorder.arm(appID: 391_220)
+        recorder.noteRunning(appID: 391_220)
+        // Play: the client starts the app again, then reports the launcher gone,
+        // then the game running.
+        recorder.arm(appID: 391_220)
+        recorder.noteStopped(appID: 391_220)
+        recorder.noteRunning(appID: 391_220)
+        #expect(recorder.openRecord(forApp: 391_220) != nil)
+        #expect(try await records(in: root, waitingFor: 1).count == 1)
+
+        recorder.noteStopped(appID: 391_220)
+        #expect(recorder.openRecord(forApp: 391_220) == nil)
+        #expect(try await records(in: root, waitingFor: 2).count == 2)
+    }
+
+    @Test
+    func `a game the client reports running without a launch gets a run`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.noteRunning(appID: 391_220)
+        #expect(recorder.openRecord(forApp: 391_220) != nil)
+        recorder.close(appID: 391_220)
+    }
+
+    @Test
     func `a run whose process was never named keeps no energy`() async throws {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }
