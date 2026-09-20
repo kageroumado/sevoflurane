@@ -40,6 +40,7 @@
 <!-- Many PRs here are written with an agent. Record who wrote this one and how; a maintainer reviews an unattended run differently from an attended one. -->
 
 - **Author**: <!-- the human, or the agent's name (e.g. Sora) -->
-- **Model**: <!-- the model the agent runs on, e.g. Opus 5 (1M context); leave blank if human-authored -->
+- **Model**: <!-- the model the agent runs on, e.g. Claude Fable 5.1; leave blank if human-authored. CONTRIBUTING.md › Who a change may come from names the models accepted. -->
 - **Session**: <!-- "attended" (a human participated or reviewed live) or "automatic" (unattended agent run) -->
-- **Verification**: <!-- what the agent actually ran and observed, or "none beyond the build" -->
+- **Verification**: <!-- what was run and observed: the numbers before and after for a performance claim, the behavior seen for a fix. "None beyond the build" is an answer, and it means the PR claims nothing. -->
+- [ ] I understand what this change does and why, and will answer review questions about it myself.

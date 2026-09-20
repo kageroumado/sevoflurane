@@ -294,8 +294,8 @@ Mach service for the prefix until the client restarts.
 ## Reporting bugs
 
 Use the issue templates: one for Steam and the app, one for a game, one for
-a feature. Every report wants the diagnostics zip — **Settings › About › Save
-Diagnostics…** or `sevo diag` — which holds the app's logs, a `sevo doctor`
+a feature. Every report wants the diagnostics zip — **Settings › Diagnostics ›
+Diagnostics archive** or `sevo diag` — which holds the app's logs, a `sevo doctor`
 report, the active engine's `engine-info.json`, the bottle's env files, the
 game launcher bundles, Steam's own bootstrap, connection, webhelper,
 game-process and console logs, this month's run records with the logs the
@@ -311,11 +311,43 @@ own is asked for in the issue, as a gift copy or a donation that covers it.
 
 ## Pull requests
 
-The template asks who wrote the change and how it was verified. A change
-written with an agent says so, names the model, and says whether a human
-attended the session; that is read, not held against anyone. What is held
+The template asks who wrote the change and how it was verified. What is held
 against a PR: changes nobody ran, comments that narrate history or plans
 instead of describing the code, and unrelated edits in the same diff.
+
+### Who a change may come from
+
+This code sits between Wine, Steam's client and macOS's window server, and a
+change that reads as correct is wrong here more often than in most projects.
+So a PR is accepted from:
+
+- **A person who knows the ground**: macOS's windowing and graphics stack, or
+  Wine's internals, well enough to say why the change is right and what it
+  could break. No credentials are asked for; the PR's own explanation is the
+  evidence.
+- **A frontier model, with a person answering for it**: Claude Mythos or
+  Claude Fable, GPT 6 Astra, or a later model of either line. Earlier and
+  smaller models produce changes here that compile, pass review at a glance
+  and fail in a bottle, and reviewing those costs more than writing the change.
+
+A change written with a model says so, names the model, and says whether a
+person attended the session. The person who opens the PR understands what it
+does and why, and answers review questions themselves: "the model said so" is
+the end of a review. A model's PR is held to the rule below like anyone's.
+
+### Measure before you claim
+
+Nothing in a PR is taken as correct, faster or fixed because it should be.
+
+- A performance claim comes with numbers from `bispectral` or the frame rate
+  counter: before and after, same machine, same game, run more than once.
+- A behavior claim comes with the behavior observed: the game launched, the
+  window resized, the log line that shows it, the run record.
+- A fix for a bug names how the bug was reproduced first.
+
+An explanation of why something ought to work is welcome beside the
+measurement and replaces none of it. This project's own history has a week
+lost to a mechanism that was reasoned out and never measured.
 
 Comments say what the code does and why, in the present tense. A negation
 earns its place only when it names the wrong belief it corrects.
