@@ -73,7 +73,7 @@ struct DiagnosticsSettings: View {
         Section {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Reports")
+                    Text("Run reports")
                     Text(reportsDetail)
                         .font(.caption)
                         .foregroundStyle(.secondary)

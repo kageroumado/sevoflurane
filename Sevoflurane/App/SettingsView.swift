@@ -415,7 +415,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
                 SearchableSetting(
                     id: .diagnosticsReports,
-                    title: "Reports",
+                    title: "Run reports",
                     keywords: [
                         "report", "reports", "crash", "collected", "folder", "finder",
                         "dump", "minidump", "ips", "share", "runs", "run", "history",

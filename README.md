@@ -109,7 +109,10 @@ Apple silicon.
 
 Settings › Graphics chooses the default graphics translator. A game's
 renderer can also be set from its menu in the menu bar library. Settings ›
-Games has per-game window, upscaler, filter and mouse controls.
+Games has one game's picture, mouse, performance and DLL override settings;
+Settings › Engine holds the same ones for every game, and each has an (i)
+that says what it does and when to change it. DLL overrides are Wine's own,
+the values winecfg shows.
 
 | Renderer | Supports | Use |
 |---|---|---|
@@ -153,9 +156,10 @@ for sample results and their limits.
 - OpenGL drawables that are multisampled, stereo, floating-point or 10-bit
   are shown without the upscaler. DXMT and DXVK through the presenter are
   untested.
-- The Experimental performance tuning shortens waits between threads in
+- The Experimental thread-waiting preset shortens waits between threads in
   synthetic tests and has not raised the frame rate of any game measured
-  (Black Myth: Wukong, Rise of the Tomb Raider). It is off by default.
+  (Black Myth: Wukong, Rise of the Tomb Raider). It is off by default; the
+  Custom preset opens its three numbers.
 - Media Foundation video decodes in software.
 - Unity games on Mono that crash within seconds of launch (TABS, Aka Manto)
   are an open engine bug.
