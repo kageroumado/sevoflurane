@@ -420,7 +420,11 @@ nonisolated enum GameConfig {
 
     /// What every level inherits when nothing is set anywhere.
     static let defaults = ConfigValues(
-        windows: .fixed, mouse: .system, tuning: .standard, upscaler: UpscalerChoice.off.rawValue, filter: .lanczos,
+        windows: .fixed, mouse: .system, tuning: .standard,
+        // Lanczos as the final filter costs 0.3 ms a frame in a window and 1.4 ms at a full 5K
+        // output on an M1 Max; with the presenter off, Core Animation stretches the picture
+        // bilinearly.
+        upscaler: UpscalerChoice.lanczos.rawValue, filter: .lanczos,
         retina: false, emulateModeset: false,
         // AVX on: the bottle has advertised it since the translation defaults
         // were written, and a growing number of titles read the CPUID answer

@@ -29,10 +29,10 @@ struct UpscalerConfigTests {
     }
 
     @Test
-    func `nothing set anywhere means off, resampled with lanczos`() throws {
-        #expect(GameConfig.defaults.upscaler == "off")
+    func `nothing set anywhere means the final filter alone, and that filter is lanczos`() throws {
+        #expect(GameConfig.defaults.upscaler == "lanczos")
         #expect(GameConfig.defaults.filter == .lanczos)
-        #expect(try UpscalerChoice(rawValue: #require(GameConfig.defaults.upscaler)) == .off)
+        #expect(try UpscalerChoice(rawValue: #require(GameConfig.defaults.upscaler)) == .lanczos)
     }
 
     @Test
