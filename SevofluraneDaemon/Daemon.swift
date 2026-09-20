@@ -45,6 +45,12 @@ final class Daemon {
                 await self.app.push(self.snapshot(health))
             }
         }
+        supervisor.onPressureChange = { [weak self] _ in
+            guard let self else { return }
+            Task(name: "Push the Mac's load") {
+                await self.app.push(self.snapshot(supervisor.health))
+            }
+        }
         self.supervisor = supervisor
         control = ControlServer(supervisor: supervisor, app: app) { [weak self] in
             await self?.bringTheBottleDown()
@@ -64,6 +70,7 @@ final class Daemon {
             isBusyRestarting: supervisor.isBusyRestarting,
             version: Daemon.bundledAppVersion,
             build: Daemon.build,
+            host: supervisor.pressure.isElevated ? supervisor.pressure : nil,
         )
     }
 

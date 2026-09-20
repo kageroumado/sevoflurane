@@ -39,6 +39,14 @@ struct ProminentFillStyle: ButtonStyle {
     }
 }
 
+/// A notice card's symbol and the slot it sits in: the measure every
+/// kageroumado popover's status card uses, so a card reads the same from one
+/// menu-bar app to the next.
+private enum NoticeCardMetrics {
+    static let symbolSize: CGFloat = 26
+    static let symbolSlot: CGFloat = 30
+}
+
 /// A notice in the popover: what happened, one line on it, and what can be
 /// done, under the words. Buttons beside the words leave a column a word wide
 /// in a popover 320 points across.
@@ -47,36 +55,51 @@ struct NoticeCard<Actions: View>: View {
     var tint: Color?
     /// Turns the symbol while the thing it reports is under way.
     var isSpinning = false
+    /// How far a variable symbol is filled, 0 to 1.
+    var level: Double?
     let title: String
     let detail: String
     @ViewBuilder var actions: Actions
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Space.md) {
-            Image(systemName: symbol)
-                .font(.title3)
+            Image(systemName: symbol, variableValue: level)
+                .font(.system(size: NoticeCardMetrics.symbolSize))
                 .symbolRenderingMode(.hierarchical)
+                // A gauge fills by drawing its arc. The default mode, color,
+                // dims whole layers, and a gauge's arc is one layer: it shows
+                // full or empty and nothing between.
+                .symbolVariableValueMode(.draw)
                 .foregroundStyle(tint ?? Color.secondary)
                 .symbolEffect(.rotate, options: .repeat(.continuous), isActive: isSpinning)
-                .frame(width: 24)
+                .frame(width: NoticeCardMetrics.symbolSlot)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.callout.weight(.semibold))
+                    .font(.system(.body, design: .rounded).weight(.semibold))
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: Theme.Space.sm) {
-                    actions
+                if Actions.self != EmptyView.self {
+                    HStack(spacing: Theme.Space.sm) {
+                        actions
+                    }
+                    .controlSize(.small)
+                    .padding(.top, 2)
                 }
-                .controlSize(.small)
-                .padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(Theme.Space.md)
         .glassCard()
+    }
+}
+
+extension NoticeCard where Actions == EmptyView {
+    /// A card that says something and offers nothing to press.
+    init(symbol: String, tint: Color? = nil, level: Double? = nil, title: String, detail: String) {
+        self.init(symbol: symbol, tint: tint, level: level, title: title, detail: detail) { EmptyView() }
     }
 }
 

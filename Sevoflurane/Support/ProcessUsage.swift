@@ -35,6 +35,20 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         return min(1, Double(pCoreTimeNanoseconds) / Double(cpuTimeNanoseconds))
     }
 
+    /// The kernel reports these times in Mach time units, NOT nanoseconds —
+    /// the field names and headers say time and give no unit, and on Intel
+    /// the two are the same. On Apple silicon a unit is 125/3 ns, so a second
+    /// of work reads as 0.024 s untreated.
+    private static let timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    private static func nanoseconds(_ machTime: UInt64) -> UInt64 {
+        machTime * UInt64(timebase.numer) / UInt64(max(1, timebase.denom))
+    }
+
     /// The process's accounting right now, or `nil` when there is no such
     /// process or it belongs to another user.
     static func read(pid: pid_t) -> ProcessUsage? {
@@ -47,8 +61,8 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         guard status == 0 else { return nil }
         return ProcessUsage(
             pid: pid,
-            cpuTimeNanoseconds: info.ri_user_time + info.ri_system_time,
-            pCoreTimeNanoseconds: info.ri_user_ptime + info.ri_system_ptime,
+            cpuTimeNanoseconds: nanoseconds(info.ri_user_time + info.ri_system_time),
+            pCoreTimeNanoseconds: nanoseconds(info.ri_user_ptime + info.ri_system_ptime),
             footprintBytes: info.ri_phys_footprint,
             energyNanojoules: info.ri_billed_energy,
             instructions: info.ri_instructions,

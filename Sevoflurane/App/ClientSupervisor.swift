@@ -36,6 +36,9 @@ final class ClientSupervisor {
     /// Whether the restart ladder is mid-flight, as the daemon last reported —
     /// control verbs that would race it refuse instead of interleaving.
     private(set) var isBusyRestarting = false
+    /// What else weighs on this Mac, while it is more than ordinary: the
+    /// daemon's reading, which is also what stretches its clocks.
+    private(set) var hostPressure: HostPressure?
 
     var statusText: String {
         health.statusText
@@ -140,6 +143,7 @@ final class ClientSupervisor {
         daemonIsUnreachable = false
         health = snapshot.supervisorHealth
         isBusyRestarting = snapshot.isBusyRestarting
+        hostPressure = snapshot.host
     }
 
     /// Reads `/status` once. A push covers every change; this covers the two
@@ -153,6 +157,9 @@ final class ClientSupervisor {
             health: name,
             detail: object["detail"] as? String ?? "",
             needsAttention: object["needsAttention"] as? Bool ?? false,
+            host: (object["host"] as? [String: Any])
+                .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+                .flatMap { try? JSONDecoder().decode(HostPressure.self, from: $0) },
         ))
     }
 

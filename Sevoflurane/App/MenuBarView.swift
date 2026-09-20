@@ -22,6 +22,7 @@ struct MenuBarView: View {
             PopoverHeader("Sevoflurane")
             SteamWindowRow(host: host, supervisor: supervisor)
             SupervisorNotice(supervisor: supervisor)
+            HostPressureNotice(pressure: supervisor.hostPressure)
             BottleIncompleteChip()
             RecentGames(host: host, supervisor: supervisor)
             StagedRendererCaption(host: host, supervisor: supervisor)
@@ -77,6 +78,7 @@ private struct PopoverAnimations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .animation(.smooth(duration: 0.3), value: supervisor.health)
+            .animation(.smooth(duration: 0.3), value: supervisor.hostPressure?.sentence)
             .animation(.smooth(duration: 0.3), value: host.recentGames)
             .animation(.smooth(duration: 0.3), value: host.activeLaunch)
             .animation(.smooth(duration: 0.3), value: host.unreadChats)
@@ -264,6 +266,26 @@ private struct SupervisorNotice: View {
 
     private var isRestarting: Bool {
         if case .restarting = supervisor.health { true } else { false }
+    }
+}
+
+// MARK: - The Mac's load
+
+/// What else weighs on this Mac, shown only while it is more than ordinary:
+/// a game that starts slowly or stutters under someone else's work is this
+/// card's to explain, before the person blames the game or this app.
+private struct HostPressureNotice: View {
+    let pressure: HostPressure?
+
+    var body: some View {
+        if let pressure, let sentence = pressure.sentence {
+            NoticeCard(
+                symbol: "thermometer.gauge.open", tint: .orange, level: pressure.level,
+                title: "Your Mac is busy with other work",
+                detail: "\(sentence) Games launch and run slower meanwhile.",
+            )
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
     }
 }
 

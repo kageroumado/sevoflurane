@@ -86,7 +86,8 @@ final class BottleSupervisor {
         return Int(bootBegan.duration(to: .now).components.seconds)
     }
 
-    /// The clocks the cycle keeps, in seconds.
+    /// The clocks the cycle keeps, in seconds, as they stand on an idle Mac.
+    /// The cycle reads them through ``patient(_:)``.
     private enum Timing {
         /// How long a launch has to bring CDP up before it is a failure.
         static let clientBoot = 180
@@ -94,8 +95,57 @@ final class BottleSupervisor {
         /// is booted without them.
         static let clientServices = 120
         /// How long a page that answers with no services is left alone.
-        static let servicesGrace: TimeInterval = 90
+        static let servicesGrace = 90
+        /// How long a live client's DevTools server may stay mute before the
+        /// client counts as down.
+        static let muteClient = 30
     }
+
+    // MARK: - The Mac the client runs on
+
+    /// What else weighs on this Mac, read at every probe. A client that is
+    /// slow on a Mac at full load is slow because of the load: the clocks
+    /// stretch by ``HostPressure/patience`` and the log says why.
+    private(set) var pressure = HostPressure()
+    @ObservationIgnored private let pressureSampler = HostPressureSampler()
+    var onPressureChange: ((HostPressure) -> Void)?
+
+    /// A clock of ``Timing`` as it stands under the current pressure.
+    private func patient(_ seconds: Int) -> Int {
+        Int((Double(seconds) * pressure.patience).rounded())
+    }
+
+    /// The reason for a restart or a fault, with the Mac's state beside it
+    /// where that state is part of the story.
+    private func withPressure(_ reason: String) -> String {
+        guard pressure.isElevated else { return reason }
+        return "\(reason) — on a loaded Mac: \(pressure.causes.joined(separator: "; "))"
+    }
+
+    /// Rising pressure counts at once, because a clock must stretch before
+    /// it runs out; falling pressure counts once it has held, because a
+    /// build breathes between steps and the log should not breathe with it.
+    private func samplePressure() {
+        let reading = pressureSampler.sample()
+        if reading.patience < pressure.patience || (!reading.isElevated && pressure.isElevated) {
+            calmerReadings += 1
+            guard calmerReadings >= Self.calmerReadingsToSettle else { return }
+        }
+        calmerReadings = 0
+        let before = pressure
+        pressure = reading
+        guard reading.rounded != before.rounded else { return }
+        if reading.isElevated != before.isElevated || reading.patience != before.patience {
+            log.log(.supervisor, reading.sentence.map {
+                "host: \($0) Waits are \(Int(reading.patience))× as long."
+            } ?? "host: back to ordinary levels")
+        }
+        onPressureChange?(reading)
+    }
+
+    @ObservationIgnored private var calmerReadings = 0
+    /// About fifteen seconds of probes.
+    private static let calmerReadingsToSettle = 5
 
     var statusText: String {
         health.statusText
@@ -351,6 +401,7 @@ final class BottleSupervisor {
     // MARK: - Probe cycle
 
     private func probe() async {
+        samplePressure()
         if isPaused || isRestarting || isQuitting { return }
         probeCycleCount += 1
         let cycle = PerfProbe.supervisor.beginInterval("ProbeCycle")
@@ -463,7 +514,7 @@ final class BottleSupervisor {
             if await ClientLifecycle.clientServicesReady() == true {
                 log.log(.client, "client services ready — booting the page with a live session")
                 await bootPage()
-            } else if bootSeconds >= Timing.clientServices {
+            } else if bootSeconds >= patient(Timing.clientServices) {
                 log.log(.client, "client services did not arrive in time — booting the page anyway")
                 await bootPage()
             }
@@ -510,7 +561,7 @@ final class BottleSupervisor {
         pageServicesUp = false
         pageFailures += 1
         if pageFailures >= 2,
-           Date.now.timeIntervalSince(lastPageRecovery) > Timing.servicesGrace {
+           Date.now.timeIntervalSince(lastPageRecovery) > Double(patient(Timing.servicesGrace)) {
             lastPageRecovery = .now
             pageFailures = 0
             if pageReloads >= 2 {
@@ -651,14 +702,14 @@ final class BottleSupervisor {
         let clientSocketOpen = app.facts.isClientConnected
         let busyButConnected = client == .busy && clientSocketOpen
         let deadLongEnough = !busyButConnected && clientFailures >= 3
-            && Date.now.timeIntervalSince(firstClientFailure) >= 30
+            && Date.now.timeIntervalSince(firstClientFailure) >= Double(patient(Timing.muteClient))
         if !wineWindows.isEmpty, hasSeenClientUp {
             await restartClient(
                 reason: reason + " with a Wine dialog up — Steam's own watchdog likely fired",
             )
         } else if !processAlive || deadLongEnough {
             let cause = if processAlive {
-                reason + " for \(Int(Date.now.timeIntervalSince(firstClientFailure)))s"
+                withPressure(reason + " for \(Int(Date.now.timeIntervalSince(firstClientFailure)))s")
             } else if hasSeenClientUp {
                 "the client process is gone"
             } else {
@@ -666,8 +717,8 @@ final class BottleSupervisor {
             }
             await restartClient(reason: cause)
         } else if hasSeenClientUp {
-            fault = .degraded(reason)
-            transition(logging: .client, reason)
+            fault = .degraded(withPressure(reason))
+            transition(logging: .client, withPressure(reason))
         }
     }
 
@@ -677,13 +728,12 @@ final class BottleSupervisor {
     /// its way. Every other failure path stays live throughout.
     private func advanceBootWait(wineWindows: [WineWindowWatch.Window]) {
         let waited = bootSeconds
-        if waited >= Timing.clientBoot {
+        let limit = patient(Timing.clientBoot)
+        if waited >= limit {
             endBoot()
-            fault = .degraded("client did not come back within \(Timing.clientBoot)s of launch")
-            transition(
-                logging: .client,
-                "client did not come back within \(Timing.clientBoot)s of launch",
-            )
+            let reason = withPressure("client did not come back within \(limit)s of launch")
+            fault = .degraded(reason)
+            transition(logging: .client, reason)
             return
         }
         // A Wine window with CDP still dead this far in is Steam saying
@@ -811,7 +861,7 @@ final class BottleSupervisor {
             enterBoot(.pageBooting)
             return
         }
-        guard Date.now.timeIntervalSince(lastPageRecovery) > Timing.servicesGrace else {
+        guard Date.now.timeIntervalSince(lastPageRecovery) > Double(patient(Timing.servicesGrace)) else {
             // Not a fault: the page is up and Steam's stores are still
             // filling. Reporting it as degraded put an orange "Steam is
             // struggling" and a menu-bar dot in front of the user for the

@@ -118,6 +118,8 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
     /// The running daemon's own build (``MachOIdentity``): what tells a
     /// rebuilt daemon of the same version from the one still in memory.
     var build: String?
+    /// What else weighs on this Mac, while it is more than ordinary.
+    var host: HostPressure?
 
     init(
         health: String = "starting",
@@ -126,6 +128,7 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
         isBusyRestarting: Bool = false,
         version: String = "0",
         build: String? = nil,
+        host: HostPressure? = nil,
     ) {
         self.health = health
         self.detail = detail
@@ -133,9 +136,13 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
         self.isBusyRestarting = isBusyRestarting
         self.version = version
         self.build = build
+        self.host = host
     }
 
-    init(_ health: SupervisorHealth, isBusyRestarting: Bool, version: String, build: String? = nil) {
+    init(
+        _ health: SupervisorHealth, isBusyRestarting: Bool, version: String, build: String? = nil,
+        host: HostPressure? = nil,
+    ) {
         self.init(
             health: health.wireName,
             detail: health.statusText,
@@ -143,6 +150,7 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
             isBusyRestarting: isBusyRestarting,
             version: version,
             build: build,
+            host: host,
         )
     }
 

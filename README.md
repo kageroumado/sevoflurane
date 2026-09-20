@@ -52,6 +52,13 @@ A background helper watches the Steam client for hangs and crashes. It can
 restart the client, clear its web cache and repair its installation. If
 recovery keeps failing, it stops retrying and reports the problem.
 
+The helper also reads what else weighs on the Mac: processor time taken by
+other apps, memory pressure, temperature and Low Power Mode. While any of
+them is past an ordinary level the menu-bar popover says so and names the
+program taking the most, the helper waits two or three times as long before
+it calls a slow client a hung one, and the log records the cause beside
+anything it does. At ordinary levels none of it is shown.
+
 The helper owns the Windows side, so quitting and crashing are different
 things. Quitting Sevoflurane quits Steam and everything in the bottle. If
 Sevoflurane crashes or is force-quit while you are playing, the game keeps

@@ -334,11 +334,18 @@ final class ControlServer {
         let body = #"{"app":\#(JSLiteral.string(app.isAttached ? "running" : "not running")),"#
             + #""daemon":"running","version":\#(JSLiteral.string(version)),"#
             + #""build":\#(JSLiteral.string(Daemon.build ?? "")),"#
+            + #""host":\#(Self.hostJSON(supervisor.pressure)),"#
             + #""health":\#(JSLiteral.string(supervisor.health.wireName)),"#
             + #""detail":\#(JSLiteral.string(supervisor.statusText)),"#
             + #""debug":\#(debug),"#
             + #""needsAttention":\#(supervisor.health.needsAttention)}"#
         return Self.json(body)
+    }
+
+    /// The Mac's load as JSON while it is more than ordinary, `null` otherwise.
+    private static func hostJSON(_ pressure: HostPressure) -> String {
+        guard pressure.isElevated, let data = try? JSONEncoder().encode(pressure) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// One query parameter's value, or the empty string.
