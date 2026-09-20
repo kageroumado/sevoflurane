@@ -141,7 +141,7 @@ enum StatusReport {
         var line = "engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
             + " · supervision \(supervision) · app \(appState.rawValue)"
-        if incomplete != nil { line += " · bottle incomplete" }
+        if let incomplete { line += " · bottle incomplete (\(incomplete))" }
         if snapshot.appStatus?["debug"] as? Bool == true { line += " · debug mode on" }
         return (dict, line)
     }
