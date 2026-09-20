@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Settings › Recovery: the actions that get a stuck installation running
 /// again, gathered in one place. Steam and its menus, the background helper,
-/// the bottle and its Wine underneath, diagnostics, and a short list of the
-/// problems this project has seen with the one-tap fix beside each. Every
+/// the bottle and its Wine underneath, and the problems people meet with
+/// where each one's fix is. Every
 /// action here keeps your games and saves — the destructive-looking ones stop
 /// and restart Steam, and the resets touch only regenerable caches.
 struct RecoverySettings: View {
@@ -14,8 +14,6 @@ struct RecoverySettings: View {
     var supervisor: ClientSupervisor?
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
-    /// Opens the report window. Absent in the gallery, where no window opens.
-    var showReports: (() -> Void)?
 
     /// The resets that stop the client, so each confirms before it runs. The
     /// set is fixed, and none of them can reach saves or game files.
@@ -63,42 +61,72 @@ struct RecoverySettings: View {
         }
     }
 
-    /// A problem this project has diagnosed, in plain language, with what to do.
+    /// A problem as the person meeting it would put it, with the error text
+    /// they are likely to be looking at, and where its fix is.
     struct KnownIssue: Identifiable {
         let id: String
         let symptom: String
+        /// What the game or Windows prints, when the problem has a wording.
+        var example: String?
         let fix: String
     }
 
-    /// Kept short and current: only what has actually been seen and has a fix
-    /// a person can act on from here or from Settings › Engine.
+    /// Only problems with a fix a person can reach from Settings.
     static let knownIssues: [KnownIssue] = [
+        KnownIssue(
+            id: "dll-missing-runtime",
+            symptom: "A game says a file is missing and will not start.",
+            example: "\u{201C}VCRUNTIME140.dll was not found\u{201D} · MSVCP140.dll · "
+                + "d3dx9_43.dll · XINPUT1_3.dll",
+            fix: "These files come with Windows runtimes that games expect to be there. Install "
+                + "Visual C++ runtime for VCRUNTIME and MSVCP, DirectX runtimes for d3dx9, xinput "
+                + "and xaudio, in Settings › Engine › Game dependencies.",
+        ),
+        KnownIssue(
+            id: "dll-own-copy",
+            symptom: "A mod, a fix or a loader is installed and the game ignores it.",
+            example: "ReShade · a widescreen fix · dinput8.dll · version.dll · winmm.dll · d3d9.dll",
+            fix: "Wine uses its own copy of a library it knows. Add a DLL override for that file "
+                + "in Settings › Games, set to Native, then built-in, so the game's copy wins.",
+        ),
+        KnownIssue(
+            id: "d3dcompiler-missing",
+            symptom: "A game shows a black screen, or stops while its shaders compile.",
+            example: "d3dcompiler_47.dll · \u{201C}Failed to compile shader\u{201D}",
+            fix: "Reinstall the Direct3D shader compiler above.",
+        ),
+        KnownIssue(
+            id: "fonts-missing",
+            symptom: "A launcher shows empty buttons, or text is boxes.",
+            fix: "Install Core fonts, and Japanese, Chinese & Korean fonts for a game in those "
+                + "languages, in Settings › Engine › Game dependencies.",
+        ),
+        KnownIssue(
+            id: "wrong-renderer",
+            symptom: "A game starts and its picture is wrong, flickers or stays black.",
+            fix: "Choose another renderer for that game in Settings › Games. The (i) beside "
+                + "Game renderer in Settings › Graphics says what each one is for.",
+        ),
+        KnownIssue(
+            id: "black-intro-video",
+            symptom: "A game shows a black screen where its intro video plays.",
+            fix: "Update the engine in Settings › Engine. Dormison plays these videos.",
+        ),
+        KnownIssue(
+            id: "menus-freeze-27",
+            symptom: "Steam's menus freeze and the app looks stuck.",
+            fix: "Cancel stuck menus above. macOS 27 can leave a menu tracking; Steam keeps "
+                + "running behind it.",
+        ),
         KnownIssue(
             id: "helper-wont-start",
             symptom: "The menu bar says the background helper won't start.",
             fix: "Repair the background helper above; approve it in Login Items if asked.",
         ),
-        KnownIssue(
-            id: "menus-freeze-27",
-            symptom: "Steam's menus freeze and the app looks stuck (macOS 27 beta).",
-            fix: "Cancel stuck menus above. This is a system beta issue, not Steam's.",
-        ),
-        KnownIssue(
-            id: "black-intro-video",
-            symptom: "A game shows a black screen on its intro video.",
-            fix: "Install engine r7 or later in Settings › Engine.",
-        ),
-        KnownIssue(
-            id: "d3dcompiler-missing",
-            symptom: "A game won't start and the doctor says the Direct3D shader compiler is missing.",
-            fix: "Reinstall the Direct3D shader compiler above.",
-        ),
     ]
 
     @State private var pendingReset: Reset?
     @State private var helper = HelperState.idle
-    @State private var savingDiagnostics = false
-    @State private var diagnosticsError: String?
     @State private var lastMenuResult: String?
 
     var body: some View {
@@ -106,7 +134,6 @@ struct RecoverySettings: View {
             steamSection
             helperSection
             bottleSection
-            diagnosticsSection
             knownIssuesSection
         }
         .formStyle(.grouped)
@@ -186,8 +213,6 @@ struct RecoverySettings: View {
     @ViewBuilder private var helperActivity: some View {
         switch helper {
         case .idle:
-            Image(systemName: "arrow.clockwise.circle")
-                .foregroundStyle(.secondary)
             Text("Repair the background helper")
         case .working:
             ProgressView().controlSize(.small)
@@ -275,63 +300,6 @@ struct RecoverySettings: View {
             : "Missing. A game that needs it will not start."
     }
 
-    // MARK: - Diagnostics
-
-    private var diagnosticsSection: some View {
-        Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Save Diagnostics…")
-                    Text("Writes logs, system details, and recent crashes to a ZIP on your "
-                        + "Desktop. Read it before sharing.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let diagnosticsError {
-                        Text(diagnosticsError).font(.caption).foregroundStyle(.orange)
-                    }
-                }
-                Spacer()
-                Button(savingDiagnostics ? "Saving…" : "Save…") { saveDiagnostics() }
-                    .disabled(savingDiagnostics)
-            }
-            .highlightable(.recoveryDiagnostics, highlighted: highlighted)
-            if let showReports {
-                actionRow(
-                    "Reports",
-                    detail: "Every game you have run, what it left behind, and the two ways "
-                        + "to share one: a zip on the Desktop, or an issue already filled in.",
-                    button: "Open…",
-                ) { showReports() }
-                    .highlightable(.recoveryReports, highlighted: highlighted)
-            }
-            Toggle(isOn: debugModeBinding) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Debug mode")
-                    Text("Records far more to the logs — every library a game loads, the "
-                        + "renderer, and the engine. Turn it on before reproducing a bug.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
-            .highlightable(.recoveryDebugMode, highlighted: highlighted)
-        } header: {
-            Text("Diagnostics")
-        } footer: {
-            Text("Restart Steam to apply a debug-mode change to games. Debug mode also "
-                + "lives in the menu bar popover.")
-        }
-    }
-
-    private var debugModeBinding: Binding<Bool> {
-        Binding(
-            get: { DebugModeSwitch.shared.isOn },
-            set: { DebugModeSwitch.shared.set($0) },
-        )
-    }
-
     // MARK: - Known issues
 
     private var knownIssuesSection: some View {
@@ -339,6 +307,12 @@ struct RecoverySettings: View {
             ForEach(Self.knownIssues) { issue in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(issue.symptom)
+                    if let example = issue.example {
+                        Text(example)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(issue.fix)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -347,7 +321,9 @@ struct RecoverySettings: View {
                 .padding(.vertical, 2)
             }
         } header: {
-            Text("Known issues")
+            Text("Common problems")
+        } footer: {
+            Text("For anything else, Settings › Diagnostics saves what a bug report needs.")
         }
     }
 
@@ -428,33 +404,6 @@ struct RecoverySettings: View {
             case let .failed(reason):
                 helper = .failed(reason)
             }
-        }
-    }
-
-    /// The `sevo` helper inside this bundle. The report is written by the
-    /// same binary the terminal runs, so a zip saved from here and one from a
-    /// hand-run `sevo diag` are the same report.
-    static var diagnosticsHelper: URL {
-        Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
-    }
-
-    /// The bundled CLI writes the zip (`sevo diag`), so the app and the
-    /// terminal produce the same report; Finder then shows it.
-    private func saveDiagnostics() {
-        savingDiagnostics = true
-        diagnosticsError = nil
-        Task(name: "Save diagnostics") {
-            let result = await Subprocess.run(
-                Self.diagnosticsHelper.path, ["diag", "--steam-logs"],
-                capture: .combined, timeout: .seconds(90),
-            )
-            savingDiagnostics = false
-            let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
-            guard result.status == 0, path.hasSuffix(".zip") else {
-                diagnosticsError = "Could not write the report: \(result.output.suffix(200))"
-                return
-            }
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         }
     }
 

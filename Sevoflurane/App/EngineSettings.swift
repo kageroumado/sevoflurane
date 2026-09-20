@@ -945,8 +945,6 @@ struct RepairRow: View {
                 .foregroundStyle(.green)
             Text("Steam is ready.")
         case .idle:
-            Image(systemName: "checkmark.circle")
-                .foregroundStyle(.secondary)
             Text("Repair Steam")
         }
     }

@@ -26,7 +26,7 @@ struct RecoveryTests {
         // Both sides are standardized: `standardizedFileURL` shortens a
         // leading /private, so a bundle built under /tmp or /var reads as
         // outside itself when only the prefix is put through it.
-        let helper = RecoverySettings.diagnosticsHelper.standardizedFileURL.path
+        let helper = DiagnosticsArchive.helper.standardizedFileURL.path
         #expect(helper.hasSuffix("/Contents/Helpers/sevo"))
         #expect(helper.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path + "/"))
     }
@@ -53,6 +53,15 @@ struct RecoveryTests {
         let ids = Set(issues.map(\.id))
         #expect(ids.contains("helper-wont-start"))
         #expect(ids.contains("d3dcompiler-missing"))
+    }
+
+    @Test
+    func `a problem's wording names no beta and no engine release`() {
+        for issue in RecoverySettings.knownIssues {
+            #expect(!issue.symptom.contains("beta"))
+            #expect(!issue.fix.contains("beta"))
+            #expect(issue.fix.range(of: #"\br\d+\b"#, options: .regularExpression) == nil)
+        }
     }
 }
 

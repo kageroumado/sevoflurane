@@ -47,11 +47,13 @@ struct DiagnosticsSettings: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
+            DebugModeRow()
+                .highlightable(.diagnosticsDebugMode, highlighted: highlighted)
         } header: {
-            Text("Level")
+            Text("Recording")
         } footer: {
-            Text("A change reaches each game the next time it is launched. "
-                + "Steam does not need restarting.")
+            Text("A level reaches each game the next time it is launched. "
+                + "Debug mode restarts Steam, and ends when Sevoflurane quits.")
         }
     }
 
@@ -71,7 +73,7 @@ struct DiagnosticsSettings: View {
         Section {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Collected reports")
+                    Text("Reports")
                     Text(reportsDetail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -84,6 +86,8 @@ struct DiagnosticsSettings: View {
                 }
             }
             .highlightable(.diagnosticsReports, highlighted: highlighted)
+            SaveDiagnosticsRow()
+                .highlightable(.diagnosticsSave, highlighted: highlighted)
         } header: {
             Text("Reports")
         } footer: {
@@ -95,7 +99,7 @@ struct DiagnosticsSettings: View {
 
     private var reportsDetail: String {
         let count = CrashCollector.reports().count
-        guard count > 0 else { return "Nothing collected yet." }
+        guard count > 0 else { return "Every game you run gets one. Nothing collected yet." }
         let size = ByteCountFormatter.string(
             fromByteCount: Int64(reportBytes), countStyle: .file,
         )
@@ -140,5 +144,58 @@ struct DiagnosticsSettings: View {
         let root = CrashCollector.root
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([root])
+    }
+}
+
+/// Debug mode beside the level it overrides: the playtest switch that turns
+/// everything on for one session.
+private struct DebugModeRow: View {
+    private static let help = SettingHelp(
+        title: "Debug mode",
+        summary: "One switch for reproducing a bug: it sets everything a report needs, "
+            + "and takes it all off again when it ends.",
+        entries: [
+            .init(
+                name: "What it records",
+                text: "Every library a game loads, the renderer's own errors in a file of "
+                    + "their own, and how each frame reached the screen.",
+            ),
+            .init(
+                name: "How it differs from the level",
+                text: "The level is kept and costs little. Debug mode costs speed and disk, "
+                    + "so it lives only as long as this session.",
+            ),
+        ],
+        footnote: "Also in the menu bar popover, under the … button.",
+    )
+
+    var body: some View {
+        HelpedRow(caption: "Records everything for one session. Turn it on before reproducing a bug.", help: Self.help) {
+            Toggle("Debug mode", isOn: Binding(
+                get: { DebugModeSwitch.shared.isOn },
+                set: { DebugModeSwitch.shared.set($0) },
+            ))
+            .toggleStyle(.switch)
+        }
+    }
+}
+
+/// The zip for a bug report.
+private struct SaveDiagnosticsRow: View {
+    @State private var error: String?
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Diagnostics archive")
+                Text(error ?? "Logs, system details and recent crashes in a ZIP on your Desktop, "
+                    + "with your name, paths and Steam ids taken out.")
+                    .font(.caption)
+                    .foregroundStyle(error == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            SaveDiagnosticsButton(title: "Save…", error: $error)
+        }
     }
 }

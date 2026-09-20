@@ -376,7 +376,7 @@ final class SteamWindow: NSObject {
             // A page-side error the shim's guard caught — the stack Steam's
             // own error boundary swallows. Diagnostic for the intermittent
             // library crash; goes to the event log a bug report attaches.
-            EventLog.shared.log(.window, "page error — \(string(args, 0))")
+            host?.notePageError(string(args, 0))
         case "__bv":
             // An identity, not a measurement — read as an integer so a stray
             // `NaN` cannot trap `Int(_:)` on the way in.

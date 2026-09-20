@@ -4,28 +4,7 @@ import SwiftUI
 
 struct AboutSettings: View {
     let highlighted: SettingsAnchor?
-    @State private var savingDiagnostics = false
     @State private var diagnosticsError: String?
-
-    /// The bundled CLI writes the zip (`sevo diag`), so the app and the
-    /// terminal produce the same report; Finder then shows it.
-    private func saveDiagnostics() {
-        savingDiagnostics = true
-        diagnosticsError = nil
-        Task(name: "Save diagnostics") {
-            let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
-            let result = await Subprocess.run(
-                helper.path, ["diag", "--steam-logs"], capture: .combined, timeout: .seconds(90),
-            )
-            savingDiagnostics = false
-            let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
-            guard result.status == 0, path.hasSuffix(".zip") else {
-                diagnosticsError = "Could not write the report: \(result.output.suffix(200))"
-                return
-            }
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-        }
-    }
 
     /// A scroll view like every other pane: the split view hangs its title
     /// bar and its sidebar on the detail's scroll view, and a detail without
@@ -65,8 +44,7 @@ struct AboutSettings: View {
                 Button("License") {
                     NSApp.sendAction(#selector(AppDelegate.showLicense(_:)), to: nil, from: nil)
                 }
-                Button(savingDiagnostics ? "Saving…" : "Save Diagnostics…") { saveDiagnostics() }
-                    .disabled(savingDiagnostics)
+                SaveDiagnosticsButton(title: "Save Diagnostics…", error: $diagnosticsError)
                     .highlightable(.aboutDiagnostics, highlighted: highlighted)
             }
             .controlSize(.small)

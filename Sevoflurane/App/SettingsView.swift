@@ -395,29 +395,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     title: "Wine configuration",
                     keywords: ["wine", "winecfg", "windows version", "configuration", "recovery"],
                 ),
-                SearchableSetting(
-                    id: .recoveryDiagnostics,
-                    title: "Save Diagnostics",
-                    keywords: [
-                        "diagnostics", "diagnostic", "report", "logs", "log", "zip",
-                        "bug", "crash", "support", "send",
-                    ],
-                ),
-                SearchableSetting(
-                    id: .recoveryDebugMode,
-                    title: "Debug mode",
-                    keywords: [
-                        "debug", "verbose", "logging", "trace", "logs", "diagnostics",
-                    ],
-                ),
-                SearchableSetting(
-                    id: .recoveryReports,
-                    title: "Reports",
-                    keywords: [
-                        "report", "reports", "runs", "run", "history", "issue", "github",
-                        "bug", "crash", "share", "fps", "frame rate",
-                    ],
-                ),
             ]
         case .diagnostics:
             [
@@ -430,11 +407,27 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
+                    id: .diagnosticsDebugMode,
+                    title: "Debug mode",
+                    keywords: [
+                        "debug", "verbose", "logging", "trace", "logs", "diagnostics",
+                    ],
+                ),
+                SearchableSetting(
                     id: .diagnosticsReports,
-                    title: "Collected reports",
+                    title: "Reports",
                     keywords: [
                         "report", "reports", "crash", "collected", "folder", "finder",
-                        "dump", "minidump", "ips", "share",
+                        "dump", "minidump", "ips", "share", "runs", "run", "history",
+                        "issue", "github", "bug", "fps", "frame rate",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .diagnosticsSave,
+                    title: "Diagnostics archive",
+                    keywords: [
+                        "diagnostics", "diagnostic", "save", "logs", "log", "zip",
+                        "bug", "crash", "support", "send",
                     ],
                 ),
                 SearchableSetting(
@@ -520,11 +513,10 @@ enum SettingsAnchor: String, CaseIterable {
     case recoveryClearShaderCache = "recovery.clearShaderCache"
     case recoveryRebuildSteam = "recovery.rebuildSteam"
     case recoveryWinecfg = "recovery.winecfg"
-    case recoveryDiagnostics = "recovery.diagnostics"
-    case recoveryDebugMode = "recovery.debugMode"
-    case recoveryReports = "recovery.reports"
     case diagnosticsLevel = "diagnostics.level"
+    case diagnosticsDebugMode = "diagnostics.debugMode"
     case diagnosticsReports = "diagnostics.reports"
+    case diagnosticsSave = "diagnostics.save"
     case diagnosticsCaps = "diagnostics.caps"
     case aboutDiagnostics = "about.diagnostics"
     case aboutVersion = "about.version"
@@ -640,7 +632,6 @@ private struct SettingsPane: View {
                 RecoverySettings(
                     provisioner: provisioner, compatibility: compatibility,
                     supervisor: supervisor, steam: steam, highlighted: highlighted,
-                    showReports: showReports,
                 )
             case .diagnostics:
                 DiagnosticsSettings(highlighted: highlighted, showReports: showReports)

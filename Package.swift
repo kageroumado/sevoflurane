@@ -129,6 +129,7 @@ let package = Package(
                 "Sevoflurane/Support/NWJSGames.swift",
                 "Sevoflurane/Support/NWJSRunner.swift",
                 "Sevoflurane/Support/NWJSRuntime.swift",
+                "Sevoflurane/Support/PageErrorTriage.swift",
                 "Sevoflurane/Support/PerformanceProbes.swift",
                 "Sevoflurane/Support/PopupSweeper.swift",
                 "Sevoflurane/Support/Preferences.swift",

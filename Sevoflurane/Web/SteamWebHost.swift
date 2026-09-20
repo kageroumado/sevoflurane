@@ -291,6 +291,23 @@ final class SteamWebHost {
     /// The launch task the log last carried, as `appid:task`.
     var lastLoggedLaunchTask: String?
 
+    /// The expected refusals this page has already logged, so each is said
+    /// once per page load.
+    private var loggedRefusals: Set<String> = []
+
+    /// Logs what the page's error guard reported: an error as it arrived, a
+    /// refusal every session produces once and in plain words.
+    func notePageError(_ detail: String) {
+        switch PageErrorTriage.verdict(for: detail) {
+        case .error:
+            EventLog.shared.log(.window, "page error — \(detail)")
+        case let .expected(sentence):
+            if loggedRefusals.insert(sentence).inserted {
+                EventLog.shared.log(.page, "expected: \(sentence)")
+            }
+        }
+    }
+
     // Overlay presence. It is shown only while the overlay is active *and* the
     // game (or this app, once the overlay has taken key) is frontmost, so it
     // rides just above the game and vanishes the moment another app comes
@@ -416,6 +433,7 @@ final class SteamWebHost {
         status = "starting Steam"
         PerfProbe.poi.emitEvent("PageBoot")
         EventLog.shared.log(.page, "booting the Steam UI from \(Self.uiURL.absoluteString)")
+        loggedRefusals = []
         webView.load(URLRequest(url: Self.uiURL))
     }
 
@@ -424,6 +442,7 @@ final class SteamWebHost {
         detachPopups(reason: .pageTeardown)
         desktop = nil
         status = "reloading"
+        loggedRefusals = []
         context?.webView.load(URLRequest(url: Self.uiURL))
     }
 
