@@ -41,7 +41,7 @@ templates ask for the subset that matters.
    renderer that answered it, and a renderer switch from the menu bar restarts
    Steam, so write the time down.
 
-4. **Note the window mode.** Settings › Engine › *Make game windows resizable*.
+4. **Note the window mode.** Settings › Engine › *Resizable windows*.
    The default covers games that run in a window; a game that covers the screen
    needs the third option before it can be moved or resized.
 

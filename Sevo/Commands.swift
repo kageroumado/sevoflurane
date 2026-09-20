@@ -1409,7 +1409,7 @@ struct ClientCommand: AsyncParsableCommand {
             commandName: "force-quit",
             abstract: "SIGKILL now; report what died, what survived, and what came back.",
             discussion: """
-            scope 'steam' kills the client and leaves the fake Windows booted; \
+            scope 'steam' kills the client and leaves the bottle's Windows processes up; \
             'all' runs wineserver -k and kills the whole bottle, games included. \
             With supervision running the client is brought back clean afterward. \
             The reply is the observation, not a verdict: killed, still-running \
@@ -1535,7 +1535,7 @@ struct ClientCommand: AsyncParsableCommand {
             commandName: "restart", abstract: "Stop, then start.",
         )
         @Flag(name: .customLong("no-app")) var noApp = false
-        @Flag(name: .customLong("windows"), help: "Bring the whole fake Windows (wineserver included) down and boot it fresh.")
+        @Flag(name: .customLong("windows"), help: "Stop every Windows process in the bottle, Wine's server included, and start again.")
         var windows = false
         @Flag(name: .customLong("json"), help: "Machine-readable observation.")
         var asJSON = false
