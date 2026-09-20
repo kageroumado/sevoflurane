@@ -1,4 +1,5 @@
 import Foundation
+import SystemConfiguration
 
 /// Takes the person out of text that is meant to be shared.
 ///
@@ -39,9 +40,7 @@ nonisolated enum Redaction {
             "7656119",
             NSUserName(),
             NSFullUserName(),
-            ProcessInfo.processInfo.hostName,
-            Host.current().localizedName ?? "",
-        ] + personas)
+        ] + machineNames + personas)
             .filter { $0.count > 2 }
             .map(NSRegularExpression.escapedPattern(for:))
         guard let search = try? NSRegularExpression(
@@ -62,6 +61,23 @@ nonisolated enum Redaction {
         return result as String
     }
 
+    /// What this Mac is called: the kernel's host name, and the computer and
+    /// Bonjour names from Sharing settings, longest first so a name that
+    /// contains another is replaced whole. All three are local reads.
+    /// `ProcessInfo.hostName` and `Host.current()` resolve the name over the
+    /// network, and hold the caller for half a minute where the resolver
+    /// does not answer.
+    private static let machineNames: [String] = {
+        var kernelName = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+        let names = [
+            gethostname(&kernelName, kernelName.count - 1) == 0 ? String(cString: kernelName) : nil,
+            SCDynamicStoreCopyComputerName(nil, nil) as String?,
+            SCDynamicStoreCopyLocalHostName(nil) as String?,
+        ]
+        return Set(names.compactMap(\.self).filter { $0.count > 2 })
+            .sorted { ($0.count, $0) > ($1.count, $1) }
+    }()
+
     private static func redact(_ text: String, personas: [String]) -> String {
         var result = text
         for name in personas where name.count > 2 {
@@ -73,8 +89,7 @@ nonisolated enum Redaction {
         result = result.replacing(macHome) { _ in home }
         result = result.replacing(windowsUser) { match in "\(match.output.1)~" }
         result = result.replacing(steamIDDigits) { _ in steamID }
-        for name in [ProcessInfo.processInfo.hostName, Host.current().localizedName ?? ""]
-            where name.count > 2 {
+        for name in machineNames {
             result = result.replacingOccurrences(of: name, with: host)
         }
         let fullName = NSFullUserName()

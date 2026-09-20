@@ -11,6 +11,15 @@ struct RedactionTests {
     }
 
     @Test
+    func `this Mac's name becomes a placeholder`() throws {
+        var buffer = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
+        try #require(gethostname(&buffer, buffer.count - 1) == 0)
+        let name = String(cString: buffer)
+        try #require(name.count > 2)
+        #expect(Redaction.apply(to: "wineserver: host \(name) answered") == "wineserver: host <host> answered")
+    }
+
+    @Test
     func `any account's home becomes a tilde, and the shared folder is left alone`() {
         #expect(
             Redaction.apply(to: "Mono path[0] = '/Users/someone/Games/data'")
