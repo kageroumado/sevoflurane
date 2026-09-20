@@ -12,8 +12,8 @@ import Observation
 /// which is why the state is asked for rather than inferred.
 ///
 /// Then a ladder, each rung written into the run record: release what is ours,
-/// `SIGCONT` the tree, wait again, and only then kill it. A client that stalls
-/// is not killed here — it has a restart ladder of its own in the supervisor.
+/// `SIGCONT` the tree, wait again, and only then kill it. A client process
+/// at rest is left alone: the supervisor asks the client itself whether it works.
 ///
 /// The same samples are what the process monitor shows; the window is this
 /// object's view.
@@ -121,8 +121,6 @@ final class StallWatch {
     /// What a run is told about its own stalls, and what ends one that will
     /// not come back.
     var recorder: RunRecorder?
-    /// Where a stalled client goes: it has a restart ladder of its own.
-    var restartClient: ((String) -> Void)?
 
     /// - Parameter chronicleURL: The dock shim's chronicle, which is where
     ///   the Unix pids and the Windows executables meet. A test points it at
@@ -287,25 +285,17 @@ final class StallWatch {
     /// One rung, per stalled process, per sample.
     private func climb(for process: Process, at now: TimeInterval) {
         switch process.role {
-        case .client:
-            handClientToSupervisor(process)
         case .game, .gameChild:
             unwedge(process, at: now)
-        case .helper, .driver:
-            // Neither is a session: a helper at rest is a helper with nothing
-            // to do, and killing one costs more than it saves.
+        case .client, .helper, .driver:
+            // None is a session. A helper at rest is a helper with nothing to
+            // do, and so is a client process: Steam's web helper keeps several
+            // children that sit at zero CPU for minutes. Whether the client
+            // works is the supervisor's question, asked of the client itself.
             break
         }
     }
 
-    private func handClientToSupervisor(_ process: Process) {
-        guard handedOver.insert(process.pid).inserted else { return }
-        let reason = "\(process.name) has used no CPU for \(Int(Rules.candidateAfter)) s"
-        probes.log("stall: \(reason) — handing it to the supervisor")
-        restartClient?(reason)
-    }
-
-    private var handedOver: Set<pid_t> = []
     /// When each stalled process's ladder began, so the kill rung waits its
     /// own ``Rules/killAfter`` rather than firing on the sample that found it.
     private var laddersBegan: [pid_t: TimeInterval] = [:]

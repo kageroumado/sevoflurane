@@ -314,9 +314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the record can name.
     private func startStallWatch() {
         stallWatch.recorder = runRecorder
-        stallWatch.restartClient = { [weak self] reason in
-            self?.supervisor.restartNow(reason: reason)
-        }
         stallWatch.start()
     }
 

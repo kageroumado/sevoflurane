@@ -244,27 +244,22 @@ struct StallWatchTests {
     }
 
     @Test
-    func `a stalled client goes to the supervisor rather than being killed`() throws {
+    func `a quiet client process is left alone`() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let machine = Machine()
         machine.cpuNanoseconds = [800: 0]
         let log = try chronicle(in: root)
         let watch = StallWatch(probes: machine.probes(), chronicleURL: log)
-        try arm([(800, "steam.exe")], in: log)
+        try arm([(800, "steamwebhelper.exe")], in: log)
         watch.recorder = try recorder(in: root, appID: 480, pid: 900)
-        var reasons: [String] = []
-        watch.restartClient = { reasons.append($0) }
 
         watch.sample()
-        machine.advance(StallWatch.Rules.candidateAfter + 2)
+        machine.advance(StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter + 4)
         watch.sample()
-        // A second pass must not ask for a second restart.
         machine.advance(4)
         watch.sample()
 
-        #expect(reasons.count == 1)
-        #expect(reasons.first?.contains("steam.exe") == true)
         #expect(machine.signals.isEmpty)
     }
 
