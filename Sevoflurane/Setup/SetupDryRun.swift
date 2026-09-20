@@ -103,6 +103,13 @@
                         Self.bottle(named: "Steam Beta", hasSteam: true),
                         Self.bottle(named: "Games", hasSteam: true),
                         Self.bottle(named: "Office", hasSteam: false),
+                        // Another engine's bottle of the same name, which a
+                        // real Mac with CrossOver and Dormison both has.
+                        SetupDetection.Bottle(
+                            name: "Steam",
+                            url: URL(fileURLWithPath: "/private/var/empty/CrossOver/Bottles/Steam"),
+                            hasSteam: true,
+                        ),
                     ],
                     managedEngineVersions: [],
                 )

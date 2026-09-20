@@ -96,11 +96,17 @@ final class Provisioner {
     /// disk, so on a Mac whose bottle root does not exist yet the one
     /// directory spelled two ways is two unequal URLs.
     private func bottleRecord(named name: String) -> SetupDetection.Bottle? {
+        ownBottles.first { $0.name == name }
+    }
+
+    /// The bottles under the active engine's root: the ones a name chosen in
+    /// the wizard can mean. CrossOver's bottles and a managed engine's live
+    /// in different folders and can share names, "Steam" above all.
+    var ownBottles: [SetupDetection.Bottle] {
         let root = environment.bottlesRoot.standardizedFileURL.path
-        return detection?.bottles.first {
-            $0.name == name
-                && $0.url.deletingLastPathComponent().standardizedFileURL.path == root
-        }
+        return detection?.bottles.filter {
+            $0.url.deletingLastPathComponent().standardizedFileURL.path == root
+        } ?? []
     }
 
     /// Whether what still needs doing starts with the engine: none on disk

@@ -175,6 +175,15 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `another engine's bottle of the same name is no candidate`() async {
+        let (provisioner, _) = makeProvisioner(.multipleBottles)
+        await provisioner.refreshDetection()
+        #expect(provisioner.detection?.bottles.count { $0.name == "Steam" } == 2)
+        #expect(provisioner.ownBottles.count { $0.name == "Steam" } == 1)
+        #expect(provisioner.ownBottles.map(\.name) == ["Steam", "Steam Beta", "Games", "Office"])
+    }
+
+    @Test
     func `expired trial is not a usable engine`() async {
         let (provisioner, _) = makeProvisioner(.trialExpired)
         await provisioner.refreshDetection()

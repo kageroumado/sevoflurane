@@ -212,7 +212,7 @@ struct SetupView: View {
     /// the answer is genuinely ambiguous — one bottle named the way we would
     /// name it needs no question.
     private var bottleCandidates: [SetupDetection.Bottle] {
-        provisioner.detection?.steamBottles ?? []
+        provisioner.ownBottles.filter(\.hasSteam)
     }
 
     private var needsBottleChoice: Bool {
@@ -229,7 +229,7 @@ struct SetupView: View {
         if name.contains("/") || name.contains(":") {
             return "Use a name without / or : in it."
         }
-        if provisioner.detection?.bottles.contains(where: { $0.name == name }) == true {
+        if provisioner.ownBottles.contains(where: { $0.name == name }) {
             return "A bottle named “\(name)” already exists."
         }
         return nil
@@ -240,7 +240,7 @@ struct SetupView: View {
     /// telling someone their installed Steam is being downloaded is a lie
     /// they will watch for minutes.
     private var isAdoptingSteam: Bool {
-        provisioner.detection?.steamBottles.contains { $0.name == SteamBottle.name } == true
+        bottleCandidates.contains { $0.name == SteamBottle.name }
     }
 
     private var hasFailed: Bool {
