@@ -190,10 +190,8 @@ struct SetupInstallStep: View {
     var body: some View {
         SetupPage(
             glyph: "arrow.down.circle",
-            title: isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam",
-            subtitle: isAdoptingSteam
-                ? "Checking the Steam installed here and updating it."
-                : "Most connections take a few minutes.",
+            title: title,
+            subtitle: subtitle,
         ) {
             SetupList {
                 ForEach(Array(Self.stages.enumerated()), id: \.offset) { offset, stage in
@@ -207,6 +205,18 @@ struct SetupInstallStep: View {
             }
             SetupFootnote(text: closingNote)
         }
+    }
+
+    private var title: String {
+        if provisioner.activity == .done { return "Steam is ready" }
+        return isAdoptingSteam ? "Getting Steam ready" : "Setting up Steam"
+    }
+
+    private var subtitle: String {
+        if provisioner.activity == .done { return "Continue to finish setting up." }
+        return isAdoptingSteam
+            ? "Checking the Steam installed here and updating it."
+            : "Most connections take a few minutes."
     }
 
     private var currentStage: Int {

@@ -53,6 +53,8 @@ struct SetupView: View {
     @State private var newBottleName = SteamBottle.defaultName
     @State private var downloadEverything = BottleDependencies.installsEverything
     @State private var graphicsStore: GraphicsStore?
+    /// Whether this run found Steam already in its bottle when it began.
+    @State private var adoptsSteam = false
     @State private var gptk = GPTkDownload()
 
     /// A real run always opens on the welcome. The gallery draws every step at
@@ -124,7 +126,7 @@ struct SetupView: View {
                 downloadEverything: $downloadEverything,
             )
         case .steam:
-            SetupInstallStep(provisioner: provisioner, isAdoptingSteam: isAdoptingSteam)
+            SetupInstallStep(provisioner: provisioner, isAdoptingSteam: adoptsSteam)
         case .graphics:
             SetupGraphicsStep(download: gptk, store: graphicsStore, isSimulated: provisioner.isDryRun)
         case .options:
@@ -280,6 +282,9 @@ struct SetupView: View {
     }
 
     private func beginProvisioning() {
+        // Read before the first stage runs: a bottle that gets its Steam from
+        // this run has one by the end of it, and would read as adopted.
+        adoptsSteam = isAdoptingSteam
         step = .steam
         if provisioner.activity == .idle {
             Task { await provisioner.provisionAndConfigure() }
