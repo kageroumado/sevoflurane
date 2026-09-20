@@ -30,6 +30,9 @@ final class BottleSupervisor {
     /// Whether the client has answered at all since the app started. Until it
     /// has, every failure is the first launch still happening.
     @ObservationIgnored var hasSeenClientUp = false
+    /// Whether this session's client has been healthy once: what tells a
+    /// launch from a recovery, in the verdict and in the log.
+    @ObservationIgnored var hasBeenHealthy = false
 
     private var isPaused = false
 
@@ -61,7 +64,7 @@ final class BottleSupervisor {
             isPageBooting: boot == .pageBooting,
             lastProbe: lastProbe,
             pageServicesUp: pageServicesUp,
-            hasSeenClientUp: hasSeenClientUp,
+            hasBeenHealthy: hasBeenHealthy,
             isAwaitingSignIn: isAwaitingSignIn,
             fault: fault,
         )
@@ -536,6 +539,7 @@ final class BottleSupervisor {
     /// by whatever was waiting on it.
     private func noteEverythingUp(wineWindows: [WineWindowWatch.Window]) async {
         endBoot()
+        hasBeenHealthy = true
         pageServicesUp = true
         pageFailures = 0
         pageReloads = 0

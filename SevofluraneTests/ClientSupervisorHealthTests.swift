@@ -12,11 +12,11 @@ struct ClientSupervisorHealthTests {
 
     @Test
     func `a healthy client needs both CDP and Steam's services`() {
-        #expect(health(Inputs(lastProbe: .up, pageServicesUp: true, hasSeenClientUp: true))
+        #expect(health(Inputs(lastProbe: .up, pageServicesUp: true, hasBeenHealthy: true))
             == .healthy)
-        #expect(health(Inputs(lastProbe: .up, pageServicesUp: false, hasSeenClientUp: true))
+        #expect(health(Inputs(lastProbe: .up, pageServicesUp: false, hasBeenHealthy: true))
             == .starting)
-        #expect(health(Inputs(lastProbe: .down, pageServicesUp: true, hasSeenClientUp: true))
+        #expect(health(Inputs(lastProbe: .down, pageServicesUp: true, hasBeenHealthy: true))
             == .starting)
     }
 
@@ -38,7 +38,7 @@ struct ClientSupervisorHealthTests {
 
     @Test
     func `a crash loop stands until something clears it`() {
-        var inputs = Inputs(hasSeenClientUp: true, fault: .gaveUp("client keeps dying"))
+        var inputs = Inputs(hasBeenHealthy: true, fault: .gaveUp("client keeps dying"))
         #expect(health(inputs) == .gaveUp("client keeps dying"))
         // A restart in flight does not hide it; clearing the fault is what
         // ends it, which is why the ladder clears it by name.
@@ -51,7 +51,7 @@ struct ClientSupervisorHealthTests {
 
     @Test
     func `a signed-out client outranks progress and faults alike`() {
-        var inputs = Inputs(lastProbe: .up, hasSeenClientUp: true, isAwaitingSignIn: true)
+        var inputs = Inputs(lastProbe: .up, hasBeenHealthy: true, isAwaitingSignIn: true)
         #expect(health(inputs) == .waitingForSignIn)
         inputs.progressPhase = "waiting for Steam's services…"
         #expect(health(inputs) == .waitingForSignIn)
@@ -68,7 +68,7 @@ struct ClientSupervisorHealthTests {
     func `a progress phase reads as a first launch until a client has answered`() {
         var inputs = Inputs(progressPhase: "waiting for the client (12s)")
         #expect(health(inputs) == .launching("waiting for the client (12s)"))
-        inputs.hasSeenClientUp = true
+        inputs.hasBeenHealthy = true
         #expect(health(inputs) == .restarting("waiting for the client (12s)"))
     }
 
@@ -77,7 +77,7 @@ struct ClientSupervisorHealthTests {
         let inputs = Inputs(
             progressPhase: "waiting for Steam's services…",
             lastProbe: .up,
-            hasSeenClientUp: true,
+            hasBeenHealthy: true,
             fault: .degraded("CDP unreachable — client down"),
         )
         #expect(health(inputs) == .restarting("waiting for Steam's services…"))
@@ -85,7 +85,7 @@ struct ClientSupervisorHealthTests {
 
     @Test
     func `a page that has just been sent to a new client is starting`() {
-        let inputs = Inputs(isPageBooting: true, lastProbe: .up, hasSeenClientUp: true)
+        let inputs = Inputs(isPageBooting: true, lastProbe: .up, hasBeenHealthy: true)
         #expect(health(inputs) == .starting)
     }
 
@@ -93,7 +93,7 @@ struct ClientSupervisorHealthTests {
     func `a fault is reported once nothing else claims the cycle`() {
         let inputs = Inputs(
             lastProbe: .down,
-            hasSeenClientUp: true,
+            hasBeenHealthy: true,
             fault: .degraded("CDP unreachable — client down"),
         )
         #expect(health(inputs) == .degraded("CDP unreachable — client down"))
@@ -112,8 +112,14 @@ struct ClientSupervisorHealthTests {
     func `the ladder starting the first client reads as a launch, and as a restart once one has been up`() {
         var inputs = Inputs(isRestarting: true, restartPhase: "Starting Windows and Steam")
         #expect(health(inputs) == .launching("Starting Windows and Steam"))
-        inputs.hasSeenClientUp = true
+        inputs.hasBeenHealthy = true
         #expect(health(inputs) == .restarting("Starting Windows and Steam"))
+    }
+
+    @Test
+    func `a first launch stays a launch while the client answers and Steam's services are still coming up`() {
+        let inputs = Inputs(progressPhase: "Waiting for Steam’s services… (14s)", lastProbe: .up)
+        #expect(health(inputs) == .launching("Waiting for Steam’s services… (14s)"))
     }
 }
 

@@ -128,13 +128,16 @@ nonisolated struct SupervisorHealthInputs: Equatable, Sendable {
     /// The rung the restart ladder is on.
     var restartPhase = ""
     /// A phase the machine is deliberately waiting through, told as a first
-    /// launch or as a recovery by `hasSeenClientUp`.
+    /// launch or as a recovery by `hasBeenHealthy`.
     var progressPhase: String?
     var isPageBooting = false
     var lastProbe: ClientLifecycle.ClientState = .down
     /// Whether the page reports Steam's stores as initialized.
     var pageServicesUp = false
-    var hasSeenClientUp = false
+    /// Whether this session has had a healthy client: a client that
+    /// answers while Steam's services are still coming up is a launch in
+    /// progress.
+    var hasBeenHealthy = false
     var isAwaitingSignIn = false
     var fault: SupervisorFault?
 }
@@ -153,16 +156,16 @@ nonisolated extension SupervisorHealth {
         // The ladder is how a client is started as well as restarted: it is a
         // restart only where there was a client to lose.
         if inputs.isRestarting {
-            return inputs.hasSeenClientUp
+            return inputs.hasBeenHealthy
                 ? .restarting(inputs.restartPhase) : .launching(inputs.restartPhase)
         }
         if inputs.isAwaitingSignIn { return .waitingForSignIn }
         if let phase = inputs.progressPhase {
-            return inputs.hasSeenClientUp ? .restarting(phase) : .launching(phase)
+            return inputs.hasBeenHealthy ? .restarting(phase) : .launching(phase)
         }
         if case let .degraded(reason)? = inputs.fault { return .degraded(reason) }
         if inputs.isPageBooting { return .starting }
-        if inputs.lastProbe != .up, !inputs.hasSeenClientUp {
+        if inputs.lastProbe != .up, !inputs.hasBeenHealthy {
             return .launching("Steam is starting. A first launch takes a minute.")
         }
         return inputs.lastProbe == .up && inputs.pageServicesUp ? .healthy : .starting

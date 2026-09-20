@@ -203,6 +203,7 @@ extension BottleSupervisor {
         // The next client is a start: the one this session saw is gone on
         // purpose, and the daemon outlives the app that asked.
         hasSeenClientUp = false
+        hasBeenHealthy = false
         isQuitting = false
         refreshHealth()
     }
