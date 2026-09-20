@@ -17,10 +17,10 @@ struct UpscalerPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CaptionedRow(caption: detail) {
+            HelpedRow(caption: detail, help: SettingCopy.scaling) {
                 Picker("Upscaler", selection: pickerSelection) {
                     if let inherited {
-                        Text("Inherit (\(label(forToken: inherited)))").tag("")
+                        Text("Inherit").tag("")
                     }
                     ForEach(shaders.choices) { choice in
                         Text(label(for: choice)).tag(choice.token)
@@ -62,10 +62,6 @@ struct UpscalerPicker: View {
         return "\(entry.title) · Download\(size)"
     }
 
-    private func label(forToken token: String) -> String {
-        shaders.choices.first { $0.token == token }?.label ?? token
-    }
-
     /// One line on the current choice — the inherited one's when inheriting.
     private var detail: String {
         let token = pending ?? selection ?? inherited
@@ -73,7 +69,8 @@ struct UpscalerPicker: View {
         guard let choice = shaders.choices.first(where: { $0.token == token }) else {
             return "This package is missing. Games fall back to Lanczos."
         }
-        return choice.detail
+        guard selection == nil, pending == nil, inherited != nil else { return choice.detail }
+        return "Engine's value: \(choice.label). \(choice.detail)"
     }
 }
 
@@ -84,16 +81,23 @@ struct FinalFilterPicker: View {
     @Binding var selection: FinalFilter?
 
     var body: some View {
-        CaptionedRow(caption: (selection ?? inherited)?.detail ?? "") {
+        HelpedRow(caption: caption, help: SettingCopy.scaling) {
             Picker("Final filter", selection: pickerSelection) {
                 if let inherited {
-                    Text("Inherit (\(inherited.label))").tag("")
+                    Text("Inherit").tag("")
                 }
                 ForEach(FinalFilter.allCases, id: \.self) { filter in
                     Text(filter.label).tag(filter.rawValue)
                 }
             }
         }
+    }
+
+    /// One line on the filter in force — the inherited one's when inheriting.
+    private var caption: String {
+        if let selection { return selection.detail }
+        guard let inherited else { return "" }
+        return "Engine's value: \(inherited.label). \(inherited.detail)"
     }
 
     private var pickerSelection: Binding<String> {

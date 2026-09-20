@@ -415,21 +415,14 @@ private struct MsyncSection: View {
     }
 }
 
-// MARK: - Windows
+// MARK: - Game defaults
 
 /// The bottle level of the config hierarchy: the defaults every Dormison game
-/// starts from, each row writing its own key as it changes.
+/// starts from, in the three groups Settings › Games shows for one game. Each
+/// row writes its own key as it changes.
 private struct BottleDefaultsSection: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
-
-    @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
-    @State private var fps = GameConfig.fps(bottle: SteamBottle.name).value
-    @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
-    @State private var unifiedMemory = GameConfig.unifiedMemory(bottle: SteamBottle.name).value
-    @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
-    @State private var largeAddressAware = GameConfig
-        .largeAddressAware(bottle: SteamBottle.name).value
 
     var body: some View {
         Section {
@@ -439,73 +432,56 @@ private struct BottleDefaultsSection: View {
                 .highlightable(.engineUpscaler, highlighted: highlighted)
             BottleFinalFilterRow()
                 .highlightable(.engineFilter, highlighted: highlighted)
+            RetinaToggle()
+            BottleSwitchRow(copy: .modeset, key: \.emulateModeset, initial: GameConfig.emulateModeset)
+            BottleSwitchRow(copy: .fps, key: \.fps, initial: GameConfig.fps)
+            BottleSwitchRow(copy: .hud, key: \.hud, initial: GameConfig.hud)
+        } header: {
+            Text("Picture")
+        }
+        Section("Mouse") {
             MouseCurveRow()
                 .highlightable(.engineMouse, highlighted: highlighted)
+            BottleSwitchRow(copy: .cursorConfine, key: \.cursorConfine, initial: GameConfig.cursorConfine)
+        }
+        Section {
             PerformanceTuningRow()
-            RetinaToggle()
-            ModesetToggle()
-            bottleSwitch(
-                "Frame rate counter",
-                detail: "One number at the top right of the game's window. "
-                    + "View › Show Frame Rate switches it while a game runs.",
-                value: $fps, key: \.fps,
+            BottleSwitchRow(copy: .unifiedMemory, key: \.unifiedMemory, initial: GameConfig.unifiedMemory)
+            BottleSwitchRow(
+                copy: .largeAddressAware, key: \.largeAddressAware, initial: GameConfig.largeAddressAware,
             )
-            bottleSwitch(
-                "Performance HUD", detail: "Metal draws frame time, GPU time and memory "
-                    + "over the game.", value: $hud, key: \.hud,
-            )
-            bottleSwitch(
-                "Keep the pointer in the window",
-                detail: "While a game holds the cursor for mouse-look, the pointer stays "
-                    + "inside its window instead of reaching another display.",
-                value: $cursorConfine, key: \.cursorConfine,
-            )
-            bottleSwitch(
-                "Report AVX to games",
-                detail: "Rosetta tells the game the CPU has AVX and AVX2, which games "
-                    + "that check refuse to start without.",
-                value: $avx, key: \.avx,
-            )
-            bottleSwitch(
-                "Unified memory (experimental)",
-                detail: "Your Mac has one pool of memory that the processor and the "
-                    + "graphics chip both use. Windows games expect a separate graphics "
-                    + "card, so they copy everything twice — once to hand it over, once "
-                    + "to store it — and on a Mac both copies land in the same memory. "
-                    + "This tells a game the truth, so it writes each texture once. "
-                    + "Games that load large scenes gain the most, and a few may show "
-                    + "wrong textures or refuse to start: turn it off again if one does.",
-                value: $unifiedMemory, key: \.unifiedMemory,
-            )
-            bottleSwitch(
-                "Full address space for 32-bit games",
-                detail: "A 32-bit game gets 4 GB of address space even when its "
-                    + "executable asks for 2. Turn it off for a game that crashes with it.",
-                value: $largeAddressAware, key: \.largeAddressAware,
-            )
+            BottleSwitchRow(copy: .avx, key: \.avx, initial: GameConfig.avx)
+        } header: {
+            Text("Performance and compatibility")
         } footer: {
             Text(Engine.active.supportsEnvFiles
-                ? "Defaults for Dormison games. Change one game in Games. A change applies at the next launch."
-                : "Defaults for Dormison games. Change one game in Games. Restart Steam to apply a change.")
+                ? "Defaults for every game on Dormison. Settings › Games changes one game. A change applies at a game's next launch."
+                : "Defaults for every game on Dormison. Settings › Games changes one game. Restart Steam to apply a change.")
         }
     }
+}
 
-    /// One of the bottle's own switches, written straight into the hierarchy's
-    /// bottle level. The same key is a game's to override in Settings › Games.
-    private func bottleSwitch(
-        _ title: String, detail: String, value: Binding<Bool>,
-        key: WritableKeyPath<ConfigValues, Bool?>,
-    ) -> some View {
-        Toggle(isOn: value) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+/// One of the bottle's own switches, written straight into the hierarchy's
+/// bottle level. The same key is a game's to override in Settings › Games.
+private struct BottleSwitchRow: View {
+    let copy: SettingCopy
+    let key: WritableKeyPath<ConfigValues, Bool?>
+    @State private var isOn: Bool
+
+    init(
+        copy: SettingCopy, key: WritableKeyPath<ConfigValues, Bool?>,
+        initial: (String, Int?) -> Resolved<Bool>,
+    ) {
+        self.copy = copy
+        self.key = key
+        _isOn = State(initialValue: initial(SteamBottle.name, nil).value)
+    }
+
+    var body: some View {
+        HelpedRow(caption: copy.caption, help: copy.help) {
+            Toggle(copy.title, isOn: $isOn)
         }
-        .onChange(of: value.wrappedValue) { _, new in
+        .onChange(of: isOn) { _, new in
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
                 $0[keyPath: key] = new
             }
@@ -518,8 +494,8 @@ private struct ResizableWindowsRow: View {
     @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
 
     var body: some View {
-        CaptionedRow(caption: "A resizable window scales the picture to fit. The game keeps drawing at its own size.") {
-            Picker("Resizable windows", selection: $windowTreatment) {
+        HelpedRow(caption: SettingCopy.windows.caption, help: SettingCopy.windows.help) {
+            Picker(SettingCopy.windows.title, selection: $windowTreatment) {
                 ForEach(WindowTreatment.allCases, id: \.self) { treatment in
                     Text(treatment.label).tag(treatment)
                 }
@@ -586,8 +562,8 @@ private struct MouseCurveRow: View {
     @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
 
     var body: some View {
-        CaptionedRow(caption: "Linear removes acceleration while a game controls the mouse.") {
-            Picker("Mouse", selection: $mouseCurve) {
+        HelpedRow(caption: SettingCopy.mouse.caption, help: SettingCopy.mouse.help) {
+            Picker("Movement", selection: $mouseCurve) {
                 ForEach(MouseCurve.allCases, id: \.self) { curve in
                     Text(curve.label).tag(curve)
                 }
@@ -601,13 +577,15 @@ private struct MouseCurveRow: View {
     }
 }
 
-/// The bottle's thread-wait tuning.
+/// The bottle's thread-wait preset, and its parameters when the preset is
+/// Custom.
 private struct PerformanceTuningRow: View {
     @State private var tuning = GameConfig.tuning(bottle: SteamBottle.name).value
+    @State private var parameters = GameConfig.bottle(SteamBottle.name).tuningParameters ?? .experimental
 
     var body: some View {
-        CaptionedRow(caption: "Experimental shortens the waits between a game's threads, which can raise frame rates and smooth stutter. Applies from a game's next launch.") {
-            Picker("Performance tuning", selection: $tuning) {
+        HelpedRow(caption: SettingCopy.tuning.caption, help: SettingCopy.tuning.help) {
+            Picker(SettingCopy.tuning.title, selection: $tuning) {
                 ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
                     Text(tuning.label).tag(tuning)
                 }
@@ -616,7 +594,16 @@ private struct PerformanceTuningRow: View {
         .onChange(of: tuning) { _, tuning in
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
                 $0.tuning = tuning
+                $0.tuningParameters = tuning == .custom ? parameters : nil
             }
+        }
+        if tuning == .custom {
+            TuningParametersFields(parameters: $parameters)
+                .onChange(of: parameters) { _, parameters in
+                    GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                        $0.tuningParameters = parameters
+                    }
+                }
         }
     }
 }
@@ -628,42 +615,12 @@ private struct RetinaToggle: View {
     @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
 
     var body: some View {
-        Toggle(isOn: $retina) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Draw at full resolution")
-                Text("Games see a Retina display and draw at its full pixel size. "
-                    + "Sharper, and heavier on the GPU.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        HelpedRow(caption: SettingCopy.retina.caption, help: SettingCopy.retina.help) {
+            Toggle(SettingCopy.retina.title, isOn: $retina)
         }
         .onChange(of: retina) { _, value in
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
                 $0.retina = value
-            }
-        }
-    }
-}
-
-/// The switch that turns a game's display-mode changes into a window.
-private struct ModesetToggle: View {
-    @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
-
-    var body: some View {
-        Toggle(isOn: $emulateModeset) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Fake display-mode changes")
-                Text("A game that switches the screen's resolution gets the switch "
-                    + "faked and its picture in a window instead.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .onChange(of: emulateModeset) { _, value in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.emulateModeset = value
             }
         }
     }
@@ -777,9 +734,12 @@ private struct DLLOverridesSection: View {
                 Text(error).font(.caption).foregroundStyle(.orange)
             }
         } header: {
-            Text("DLL overrides")
+            HStack(spacing: 6) {
+                Text("DLL overrides")
+                SettingHelpButton(help: SettingCopy.dllOverrides)
+            }
         } footer: {
-            Text("Choose native for the installed Windows DLL, or builtin for Wine's own. A change applies at the next game launch.")
+            Text("For every program in the bottle, from a game's next launch. winecfg shows the same values; Settings › Games holds one game's.")
         }
         .highlightable(.engineOverrides, highlighted: highlighted)
     }
@@ -815,12 +775,11 @@ private struct NewDLLOverrideRow: View {
 
     @State private var newOverrideDLL = ""
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
+    @State private var libraries: [String] = []
 
     var body: some View {
         HStack(spacing: Theme.Space.md) {
-            TextField("DLL name, like dinput8", text: $newOverrideDLL)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
+            DLLNameField(name: $newOverrideDLL, names: libraries)
             Picker("", selection: $newOverrideMode) {
                 ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
                     Text(mode).tag(mode)
@@ -829,11 +788,12 @@ private struct NewDLLOverrideRow: View {
             .labelsHidden()
             .frame(width: 140)
             Button("Add") {
-                compatibility.setOverride(dll: newOverrideDLL, mode: newOverrideMode)
+                compatibility.setOverride(dll: BuiltinLibraries.normalized(newOverrideDLL), mode: newOverrideMode)
                 newOverrideDLL = ""
             }
-            .disabled(newOverrideDLL.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(BuiltinLibraries.normalized(newOverrideDLL).isEmpty)
         }
+        .task { libraries = BuiltinLibraries.names() }
     }
 }
 

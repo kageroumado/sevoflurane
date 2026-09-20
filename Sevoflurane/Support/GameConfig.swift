@@ -26,9 +26,9 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .off: "Never"
-        case .fixed: "Windowed games"
-        case .window: "Windowed and full-screen games"
-        case .all: "Every window"
+        case .fixed: "Fixed-size windows"
+        case .window: "Fixed-size and full-screen"
+        case .all: "All windows"
         }
     }
 
@@ -75,7 +75,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .off: "Off"
-        case .lanczos: "Lanczos"
+        case .lanczos: "Final filter only"
         case .metalfx: "MetalFX Spatial"
         }
     }
@@ -84,7 +84,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
     var detail: String {
         switch self {
         case .off: "The window system scales the picture."
-        case .lanczos: "Sharp resampling at your display's full resolution."
+        case .lanczos: "No shader. The final filter does all the resizing."
         case .metalfx: "For 3D games rendered below your display's resolution."
         }
     }
@@ -127,24 +127,72 @@ nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
     /// that runs more busy threads than the Mac has cores pays for it in
     /// processor time.
     case experimental
+    /// The three parameters as the level's ``TuningParameters`` set them.
+    case custom
 
     var label: String {
         switch self {
         case .standard: "Standard"
         case .experimental: "Experimental"
+        case .custom: "Custom"
         }
     }
 
-    /// The engine switches this choice stands for. Every key appears in every
-    /// case: a game's file is read over the bottle's, and an absent key would
-    /// leave the bottle's value standing.
-    var environment: [(key: String, value: String)] {
+    /// The parameters a preset stands for; `custom` stands for the ones
+    /// handed in, and for the experimental ones where none are stored.
+    func parameters(custom: TuningParameters?) -> TuningParameters {
         switch self {
-        case .standard:
-            [("SEVO_WAIT_SPIN", "0"), ("SEVO_WAIT_SPIN_ADAPT", "0"), ("SEVO_OBJECT_SPIN", "0")]
-        case .experimental:
-            [("SEVO_WAIT_SPIN", "5200"), ("SEVO_WAIT_SPIN_ADAPT", "1"), ("SEVO_OBJECT_SPIN", "5200")]
+        case .standard: .standard
+        case .experimental: .experimental
+        case .custom: custom ?? .experimental
         }
+    }
+}
+
+/// How long a waiting thread looks for its wake-up before it sleeps — the
+/// engine switches ``PerformanceTuning`` sets, open to a hand.
+nonisolated struct TuningParameters: Codable, Equatable, Sendable {
+    /// Iterations a thread spins on a wait before it parks (`SEVO_WAIT_SPIN`).
+    /// One iteration is about 0.4 ns, so 5200 is two microseconds.
+    var waitSpin: Int
+    /// Whether a wait that keeps failing to catch its wake-up stops spinning
+    /// (`SEVO_WAIT_SPIN_ADAPT`).
+    var adaptive: Bool
+    /// Iterations a thread spins on a contended object — a mutex, an event, a
+    /// semaphore — before it parks (`SEVO_OBJECT_SPIN`).
+    var objectSpin: Int
+
+    static let standard = TuningParameters(waitSpin: 0, adaptive: false, objectSpin: 0)
+    static let experimental = TuningParameters(waitSpin: 5200, adaptive: true, objectSpin: 5200)
+
+    /// What the engine accepts: a spin past this is a thread that never sleeps.
+    static let spinRange = 0 ... 1_000_000
+
+    var argument: String { "\(waitSpin),\(adaptive ? 1 : 0),\(objectSpin)" }
+
+    private static func clamped(_ spin: Int) -> Int {
+        min(max(spin, spinRange.lowerBound), spinRange.upperBound)
+    }
+
+    /// Every key, always: a game's file is read over the bottle's, and an
+    /// absent key would leave the bottle's value standing.
+    var environment: [(key: String, value: String)] {
+        [
+            ("SEVO_WAIT_SPIN", "\(Self.clamped(waitSpin))"),
+            ("SEVO_WAIT_SPIN_ADAPT", adaptive ? "1" : "0"),
+            ("SEVO_OBJECT_SPIN", "\(Self.clamped(objectSpin))"),
+        ]
+    }
+}
+
+nonisolated extension TuningParameters {
+    /// The command line's spelling, `<wait>,<adaptive 0|1>,<object>`.
+    init?(argument: String) {
+        let parts = argument.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3, let wait = Int(parts[0]), let object = Int(parts[2]),
+              ["0", "1"].contains(parts[1]),
+              Self.spinRange.contains(wait), Self.spinRange.contains(object) else { return nil }
+        self.init(waitSpin: wait, adaptive: parts[1] == "1", objectSpin: object)
     }
 }
 
@@ -162,7 +210,7 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .system: "macOS acceleration"
-        case .linear: "Linear"
+        case .linear: "Linear (no acceleration)"
         }
     }
 }
@@ -179,6 +227,8 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// Experimental: how the engine's threads wait for each other
     /// (``PerformanceTuning``).
     var tuning: PerformanceTuning?
+    /// The parameters the `custom` tuning stands for at this level.
+    var tuningParameters: TuningParameters?
     /// The present-time upscaler: one of ``UpscalerChoice`` by raw value, or
     /// the name of a shader package. Stored as text so a file written by a
     /// later version, naming a package this one does not know, still reads;
@@ -442,6 +492,14 @@ nonisolated enum GameConfig {
     /// game when its id is known, otherwise the bottle's own value.
     static func tuning(bottle: String, game appID: Int? = nil) -> Resolved<PerformanceTuning> {
         resolve(\.tuning, bottle: bottle, game: appID)
+    }
+
+    /// The thread-wait parameters a launch gets: the resolved preset's, and
+    /// for `custom` the nearest level's own.
+    static func tuningParameters(bottle: String, game appID: Int? = nil) -> TuningParameters {
+        let custom = appID.flatMap { game($0).tuningParameters }
+            ?? Self.bottle(bottle).tuningParameters ?? global().tuningParameters
+        return tuning(bottle: bottle, game: appID).value.parameters(custom: custom)
     }
 
     /// The upscaler a launch in this bottle gets — an ``UpscalerChoice`` raw

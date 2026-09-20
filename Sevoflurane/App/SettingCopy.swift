@@ -1,0 +1,254 @@
+import Foundation
+
+/// The words Settings › Engine and Settings › Games share for a setting both
+/// can set: its title, the one line under its row, and what its (i) says.
+struct SettingCopy {
+    let title: String
+    var caption = ""
+    var help: SettingHelp?
+}
+
+extension SettingCopy {
+    static let windows = SettingCopy(
+        title: "Resizable windows",
+        caption: "A resizable window scales the game's picture to fit.",
+        help: SettingHelp(
+            title: "Resizable windows",
+            summary: "A game draws at the size it chose. A resizable window scales that picture to "
+                + "the window through the upscaler, and the game keeps believing in its own size.",
+            entries: [
+                .init(name: "Never", text: "Windows stay as the game makes them."),
+                .init(
+                    name: "Fixed-size windows",
+                    text: "A window the game locks to one size can be resized.",
+                ),
+                .init(
+                    name: "Fixed-size and full-screen",
+                    text: "Also, a game that takes over the whole screen gets a window of its own, "
+                        + "and still believes it fills the screen.",
+                ),
+                .init(
+                    name: "All windows",
+                    text: "Also the windows a game already lets you resize. Such a game would "
+                        + "redraw at the new size; with this it is scaled like the rest.",
+                ),
+            ],
+        ),
+    )
+
+    static let scaling = SettingHelp(
+        title: "Upscaler and final filter",
+        summary: "Two steps, in order, between the game's picture and the window.",
+        entries: [
+            .init(
+                name: "Upscaler",
+                text: "Enlarges the picture with a shader made for it: Anime4K and CuNNy for drawn "
+                    + "art, by whole steps such as 2×, and MetalFX Spatial for 3D games. Off hands "
+                    + "the picture to macOS, which stretches it softly. Final filter only uses "
+                    + "no shader.",
+            ),
+            .init(
+                name: "Final filter",
+                text: "Fits what the upscaler made to the window's exact size: all of the resizing "
+                    + "with no shader, the last few percent after one. Lanczos is sharp, "
+                    + "Bilinear soft, Nearest keeps hard pixel edges.",
+            ),
+        ],
+        footnote: "View › Upscaler in a running game's menu bar switches live.",
+    )
+
+    static let mouse = SettingCopy(
+        title: "Mouse",
+        caption: "What a game gets while it holds the pointer for mouse-look.",
+        help: SettingHelp(
+            title: "Mouse",
+            summary: "Applies while a game has taken the pointer, as a first-person camera does. "
+                + "Menus and the desktop keep the Mac's pointer.",
+            entries: [
+                .init(
+                    name: "macOS acceleration",
+                    text: "The pointer's usual curve: a fast flick travels farther than a slow "
+                        + "sweep of the same length.",
+                ),
+                .init(
+                    name: "Linear (no acceleration)",
+                    text: "The mouse's own movement, unshaped: the same sweep of the hand turns "
+                        + "the camera the same amount at any speed. What shooters expect.",
+                ),
+            ],
+        ),
+    )
+
+    static let modeset = SettingCopy(
+        title: "Fake display-mode changes",
+        caption: "A game that switches the screen's resolution gets a window instead.",
+        help: SettingHelp(
+            title: "Fake display-mode changes",
+            summary: "Older games ask Windows to switch the display to 800 × 600 or 1024 × 768 and "
+                + "draw full screen. A Mac display has no such modes. With this on the game is "
+                + "told the switch happened, and its picture goes into a window that the "
+                + "upscaler scales.",
+        ),
+    )
+
+    static let fps = SettingCopy(
+        title: "Frame rate counter",
+        caption: "One number at the top right of the game's window.",
+        help: SettingHelp(
+            title: "Frame rate counter",
+            summary: "Counts the frames the engine put on screen, whichever renderer drew them.",
+            footnote: "View › Show Frame Rate (⌥⌘F) switches it while a game runs.",
+        ),
+    )
+
+    static let hud = SettingCopy(
+        title: "Performance HUD",
+        caption: "Apple's overlay: frame time, GPU time and memory.",
+    )
+
+    static let cursorConfine = SettingCopy(
+        title: "Keep the pointer in the window",
+        caption: "During mouse-look the pointer stays off your other displays.",
+    )
+
+    static let retina = SettingCopy(
+        title: "High-resolution mode",
+        caption: "Games see the display's real pixel count. Older games draw tiny text and menus.",
+        help: SettingHelp(
+            title: "High-resolution mode",
+            summary: "A Retina display has four pixels for every point macOS lays out. Windows "
+                + "programs are told the point size by default, and the picture is scaled up.",
+            entries: [
+                .init(
+                    name: "On",
+                    text: "Games see every pixel, so a 5K display offers 5120 × 2880 in a game's "
+                        + "resolution list. A program written before high-DPI displays draws "
+                        + "its text, buttons and launcher at half the size.",
+                ),
+                .init(
+                    name: "Off",
+                    text: "Everything keeps a readable size, and the upscaler sharpens the result.",
+                ),
+            ],
+            footnote: "One setting for the whole bottle. Restart Steam to apply it.",
+        ),
+    )
+
+    static let tuning = SettingCopy(
+        title: "Thread waiting",
+        caption: "How long a game's threads look for work before they sleep.",
+        help: SettingHelp(
+            title: "Thread waiting",
+            summary: "A game's threads hand work to each other thousands of times a second. "
+                + "Putting a thread to sleep and waking it costs far more on macOS than on "
+                + "Windows, so a thread can spin briefly first in case its wake-up is about to "
+                + "arrive.",
+            entries: [
+                .init(name: "Standard", text: "A waiting thread sleeps at once, as Wine does it."),
+                .init(
+                    name: "Experimental",
+                    text: "A thread spins for about two microseconds first, and stops doing so "
+                        + "where that keeps failing. Hand-offs get up to ten times quicker; a "
+                        + "game with more busy threads than the Mac has cores pays in "
+                        + "processor time.",
+                ),
+                .init(
+                    name: "Custom",
+                    text: "Wait spin and Object spin count loop iterations of about 0.4 ns each: "
+                        + "5200 is two microseconds, 0 is off. Wait spin covers a thread "
+                        + "waiting on anything; Object spin covers a contended lock, event or "
+                        + "semaphore. Back off stops the spinning on waits that keep missing.",
+                ),
+            ],
+            footnote: "Measure with the frame rate counter. Most games show no difference.",
+        ),
+    )
+
+    static let unifiedMemory = SettingCopy(
+        title: "Unified memory",
+        caption: "Experimental. Tells games the GPU shares the Mac's memory, so textures are written once.",
+        help: SettingHelp(
+            title: "Unified memory",
+            summary: "A Mac has one pool of memory that the processor and the graphics chip both "
+                + "use. Windows games expect a separate graphics card, so they copy every "
+                + "texture twice: once to hand it over, once to store it. On a Mac both copies "
+                + "land in the same memory.",
+            entries: [
+                .init(
+                    name: "On",
+                    text: "The game is told the truth (Direct3D 12 calls it UMA) and writes each "
+                        + "texture once. Games that stream large scenes gain the most.",
+                ),
+                .init(
+                    name: "If a game misbehaves",
+                    text: "Wrong textures, or a game that stops at launch: turn it off for that "
+                        + "game. Few games are tested on this path.",
+                ),
+            ],
+            link: .init(
+                title: "Microsoft on UMA in Direct3D 12",
+                url: URL(string: "https://learn.microsoft.com/windows/win32/api/d3d12/ns-d3d12-d3d12_feature_data_architecture")!,
+            ),
+        ),
+    )
+
+    static let largeAddressAware = SettingCopy(
+        title: "4 GB for 32-bit games",
+        caption: "A 32-bit game may use 4 GB where Windows would give it 2.",
+        help: SettingHelp(
+            title: "4 GB for 32-bit games",
+            summary: "A 32-bit program can address 4 GB, and Windows gives it the lower 2 GB unless "
+                + "its file carries the Large Address Aware flag. Modded and texture-heavy "
+                + "32-bit games run out of those 2 GB and crash. With this on every 32-bit game "
+                + "gets all 4, flag or no flag.",
+            entries: [
+                .init(
+                    name: "If a game misbehaves",
+                    text: "A few old games assume addresses stay under 2 GB and crash above it: "
+                        + "turn it off for that game.",
+                ),
+            ],
+            link: .init(
+                title: "Microsoft on the 4 GB address space",
+                url: URL(string: "https://learn.microsoft.com/windows/win32/memory/4-gigabyte-tuning")!,
+            ),
+        ),
+    )
+
+    static let avx = SettingCopy(
+        title: "Report AVX to games",
+        caption: "Games that check for AVX at launch find it.",
+        help: SettingHelp(
+            title: "Report AVX to games",
+            summary: "AVX and AVX2 are processor instructions many games since 2020 require. "
+                + "Rosetta translates them either way; this makes it say so, which is what a "
+                + "game's start-up check reads.",
+            entries: [
+                .init(
+                    name: "If a game misbehaves",
+                    text: "A game that picks a slower AVX code path because it is offered can run "
+                        + "better with this off.",
+                ),
+            ],
+        ),
+    )
+
+    static let dllOverrides = SettingHelp(
+        title: "DLL overrides",
+        summary: "Wine ships its own version of most Windows libraries and prefers it. An override "
+            + "changes that for one library.",
+        entries: [
+            .init(
+                name: "Native, then built-in",
+                text: "Use the copy the game or an installer brought, and Wine's where there is "
+                    + "none. What a mod loader, ReShade or a Visual C++ runtime needs.",
+            ),
+            .init(name: "Built-in, then native", text: "Wine's copy first. Wine's usual order."),
+            .init(name: "Native only · Built-in only", text: "One of them, with nothing to fall back to."),
+            .init(name: "Disabled", text: "The library is not loaded at all."),
+        ],
+        footnote: "These are Wine's own overrides, the values winecfg's Libraries tab shows and edits: a "
+            + "game's are stored under its program, the bottle's under every program. The "
+            + "renderer's libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.",
+    )
+}

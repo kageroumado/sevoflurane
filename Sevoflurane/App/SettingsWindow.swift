@@ -118,7 +118,6 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         let window = NSWindow(contentViewController: controller)
         titleByPane(window)
         window.styleMask = [.titled, .closable, .fullSizeContentView]
-        window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
         // The separator is the whole toolbar: it is what aligns the split
         // view's divider with the titlebar, and without a toolbar at all the

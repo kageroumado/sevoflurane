@@ -92,7 +92,12 @@ struct HelpedRow<Control: View>: View {
         CaptionedRow(caption: caption, isWarning: isWarning) {
             HStack(spacing: Theme.Space.sm) {
                 control
-                if let help { SettingHelpButton(help: help) }
+                if let help {
+                    SettingHelpButton(help: help)
+                } else {
+                    // The column stays, so a control lines up with its neighbors'.
+                    Image(systemName: "info.circle").hidden().accessibilityHidden(true)
+                }
             }
         }
     }

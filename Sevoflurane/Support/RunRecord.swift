@@ -206,7 +206,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
 
     private var outcomeParts: [String] {
         var parts = [engine, renderer]
-        if tuning == PerformanceTuning.experimental.rawValue { parts.append("experimental tuning") }
+        if let tuning, tuning != PerformanceTuning.standard.rawValue { parts.append("\(tuning) tuning") }
         if let upscaler, upscaler != UpscalerChoice.off.rawValue { parts.append("upscaler \(upscaler)") }
         if let durationSeconds { parts.append(Self.duration(durationSeconds)) }
         parts.append(exitSummary)

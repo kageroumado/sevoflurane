@@ -173,7 +173,24 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
             ),
         )
         background.contentView = content
-        panel.contentView = background
+
+        // The window server cuts the panel's shadow from the alpha it
+        // composites, and glass fills its whole rectangle there. A layer
+        // that clips to the card's shape gives the shadow the same corners.
+        let shape = NSView()
+        shape.wantsLayer = true
+        shape.layer?.cornerRadius = Theme.Radius.card
+        shape.layer?.cornerCurve = .continuous
+        shape.layer?.masksToBounds = true
+        background.translatesAutoresizingMaskIntoConstraints = false
+        shape.addSubview(background)
+        NSLayoutConstraint.activate([
+            background.leadingAnchor.constraint(equalTo: shape.leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: shape.trailingAnchor),
+            background.topAnchor.constraint(equalTo: shape.topAnchor),
+            background.bottomAnchor.constraint(equalTo: shape.bottomAnchor),
+        ])
+        panel.contentView = shape
         return panel
     }
 
@@ -194,6 +211,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
             )
         }
         panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        panel.invalidateShadow()
     }
 
     /// The drop below the menu bar, and the least the panel keeps from a

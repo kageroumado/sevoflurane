@@ -209,7 +209,7 @@ final nonisolated class RunRecorder {
             renderer: values.runner == GameRunner.nwjs ? GameRunner.nwjs : selection.renderer.rawValue,
             runner: values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
-            tuning: GameConfig.tuning(bottle: SteamBottle.name, game: appID).value.rawValue,
+            tuning: Self.tuningLabel(forApp: appID),
             upscaler: GameConfig.upscaler(bottle: SteamBottle.name, game: appID).value,
             msync: selection.msync,
             d3dmetal: selection.d3dMetalVersion,
@@ -341,6 +341,14 @@ final nonisolated class RunRecorder {
 
     /// Where the executable a launch named sits on disk: in the app's Steam
     /// install, or, for an adopted program, wherever it was adopted from.
+    /// The tuning a record carries: the preset, and for a custom one its
+    /// parameters, since two custom runs are only comparable by them.
+    private static func tuningLabel(forApp appID: Int) -> String {
+        let tuning = GameConfig.tuning(bottle: SteamBottle.name, game: appID).value
+        guard tuning == .custom else { return tuning.rawValue }
+        return "custom:\(GameConfig.tuningParameters(bottle: SteamBottle.name, game: appID).argument)"
+    }
+
     private static func executableURL(named exe: String, forApp appID: Int) -> URL? {
         let wanted = exe.lowercased()
         if let program = GameConfig.game(appID).program,

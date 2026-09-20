@@ -131,7 +131,7 @@ nonisolated enum ConfigMaterializer {
         lines += switches.map { key, resolve in
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
-        lines += GameConfig.tuning(bottle: name).value.environment.map { "\($0.key)=\($0.value)" }
+        lines += GameConfig.tuningParameters(bottle: name).environment.map { "\($0.key)=\($0.value)" }
         // What a running game's View menu needs: the engine's name for its
         // readout, and the `sevo` that stores a choice made there.
         lines.append("SEVO_ENGINE_NAME=\(Engine.active.recordIdentifier)")
@@ -198,7 +198,8 @@ nonisolated enum ConfigMaterializer {
             own[key].map { "\(key)=\($0 ? "1" : "0")" }
         }
         if let tuning = values.tuning {
-            lines += tuning.environment.map { "\($0.key)=\($0.value)" }
+            lines += tuning.parameters(custom: values.tuningParameters).environment
+                .map { "\($0.key)=\($0.value)" }
         }
         return lines
     }

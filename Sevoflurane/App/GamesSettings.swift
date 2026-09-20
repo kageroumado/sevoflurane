@@ -74,12 +74,14 @@ private struct GameList: View {
     let games: [GamesSettings.Entry]
     @Binding var selected: Int?
 
+    private static let width: CGFloat = 210
+
     var body: some View {
         List(games, selection: $selected) { entry in
             GameListRow(name: entry.name, exes: entry.exes)
         }
-        .listStyle(.sidebar)
-        .frame(width: 200)
+        .listStyle(.inset)
+        .frame(width: Self.width)
     }
 }
 
@@ -120,7 +122,8 @@ private struct GamesPlaceholder: View {
 
 // MARK: - The form
 
-/// The selected game's form: its settings, then its DLL overrides.
+/// The selected game's form: its picture, its input, its performance
+/// switches, then its DLL overrides.
 private struct GameForm: View {
     let gameID: Int
     let name: String
@@ -130,150 +133,26 @@ private struct GameForm: View {
     let recommendation: KnownFixes.Recommendation
 
     var body: some View {
+        let settings = GameSettings(gameID: gameID, values: $values, recommendation: recommendation)
         Form {
-            GameSettingsSection(
-                gameID: gameID, name: name, shaders: shaders, highlighted: highlighted,
-                values: $values, recommendation: recommendation,
-            )
+            GamePictureSection(name: name, shaders: shaders, highlighted: highlighted, settings: settings)
+            GameInputSection(settings: settings)
+            GamePerformanceSection(settings: settings)
             GameDLLOverridesSection(gameID: gameID, overrides: $values.dllOverrides)
         }
         .formStyle(.grouped)
     }
 }
 
-/// Every key a game can set over the bottle's, one ``GameSettingRow`` each.
-private struct GameSettingsSection: View {
+/// The selected game's values as the sections read and write them: a key's
+/// binding writes the form's model, the game's file and the env files derived
+/// from it, and a key's row carries what the fix table says about it.
+private struct GameSettings {
     let gameID: Int
-    let name: String
-    let shaders: ShaderStore
-    let highlighted: SettingsAnchor?
     @Binding var values: ConfigValues
     let recommendation: KnownFixes.Recommendation
 
-    var body: some View {
-        Section {
-            // Automatic is the bottle's business — it consults CrossOver's own
-            // per-game database — so a game names a layer or inherits.
-            row(\.renderer, cost: .renderer(values.renderer)) { selection in
-                InheritingPicker(
-                    title: "Renderer",
-                    inherited: BottleGraphics.currentSelection().renderer.label,
-                    choices: Renderer.allCases.filter { $0 != .auto }, label: \.label,
-                    selection: selection,
-                )
-            }
-            row(\.windows, cost: .env) { selection in
-                InheritingPicker(
-                    title: "Resizable windows",
-                    inherited: GameConfig.windows(bottle: SteamBottle.name).value.label,
-                    choices: WindowTreatment.allCases, label: \.label, selection: selection,
-                )
-            }
-            row(\.upscaler, cost: .env) { selection in
-                UpscalerPicker(
-                    shaders: shaders,
-                    inherited: GameConfig.upscaler(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-                .highlightable(.gamesUpscaler, highlighted: highlighted)
-            }
-            row(\.filter, cost: .env) { selection in
-                FinalFilterPicker(
-                    inherited: GameConfig.filter(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.mouse, cost: .env) { selection in
-                InheritingPicker(
-                    title: "Mouse",
-                    inherited: GameConfig.mouse(bottle: SteamBottle.name).value.label,
-                    choices: MouseCurve.allCases, label: \.label, selection: selection,
-                )
-            }
-            row(\.emulateModeset, cost: .nextLaunch) { selection in
-                InheritingSwitch(
-                    title: "Fake display-mode changes",
-                    inherited: GameConfig.emulateModeset(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.fps, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Frame rate counter",
-                    inherited: GameConfig.fps(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.hud, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Performance HUD",
-                    inherited: GameConfig.hud(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.cursorConfine, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Keep the pointer in the window",
-                    inherited: GameConfig.cursorConfine(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.avx, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Report AVX to the game",
-                    inherited: GameConfig.avx(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.tuning, cost: .env) { selection in
-                InheritingPicker(
-                    title: "Performance tuning",
-                    inherited: GameConfig.tuning(bottle: SteamBottle.name).value.label,
-                    choices: PerformanceTuning.allCases, label: \.label, selection: selection,
-                )
-            }
-            row(\.unifiedMemory, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Unified memory",
-                    inherited: GameConfig.unifiedMemory(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-            row(\.largeAddressAware, cost: .env) { selection in
-                InheritingSwitch(
-                    title: "Full address space (32-bit games)",
-                    inherited: GameConfig.largeAddressAware(bottle: SteamBottle.name).value,
-                    selection: selection,
-                )
-            }
-        } header: {
-            Text(name)
-        } footer: {
-            Text("Inherit uses the value from Engine. Each setting says which "
-                + "level it comes from and what a change costs.")
-        }
-        .highlightable(.gamesSettings, highlighted: highlighted)
-    }
-
-    /// The row for one key: its control on the key's binding, and what the
-    /// fix table says about the key.
-    private func row<Value: Equatable>(
-        _ key: WritableKeyPath<ConfigValues, Value?>, cost: SettingReach,
-        @ViewBuilder control: (Binding<Value?>) -> some View,
-    ) -> some View {
-        let selection = binding(key)
-        let fix = recommendation.fix(setting: key)
-        return GameSettingRow(
-            key: key, cost: cost, selection: selection,
-            recommended: fix?.values[keyPath: key], reason: fix?.reason,
-        ) {
-            control(selection)
-        }
-    }
-
-    /// One key of the selected game's values: reads the form's model, writes
-    /// the game's file and the env files derived from it.
-    private func binding<Value>(_ key: WritableKeyPath<ConfigValues, Value?>) -> Binding<Value?> {
+    func binding<Value>(_ key: WritableKeyPath<ConfigValues, Value?>) -> Binding<Value?> {
         Binding(
             get: { values[keyPath: key] },
             set: { value in
@@ -284,14 +163,192 @@ private struct GameSettingsSection: View {
             },
         )
     }
+
+    func row<Value: Equatable>(
+        _ key: WritableKeyPath<ConfigValues, Value?>, copy: SettingCopy? = nil, inherited: String? = nil,
+        cost: SettingReach = .env, controlHasOwnLine: Bool = false,
+        @ViewBuilder control: (Binding<Value?>) -> some View,
+    ) -> some View {
+        let selection = binding(key)
+        let fix = recommendation.fix(setting: key)
+        return GameSettingRow(
+            copy: copy, inherited: inherited, cost: cost, controlHasOwnLine: controlHasOwnLine,
+            selection: selection,
+            recommended: fix?.values[keyPath: key], reason: fix?.reason,
+        ) {
+            control(selection)
+        }
+    }
 }
 
-/// One control, the two badges saying where its value comes from and what
-/// a change costs, and the chip the fix table earns when it names a value
-/// this game does not have. Nothing applies itself; the chip is the click.
+/// What reaches the screen: the renderer, the window, the scaling, and the
+/// two readouts drawn over the game.
+private struct GamePictureSection: View {
+    let name: String
+    let shaders: ShaderStore
+    let highlighted: SettingsAnchor?
+    let settings: GameSettings
+
+    var body: some View {
+        Section {
+            // Automatic is the bottle's business — it consults CrossOver's own
+            // per-game database — so a game names a layer or inherits.
+            settings.row(
+                \.renderer, inherited: BottleGraphics.currentSelection().renderer.label,
+                cost: .renderer(settings.values.renderer),
+            ) { selection in
+                InheritingPicker(
+                    title: "Renderer",
+                    choices: Renderer.allCases.filter { $0 != .auto }, label: \.label,
+                    selection: selection,
+                )
+            }
+            settings.row(
+                \.windows, copy: .windows,
+                inherited: GameConfig.windows(bottle: SteamBottle.name).value.label,
+            ) { selection in
+                InheritingPicker(
+                    title: SettingCopy.windows.title,
+                    choices: WindowTreatment.allCases, label: \.label, selection: selection,
+                )
+            }
+            settings.row(\.upscaler, controlHasOwnLine: true) { selection in
+                UpscalerPicker(
+                    shaders: shaders,
+                    inherited: GameConfig.upscaler(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+                .highlightable(.gamesUpscaler, highlighted: highlighted)
+            }
+            settings.row(\.filter, controlHasOwnLine: true) { selection in
+                FinalFilterPicker(
+                    inherited: GameConfig.filter(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+            settings.row(\.emulateModeset, copy: .modeset, cost: .nextLaunch) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.modeset.title,
+                    inherited: GameConfig.emulateModeset(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+            settings.row(\.fps, copy: .fps) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.fps.title,
+                    inherited: GameConfig.fps(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+            settings.row(\.hud, copy: .hud) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.hud.title,
+                    inherited: GameConfig.hud(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+        } header: {
+            Text(name)
+        } footer: {
+            Text("Inherit takes the value from Settings › Engine. A change applies the next time the game starts.")
+        }
+        .highlightable(.gamesSettings, highlighted: highlighted)
+    }
+}
+
+private struct GameInputSection: View {
+    let settings: GameSettings
+
+    var body: some View {
+        Section("Mouse") {
+            settings.row(
+                \.mouse, copy: .mouse, inherited: GameConfig.mouse(bottle: SteamBottle.name).value.label,
+            ) { selection in
+                InheritingPicker(
+                    title: "Movement",
+                    choices: MouseCurve.allCases, label: \.label, selection: selection,
+                )
+            }
+            settings.row(\.cursorConfine, copy: .cursorConfine) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.cursorConfine.title,
+                    inherited: GameConfig.cursorConfine(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+        }
+    }
+}
+
+/// The switches that change how the game runs rather than how it looks, each
+/// with its explanation behind an (i).
+private struct GamePerformanceSection: View {
+    let settings: GameSettings
+
+    var body: some View {
+        Section {
+            settings.row(
+                \.tuning, copy: .tuning, inherited: GameConfig.tuning(bottle: SteamBottle.name).value.label,
+            ) { selection in
+                InheritingPicker(
+                    title: SettingCopy.tuning.title,
+                    choices: PerformanceTuning.allCases, label: \.label, selection: selection,
+                )
+            }
+            if settings.values.tuning == .custom {
+                TuningParametersFields(parameters: parameters)
+            }
+            settings.row(\.unifiedMemory, copy: .unifiedMemory) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.unifiedMemory.title,
+                    inherited: GameConfig.unifiedMemory(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+            settings.row(\.largeAddressAware, copy: .largeAddressAware) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.largeAddressAware.title,
+                    inherited: GameConfig.largeAddressAware(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+            settings.row(\.avx, copy: .avx) { selection in
+                InheritingSwitch(
+                    title: SettingCopy.avx.title,
+                    inherited: GameConfig.avx(bottle: SteamBottle.name).value,
+                    selection: selection,
+                )
+            }
+        } header: {
+            Text("Performance and compatibility")
+        } footer: {
+            Text("Leave these on Inherit unless a game needs one. The (i) says what each does and when to change it.")
+        }
+    }
+
+    /// This game's custom parameters, starting from the experimental preset.
+    private var parameters: Binding<TuningParameters> {
+        let stored = settings.binding(\.tuningParameters)
+        return Binding(
+            get: { stored.wrappedValue ?? .experimental },
+            set: { stored.wrappedValue = $0 },
+        )
+    }
+}
+
+/// One control with its (i), the line under it, what a change costs when
+/// that is more than the next launch, and the chip the fix table earns when
+/// it names a value this game does not have. Nothing applies itself; the
+/// chip is the click.
 private struct GameSettingRow<Value: Equatable, Control: View>: View {
-    let key: KeyPath<ConfigValues, Value?>
+    let copy: SettingCopy?
+    /// What Inherit resolves to, for a picker whose closed face has no room
+    /// to say it.
+    let inherited: String?
     let cost: SettingReach
+    /// The scaling pickers bring their own line and (i), which change with
+    /// the choice.
+    let controlHasOwnLine: Bool
     @Binding var selection: Value?
     /// The value the fix table names for this key, and the measurement behind it.
     let recommended: Value?
@@ -300,42 +357,30 @@ private struct GameSettingRow<Value: Equatable, Control: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            control
-            HStack(spacing: 6) {
-                SettingBadge(text: level, help: "Where this setting's value comes from.")
-                SettingBadge(text: cost.label, help: cost.detail)
+            if controlHasOwnLine {
+                control
+            } else {
+                HelpedRow(caption: caption, help: copy?.help) { control }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if cost == .clientRestart {
+                Text("Steam restarts around this game's next launch, about 30 seconds.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             if let recommended, let reason, selection != recommended {
                 RecommendedChip(reason: reason) { selection = recommended }
             }
         }
     }
-
-    /// Which level the resolved value comes from, read the way the resolver
-    /// reads it.
-    private var level: String {
-        if selection != nil { return "This game" }
-        if GameConfig.bottle(SteamBottle.name)[keyPath: key] != nil { return "Engine" }
-        if GameConfig.global()[keyPath: key] != nil { return "All games" }
-        return "Default"
-    }
 }
 
-/// One of the two marks under a control: quiet, small, and explained by
-/// its tooltip.
-private struct SettingBadge: View {
-    let text: String
-    let help: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(.quaternary.opacity(0.5), in: Capsule())
-            .help(help)
+private extension GameSettingRow {
+    /// The line under the control: what Inherit stands for while the game
+    /// inherits, then what the setting is.
+    var caption: String {
+        let what = copy?.caption ?? ""
+        guard selection == nil, let inherited else { return what }
+        return what.isEmpty ? "Engine's value: \(inherited)." : "Engine's value: \(inherited). \(what)"
     }
 }
 
@@ -367,19 +412,18 @@ private struct RecommendedChip: View {
 // MARK: - Inheriting controls
 
 /// A picker over a setting's cases whose first entry leaves the key to the
-/// level above, naming what that level resolves to.
+/// level above. The row's first line names what that level resolves to: a
+/// choice's label is too long to share the closed picker with "Inherit".
 private struct InheritingPicker<Choice: RawRepresentable & Hashable>: View
     where Choice.RawValue == String {
     let title: String
-    /// The label of the value the level above resolves to.
-    let inherited: String
     let choices: [Choice]
     let label: KeyPath<Choice, String>
     @Binding var selection: Choice?
 
     var body: some View {
         Picker(selection: $selection.pickerTag) {
-            Text("Inherit (\(inherited))").tag("")
+            Text("Inherit").tag("")
             ForEach(choices, id: \.self) { choice in
                 Text(choice[keyPath: label]).tag(choice.rawValue)
             }
@@ -445,10 +489,13 @@ private struct GameDLLOverridesSection: View {
             }
             AddDLLOverrideRow(gameID: gameID) { dll, mode in set(dll: dll, mode: mode) }
         } header: {
-            Text("DLL overrides")
+            HStack(spacing: 6) {
+                Text("DLL overrides")
+                SettingHelpButton(help: SettingCopy.dllOverrides)
+            }
         } footer: {
-            Text("Applies to this game alone, at its next launch. "
-                + "Settings › Engine holds the bottle's own overrides.")
+            Text("For this game alone, from its next launch. winecfg shows the same values; "
+                + "Settings › Engine holds the bottle's.")
         }
     }
 
@@ -484,7 +531,7 @@ private struct DLLOverrideRow: View {
 
     var body: some View {
         HStack {
-            Text(dll)
+            Text(dll).font(.body.monospaced())
             Spacer()
             Picker("", selection: Binding(get: { mode }, set: { set($0) })) {
                 ForEach(dllOverrideModes, id: \.mode) { choice in
@@ -511,30 +558,32 @@ private struct AddDLLOverrideRow: View {
     let add: (_ dll: String, _ mode: String) -> Void
     @State private var name = ""
     @State private var mode = "n,b"
+    @State private var libraries: [String] = []
 
     var body: some View {
-        HStack {
-            TextField("DLL name", text: $name, prompt: Text("d3dcompiler_47"))
-                .textFieldStyle(.roundedBorder)
-                .labelsHidden()
-            Picker("", selection: $mode) {
-                ForEach(dllOverrideModes, id: \.mode) { choice in
-                    Text(choice.label).tag(choice.mode)
+        // Two lines: the form's column is too narrow for a library name, a
+        // load order and a button side by side.
+        VStack(alignment: .leading, spacing: 8) {
+            DLLNameField(name: $name, names: libraries)
+            HStack {
+                Picker("Load order", selection: $mode) {
+                    ForEach(dllOverrideModes, id: \.mode) { choice in
+                        Text(choice.label).tag(choice.mode)
+                    }
                 }
+                .labelsHidden()
+                .fixedSize()
+                Spacer()
+                Button("Add") {
+                    let dll = BuiltinLibraries.normalized(name)
+                    guard !dll.isEmpty else { return }
+                    add(dll, mode)
+                    name = ""
+                }
+                .disabled(BuiltinLibraries.normalized(name).isEmpty)
             }
-            .labelsHidden()
-            .frame(width: 180)
-            Button("Add") {
-                let dll = name
-                    .trimmingCharacters(in: .whitespaces)
-                    .replacingOccurrences(of: ".dll", with: "")
-                    .lowercased()
-                guard !dll.isEmpty else { return }
-                add(dll, mode)
-                name = ""
-            }
-            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .onChange(of: gameID) { name = "" }
+        .task { libraries = BuiltinLibraries.names() }
     }
 }

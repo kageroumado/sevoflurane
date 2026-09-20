@@ -1986,14 +1986,25 @@ struct AppCommand: AsyncParsableCommand {
             case "tuning":
                 guard let value else {
                     let resolved = GameConfig.tuning(bottle: bottle, game: appid)
-                    print("\(resolved.value.rawValue) (\(resolved.source))")
+                    let parameters = GameConfig.tuningParameters(bottle: bottle, game: appid)
+                    print("\(resolved.value.rawValue) \(parameters.argument) (\(resolved.source))")
                     return
                 }
-                let tuning = PerformanceTuning(rawValue: value)
-                guard tuning != nil || value == "inherit" else {
-                    throw ValidationError("tuning is standard, experimental or inherit")
+                // `custom:<wait>,<adaptive 0|1>,<object>` names the preset and
+                // its parameters in one value.
+                let custom = value.hasPrefix("custom:")
+                    ? TuningParameters(argument: String(value.dropFirst("custom:".count))) : nil
+                let tuning = custom != nil ? PerformanceTuning.custom : PerformanceTuning(rawValue: value)
+                guard tuning != nil && (tuning != .custom || custom != nil) || value == "inherit" else {
+                    throw ValidationError(
+                        "tuning is standard, experimental, custom:<wait spin>,<adaptive 0|1>,<object spin> "
+                            + "(spins 0 to 1000000, 5200 is two microseconds) or inherit",
+                    )
                 }
-                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { $0.tuning = tuning }
+                GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) {
+                    $0.tuning = tuning
+                    $0.tuningParameters = custom
+                }
             case "runner":
                 guard let value else {
                     print(values.runner ?? GameRunner.wine)
