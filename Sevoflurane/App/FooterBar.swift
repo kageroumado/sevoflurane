@@ -129,7 +129,10 @@ struct FooterBar: View {
         Toggle(isOn: Binding(get: { debug.isOn }, set: { debug.set($0) })) {
             Label("Debug Mode", systemImage: "ladybug")
         }
-        .help("Logs library loads, renderer errors, and the engine's frame trail. "
+        .help(Engine.active.supportsEnvFiles
+            ? "Logs library loads, renderer errors, and the engine's frame trail. "
+            + "Stops when the app quits."
+            : "Logs more of what Sevoflurane does. The engine's own logging needs Dormison. "
             + "Stops when the app quits.")
         if debug.isOn, isClientUp {
             Button("Restart Steam to Apply Debug Mode") {
