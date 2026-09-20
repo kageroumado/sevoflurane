@@ -10,94 +10,74 @@ struct GeneralSettings: View {
     let highlighted: SettingsAnchor?
     /// The supervisor to stand down before an uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
-    @State private var openAtLogin = false
-    @State private var cliInstalled = false
-    @State private var cliBusy = false
-    @State private var cliError: String?
-    @State private var agents: [AgentRow] = []
-    @State private var confirmingUninstall = false
-    @State private var compatibilityStrip = true
-    @State private var discordBridge = false
-    @State private var discordPresence = false
-
-    /// One detected AI assistant: its registration state, and the in-flight
-    /// and failure state of the last flip.
-    private struct AgentRow: Identifiable {
-        let harness: AgentIntegration.Harness
-        var registered: Bool
-        var busy = false
-        var error: String?
-        var id: String {
-            harness.id
-        }
-    }
-
-    @State private var steamLinksComeHere = SteamLinks.comeHere
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Open at login", isOn: $openAtLogin)
-                    .toggleStyle(.switch)
-                    .onChange(of: openAtLogin) { _, enabled in
-                        provisioner.setOpenAtLogin(enabled)
-                    }
-                    .highlightable(.generalOpenAtLogin, highlighted: highlighted)
-                if let steam {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Steam settings")
-                            Text("Downloads, controllers, and the Steam interface.")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Open…") { steam.openSteamSettings() }
-                    }
-                    .highlightable(.generalSteamSettings, highlighted: highlighted)
-                }
-                steamLinksRow
-            }
-            Section {
-                cliRow
-                if cliInstalled {
-                    if agents.isEmpty {
-                        Text("No supported AI assistant is installed.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach($agents) { $row in
-                            agentRow($row)
-                        }
-                    }
-                    manualCommandRow
-                }
-            } header: {
-                Text("Automation")
-            } footer: {
-                if cliInstalled {
-                    Text("Let each assistant control Steam through MCP.")
-                }
-            }
-            steamPagesSection
-            discordSection
-            uninstallSection
+            GeneralStartupSection(provisioner: provisioner, steam: steam, highlighted: highlighted)
+            GeneralAutomationSection(highlighted: highlighted)
+            GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
+            GeneralDiscordSection(highlighted: highlighted)
+            GeneralUninstallSection(
+                provisioner: provisioner, store: store, supervisor: supervisor,
+                highlighted: highlighted,
+            )
         }
         .formStyle(.grouped)
-        .onAppear {
-            openAtLogin = provisioner.openAtLogin
-            cliInstalled = AgentIntegration.isCLIInstalled
-            compatibilityStrip = Preferences.compatibilityStrip
-            discordBridge = Preferences.discordBridge
-            discordPresence = Preferences.discordPresence
-            refreshAgents()
-        }
         .task { await store.measure() }
     }
+}
 
-    // MARK: - Steam links
+// MARK: - Startup and Steam
 
-    private var steamLinksRow: some View {
+/// Open at login, the door to Steam's own settings, and where `steam://`
+/// links go.
+private struct GeneralStartupSection: View {
+    let provisioner: Provisioner
+    let steam: SteamActions?
+    let highlighted: SettingsAnchor?
+    @State private var openAtLogin = false
+
+    var body: some View {
+        Section {
+            Toggle("Open at login", isOn: $openAtLogin)
+                .toggleStyle(.switch)
+                .onChange(of: openAtLogin) { _, enabled in
+                    provisioner.setOpenAtLogin(enabled)
+                }
+                .highlightable(.generalOpenAtLogin, highlighted: highlighted)
+                .onAppear { openAtLogin = provisioner.openAtLogin }
+            if let steam {
+                SteamSettingsRow(steam: steam)
+                    .highlightable(.generalSteamSettings, highlighted: highlighted)
+            }
+            SteamLinksRow()
+        }
+    }
+}
+
+/// The button that opens the Steam client's own settings.
+private struct SteamSettingsRow: View {
+    let steam: SteamActions
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Steam settings")
+                Text("Downloads, controllers, and the Steam interface.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Open…") { steam.openSteamSettings() }
+        }
+    }
+}
+
+/// Which app `steam://` links open in, and the button that claims them.
+private struct SteamLinksRow: View {
+    @State private var steamLinksComeHere = SteamLinks.comeHere
+
+    var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Steam links")
@@ -116,140 +96,163 @@ struct GeneralSettings: View {
             }
         }
     }
+}
 
-    // MARK: - The Steam pages
+// MARK: - Automation
 
-    private var steamPagesSection: some View {
+/// One detected AI assistant: its registration state, and the in-flight
+/// and failure state of the last flip.
+private struct AgentRow: Identifiable {
+    let harness: AgentIntegration.Harness
+    var registered: Bool
+    var busy = false
+    var error: String?
+    var id: String {
+        harness.id
+    }
+}
+
+/// The command-line tool and, once it is installed, the assistants that can
+/// reach Steam through it.
+private struct GeneralAutomationSection: View {
+    let highlighted: SettingsAnchor?
+    @State private var cliInstalled = false
+    @State private var agents: [AgentRow] = []
+
+    var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Mac compatibility strip", isOn: $compatibilityStrip)
-                    .toggleStyle(.switch)
-                    .onChange(of: compatibilityStrip) { _, enabled in
-                        Preferences.compatibilityStrip = enabled
-                        steam?.applyCompatibilityStrip()
+            CommandLineToolRow(installed: $cliInstalled, finished: refreshAgents)
+                .highlightable(.generalCli, highlighted: highlighted)
+                .onAppear {
+                    cliInstalled = AgentIntegration.isCLIInstalled
+                    refreshAgents()
+                }
+            if cliInstalled {
+                if agents.isEmpty {
+                    Text("No supported AI assistant is installed.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach($agents) { $row in
+                        AgentToggleRow(row: $row)
+                            .highlightable(.generalAgents, highlighted: highlighted)
                     }
-                Text("A game's page says how it runs on a Mac and what its anti-cheat "
-                    + "does, in the slot Steam's own Deck strip leaves empty here.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                }
+                ManualCommandRow()
             }
-            .highlightable(.generalCompatStrip, highlighted: highlighted)
         } header: {
-            Text("Steam pages")
+            Text("Automation")
+        } footer: {
+            if cliInstalled {
+                Text("Let each assistant control Steam through MCP.")
+            }
         }
     }
 
-    // MARK: - Discord
-
-    /// Whether this engine ships the relay that carries a game's own Discord
-    /// traffic out of the bottle.
-    private var hasDiscordBridge: Bool {
-        Engine.active.discordBridge != nil
-    }
-
-    private var discordSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Discord presence in games", isOn: $discordBridge)
-                    .toggleStyle(.switch)
-                    .disabled(!hasDiscordBridge)
-                    .onChange(of: discordBridge) { _, enabled in
-                        Preferences.discordBridge = enabled
-                    }
-                Text(hasDiscordBridge
-                    ? "Games with their own Discord support show their status. Restart Steam to apply a change."
-                    : "Only the built-in engine carries the Discord relay. Switch to it in Engine.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .highlightable(.generalDiscordBridge, highlighted: highlighted)
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Show what you play in Discord", isOn: $discordPresence)
-                    .toggleStyle(.switch)
-                    .onChange(of: discordPresence) { _, enabled in
-                        Preferences.discordPresence = enabled
-                    }
-                Text("Games in Discord's database show as what you play.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .highlightable(.generalDiscordPresence, highlighted: highlighted)
-        } header: {
-            Text("Discord")
+    private func refreshAgents() {
+        agents = AgentIntegration.detectedHarnesses.map {
+            AgentRow(harness: $0, registered: AgentIntegration.isRegistered($0))
         }
     }
+}
 
-    // MARK: - Automation
+/// Installs and removes `sevo`, with the progress and the failure of the
+/// last attempt.
+private struct CommandLineToolRow: View {
+    @Binding var installed: Bool
+    /// Runs after an install or a removal, whatever its outcome.
+    let finished: () -> Void
+    @State private var busy = false
+    @State private var error: String?
 
-    private var cliRow: some View {
+    var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Command-line tool")
-                Text(cliInstalled
+                Text(installed
                     ? "Installed at /usr/local/bin/sevo."
                     : "Adds sevo for Terminal and MCP. Needs an administrator password.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                if let cliError {
-                    Text(cliError).font(.callout).foregroundStyle(.orange)
+                if let error {
+                    Text(error).font(.callout).foregroundStyle(.orange)
                 }
             }
             Spacer()
-            if cliBusy {
+            if busy {
                 ProgressView().controlSize(.small)
             }
-            Button(cliInstalled ? "Remove" : "Install…") {
-                cliBusy = true
-                Task {
-                    if cliInstalled {
+            Button(installed ? "Remove" : "Install…") {
+                busy = true
+                Task(name: installed ? "Remove the command-line tool" : "Install the command-line tool") {
+                    if installed {
                         await AgentIntegration.remove()
-                        cliError = nil
+                        error = nil
                     } else {
-                        cliError = await AgentIntegration.installCLI()
+                        error = await AgentIntegration.installCLI()
                     }
-                    cliInstalled = AgentIntegration.isCLIInstalled
-                    refreshAgents()
-                    cliBusy = false
+                    installed = AgentIntegration.isCLIInstalled
+                    finished()
+                    busy = false
                 }
             }
-            .disabled(cliBusy)
+            .disabled(busy)
         }
-        .highlightable(.generalCli, highlighted: highlighted)
     }
+}
 
-    private func agentRow(_ row: Binding<AgentRow>) -> some View {
+/// One assistant and the switch that registers Sevoflurane with it.
+private struct AgentToggleRow: View {
+    @Binding var row: AgentRow
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: Theme.Space.md) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.wrappedValue.harness.displayName)
-                        .help(row.wrappedValue.harness.configDescription)
+                    Text(row.harness.displayName)
+                        .help(row.harness.configDescription)
                 }
                 Spacer()
-                if row.wrappedValue.busy {
+                if row.busy {
                     ProgressView().controlSize(.small)
                 }
-                Toggle(row.wrappedValue.harness.displayName, isOn: Binding(
-                    get: { row.wrappedValue.registered },
-                    set: { enabled in flip(row, to: enabled) },
+                Toggle(row.harness.displayName, isOn: Binding(
+                    get: { row.registered },
+                    set: { enabled in flip(to: enabled) },
                 ))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .disabled(row.wrappedValue.busy)
+                .disabled(row.busy)
             }
-            if let error = row.wrappedValue.error {
+            if let error = row.error {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .highlightable(.generalAgents, highlighted: highlighted)
     }
 
-    /// For every agent that speaks MCP but isn't in the list: the command,
-    /// ready to paste.
-    private var manualCommandRow: some View {
+    private func flip(to enabled: Bool) {
+        row.busy = true
+        row.error = nil
+        let harness = row.harness
+        Task(name: "\(enabled ? "Connect" : "Disconnect") \(harness.displayName)") {
+            let failure = enabled
+                ? await AgentIntegration.register(harness)
+                : await AgentIntegration.unregister(harness)
+            row.error = failure
+            row.registered = AgentIntegration.isRegistered(harness)
+            row.busy = false
+        }
+    }
+}
+
+/// For every agent that speaks MCP but isn't in the list: the command,
+/// ready to paste.
+private struct ManualCommandRow: View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Other MCP assistants")
                 .font(.caption.weight(.medium))
@@ -265,30 +268,102 @@ struct GeneralSettings: View {
             .background(.quaternary.opacity(0.6), in: Theme.innerShape)
         }
     }
+}
 
-    private func flip(_ row: Binding<AgentRow>, to enabled: Bool) {
-        row.wrappedValue.busy = true
-        row.wrappedValue.error = nil
-        let harness = row.wrappedValue.harness
-        Task(name: "\(enabled ? "Connect" : "Disconnect") \(harness.displayName)") {
-            let failure = enabled
-                ? await AgentIntegration.register(harness)
-                : await AgentIntegration.unregister(harness)
-            row.wrappedValue.error = failure
-            row.wrappedValue.registered = AgentIntegration.isRegistered(harness)
-            row.wrappedValue.busy = false
+// MARK: - The Steam pages
+
+/// What Sevoflurane adds to Steam's own pages.
+private struct GeneralSteamPagesSection: View {
+    let steam: SteamActions?
+    let highlighted: SettingsAnchor?
+    @State private var compatibilityStrip = true
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Mac compatibility strip", isOn: $compatibilityStrip)
+                    .toggleStyle(.switch)
+                    .onChange(of: compatibilityStrip) { _, enabled in
+                        Preferences.compatibilityStrip = enabled
+                        steam?.applyCompatibilityStrip()
+                    }
+                Text("A game's page says how it runs on a Mac and what its anti-cheat "
+                    + "does, in the slot Steam's own Deck strip leaves empty here.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalCompatStrip, highlighted: highlighted)
+            .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
+        } header: {
+            Text("Steam pages")
         }
     }
+}
 
-    private func refreshAgents() {
-        agents = AgentIntegration.detectedHarnesses.map {
-            AgentRow(harness: $0, registered: AgentIntegration.isRegistered($0))
-        }
+// MARK: - Discord
+
+/// A game's own Discord traffic, and the presence Sevoflurane publishes for
+/// games Discord knows.
+private struct GeneralDiscordSection: View {
+    let highlighted: SettingsAnchor?
+    @State private var discordBridge = false
+    @State private var discordPresence = false
+
+    /// Whether this engine ships the relay that carries a game's own Discord
+    /// traffic out of the bottle.
+    private var hasDiscordBridge: Bool {
+        Engine.active.discordBridge != nil
     }
 
-    // MARK: - Uninstall
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Discord presence in games", isOn: $discordBridge)
+                    .toggleStyle(.switch)
+                    .disabled(!hasDiscordBridge)
+                    .onChange(of: discordBridge) { _, enabled in
+                        Preferences.discordBridge = enabled
+                    }
+                Text(hasDiscordBridge
+                    ? "Games with their own Discord support show their status. Restart Steam to apply a change."
+                    : "Only the built-in engine carries the Discord relay. Switch to it in Engine.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalDiscordBridge, highlighted: highlighted)
+            .onAppear {
+                discordBridge = Preferences.discordBridge
+                discordPresence = Preferences.discordPresence
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Show what you play in Discord", isOn: $discordPresence)
+                    .toggleStyle(.switch)
+                    .onChange(of: discordPresence) { _, enabled in
+                        Preferences.discordPresence = enabled
+                    }
+                Text("Games in Discord's database show as what you play.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalDiscordPresence, highlighted: highlighted)
+        } header: {
+            Text("Discord")
+        }
+    }
+}
 
-    private var uninstallSection: some View {
+// MARK: - Uninstall
+
+/// The uninstall button and the dialog that asks whether games go too.
+private struct GeneralUninstallSection: View {
+    let provisioner: Provisioner
+    let store: StorageStore
+    /// The supervisor to stand down before the uninstall; `nil` in previews.
+    let supervisor: ClientSupervisor?
+    let highlighted: SettingsAnchor?
+    @State private var confirmingUninstall = false
+
+    var body: some View {
         Section {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {

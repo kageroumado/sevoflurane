@@ -20,15 +20,15 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             PopoverHeader("Sevoflurane")
-            steamWindowRow
-            healthCard
+            SteamWindowRow(host: host, supervisor: supervisor)
+            SupervisorNotice(supervisor: supervisor)
             BottleIncompleteChip()
-            recentGames
-            stagedRendererCaption
-            quickLaunchSection
-            friendsRow
-            notificationPermissionCard
-            openSteamButton
+            RecentGames(host: host, supervisor: supervisor)
+            StagedRendererCaption(host: host, supervisor: supervisor)
+            QuickLaunchSection(quickLaunch: quickLaunch)
+            FriendsRow(host: host)
+            NotificationPermissionCard(notifications: notifications)
+            OpenSteamButton(host: host, supervisor: supervisor)
             FooterBar(host: host, supervisor: supervisor)
         }
         // Tighter than Propofol's outer `lg`: this popover's rows carry their
@@ -36,12 +36,12 @@ struct MenuBarView: View {
         .padding(Theme.Space.md)
         .frame(width: Theme.popoverWidth)
         .fixedSize(horizontal: false, vertical: true)
-        .animation(.smooth(duration: 0.3), value: supervisor.health)
-        .animation(.smooth(duration: 0.3), value: host.recentGames)
-        .animation(.smooth(duration: 0.3), value: host.activeLaunch)
-        .animation(.smooth(duration: 0.3), value: host.unreadChats)
-        .animation(.smooth(duration: 0.3), value: notifications.hasUnaskedNotifications)
-        .animation(.smooth(duration: 0.3), value: quickLaunch.programs)
+        .modifier(
+            PopoverAnimations(
+                host: host, supervisor: supervisor, notifications: notifications,
+                quickLaunch: quickLaunch,
+            ),
+        )
         .onAppear {
             host.refreshRecentGames()
             quickLaunch.refresh()
@@ -50,14 +50,76 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - Where Steam's window is
+    /// "Friends", or what is waiting in it. The count is conversations, not
+    /// messages — it is the number Steam itself posts to the client for its
+    /// own tray badge, and a conversation is what a click opens.
+    static func friendsLabel(unreadChats: Int) -> String {
+        switch unreadChats {
+        case 0: "Friends"
+        case 1: "Friends · 1 new message"
+        default: "Friends · \(unreadChats) new messages"
+        }
+    }
+}
 
-    /// A running client with no window on screen looks exactly like a client
-    /// that failed to start, and the only thing on screen saying otherwise is
-    /// an 18-point menu-bar glyph. So the popover says which it is, next to
-    /// the one click that fixes it.
-    @ViewBuilder private var steamWindowRow: some View {
-        if canOpenSteam, !host.isSteamOnScreen {
+// MARK: - Animation
+
+/// The one curve every region of the popover moves on, keyed to each value
+/// whose change adds, removes or reorders something. The values are read
+/// here, so a change re-runs this modifier and leaves ``MenuBarView``'s body
+/// alone.
+private struct PopoverAnimations: ViewModifier {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    let notifications: SteamNotifications
+    let quickLaunch: QuickLaunchStore
+
+    func body(content: Content) -> some View {
+        content
+            .animation(.smooth(duration: 0.3), value: supervisor.health)
+            .animation(.smooth(duration: 0.3), value: host.recentGames)
+            .animation(.smooth(duration: 0.3), value: host.activeLaunch)
+            .animation(.smooth(duration: 0.3), value: host.unreadChats)
+            .animation(.smooth(duration: 0.3), value: notifications.hasUnaskedNotifications)
+            .animation(.smooth(duration: 0.3), value: quickLaunch.programs)
+    }
+}
+
+private extension SupervisorHealth {
+    /// Whether a click on Open Steam would actually put Steam on screen.
+    /// While the client is coming up, restarting, or crash-looped, the
+    /// health card above already says what's happening — an enabled button
+    /// under it would promise a window that can't appear.
+    var canOpenSteam: Bool {
+        switch self {
+        case .starting, .launching, .restarting, .gaveUp: false
+        case .healthy, .waitingForSignIn, .degraded, .paused: true
+        }
+    }
+}
+
+/// The booted graphics record and a game's pinned renderer live in plain
+/// storage, which observation cannot see. Both are rewritten when the client
+/// boots and when a launch restages it; `health` and `activeLaunch` move on
+/// those occasions, so a body that reads the storage subscribes to them here.
+@MainActor
+private func trackGraphicsStorage(host: SteamWebHost, supervisor: ClientSupervisor) {
+    _ = supervisor.health
+    _ = host.activeLaunch
+}
+
+// MARK: - Where Steam's window is
+
+/// A running client with no window on screen looks exactly like a client
+/// that failed to start, and the only thing on screen saying otherwise is
+/// an 18-point menu-bar glyph. So the popover says which it is, next to
+/// the one click that fixes it.
+private struct SteamWindowRow: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+
+    var body: some View {
+        if supervisor.health.canOpenSteam, !host.isSteamOnScreen {
             HStack(spacing: Theme.Space.xs) {
                 Image(systemName: "macwindow")
                 Text("Steam window: hidden")
@@ -69,8 +131,34 @@ struct MenuBarView: View {
             .foregroundStyle(.secondary)
         }
     }
+}
 
-    // MARK: - Health card
+// MARK: - Health card
+
+/// The supervisor's card: what is wrong with the client and the way out of
+/// it, absent while the client is healthy.
+private struct SupervisorNotice: View {
+    let supervisor: ClientSupervisor
+
+    var body: some View {
+        if let card = model {
+            NoticeCard(
+                symbol: card.symbol, tint: card.tint, isSpinning: isRestarting,
+                title: card.title, detail: card.detail.sentenceCased,
+            ) {
+                if let action = card.action {
+                    Button(action.label, action: action.run)
+                        .buttonStyle(.glassProminent)
+                        .foregroundStyle(Theme.onAccent)
+                }
+                if let alternative = card.alternative {
+                    Button(alternative.label, action: alternative.run)
+                        .buttonStyle(.glass)
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
 
     /// What the supervisor card shows for the current health state, or `nil`
     /// when the client is healthy and the card stays out of the way.
@@ -104,7 +192,7 @@ struct MenuBarView: View {
         )
     }
 
-    private var healthCardModel: HealthCard? {
+    private var model: HealthCard? {
         if supervisor.daemonIsUnreachable { return daemonCard }
         return switch supervisor.health {
         case .healthy:
@@ -174,61 +262,23 @@ struct MenuBarView: View {
         }
     }
 
-    @ViewBuilder private var healthCard: some View {
-        if let card = healthCardModel {
-            NoticeCard(
-                symbol: card.symbol, tint: card.tint, isSpinning: isRestarting,
-                title: card.title, detail: card.detail.sentenceCased,
-            ) {
-                if let action = card.action {
-                    Button(action.label, action: action.run)
-                        .buttonStyle(.glassProminent)
-                        .foregroundStyle(Theme.onAccent)
-                }
-                if let alternative = card.alternative {
-                    Button(alternative.label, action: alternative.run)
-                        .buttonStyle(.glass)
-                }
-            }
-            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
-        }
-    }
-
     private var isRestarting: Bool {
         if case .restarting = supervisor.health { true } else { false }
     }
+}
 
-    // MARK: - Recent games
+// MARK: - Recent games
 
-    /// No heading: five pieces of box art under the app's own name need no
-    /// label to say they are games.
-    /// What a game will actually load — the renderer the running client is
-    /// staged for, read back from the booted record, not the pending pick.
-    @ViewBuilder private var stagedRendererCaption: some View {
-        if !host.recentGames.isEmpty, let booted = BottleGraphics.bootedSelection() {
-            let version = booted.renderer == .d3dmetal
-                ? (booted.d3dMetalVersion.map { " \($0)" } ?? "")
-                : ""
-            Label(
-                "Games run on \(booted.renderer.label)\(version)",
-                systemImage: "cube.transparent",
-            )
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, Theme.Space.xs)
-        }
-    }
+/// The library's five most recently played games.
+///
+/// No heading: five pieces of box art under the app's own name need no
+/// label to say they are games.
+private struct RecentGames: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
 
-    /// The press is the app's claim to the activation right, and the game's
-    /// window is what it will be spent on a minute later. The popover itself
-    /// is a non-activating panel — it must stay one, or every click in it
-    /// would pull focus off whatever the user was doing — so the press says
-    /// so explicitly instead.
-    private func claimActivationRight() {
-        ActivationPolicy.claimRightForALaunch()
-    }
-
-    @ViewBuilder private var recentGames: some View {
+    var body: some View {
+        let _ = trackGraphicsStorage(host: host, supervisor: supervisor)
         if host.recentGames.isEmpty {
             // A popover with nothing between the header and the button reads
             // as a failure; a library with no installed games is not one.
@@ -245,167 +295,202 @@ struct MenuBarView: View {
                         launchDetail: host.activeLaunch
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: GameConfig.game(game.id).renderer,
-                        setPin: { renderer in
-                            GameConfig.update(
-                                game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root,
-                            ) {
-                                $0.renderer = renderer
-                                if $0.name == nil { $0.name = game.name }
-                            }
-                        },
-                        launch: {
-                            claimActivationRight()
-                            Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
-                        },
-                        runWith: { renderer in
-                            claimActivationRight()
-                            Task(name: "Run \(game.name) on \(renderer.label)") {
-                                await supervisor.launch(game, renderer: renderer)
-                            }
-                        },
+                        supervisor: supervisor,
                     )
                 }
             }
         }
     }
+}
 
-    private struct GameRow: View {
-        let game: SteamWebHost.RecentGame
-        /// What the client says it is doing right now for this app
-        /// (game-action events); `nil` outside a launch.
-        let launchDetail: String?
-        /// The renderer this game is pinned to, if any.
-        let pinned: Renderer?
-        let setPin: (Renderer?) -> Void
-        let launch: () -> Void
-        /// Swap to this renderer and launch immediately (context menu).
-        let runWith: (Renderer) -> Void
-        @State private var isHovered = false
-        /// Instant acknowledgment for the click; the client's first
-        /// game-action event takes over from it, and it stands alone as an
-        /// 8s fallback if no events arrive.
-        @State private var isLaunching = false
+/// One game: its capsule art, its name, and a press that launches it.
+private struct GameRow: View {
+    let game: SteamWebHost.RecentGame
+    /// What the client says it is doing right now for this app
+    /// (game-action events); `nil` outside a launch.
+    let launchDetail: String?
+    /// The renderer this game is pinned to, if any.
+    let pinned: Renderer?
+    let supervisor: ClientSupervisor
+    @State private var isHovered = false
+    /// Instant acknowledgment for the click; the client's first
+    /// game-action event takes over from it, and it stands alone as an
+    /// 8s fallback if no events arrive.
+    @State private var isLaunching = false
 
-        var body: some View {
-            Button {
-                guard !isLaunching else { return }
-                launch()
-                withAnimation(.easeInOut(duration: 0.15)) { isLaunching = true }
-                Task {
-                    try? await Task.sleep(for: .seconds(8))
-                    withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
-                }
-            } label: {
-                HStack(spacing: Theme.Space.md) {
-                    capsuleArt
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(game.name)
-                            .font(.system(size: 12, weight: .medium))
+    var body: some View {
+        Button {
+            guard !isLaunching else { return }
+            launch()
+            withAnimation(.easeInOut(duration: 0.15)) { isLaunching = true }
+            Task(name: "Clear the launch acknowledgment") {
+                try? await Task.sleep(for: .seconds(8))
+                withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
+            }
+        } label: {
+            HStack(spacing: Theme.Space.md) {
+                capsuleArt
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(game.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    if let launchDetail {
+                        Text(launchDetail)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
-                        if let launchDetail {
-                            Text(launchDetail)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .transition(.opacity)
-                        } else if let restartFor {
-                            // Pinned to a renderer the running client did not
-                            // boot with: the launch path restages it (or
-                            // restarts, if the engine or sync must change).
-                            // Better said before the click than after.
-                            Text("\(restartFor.label) · set when it launches")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: Theme.Space.sm)
-                    // The row is flush with the popover's own padding, so the
-                    // play badge needs its own inset or it rides the edge.
-                    trailing.padding(.trailing, Theme.Space.lg)
-                }
-                // No horizontal inset: the art, the Open Steam button and the
-                // footer chips all start at the popover's own padding, so the
-                // column reads as one edge rather than the rows sitting in
-                // from everything else.
-                .padding(.vertical, Theme.Space.xs)
-                .contentShape(Theme.innerShape)
-            }
-            .buttonStyle(PressableStyle())
-            .background(
-                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-            )
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-            }
-            .contextMenu {
-                // One-shot: swap the renderer and launch now. The launch path
-                // restages the tree (or restarts, if the engine or sync must
-                // change) before the game starts.
-                Menu("Run with…") {
-                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
-                        Button(renderer.label) { runWith(renderer) }
+                            .transition(.opacity)
+                    } else if let restartFor {
+                        // Pinned to a renderer the running client did not
+                        // boot with: the launch path restages it (or
+                        // restarts, if the engine or sync must change).
+                        // Better said before the click than after.
+                        Text("\(restartFor.label) · set when it launches")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
-                Divider()
-                Picker("Always run with", selection: pinBinding) {
-                    Text("Bottle default").tag(Renderer?.none)
-                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
-                        Text(renderer.label).tag(Renderer?.some(renderer))
-                    }
+                Spacer(minLength: Theme.Space.sm)
+                // The row is flush with the popover's own padding, so the
+                // play badge needs its own inset or it rides the edge.
+                trailing.padding(.trailing, Theme.Space.lg)
+            }
+            // No horizontal inset: the art, the Open Steam button and the
+            // footer chips all start at the popover's own padding, so the
+            // column reads as one edge rather than the rows sitting in
+            // from everything else.
+            .padding(.vertical, Theme.Space.xs)
+            .contentShape(Theme.innerShape)
+        }
+        .buttonStyle(PressableStyle())
+        .background(
+            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .contextMenu {
+            // One-shot: swap the renderer and launch now. The launch path
+            // restages the tree (or restarts, if the engine or sync must
+            // change) before the game starts.
+            Menu("Run with…") {
+                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                    Button(renderer.label) { runWith(renderer) }
                 }
             }
-        }
-
-        /// What the pin menu reads and writes.
-        private var pinBinding: Binding<Renderer?> {
-            Binding(get: { pinned }, set: { setPin($0) })
-        }
-
-        /// The renderer this launch would have to restart the client for.
-        private var restartFor: Renderer? {
-            BottleGraphics.rendererNeedingRestart(forApp: game.id)
-        }
-
-        private var capsuleArt: some View {
-            AsyncImage(url: game.artURL) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Rectangle().fill(.quaternary.opacity(0.5))
-            }
-            .frame(width: 27, height: 40)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        }
-
-        /// The launch affordance: a filled accent disc big enough to read as
-        /// the row's button, in place of the small tinted glyph a pointer had
-        /// to hunt for. It appears on hover, where the spinner replaces it for
-        /// the length of a launch.
-        @ViewBuilder private var trailing: some View {
-            if isLaunching || launchDetail != nil {
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.8)
-                    .frame(width: 26, height: 26)
-            } else {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.onAccent)
-                    .frame(width: 26, height: 26)
-                    .background(Color.accentColor, in: Circle())
-                    .opacity(isHovered ? 1 : 0)
-                    .scaleEffect(isHovered ? 1 : 0.7)
+            Divider()
+            Picker("Always run with", selection: pinBinding) {
+                Text("Bottle default").tag(Renderer?.none)
+                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                    Text(renderer.label).tag(Renderer?.some(renderer))
+                }
             }
         }
     }
 
-    // MARK: - Quick Launch
+    /// The press is the app's claim to the activation right, and the game's
+    /// window is what it will be spent on a minute later. The popover itself
+    /// is a non-activating panel — it must stay one, or every click in it
+    /// would pull focus off whatever the user was doing — so the press says
+    /// so explicitly instead.
+    private func launch() {
+        ActivationPolicy.claimRightForALaunch()
+        Task(name: "Launch \(game.name)") { await supervisor.launch(game) }
+    }
 
-    /// The Windows programs the user handed to Sevoflurane. It carries a
-    /// heading where the library above does not: box art is self-evidently a
-    /// game list, while a row with an app icon needs to say what the click
-    /// will do.
-    private var quickLaunchSection: some View {
+    /// Swap to this renderer and launch immediately (context menu).
+    private func runWith(_ renderer: Renderer) {
+        ActivationPolicy.claimRightForALaunch()
+        Task(name: "Run \(game.name) on \(renderer.label)") {
+            await supervisor.launch(game, renderer: renderer)
+        }
+    }
+
+    private func setPin(_ renderer: Renderer?) {
+        GameConfig.update(
+            game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root,
+        ) {
+            $0.renderer = renderer
+            if $0.name == nil { $0.name = game.name }
+        }
+    }
+
+    /// What the pin menu reads and writes.
+    private var pinBinding: Binding<Renderer?> {
+        Binding(get: { pinned }, set: { setPin($0) })
+    }
+
+    /// The renderer this launch would have to restart the client for.
+    private var restartFor: Renderer? {
+        BottleGraphics.rendererNeedingRestart(forApp: game.id)
+    }
+
+    private var capsuleArt: some View {
+        AsyncImage(url: game.artURL) { image in
+            image.resizable().aspectRatio(contentMode: .fill)
+        } placeholder: {
+            Rectangle().fill(.quaternary.opacity(0.5))
+        }
+        .frame(width: 27, height: 40)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    /// The launch affordance: a filled accent disc big enough to read as
+    /// the row's button, in place of the small tinted glyph a pointer had
+    /// to hunt for. It appears on hover, where the spinner replaces it for
+    /// the length of a launch.
+    @ViewBuilder private var trailing: some View {
+        if isLaunching || launchDetail != nil {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.8)
+                .frame(width: 26, height: 26)
+        } else {
+            Image(systemName: "play.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.onAccent)
+                .frame(width: 26, height: 26)
+                .background(Color.accentColor, in: Circle())
+                .opacity(isHovered ? 1 : 0)
+                .scaleEffect(isHovered ? 1 : 0.7)
+        }
+    }
+}
+
+/// What a game will actually load — the renderer the running client is
+/// staged for, read back from the booted record, not the pending pick.
+private struct StagedRendererCaption: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+
+    var body: some View {
+        let _ = trackGraphicsStorage(host: host, supervisor: supervisor)
+        if !host.recentGames.isEmpty, let booted = BottleGraphics.bootedSelection() {
+            let version = booted.renderer == .d3dmetal
+                ? (booted.d3dMetalVersion.map { " \($0)" } ?? "")
+                : ""
+            Label(
+                "Games run on \(booted.renderer.label)\(version)",
+                systemImage: "cube.transparent",
+            )
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, Theme.Space.xs)
+        }
+    }
+}
+
+// MARK: - Quick Launch
+
+/// The Windows programs the user handed to Sevoflurane. It carries a
+/// heading where the library above does not: box art is self-evidently a
+/// game list, while a row with an app icon needs to say what the click
+/// will do.
+private struct QuickLaunchSection: View {
+    let quickLaunch: QuickLaunchStore
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Quick Launch")
                 .font(.system(size: 10, weight: .semibold))
@@ -416,183 +501,173 @@ struct MenuBarView: View {
                 ProgramRow(
                     entry: entry,
                     icon: quickLaunch.icon(for: entry),
-                    launch: { quickLaunch.launch(entry) },
-                    runWith: { quickLaunch.launch(entry, renderer: $0) },
-                    reveal: { quickLaunch.showInFinder(entry) },
-                    remove: { quickLaunch.remove(entry) },
+                    quickLaunch: quickLaunch,
                 )
             }
-            AddProgramRow { quickLaunch.chooseProgram() }
+            AddProgramRow(quickLaunch: quickLaunch)
         }
     }
+}
 
-    /// One adopted program: its own icon, its name, and a press that starts
-    /// it through the daemon.
-    private struct ProgramRow: View {
-        let entry: AdoptedPrograms.Entry
-        let icon: NSImage?
-        let launch: () -> Void
-        let runWith: (Renderer) -> Void
-        let reveal: () -> Void
-        let remove: () -> Void
-        @State private var isHovered = false
+/// One adopted program: its own icon, its name, and a press that starts
+/// it through the daemon.
+private struct ProgramRow: View {
+    let entry: AdoptedPrograms.Entry
+    let icon: NSImage?
+    let quickLaunch: QuickLaunchStore
+    @State private var isHovered = false
 
-        var body: some View {
-            Button(action: launch) {
-                HStack(spacing: Theme.Space.md) {
-                    artwork
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(entry.name)
-                            .font(.system(size: 12, weight: .medium))
+    var body: some View {
+        Button {
+            quickLaunch.launch(entry)
+        } label: {
+            HStack(spacing: Theme.Space.md) {
+                artwork
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    if !entry.program.exists {
+                        Text("moved or deleted")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
-                        if !entry.program.exists {
-                            Text("moved or deleted")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: Theme.Space.sm)
-                }
-                .padding(.vertical, Theme.Space.xs)
-                .contentShape(Theme.innerShape)
-            }
-            .buttonStyle(PressableStyle())
-            .disabled(!entry.program.exists)
-            .background(
-                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-            )
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-            }
-            .contextMenu {
-                Menu("Run with…") {
-                    ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
-                        Button(renderer.label) { runWith(renderer) }
                     }
                 }
-                Divider()
-                Button("Show in Finder", action: reveal)
-                Button("Remove", action: remove)
+                Spacer(minLength: Theme.Space.sm)
             }
+            .padding(.vertical, Theme.Space.xs)
+            .contentShape(Theme.innerShape)
         }
-
-        private var artwork: some View {
-            Group {
-                if let icon {
-                    Image(nsImage: icon).resizable()
-                } else {
-                    Image(systemName: "app.dashed")
-                        .resizable()
-                        .foregroundStyle(.tertiary)
+        .buttonStyle(PressableStyle())
+        .disabled(!entry.program.exists)
+        .background(
+            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .contextMenu {
+            Menu("Run with…") {
+                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                    Button(renderer.label) { quickLaunch.launch(entry, renderer: renderer) }
                 }
             }
-            .frame(width: 27, height: 27)
-            .padding(.vertical, 6)
+            Divider()
+            Button("Show in Finder") { quickLaunch.showInFinder(entry) }
+            Button("Remove") { quickLaunch.remove(entry) }
         }
     }
 
-    /// The row that adds one. It sits with the programs rather than in the
-    /// footer, because it is what an empty Quick Launch is for.
-    private struct AddProgramRow: View {
-        let choose: () -> Void
-        @State private var isHovered = false
-
-        var body: some View {
-            Button(action: choose) {
-                HStack(spacing: Theme.Space.md) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 27)
-                    Text("Add Windows Program…")
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
-                    Spacer(minLength: Theme.Space.sm)
-                }
-                .padding(.vertical, Theme.Space.xs)
-                .contentShape(Theme.innerShape)
-            }
-            .buttonStyle(PressableStyle())
-            .background(
-                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-            )
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+    private var artwork: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon).resizable()
+            } else {
+                Image(systemName: "app.dashed")
+                    .resizable()
+                    .foregroundStyle(.tertiary)
             }
         }
+        .frame(width: 27, height: 27)
+        .padding(.vertical, 6)
     }
+}
 
-    // MARK: - Friends
+/// The row that adds one. It sits with the programs rather than in the
+/// footer, because it is what an empty Quick Launch is for.
+private struct AddProgramRow: View {
+    let quickLaunch: QuickLaunchStore
+    @State private var isHovered = false
 
-    /// The other half of what a menu-bar Steam is for. It says what is
-    /// waiting rather than a bare "Friends", and clicking it opens the
-    /// friends list — or, with messages waiting, the oldest of them — as its
-    /// own window. Steam's desktop window is never involved.
-    private var friendsRow: some View {
-        FriendsRow(unreadChats: host.unreadChats) { host.openFriends() }
-    }
-
-    /// Built like a game row so the two read as one column: the same leading
-    /// inset, the same hover fill, the same vertical rhythm.
-    private struct FriendsRow: View {
-        let unreadChats: Int
-        let open: () -> Void
-        @State private var isHovered = false
-
-        var body: some View {
-            Button(action: open) {
-                HStack(spacing: Theme.Space.md) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 13))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(unreadChats > 0 ? Color.accentColor : Color.secondary)
-                        .frame(width: 27)
-                    // The count is in the words. A badge beside them would
-                    // say the same number twice, which is the one thing this
-                    // popover's rows never do.
-                    Text(MenuBarView.friendsLabel(unreadChats: unreadChats))
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
-                    Spacer(minLength: Theme.Space.sm)
-                }
-                .padding(.vertical, Theme.Space.xs)
-                .contentShape(Theme.innerShape)
+    var body: some View {
+        Button {
+            quickLaunch.chooseProgram()
+        } label: {
+            HStack(spacing: Theme.Space.md) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 27)
+                Text("Add Windows Program…")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: Theme.Space.sm)
             }
-            .buttonStyle(PressableStyle())
-            .background(
-                Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-            )
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-            }
-            .keyboardShortcut("f")
+            .padding(.vertical, Theme.Space.xs)
+            .contentShape(Theme.innerShape)
+        }
+        .buttonStyle(PressableStyle())
+        .background(
+            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
     }
+}
 
-    /// "Friends", or what is waiting in it. The count is conversations, not
-    /// messages — it is the number Steam itself posts to the client for its
-    /// own tray badge, and a conversation is what a click opens.
-    static func friendsLabel(unreadChats: Int) -> String {
-        switch unreadChats {
-        case 0: "Friends"
-        case 1: "Friends · 1 new message"
-        default: "Friends · \(unreadChats) new messages"
+// MARK: - Friends
+
+/// The other half of what a menu-bar Steam is for. It says what is
+/// waiting rather than a bare "Friends", and clicking it opens the
+/// friends list — or, with messages waiting, the oldest of them — as its
+/// own window. Steam's desktop window is never involved.
+///
+/// Built like a game row so the two read as one column: the same leading
+/// inset, the same hover fill, the same vertical rhythm.
+private struct FriendsRow: View {
+    let host: SteamWebHost
+    @State private var isHovered = false
+
+    var body: some View {
+        let unreadChats = host.unreadChats
+        Button {
+            host.openFriends()
+        } label: {
+            HStack(spacing: Theme.Space.md) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 13))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(unreadChats > 0 ? Color.accentColor : Color.secondary)
+                    .frame(width: 27)
+                // The count is in the words. A badge beside them would
+                // say the same number twice, which is the one thing this
+                // popover's rows never do.
+                Text(MenuBarView.friendsLabel(unreadChats: unreadChats))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: Theme.Space.sm)
+            }
+            .padding(.vertical, Theme.Space.xs)
+            .contentShape(Theme.innerShape)
         }
+        .buttonStyle(PressableStyle())
+        .background(
+            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .keyboardShortcut("f")
     }
+}
 
-    // MARK: - Notification permission
+// MARK: - Notification permission
 
-    /// Where the app asks to post notifications.
-    ///
-    /// An app with no window on first run has nowhere honest to raise the
-    /// system alert at launch, and asking before there is anything to show
-    /// asks for a permission the user has no reason to weigh yet. So nothing
-    /// is asked until Steam actually produces a notification: the first one
-    /// is held, the menu-bar dot goes up for it, and this row is what the
-    /// user finds when they open the popover to see why. The prompt is then
-    /// raised by their click on it.
-    @ViewBuilder private var notificationPermissionCard: some View {
+/// Where the app asks to post notifications.
+///
+/// An app with no window on first run has nowhere honest to raise the
+/// system alert at launch, and asking before there is anything to show
+/// asks for a permission the user has no reason to weigh yet. So nothing
+/// is asked until Steam actually produces a notification: the first one
+/// is held, the menu-bar dot goes up for it, and this row is what the
+/// user finds when they open the popover to see why. The prompt is then
+/// raised by their click on it.
+private struct NotificationPermissionCard: View {
+    let notifications: SteamNotifications
+
+    var body: some View {
         if notifications.hasUnaskedNotifications || notifications.authorization == .denied {
             let denied = notifications.authorization == .denied
             NoticeCard(
@@ -617,10 +692,16 @@ struct MenuBarView: View {
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }
+}
 
-    // MARK: - Primary action
+// MARK: - Primary action
 
-    private var openSteamButton: some View {
+private struct OpenSteamButton: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+
+    var body: some View {
+        let canOpenSteam = supervisor.health.canOpenSteam
         Button { host.showSteam() } label: {
             Text("Open Steam")
                 .font(.system(size: 12, weight: .semibold))
@@ -633,17 +714,6 @@ struct MenuBarView: View {
         .keyboardShortcut("o")
         .disabled(!canOpenSteam)
         .opacity(canOpenSteam ? 1 : 0.5)
-    }
-
-    /// Whether a click on Open Steam would actually put Steam on screen.
-    /// While the client is coming up, restarting, or crash-looped, the
-    /// health card above already says what's happening — an enabled button
-    /// under it would promise a window that can't appear.
-    private var canOpenSteam: Bool {
-        switch supervisor.health {
-        case .starting, .launching, .restarting, .gaveUp: false
-        case .healthy, .waitingForSignIn, .degraded, .paused: true
-        }
     }
 }
 

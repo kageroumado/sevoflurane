@@ -14,44 +14,37 @@ struct EngineSettings: View {
     let provisioner: Provisioner
     let highlighted: SettingsAnchor?
 
-    /// The bottle picker's sentinel for "type a new name".
-    private static let newBottleTag = "\u{0}new"
+    /// The bottle picker's selection. The pane seeds it once the store has
+    /// refreshed; the selection section's rows read and write it.
     @State private var bottleChoice = ""
-    @State private var newBottleName = ""
-    @State private var newOverrideDLL = ""
-    @State private var newOverrideMode = BottleDependencies.overrideModes[0]
-    @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
-    @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
-    @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
-    @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
-    @State private var tuning = GameConfig.tuning(bottle: SteamBottle.name).value
-    @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
-    @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
-    @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
-    @State private var fps = GameConfig.fps(bottle: SteamBottle.name).value
-    @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
-    @State private var unifiedMemory = GameConfig.unifiedMemory(bottle: SteamBottle.name).value
-    @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
-    @State private var largeAddressAware = GameConfig
-        .largeAddressAware(bottle: SteamBottle.name).value
-    @State private var downloadEverything = BottleDependencies.installsEverything
-    @State private var wineDiagnostics = WineLog.isDiagnosing
-    @State private var isInstallingEngineFile = false
-    @State private var engineFileError: String?
 
     var body: some View {
         Form {
-            selectionSection
+            EngineSelectionSection(
+                store: store,
+                provisioner: provisioner,
+                highlighted: highlighted,
+                bottleChoice: $bottleChoice,
+            )
             if store.stagedEngine.isCrossOver {
-                crossoverCard
+                CrossOverNotice(engine: store.stagedEngine)
             }
-            msyncSection
+            MsyncSection(graphics: graphics, highlighted: highlighted)
             if !store.stagedEngine.isCrossOver {
-                windowsSection
+                BottleDefaultsSection(shaders: shaders, highlighted: highlighted)
             }
-            dependenciesSection
-            overridesSection
-            advancedSection
+            DependenciesSection(
+                store: store,
+                compatibility: compatibility,
+                highlighted: highlighted,
+            )
+            DLLOverridesSection(compatibility: compatibility, highlighted: highlighted)
+            TroubleshootingSection(
+                store: store,
+                compatibility: compatibility,
+                provisioner: provisioner,
+                highlighted: highlighted,
+            )
         }
         .formStyle(.grouped)
         .task {
@@ -60,45 +53,38 @@ struct EngineSettings: View {
             compatibility.refresh()
         }
     }
+}
 
-    // MARK: - Engine & bottle
+// MARK: - Engine & bottle
 
-    private var selectionSection: some View {
+/// "Where Steam runs": the engine and bottle pickers, the release feed's
+/// offer, an engine from disk, and the row that carries a staged change out.
+private struct EngineSelectionSection: View {
+    let store: EngineStore
+    let provisioner: Provisioner
+    let highlighted: SettingsAnchor?
+    @Binding var bottleChoice: String
+
+    /// The bottle picker's sentinel for "type a new name".
+    static let newBottleTag = "\u{0}new"
+
+    var body: some View {
         Section {
-            enginePicker
-            bottlePicker
+            EnginePicker(store: store, bottleChoice: $bottleChoice)
+            BottlePicker(store: store, bottleChoice: $bottleChoice)
             if bottleChoice == Self.newBottleTag {
-                newBottleField
+                NewBottleField(store: store, bottleChoice: $bottleChoice)
             }
-            engineUpdateRow
-            engineFileRow
+            EngineUpdateRow(store: store)
+            EngineFileRow(store: store, provisioner: provisioner, bottleChoice: $bottleChoice)
             if store.hasChanges || store.isSwitching {
-                switchRow
+                EngineSwitchRow(
+                    store: store,
+                    provisioner: provisioner,
+                    bottleChoice: $bottleChoice,
+                )
             } else if let error = store.standingFailure {
-                // A switch that failed after applying its choice has no
-                // pending change left to hang the message on — the error
-                // still has to be said, and it is read back from the record
-                // so leaving the pane does not lose it.
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(error)
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if store.clientStartIsBlocked {
-                        Text("Steam stays down until this is fixed.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    HStack {
-                        Spacer()
-                        if store.clientStartIsBlocked {
-                            Button("Start Steam Anyway") { store.startClientAnyway() }
-                        }
-                        Button("Try Again") { store.retryProvisioning() }
-                            .buttonStyle(.borderedProminent)
-                    }
-                }
+                EngineStandingFailure(store: store, error: error)
             }
         } header: {
             Text("Where Steam runs")
@@ -107,8 +93,14 @@ struct EngineSettings: View {
         }
         .highlightable(.engineSelection, highlighted: highlighted)
     }
+}
 
-    private var enginePicker: some View {
+/// The staged engine, with the chosen option's detail line under the picker.
+private struct EnginePicker: View {
+    let store: EngineStore
+    @Binding var bottleChoice: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Engine", selection: Binding(
                 get: { store.stagedEngine.description },
@@ -133,14 +125,21 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    private var bottlePicker: some View {
+/// The staged bottle: every bottle on disk, plus the entry that opens the
+/// new-name field.
+private struct BottlePicker: View {
+    let store: EngineStore
+    @Binding var bottleChoice: String
+
+    var body: some View {
         Picker("Bottle", selection: $bottleChoice) {
             ForEach(store.bottles, id: \.name) { bottle in
                 Text(bottle.hasSteam ? bottle.name : "\(bottle.name) (no Steam yet)")
                     .tag(bottle.name)
             }
-            Text("New bottle…").tag(Self.newBottleTag)
+            Text("New bottle…").tag(EngineSelectionSection.newBottleTag)
             // A staged name that isn't on disk yet keeps its own row, so the
             // picker never shows an empty selection.
             if store.stagedBottleIsNew, !store.stagedBottle.isEmpty,
@@ -150,12 +149,20 @@ struct EngineSettings: View {
         }
         .disabled(store.isSwitching)
         .onChange(of: bottleChoice) { _, choice in
-            guard choice != Self.newBottleTag else { return }
+            guard choice != EngineSelectionSection.newBottleTag else { return }
             store.stagedBottle = choice
         }
     }
+}
 
-    private var newBottleField: some View {
+/// The name of a bottle to create, staged with Use.
+private struct NewBottleField: View {
+    let store: EngineStore
+    @Binding var bottleChoice: String
+
+    @State private var newBottleName = ""
+
+    var body: some View {
         HStack {
             TextField("Bottle name", text: $newBottleName)
                 .textFieldStyle(.roundedBorder)
@@ -168,11 +175,15 @@ struct EngineSettings: View {
             .disabled(newBottleName.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
+}
 
-    /// What the release feed has that this Mac does not, and the way back to
-    /// it. Both buttons do the same thing — land on the version the feed
-    /// calls stable — so the row says whichever of the two is true.
-    @ViewBuilder private var engineUpdateRow: some View {
+/// What the release feed has that this Mac does not, and the way back to
+/// it. Both buttons do the same thing — land on the version the feed
+/// calls stable — so the row says whichever of the two is true.
+private struct EngineUpdateRow: View {
+    let store: EngineStore
+
+    var body: some View {
         if let newer = store.newerEngine {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -201,12 +212,21 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    /// Dormison from a file or a folder — the route for a Mac the release
-    /// feed does not reach, for adding a release by hand, or for running a
-    /// tree built here. The engine lands beside the installed ones and is
-    /// staged in the picker; Switch still decides when it runs.
-    private var engineFileRow: some View {
+/// Dormison from a file or a folder — the route for a Mac the release
+/// feed does not reach, for adding a release by hand, or for running a
+/// tree built here. The engine lands beside the installed ones and is
+/// staged in the picker; Switch still decides when it runs.
+private struct EngineFileRow: View {
+    let store: EngineStore
+    let provisioner: Provisioner
+    @Binding var bottleChoice: String
+
+    @State private var isInstallingEngineFile = false
+    @State private var engineFileError: String?
+
+    var body: some View {
         CaptionedRow(caption: engineFileDetail, isWarning: engineFileError != nil) {
             LabeledContent("Engine from a file or folder") {
                 if isInstallingEngineFile {
@@ -243,8 +263,16 @@ struct EngineSettings: View {
             isInstallingEngineFile = false
         }
     }
+}
 
-    @ViewBuilder private var switchRow: some View {
+/// A staged change on its way out: what Switch will do with Cancel and
+/// Switch under it, or the running switch's phase and progress.
+private struct EngineSwitchRow: View {
+    let store: EngineStore
+    let provisioner: Provisioner
+    @Binding var bottleChoice: String
+
+    var body: some View {
         if store.isSwitching {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
@@ -296,15 +324,50 @@ struct EngineSettings: View {
         }
         return store.switchPhase ?? "Switching…"
     }
+}
 
-    /// CrossOver knows its own bottles best — say so before someone reaches
-    /// for the tools below on a bottle CrossOver manages.
-    private var crossoverCard: some View {
+/// A switch that failed after applying its choice has no pending change
+/// left to hang the message on — the error still has to be said, and it is
+/// read back from the record so leaving the pane does not lose it.
+private struct EngineStandingFailure: View {
+    let store: EngineStore
+    let error: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(error)
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            if store.clientStartIsBlocked {
+                Text("Steam stays down until this is fixed.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                if store.clientStartIsBlocked {
+                    Button("Start Steam Anyway") { store.startClientAnyway() }
+                }
+                Button("Try Again") { store.retryProvisioning() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+}
+
+/// CrossOver knows its own bottles best — say so before someone reaches
+/// for the tools below on a bottle CrossOver manages.
+private struct CrossOverNotice: View {
+    let engine: Engine
+
+    var body: some View {
         Section {
             CaptionedRow(caption: "Its dependencies and Windows settings are CrossOver's to change.") {
-                LabeledContent("\(store.stagedEngine.description) manages this bottle") {
-                    Button("Open \(store.stagedEngine == .crossoverPreview ? "Preview" : "CrossOver")") {
-                        if let app = store.stagedEngine.crossoverApp {
+                LabeledContent("\(engine.description) manages this bottle") {
+                    Button("Open \(engine == .crossoverPreview ? "Preview" : "CrossOver")") {
+                        if let app = engine.crossoverApp {
                             NSWorkspace.shared.openApplication(at: app, configuration: .init())
                         }
                     }
@@ -312,22 +375,16 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    // MARK: - Synchronization
+// MARK: - Synchronization
 
-    /// Edits go through the store, which decides whether they reach a bottle.
-    private var msyncBinding: Binding<Bool> {
-        Binding(
-            get: { graphics.selection.msync },
-            set: { enabled in
-                var selection = graphics.selection
-                selection.msync = enabled
-                graphics.update(selection)
-            },
-        )
-    }
+/// The msync switch, a graphics selection like the renderer.
+private struct MsyncSection: View {
+    let graphics: GraphicsStore
+    let highlighted: SettingsAnchor?
 
-    private var msyncSection: some View {
+    var body: some View {
         Section {
             Toggle(isOn: msyncBinding) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -345,31 +402,48 @@ struct EngineSettings: View {
         }
     }
 
-    // MARK: - Windows
+    /// Edits go through the store, which decides whether they reach a bottle.
+    private var msyncBinding: Binding<Bool> {
+        Binding(
+            get: { graphics.selection.msync },
+            set: { enabled in
+                var selection = graphics.selection
+                selection.msync = enabled
+                graphics.update(selection)
+            },
+        )
+    }
+}
 
-    private var windowsSection: some View {
+// MARK: - Windows
+
+/// The bottle level of the config hierarchy: the defaults every Dormison game
+/// starts from, each row writing its own key as it changes.
+private struct BottleDefaultsSection: View {
+    let shaders: ShaderStore
+    let highlighted: SettingsAnchor?
+
+    @State private var hud = GameConfig.hud(bottle: SteamBottle.name).value
+    @State private var fps = GameConfig.fps(bottle: SteamBottle.name).value
+    @State private var cursorConfine = GameConfig.cursorConfine(bottle: SteamBottle.name).value
+    @State private var unifiedMemory = GameConfig.unifiedMemory(bottle: SteamBottle.name).value
+    @State private var avx = GameConfig.avx(bottle: SteamBottle.name).value
+    @State private var largeAddressAware = GameConfig
+        .largeAddressAware(bottle: SteamBottle.name).value
+
+    var body: some View {
         Section {
-            CaptionedRow(caption: "A resizable window scales the picture to fit. The game keeps drawing at its own size.") {
-                Picker("Resizable windows", selection: $windowTreatment) {
-                    ForEach(WindowTreatment.allCases, id: \.self) { treatment in
-                        Text(treatment.label).tag(treatment)
-                    }
-                }
-            }
-            .onChange(of: windowTreatment) { _, treatment in
-                GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                    $0.windows = treatment
-                }
-            }
-            .highlightable(.engineWindows, highlighted: highlighted)
-            UpscalerPicker(shaders: shaders, selection: upscalerBinding)
+            ResizableWindowsRow()
+                .highlightable(.engineWindows, highlighted: highlighted)
+            BottleUpscalerRow(shaders: shaders)
                 .highlightable(.engineUpscaler, highlighted: highlighted)
-            FinalFilterPicker(selection: filterBinding)
+            BottleFinalFilterRow()
                 .highlightable(.engineFilter, highlighted: highlighted)
-            mousePicker
-            tuningPicker
-            retinaToggle
-            modesetToggle
+            MouseCurveRow()
+                .highlightable(.engineMouse, highlighted: highlighted)
+            PerformanceTuningRow()
+            RetinaToggle()
+            ModesetToggle()
             bottleSwitch(
                 "Frame rate counter",
                 detail: "One number at the top right of the game's window. "
@@ -437,44 +511,36 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    /// The prefix's HiDPI switch. It has no per-game rung: Wine reads it with
-    /// no app key so that the DPI and the monitor sizes are one answer for
-    /// every process in the prefix.
-    private var retinaToggle: some View {
-        Toggle(isOn: $retina) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Draw at full resolution")
-                Text("Games see a Retina display and draw at its full pixel size. "
-                    + "Sharper, and heavier on the GPU.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+/// How the bottle's games treat a resized window.
+private struct ResizableWindowsRow: View {
+    @State private var windowTreatment = GameConfig.windows(bottle: SteamBottle.name).value
+
+    var body: some View {
+        CaptionedRow(caption: "A resizable window scales the picture to fit. The game keeps drawing at its own size.") {
+            Picker("Resizable windows", selection: $windowTreatment) {
+                ForEach(WindowTreatment.allCases, id: \.self) { treatment in
+                    Text(treatment.label).tag(treatment)
+                }
             }
         }
-        .onChange(of: retina) { _, value in
+        .onChange(of: windowTreatment) { _, treatment in
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.retina = value
+                $0.windows = treatment
             }
         }
     }
+}
 
-    private var modesetToggle: some View {
-        Toggle(isOn: $emulateModeset) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Fake display-mode changes")
-                Text("A game that switches the screen's resolution gets the switch "
-                    + "faked and its picture in a window instead.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .onChange(of: emulateModeset) { _, value in
-            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.emulateModeset = value
-            }
-        }
+/// The bottle's upscaler, chosen from the installed shader packages.
+private struct BottleUpscalerRow: View {
+    let shaders: ShaderStore
+
+    @State private var upscaler: String? = GameConfig.upscaler(bottle: SteamBottle.name).value
+
+    var body: some View {
+        UpscalerPicker(shaders: shaders, selection: upscalerBinding)
     }
 
     /// The bottle level has no inherit entry, so a `nil` from the picker
@@ -491,6 +557,15 @@ struct EngineSettings: View {
             },
         )
     }
+}
+
+/// The bottle's final filter, written when it differs from the one shown.
+private struct BottleFinalFilterRow: View {
+    @State private var finalFilter: FinalFilter? = GameConfig.filter(bottle: SteamBottle.name).value
+
+    var body: some View {
+        FinalFilterPicker(selection: filterBinding)
+    }
 
     private var filterBinding: Binding<FinalFilter?> {
         Binding(
@@ -504,8 +579,33 @@ struct EngineSettings: View {
             },
         )
     }
+}
 
-    private var tuningPicker: some View {
+/// The pointer curve a game gets while it controls the mouse.
+private struct MouseCurveRow: View {
+    @State private var mouseCurve = GameConfig.mouse(bottle: SteamBottle.name).value
+
+    var body: some View {
+        CaptionedRow(caption: "Linear removes acceleration while a game controls the mouse.") {
+            Picker("Mouse", selection: $mouseCurve) {
+                ForEach(MouseCurve.allCases, id: \.self) { curve in
+                    Text(curve.label).tag(curve)
+                }
+            }
+        }
+        .onChange(of: mouseCurve) { _, curve in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.mouse = curve
+            }
+        }
+    }
+}
+
+/// The bottle's thread-wait tuning.
+private struct PerformanceTuningRow: View {
+    @State private var tuning = GameConfig.tuning(bottle: SteamBottle.name).value
+
+    var body: some View {
         CaptionedRow(caption: "Experimental shortens the waits between a game's threads, which can raise frame rates and smooth stutter. Applies from a game's next launch.") {
             Picker("Performance tuning", selection: $tuning) {
                 ForEach(PerformanceTuning.allCases, id: \.self) { tuning in
@@ -519,42 +619,70 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    private var mousePicker: some View {
-        CaptionedRow(caption: "Linear removes acceleration while a game controls the mouse.") {
-            Picker("Mouse", selection: $mouseCurve) {
-                ForEach(MouseCurve.allCases, id: \.self) { curve in
-                    Text(curve.label).tag(curve)
-                }
+/// The prefix's HiDPI switch. It has no per-game rung: Wine reads it with
+/// no app key so that the DPI and the monitor sizes are one answer for
+/// every process in the prefix.
+private struct RetinaToggle: View {
+    @State private var retina = GameConfig.retina(bottle: SteamBottle.name).value
+
+    var body: some View {
+        Toggle(isOn: $retina) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Draw at full resolution")
+                Text("Games see a Retina display and draw at its full pixel size. "
+                    + "Sharper, and heavier on the GPU.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onChange(of: mouseCurve) { _, curve in
+        .onChange(of: retina) { _, value in
             GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
-                $0.mouse = curve
+                $0.retina = value
             }
         }
-        .highlightable(.engineMouse, highlighted: highlighted)
     }
+}
 
-    // MARK: - Dependencies
+/// The switch that turns a game's display-mode changes into a window.
+private struct ModesetToggle: View {
+    @State private var emulateModeset = GameConfig.emulateModeset(bottle: SteamBottle.name).value
 
-    private var dependenciesSection: some View {
+    var body: some View {
+        Toggle(isOn: $emulateModeset) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Fake display-mode changes")
+                Text("A game that switches the screen's resolution gets the switch "
+                    + "faked and its picture in a window instead.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: emulateModeset) { _, value in
+            GameConfig.update(bottle: SteamBottle.name, prefix: SteamBottle.root) {
+                $0.emulateModeset = value
+            }
+        }
+    }
+}
+
+// MARK: - Dependencies
+
+/// "Game dependencies": what a new bottle downloads, and one row per
+/// dependency the current bottle can install.
+private struct DependenciesSection: View {
+    let store: EngineStore
+    let compatibility: CompatibilityStore
+    let highlighted: SettingsAnchor?
+
+    var body: some View {
         Section {
-            Toggle(isOn: $downloadEverything) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Download everything")
-                    Text("A new bottle gets the fonts and legacy runtimes too, not the "
-                        + "required ones alone.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .onChange(of: downloadEverything) { _, value in
-                BottleDependencies.installsEverything = value
-            }
+            DownloadEverythingToggle()
             ForEach(compatibility.rows) { row in
-                dependencyRow(row)
+                DependencyInstallRow(row: row, store: store, compatibility: compatibility)
             }
         } header: {
             Text("Game dependencies")
@@ -570,8 +698,36 @@ struct EngineSettings: View {
         }
         .highlightable(.engineDependencies, highlighted: highlighted)
     }
+}
 
-    private func dependencyRow(_ row: CompatibilityStore.DependencyRow) -> some View {
+/// Whether a new bottle gets the optional dependencies with the required ones.
+private struct DownloadEverythingToggle: View {
+    @State private var downloadEverything = BottleDependencies.installsEverything
+
+    var body: some View {
+        Toggle(isOn: $downloadEverything) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Download everything")
+                Text("A new bottle gets the fonts and legacy runtimes too, not the "
+                    + "required ones alone.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: downloadEverything) { _, value in
+            BottleDependencies.installsEverything = value
+        }
+    }
+}
+
+/// One dependency: its state in the bottle, and the button that installs it.
+private struct DependencyInstallRow: View {
+    let row: CompatibilityStore.DependencyRow
+    let store: EngineStore
+    let compatibility: CompatibilityStore
+
+    var body: some View {
         HStack(alignment: .center, spacing: Theme.Space.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.dependency.name)
@@ -602,45 +758,21 @@ struct EngineSettings: View {
             }
         }
     }
+}
 
-    // MARK: - DLL overrides
+// MARK: - DLL overrides
 
-    private var overridesSection: some View {
+/// "DLL overrides": the bottle's overrides, and the row that adds one.
+private struct DLLOverridesSection: View {
+    let compatibility: CompatibilityStore
+    let highlighted: SettingsAnchor?
+
+    var body: some View {
         Section {
             ForEach(compatibility.overrides) { override in
-                HStack(spacing: Theme.Space.md) {
-                    Text(override.dll)
-                        .font(.system(.body, design: .monospaced))
-                    Spacer()
-                    Text(override.mode)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        compatibility.removeOverride(override)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Remove the \(override.dll) override")
-                }
+                DLLOverrideRow(override: override, compatibility: compatibility)
             }
-            HStack(spacing: Theme.Space.md) {
-                TextField("DLL name, like dinput8", text: $newOverrideDLL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                Picker("", selection: $newOverrideMode) {
-                    ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
-                        Text(mode).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 140)
-                Button("Add") {
-                    compatibility.setOverride(dll: newOverrideDLL, mode: newOverrideMode)
-                    newOverrideDLL = ""
-                }
-                .disabled(newOverrideDLL.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            NewDLLOverrideRow(compatibility: compatibility)
             if let error = compatibility.overrideError {
                 Text(error).font(.caption).foregroundStyle(.orange)
             }
@@ -651,43 +783,122 @@ struct EngineSettings: View {
         }
         .highlightable(.engineOverrides, highlighted: highlighted)
     }
+}
 
-    // MARK: - Advanced
+/// One override: the DLL, its mode, and the button that removes it.
+private struct DLLOverrideRow: View {
+    let override: BottleDependencies.Override
+    let compatibility: CompatibilityStore
 
-    private var advancedSection: some View {
+    var body: some View {
+        HStack(spacing: Theme.Space.md) {
+            Text(override.dll)
+                .font(.system(.body, design: .monospaced))
+            Spacer()
+            Text(override.mode)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button {
+                compatibility.removeOverride(override)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Remove the \(override.dll) override")
+        }
+    }
+}
+
+/// The draft of an override: a DLL name, a mode, and Add.
+private struct NewDLLOverrideRow: View {
+    let compatibility: CompatibilityStore
+
+    @State private var newOverrideDLL = ""
+    @State private var newOverrideMode = BottleDependencies.overrideModes[0]
+
+    var body: some View {
+        HStack(spacing: Theme.Space.md) {
+            TextField("DLL name, like dinput8", text: $newOverrideDLL)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+            Picker("", selection: $newOverrideMode) {
+                ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
+                    Text(mode).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 140)
+            Button("Add") {
+                compatibility.setOverride(dll: newOverrideDLL, mode: newOverrideMode)
+                newOverrideDLL = ""
+            }
+            .disabled(newOverrideDLL.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+}
+
+// MARK: - Advanced
+
+/// "Troubleshooting": Wine's configuration window, the verbose log, and Repair.
+private struct TroubleshootingSection: View {
+    let store: EngineStore
+    let compatibility: CompatibilityStore
+    let provisioner: Provisioner
+    let highlighted: SettingsAnchor?
+
+    var body: some View {
         Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Windows settings")
-                    Text("Windows version, drives, audio, and game overrides.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Open…") { compatibility.openWineConfiguration() }
-                    .disabled(store.isSwitching)
-            }
-            .highlightable(.engineWinecfg, highlighted: highlighted)
-            Toggle(isOn: $wineDiagnostics) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Log every library a game loads")
-                    Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This adds every exception and every library load. The log then grows fast.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
-            .onChange(of: wineDiagnostics) { _, enabled in
-                WineLog.setDiagnosing(enabled)
-            }
-            .highlightable(.engineWineDiagnostics, highlighted: highlighted)
+            WineConfigurationRow(store: store, compatibility: compatibility)
+                .highlightable(.engineWinecfg, highlighted: highlighted)
+            WineDiagnosticsToggle()
+                .highlightable(.engineWineDiagnostics, highlighted: highlighted)
             RepairRow(provisioner: provisioner, highlighted: highlighted)
                 .disabled(store.isSwitching)
         } header: {
             Text("Troubleshooting")
         } footer: {
             Text("Repair checks the engine, the bottle, and Steam. Your games and saves stay. Restart Steam to apply a logging change.")
+        }
+    }
+}
+
+/// The way into winecfg for the current bottle.
+private struct WineConfigurationRow: View {
+    let store: EngineStore
+    let compatibility: CompatibilityStore
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Windows settings")
+                Text("Windows version, drives, audio, and game overrides.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Open…") { compatibility.openWineConfiguration() }
+                .disabled(store.isSwitching)
+        }
+    }
+}
+
+/// The Wine log's verbose mode: every exception and every library load.
+private struct WineDiagnosticsToggle: View {
+    @State private var wineDiagnostics = WineLog.isDiagnosing
+
+    var body: some View {
+        Toggle(isOn: $wineDiagnostics) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Log every library a game loads")
+                Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This adds every exception and every library load. The log then grows fast.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
+        .onChange(of: wineDiagnostics) { _, enabled in
+            WineLog.setDiagnosing(enabled)
         }
     }
 }
