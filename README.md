@@ -205,7 +205,7 @@ sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
 sevo engine list|install [--file TARBALL]|use
 sevo update
-sevo bottle config <key> [value]
+sevo bottle list|config <key> [value]|deps [install ID]
 sevo shaders list|install|remove
 sevo storage [--games]
 sevo nwjs

@@ -1117,7 +1117,7 @@ struct BottleCommand: AsyncParsableCommand {
         discussion: "windows takes \(WindowTreatment.help).",
     )
 
-    @Argument(help: "list | config") var verb: String = "list"
+    @Argument(help: "list | config | deps [install <id>]") var verb: String = "list"
     @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | retina | emulate-modeset | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
@@ -1130,10 +1130,48 @@ struct BottleCommand: AsyncParsableCommand {
             try await list()
         case "config":
             try await config()
+        case "deps":
+            try await dependencies()
         default:
-            Sevo.printError("bottle \(verb): unknown verb (list | config)")
+            Sevo.printError("bottle \(verb): unknown verb (list | config | deps)")
             throw SevoExit.badInvocation
         }
+    }
+
+    /// The fonts and runtimes Settings › Engine lists for the bottle: what is
+    /// installed, and `deps install <id>` for one that is missing.
+    private func dependencies() async throws {
+        guard key == "install" else {
+            let rows = BottleDependencies.catalog.map { dependency in
+                (dependency, BottleDependencies.isInstalled(dependency))
+            }
+            if asJSON {
+                print(Sevo.json(rows.map { dependency, installed in
+                    ["id": dependency.id, "name": dependency.name, "required": dependency.required,
+                     "installed": installed, "download": dependency.download]
+                }))
+                return
+            }
+            for (dependency, installed) in rows {
+                let state = installed ? "installed" : "missing, \(dependency.download)"
+                let need = dependency.required ? "required" : "optional"
+                print("\(installed ? "✔" : "✖") \(dependency.id)  \(dependency.name) (\(need), \(state))")
+            }
+            return
+        }
+        guard let id = value, BottleDependencies.catalog.contains(where: { $0.id == id }) else {
+            let ids = BottleDependencies.catalog.map(\.id).joined(separator: " | ")
+            Sevo.printError("bottle deps install: name one of \(ids)")
+            throw SevoExit.badInvocation
+        }
+        let failure = await BottleDependencies.install(id) { phase in
+            FileHandle.standardError.write(Data("\(phase)\n".utf8))
+        }
+        if let failure {
+            Sevo.printError("bottle deps install \(id): \(failure)")
+            throw SevoExit.failed
+        }
+        print("\(id) installed in bottle '\(SteamBottle.name)'")
     }
 
     /// Reads or writes the graphics knobs the app's Settings › Graphics pane
