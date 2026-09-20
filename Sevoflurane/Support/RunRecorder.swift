@@ -29,6 +29,12 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     var arch: Int? = nil
     /// The driver's window treatment for this game (``WindowTreatment``).
     var windows: String
+    /// The performance tuning in force (``PerformanceTuning``): what makes two
+    /// runs of one game comparable, or not.
+    var tuning: String? = nil
+    /// The upscaler in force, an ``UpscalerChoice`` raw value or a shader
+    /// package's name; its cost is part of any frame rate read beside it.
+    var upscaler: String? = nil
     var msync: Bool
     /// The D3DMetal toolkit version in force, when there is one.
     var d3dmetal: String? = nil
@@ -191,6 +197,8 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     /// long it lasted and how it ended.
     var summary: String {
         var parts = [name.map { "\($0) (\(appid))" } ?? "app \(appid)", engine, renderer]
+        if tuning == PerformanceTuning.experimental.rawValue { parts.append("experimental tuning") }
+        if let upscaler, upscaler != UpscalerChoice.off.rawValue { parts.append("upscaler \(upscaler)") }
         if let durationSeconds { parts.append(Self.duration(durationSeconds)) }
         parts.append(exitSummary)
         return parts.joined(separator: " · ")
@@ -636,6 +644,8 @@ final nonisolated class RunRecorder {
             renderer: selection.renderer.rawValue,
             runner: values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
+            tuning: GameConfig.tuning(bottle: SteamBottle.name, game: appID).value.rawValue,
+            upscaler: GameConfig.upscaler(bottle: SteamBottle.name, game: appID).value,
             msync: selection.msync,
             d3dmetal: selection.d3dMetalVersion,
             macos: Self.macOSVersion,
