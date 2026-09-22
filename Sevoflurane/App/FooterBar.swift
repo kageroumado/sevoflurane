@@ -12,44 +12,40 @@ struct FooterBar: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
 
-    /// The label box every capsule in the bar is built around. A glass capsule sizes to its label,
-    /// so the label is where sameness has to be imposed: the glyph buttons draw their symbol in
-    /// this box and the two text chips are pinned to its height, which is what keeps the status
-    /// chip from sitting a few points shorter than the gear beside it.
-    static let labelBox: CGFloat = 16
-
     var body: some View {
-        // One `GlassEffectContainer` over the whole bar at one control size: glass sampled per
-        // control picks up whatever sits behind that spot, which is what made the status chips
-        // and the glyph buttons look like different materials.
-        // Tight spacing and small controls, because the width is the binding constraint: five
-        // capsules share a 320-point popover and two of them grow on hover into a switch and its
-        // name. Loosening either one costs a label its last characters.
-        GlassEffectContainer(spacing: Theme.Space.xs) {
+        // One `GlassEffectContainer` over the whole bar: glass sampled per control picks up
+        // whatever sits behind that spot, which is what made the chips and the glyph buttons look
+        // like different materials. Zero blend distance, because the controls sit closer together
+        // than any nonzero spacing allows before their glass pools into one shape.
+        // Tight spacing, because the width is the binding constraint: five controls share a
+        // 320-point popover and two of them grow on hover into a switch and its name. Loosening
+        // it costs a label its last characters.
+        GlassEffectContainer(spacing: 0) {
             HStack(spacing: Theme.Space.xs) {
                 StatusChip(host: host, supervisor: supervisor)
-                if case .gaveUp = supervisor.health {
+                if hasGivenUp {
                     Button("Recovery…") {
                         NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
                     }
-                    .font(.system(size: 11))
-                    .fixedSize()
+                    .buttonStyle(.footerChip)
                     .help("Open Settings › Recovery: restart, repair, or report")
                 }
                 DebugChip()
-                UpdateChip()
+                // The resting version gives its place to Recovery…: the bar holds one of the two,
+                // and while the client is down the way back up is the one that matters.
+                UpdateChip(showsRestingVersion: !hasGivenUp)
                 Spacer(minLength: 0)
                 actionsMenu
                 settingsButton
-                Button { NSApplication.shared.terminate(nil) } label: { utilityIcon("xmark") }
+                FooterIconButton("Quit", systemImage: "xmark") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
                     .help("Quit Sevoflurane and close Steam")
-                    .accessibilityLabel("Quit")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.capsule)
-            .controlSize(.small)
         }
+    }
+
+    private var hasGivenUp: Bool {
+        if case .gaveUp = supervisor.health { true } else { false }
     }
 
     /// The gear, wearing a dot when the release feed has an engine or a renderer version this Mac
@@ -57,28 +53,26 @@ struct FooterBar: View {
     /// is fetched from Settings.
     private var settingsButton: some View {
         let summary = UpdateSummary.shared.summary
-        return Button {
+        return FooterIconButton(summary.map { "Settings — \($0)" } ?? "Settings", systemImage: "gearshape") {
             NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
-        } label: { utilityIcon("gearshape") }
-            .help(summary ?? "Settings")
-            .accessibilityLabel(summary.map { "Settings — \($0)" } ?? "Settings")
-            .overlay(alignment: .topTrailing) {
-                if summary != nil {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 6, height: 6)
-                        .offset(x: 2, y: -2)
-                        .allowsHitTesting(false)
-                }
+        }
+        .help(summary ?? "Settings")
+        .overlay(alignment: .topTrailing) {
+            if summary != nil {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 6, height: 6)
+                    .allowsHitTesting(false)
             }
+        }
     }
 
     /// `Menu` draws its own background and sizes to its label, so however it is styled it comes
-    /// out narrower and darker than the `.glass` buttons beside it. So it draws nothing: the
-    /// visible control is a real `.glass` button — a sibling of the other two, identical by
+    /// out narrower and darker than the glass circles beside it. So it draws nothing: the visible
+    /// control is a real `FooterIconButton` — a sibling of the other two, identical by
     /// construction — and the menu is a transparent layer over it that takes the click.
     private var actionsMenu: some View {
-        Button {} label: { utilityIcon("ellipsis") }
+        FooterIconButton("More actions", systemImage: "ellipsis") {}
             .allowsHitTesting(false)
             .overlay {
                 Menu {
@@ -117,7 +111,6 @@ struct FooterBar: View {
                 .menuIndicator(.hidden)
             }
             .help("Reload, restart, and the event log")
-            .accessibilityLabel("More actions")
     }
 
     /// The playtest switch, and — while a client is already up under the old environment — the
@@ -147,13 +140,6 @@ struct FooterBar: View {
         case .healthy, .degraded, .waitingForSignIn: true
         case .starting, .launching, .restarting, .gaveUp, .paused: false
         }
-    }
-
-    /// A glyph for the bottom-bar utility controls, pinned to the shared label box so every glass
-    /// capsule comes out the same size regardless of glyph proportions.
-    private func utilityIcon(_ name: String) -> some View {
-        Image(systemName: name)
-            .frame(width: Self.labelBox, height: Self.labelBox)
     }
 }
 
@@ -215,7 +201,6 @@ private struct StatusChip: View {
         // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
         // the width its label asks for and the bar is sized to afford it.
         .fixedSize()
-        .frame(height: FooterBar.labelBox)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
@@ -237,7 +222,6 @@ private struct DebugChip: View {
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 .fixedSize()
-                .frame(height: FooterBar.labelBox)
                 .help(debug.summary)
         }
     }
@@ -249,6 +233,7 @@ private struct DebugChip: View {
 /// just landed (click acknowledges), and at rest flips into the Auto-Update switch on hover so the
 /// setting costs no footer space.
 private struct UpdateChip: View {
+    let showsRestingVersion: Bool
     @AppStorage("autoUpdate") private var autoUpdate = true
     @State private var isHovered = false
 
@@ -266,11 +251,9 @@ private struct UpdateChip: View {
                 updates.dismissFailure()
             } label: {
                 Label("Update failed", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
                     .foregroundStyle(Theme.onAccent)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
+            .buttonStyle(.footerChipProminent)
             .help(message)
         case .idle:
             idleChip(updates)
@@ -282,22 +265,18 @@ private struct UpdateChip: View {
         if let justUpdated = updates.justUpdatedVersion {
             Button { updates.acknowledgeUpdate() } label: {
                 Label("v\(justUpdated)", systemImage: "checkmark")
-                    .font(.caption)
                     .foregroundStyle(Theme.onAccent)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
+            .buttonStyle(.footerChipProminent)
             .help("Updated to version \(justUpdated)")
         } else if let available = updates.availableVersion ?? updates.pendingVersion {
             Button { Task { await updates.updateNow() } } label: {
                 Label("v\(available)", systemImage: "arrow.down.circle.fill")
-                    .font(.caption)
                     .foregroundStyle(Theme.onAccent)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.small)
+            .buttonStyle(.footerChipProminent)
             .help("Click to install version \(available)")
-        } else {
+        } else if showsRestingVersion {
             Button {
                 autoUpdate.toggle()
                 updates.setAutoInstall(autoUpdate)
@@ -312,11 +291,9 @@ private struct UpdateChip: View {
                         Text(Self.versionString)
                     }
                 }
-                .font(.caption)
                 .foregroundStyle(.secondary)
-                .fixedSize()
-                .frame(height: FooterBar.labelBox)
             }
+            .buttonStyle(.footerChip)
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
             }
