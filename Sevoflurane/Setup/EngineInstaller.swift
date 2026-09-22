@@ -14,10 +14,10 @@ import Foundation
 /// (``bundledTarball(resources:beside:)``), or the tree `package-engine.sh`
 /// left behind for whoever built it.
 nonisolated enum EngineInstaller {
-    /// Fetches the manifest's stable release, or reports why the machine
-    /// can't use it.
+    /// Fetches the release this Mac's channel names, or reports why the
+    /// machine can't use it.
     static func stableRelease() async throws -> EngineManifest.Release {
-        guard let release = try await EngineManifest.fetch().stable else {
+        guard let release = try await EngineManifest.fetch().release() else {
             throw InstallError("engine manifest has no stable channel")
         }
         return release

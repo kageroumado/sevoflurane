@@ -230,11 +230,14 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         }
     }
 
-    /// The release number of a managed engine, `11` for `dormison-r11`; nil for
-    /// CrossOver and for a managed directory that is not `dormison-r<N>`.
+    /// The release number of a managed engine, `11` for `dormison-r11` and for
+    /// the beta `dormison-b11` that precedes it; nil for CrossOver and for a
+    /// managed directory named another way.
     var managedRelease: Int? {
-        guard case let .managed(version) = self, version.hasPrefix("dormison-r") else { return nil }
-        return Int(version.dropFirst("dormison-r".count))
+        guard case let .managed(version) = self, version.hasPrefix("dormison-") else { return nil }
+        let tag = version.dropFirst("dormison-".count)
+        guard let kind = tag.first, kind == "r" || kind == "b" else { return nil }
+        return Int(tag.dropFirst())
     }
 
     /// Whether winebus keeps its SDL backend. From r11 the SDL bus polls instead

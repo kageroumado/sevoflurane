@@ -39,14 +39,17 @@ final class UpdateSummary {
         }
     }
 
-    /// The feed's stable engine, named the way the picker names it, when
-    /// every managed engine on this Mac is older than it. A Mac with none at
-    /// all is not told: the engine picker already offers to fetch one.
-    static func newerEngine(in manifest: EngineManifest, installed: [String]) -> String? {
-        guard let stable = manifest.stable, !installed.isEmpty,
-              isNewer(stable.version, thanAll: installed)
+    /// The feed's engine on this Mac's channel, named the way the picker
+    /// names it, when every managed engine on this Mac is older than it. A
+    /// Mac with none at all is not told: the engine picker already offers to
+    /// fetch one.
+    static func newerEngine(
+        in manifest: EngineManifest, installed: [String], channel: EngineChannel = Preferences.engineChannel,
+    ) -> String? {
+        guard let release = manifest.release(for: channel), !installed.isEmpty,
+              isNewer(release.version, thanAll: installed)
         else { return nil }
-        return Engine.managedDisplayName(stable.version)
+        return Engine.managedDisplayName(release.version)
     }
 
     /// Every renderer component the feed names a version of that beats the

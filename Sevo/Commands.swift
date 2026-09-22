@@ -424,11 +424,25 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines: Dormison releases and CrossOver.",
     )
 
-    @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | check-manifest") var verb: String = "list"
+    @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | channel [stable|beta] | check-manifest")
+    var verb: String = "list"
     @Argument(
-        help: "For use: the engine to switch to (a name from `sevo engine list`); for check-manifest: the engine.json to check.",
+        help: "For use: the engine to switch to (a name from `sevo engine list`); for channel: stable or beta; for check-manifest: the engine.json to check.",
     )
     var target: String?
+    @Option(
+        name: .customLong("channel"),
+        help: "For install: take this channel's release instead of the Mac's setting (stable | beta).",
+    ) var channelName: String?
+
+    private func channel() throws -> EngineChannel? {
+        guard let channelName else { return nil }
+        guard let channel = EngineChannel(rawValue: channelName) else {
+            Sevo.printError("--channel \(channelName): stable or beta")
+            throw SevoExit.badInvocation
+        }
+        return channel
+    }
     @Option(
         name: .customLong("sig"),
         help: "For check-manifest: the engine.json.sig to verify against the pinned key.",
@@ -473,11 +487,29 @@ struct EngineCommand: AsyncParsableCommand {
             try await addD3DMetal()
         case "use":
             try await use()
+        case "channel":
+            try setChannel()
         case "check-manifest":
             try checkManifest()
         default:
-            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use | check-manifest)")
+            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use | channel | check-manifest)")
             throw SevoExit.badInvocation
+        }
+    }
+
+    /// Reads or sets which channel this Mac takes engines from. The next
+    /// install and the next update check read it; nothing already installed
+    /// changes.
+    private func setChannel() throws {
+        if let target {
+            guard let channel = EngineChannel(rawValue: target) else {
+                Sevo.printError("engine channel \(target): stable or beta")
+                throw SevoExit.badInvocation
+            }
+            Preferences.engineChannel = channel
+            print("engine channel: \(channel.rawValue) — the next install and update check take it")
+        } else {
+            print("engine channel: \(Preferences.engineChannel.rawValue)")
         }
     }
 
@@ -656,7 +688,7 @@ struct EngineCommand: AsyncParsableCommand {
         } ?? EngineManifest.url
         do {
             let fetched = try await EngineManifest.fetch(from: manifestURL)
-            guard let release = fetched.stable else {
+            guard let release = fetched.release(for: try channel() ?? Preferences.engineChannel) else {
                 Sevo.printError("manifest has no stable channel")
                 throw SevoExit.failed
             }

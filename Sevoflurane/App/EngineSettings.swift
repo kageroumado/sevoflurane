@@ -77,6 +77,7 @@ private struct EngineSelectionSection: View {
             if bottleChoice == Self.newBottleTag {
                 NewBottleField(store: store, bottleChoice: $bottleChoice)
             }
+            EngineChannelRow(store: store)
             EngineUpdateRow(store: store)
             EngineFileRow(store: store, provisioner: provisioner, bottleChoice: $bottleChoice)
             if store.hasChanges || store.isSwitching {
@@ -213,6 +214,32 @@ private struct EngineUpdateRow: View {
                     .disabled(store.isSwitching)
             }
         }
+    }
+}
+
+/// Which of the feed's channels this Mac takes engines from: releases, or
+/// the betas that precede them. A change reaches the next update check and
+/// the next install; the engine already running stays.
+private struct EngineChannelRow: View {
+    let store: EngineStore
+
+    var body: some View {
+        Picker(selection: Binding(get: { store.channel }, set: { store.channel = $0 })) {
+            ForEach(EngineChannel.allCases, id: \.self) { channel in
+                Text(channel.label).tag(channel)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Engine updates")
+                Text(store.channel == .beta
+                    ? "Betas arrive before releases and have been run on fewer Macs."
+                    : "Releases only.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .pickerStyle(.menu)
+        .disabled(store.isSwitching)
     }
 }
 

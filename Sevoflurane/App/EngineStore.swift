@@ -141,13 +141,25 @@ final class EngineStore {
     /// signed fetch over the network, and the stable release does not move
     /// while Settings is open. Off to the side of ``refresh()``, which a
     /// switch awaits and which must not wait on a network that may be gone.
+    /// Which channel the feed is read on. Changing it drops the release
+    /// already fetched and asks the feed again.
+    var channel: EngineChannel {
+        get { Preferences.engineChannel }
+        set {
+            guard newValue != Preferences.engineChannel else { return }
+            Preferences.engineChannel = newValue
+            stableRelease = nil
+            refreshStableRelease()
+        }
+    }
+
     private func refreshStableRelease() {
         guard !environment.isSimulation, stableRelease == nil, !isLookingUpDefault else {
             return
         }
         isLookingUpDefault = true
         Task(name: "Look up the default engine") { [weak self] in
-            let release = try? await EngineManifest.fetch().stable
+            let release = try? await EngineManifest.fetch().release()
             guard let self else { return }
             stableRelease = release
             isLookingUpDefault = false

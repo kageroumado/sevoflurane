@@ -51,6 +51,31 @@ nonisolated extension Preferences {
     }
 }
 
+// MARK: - Engine channel
+
+/// Which of the manifest's channels this Mac takes engines from.
+nonisolated enum EngineChannel: String, CaseIterable, Sendable {
+    /// Releases: what everyone gets.
+    case stable
+    /// Prereleases: what is being tried before it becomes a release. A Mac on
+    /// beta falls back to stable when the manifest has no beta.
+    case beta
+
+    var label: String {
+        switch self {
+        case .stable: "Release"
+        case .beta: "Beta"
+        }
+    }
+}
+
+nonisolated extension Preferences {
+    static var engineChannel: EngineChannel {
+        get { shared.string(forKey: "engineChannel").flatMap(EngineChannel.init(rawValue:)) ?? .stable }
+        set { shared.set(newValue.rawValue, forKey: "engineChannel") }
+    }
+}
+
 // MARK: - Updates
 
 nonisolated extension Preferences {

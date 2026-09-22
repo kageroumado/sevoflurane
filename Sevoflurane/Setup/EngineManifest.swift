@@ -83,6 +83,12 @@ nonisolated struct EngineManifest: Decodable, Sendable {
         channels["stable"]
     }
 
+    /// The release a Mac on `channel` takes: the channel's own, or stable
+    /// when the channel is empty, which is how beta reads between betas.
+    func release(for channel: EngineChannel = Preferences.engineChannel) -> Release? {
+        channels[channel.rawValue] ?? stable
+    }
+
     /// The release manifest, verified against ``EngineSignature``'s key
     /// before it is decoded; a manifest without a valid `engine.json.sig`
     /// is refused. An explicit or override URL is the operator's own and is
