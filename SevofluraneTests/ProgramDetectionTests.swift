@@ -119,6 +119,36 @@ struct ProgramDetectionTests {
         #expect(ProgramDetection.classify(fixture).kind == ProgramKind.program)
     }
 
+    /// The fixture whose manifest asks for administrator and says nothing else.
+    private var adminFixture: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .appending(path: "Fixtures/admin.exe")
+    }
+
+    @Test
+    func `asking for administrator alone is not an installer`() throws {
+        // Genshin Impact's manifest asks for it for its anti-cheat driver; the
+        // verdict used to call the game an installer and grey out Quick Launch.
+        let tree = try Tree()
+        let exe = tree.root.appending(path: "GenshinImpact.exe")
+        try FileManager.default.copyItem(at: adminFixture, to: exe)
+        let verdict = ProgramDetection.classify(exe)
+        #expect(verdict.kind == ProgramKind.program)
+        #expect(verdict.reasons.isEmpty)
+    }
+
+    @Test
+    func `asking for administrator backs up another installer signal`() throws {
+        let tree = try Tree()
+        try tree.file("payload.msi")
+        let exe = tree.root.appending(path: "start.exe")
+        try FileManager.default.copyItem(at: adminFixture, to: exe)
+        let verdict = ProgramDetection.classify(exe)
+        #expect(verdict.kind == ProgramKind.installer)
+        #expect(verdict.reasons == ["an .msi beside it", "it asks for administrator"])
+    }
+
     @Test
     func `the verdict reads as one sentence`() throws {
         let tree = try Tree()

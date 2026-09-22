@@ -6,8 +6,9 @@ import Foundation
 /// judged by what it leaves on disk, the other is kept and started again — and
 /// asking the user to classify their own download is asking them to know how
 /// this app works. The file says enough by itself: its name, the strings in
-/// its version resource, the privilege its manifest asks for, the installer
-/// toolkits' own markers, and what lies beside it in its folder.
+/// its version resource, the installer toolkits' own markers, and what lies
+/// beside it in its folder; the privilege its manifest asks for only backs
+/// those up.
 nonisolated enum ProgramDetection {
     /// A kind and the signals that chose it, so the panel can show its work.
     struct Verdict: Sendable, Equatable {
@@ -67,14 +68,19 @@ nonisolated enum ProgramDetection {
         if let described = versionSaysInstaller(info) {
             reasons.append("its version resource says \u{201C}\(described)\u{201D}")
         }
-        if info?.requestedExecutionLevel == "requireAdministrator" {
-            reasons.append("it asks for administrator")
-        }
         if let toolkit = toolkit(in: url) {
             reasons.append("built with \(toolkit)")
         }
         if let sibling = installerSibling(url) {
             reasons.append("\(sibling) beside it")
+        }
+        // Asking for administrator corroborates an installer; alone it names
+        // one only by coincidence. Games ask for it too — Genshin Impact's
+        // manifest says `requireAdministrator` for its anti-cheat driver, and
+        // the verdict turned a 30 GB game into "an installer" that "added
+        // nothing", with Quick Launch greyed out (2026-09-23).
+        if !reasons.isEmpty, info?.requestedExecutionLevel == "requireAdministrator" {
+            reasons.append("it asks for administrator")
         }
         return reasons
     }
