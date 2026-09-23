@@ -138,6 +138,7 @@ let package = Package(
                 "Sevoflurane/Support/Preferences.swift",
                 "Sevoflurane/Support/PresentStats.swift",
                 "Sevoflurane/Support/ProcessUsage.swift",
+                "Sevoflurane/Support/WineOrphans.swift",
                 "Sevoflurane/Support/ProgramDetection.swift",
                 "Sevoflurane/Support/Redaction.swift",
                 "Sevoflurane/Support/RendererVersions.swift",

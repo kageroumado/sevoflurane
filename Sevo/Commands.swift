@@ -19,7 +19,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, NWJSCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
-            RunsCommand.self, DiagCommand.self, DebugCommand.self,
+            RunsCommand.self, OrphansCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -2688,6 +2688,44 @@ struct DownloadsCommand: AsyncParsableCommand {
 }
 
 // MARK: - debug channels
+
+struct OrphansCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "orphans",
+        abstract: "Wine processes of Sevoflurane's engines whose wineserver is gone.",
+        discussion: """
+        A Wine process cannot do anything once its prefix's wineserver has died; one \
+        that does not notice stays parked until something ends it. The helper ends \
+        these on its own after two sightings a minute apart; --end does it now. Exit \
+        status is 1 when any were found and left running.
+        """,
+    )
+
+    @Flag(name: .customLong("end"), help: "End every one found (SIGKILL).") var end = false
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        let found = WineOrphans.find()
+        let ended = end ? WineOrphans.end(found) : []
+        if asJSON {
+            let rows = found.map { orphan -> [String: Any] in
+                ["pid": Int(orphan.pid), "prefix": orphan.prefix, "command": orphan.command,
+                 "executable": orphan.executable, "ended": ended.contains(orphan)]
+            }
+            print(Sevo.json(rows, pretty: true))
+        } else if found.isEmpty {
+            print("no orphaned Wine processes")
+        } else {
+            for (prefix, group) in Dictionary(grouping: found, by: \.prefix).sorted(by: { $0.key < $1.key }) {
+                print("\((prefix as NSString).abbreviatingWithTildeInPath) — \(group.count) without a wineserver")
+                for orphan in group.prefix(8) { print("    \(orphan.pid)  \(orphan.command)") }
+                if group.count > 8 { print("    … \(group.count - 8) more") }
+            }
+            print(end ? "ended \(ended.count)" : "end them with: sevo orphans --end")
+        }
+        if !found.isEmpty, !end { throw SevoExit.failed }
+    }
+}
 
 struct BenchmarkCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

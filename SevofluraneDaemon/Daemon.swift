@@ -15,6 +15,7 @@ final class Daemon {
     let app = AppLink()
     private var supervisor: BottleSupervisor!
     private var control: ControlServer!
+    private var orphanWatch: Task<Void, Never>?
 
     /// Answers false when another supervisor already holds the control port,
     /// in which case this process has nothing to do and should end.
@@ -61,7 +62,32 @@ final class Daemon {
             "daemon up (pid \(getpid())) — it owns the bottle from here",
         )
         supervisor.start()
+        watchForOrphans()
         return true
+    }
+
+    /// How often the engines' processes are checked for a dead wineserver. Two sightings in a
+    /// row end one, so an orphan lives at most twice this.
+    private static let orphanInterval: Duration = .seconds(60)
+
+    /// Ends Wine processes whose wineserver is gone, in any prefix the managed engines run:
+    /// the bottle's after a server crash, a harness's or a test's after it killed its server.
+    /// An engine with the dead-name watch ends its own; this is for the ones that cannot.
+    private func watchForOrphans() {
+        orphanWatch = Task(name: "Reap Wine orphans") {
+            var reaper = WineOrphanReaper()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.orphanInterval)
+                let found = await Task.detached(priority: .utility) { WineOrphans.find() }.value
+                let ended = WineOrphans.end(reaper.confirm(found))
+                guard !ended.isEmpty else { continue }
+                let prefixes = Set(ended.map(\.prefix)).sorted().joined(separator: ", ")
+                EventLog.shared.log(
+                    .supervisor,
+                    "ended \(ended.count) Wine process\(ended.count == 1 ? "" : "es") whose wineserver is gone (\(prefixes))",
+                )
+            }
+        }
     }
 
     private func snapshot(_ health: SupervisorHealth) -> SupervisorSnapshot {
