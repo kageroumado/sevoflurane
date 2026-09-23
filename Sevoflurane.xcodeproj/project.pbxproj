@@ -188,6 +188,7 @@
 				Support/SyntheticLoad.swift,
 				Support/WineChronicle.swift,
 				Web/BrowserViewChild.swift,
+				Web/PopupSparing.swift,
 				Web/SteamCompatBadge.swift,
 				Web/SteamDesktopChrome.swift,
 				Web/SteamMenuMirror.swift,

@@ -52,7 +52,13 @@ final class AppLinkServer {
             guard let appID = Int(Self.value(of: "appid", in: request.query)) else {
                 return .error(400, "pass ?appid=<steam app id>")
             }
-            host.launchGame(appID: appID)
+            // `option` answers Steam's launch-option question ahead of it.
+            if let option = Int(Self.value(of: "option", in: request.query)) {
+                host.launchOptionAnswers[appID] = option
+                host.launchGame(appID: appID, forgettingChoice: true)
+            } else {
+                host.launchGame(appID: appID)
+            }
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/state"):
             guard let snapshot = try? JSONDecoder()

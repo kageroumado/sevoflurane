@@ -273,12 +273,15 @@ actor SteamBridge {
     ///
     /// Answers the names it hid, or nil when the bridge holds no connection
     /// — the caller's cue that no sweep happened.
+    ///
+    /// `sparing` names the popups a launch in flight is waiting on, which
+    /// stay where they are whatever the scope (``PopupSparing``).
     func hideVisibleClientPopups(
-        _ scope: PopupSweepScope = .everything,
+        _ scope: PopupSweepScope = .everything, sparing: PopupSparing = .none,
     ) async -> [String]? {
         guard let cdp, await !cdp.isClosed else { return nil }
         let hidden = try? await withDeadline(ClientLifecycle.cdpCallCap) {
-            try await cdp.evaluate(Self.popupHideScript(scope))
+            try await cdp.evaluate(Self.popupHideScript(scope, sparing: sparing))
         }
         guard let hidden else { return nil }
         return (hidden ?? "").split(separator: "\n").map(String.init)
@@ -310,23 +313,48 @@ actor SteamBridge {
     /// A twin sweep carries ``SteamWindowRole``'s own table rather than a
     /// second copy of it in JavaScript: `exact` names are whole bases and
     /// `starts` are the families Steam numbers per instance, both matched
-    /// against the part of the name before its `_uid<pid>` suffix.
-    private static func popupHideScript(_ scope: PopupSweepScope) -> String {
+    /// against the part of the name before its `_uid<pid>` suffix. The whole
+    /// table travels as `knownExact` and `knownStarts` for the sparing, which
+    /// keeps a desktop-UI popup the table cannot name.
+    nonisolated static func popupHideScript(_ scope: PopupSweepScope, sparing: PopupSparing = .none) -> String {
         let names = scope == .twins ? SteamWindowRole.twinNames : nil
-        func list(_ keep: (SteamWindowRole.NameMatch) -> String?) -> String {
+        func list(_ names: [SteamWindowRole.NameMatch]?, _ keep: (SteamWindowRole.NameMatch) -> String?) -> String {
             guard let names else { return "null" }
             return "[\(names.compactMap(keep).map(JSLiteral.string).joined(separator: ","))]"
         }
-        let exact = list { if case let .exact(name) = $0 { name } else { nil } }
-        let starts = list { if case let .prefix(start) = $0 { start } else { nil } }
+        func exact(_ match: SteamWindowRole.NameMatch) -> String? {
+            if case let .exact(name) = match { name } else { nil }
+        }
+        func prefix(_ match: SteamWindowRole.NameMatch) -> String? {
+            if case let .prefix(start) = match { start } else { nil }
+        }
+        let known = SteamWindowRole.names.map(\.match)
+        let spared = "[\(sparing.exactBases.map(JSLiteral.string).joined(separator: ","))]"
         return """
-        (function (exact, starts) {
+        (function (exact, starts, spareExact, spareUnclassified, knownExact, knownStarts) {
           var popups = window.g_PopupManager && g_PopupManager.m_mapPopups;
           if (!popups) return "";
-          var allowed = function (name) {
-            if (!exact) return true;
+          var baseOf = function (name) {
             var uid = name.indexOf("_uid");
-            var base = uid < 0 ? name : name.slice(0, uid);
+            return uid < 0 ? name : name.slice(0, uid);
+          };
+          var instanceOf = function (name) {
+            var uid = name.lastIndexOf("_uid");
+            return uid < 0 ? 0 : (parseInt(name.slice(uid + 4), 10) || 0);
+          };
+          var known = function (base) {
+            if (knownExact.indexOf(base) >= 0) return true;
+            return knownStarts.some(function (start) { return base.indexOf(start) === 0; });
+          };
+          var spared = function (name) {
+            var base = baseOf(name);
+            if (spareExact.indexOf(base) >= 0 || spareExact.indexOf(name) >= 0) return true;
+            return spareUnclassified && instanceOf(name) === 0 && !known(base);
+          };
+          var allowed = function (name) {
+            if (spared(name)) return false;
+            if (!exact) return true;
+            var base = baseOf(name);
             if (exact.indexOf(base) >= 0) return true;
             return starts.some(function (start) { return base.indexOf(start) === 0; });
           };
@@ -345,7 +373,8 @@ actor SteamBridge {
             } catch (e) {}
           });
           return hidden.join("\\n");
-        })(\(exact), \(starts))
+        })(\(list(names, exact)), \(list(names, prefix)), \(spared), \(sparing.unclassifiedDesktopPopups),
+           \(list(known, exact)), \(list(known, prefix)))
         """
     }
 

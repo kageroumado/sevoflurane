@@ -55,6 +55,17 @@ nonisolated enum SteamOps {
         )
     }
 
+    /// Starts an app and answers Steam's launch-option question with `option`
+    /// from the client's own context, for a `sevo` with no app to ask the user.
+    static func launch(_ appid: Int, answering option: Int) async throws {
+        _ = try await SteamJS.eval(LaunchOptions.runAnsweringScript(appID: appid, option: option))
+    }
+
+    /// The ways Steam lists to start an app, as the client's JSON.
+    static func launchOptions(_ appid: Int) async throws -> String {
+        try await SteamJS.eval(LaunchOptions.listScript(appID: appid)) ?? "[]"
+    }
+
     static func terminate(_ appid: Int) async throws {
         RunLog.noteStopRequest(forApp: appid)
         _ = try await SteamJS.eval(

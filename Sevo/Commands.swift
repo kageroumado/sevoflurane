@@ -1892,7 +1892,17 @@ struct AppCommand: AsyncParsableCommand {
 
         func run() async throws {
             try await handlingFailures {
-                try await print(SteamOps.appInfo(appid))
+                var info = try await SteamOps.appInfo(appid)
+                // The ways an installed app can start, as `sevo app launch
+                // --option <n>` numbers them.
+                if var overview = Sevo.jsonObject(info), overview["installed"] as? Bool == true,
+                   let listed = try? await SteamOps.launchOptions(appid) {
+                    overview["launch_options"] = LaunchOptions.parse(listed).map {
+                        ["index": $0.index, "description": $0.description, "type": $0.type]
+                    }
+                    info = Sevo.json(overview)
+                }
+                print(info)
             }
         }
     }
@@ -2342,6 +2352,11 @@ struct AppCommand: AsyncParsableCommand {
         @Argument var appid: Int
         @Option(name: .customLong("timeout"), help: "Seconds to wait for the window (default 180).")
         var timeout = 180
+        @Option(
+            name: .customLong("option"),
+            help: "Which way to start it when Steam lists more than one (sevo app info lists them by index).",
+        )
+        var option: Int?
         @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
 
         func run() async throws {
@@ -2349,7 +2364,7 @@ struct AppCommand: AsyncParsableCommand {
                 let before = await WindowReport.currentWindow()
                 await warnAboutRunningApps()
                 let stuckInSync = await isStuckInCloudSync()
-                try await SteamOps.launch(appid)
+                try await requestLaunch()
                 narrate("launch requested for \(appid) — waiting for its window", asJSON: asJSON)
                 let window = await WindowReport.awaitWindow(
                     forApp: appid, before: before, timeout: timeout,
@@ -2377,6 +2392,32 @@ struct AppCommand: AsyncParsableCommand {
                         + " (is Sevoflurane running? poll: sevo status)")
                 }
             }
+        }
+
+        /// Asks for the launch where the launch-option question can be answered:
+        /// through the app when it is up, so its own chooser or the `--option`
+        /// given here answers Steam; otherwise in the client's own context,
+        /// where only an option given here can.
+        private func requestLaunch() async throws {
+            let appIsUp = await AppControl.appIsAlive()
+            guard let option else {
+                if !appIsUp {
+                    narrate(
+                        "Sevoflurane is not running — if Steam asks which way to start it, "
+                            + "nothing will answer; pass --option <n> (sevo app info lists them)",
+                        asJSON: asJSON,
+                    )
+                }
+                try await SteamOps.launch(appid)
+                return
+            }
+            if appIsUp, let reply = await AppControl.appLinkPost("/command/launch?appid=\(appid)&option=\(option)"),
+               (200 ..< 300).contains(reply.status) {
+                narrate("option \(option) will answer Steam's launch-option question", asJSON: asJSON)
+                return
+            }
+            try await SteamOps.launch(appid, answering: option)
+            narrate("option \(option) will answer Steam's launch-option question", asJSON: asJSON)
         }
 
         /// A game force-ended during its Steam Cloud sync stays at Synchronizing, and the

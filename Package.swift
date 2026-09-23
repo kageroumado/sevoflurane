@@ -124,6 +124,7 @@ let package = Package(
                 "Sevoflurane/Support/HostSnapshot.swift",
                 "Sevoflurane/Support/InstallDirectory.swift",
                 "Sevoflurane/Support/JSLiteral.swift",
+                "Sevoflurane/Support/LaunchOptions.swift",
                 "Sevoflurane/Support/JSONText.swift",
                 "Sevoflurane/Support/KnownFailures.swift",
                 "Sevoflurane/Support/KnownFixes.swift",

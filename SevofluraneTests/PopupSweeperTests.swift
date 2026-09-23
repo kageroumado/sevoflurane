@@ -163,3 +163,42 @@ struct PopupSweepClassificationTests {
         }
     }
 }
+
+/// Which of the client's popups a sweep leaves alone while a launch is
+/// waiting on one of them.
+struct PopupSparingTests {
+    @Test
+    func `the launch's own popup is spared by name`() {
+        let sparing = PopupSparing(exactBases: ["Black Myth: Wukong Benchmark Tool"])
+        #expect(sparing.spares(popupNamed: "Black Myth: Wukong Benchmark Tool_uid0"))
+        #expect(!sparing.spares(popupNamed: "Megabonk_uid0"))
+    }
+
+    @Test
+    func `a desktop popup the role table cannot name is spared when asked`() {
+        let sparing = PopupSparing(unclassifiedDesktopPopups: true)
+        #expect(sparing.spares(popupNamed: "Megabonk_uid0"))
+        #expect(!sparing.spares(popupNamed: "notificationtoasts_1_desktop"))
+        #expect(!sparing.spares(popupNamed: "SP Desktop_uid0"))
+        #expect(!sparing.spares(popupNamed: "PopupWindow_InstallModal_«rg»"))
+        // A game overlay's popup carries the game's pid and is never a launch dialog.
+        #expect(!sparing.spares(popupNamed: "friendslist_uid2220"))
+    }
+
+    @Test
+    func `nothing is spared by default`() {
+        for name in ["Black Myth: Wukong Benchmark Tool_uid0", "Megabonk_uid0", "SP Desktop_uid0"] {
+            #expect(!PopupSparing.none.spares(popupNamed: name))
+        }
+    }
+
+    @Test
+    func `the sweep script carries the spared name`() {
+        let script = SteamBridge.popupHideScript(
+            .everything, sparing: PopupSparing(exactBases: ["Black Myth: Wukong Benchmark Tool"], unclassifiedDesktopPopups: true),
+        )
+        #expect(script.contains("\"Black Myth: Wukong Benchmark Tool\""))
+        #expect(script.contains("true"))
+        #expect(SteamBridge.popupHideScript(.everything).contains("[], false"))
+    }
+}

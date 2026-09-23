@@ -361,6 +361,16 @@ final class SteamWindow: NSObject {
                 phase: string(args, 0),
                 appID: string(args, 1),
                 task: string(args, 2),
+                actionID: string(args, 3),
+            )
+        case "__launchOptions":
+            // The shim's tap on Steam's launch-option request (its
+            // CALLBACK_TAPS): the app answers it with a native alert.
+            host?.noteLaunchOptions(
+                appID: Int(string(args, 0)) ?? 0,
+                actionID: Int(string(args, 1)) ?? 0,
+                json: string(args, 2),
+                remembered: string(args, 3),
             )
         case "__overlayActivated":
             // The context page's overlay subscription

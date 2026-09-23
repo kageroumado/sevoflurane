@@ -342,6 +342,64 @@
     "SteamClient.WebChat.SetNumChatsWithUnreadPriorityMessages": "__unreadChats",
   };
 
+  /* Registrations whose callback the host answers one request of, inside the
+     app. Steam's UI asks "how should this app start" through
+     RegisterForGameActionUserRequest and answers it with its own dialog, or
+     silently from a remembered choice; here the request goes to the host as
+     __launchOptions instead, which puts it as a native alert. Every other
+     request reaches the page's handler untouched. The action id the answer
+     needs arrives through RegisterForGameActionStart, so that registration is
+     tapped too. */
+  var launchAction = { id: null, appid: null };
+  function launchOptionKey(appid, options) {
+    /* Steam's own key and hash (LaunchOptions.rememberedKeyScript is its twin). */
+    var text = JSON.stringify(options), hash = 0;
+    for (var i = 0; i < text.length; i++) {
+      hash = (hash << 5) - hash + text.charCodeAt(i);
+      hash |= 0;
+    }
+    return "Apps\\" + appid + "\\DefaultLaunchOption\\"
+      + (hash < 0 ? 4294967295 + hash + 1 : hash).toString(16);
+  }
+  var CALLBACK_TAPS = {
+    "SteamClient.Apps.RegisterForGameActionStart": function (cb) {
+      return function (id, gameid) {
+        launchAction = { id: id, appid: String(gameid) };
+        return cb.apply(this, arguments);
+      };
+    },
+    "SteamClient.Apps.RegisterForGameActionUserRequest": function (cb) {
+      return function (gameid, action, request) {
+        var handler = nativeWindowHandler(window);
+        if (request !== "ShowLaunchOption" || !handler
+            || launchAction.appid !== String(gameid)) {
+          return cb.apply(this, arguments);
+        }
+        var actionID = launchAction.id;
+        var post = function (options, remembered) {
+          try {
+            handler.postMessage({ fn: "__launchOptions", args: [
+              String(gameid), String(actionID), JSON.stringify(options || []),
+              typeof remembered === "string" ? remembered : "",
+            ] });
+          } catch (e) {}
+        };
+        window.SteamClient.Apps.GetLaunchOptionsForApp(Number(gameid)).then(function (options) {
+          var key = launchOptionKey(gameid, options);
+          return window.SteamClient.Storage.GetString(key).then(function (remembered) {
+            post(options, remembered);
+          }, function () { post(options, ""); });
+        }, function () { post([], ""); });
+      };
+    },
+  };
+  function tapCallbacks(path, args) {
+    var list = Array.prototype.slice.call(args);
+    var tap = CALLBACK_TAPS[path];
+    if (!tap || !nativeWindowHandler(window)) return list;
+    return list.map(function (a) { return typeof a === "function" ? tap(a) : a; });
+  }
+
   /* Routes whose target is a path only the client knows: resolved here, where
      the API lives, and then opened through the directory route above. */
   var NATIVE_RESOLVERS = {
@@ -434,7 +492,7 @@
         entry = { command: arguments[0], fn: arguments[1] };
         steamURLHandlers.push(entry);
       }
-      var sent = call(path, arguments);
+      var sent = call(path, tapCallbacks(path, arguments));
       if (isRegistration(path)) {
         return {
           unregister: function () {

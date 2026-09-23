@@ -186,10 +186,39 @@ final class SteamWebHost {
     /// The same call by app id, for the daemon: it decides whether a launch
     /// needs the client restarted first, and the launch itself comes back here
     /// because it is a line of JavaScript in the page.
-    func launchGame(appID: Int) {
+    ///
+    /// `forgettingChoice` clears the launch option Steam remembers for the app
+    /// first, so its `ShowLaunchOption` request is asked rather than answered
+    /// from memory: what an answer given ahead of time (``launchOptionAnswers``)
+    /// needs, since Steam's own UI answers from memory before this app can.
+    func launchGame(appID: Int, forgettingChoice: Bool = false) {
         context?.webView.evaluateJavaScript(
-            "SteamClient.Apps.RunGame(String(\(appID)), '', -1, 100)",
+            forgettingChoice
+                ? LaunchOptions.forgetAndRunScript(appID: appID)
+                : "SteamClient.Apps.RunGame(String(\(appID)), '', -1, 100)",
         )
+    }
+
+    /// Launch options chosen before Steam asks, by app id, each used once:
+    /// `sevo app launch --option <n>`.
+    @ObservationIgnored var launchOptionAnswers: [Int: Int] = [:]
+
+    /// The app whose launch-option alert is on screen, while it is.
+    @ObservationIgnored var launchOptionPending: Int?
+
+    /// What a sweep of the client's popups leaves alone right now: the popup
+    /// named after the game a launch is in flight for, and any other
+    /// desktop-UI popup the role table cannot name, since either may be the
+    /// dialog the launch is waiting on. While this app's own alert is asking
+    /// the question, the client's copy of it is redundant and is not spared.
+    var launchPopupSparing: PopupSparing {
+        guard let launch = activeLaunch, launchOptionPending != launch.appID else { return .none }
+        return PopupSparing(exactBases: [gameName(launch.appID)], unclassifiedDesktopPopups: true)
+    }
+
+    /// The game's name as the library shows it, or as its config names it.
+    func gameName(_ appID: Int) -> String {
+        recentGames.first { $0.id == appID }?.name ?? GameConfig.game(appID).name ?? "app \(appID)"
     }
 
     // MARK: - Friends, chat, and notifications
@@ -280,6 +309,9 @@ final class SteamWebHost {
     struct GameLaunch: Equatable {
         let appID: Int
         var detail: String
+        /// The client's id for this game action, which its `ShowLaunchOption`
+        /// request is answered against.
+        var actionID: Int?
     }
 
     private(set) var activeLaunch: GameLaunch?
