@@ -75,10 +75,8 @@ nonisolated enum ProgramDetection {
             reasons.append("\(sibling) beside it")
         }
         // Asking for administrator corroborates an installer; alone it names
-        // one only by coincidence. Games ask for it too — Genshin Impact's
-        // manifest says `requireAdministrator` for its anti-cheat driver, and
-        // the verdict turned a 30 GB game into "an installer" that "added
-        // nothing", with Quick Launch greyed out (2026-09-23).
+        // one only by coincidence. Games ask for it too: Genshin Impact's
+        // manifest says `requireAdministrator` for its anti-cheat driver.
         if !reasons.isEmpty, info?.requestedExecutionLevel == "requireAdministrator" {
             reasons.append("it asks for administrator")
         }
