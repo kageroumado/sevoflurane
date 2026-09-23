@@ -45,7 +45,7 @@ nonisolated enum CrashCollector {
         var personas: [String] = SteamAccounts.names()
         /// Path fragments that mark an image as this project's software, for
         /// the crash reports' image lists.
-        var ourImageMarkers = ["Sevoflurane", "/Engines/", "D3DMetal", "/Renderers/"]
+        var ourImageMarkers = CrashCollector.ourImageMarkers
         /// Where a game is installed, which is where its own logs and dumps
         /// are. Injected so a test never reads the Mac's real library.
         var installDirectory: @Sendable (Int) -> URL? = {
@@ -272,11 +272,13 @@ nonisolated enum CrashCollector {
         let names = (try? manager.contentsOfDirectory(atPath: places.diagnosticReports.path)) ?? []
         for name in names.sorted() where name.hasSuffix(".ips") {
             let url = places.diagnosticReports.appendingPathComponent(name)
-            guard ourCrashReportPrefixes.contains(where: { name.hasPrefix($0) }),
-                  let written = modified(url), window.contains(written),
-                  let text = CrashReportIPS.render(url, ours: { path in
-                      places.ourImageMarkers.contains { path.contains($0) }
-                  }) else { continue }
+            guard CrashReportIPS.isOurs(
+                url, prefixes: ourCrashReportPrefixes, pathMarkers: places.ourImageMarkers,
+            ),
+                let written = modified(url), window.contains(written),
+                let text = CrashReportIPS.render(url, ours: { path in
+                    places.ourImageMarkers.contains { path.contains($0) }
+                }) else { continue }
             writer.write(
                 text, as: "crashes/\((name as NSString).deletingPathExtension).txt",
                 kind: "macOS crash report", from: "DiagnosticReports/\(name)",
@@ -284,12 +286,20 @@ nonisolated enum CrashCollector {
         }
     }
 
-    /// The processes whose crash reports are this app's business. Everything
-    /// else on the Mac crashed on its own account.
+    /// The processes whose crash reports are this app's business, by the name
+    /// at the head of the report's file name. Everything else on the Mac
+    /// crashed on its own account — except a game run through its launcher
+    /// bundle, whose report carries the game's title and is told apart by its
+    /// path (``CrashReportIPS/isOurs(_:prefixes:pathMarkers:)``).
     static let ourCrashReportPrefixes = [
-        "wine", "wine64", "wine-preloader", "nwjs", "Sevoflurane", "steam", "sevo-",
-        "winedevice", "services", "explorer", "start", "ExcUserFault_",
+        "wine", "wine64", "wine-preloader", "wineserver", "nwjs", "Sevoflurane", "steam",
+        "sevo-", "winedevice", "services", "explorer", "start", "ExcUserFault_",
     ]
+
+    /// Path fragments that mark an executable or an image as this project's
+    /// software: the app and everything under its Application Support
+    /// directory, the engines, the renderers, and D3DMetal wherever it sits.
+    static let ourImageMarkers = ["Sevoflurane", "/Engines/", "D3DMetal", "/Renderers/"]
 
     // MARK: - The game's own logs
 

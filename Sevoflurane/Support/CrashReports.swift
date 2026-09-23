@@ -12,23 +12,47 @@ import Foundation
 /// The render keeps paths whole; taking the person out of them is
 /// ``ReportStripper``'s job, once, over the finished text.
 nonisolated enum CrashReportIPS {
-    /// The header's `procName`, and when the report was written.
+    /// The header's `procName`, the body's `procPath`, and when the report
+    /// was written.
     struct Identity: Sendable, Equatable {
         let process: String
+        /// The executable that died. The header names only the process, so
+        /// this comes from the body, whose opening keys carry it.
+        let path: String?
         let timestamp: Date?
     }
 
-    /// The header of a report, without reading the body.
+    /// The header of a report and the path at the head of its body, from the
+    /// opening kilobytes alone.
     static func identity(of url: URL) -> Identity? {
-        guard let line = firstLine(of: url),
-              let header = try? JSONSerialization.jsonObject(with: Data(line.utf8))
+        guard let opening = opening(of: url),
+              let split = opening.firstIndex(of: UInt8(ascii: "\n")),
+              let header = try? JSONSerialization.jsonObject(with: opening[..<split])
               as? [String: Any] else { return nil }
         let name = header["procName"] as? String ?? header["name"] as? String
         guard let name else { return nil }
+        let body = String(decoding: opening[opening.index(after: split)...], as: UTF8.self)
         return Identity(
             process: name,
+            path: body.firstMatch(of: procPath).map { unescaped(String($0.1)) },
             timestamp: (header["timestamp"] as? String).flatMap(reportStamp.date(from:)),
         )
+    }
+
+    /// Whether a report is one of this project's processes.
+    ///
+    /// The engine's own executables are known by name, so their reports are
+    /// matched by `prefixes`. A Wine game runs through its launcher bundle,
+    /// `~/Library/Application Support/Sevoflurane/Launchers/<appid>/<Title>.app`,
+    /// and macOS names its report after the bundle: `<Title>-<date>.ips`,
+    /// which no list of prefixes can anticipate. That report is recognized by
+    /// its `procPath`, which sits inside the bundle and so contains one of
+    /// `pathMarkers`.
+    static func isOurs(_ url: URL, prefixes: [String], pathMarkers: [String]) -> Bool {
+        let name = url.lastPathComponent
+        if prefixes.contains(where: { name.hasPrefix($0) }) { return true }
+        guard let path = identity(of: url)?.path else { return false }
+        return pathMarkers.contains { path.contains($0) }
     }
 
     /// The report, rendered down to what a person can act on. `ours` decides
@@ -133,12 +157,25 @@ nonisolated enum CrashReportIPS {
         return String(describing: value)
     }
 
-    private static func firstLine(of url: URL) -> String? {
+    /// The first kilobytes of a report: the whole header line and the opening
+    /// of the body, where `procPath` sits.
+    private static func opening(of url: URL) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 8192),
-              let end = data.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
-        return String(decoding: data[..<end], as: UTF8.self)
+        return try? handle.read(upToCount: openingBytes)
+    }
+
+    private static let openingBytes = 8192
+
+    // `nonisolated(unsafe)`: a `Regex` built from a literal holds no state.
+    // The body is pretty-printed JSON, so the value is quoted and any quote
+    // or backslash inside it is escaped.
+    private nonisolated(unsafe) static let procPath = /"procPath"\s*:\s*"((?:[^"\\]|\\.)*)"/
+
+    /// A JSON string's slashes as the path has them: the report writes every
+    /// `/` as `\/`.
+    private static func unescaped(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\/", with: "/")
     }
 }
 

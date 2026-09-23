@@ -94,6 +94,7 @@ struct CrashCollectorTests {
 
         let identity = try #require(CrashReportIPS.identity(of: url))
         #expect(identity.process == "wine64")
+        #expect(identity.path == "/Users/someone/Library/Application Support/Sevoflurane/Engines/r11/wine64")
 
         let text = try #require(CrashReportIPS.render(url) { $0.contains("/Engines/") })
         #expect(text.contains("EXC_BAD_ACCESS"))
@@ -115,6 +116,69 @@ struct CrashCollectorTests {
         try Data("not json\nnot json either\n".utf8).write(to: url)
         #expect(CrashReportIPS.render(url) { _ in true } == nil)
         #expect(CrashReportIPS.identity(of: url) == nil)
+    }
+
+    @Test
+    func `a report named for an engine process is ours by its prefix`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let url = root.appendingPathComponent("wineserver-2026-09-23-013800.ips")
+        try Data(Self.crashReport.utf8).write(to: url)
+        #expect(CrashReportIPS.isOurs(url, prefixes: CrashCollector.ourCrashReportPrefixes, pathMarkers: []))
+    }
+
+    @Test
+    func `a report named for a game's title is ours by the path in its body`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let url = root.appendingPathComponent("Subnautica 2-2026-09-23-013800.ips")
+        try Data(Self.launcherCrashReport.utf8).write(to: url)
+
+        let identity = try #require(CrashReportIPS.identity(of: url))
+        #expect(identity.process == "Subnautica 2")
+        #expect(identity.path == Self.launcherPath)
+        #expect(CrashReportIPS.isOurs(
+            url, prefixes: CrashCollector.ourCrashReportPrefixes,
+            pathMarkers: CrashCollector.ourImageMarkers,
+        ))
+    }
+
+    @Test
+    func `a report for a process outside the project is refused`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let url = root.appendingPathComponent("Terminal-2026-09-23-013800.ips")
+        try Data(Self.foreignCrashReport.utf8).write(to: url)
+        #expect(CrashReportIPS.identity(of: url)?.path
+            == "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal")
+        #expect(!CrashReportIPS.isOurs(
+            url, prefixes: CrashCollector.ourCrashReportPrefixes,
+            pathMarkers: CrashCollector.ourImageMarkers,
+        ))
+    }
+
+    @Test
+    func `a collected report keeps the game's own title-named crash report`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let places = Self.places(in: root)
+        try manager.createDirectory(at: places.diagnosticReports, withIntermediateDirectories: true)
+        let name = "Subnautica 2-2026-09-11-172400"
+        let report = places.diagnosticReports.appendingPathComponent("\(name).ips")
+        try Data(Self.launcherCrashReport.utf8).write(to: report)
+        let window = try #require(CrashCollector.window(of: Self.record()))
+        try manager.setAttributes(
+            [.modificationDate: window.lowerBound.addingTimeInterval(60)],
+            ofItemAtPath: report.path,
+        )
+
+        let collected = try #require(CrashCollector.collect(for: Self.record(), places: places))
+        #expect(collected.manifest.sources.contains { $0.file == "crashes/\(name).txt" })
+        let text = try String(
+            contentsOf: collected.directory.appendingPathComponent("crashes/\(name).txt"),
+            encoding: .utf8,
+        )
+        #expect(text.contains("EXC_BAD_ACCESS"))
     }
 
     // MARK: - Minidumps
@@ -361,6 +425,46 @@ struct CrashCollectorTests {
         { "name" : "libsystem_kernel.dylib", "uuid" : "bbbb", "base" : 2,
           "path" : "/usr/lib/system/libsystem_kernel.dylib" }
       ]
+    }
+    """
+
+    /// Where a game run through its launcher bundle is, as the report's body
+    /// spells it once its slashes are unescaped.
+    private static let launcherPath =
+        "/Users/someone/Library/Application Support/Sevoflurane/Launchers/1962700/Subnautica 2.app"
+            + "/Contents/MacOS/Subnautica 2"
+
+    /// A report for a game run through its launcher bundle: named for the
+    /// game's title, with the path escaped the way the report writes it.
+    private static let launcherCrashReport = """
+    {"app_name":"Subnautica 2","timestamp":"2026-09-11 19:24:00.00 +0200",\
+    "procName":"Subnautica 2","os_version":"macOS 27.0 (26A428)","incident_id":"y",\
+    "name":"Subnautica 2"}
+    {
+      "procName" : "Subnautica 2",
+      "procPath" : "\\/Users\\/someone\\/Library\\/Application Support\\/Sevoflurane\\/Launchers\\/1962700\\/Subnautica 2.app\\/Contents\\/MacOS\\/Subnautica 2",
+      "pid" : 4243,
+      "faultingThread" : 0,
+      "exception" : { "type" : "EXC_BAD_ACCESS", "signal" : "SIGSEGV" },
+      "threads" : [ { "id" : 1, "frames" : [ { "imageOffset" : 16, "imageIndex" : 0 } ] } ],
+      "usedImages" : [
+        { "name" : "libsystem_kernel.dylib", "uuid" : "bbbb", "base" : 2,
+          "path" : "/usr/lib/system/libsystem_kernel.dylib" }
+      ]
+    }
+    """
+
+    /// A report for a process that is nobody's business here.
+    private static let foreignCrashReport = """
+    {"app_name":"Terminal","timestamp":"2026-09-11 19:24:00.00 +0200","procName":"Terminal",\
+    "os_version":"macOS 27.0 (26A428)","incident_id":"z","name":"Terminal"}
+    {
+      "procName" : "Terminal",
+      "procPath" : "\\/System\\/Applications\\/Utilities\\/Terminal.app\\/Contents\\/MacOS\\/Terminal",
+      "pid" : 651,
+      "exception" : { "type" : "EXC_CRASH", "signal" : "SIGABRT" },
+      "threads" : [],
+      "usedImages" : []
     }
     """
 

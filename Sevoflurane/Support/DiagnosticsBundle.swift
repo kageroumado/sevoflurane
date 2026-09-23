@@ -41,7 +41,6 @@ nonisolated enum Diagnostics {
     /// with `Doctor`; the app asks its bundled `sevo` the same questions.
     nonisolated(unsafe) static var faceReport: @Sendable () async -> FaceReport = { FaceReport() }
 
-    static let crashReportPrefixes = ["wine", "wine64", "nwjs", "Sevoflurane", "steam", "sevo-"]
     /// `console_log.txt` carries the whole `GameAction` trail and the exit
     /// code of a game the client started, which is the answer to most of what
     /// a launch failure is asked about.
@@ -137,9 +136,17 @@ nonisolated enum Diagnostics {
         )
     }
 
+    /// The reports macOS wrote for the engine's processes and for the games
+    /// they ran, whichever name a report carries. The per-run collector and
+    /// this bundle answer the question with the same lists, so a report one
+    /// keeps the other keeps too.
     private static func collectCrashReports(into staging: Staging) {
         let reports = logs.appendingPathComponent("DiagnosticReports")
-        for url in recentFiles(in: reports, where: { name in crashReportPrefixes.contains { name.hasPrefix($0) } }) {
+        for url in recentFiles(in: reports, where: { _ in true })
+            where CrashReportIPS.isOurs(
+                url, prefixes: CrashCollector.ourCrashReportPrefixes,
+                pathMarkers: CrashCollector.ourImageMarkers,
+            ) {
             staging.copy(url, as: "crashes/\(url.lastPathComponent)")
         }
     }
