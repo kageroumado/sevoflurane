@@ -98,7 +98,7 @@ enum StatusReport {
         } else {
             Engine.active.description
         }
-        let steamOK = d.bottles.first { $0.name == SteamBottle.name }?.hasSteam == true
+        let steamOK = SetupProbe.bottles(for: Engine.active).first { $0.name == SteamBottle.name }?.hasSteam == true
         let client = switch snapshot.clientState {
         case .up: "running"
         case .portWithoutContext: "half-wedged (no SharedJSContext)"
@@ -453,7 +453,7 @@ struct EngineCommand: AsyncParsableCommand {
     ) var bottle: String?
     @Flag(
         name: .customLong("no-app"),
-        help: "For use: drive the client from this process instead of through the app (debug); without it a closed app is opened to boot the engine.",
+        help: "For use: drive the client from this process instead of through the daemon (debug); without it a stopped daemon is started to boot the engine.",
     ) var noApp = false
     @Option(
         name: .customLong("from"),
@@ -688,8 +688,9 @@ struct EngineCommand: AsyncParsableCommand {
         } ?? EngineManifest.url
         do {
             let fetched = try await EngineManifest.fetch(from: manifestURL)
-            guard let release = fetched.release(for: try channel() ?? Preferences.engineChannel) else {
-                Sevo.printError("manifest has no stable channel")
+            let wanted = try channel() ?? Preferences.engineChannel
+            guard let release = try fetched.release(for: wanted) else {
+                Sevo.printError("manifest has no \(wanted.rawValue) channel")
                 throw SevoExit.failed
             }
             guard !EngineInstaller.isInstalled(release) else {
@@ -1376,7 +1377,9 @@ struct BottleCommand: AsyncParsableCommand {
             Sevo.printError("\(error)")
             throw SevoExit.failed
         }
-        print("\(key) \(value) — takes effect at the next game launch")
+        print(key == "msync"
+            ? "msync \(value) — takes effect at the client's next start: sevo client restart"
+            : "\(key) \(value) — takes effect at the next game launch")
     }
 
     private func current() -> BottleGraphics.Selection {
@@ -1560,7 +1563,7 @@ struct ClientCommand: AsyncParsableCommand {
                     "client_state": clientText,
                 ], pretty: true))
             } else {
-                print("force-quit (\(scopeName)) \(routed ? "via app" : "direct"):")
+                print("force-quit (\(scopeName)) \(routed ? "via the daemon" : "direct"):")
                 print("  killed: \(killed.isEmpty ? "none" : killed.map(label).joined(separator: ", "))")
                 if !stillRunning.isEmpty {
                     print("  still running: \(stillRunning.map(label).joined(separator: ", "))")
@@ -2397,29 +2400,20 @@ struct AppCommand: AsyncParsableCommand {
         }
 
         /// Asks for the launch where the launch-option question can be answered:
-        /// through the app when it is up, so its own chooser or the `--option`
-        /// given here answers Steam; otherwise in the client's own context,
-        /// where only an option given here can.
+        /// through the daemon and the app when they are up, so its own chooser
+        /// or the `--option` given here answers Steam; otherwise in the
+        /// client's own context, where only an option given here can.
         private func requestLaunch() async throws {
-            let appIsUp = await AppControl.appIsAlive()
-            guard let option else {
-                if !appIsUp {
-                    narrate(
-                        "Sevoflurane is not running — if Steam asks which way to start it, "
-                            + "nothing will answer; pass --option <n> (sevo app info lists them)",
-                        asJSON: asJSON,
-                    )
-                }
-                try await SteamOps.launch(appid)
-                return
-            }
-            if appIsUp, let reply = await AppControl.appLinkPost("/command/launch?appid=\(appid)&option=\(option)"),
-               (200 ..< 300).contains(reply.status) {
+            let route = try await SteamOps.requestLaunch(appid, option: option)
+            if let option {
                 narrate("option \(option) will answer Steam's launch-option question", asJSON: asJSON)
-                return
+            } else if route == .client {
+                narrate(
+                    "Sevoflurane is not running — if Steam asks which way to start it, "
+                        + "nothing will answer; pass --option <n> (sevo app info lists them)",
+                    asJSON: asJSON,
+                )
             }
-            try await SteamOps.launch(appid, answering: option)
-            narrate("option \(option) will answer Steam's launch-option question", asJSON: asJSON)
         }
 
         /// A game force-ended during its Steam Cloud sync stays at Synchronizing, and the
@@ -2711,8 +2705,13 @@ struct OrphansCommand: AsyncParsableCommand {
         let ended = end ? WineOrphans.end(found) : []
         if asJSON {
             let rows = found.map { orphan -> [String: Any] in
-                ["pid": Int(orphan.pid), "prefix": orphan.prefix, "command": orphan.command,
-                 "executable": orphan.executable, "ended": ended.contains(orphan)]
+                [
+                    "pid": Int(orphan.pid),
+                    "prefix": orphan.prefix,
+                    "command": orphan.command,
+                    "executable": orphan.executable,
+                    "ended": ended.contains(orphan),
+                ]
             }
             print(Sevo.json(rows, pretty: true))
         } else if found.isEmpty {
@@ -3114,18 +3113,27 @@ struct LogsCommand: AsyncParsableCommand {
     }
 
     static func tail(lines: Int, follow: Bool, file: URL = Sevo.logFile) async throws {
-        guard let handle = try? FileHandle(forReadingFrom: file) else {
+        guard let existing = LogTail.lastLines(of: file, count: max(1, lines)),
+              let handle = try? FileHandle(forReadingFrom: file) else {
             Sevo.printError("no log file at \(file.path) — has the app ever run?")
             throw SevoExit.failed
         }
-        let existing = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
-        for line in existing.split(separator: "\n").suffix(max(1, lines)) {
+        for line in existing {
             print(line)
         }
         guard follow else { return }
+        var offset = (try? handle.seekToEnd()) ?? 0
         while true {
             try? await Task.sleep(for: .milliseconds(500))
+            // Rotation copies the log aside and truncates it in place, so a
+            // file shorter than what was read has started over.
+            let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? UInt64 ?? offset
+            if size < offset {
+                offset = 0
+                try? handle.seek(toOffset: 0)
+            }
             if let data = try? handle.readToEnd(), !data.isEmpty {
+                offset += UInt64(data.count)
                 FileHandle.standardOutput.write(data)
             }
         }

@@ -27,12 +27,13 @@ final class BottleSupervisor {
     /// changes with it rather than a poll later.
     var onHealthChange: ((Health) -> Void)?
 
-    /// Whether the client has answered at all since the app started. Until it
-    /// has, every failure is the first launch still happening.
-    @ObservationIgnored var hasSeenClientUp = false
+    /// Whether the client has answered at all since this daemon started, or
+    /// since the last quit. Until it has, every failure is the first launch
+    /// still happening.
+    var hasSeenClientUp = false
     /// Whether this session's client has been healthy once: what tells a
     /// launch from a recovery, in the verdict and in the log.
-    @ObservationIgnored var hasBeenHealthy = false
+    var hasBeenHealthy = false
 
     private var isPaused = false
 
@@ -45,15 +46,15 @@ final class BottleSupervisor {
     /// Without it, quitting Sevoflurane would bring the bottle down and the
     /// next probe would put it straight back up.
     var wantsClient = false
-    @ObservationIgnored var restartPhase = ""
-    @ObservationIgnored private var progressPhase: String?
-    @ObservationIgnored private var lastProbe: ClientLifecycle.ClientState = .down
-    @ObservationIgnored private var pageServicesUp = false
-    @ObservationIgnored var fault: Fault?
-    @ObservationIgnored private var boot: BootPhase = .idle
+    var restartPhase = ""
+    private var progressPhase: String?
+    private var lastProbe: ClientLifecycle.ClientState = .down
+    private var pageServicesUp = false
+    var fault: Fault?
+    private var boot: BootPhase = .idle
     /// When the current boot phase began: `.awaitingClient` and
     /// `.awaitingServices` have budgets of their own, so each starts a clock.
-    @ObservationIgnored private var bootBegan: ContinuousClock.Instant?
+    private var bootBegan: ContinuousClock.Instant?
 
     private var healthInputs: HealthInputs {
         HealthInputs(
@@ -107,12 +108,29 @@ final class BottleSupervisor {
     /// slow on a Mac at full load is slow because of the load: the clocks
     /// stretch by ``HostPressure/patience`` and the log says why.
     private(set) var pressure = HostPressure()
-    @ObservationIgnored private let pressureSampler = HostPressureSampler()
+    private let pressureSampler = HostPressureSampler()
     var onPressureChange: ((HostPressure) -> Void)?
 
     /// A clock of ``Timing`` as it stands under the current pressure.
     private func patient(_ seconds: Int) -> Int {
         Int((Double(seconds) * pressure.patience).rounded())
+    }
+
+    /// Waits for the verdict to reach healthy, for as long as a boot's own
+    /// clocks allow on this Mac as loaded as it is. Answers false when it
+    /// never did: the clocks ran out, supervision paused, or the supervisor
+    /// gave up.
+    func waitForHealthy() async -> Bool {
+        let began = ContinuousClock.now
+        while began.duration(to: .now)
+            < .seconds(patient(Timing.clientBoot + Timing.clientServices + Timing.servicesGrace)) {
+            switch health {
+            case .healthy: return true
+            case .gaveUp, .paused: return false
+            default: try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        return health == .healthy
     }
 
     /// The reason for a restart or a fault, with the Mac's state beside it
@@ -143,7 +161,7 @@ final class BottleSupervisor {
         onPressureChange?(reading)
     }
 
-    @ObservationIgnored private var calmerReadings = 0
+    private var calmerReadings = 0
     /// About fifteen seconds of probes.
     private static let calmerReadingsToSettle = 5
 
@@ -172,46 +190,61 @@ final class BottleSupervisor {
         if app.facts.isAwaitingSignIn { clientShowsLoginWindow = false }
     }
 
-    @ObservationIgnored private var loop: Task<Void, Never>?
-    @ObservationIgnored var clientFailures = 0
+    private var loop: Task<Void, Never>?
+    var clientFailures = 0
     /// When the current run of consecutive client-probe failures began; the
     /// restart decision needs a duration, not just a count.
-    @ObservationIgnored private var firstClientFailure = Date.distantPast
+    private var firstClientFailure = Date.distantPast
     /// A game window is on screen (from the probe's window scan).
-    @ObservationIgnored private var gameIsUp = false
-    @ObservationIgnored private var probeCycleCount = 0
-    @ObservationIgnored private var pageFailures = 0
+    private var gameIsUp = false
+    private var probeCycleCount = 0
+    private var pageFailures = 0
     /// Reloads given to the current page outage. Two that changed nothing
     /// mean the web view itself is what is wedged, and the third try rebuilds it.
-    @ObservationIgnored private var pageReloads = 0
-    @ObservationIgnored var isRestarting = false
+    private var pageReloads = 0
+    var isRestarting = false
     /// A restart asked for while the ladder is mid-flight, with its reason.
     /// The running ladder stops waiting on the client it is bringing up and
     /// runs again from the top, so an engine switch that lands during a boot
     /// boots the new engine instead of finishing the old one first.
-    @ObservationIgnored var restartAgain: String?
-    @ObservationIgnored var recentRestarts: [Date] = []
+    var restartAgain: String?
+    /// An engine or bottle to move onto once the ladder has the running
+    /// client down (``switchEngine(to:bottle:)``).
+    var pendingSwitch: EngineSwitch?
+    /// A shader-cache clear the next ladder pass makes between its stop and
+    /// its launch (``clearShaderCache()``).
+    var pendingShaderCacheClear = false
+    /// The provisioning failure the log has already named, so a probe that
+    /// meets it again says nothing new.
+    var reportedProvisioningBlock: String?
+    /// Callers of ``ladderFinished()`` waiting for the running ladder.
+    var ladderWaiters: [CheckedContinuation<Void, Never>] = []
+    struct EngineSwitch {
+        let engine: Engine
+        let bottle: String?
+    }
+    var recentRestarts: [Date] = []
     /// The restart whose boot has not been classified yet. A boot that ends
     /// at the login window is a user who signed out, not a crash, so its
     /// entry comes back out of the crash-loop budget.
-    @ObservationIgnored var pendingRestart: Date?
+    var pendingRestart: Date?
     /// The client's own sign-in window, seen by the boot's popup sweep two
     /// seconds after launch — long before the page has adopted anything. It
     /// ends the wait for Steam's services, which a signed-out client never
     /// initializes, and hands over to the page's own login popup as soon as
     /// that exists.
-    @ObservationIgnored var clientShowsLoginWindow = false
-    @ObservationIgnored private var lastPageRecovery = Date.distantPast
+    var clientShowsLoginWindow = false
+    private var lastPageRecovery = Date.distantPast
     /// Whether the current services outage already got its one page reload —
     /// the next escalation is a client restart.
-    @ObservationIgnored private var serviceRecoveryTried = false
+    private var serviceRecoveryTried = false
     /// Whether the current crash loop already got its one hygiene pass
     /// (htmlcache purge + headless client repair) — the next stop is `gaveUp`.
-    @ObservationIgnored var hygieneTried = false
+    var hygieneTried = false
     /// Whether the login window was up on a previous cycle. Its going away
     /// with the services still down is the "the user just signed in" edge,
     /// which needs the page reloaded rather than waited out.
-    @ObservationIgnored private var wasAwaitingSignIn = false
+    private var wasAwaitingSignIn = false
     /// Why the library is to open by itself the moment everything is healthy,
     /// or nil when it is not. The reason picks the line the log gets: a person
     /// who opened Sevoflurane and a sign-in that just finished are different
@@ -238,13 +271,13 @@ final class BottleSupervisor {
     }
 
     /// Dedupes the "Wine window visible" log line across probe cycles.
-    @ObservationIgnored private var wineWindowsVisible = false
+    private var wineWindowsVisible = false
     /// When the current client launch began, for the boot-audit line at the
     /// healthy transition.
-    @ObservationIgnored var clientStartedAt: ContinuousClock.Instant?
+    var clientStartedAt: ContinuousClock.Instant?
     /// Set once quit teardown begins; blocks every path that could relaunch
     /// the client mid-teardown.
-    @ObservationIgnored var isQuitting = false
+    var isQuitting = false
 
     init(app: AppLink) {
         self.app = app
@@ -252,11 +285,8 @@ final class BottleSupervisor {
 
     /// Why the probe cycle woke.
     ///
-    /// The loop used to be `probe(); sleep(interval)`, so the interval *was*
-    /// the latency: a client that died with a game up went unnoticed for 58 s,
-    /// which is the 60 s cadence a running game earns. Every death that can be
-    /// observed directly arrives here instead, and the interval becomes a
-    /// ceiling on how long an unobservable change can hide.
+    /// Every observable death wakes the cycle; the interval is a ceiling on
+    /// how long an unobservable change can hide.
     nonisolated enum Wake: Equatable, Sendable {
         case tick
         case launcherExited(Int32)
@@ -280,8 +310,8 @@ final class BottleSupervisor {
         }
     }
 
-    @ObservationIgnored private var wakeups: AsyncStream<Wake>.Continuation?
-    @ObservationIgnored private var pendingTick: Task<Void, Never>?
+    private var wakeups: AsyncStream<Wake>.Continuation?
+    private var pendingTick: Task<Void, Never>?
 
     func start() {
         guard loop == nil else { return }
@@ -376,10 +406,6 @@ final class BottleSupervisor {
         }
     }
 
-    func togglePaused() {
-        setPaused(!isPaused, note: isPaused ? "auto-restart resumed" : "auto-restart paused")
-    }
-
     /// Pausing is about this app, not about Steam, so it is a flag rather than
     /// a health value: a health value is overwritten by whatever assigns
     /// health next, and a pause that a restart ladder can silently undo is
@@ -412,7 +438,6 @@ final class BottleSupervisor {
     }
 
     private func probeChain() async {
-        app.reapIfGone()
         refreshSignInState()
         // Progress is what this cycle finds, never what a previous one left;
         // and a fault the cycle no longer sees is gone. `gaveUp` is the
@@ -476,9 +501,9 @@ final class BottleSupervisor {
     }
 
     /// Moves the client's boot on by one step, and answers whether the boot
-    /// owns this cycle. Every wait the restart ladder used to make on the
-    /// client's behalf is a step here instead, so the guards the cycle owns —
-    /// the login window above all — are on throughout.
+    /// owns this cycle. Every wait on the client's boot is a step here, so
+    /// the guards the cycle owns — the login window above all — are on
+    /// throughout.
     private func advanceBoot() async -> Bool {
         switch boot {
         case .idle, .pageBooting:
@@ -504,8 +529,8 @@ final class BottleSupervisor {
             if isAwaitingSignIn {
                 // A signed-out client never initializes its services, so the
                 // sign-in window ends this wait as decisively as the services
-                // arriving. Two minutes of waiting followed by a reload is
-                // how it used to end, and the reload is what quit Steam.
+                // arriving. The page is left as it is: a reload over the
+                // login window quits Steam.
                 log.log(.client, "the client is showing its sign-in window — waiting for sign-in")
                 await bootPage()
                 dropPendingRestart()
@@ -690,19 +715,23 @@ final class BottleSupervisor {
             return
         }
         // A dead process is down; a mute DevTools server on a live process is
-        // slow until it has been mute for half a minute. This app's own log
-        // holds three restarts whose only evidence was two 3-second `/json`
-        // timeouts against a swapped-out CEF — each one a two-minute outage
-        // the user paid for a probe's impatience.
+        // slow until it has been mute for half a minute. A swapped-out CEF
+        // misses short `/json` timeouts, and each restart that reads that as
+        // a death is a two-minute outage.
         let processAlive = await ClientLifecycle.clientProcessAlive()
         // A DevTools server that accepted the connection and said nothing, on
         // a client whose transport is still open, is under load rather than
         // gone: the socket the bridge holds is the second opinion `/json`
         // alone cannot give.
         let clientSocketOpen = app.facts.isClientConnected
+        // That opinion holds for four mute windows; a client busy past them is
+        // wedged with its socket open. A game on screen keeps it holding,
+        // since the game is the load and a restart would take Steam from it.
+        let muteFor = Date.now.timeIntervalSince(firstClientFailure)
         let busyButConnected = client == .busy && clientSocketOpen
+            && (gameIsUp || muteFor < Double(patient(Timing.muteClient) * 4))
         let deadLongEnough = !busyButConnected && clientFailures >= 3
-            && Date.now.timeIntervalSince(firstClientFailure) >= Double(patient(Timing.muteClient))
+            && muteFor >= Double(patient(Timing.muteClient))
         if !wineWindows.isEmpty, hasSeenClientUp {
             await restartClient(
                 reason: reason + " with a Wine dialog up — Steam's own watchdog likely fired",
@@ -737,9 +766,8 @@ final class BottleSupervisor {
             return
         }
         // A Wine window with CDP still dead this far in is Steam saying
-        // something instead of starting — the gptk-wine wedge sat in this
-        // wait for its full length, three times over, before anything could
-        // see it. Only once the session has had a working client: a
+        // something instead of starting, and waiting out the full budget
+        // hides it. Only once the session has had a working client: a
         // first-ever boot may legitimately show the updater for minutes while
         // it applies staged packages.
         if waited >= 24, hasSeenClientUp, !wineWindows.isEmpty {
@@ -754,11 +782,6 @@ final class BottleSupervisor {
         progressPhase = boot.progressText(elapsedSeconds: waited)
     }
 
-    /// The page answers but Steam's stores never initialized. Boot and reload
-    /// both need time to log in and fill the stores; past that, a reload is
-    /// the cheap try, and a client whose UI session died (splash freeze,
-    /// "Sign in to Steam") needs the full restart — a reload alone reattaches
-    /// to the same dead session.
     /// One pass over the client's own CEF popups: each visible one is put away
     /// (the page renders these natively) and a sign-in window among them is
     /// remembered.
@@ -808,6 +831,11 @@ final class BottleSupervisor {
         recentRestarts.removeAll { $0 == stamp }
     }
 
+    /// The page answers but Steam's stores never initialized. Boot and reload
+    /// both need time to log in and fill the stores; past that, a reload is
+    /// the cheap try, and a client whose UI session died (splash freeze,
+    /// "Sign in to Steam") needs the full restart — a reload alone reattaches
+    /// to the same dead session.
     private func recoverDeadServices(wineWindows: [WineWindowWatch.Window]) async {
         if isAwaitingSignIn {
             // A signed-out bottle's services never initialize until the user
@@ -863,10 +891,8 @@ final class BottleSupervisor {
         }
         guard Date.now.timeIntervalSince(lastPageRecovery) > Double(patient(Timing.servicesGrace)) else {
             // Not a fault: the page is up and Steam's stores are still
-            // filling. Reporting it as degraded put an orange "Steam is
-            // struggling" and a menu-bar dot in front of the user for the
-            // whole grace, which is what a first run looks like from the
-            // outside — the one thing `.launching` exists to prevent.
+            // filling, which is what a first run looks like from the outside.
+            // It reports as progress, never as degraded.
             progressPhase = "waiting for Steam's services…"
             transition(logging: .page, "page up, Steam services not initialized yet")
             return

@@ -4,9 +4,10 @@ import Foundation
 ///
 /// The app posts facts to the control port and this dials the app's own
 /// listener back for the work only it can do — reloading the page, dismissing
-/// Steam's popups, opening the library. Nothing here waits on an answer to a
-/// question: a command is a statement, and everything the daemon needs to know
-/// arrives as a fact the app posted when it changed.
+/// Steam's popups, opening the library. Most commands are statements, and what
+/// the daemon needs to know arrives as a fact the app posted when it changed;
+/// the few that answer — a popup sweep, the services check, a launch — say
+/// so in their return.
 ///
 /// An app that is not attached is not an error. The daemon keeps the client
 /// alive without one, and the page half resumes when an app attaches again —
@@ -16,12 +17,16 @@ final class AppLink {
     private(set) var facts = PageFacts()
     private let log = EventLog.shared
 
-    /// Whether an app is attached and still alive. The pid is the whole test:
-    /// a crashed app posts no farewell, and a stale fact must not keep the
-    /// daemon reloading a page that no longer exists.
+    /// Whether an app is attached and still alive. A crashed app posts no
+    /// farewell, so its exit is watched from the moment it attaches, and a
+    /// stale fact never keeps the daemon reloading a page that no longer
+    /// exists — nor does a later process that happens to reuse the pid.
     var isAttached: Bool {
-        facts.appPID > 0 && kill(facts.appPID, 0) == 0
+        facts.appPID > 0
     }
+
+    /// Fires once when the attached app's process exits.
+    private var exitWatch: DispatchSourceProcess?
 
     /// The app said hello, or one of its facts changed. Answers whether this
     /// is a different app process from the one that was attached — a relaunch
@@ -32,7 +37,23 @@ final class AppLink {
         facts = incoming
         guard isNew else { return false }
         log.log(.app, "Sevoflurane \(incoming.appVersion) attached (pid \(incoming.appPID))")
+        watchForExit(of: incoming.appPID)
         return true
+    }
+
+    private func watchForExit(of pid: pid_t) {
+        exitWatch?.cancel()
+        let watch = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+        watch.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.facts.appPID == pid else { return }
+                self.detach(reason: "the process is gone")
+            }
+        }
+        exitWatch = watch
+        watch.resume()
+        // A process that exited before the watch began delivers no event.
+        if kill(pid, 0) != 0 { detach(reason: "the process is gone") }
     }
 
     /// Forgets the app, so every page-side guard reads as "nobody is
@@ -41,14 +62,8 @@ final class AppLink {
         guard facts.appPID > 0 else { return }
         log.log(.app, "Sevoflurane (pid \(facts.appPID)) detached: \(reason)")
         facts = PageFacts()
-    }
-
-    /// Drops the app if its process is gone. Called at the top of every probe
-    /// cycle, so a crash is noticed within a cycle rather than at the next
-    /// command that fails.
-    func reapIfGone() {
-        guard facts.appPID > 0, kill(facts.appPID, 0) != 0 else { return }
-        detach(reason: "the process is gone")
+        exitWatch?.cancel()
+        exitWatch = nil
     }
 
     // MARK: - Commands
@@ -98,8 +113,13 @@ final class AppLink {
         return (try? JSONDecoder().decode(Reply.self, from: data))?.ready
     }
 
-    func launchGame(appID: Int) async {
-        _ = await post("/command/launch?appid=\(appID)")
+    /// Asks the app to start a game from its page, with `option` answering
+    /// Steam's launch-option question ahead of it. Answers whether the app
+    /// took the launch.
+    func launchGame(appID: Int, option: Int? = nil) async -> Bool {
+        guard isAttached else { return false }
+        let path = "/command/launch?appid=\(appID)" + (option.map { "&option=\($0)" } ?? "")
+        return await post(path) != nil
     }
 
     /// Mirrors the daemon's verdict into the app, so the menu bar moves with

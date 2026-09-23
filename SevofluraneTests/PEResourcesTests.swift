@@ -138,4 +138,17 @@ struct PEResourcesTests {
         }
         return found
     }
+
+    @Test
+    func `a hostile directory is bounded`() {
+        // A directory header claiming 0xFFFF named and 0xFFFF numbered
+        // entries, followed by room for every one of them.
+        var data = Data(count: 16 + 0x1FFFE * 8)
+        data[12] = 0xFF
+        data[13] = 0xFF
+        data[14] = 0xFF
+        data[15] = 0xFF
+        #expect(PEResources.children(of: data, at: 0).count == PEResources.entriesPerDirectory)
+        #expect(PEResources.children(of: data, at: 0, limit: 1).count == 1)
+    }
 }

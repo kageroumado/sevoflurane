@@ -38,6 +38,29 @@ final class MCPServer {
         }
     }
 
+    /// The protocol revisions this server speaks, newest first.
+    static let supportedVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
+
+    /// The client's revision when this server speaks it, else the newest this
+    /// server does — the client then decides whether it can go on.
+    static func negotiatedVersion(_ requested: String?) -> String {
+        if let requested, supportedVersions.contains(requested) { return requested }
+        return supportedVersions[0]
+    }
+
+    /// A JSON integer argument. `JSONSerialization` bridges `true` to an
+    /// `NSNumber` that `as? Int` accepts as 1, so booleans are refused here.
+    static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return Int(exactly: number.doubleValue)
+    }
+
+    /// A JSON boolean argument; a number is not one.
+    static func boolean(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
+    }
+
     private func handle(_ message: [String: Any]) async -> [String: Any]? {
         let method = message["method"] as? String ?? ""
         let id = message["id"]
@@ -48,9 +71,8 @@ final class MCPServer {
 
         switch method {
         case "initialize":
-            let requested = params["protocolVersion"] as? String ?? "2025-06-18"
             return result(id: id, [
-                "protocolVersion": requested,
+                "protocolVersion": Self.negotiatedVersion(params["protocolVersion"] as? String),
                 "capabilities": ["tools": [:], "resources": [:]] as [String: Any],
                 "serverInfo": ["name": "sevo", "version": Sevo.version],
             ])
@@ -128,8 +150,8 @@ final class MCPServer {
             tool("client_start", "Start the bottled Steam client and wait for it to come up."),
             tool(
                 "client_stop",
-                "Stop the Steam client (kill ladder; pauses the app's "
-                    + "auto-restart when routed through the app).",
+                "Stop the Steam client (kill ladder; pauses the daemon's "
+                    + "auto-restart when routed through the daemon).",
                 destructive: true,
             ),
             tool(
@@ -265,7 +287,7 @@ final class MCPServer {
 
     private func invoke(_ name: String, args: [String: Any]) async throws -> String {
         func appid() throws -> Int {
-            guard let appid = args["appid"] as? Int else {
+            guard let appid = Self.integer(args["appid"]) else {
                 throw ClientOps.Failure.message("appid (integer) is required")
             }
             return appid
@@ -331,19 +353,19 @@ final class MCPServer {
             let outcome = try await ClientOps.restart(noApp: false) { progress.append($0) }
             return await Self.observed(outcome, progress: progress)
         case "recover":
-            let deep = args["deep"] as? Bool ?? false
+            let deep = Self.boolean(args["deep"]) ?? false
             let outcome = try await ClientOps.recover(deep: deep, noApp: false) { progress.append($0) }
             return await Self.observed(outcome, progress: progress)
         case "library_list":
             return try await SteamOps.libraryList(
-                installedOnly: args["installed_only"] as? Bool ?? false,
+                installedOnly: Self.boolean(args["installed_only"]) ?? false,
             )
         case "app_info":
             return try await SteamOps.appInfo(appid())
         case "app_launch":
             let id = try appid()
             let before = await WindowReport.currentWindow()
-            try await SteamOps.launch(id)
+            _ = try await SteamOps.requestLaunch(id, option: nil)
             let window = await WindowReport.awaitWindow(
                 forApp: id, before: before, timeout: 180,
             ) { progress.append($0) }
@@ -390,7 +412,7 @@ final class MCPServer {
                 ] as [String: Any]
             }], pretty: true)
         case "program_launch":
-            guard let id = args["id"] as? Int else {
+            guard let id = Self.integer(args["id"]) else {
                 throw ClientOps.Failure.message("id (integer) is required")
             }
             let outcome = try await ClientOps.launchProgram(
@@ -406,7 +428,7 @@ final class MCPServer {
             try await SteamOps.setDownloadsEnabled(true)
             return "downloads resumed"
         case "logs_tail":
-            return try Self.logTail(lines: args["lines"] as? Int ?? 50)
+            return try Self.logTail(lines: Self.integer(args["lines"]) ?? 50)
         case "eval_js" where allowEval:
             let js = args["js"] as? String ?? ""
             if args["context"] as? String == "client" {

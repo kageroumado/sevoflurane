@@ -18,9 +18,15 @@ termination.resume()
 
 // The control port is taken exclusively, so a second daemon cannot come up
 // beside the first and split supervision between them. It ends here instead,
-// having said in the log which one holds the port.
+// having said in the log which one holds the port. That exit is a success, so
+// launchd's `KeepAlive { SuccessfulExit = false }` leaves it ended; a control
+// port that failed for any other reason exits nonzero and is started again.
 Task(name: "Daemon startup") { @MainActor in
-    guard await daemon.start() else { exit(0) }
+    switch await daemon.start() {
+    case .serving: break
+    case .anotherSupervisorHoldsThePort: exit(0)
+    case .failed: exit(1)
+    }
 }
 
 RunLoop.main.run()

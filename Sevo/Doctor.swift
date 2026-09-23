@@ -119,7 +119,7 @@ nonisolated enum Doctor {
             hint: "run Sevoflurane's setup wizard to create one", provisioning: true,
         ))
 
-        let steamBottle = d.bottles.first { $0.name == SteamBottle.name }
+        let steamBottle = SetupProbe.bottles(for: Engine.active).first { $0.name == SteamBottle.name }
         checks.append(Check(
             id: "steam", ok: steamBottle?.hasSteam == true,
             label: "Steam client in bottle '\(SteamBottle.name)'",

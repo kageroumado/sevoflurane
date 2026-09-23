@@ -210,7 +210,7 @@ nonisolated enum PEResources {
 
     // MARK: - The resource tree
 
-    private struct Node {
+    struct Node {
         /// The entry's numeric id; a named entry carries `nil`.
         let id: Int?
         let isDirectory: Bool
@@ -218,12 +218,18 @@ nonisolated enum PEResources {
         let offset: Int
     }
 
-    private static func children(of data: Data, at offset: Int) -> [Node] {
+    /// The most entries one directory is read for. A header may claim
+    /// 131 070, and the tree is three levels deep, so a hostile file could
+    /// otherwise ask for billions of reads.
+    static let entriesPerDirectory = 4096
+
+    /// A directory's entries, at most `limit` of them.
+    static func children(of data: Data, at offset: Int, limit: Int = entriesPerDirectory) -> [Node] {
         guard let named = u16(data, offset + 12), let numbered = u16(data, offset + 14) else {
             return []
         }
         var result: [Node] = []
-        for index in 0 ..< (named + numbered) {
+        for index in 0 ..< min(named + numbered, limit) {
             let entry = offset + 16 + index * 8
             guard let name = u32(data, entry), let value = u32(data, entry + 4) else { break }
             result.append(Node(
@@ -257,8 +263,9 @@ nonisolated enum PEResources {
         var result: [Int: Data] = [:]
         for name in children(of: data, at: root + types.offset) {
             guard let id = name.id else { continue }
+            // The language level: the first entry is the one taken.
             let leafNode = name.isDirectory
-                ? children(of: data, at: root + name.offset).first
+                ? children(of: data, at: root + name.offset, limit: 1).first
                 : name
             guard let leafNode, let bytes = leaf(
                 of: data, root: root, offset: leafNode.offset, sections: sections,

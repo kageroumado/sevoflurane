@@ -55,6 +55,40 @@ nonisolated enum SteamOps {
         )
     }
 
+    /// Where a launch went: to Sevoflurane's page, whose chooser (or the
+    /// option given ahead) answers Steam's launch-option question, or straight
+    /// into the client, where only an option given ahead can.
+    enum LaunchRoute { case app, client }
+
+    /// Starts an app the way the menu does. With supervision running the
+    /// daemon's `/game/launch` takes it, so a game pinned to another renderer
+    /// is staged and the client restarted for it first; the daemon hands the
+    /// launch to the app when one is attached. Otherwise, and when no app took
+    /// it, the launch is made in the client's own context.
+    static func requestLaunch(_ appid: Int, option: Int?) async throws -> LaunchRoute {
+        if await AppControl.status() != nil {
+            var path = "/game/launch?appid=\(appid)"
+            if let option { path += "&option=\(option)" }
+            if let data = await AppControl.post(path, timeout: 300) {
+                let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                // A daemon that does not report delivery hands every launch
+                // to the app it has.
+                let delivered = if let answer = reply?["delivered"] as? Bool {
+                    answer
+                } else {
+                    await AppControl.appIsAlive()
+                }
+                if delivered { return .app }
+            }
+        }
+        if let option {
+            try await launch(appid, answering: option)
+        } else {
+            try await launch(appid)
+        }
+        return .client
+    }
+
     /// Starts an app and answers Steam's launch-option question with `option`
     /// from the client's own context, for a `sevo` with no app to ask the user.
     static func launch(_ appid: Int, answering option: Int) async throws {
@@ -250,7 +284,14 @@ nonisolated enum GameStop {
     static func processes(ofApp appid: Int) async -> [pid_t] {
         let names = executableNames(ofApp: appid)
         guard !names.isEmpty else { return [] }
-        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: names)
+        // `pgrep` matches a pattern anywhere in the command line, so the
+        // bottle-scoped candidates are kept only where the program itself —
+        // argv[0]'s last path component — carries one of the names exactly.
+        let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
+        let exact = Set(names.flatMap { WineProcessList.pids(named: $0, inPgrepLong: listing) })
+        guard !exact.isEmpty else { return [] }
+        let patterns = names.map { NSRegularExpression.escapedPattern(for: $0) }
+        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns).filter(exact.contains)
     }
 
     static func executableNames(ofApp appid: Int) -> [String] {

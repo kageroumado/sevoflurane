@@ -2,8 +2,9 @@ import Foundation
 
 /// Everything that owns the bottle, in one process that outlives the app.
 ///
-/// The daemon is a LaunchAgent with `KeepAlive`, so it is up whenever the user
-/// is logged in and Sevoflurane's background item is enabled. It spawns and
+/// The daemon is a LaunchAgent that launchd starts again after a crash, so it
+/// is up whenever the user is logged in and Sevoflurane's background item is
+/// enabled. It spawns and
 /// reaps every bottle process, runs the restart ladder, and serves the control
 /// port; Sevoflurane.app renders Steam and attaches to it, and quitting the app
 /// asks the daemon to bring the bottle down.
@@ -13,13 +14,14 @@ import Foundation
 @MainActor
 final class Daemon {
     let app = AppLink()
-    private var supervisor: BottleSupervisor!
-    private var control: ControlServer!
+    /// Nil until ``start()`` has run: a `SIGTERM` can arrive before it.
+    private var supervisor: BottleSupervisor?
+    private var control: ControlServer?
     private var orphanWatch: Task<Void, Never>?
 
-    /// Answers false when another supervisor already holds the control port,
-    /// in which case this process has nothing to do and should end.
-    func start() async -> Bool {
+    /// Answers how the control port went. With another supervisor holding
+    /// it, this process has nothing to do and should end.
+    func start() async -> ControlServer.StartOutcome {
         // Ownership first: everything spawned from here carries this pid, and
         // the engine's dock shim brings the prefix down if it dies.
         BottleOwner.claim()
@@ -43,27 +45,29 @@ final class Daemon {
         supervisor.onHealthChange = { [weak self] health in
             guard let self else { return }
             Task(name: "Push the supervisor's verdict") {
-                await self.app.push(self.snapshot(health))
+                await self.app.push(self.snapshot(health, of: supervisor))
             }
         }
         supervisor.onPressureChange = { [weak self] _ in
             guard let self else { return }
             Task(name: "Push the Mac's load") {
-                await self.app.push(self.snapshot(supervisor.health))
+                await self.app.push(self.snapshot(supervisor.health, of: supervisor))
             }
         }
         self.supervisor = supervisor
-        control = ControlServer(supervisor: supervisor, app: app) { [weak self] in
+        let control = ControlServer(supervisor: supervisor, app: app) { [weak self] in
             await self?.bringTheBottleDown()
         }
-        guard await control.start() else { return false }
+        self.control = control
+        let outcome = await control.start()
+        guard outcome == .serving else { return outcome }
         EventLog.shared.log(
             .supervisor,
             "daemon up (pid \(getpid())) — it owns the bottle from here",
         )
         supervisor.start()
         watchForOrphans()
-        return true
+        return .serving
     }
 
     /// How often the engines' processes are checked for a dead wineserver. Two sightings in a
@@ -90,7 +94,9 @@ final class Daemon {
         }
     }
 
-    private func snapshot(_ health: SupervisorHealth) -> SupervisorSnapshot {
+    private func snapshot(
+        _ health: SupervisorHealth, of supervisor: BottleSupervisor,
+    ) -> SupervisorSnapshot {
         SupervisorSnapshot(
             health,
             isBusyRestarting: supervisor.isBusyRestarting,
@@ -126,6 +132,6 @@ final class Daemon {
     /// (`launchctl bootout`, logout, shutdown). Supervision stops first so
     /// nothing relaunches the client behind the teardown.
     func bringTheBottleDown() async {
-        await supervisor.shutdownForQuit()
+        await supervisor?.shutdownForQuit()
     }
 }

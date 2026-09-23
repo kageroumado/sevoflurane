@@ -8,7 +8,13 @@ extension BottleSupervisor {
     /// per-program file; every other one reaches it through the environment of
     /// the process tree Steam already lives in, so it takes a new tree. The
     /// menu bar says so before the click; this is the click.
-    func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
+    ///
+    /// Answers whether the app took the launch. With no app attached the
+    /// bottle is still made ready, and the caller starts the game itself.
+    @discardableResult
+    func launch(
+        appID: Int, name: String, renderer explicit: Renderer? = nil, option: Int? = nil,
+    ) async -> Bool {
         // The renderer this launch has to move the bottle onto — an explicit
         // "Run with X" wins over the game's own choice, and neither persists
         // past the launch beyond the bottle default it sets.
@@ -37,10 +43,11 @@ extension BottleSupervisor {
             recentRestarts.removeAll()
             hygieneTried = false
             await restartClient(reason: "graphics change for \(name)")
-            // The client is up and the page reloaded; Steam's own services
-            // need a moment more before a launch request means anything.
-            for _ in 0 ..< 40 where health != .healthy {
-                try? await Task.sleep(for: .seconds(3))
+            // The ladder returns at the spawn; a launch request means nothing
+            // until the client, the page and Steam's services are all up.
+            if await !waitForHealthy(), case .gaveUp = health {
+                log.log(.client, "not launching \(name): the client did not come back")
+                return false
             }
         } else if change.restage {
             // Hot: only the renderer or D3DMetal version moved. Restage the
@@ -52,7 +59,7 @@ extension BottleSupervisor {
             }
             BottleGraphics.recordBootedSelection()
         }
-        await app.launchGame(appID: appID)
+        return await app.launchGame(appID: appID, option: option)
     }
 
     /// The menu-bar button and the control endpoint: restarts
@@ -66,6 +73,32 @@ extension BottleSupervisor {
         Task(name: "Manual client restart") {
             await restartClient(reason: reason)
         }
+    }
+
+    /// Moves the client onto another engine, and optionally another bottle.
+    /// The choice is held until the ladder has stopped the running client:
+    /// every stop rung — the graceful ask, `wineserver -k`, the scoped sweeps —
+    /// addresses `Engine.active` and `SteamBottle.name`, so choosing first
+    /// would aim them at the new prefix and leave the old client, its
+    /// wineserver and any game running.
+    func switchEngine(to engine: Engine, bottle: String?) {
+        pendingSwitch = EngineSwitch(engine: engine, bottle: bottle)
+        restartNow(reason: "engine switched to \(engine.description)")
+    }
+
+    /// Makes a held engine switch the active choice. Called with the old
+    /// client down; answers whether there was one.
+    @discardableResult
+    func applyPendingSwitch() -> Bool {
+        guard let next = pendingSwitch else { return false }
+        pendingSwitch = nil
+        Engine.choose(next.engine)
+        if let bottle = next.bottle { SteamBottle.choose(bottle) }
+        log.log(
+            .supervisor,
+            "engine is now \(next.engine.description), bottle \(SteamBottle.name)",
+        )
+        return true
     }
 
     /// The heavier menu-bar restart: the whole fake Windows comes down and
@@ -108,17 +141,34 @@ extension BottleSupervisor {
     /// comes down first so nothing holds the cache, it is cleared, then the
     /// client relaunches if one is still wanted. Only `steamapps/shadercache`
     /// is removed — saves and game files stay — and Steam rebuilds it.
+    ///
+    /// With a client wanted it is one ladder pass, clearing between the stop
+    /// and the launch, so neither the probe cycle nor another ladder can start
+    /// a client over the cache while it goes.
     func clearShaderCache() {
         recentRestarts.removeAll()
         hygieneTried = false
-        Task(name: "Clear the shader cache") {
-            await app.duringClientStop {
-                await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
+        guard wantsClient, !isQuitting else {
+            Task(name: "Clear the shader cache") {
+                guard !isRestarting, !isQuitting else { return }
+                await app.duringClientStop {
+                    await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
+                }
+                clearShaderCacheNow()
             }
-            let cleared = ClientLifecycle.clearShaderCache()
-            log.log(.supervisor, cleared ? "shader cache cleared" : "no shader cache to clear")
-            await restartClient(reason: "shader cache cleared")
+            return
         }
+        pendingShaderCacheClear = true
+        Task(name: "Clear the shader cache") {
+            await restartClient(reason: "clearing the shader cache", fullWindows: true)
+        }
+    }
+
+    /// Clears the cache a ladder pass was asked to, with the bottle down.
+    func clearShaderCacheNow() {
+        pendingShaderCacheClear = false
+        let cleared = ClientLifecycle.clearShaderCache()
+        log.log(.supervisor, cleared ? "shader cache cleared" : "no shader cache to clear")
     }
 
     /// Whether the restart ladder is mid-flight — control verbs that would
@@ -146,14 +196,23 @@ extension BottleSupervisor {
     /// Whether a provisioning failure is holding the client down: the last
     /// setup pass for this engine and bottle stopped at a stage that leaves
     /// nothing to start, and nobody has retried it or asked for the client
-    /// anyway (Settings › Engine). Says so in the log once per attempt,
-    /// because a client that never comes up is otherwise a mystery.
+    /// anyway (Settings › Engine). The verdict names the reason, because a
+    /// client that never comes up is otherwise a mystery; the log says it
+    /// once per failure rather than once per probe.
     func provisioningBlocksStart(reason: String) -> Bool {
-        guard let failure = BottleReadiness.clientStartBlock else { return false }
-        log.log(
-            .supervisor,
-            "not starting the client (\(reason)): the bottle is unfinished — \(failure)",
-        )
+        guard let failure = BottleReadiness.clientStartBlock else {
+            reportedProvisioningBlock = nil
+            return false
+        }
+        if reportedProvisioningBlock != failure {
+            reportedProvisioningBlock = failure
+            log.log(
+                .supervisor,
+                "not starting the client (\(reason)): the bottle is unfinished — \(failure)",
+            )
+        }
+        fault = .degraded("the bottle is unfinished — \(failure)")
+        refreshHealth()
         return true
     }
 
@@ -193,6 +252,15 @@ extension BottleSupervisor {
         await app.duringClientStop {
             await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
         }
+        // A ladder that was mid-flight sees the quit at its next guard and
+        // launches nothing; once it has returned, one more pass takes down
+        // whatever it had spawned before the guard.
+        if isRestarting {
+            await ladderFinished()
+            await app.duringClientStop {
+                await ClientLifecycle.stopAll(gracePolls: 4, hidingPopups: true)
+            }
+        }
         let survivors = await ClientLifecycle.bottleProcessIDs()
         log.log(
             .supervisor,
@@ -200,6 +268,9 @@ extension BottleSupervisor {
                 ? "quit: bottle is down"
                 : "quit: pids \(survivors) survived SIGKILL",
         )
+        // A switch the quit overtook lands now, with the old bottle down,
+        // so the next start boots the engine that was asked for.
+        applyPendingSwitch()
         // The next client is a start: the one this session saw is gone on
         // purpose, and the daemon outlives the app that asked.
         hasSeenClientUp = false

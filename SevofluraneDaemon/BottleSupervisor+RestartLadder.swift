@@ -3,22 +3,31 @@ import os
 
 extension BottleSupervisor {
     func restartClient(reason: String, fullWindows: Bool = false) async {
-        guard wantsClient else { return }
-        guard !isQuitting, !provisioningBlocksStart(reason: reason) else { return }
+        guard wantsClient, !isQuitting else { return }
+        // A held switch is judged by the bottle it moves to, once it has.
+        if pendingSwitch == nil, provisioningBlocksStart(reason: reason) { return }
         if isRestarting {
             restartAgain = reason
             log.log(.supervisor, "restart requested mid-restart (\(reason)); the ladder runs again")
             return
         }
         isRestarting = true
+        // The verdict moves to restarting before the first await, so a
+        // caller polling for healthy never reads the client being replaced.
+        refreshHealth()
         defer {
             isRestarting = false
             refreshHealth()
+            let waiters = ladderWaiters
+            ladderWaiters = []
+            for waiter in waiters {
+                waiter.resume()
+            }
         }
         var reason = reason, fullWindows = fullWindows
         while true {
             await runRestartLadder(reason: reason, fullWindows: fullWindows)
-            guard let again = restartAgain, !isQuitting else { return }
+            guard let again = restartAgain, wantsClient, !isQuitting else { return }
             restartAgain = nil
             reason = again
             fullWindows = false
@@ -58,7 +67,7 @@ extension BottleSupervisor {
         // wineserver only has to go when the next launch actually needs a
         // different one: another engine's, or new sync primitives (esync/
         // msync are negotiated with the server at spawn).
-        let windowsCanStay = !fullWindows
+        let windowsCanStay = !fullWindows && pendingSwitch == nil && !pendingShaderCacheClear
             && BottleGraphics.bootedEngineRoot() == Engine.active.root.path
             && BottleGraphics.bootedSelection()?.msync
             == BottleGraphics.currentSelection().msync
@@ -74,14 +83,18 @@ extension BottleSupervisor {
             }
         }
 
+        await launchAfterStop(reason: reason)
+    }
+
+    /// The launch that ends a pass, once its stop has run. It launches only
+    /// onto a bottle with no `steam.exe` left, with a client still wanted and
+    /// no newer restart asked for, and applies a held engine switch first.
+    private func launchAfterStop(reason: String) async {
         // The launcher can time out and *still* spawn a client later; a
-        // steam.exe that survived everything above means launching now could
-        // stack a second instance on top of it. This guard plus
-        // `isRestarting` is the entire double-start defense: restart
-        // generation tags were considered and dropped because
-        // `-nocrashdialog` removed Steam's own watchdog — the only other
-        // writer that could race a relaunch. If a double-start ever appears
-        // in the log again, tags are the next step.
+        // steam.exe that survived the stop means launching now could stack a
+        // second instance on top of it. This guard plus `isRestarting` is the
+        // double-start defense: `-nocrashdialog` removed Steam's own watchdog,
+        // the only other writer that could race a relaunch.
         let leftovers = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe")
         guard leftovers.isEmpty else {
             fault = .degraded("a steam.exe survived kill -9 — not launching a second client")
@@ -91,10 +104,14 @@ extension BottleSupervisor {
             )
             return
         }
-        guard !isQuitting else { return }
+        if pendingShaderCacheClear { clearShaderCacheNow() }
+        // A quit that began during the stop has taken the client away from
+        // this ladder: it launches nothing.
+        guard wantsClient, !isQuitting else { return }
         // The engine may have changed under this pass; the next one settles
         // what has to come down for it before anything is launched.
         guard restartAgain == nil else { return }
+        if applyPendingSwitch(), provisioningBlocksStart(reason: reason) { return }
 
         setRestartPhase("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
@@ -105,6 +122,14 @@ extension BottleSupervisor {
         // booting — is a state of the probe cycle, which has the guards and
         // the cadence for it.
         enterBoot(.awaitingClient)
+    }
+
+    /// Returns once no ladder is running. Quit waits here, so a ladder that
+    /// was mid-stop when the quit arrived has returned before the quit
+    /// declares the bottle down.
+    func ladderFinished() async {
+        guard isRestarting else { return }
+        await withCheckedContinuation { ladderWaiters.append($0) }
     }
 
     /// The rung the ladder is on, as the menu bar and the footer show it.
@@ -143,7 +168,7 @@ extension BottleSupervisor {
                 setRestartPhase(phase)
             }
         }
-        guard !isQuitting else { return }
+        guard wantsClient, !isQuitting else { return }
         if ClientLifecycle.purgeHTMLCache() {
             log.log(.client, "trashed the bottle's htmlcache")
         }
@@ -154,10 +179,15 @@ extension BottleSupervisor {
             updated ? "headless client repair finished"
                 : "headless client repair did not exit cleanly",
         )
-        guard !isQuitting else { return }
-        setRestartPhase("launching the client")
-        clientStartedAt = .now
-        await ClientLifecycle.launchClient()
-        enterBoot(.awaitingClient)
+        if !updated {
+            // An updater that timed out may have left a client of its own
+            // running in the bottle; the relaunch starts from an empty one.
+            await app.duringClientStop {
+                await ClientLifecycle.stopAll(gracePolls: 10) { phase in
+                    setRestartPhase(phase)
+                }
+            }
+        }
+        await launchAfterStop(reason: "crash-loop relaunch")
     }
 }

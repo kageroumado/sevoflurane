@@ -17,7 +17,13 @@
     <true/>
 
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ExitTimeOut</key>
+    <integer>60</integer>
 
     <key>ProcessType</key>
     <string>Interactive</string>

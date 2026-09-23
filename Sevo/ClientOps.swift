@@ -197,8 +197,9 @@ nonisolated enum ClientOps {
             }
         }
         if await supervisionIsRunning(noApp: noApp) {
-            var path = "/engine/use?version=\(version)"
-            if let bottle, !bottle.isEmpty { path += "&bottle=\(bottle)" }
+            var query = [(name: "version", value: version)]
+            if let bottle, !bottle.isEmpty { query.append((name: "bottle", value: bottle)) }
+            let path = "/engine/use?" + QueryString.encode(query)
             guard let reply = await AppControl.postReply(path, timeout: 120) else {
                 throw Failure.message("the daemon's control endpoint did not answer /engine/use")
             }
@@ -208,17 +209,21 @@ nonisolated enum ClientOps {
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                 )
             }
-            // The switch lands in the app's process; this one resolved
+            // The switch lands in the daemon's process; this one resolved
             // `Engine.active` before it and reports the outcome from there.
             Engine.active = engine
             progress("engine switch requested via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "engine use", progress: progress)
         }
+        // The stop runs under the old choice: its graceful ask, `wineserver -k`
+        // and sweeps address the active engine's prefix, and choosing first
+        // would leave the old client running beside the new one.
+        _ = try await stop(noApp: true, progress: progress)
         Engine.choose(engine)
         if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
         try await ensureProvisioned()
-        progress("engine set to \(version) — restarting the client")
-        let outcome = try await restart(noApp: true, progress: progress).renamed("engine use")
+        progress("engine set to \(version) — starting the client")
+        let outcome = try await start(noApp: true, progress: progress).renamed("engine use")
         // A restart always moves the client, so its verdict is about health,
         // not about the switch; when nothing actually changed, say so.
         if alreadyActive, bottle == nil, outcome.verdict == .confirmed {
@@ -459,7 +464,7 @@ nonisolated enum ClientOps {
                 "no usable engine — install CrossOver, or run: sevo engine install",
             )
         }
-        guard detection.bottles.first(where: { $0.name == SteamBottle.name })?.hasSteam == true else {
+        guard SetupProbe.bottles(for: Engine.active).first(where: { $0.name == SteamBottle.name })?.hasSteam == true else {
             throw Failure.unprovisioned(
                 "no Steam client in bottle '\(SteamBottle.name)' — run Sevoflurane's setup wizard",
             )
