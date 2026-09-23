@@ -1,14 +1,14 @@
 import Foundation
 
 /// The daemon half of the `sevo` contract: a loopback HTTP endpoint the CLI —
-/// and through it, agents — uses to drive supervision. Every verb the app used
-/// to serve keeps its path and its JSON, so `sevo` cannot tell that the
-/// supervisor moved out of the app process.
+/// and through it, agents — uses to drive supervision. A verb keeps its path
+/// and its JSON wherever it is served, so `sevo` never needs to know which
+/// process answers it.
 ///
 /// Verbs that need the page rather than the client are proxied to the app
-/// (``AppLink/proxy(_:)``) and answer 409 when no app is running. Same exposure
-/// class as the bridge's `/__eval`: loopback only, and the machine's local
-/// processes are already trusted with more.
+/// (``AppLink/proxy(_:)``) and answer 409 when no app is running. Local
+/// programs are trusted; web pages are not, and ``LoopbackGate/control``
+/// refuses any request that carries a browser's `Origin` or a foreign `Host`.
 @MainActor
 final class ControlServer {
     private let supervisor: BottleSupervisor
@@ -57,7 +57,7 @@ final class ControlServer {
     func start() async -> Bool {
         do {
             let server = try HTTPServer(
-                port: BridgePorts.control, exclusive: true,
+                port: BridgePorts.control, gate: .control, exclusive: true,
             ) { [weak self] request in
                 await self?.handle(request) ?? .error(500, "control server gone")
             }

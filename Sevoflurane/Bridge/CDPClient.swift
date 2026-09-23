@@ -12,6 +12,11 @@ actor CDPClient {
         case unanswered(String)
         case closed
         case badReply(String)
+        /// CDP refused the call itself: an unknown method, bad parameters.
+        case protocolError(String)
+        /// The evaluated script threw; the payload is the exception's
+        /// description as the client renders it.
+        case scriptThrew(String)
     }
 
     /// Fires for every `Runtime.bindingCalled` payload on the `__sevo` binding.
@@ -84,8 +89,7 @@ actor CDPClient {
     /// `consumingBindings` enables the `Runtime` domain, which only the
     /// bridge's persistent connection needs: `Runtime.bindingCalled` is what
     /// carries the client's callbacks back, and `Runtime.evaluate` answers
-    /// without the domain enabled. A one-shot session that enabled it left
-    /// `Runtime` on in a renderer for a transport that was already gone.
+    /// without the domain enabled; one-shot sessions leave it off.
     func connect(socketURL: URL, consumingBindings: Bool) async throws {
         do {
             try await withDeadline(Self.connectBudget) {
@@ -164,12 +168,27 @@ actor CDPClient {
 
     /// Evaluates `expression` with `returnByValue` + `awaitPromise` and returns
     /// the value: strings verbatim, other scalars as their JSON text, `nil`
-    /// for null/undefined. Every caller's expression returns a string today.
+    /// for null/undefined. A script that throws, or a promise that rejects,
+    /// throws ``Failure/scriptThrew(_:)``.
     func evaluate(_ expression: String) async throws -> String? {
         let reply = try await send(method: "Runtime.evaluate", params: [
             "expression": expression, "returnByValue": true, "awaitPromise": true,
         ])
+        return try Self.value(fromEvaluateReply: reply)
+    }
+
+    /// The value a `Runtime.evaluate` reply carries, rendered as
+    /// ``evaluate(_:)`` returns it.
+    nonisolated static func value(fromEvaluateReply reply: [String: Any]) throws -> String? {
         let outer = reply["result"] as? [String: Any]
+        if let details = outer?["exceptionDetails"] as? [String: Any] {
+            let exception = details["exception"] as? [String: Any]
+            let description = exception?["description"] as? String
+                ?? (exception?["value"]).map { "\($0)" }
+                ?? details["text"] as? String
+                ?? "exception"
+            throw Failure.scriptThrew(description)
+        }
         let value = (outer?["result"] as? [String: Any])?["value"]
         switch value {
         case nil, is NSNull:
@@ -234,6 +253,9 @@ actor CDPClient {
               let reply = try? JSONSerialization.jsonObject(with: Data(raw.utf8))
               as? [String: Any] else {
             throw Failure.badReply(method)
+        }
+        if let error = reply["error"] as? [String: Any] {
+            throw Failure.protocolError("\(method): \(error["message"] as? String ?? "error")")
         }
         return reply
     }

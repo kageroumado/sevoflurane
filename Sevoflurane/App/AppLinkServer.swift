@@ -5,8 +5,8 @@ import Foundation
 /// The daemon owns the bottle and answers `sevo` on the control port; anything
 /// that needs the page, Steam's popups or a window inventory is passed through
 /// to here, and the daemon's own commands — reload, dismiss, open the library —
-/// arrive the same way. Loopback only, same exposure class as the bridge's
-/// `/__eval`.
+/// arrive the same way. Loopback only, behind ``LoopbackGate/appLink``: local
+/// programs are admitted, web pages are not.
 @MainActor
 final class AppLinkServer {
     private let supervisor: ClientSupervisor
@@ -26,7 +26,7 @@ final class AppLinkServer {
     func start() async -> Bool {
         do {
             let server = try HTTPServer(
-                port: BridgePorts.appLink, exclusive: true,
+                port: BridgePorts.appLink, gate: .appLink, exclusive: true,
             ) { [weak self] request in
                 await self?.handle(request) ?? .error(500, "app link gone")
             }

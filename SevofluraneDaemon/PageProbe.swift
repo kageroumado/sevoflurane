@@ -24,6 +24,7 @@ nonisolated enum PageProbe {
     static func state() async -> State {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"
+        request.setValue("1", forHTTPHeaderField: BridgePorts.evalHeader)
         request.httpBody = Data(
             "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))".utf8,
         )

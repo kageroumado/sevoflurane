@@ -260,32 +260,34 @@ final class SteamWindow: NSObject {
             // A dialog's place is the app's: Steam would put it bottom-left.
             if !isParked, role != .gameOverlay, role != .dialog,
                let point = geometry(args, at: 0 ..< 2, from: function) {
-                moveTo(x: point[0], y: point[1])
+                moveTo(x: Self.clampedOffset(point[0]), y: Self.clampedOffset(point[1]))
             }
         case "ResizeTo":
             // Steam resizes the overlay to the whole screen; it follows the
             // game's frame instead (`setOverlayActive`).
             if role != .gameOverlay, let size = geometry(args, at: 0 ..< 2, from: function) {
-                resizeTo(width: size[0], height: size[1])
+                let size = Self.clampedSize(width: size[0], height: size[1])
+                resizeTo(width: size.width, height: size.height)
             }
         case "PositionWindowRelative":
             if !isParked, role != .gameOverlay, let frame = geometry(args, at: 1 ..< 5, from: function) {
+                let size = Self.clampedSize(width: frame[2], height: frame[3])
                 positionRelative(
                     toWindowNamed: string(args, 0),
-                    x: frame[0],
-                    y: frame[1],
-                    width: frame[2],
-                    height: frame[3],
+                    x: Self.clampedOffset(frame[0]),
+                    y: Self.clampedOffset(frame[1]),
+                    width: size.width,
+                    height: size.height,
                 )
             }
         case "SetMinSize":
             if let size = geometry(args, at: 0 ..< 2, from: function) {
-                minimumSize = CGSize(width: size[0], height: size[1])
+                minimumSize = Self.clampedSize(width: size[0], height: size[1])
                 window?.contentMinSize = minimumSize ?? .zero
             }
         case "SetMaxSize":
             if let size = geometry(args, at: 0 ..< 2, from: function) {
-                maximumSize = CGSize(width: size[0], height: size[1])
+                maximumSize = Self.clampedSize(width: size[0], height: size[1])
                 window?.contentMaxSize = maximumSize ?? .zero
             }
         case "SetHideOnClose":
@@ -321,7 +323,7 @@ final class SteamWindow: NSObject {
             // "Browse local files" and friends. Routed here by the shim; the
             // client's own handler would open Wine's explorer.exe.
             if let target = SteamBottle.macURL(fromWindowsPath: string(args, 0)) {
-                NSWorkspace.shared.open(target)
+                Self.reveal(target)
             }
         case "__browseScreenshots":
             // Steam's own handler opens the bottle's explorer.exe. The first
@@ -329,7 +331,7 @@ final class SteamWindow: NSObject {
             // the app menu passes with it names a file, and the folder is
             // what "show on disk" means.
             if let folder = SteamBottle.screenshots(forApp: string(args, 0)) {
-                NSWorkspace.shared.open(folder)
+                Self.reveal(folder)
             }
         case "__openSoundSettings":
             // The bottle's microphone panel configures a Wine device nobody
@@ -868,6 +870,35 @@ final class SteamWindow: NSObject {
                 width: numbers[2].doubleValue,
                 height: numbers[3].doubleValue,
             )
+        }
+    }
+}
+
+// MARK: - Local folders
+
+extension SteamWindow {
+    /// How a path the page names is shown in the Finder.
+    nonisolated enum Reveal: Equatable, Sendable {
+        /// A plain folder, opened as a Finder window.
+        case open(URL)
+        /// A file or a package, selected in its enclosing folder. Opening one
+        /// would launch it: an app, a script, a document's handler.
+        case select(URL)
+    }
+
+    /// The Finder action for `url`, judged on the file system as it stands.
+    nonisolated static func directoryToReveal(_ url: URL) -> Reveal {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        if values?.isDirectory == true, values?.isPackage != true { return .open(url) }
+        return .select(url)
+    }
+
+    static func reveal(_ url: URL) {
+        switch directoryToReveal(url) {
+        case let .open(folder):
+            NSWorkspace.shared.open(folder)
+        case let .select(item):
+            NSWorkspace.shared.activateFileViewerSelecting([item])
         }
     }
 }

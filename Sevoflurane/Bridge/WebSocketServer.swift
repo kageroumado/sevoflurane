@@ -36,7 +36,8 @@ final nonisolated class WSConnection: Sendable {
     }
 
     /// Begins the receive loop. `onClose` fires exactly once, for any of
-    /// error, cancel, or a close frame from the peer.
+    /// error, cancel, a close frame from the peer, or the peer finishing its
+    /// side; the connection is cancelled with it.
     func start(
         queue: DispatchQueue,
         onText: @escaping @Sendable (String) -> Void,
@@ -44,11 +45,12 @@ final nonisolated class WSConnection: Sendable {
         onClose: @escaping @Sendable () -> Void,
     ) {
         nonisolated(unsafe) var closed = false
-        let finish: @Sendable () -> Void = {
+        let finish: @Sendable () -> Void = { [connection] in
             // Runs on `queue` from both stateUpdateHandler and the receive
             // loop, which the serial queue serializes.
             if !closed {
                 closed = true
+                connection.cancel()
                 onClose()
             }
         }
@@ -65,9 +67,11 @@ final nonisolated class WSConnection: Sendable {
         onData: @escaping @Sendable (Data) -> Void,
         onClose: @escaping @Sendable () -> Void,
     ) {
-        connection.receiveMessage { [weak self] data, context, _, error in
+        connection.receiveMessage { [weak self] data, context, isComplete, error in
             guard let self else { return }
-            if error != nil {
+            // A finished stream with nothing in it is the peer gone: a
+            // handshake the gate refused ends this way, with no error.
+            if error != nil || (isComplete && data == nil) {
                 onClose()
                 return
             }
@@ -80,7 +84,6 @@ final nonisolated class WSConnection: Sendable {
                 if let data { onData(data) }
             case .close:
                 onClose()
-                self.connection.cancel()
                 return
             default:
                 break
@@ -93,11 +96,17 @@ final nonisolated class WSConnection: Sendable {
 /// A loopback WebSocket server. Each accepted connection is handed to
 /// `onConnection` before its receive loop starts, so the owner can register
 /// it and then call ``WSConnection/start``.
+///
+/// The handshake passes through the port's ``LoopbackGate``, and one it
+/// refuses is answered 400. The refused connection still reaches
+/// `onConnection` — Network.framework offers no way to tell it apart there —
+/// and closes as soon as its receive loop starts, so an owner must not treat
+/// a connection as its peer before the first message arrives.
 final nonisolated class WebSocketServer: Sendable {
     private let listener: NWListener
     let queue: DispatchQueue
 
-    init(port: UInt16, label: String, maxMessageSize: Int = 1 << 20) throws {
+    init(port: UInt16, label: String, gate: LoopbackGate, maxMessageSize: Int = 1 << 20) throws {
         queue = DispatchQueue(label: "sevo.ws.\(label)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
@@ -107,8 +116,31 @@ final nonisolated class WebSocketServer: Sendable {
         let websocket = NWProtocolWebSocket.Options()
         websocket.autoReplyPing = true
         websocket.maximumMessageSize = maxMessageSize
+        websocket.setClientRequestHandler(queue) { _, additionalHeaders in
+            let status = Self.handshakeStatus(additionalHeaders, gate: gate)
+            return NWProtocolWebSocket.Response(status: status, subprotocol: nil)
+        }
         parameters.defaultProtocolStack.applicationProtocols.insert(websocket, at: 0)
         listener = try NWListener(using: parameters)
+    }
+
+    /// The gate's verdict on one handshake. Network.framework hands the
+    /// request's header fields over as `additionalHeaders`, `Host` and
+    /// `Origin` among them.
+    static func handshakeStatus(
+        _ fields: [(name: String, value: String)], gate: LoopbackGate,
+    ) -> NWProtocolWebSocket.Response.Status {
+        var headers: [String: String] = [:]
+        for field in fields {
+            headers[field.name.lowercased()] = field.value
+        }
+        switch gate.verdict(method: "GET", path: "/", headers: headers) {
+        case .admitted:
+            return .accept
+        case let .refused(reason):
+            gate.noteRefusal(reason)
+            return .reject
+        }
     }
 
     func start(onConnection: @escaping @Sendable (WSConnection) -> Void) {

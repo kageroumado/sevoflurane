@@ -59,6 +59,8 @@ nonisolated enum BridgeJS {
          with an evaluate per frame wedges steamwebhelper. */
       const relay = new WebSocket('ws://127.0.0.1:%RELAY_PORT%');
       relay.binaryType = 'arraybuffer';
+      /* The bridge takes a socket as its relay on this first message. */
+      relay.onopen = () => relay.send(JSON.stringify({ type: 'hello' }));
       window.__sevoRelay = relay;
       const socks = window.__sevoTunnels = {};
       const ctl = (o) => { if (relay.readyState === 1) relay.send(JSON.stringify(o)); };
@@ -66,6 +68,7 @@ nonisolated enum BridgeJS {
          carry every tunnel without a JSON hop around the payload. */
       const frame = (id, buf) => {
         const idb = new TextEncoder().encode(id);
+        if (idb.length > 255) return;
         const out = new Uint8Array(1 + idb.length + buf.byteLength);
         out[0] = idb.length;
         out.set(idb, 1);
@@ -121,17 +124,4 @@ nonisolated enum BridgeJS {
       return out;
     })(SteamClient, 3))
     """#
-
-    /// Page commands answered by a one-line SteamClient call. `%ID%` is the
-    /// integer appid.
-    static let commands: [String: String] = [
-        "launch": "SteamClient.Apps.RunGame(String(%ID%), '', -1, 100)",
-        "terminate": "SteamClient.Apps.TerminateApp(String(%ID%), false)",
-        "install": "SteamClient.Installs.OpenInstallWizard([%ID%])",
-        "continue_install": "SteamClient.Installs.ContinueInstall()",
-        "uninstall": "SteamClient.Installs.OpenUninstallWizard([%ID%], true)",
-        "pause": "SteamClient.Downloads.PauseAppUpdate(%ID%)",
-        "resume": "SteamClient.Downloads.ResumeAppUpdate(%ID%)",
-        "queue_update": "SteamClient.Downloads.QueueAppUpdate(%ID%)",
-    ]
 }

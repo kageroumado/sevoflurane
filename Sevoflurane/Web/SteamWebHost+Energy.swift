@@ -1,12 +1,12 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Steam's library runs its animated capsule art at 60fps — measured ~27%
-    /// of a core even when nothing is happening. When macOS says the user wants
-    /// to save power (Low Power Mode) or reduce motion (the accessibility
-    /// preference), that cost is exactly what they are asking to shed, so the
-    /// matching Steam settings are turned on to match, and put back when the
-    /// macOS preference goes away.
+    /// Steam's library runs its animated capsule art at 60fps — a steady cost
+    /// even when idle. When macOS says the user wants to save power (Low Power
+    /// Mode) or reduce motion (the accessibility preference), that cost is
+    /// exactly what they are asking to shed, so the matching Steam settings
+    /// are turned on to match, and put back when the macOS preference goes
+    /// away.
     ///
     /// These are unambiguous system signals — the OS only reports them when the
     /// user has opted in — so this never quiets the UI while they want it full.
@@ -37,32 +37,39 @@ extension SteamWebHost {
         guard context != nil else { return }
         let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let engage = lowPower || reduceMotion
-        Task {
-            if engage {
-                if UserDefaults.standard.string(forKey: Self.renderBaselineKey) == nil {
-                    guard let saved = await evaluateInContext(Self.captureRenderSettingsScript),
-                          saved != "unavailable" else { return }
-                    UserDefaults.standard.set(saved, forKey: Self.renderBaselineKey)
-                }
-                _ = await evaluateInContext(Self.setRenderSettingsScript(
-                    lowPerf: lowPower, reduceMotion: true, smoothScroll: !lowPower,
-                ))
-                EventLog.shared.log(
-                    .app,
-                    "matched macOS power preference (low power=\(lowPower), reduce motion=\(reduceMotion)) — eased Steam's rendering",
-                )
-            } else if let baseline = UserDefaults.standard.string(forKey: Self.renderBaselineKey) {
-                UserDefaults.standard.removeObject(forKey: Self.renderBaselineKey)
-                guard let values = try? JSONDecoder().decode([String: Bool].self, from: Data(baseline.utf8))
-                else { return }
-                _ = await evaluateInContext(Self.setRenderSettingsScript(
-                    lowPerf: values["library_low_perf_mode"] ?? false,
-                    reduceMotion: values["accessibility_reduce_motion"] ?? false,
-                    smoothScroll: values["smooth_scroll_webviews"] ?? true,
-                ))
-                EventLog.shared.log(.app, "macOS power preference cleared — restored Steam's rendering")
+        // Passes run one after another: two overlapping passes race over
+        // the saved baseline, and the older one can finish last and win.
+        let previous = energyUpdate
+        energyUpdate = Task(name: "Match Steam's rendering to macOS") {
+            await previous?.value
+            await applyEnergyPreference(lowPower: lowPower, reduceMotion: reduceMotion)
+        }
+    }
+
+    private func applyEnergyPreference(lowPower: Bool, reduceMotion: Bool) async {
+        if lowPower || reduceMotion {
+            if UserDefaults.standard.string(forKey: Self.renderBaselineKey) == nil {
+                guard let saved = await evaluateInContext(Self.captureRenderSettingsScript),
+                      saved != "unavailable" else { return }
+                UserDefaults.standard.set(saved, forKey: Self.renderBaselineKey)
             }
+            _ = await evaluateInContext(Self.setRenderSettingsScript(
+                lowPerf: lowPower, reduceMotion: true, smoothScroll: !lowPower,
+            ))
+            EventLog.shared.log(
+                .app,
+                "matched macOS power preference (low power=\(lowPower), reduce motion=\(reduceMotion)) — eased Steam's rendering",
+            )
+        } else if let baseline = UserDefaults.standard.string(forKey: Self.renderBaselineKey) {
+            UserDefaults.standard.removeObject(forKey: Self.renderBaselineKey)
+            guard let values = try? JSONDecoder().decode([String: Bool].self, from: Data(baseline.utf8))
+            else { return }
+            _ = await evaluateInContext(Self.setRenderSettingsScript(
+                lowPerf: values["library_low_perf_mode"] ?? false,
+                reduceMotion: values["accessibility_reduce_motion"] ?? false,
+                smoothScroll: values["smooth_scroll_webviews"] ?? true,
+            ))
+            EventLog.shared.log(.app, "macOS power preference cleared — restored Steam's rendering")
         }
     }
 

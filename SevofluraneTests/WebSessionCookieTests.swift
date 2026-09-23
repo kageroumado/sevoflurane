@@ -38,6 +38,25 @@ struct WebSessionCookieTests {
     }
 
     @Test
+    func `the mirror preserves HttpOnly and SameSite`() throws {
+        var record = cdp()
+        record["httpOnly"] = true
+        record["sameSite"] = "Lax"
+        let parsed = try #require(SteamWebCookie(cdp: record))
+        let cookie = try #require(WebSessionCookies.httpCookie(from: parsed))
+        #expect(cookie.isHTTPOnly)
+        #expect(cookie.sameSitePolicy == .sameSiteLax)
+    }
+
+    @Test
+    func `a cookie the client left readable stays readable`() throws {
+        let parsed = try #require(SteamWebCookie(cdp: cdp()))
+        let cookie = try #require(WebSessionCookies.httpCookie(from: parsed))
+        #expect(!cookie.isHTTPOnly)
+        #expect(cookie.sameSitePolicy == nil)
+    }
+
+    @Test
     func `steam domains are recognized, including leading dots`() {
         #expect(WebSessionCookies.isSteamDomain("store.steampowered.com"))
         #expect(WebSessionCookies.isSteamDomain(".steamcommunity.com"))

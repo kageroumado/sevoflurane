@@ -198,7 +198,11 @@
 
   function connect() {
     ws = new WebSocket(WS_URL);
+    var opened = false;
     ws.onopen = function () {
+      opened = true;
+      /* The bridge registers this page on its first message. */
+      ws.send(JSON.stringify({ type: "hello" }));
       while (queue.length) ws.send(queue.shift());
     };
     ws.onmessage = function (ev) {
@@ -243,9 +247,29 @@
           });
       }
     };
-    ws.onclose = function () { setTimeout(connect, 1000); };
+    ws.onclose = function () {
+      /* A reconnect that never opened carried nothing: the calls issued
+         meanwhile are still queued for the next socket. */
+      if (opened) dropSession();
+      setTimeout(connect, 1000);
+    };
   }
   connect();
+
+  /* The bridge forgets a page when its socket closes: every call it had in
+     flight goes unanswered, every callback it registered is released, and
+     every tunnel it relayed is gone. The page hears the same here, so no
+     promise waits forever and no socket reads as open. */
+  function dropSession() {
+    var calls = Array.from(pending.values());
+    pending.clear();
+    calls.forEach(function (p) {
+      p.reject(tag(new Error("the bridge connection closed"), p.path));
+    });
+    callbacks.clear();
+    var socks = Array.from(tunnels.values());
+    socks.forEach(function (sock) { sock.__event({ ev: "close", code: 1006 }); });
+  }
 
   /* Steam passes binary as ArrayBuffers and as typed-array views; JSON drops
      both, so they cross the bridge as base64 envelopes that carry the view
@@ -962,6 +986,10 @@
   var nativeOpen = window.open;
   window.open = function (url, name) {
     var win = nativeOpen.apply(window, arguments);
+    popupWindows = popupWindows.filter(function (w) { return !w.closed; });
+    Object.keys(browserIdWindows).forEach(function (id) {
+      if (browserIdWindows[id] !== window && browserIdWindows[id].closed) delete browserIdWindows[id];
+    });
     if (win) {
       try {
         popupWindows.push(win);

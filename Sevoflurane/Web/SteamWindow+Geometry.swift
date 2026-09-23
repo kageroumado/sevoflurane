@@ -99,6 +99,22 @@ extension SteamWindow {
         role == .toast
     }
 
+    /// The largest side AppKit gives a window; a larger request gets this.
+    nonisolated static let maximumSide: CGFloat = 10000
+    /// The farthest from the primary display's origin a window is placed,
+    /// with room for a window parked far off-screen.
+    nonisolated static let maximumOffset: CGFloat = 1_000_000
+
+    /// A size Steam asked for, held to what a window can be.
+    nonisolated static func clampedSize(width: CGFloat, height: CGFloat) -> CGSize {
+        CGSize(width: min(max(width, 0), maximumSide), height: min(max(height, 0), maximumSide))
+    }
+
+    /// One coordinate Steam asked for, held to ``maximumOffset``.
+    nonisolated static func clampedOffset(_ value: CGFloat) -> CGFloat {
+        min(max(value, -maximumOffset), maximumOffset)
+    }
+
     func moveTo(x: CGFloat, y: CGFloat) {
         requestedOrigin = CGPoint(x: x, y: y)
         guard let window else { return }
@@ -156,14 +172,24 @@ extension SteamWindow {
         return CGPoint(x: rect.minX, y: rect.minY)
     }
 
+    /// The display this window is measured against. A Mac with no display
+    /// attached has no screen at all, and Steam is answered with a nominal
+    /// 1920×1080 one.
+    private var measuredScreen: (frame: NSRect, visible: NSRect, scale: CGFloat) {
+        if let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first {
+            return (screen.frame, screen.visibleFrame, screen.backingScaleFactor)
+        }
+        let nominal = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        return (nominal, nominal, 1)
+    }
+
     /// This window's geometry and the display it is on, in Steam's
     /// coordinates. The screen's own origin travels with its size, the way
     /// ``monitorDimensions()`` reports `nAvailableLeft`: a display at a
     /// negative x holds windows at a negative x, and a screen described by
     /// size alone cannot say so.
     func dimensions() -> [String: Any] {
-        let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
-        let screenRect = SteamScreenSpace.steamRect(from: screen.frame)
+        let screenRect = SteamScreenSpace.steamRect(from: measuredScreen.frame)
         var answer: [String: Any] = [
             "screenLeft": screenRect.minX,
             "screenTop": screenRect.minY,
@@ -186,11 +212,11 @@ extension SteamWindow {
     }
 
     func monitorDimensions() -> [String: Any] {
-        let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens[0]
-        let visible = screen.visibleFrame
+        let screen = measuredScreen
+        let visible = screen.visible
         return [
-            "flHorizontalScale": screen.backingScaleFactor,
-            "flVerticalScale": screen.backingScaleFactor,
+            "flHorizontalScale": screen.scale,
+            "flVerticalScale": screen.scale,
             "nFullWidth": screen.frame.width,
             "nFullHeight": screen.frame.height,
             "nAvailableWidth": visible.width,

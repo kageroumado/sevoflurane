@@ -182,6 +182,7 @@ nonisolated enum BridgeEval {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue("1", forHTTPHeaderField: BridgePorts.evalHeader)
         request.httpBody = Data(expression.utf8)
         request.timeoutInterval = 30
         guard let (data, _) = try? await URLSession.shared.data(for: request) else {

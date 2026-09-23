@@ -64,9 +64,9 @@ final class SteamWebHost {
     private(set) var clientIsStopping = false
 
     /// Runs a stop with the client marked as stopping. The mark is a scoped
-    /// token rather than a flag two subsystems poke: a stop that ends without
-    /// the client ever becoming healthy — every signed-out boot — used to
-    /// leave it set for the life of the process, and a set mark refuses every
+    /// token rather than a flag two subsystems poke, so it clears when the
+    /// stop ends, whether or not the client ever became healthy — every
+    /// signed-out boot is such a stop, and a mark left set refuses every
     /// login window `show()` asks for.
     func duringClientStop<T>(_ body: () async -> T) async -> T {
         beginClientStop()
@@ -375,6 +375,9 @@ final class SteamWebHost {
     @ObservationIgnored var overlayActive = false
     @ObservationIgnored var overlayGame: WineWindowWatch.GameWindow?
     @ObservationIgnored var overlayAppID = ""
+    /// The latest pass of the energy preference mirror, which the next one
+    /// waits behind.
+    @ObservationIgnored var energyUpdate: Task<Void, Never>?
     @ObservationIgnored var overlayFrontObserver: (any NSObjectProtocol)?
     @ObservationIgnored var overlayKeyMonitor: Any?
 

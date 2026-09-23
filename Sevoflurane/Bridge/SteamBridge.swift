@@ -73,6 +73,9 @@ actor SteamBridge {
     private var pageSerial = 0
     private var evalPending: [String: CheckedContinuation<(ok: Bool, v: String), Never>] = [:]
     private var evalTimeouts: [String: Task<Void, Never>] = [:]
+    /// The page each pending eval was sent to, so a page that goes away
+    /// answers its evals at once.
+    private var evalPage: [String: ObjectIdentifier] = [:]
     private var evalSeq = 0
     /// The most recently attached page. A reload leaves the old session
     /// registered until its socket closes, and dictionary order could hand
@@ -95,10 +98,8 @@ actor SteamBridge {
         onGameLaunch = handler
     }
 
-    /// Told when the client's transport goes away. The bridge learns of a
-    /// dying client before anything else does — the relay closed four seconds
-    /// before the launcher exited on the night this was measured — and had no
-    /// way to say so; the supervisor's cycle waited out its interval instead.
+    /// Told when the client's transport goes away — the earliest sign of a
+    /// dying client, seconds before the launcher exits.
     private var onClientConnectionLost: (@Sendable () -> Void)?
 
     func setClientConnectionLostHandler(_ handler: @escaping @Sendable () -> Void) {
@@ -135,12 +136,12 @@ actor SteamBridge {
             // Sevoflurane owns the app. Two listeners on it means the kernel
             // decides which process serves Steam's bundle, request by request.
             let ui = try HTTPServer(
-                port: BridgePorts.steamUI, exclusive: true,
+                port: BridgePorts.steamUI, gate: .steamUI, exclusive: true,
             ) { [weak self] request in
                 // Static assets never enter the actor: reading Steam's bundle
                 // here would serialize every asset load against CDP dispatch
-                // and the health probe. Only /, /index.html, and /__eval need
-                // actor state.
+                // and the health probe. `/__web`, `/__loopback/`, `/`,
+                // `/index.html` and `/__eval` need actor state.
                 if request.method == "GET", request.path.hasPrefix("/__compat/") {
                     return await Self.handleCompatRequest(request)
                 }
@@ -158,12 +159,12 @@ actor SteamBridge {
             }
             try await ui.startWaitingForThePort()
             uiServer = ui
-            let art = try HTTPServer(port: BridgePorts.art) { request in
+            let art = try HTTPServer(port: BridgePorts.art, gate: .art) { request in
                 Self.handleArtRequest(request)
             }
             art.start()
             artServer = art
-            let page = try WebSocketServer(port: BridgePorts.pageWS, label: "page")
+            let page = try WebSocketServer(port: BridgePorts.pageWS, label: "page", gate: .pageWS)
             page.start { [weak self] connection in
                 Task { await self?.attachPage(connection, queue: page.queue) }
             }
@@ -171,6 +172,7 @@ actor SteamBridge {
             let relaySocket = try WebSocketServer(
                 port: BridgePorts.relayWS,
                 label: "relay",
+                gate: .relayWS,
                 maxMessageSize: 64 * 1024 * 1024,
             )
             relaySocket.start { [weak self] connection in
@@ -480,7 +482,36 @@ actor SteamBridge {
 
     // MARK: - Page sessions
 
+    /// A connection becomes a page on its first message, the shim's hello.
+    /// A handshake the gate refused sends nothing and closes, so it never
+    /// takes ``newestPage`` from the live page.
     private func attachPage(_ ws: WSConnection, queue: DispatchQueue) {
+        let id = ObjectIdentifier(ws)
+        let stream = Self.messages(of: ws, on: queue)
+        Task { [weak self] in
+            var isRegistered = false
+            for await message in stream {
+                switch message {
+                case let .text(raw) where isRegistered:
+                    await self?.handlePageMessage(raw, id: id)
+                case let .text(raw):
+                    guard Self.isHello(raw) else {
+                        ws.close()
+                        continue
+                    }
+                    isRegistered = true
+                    await self?.registerPage(ws)
+                    await self?.closeUnlessClientReachable(ws)
+                case .data:
+                    break
+                case .closed:
+                    if isRegistered { await self?.detachPage(id) }
+                }
+            }
+        }
+    }
+
+    private func registerPage(_ ws: WSConnection) {
         let (tunnelStream, tunnelContinuation) = AsyncStream.makeStream(of: String.self)
         pageSerial += 1
         let session = PageSession(ws: ws, tunnel: tunnelContinuation, serial: pageSerial)
@@ -496,20 +527,11 @@ actor SteamBridge {
                 await self?.relaySend(raw, from: id)
             }
         })
-        let stream = Self.messages(of: ws, on: queue)
-        session.tasks.append(Task { [weak self] in
-            await self?.closeUnlessClientReachable(ws)
-            for await message in stream {
-                switch message {
-                case let .text(raw):
-                    await self?.handlePageMessage(raw, id: id)
-                case .data:
-                    break
-                case .closed:
-                    await self?.detachPage(id)
-                }
-            }
-        })
+    }
+
+    /// The first message a page or the relay sends once its socket opens.
+    nonisolated static func isHello(_ raw: String) -> Bool {
+        jsonObject(raw)?["type"] as? String == "hello"
     }
 
     /// A page whose calls have nowhere to go is closed at once: the shim
@@ -534,6 +556,7 @@ actor SteamBridge {
             if let eid = request["id"] as? String,
                let continuation = evalPending.removeValue(forKey: eid) {
                 evalTimeouts.removeValue(forKey: eid)?.cancel()
+                evalPage.removeValue(forKey: eid)
                 // The shim's `v` is already JSON text (it stringifies before
                 // sending); re-encoding it here would double-escape.
                 continuation.resume(returning: (
@@ -560,16 +583,7 @@ actor SteamBridge {
                     try await unregister([Self.handle(session.serial, rid)], cdp: cdp)
                 }
             default:
-                guard let template = BridgeJS.commands[cmd],
-                      let appid = request["appid"] as? Int else { return }
-                if cmd == "terminate" { RunLog.noteStopRequest(forApp: appid) }
-                _ = try await cdp.evaluate(
-                    template.replacingOccurrences(of: "%ID%", with: String(appid)),
-                )
-                if cmd == "install" {
-                    try await Task.sleep(for: .milliseconds(500))
-                    _ = try await cdp.evaluate(BridgeJS.commands["continue_install"]!)
-                }
+                return
             }
         } catch {
             // A client on its way out refuses every call the page still
@@ -625,8 +639,14 @@ actor SteamBridge {
     ) async throws {
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
-              path.hasPrefix("SteamClient."),
               let session = pages[id] else { return }
+        guard Self.isSteamClientPath(path) else {
+            log(.bridge, "refused a SteamClient call to a malformed path")
+            ws.send(text: Self.resultReply(rid: rid, outcome: [
+                "ok": false, "e": ["__sevoErr": "Error", "message": "not a SteamClient method path"],
+            ]))
+            return
+        }
         let handle = Self.handle(session.serial, rid)
         let handleJS = Self.jsonText(handle) ?? "\"?\""
         if path == "SteamClient.Apps.RunGame" {
@@ -684,6 +704,23 @@ actor SteamBridge {
             registrations.removeValue(forKey: handle)
         }
         ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
+    }
+
+    /// Whether `path` names a member of `SteamClient` by dotted identifiers
+    /// alone. The path is spliced into the evaluated expression as source,
+    /// so anything else would be code the page chose to run in the client.
+    nonisolated static func isSteamClientPath(_ path: String) -> Bool {
+        let parts = path.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count >= 2, parts[0] == "SteamClient" else { return false }
+        return parts.dropFirst().allSatisfy(isIdentifier)
+    }
+
+    private nonisolated static func isIdentifier(_ part: Substring) -> Bool {
+        guard let first = part.unicodeScalars.first else { return false }
+        func isStart(_ scalar: Unicode.Scalar) -> Bool {
+            ("a" ... "z").contains(scalar) || ("A" ... "Z").contains(scalar) || scalar == "_" || scalar == "$"
+        }
+        return isStart(first) && part.unicodeScalars.dropFirst().allSatisfy { isStart($0) || ("0" ... "9").contains($0) }
     }
 
     /// The call's arguments as JS source, and the callback ids among them,
@@ -791,6 +828,9 @@ actor SteamBridge {
     private func detachPage(_ id: ObjectIdentifier) async {
         guard let session = pages.removeValue(forKey: id) else { return }
         if newestPage == id { newestPage = pages.keys.first }
+        for (eid, page) in evalPage where page == id {
+            finishEval(eid, with: (false, "\"page disconnected\""))
+        }
         session.tunnel.finish()
         for task in session.tasks {
             task.cancel()
@@ -814,26 +854,42 @@ actor SteamBridge {
 
     // MARK: - Transport relay
 
+    /// A connection becomes the relay on its first message, the tunnel
+    /// script's hello, the same way a page does (``attachPage(_:queue:)``).
     private func attachRelay(_ ws: WSConnection, queue: DispatchQueue) {
+        let stream = Self.messages(of: ws, on: queue)
+        Task { [weak self] in
+            var isRelay = false
+            for await message in stream {
+                switch message {
+                case let .text(raw) where isRelay:
+                    await self?.relayControl(raw)
+                case let .text(raw):
+                    guard Self.isHello(raw) else {
+                        ws.close()
+                        continue
+                    }
+                    isRelay = true
+                    await self?.promoteRelay(ws)
+                case let .data(data):
+                    if isRelay { await self?.relayFrame(data) }
+                case .closed:
+                    await self?.relayClosed(ws)
+                }
+            }
+        }
+    }
+
+    /// Makes `ws` the relay. The one it replaces is closed: its tunnels are
+    /// owned by a socket nothing routes to any more.
+    private func promoteRelay(_ ws: WSConnection) {
+        if let previous = relay, previous !== ws { previous.close() }
         relay = ws
         for waiter in relayWaiters.values {
             waiter.resume()
         }
         relayWaiters.removeAll()
         log(.bridge, "relay: SharedJSContext connected")
-        let stream = Self.messages(of: ws, on: queue)
-        Task { [weak self] in
-            for await message in stream {
-                switch message {
-                case let .text(raw):
-                    await self?.relayControl(raw)
-                case let .data(data):
-                    await self?.relayFrame(data)
-                case .closed:
-                    await self?.relayClosed(ws)
-                }
-            }
-        }
     }
 
     /// Control messages are JSON; the tunnel id names the owning page.
@@ -903,6 +959,13 @@ actor SteamBridge {
         guard let tid = request["id"] as? String else { return }
         switch cmd {
         case "ws_open":
+            // A binary frame carries the id behind a one-byte length.
+            guard tid.utf8.count <= Int(UInt8.max) else {
+                log(.bridge, "tunnel: refused an id longer than \(UInt8.max) bytes")
+                pages[id]?.ws.send(text: #"{"type":"ws_event","id":\#(Self.jsonText(tid) ?? "\"?\""),"#
+                    + #""ev":"close","code":1008}"#)
+                return
+            }
             tunnelOwner[tid] = id
             log(.bridge, "tunnel open \(tid) → \(request["url"] as? String ?? "?")")
             relay.send(text: raw)
@@ -915,15 +978,23 @@ actor SteamBridge {
                     relay.send(text: encoded)
                 }
             } else if let b64 = request["b64"] as? String,
-                      let payload = Data(base64Encoded: b64) {
-                var frame = Data([UInt8(tid.utf8.count)])
-                frame.append(Data(tid.utf8))
-                frame.append(payload)
+                      let payload = Data(base64Encoded: b64),
+                      let frame = Self.frame(tid: tid, payload: payload) {
                 relay.send(data: frame)
             }
         default:
             break
         }
+    }
+
+    /// One binary relay frame: the tunnel id behind its one-byte length, then
+    /// the payload. Nil for an id too long to prefix.
+    nonisolated static func frame(tid: String, payload: Data) -> Data? {
+        guard let length = UInt8(exactly: tid.utf8.count) else { return nil }
+        var frame = Data([length])
+        frame.append(Data(tid.utf8))
+        frame.append(payload)
+        return frame
     }
 
     // MARK: - /__eval
@@ -932,7 +1003,8 @@ actor SteamBridge {
     /// context page. This is the programmatic Web Inspector: the only other
     /// channel into the app's DOM is Safari's, by hand.
     func evaluateInPage(_ expr: String) async -> (ok: Bool, v: String) {
-        guard let session = newestPage.flatMap({ pages[$0] }) ?? pages.values.first else {
+        guard let pageID = newestPage.flatMap({ pages[$0] == nil ? nil : $0 }) ?? pages.keys.first,
+              let session = pages[pageID] else {
             return (false, "\"no page connected\"")
         }
         evalSeq += 1
@@ -946,6 +1018,7 @@ actor SteamBridge {
         )
         let result: (ok: Bool, v: String) = await withCheckedContinuation { continuation in
             evalPending[eid] = continuation
+            evalPage[eid] = pageID
             session.ws.send(text: encoded)
             evalTimeouts[eid] = Task {
                 try? await Task.sleep(for: .seconds(20))
@@ -958,9 +1031,14 @@ actor SteamBridge {
 
     private func expireEval(_ eid: String) {
         guard !Task.isCancelled else { return }
-        evalTimeouts.removeValue(forKey: eid)
-        evalPending.removeValue(forKey: eid)?
-            .resume(returning: (false, "\"eval timed out\""))
+        finishEval(eid, with: (false, "\"eval timed out\""))
+    }
+
+    /// Answers a pending eval without its page, and forgets it.
+    private func finishEval(_ eid: String, with outcome: (ok: Bool, v: String)) {
+        evalTimeouts.removeValue(forKey: eid)?.cancel()
+        evalPage.removeValue(forKey: eid)
+        evalPending.removeValue(forKey: eid)?.resume(returning: outcome)
     }
 
     // MARK: - Helpers

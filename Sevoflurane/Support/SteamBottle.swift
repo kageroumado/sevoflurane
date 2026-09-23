@@ -109,6 +109,8 @@ nonisolated enum SteamBottle {
     /// have signed in on this machine; the one that has the app's folder
     /// wins over one that only has the tree.
     static func screenshots(forApp appID: String) -> URL? {
+        // A game id is decimal digits; anything else would walk the path.
+        guard !appID.isEmpty, appID.unicodeScalars.allSatisfy({ ("0" ... "9").contains($0) }) else { return nil }
         let accounts = (try? FileManager.default.contentsOfDirectory(
             at: steamRoot.appendingPathComponent("userdata"),
             includingPropertiesForKeys: nil,

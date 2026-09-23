@@ -41,6 +41,7 @@ let package = Package(
                 "Sevoflurane/Bridge/BridgeJS.swift",
                 "Sevoflurane/Bridge/HTTPServer.swift",
                 "Sevoflurane/Bridge/LoopbackAssets.swift",
+                "Sevoflurane/Bridge/LoopbackGate.swift",
                 "Sevoflurane/Bridge/SteamBridge+HTTP.swift",
                 "Sevoflurane/Bridge/SteamBridge.swift",
                 "Sevoflurane/Bridge/WebProxy.swift",

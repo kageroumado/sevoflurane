@@ -47,7 +47,7 @@ nonisolated func handlingFailures(_ body: () async throws -> Void) async throws 
         case let .unanswered(detail):
             Sevo.printError("client too busy to answer: \(detail) — try again shortly")
             throw SevoExit.unreachable
-        case .closed, .badReply:
+        case .closed, .badReply, .protocolError, .scriptThrew:
             Sevo.printError("client eval failed: \(failure)")
             throw SevoExit.failed
         }

@@ -54,11 +54,9 @@ enum WebSessionCookies {
     }
 
     /// What the last pass wrote into WebKit, so the next pass writes only
-    /// the difference. Each `setCookie` is a round trip to the network
-    /// process, and the mirror sits on every browser view's load path — 46
-    /// serial round trips per Store open was the measured critical path
-    /// under load. The store itself persists on disk, so the first pass
-    /// after launch re-applies everything once and settles.
+    /// the difference. Each `setCookie` is a network-process round trip on
+    /// every browser view's load path. The store itself persists on disk, so
+    /// the first pass after launch re-applies everything once and settles.
     private static var lastApplied: [String: SteamWebCookie] = [:]
 
     /// Copies the client's Steam-domain cookies into the default website data
@@ -114,6 +112,10 @@ enum WebSessionCookies {
         return domains.contains { bare == $0 || bare.hasSuffix("." + $0) }
     }
 
+    /// The property `HTTPCookie` reads `isHTTPOnly` from. Foundation names
+    /// no constant for it; the string is the one its own parser writes.
+    private nonisolated static let httpOnlyKey = HTTPCookiePropertyKey("HttpOnly")
+
     /// Translates one client cookie into an `HTTPCookie`, dropping anything
     /// outside Steam's own web properties.
     nonisolated static func httpCookie(from cookie: SteamWebCookie) -> HTTPCookie? {
@@ -127,8 +129,16 @@ enum WebSessionCookies {
         if cookie.secure {
             properties[.secure] = "TRUE"
         }
+        if cookie.httpOnly {
+            properties[httpOnlyKey] = "TRUE"
+        }
+        switch cookie.sameSite?.lowercased() {
+        case "strict": properties[.sameSitePolicy] = HTTPCookieStringPolicy.sameSiteStrict
+        case "lax": properties[.sameSitePolicy] = HTTPCookieStringPolicy.sameSiteLax
+        default: break
+        }
         if let expires = cookie.expires {
-            // Foundation caps a cookie's lifetime at 400 days (measured), so a
+            // Foundation caps a cookie's lifetime at 400 days, so a
             // longer-lived client cookie lands shortened here. Harmless: the
             // mirror re-runs per browser view, well inside any cap.
             properties[.expires] = Date(timeIntervalSince1970: expires)

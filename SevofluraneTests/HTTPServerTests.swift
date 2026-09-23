@@ -136,6 +136,23 @@ struct HTTPServerTests {
     }
 
     @Test
+    func `a HEAD answer has the GET answer's headers and no body`() throws {
+        let response = HTTPResponse.ok(Data("hello".utf8), type: "text/plain")
+        let head = try #require(String(data: HTTPServer.wire(response, isHead: true), encoding: .utf8))
+        #expect(head == "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\n")
+        let get = try #require(String(data: HTTPServer.wire(response), encoding: .utf8))
+        #expect(get == head + "hello")
+    }
+
+    @Test
+    func `a HEAD answer declares the length its handler names`() throws {
+        var response = HTTPResponse.ok(Data(), type: "image/png")
+        response.headLength = 4096
+        let head = try #require(String(data: HTTPServer.wire(response, isHead: true), encoding: .utf8))
+        #expect(head.hasSuffix("Content-Length: 4096\r\n\r\n"))
+    }
+
+    @Test
     func `content types`() {
         #expect(ContentType.forExtension("js") == "text/javascript")
         #expect(ContentType.forExtension("PNG") == "image/png")

@@ -55,4 +55,49 @@ struct LoopbackRewriteTests {
         let source = "export const host = \"https://store.steampowered.com\";"
         #expect(LoopbackAssets.rewritten(source) == source)
     }
+
+    @Test
+    func `the account's files are withheld from the loopback route`() {
+        #expect(!LoopbackAssets.isServable("/config/config.vdf"))
+        #expect(!LoopbackAssets.isServable("/config/loginusers.vdf"))
+        #expect(!LoopbackAssets.isServable("/ssfn123"))
+        #expect(!LoopbackAssets.isServable("/registry.vdf"))
+        #expect(!LoopbackAssets.isServable("/userdata/1234/config/localconfig.vdf"))
+        #expect(!LoopbackAssets.isServable("/logs/connection_log.txt"))
+    }
+
+    @Test
+    func `the withheld files stay withheld however the path is spelled`() {
+        #expect(!LoopbackAssets.isServable("/CONFIG/config.vdf"))
+        #expect(!LoopbackAssets.isServable("/%63onfig/config.vdf"))
+        #expect(!LoopbackAssets.isServable("/public/../config/config.vdf"))
+        #expect(!LoopbackAssets.isServable("/public/%2E%2E/ssfn123"))
+        #expect(!LoopbackAssets.isServable("//ssfn123"))
+    }
+
+    @Test
+    func `the UI's assets are served`() {
+        #expect(LoopbackAssets.isServable("/public/images/avatar.png"))
+        #expect(LoopbackAssets.isServable("/steamui/css/library.css"))
+        #expect(LoopbackAssets.isServable("/assets/12345/header.jpg"))
+    }
+
+    @Test
+    func `the rewrite cache tells same-named files in different directories apart`() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let steamui = LoopbackAssets.cacheKey(path: "/steam/steamui/main.js", size: 10, modified: date)
+        let tenfoot = LoopbackAssets.cacheKey(path: "/steam/tenfoot/main.js", size: 10, modified: date)
+        #expect(steamui.family != tenfoot.family)
+        #expect(steamui.name != tenfoot.name)
+        #expect(steamui.name.hasPrefix(steamui.family))
+    }
+
+    @Test
+    func `one file's cache family is never the prefix of another's`() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let chunk = LoopbackAssets.cacheKey(path: "/steam/steamui/chunk.js", size: 1, modified: date)
+        let numbered = LoopbackAssets.cacheKey(path: "/steam/steamui/chunk-123.js", size: 1, modified: date)
+        #expect(!numbered.name.hasPrefix(chunk.family))
+        #expect(!chunk.name.hasPrefix(numbered.family))
+    }
 }

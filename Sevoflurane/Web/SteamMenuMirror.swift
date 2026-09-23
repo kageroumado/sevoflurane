@@ -424,22 +424,28 @@ final class SteamMenuMirror: NSObject {
     private func activate(_ sender: NSMenuItem) {
         guard let childIndex = sender.representedObject as? Int,
               let rootTitle = sender.menu?.title else { return }
-        Task(name: "Dispatch \(rootTitle) ▸ \(sender.title)") {
-            _ = await host?.evaluateInContext(
-                Self.clickScript(rootTitle: rootTitle, childIndex: childIndex),
+        let label = sender.title
+        Task(name: "Dispatch \(rootTitle) ▸ \(label)") {
+            let outcome = await host?.evaluateInContext(
+                Self.clickScript(rootTitle: rootTitle, childIndex: childIndex, label: label),
             )
+            if let outcome, outcome != "clicked" {
+                EventLog.shared.log(.menu, "\(rootTitle) ▸ \(label) not dispatched: \(outcome)")
+            }
         }
     }
 
     /// Clicks the item's element in the hidden root-menu popup. The index is
-    /// the DOM child index (separators included), so the fetched list and the
-    /// dispatch can never drift.
-    private static func clickScript(rootTitle: String, childIndex: Int) -> String {
+    /// the DOM child index (separators included), the one the fetch read the
+    /// item at; the element is clicked only while its text is still `label`,
+    /// so a strip Steam changed since the last read answers "moved" instead
+    /// of running its neighbor.
+    static func clickScript(rootTitle: String, childIndex: Int, label: String) -> String {
         """
         (function () {
           var doc = null;
           g_PopupManager.m_mapPopups.forEach(function (v) {
-            if (v.m_strTitle === "\(rootTitle) Root Menu") {
+            if (v.m_strTitle === \(JSLiteral.string(rootTitle + " Root Menu"))) {
               var p = v.m_popup;
               if (p && !p.closed) doc = p.document;
             }
@@ -449,6 +455,7 @@ final class SteamMenuMirror: NSObject {
           while (el && el.children.length === 1) el = el.children[0];
           var item = el && el.children[\(childIndex)];
           if (!item || item.tagName === "HR") return "no item";
+          if (item.textContent.trim() !== \(JSLiteral.string(label))) return "moved";
           item.click();
           return "clicked";
         })()

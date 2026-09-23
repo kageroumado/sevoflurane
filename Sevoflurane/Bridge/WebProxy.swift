@@ -110,10 +110,12 @@ nonisolated enum WebProxy {
         let status = http?.statusCode ?? 200
         let type = http?.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream"
         guard wantsBody else {
+            let length = response.expectedContentLength
             return HTTPResponse(
                 status: status, reason: reason(for: status),
                 headers: [("Content-Type", type), ("Cache-Control", "no-store")],
                 body: Data(),
+                headLength: length >= 0 ? Int(length) : nil,
             )
         }
         guard response.expectedContentLength <= Int64(maximumBodyBytes) else {

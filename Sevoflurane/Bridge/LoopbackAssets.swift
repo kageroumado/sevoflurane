@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import Synchronization
 
 /// The client's own origin, `https://steamloopback.host`, as this page has to
 /// address it.
@@ -29,6 +31,23 @@ nonisolated enum LoopbackAssets {
 
     static var pageOrigin: String { "http://127.0.0.1:\(BridgePorts.steamUI)" }
 
+    /// The Steam install's directories that hold the account rather than the
+    /// client: sign-in tokens and the account list, per-user data, logs, and
+    /// crash dumps with process memory in them.
+    static let privateDirectories: Set<String> = ["config", "userdata", "logs", "dumps"]
+
+    /// Whether a path under ``pathPrefix`` may be read from the Steam install.
+    /// Files at the install's root (`ssfn*`, `*.vdf`, the binaries) and the
+    /// ``privateDirectories`` are withheld; the UI's own assets live in
+    /// subdirectories. Judged on the decoded, normalized path, and without
+    /// case, as the file system resolves it.
+    static func isServable(_ path: String) -> Bool {
+        guard let decoded = path.removingPercentEncoding else { return false }
+        let components = URL(fileURLWithPath: "/" + decoded).standardizedFileURL.pathComponents.dropFirst()
+        guard components.count >= 2, let top = components.first?.lowercased() else { return false }
+        return !privateDirectories.contains(top)
+    }
+
     /// Rewrites every occurrence of the client's origin in a text asset.
     static func rewritten(_ text: String) -> String {
         let asOrigin = pageOrigin
@@ -49,10 +68,11 @@ nonisolated enum LoopbackAssets {
     /// The bytes to serve for `target` when it addresses the client's origin,
     /// or nil when the file is to be served as it sits on disk.
     ///
-    /// Only two files in a Steam UI bundle need this, and one of them is 14 MB,
-    /// so the rewritten copy is cached under the app's caches directory and the
-    /// source is read only when the cache misses. Everything else keeps the
-    /// mapped path ``SteamBridge`` serves assets by.
+    /// Few files need this and some are large, so the rewritten copy is cached
+    /// under the app's caches directory and the source is read only when the
+    /// cache misses. A file found not to need it is remembered by revision
+    /// and not read again. Everything else keeps the mapped path
+    /// ``SteamBridge`` serves assets by.
     static func rewrittenBytes(for target: URL) -> Data? {
         let ext = target.pathExtension.lowercased()
         guard ext == "js" || ext == "css" else { return nil }
@@ -60,31 +80,40 @@ nonisolated enum LoopbackAssets {
             .attributesOfItem(atPath: target.path),
             let size = attributes[.size] as? Int,
             let modified = attributes[.modificationDate] as? Date else { return nil }
-        let family = target.deletingPathExtension().lastPathComponent + "-"
-        let cached = cacheURL(for: target, family: family, size: size, modified: modified)
+        let key = cacheKey(path: target.path, size: size, modified: modified)
+        if untouched.withLock({ $0.contains(key.name) }) { return nil }
+        let cached = cacheDirectory.appendingPathComponent(key.name)
         if let copy = try? Data(contentsOf: cached, options: [.mappedIfSafe]) { return copy }
-        guard let data = try? Data(contentsOf: target, options: [.mappedIfSafe]),
-              data.range(of: Data(clientOrigin.utf8)) != nil,
-              let text = String(data: data, encoding: .utf8) else { return nil }
+        guard let data = try? Data(contentsOf: target, options: [.mappedIfSafe]) else { return nil }
+        guard data.range(of: Data(clientOrigin.utf8)) != nil,
+              let text = String(data: data, encoding: .utf8) else {
+            untouched.withLock { _ = $0.insert(key.name) }
+            return nil
+        }
         let copy = Data(rewritten(text).utf8)
-        store(copy, at: cached, replacing: family)
+        store(copy, at: cached, replacing: key.family)
         return copy
     }
+
+    /// The revisions of files that hold no client origin, by cache name.
+    private static let untouched = Mutex<Set<String>>([])
 
     private static var cacheDirectory: URL {
         URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Caches/Sevoflurane/LoopbackRewrite")
     }
 
-    /// Keyed by everything the rewritten bytes depend on: which file, which
-    /// revision of it, and the port the rewrite points at.
-    private static func cacheURL(
-        for target: URL, family: String, size: Int, modified: Date,
-    ) -> URL {
+    /// The cache entry for one revision of one file. `family` names the file
+    /// by its full path, so two bundles' `main.js` never share an entry, and
+    /// `name` adds everything the rewritten bytes depend on: the revision and
+    /// the port the rewrite points at.
+    static func cacheKey(path: String, size: Int, modified: Date) -> (family: String, name: String) {
+        let url = URL(fileURLWithPath: path)
+        let digest = SHA256.hash(data: Data(url.standardizedFileURL.path.utf8))
+            .prefix(8).map { String(format: "%02x", $0) }.joined()
+        let family = "\(url.deletingPathExtension().lastPathComponent)-\(digest)-"
         let stamp = Int(modified.timeIntervalSince1970)
-        return cacheDirectory.appendingPathComponent(
-            "\(family)\(size)-\(stamp)-\(BridgePorts.steamUI).\(target.pathExtension)",
-        )
+        return (family, "\(family)\(size)-\(stamp)-\(BridgePorts.steamUI).\(url.pathExtension)")
     }
 
     /// Writes the rewritten copy and drops the ones a Steam update replaced,

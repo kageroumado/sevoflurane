@@ -164,8 +164,8 @@ nonisolated enum SteamWindowRole {
     /// A window a person opens and then goes looking for has to be somewhere
     /// they can reach, and the desktop window's frame is autosaved, so one
     /// bad placement outlives the session. The kinds left out are the ones
-    /// Steam deliberately puts nowhere: a context menu is parked at
-    /// (99788, 99544) between uses and re-placed against its parent on every
+    /// Steam deliberately puts nowhere: a context menu is parked far
+    /// off-screen between uses and re-placed against its parent on every
     /// show, a toast is never shown at all, the keyboard is a panel Steam
     /// positions itself, and the overlay is placed over the game.
     var needsAReachableFrame: Bool {

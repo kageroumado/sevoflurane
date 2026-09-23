@@ -19,12 +19,17 @@ nonisolated struct HTTPRequest: Sendable, Equatable {
     }
 }
 
-/// The handler's answer; written verbatim plus `Content-Length`.
+/// The handler's answer; written verbatim plus `Content-Length`. A `HEAD`
+/// request is answered with the same headers and no body.
 nonisolated struct HTTPResponse: Sendable {
     var status: Int
     var reason: String
     var headers: [(String, String)]
     var body: Data
+    /// The `Content-Length` a bodiless answer to `HEAD` declares: the length
+    /// of what `GET` would return, when the handler knows it without reading
+    /// it. Nil declares `body`'s own length.
+    var headLength: Int?
 
     static func ok(
         _ body: Data,
@@ -64,6 +69,7 @@ nonisolated struct HTTPResponse: Sendable {
 final nonisolated class HTTPServer: Sendable {
     private let listener: NWListener
     private let handler: @Sendable (HTTPRequest) async -> HTTPResponse
+    private let gate: LoopbackGate
     /// Per-instance: the UI and art servers must not interleave on one
     /// serial queue.
     private let queue: DispatchQueue
@@ -86,10 +92,12 @@ final nonisolated class HTTPServer: Sendable {
 
     init(
         port: UInt16,
+        gate: LoopbackGate,
         exclusive: Bool = false,
         handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
     ) throws {
         self.handler = handler
+        self.gate = gate
         self.port = port
         isExclusive = exclusive
         queue = DispatchQueue(label: "sevo.http.\(port)", qos: .userInitiated)
@@ -102,9 +110,10 @@ final nonisolated class HTTPServer: Sendable {
     }
 
     func start() {
-        listener.newConnectionHandler = { [handler, queue] connection in
+        let gated = Self.gated(handler, by: gate)
+        listener.newConnectionHandler = { [queue] connection in
             connection.start(queue: queue)
-            Self.serve(connection, handler: handler, leftover: Data())
+            Self.serve(connection, handler: gated, leftover: Data())
         }
         listener.start(queue: queue)
     }
@@ -112,27 +121,63 @@ final nonisolated class HTTPServer: Sendable {
     /// Starts and answers once the port is held — or throws, naming the port,
     /// when something else already holds it. An exclusive listener's failure
     /// arrives on the listener's state handler rather than out of `start()`,
-    /// so a caller that must not run half-alive has to wait for it.
+    /// so a caller that must not run half-alive has to wait for it. A
+    /// listener that is cancelled, or has not bound within ``bindBudget``,
+    /// fails the same way and is cancelled. A listener waiting on the
+    /// network is given the budget to recover.
     func startWaitingForThePort() async throws {
         let outcome = Outcome()
-        try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, any Error>) in
-            listener.stateUpdateHandler = { [port] state in
-                switch state {
-                case .ready:
-                    outcome.finish(waiter, with: .success(()))
-                case let .failed(error):
-                    let taken = error == .posix(.EADDRINUSE) || error == .posix(.EADDRNOTAVAIL)
-                    outcome.finish(waiter, with: .failure(
-                        taken ? StartFailure.portIsTaken(port)
-                            : StartFailure.listenerFailed(error.localizedDescription),
-                    ))
-                default:
-                    break
+        do {
+            try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, any Error>) in
+                listener.stateUpdateHandler = { [port] state in
+                    switch state {
+                    case .ready:
+                        outcome.finish(waiter, with: .success(()))
+                    case let .failed(error):
+                        let taken = error == .posix(.EADDRINUSE) || error == .posix(.EADDRNOTAVAIL)
+                        outcome.finish(waiter, with: .failure(
+                            taken ? StartFailure.portIsTaken(port)
+                                : StartFailure.listenerFailed(error.localizedDescription),
+                        ))
+                    case .cancelled:
+                        outcome.finish(waiter, with: .failure(StartFailure.listenerFailed("cancelled")))
+                    default:
+                        break
+                    }
                 }
+                queue.asyncAfter(deadline: .now() + Self.bindBudget) {
+                    outcome.finish(waiter, with: .failure(
+                        StartFailure.listenerFailed("not bound after \(Int(Self.bindBudget)) s"),
+                    ))
+                }
+                start()
             }
-            start()
+        } catch {
+            listener.stateUpdateHandler = nil
+            listener.cancel()
+            throw error
         }
         listener.stateUpdateHandler = nil
+    }
+
+    /// How long a listener may take to bind a loopback port.
+    static let bindBudget: TimeInterval = 10
+
+    /// The handler behind the gate: a request the gate refuses is answered
+    /// 403 and never reaches it.
+    private static func gated(
+        _ handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
+        by gate: LoopbackGate,
+    ) -> @Sendable (HTTPRequest) async -> HTTPResponse {
+        { request in
+            switch gate.verdict(method: request.method, path: request.path, headers: request.headers) {
+            case .admitted:
+                return await handler(request)
+            case let .refused(reason):
+                gate.noteRefusal(reason)
+                return .error(403, "Forbidden")
+            }
+        }
     }
 
     /// Resumes the wait exactly once, whatever order the listener's states
@@ -164,7 +209,7 @@ final nonisolated class HTTPServer: Sendable {
         readRequest(connection, buffer: leftover) { request, remainder in
             Task {
                 let response = await handler(request)
-                connection.send(content: wire(response), completion: .contentProcessed { error in
+                connection.send(content: wire(response, isHead: request.method == "HEAD"), completion: .contentProcessed { error in
                     if error != nil {
                         connection.cancel()
                     } else {
@@ -224,15 +269,17 @@ final nonisolated class HTTPServer: Sendable {
     ]
 
     /// The response as bytes: status line, the handler's headers, then a
-    /// `Content-Length` and the body.
-    private static func wire(_ response: HTTPResponse) -> Data {
+    /// `Content-Length` and the body. The answer to `HEAD` declares the
+    /// length and stops at the headers.
+    static func wire(_ response: HTTPResponse, isHead: Bool = false) -> Data {
         var head = "HTTP/1.1 \(response.status) \(response.reason)\r\n"
         for (name, value) in response.headers {
             head += "\(name): \(value)\r\n"
         }
-        head += "Content-Length: \(response.body.count)\r\n\r\n"
+        let length = isHead ? response.headLength ?? response.body.count : response.body.count
+        head += "Content-Length: \(length)\r\n\r\n"
         var data = Data(head.utf8)
-        data.append(response.body)
+        if !isHead { data.append(response.body) }
         return data
     }
 

@@ -71,7 +71,7 @@ extension SteamWebHost {
         guard overlayActive, !overlayAppID.isEmpty else { return }
         let appID = overlayAppID
         Task(name: "Close Steam overlay") {
-            _ = await evaluateInContext("SteamClient.Overlay.SetOverlayState(\"\(appID)\", 0)")
+            _ = await evaluateInContext("SteamClient.Overlay.SetOverlayState(\(JSLiteral.string(appID)), 0)")
         }
     }
 
@@ -100,10 +100,6 @@ extension SteamWebHost {
         }
     }
 
-    /// Shows the overlay at the game's frame and level only while the game — or
-    /// this app, once the overlay has key — is frontmost; hides it whenever a
-    /// third application is, so the overlay travels with the game and never
-    /// covers anything else.
     /// Whether the overlay group belongs on screen: only while active and while
     /// the game — or this app, once the overlay has taken key — is the
     /// frontmost application. Any other app in front (one the user switched to,
@@ -118,6 +114,10 @@ extension SteamWebHost {
         return front == gamePID || front == ourPID
     }
 
+    /// Shows the overlay at the game's frame and level only while the game — or
+    /// this app, once the overlay has key — is frontmost; hides it whenever a
+    /// third application is, so the overlay travels with the game and never
+    /// covers anything else.
     private func applyOverlayPresence(_ overlay: SteamWindow) {
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let ours = ProcessInfo.processInfo.processIdentifier

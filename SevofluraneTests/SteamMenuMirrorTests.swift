@@ -205,4 +205,12 @@ struct SteamMenuMirrorTests {
         #expect(SteamMenuMirror.merge(["Games": [command("Library")]], into: &model).isEmpty)
         #expect(SteamMenuMirror.merge([:], into: &model).isEmpty)
     }
+
+    @Test
+    func `a menu click runs only while the item still carries its label`() {
+        let script = SteamMenuMirror.clickScript(rootTitle: "Games", childIndex: 3, label: #"Say "hi""#)
+        #expect(script.contains(#"item.textContent.trim() !== "Say \"hi\"") return "moved";"#))
+        #expect(script.contains(#"v.m_strTitle === "Games Root Menu""#))
+        #expect(script.contains("el.children[3]"))
+    }
 }

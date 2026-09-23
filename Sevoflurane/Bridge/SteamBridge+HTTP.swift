@@ -125,6 +125,10 @@ extension SteamBridge {
             let target = request.query.isEmpty ? path : path + "?" + request.query
             return await fetchFromClient(target)
         }
+        guard LoopbackAssets.isServable(path) else {
+            noteLoopbackMiss(path, "the Steam install's private files are not served")
+            return .error(404, "Not Found")
+        }
         let response = Self.serveFile(under: SteamBottle.steamRoot, path: path)
         if response.status == 404 { noteLoopbackMiss(path, "no file in the Steam install") }
         return response

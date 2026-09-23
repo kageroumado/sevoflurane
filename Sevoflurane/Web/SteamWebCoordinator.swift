@@ -113,8 +113,8 @@ extension SteamWebCoordinator: WKNavigationDelegate {
 
     /// The page's own process died. WebKit leaves the view blank and alive
     /// rather than taking the app with it, so this is recoverable — but only
-    /// if someone recovers it, and nothing did before: a dead web process is
-    /// indistinguishable from a hung Steam UI from the outside.
+    /// if someone recovers it: a dead web process is indistinguishable from a
+    /// hung Steam UI from the outside.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         host?.webProcessDidTerminate(for: webView)
     }
@@ -129,6 +129,13 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
         _: WKUserContentController,
         didReceive message: WKScriptMessage,
     ) async -> (Any?, String?) {
+        let origin = message.frameInfo.securityOrigin
+        guard Self.admitsMessage(
+            isMainFrame: message.frameInfo.isMainFrame,
+            origin: (origin.protocol, origin.host, origin.port),
+        ) else {
+            return (nil, nil)
+        }
         guard let body = message.body as? [String: Any],
               let function = body["fn"] as? String,
               let webView = message.webView,
@@ -136,5 +143,17 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
             return (nil, nil)
         }
         return (window.perform(function, body["args"] as? [Any] ?? []), nil)
+    }
+
+    /// Whether a message comes from Steam's UI: the top document of one of
+    /// its windows, on the bridge's origin. Steam's popups open `about:blank`
+    /// and inherit that origin from their opener; a frame the UI embeds, or a
+    /// window that has navigated to a web site, carries another.
+    nonisolated static func admitsMessage(
+        isMainFrame: Bool,
+        origin: (scheme: String, host: String, port: Int),
+    ) -> Bool {
+        isMainFrame && origin.scheme == "http" && origin.host == "127.0.0.1"
+            && origin.port == Int(BridgePorts.steamUI)
     }
 }
