@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 import Testing
 @testable import Sevoflurane
@@ -90,4 +91,46 @@ struct HostSnapshotTests {
         #expect(snapshot.loadAverage1m >= 0)
         #expect(["nominal", "fair", "serious", "critical", "unknown"].contains(snapshot.thermalState))
     }
+
+    /// The Mac running the tests may have no output device at all, so the
+    /// figures are checked only when a device answered.
+    @Test
+    func `the default output device is named with its transport and rate`() {
+        guard let audio = HostSnapshot.take().audioOutput else { return }
+        #expect(!audio.name.isEmpty)
+        #expect(Self.transportWords.contains(audio.transport))
+        #expect(audio.sampleRateHz > 0)
+        #expect(audio.summary.hasPrefix(audio.name))
+        #expect(audio.summary.contains("kHz"))
+    }
+
+    @Test
+    func `every transport type has its word`() {
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeBuiltIn) == "built-in")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeUSB) == "USB")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeBluetooth) == "Bluetooth")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeBluetoothLE) == "Bluetooth")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeHDMI) == "HDMI")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeDisplayPort) == "DisplayPort")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeVirtual) == "virtual")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeAggregate) == "aggregate")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypePCI) == "other")
+        #expect(HostSnapshot.transportWord(kAudioDeviceTransportTypeUnknown) == "other")
+    }
+
+    @Test
+    func `the summary reads as one line with the rate in kilohertz`() {
+        let dac = HostSnapshot.AudioOutput(
+            name: "MOONDROP Dawn Pro", transport: "USB", sampleRateHz: 96000, running: true,
+        )
+        #expect(dac.summary == "MOONDROP Dawn Pro (USB, 96 kHz, running)")
+        let speakers = HostSnapshot.AudioOutput(
+            name: "MacBook Pro Speakers", transport: "built-in", sampleRateHz: 44100, running: false,
+        )
+        #expect(speakers.summary == "MacBook Pro Speakers (built-in, 44.1 kHz, idle)")
+    }
+
+    private static let transportWords = [
+        "built-in", "USB", "Bluetooth", "HDMI", "DisplayPort", "virtual", "aggregate", "other",
+    ]
 }

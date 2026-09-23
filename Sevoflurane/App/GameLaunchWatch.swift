@@ -109,6 +109,13 @@ final class GameLaunchWatch {
         onGameWindowUp?(game.owner)
         let bundled = game.viaBundle ? ", via its own bundle" : ""
         EventLog.shared.log(.window, "game window up (\(game.owner))\(bundled)")
+        // The device the game's sound is about to open, named while the
+        // launch is still the subject, so a log that says the sound never
+        // started also says which device it was going to.
+        EventLog.shared.log(
+            .app,
+            "audio out: \(HostSnapshot.defaultAudioOutput()?.summary ?? "no output device")",
+        )
         let front = await activation.bringForward(
             pid: game.pid, describedAs: "game \(game.owner)",
         )

@@ -181,6 +181,12 @@ nonisolated enum Diagnostics {
             if result.status == 0 { host[name] = result.output.trimmingCharacters(in: .whitespacesAndNewlines) }
         }
         if let version = appVersion { host["app"] = version }
+        if let audio = HostSnapshot.defaultAudioOutput() {
+            host["audio_output"] = [
+                "name": audio.name, "transport": audio.transport,
+                "sample_rate_hz": audio.sampleRateHz, "running": audio.running,
+            ] as [String: Any]
+        }
         for (key, value) in face.host {
             host[key] = value
         }
