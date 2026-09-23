@@ -129,9 +129,10 @@ final class StallWatch {
         var isStopped: @Sendable (pid_t) -> Bool = { ProcessUsage.isStopped(pid: $0) }
         var children: @Sendable (pid_t) -> [pid_t] = { ProcessUsage.children(of: $0) }
         var name: @Sendable (pid_t) -> String? = { ProcessUsage.name(of: $0) }
-        /// The driver's present counter for a process, once it lands. Nothing
-        /// answers today, which is why the watchdog will not kill on CPU
-        /// alone — see ``killsOnCPUAlone``.
+        /// A present count for a process, which the kill rung takes as evidence the process
+        /// can be judged by its frames. Unanswered in the app: the stats page counts presents,
+        /// but a game showing a still picture presents nothing and is not stalled — see
+        /// ``killsOnCPUAlone``.
         var presents: @Sendable (pid_t) -> UInt64? = { _ in nil }
         /// How long the process's Cocoa main thread has been silent, when its engine says.
         var mainThreadSilence: @Sendable (pid_t) -> TimeInterval? = { PresentStats.mainThreadSilence(of: $0) }
@@ -145,11 +146,12 @@ final class StallWatch {
 
     /// Whether a game may be killed when nothing can say whether it presented.
     ///
-    /// False, and it stays false until the driver's present counter lands: a
-    /// game waiting on a download, a cut scene decoded on another thread, or a
-    /// dialog behind its own window all read as zero CPU, and killing one of
-    /// those loses a session to a guess. Until then the watchdog names the
-    /// stall, runs the rungs that cost nothing, and stops.
+    /// False: a game waiting on a download, a cut scene decoded on another
+    /// thread, or a dialog behind its own window all read as zero CPU, and
+    /// killing one of those loses a session to a guess. The present counter
+    /// does not settle it either — a menu or a paused scene at rest presents
+    /// nothing — so the watchdog names the stall, runs the rungs that cost
+    /// nothing, and leaves the kill to the user (the not-responding prompt).
     static let killsOnCPUAlone = false
 
     private let probes: Probes
@@ -218,6 +220,11 @@ final class StallWatch {
             if let appID = process.appID { note(appID: appID, for: Rules.notAnsweringAfter, unwedged: "not answering") }
             onNotAnswering?(process)
         }
+        // A process that moved again, or is gone, starts any later stall's ladder from its
+        // own beginning: the kill rung measures one stall, never the time since the first.
+        let stalled = Set(found.filter { $0.state == .stalled }.map(\.pid))
+        laddersBegan = laddersBegan.filter { stalled.contains($0.key) }
+        leftAlone.formIntersection(stalled)
         for process in found where process.state == .stalled {
             climb(for: process, at: now)
         }

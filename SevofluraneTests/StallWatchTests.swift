@@ -294,6 +294,37 @@ struct StallWatchTests {
     }
 
     @Test
+    func `a stall after a recovery waits its own time before the kill`() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        machine.presents = [900: 4242]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+
+        // A first stall, shorter than the kill rung.
+        watch.sample()
+        machine.advance(StallWatch.Rules.candidateAfter + 2)
+        watch.sample()
+        machine.advance(StallWatch.Rules.killAfter / 2)
+        watch.sample()
+        // It moves again for a while.
+        for _ in 0 ..< 3 {
+            machine.advance(2, busy: [900])
+            watch.sample()
+        }
+        // A second stall: its ladder starts now, not at the first one.
+        machine.advance(StallWatch.Rules.candidateAfter + 2)
+        watch.sample()
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+        machine.advance(StallWatch.Rules.killAfter + 2)
+        watch.sample()
+        #expect(machine.signals.contains { $0.signal == SIGKILL && $0.pid == 900 })
+    }
+
+    @Test
     func `a quiet client process is left alone`() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
