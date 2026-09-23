@@ -2444,7 +2444,19 @@ struct AppCommand: AsyncParsableCommand {
                 )
                 var sighting = await GameStop.waitUntilGone(appid: appid, seconds: timeout)
                 var verdict = GameStop.Verdict.terminated
-                if !sighting.isGone {
+                if !sighting.isGone, sighting.steamListsIt, sighting.processes.isEmpty {
+                    // An entry with no process behind it is one the client lost
+                    // track of, and only the client clears it: ask once more.
+                    try await SteamOps.terminate(appid)
+                    narrate(
+                        "Steam still lists \(appid) with no process behind it — asked the client once more",
+                        asJSON: asJSON,
+                    )
+                    sighting = await GameStop.waitUntilGone(appid: appid, seconds: 5)
+                }
+                if !sighting.isGone, sighting.processes.isEmpty {
+                    verdict = .stillRunning
+                } else if !sighting.isGone {
                     // The record and the processes are separate survivors: a
                     // stale entry is what makes every later RunGame a silent
                     // no-op, and only the client clears it, so what can be

@@ -366,6 +366,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if NotAnsweringPrompt.userEnds(process.name) { stallWatch.end(process) }
             }
         }
+        stallWatch.onGameProcessGone = { [bridge] appID in
+            Task(name: "End Steam's entry for \(appID)") {
+                if await !bridge.terminateApp(appID) {
+                    EventLog.enqueue(.client, "could not ask the client to end \(appID): the bridge is down")
+                }
+            }
+        }
         stallWatch.start()
     }
 

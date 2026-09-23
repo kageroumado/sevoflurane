@@ -400,7 +400,12 @@ final nonisolated class RunRecorder {
     /// Ends the open run of `appID`. The record is written on the closing
     /// queue: finishing it reads the tails of two logs, which is disk work
     /// the caller should not wait on.
-    func close(appID: Int, kind: RunRecord.Exit.Kind? = nil) {
+    ///
+    /// - Parameters:
+    ///   - kind: The ending the caller knows for a fact whatever the logs say.
+    ///   - unrecorded: What the ending is when Steam wrote no exit for it and
+    ///     the logs name nothing else.
+    func close(appID: Int, kind: RunRecord.Exit.Kind? = nil, unrecorded: RunRecord.Exit.Kind = .unknown) {
         guard var run = open.removeValue(forKey: appID) else { return }
         confirmedRunning.remove(appID)
         nativeSeen.remove(appID)
@@ -410,7 +415,7 @@ final nonisolated class RunRecorder {
         // new run's file with it.
         RunLog.disarm(appID: appID, in: runs)
         let lasted = Self.seconds(since: run.started)
-        Self.closings.async { run.write(lasting: lasted, kind: kind) }
+        Self.closings.async { run.write(lasting: lasted, kind: kind, unrecorded: unrecorded) }
     }
 
     /// Closes every open run, for the quit path: the app is going away and

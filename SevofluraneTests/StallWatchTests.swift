@@ -332,6 +332,91 @@ struct StallWatchTests {
         #expect(machine.signals.isEmpty)
     }
 
+    // MARK: - A process the client lost
+
+    @Test
+    func `a run whose process vanished with no word from the client closes after the grace`()
+        async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        let recorder = try recorder(in: root, appID: 480, pid: 900)
+        watch.recorder = recorder
+        var ended: [Int] = []
+        watch.onGameProcessGone = { ended.append($0) }
+
+        watch.sample()
+        machine.cpuNanoseconds[900] = nil
+        machine.advance(2)
+        watch.sample()
+        #expect(ended.isEmpty)
+        #expect(recorder.isRecording)
+
+        machine.advance(StallWatch.Rules.clientStopGrace)
+        watch.sample()
+        #expect(ended == [480])
+        #expect(!recorder.isRecording)
+        #expect(machine.lines.contains { $0.contains("gone") })
+        let record = try #require(await records(in: root, waitingFor: 1).first)
+        #expect(record.exit?.kind == .user)
+
+        // Said once: the run is closed, and nothing is left to end again.
+        machine.advance(2)
+        watch.sample()
+        #expect(ended == [480])
+    }
+
+    @Test
+    func `a run the engine says was ended while not responding keeps that ending`() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+        watch.onGameProcessGone = { _ in }
+
+        watch.sample()
+        try Data("sevo:exit pid=900 ended by the user while not responding\n".utf8)
+            .write(to: root.appendingPathComponent("wine.log"))
+        machine.cpuNanoseconds[900] = nil
+        machine.advance(2)
+        watch.sample()
+        machine.advance(StallWatch.Rules.clientStopGrace)
+        watch.sample()
+
+        let record = try #require(await records(in: root, waitingFor: 1).first)
+        #expect(record.exit?.kind == .endedNotResponding)
+    }
+
+    @Test
+    func `the client's own stop edge inside the grace wins`() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        let recorder = try recorder(in: root, appID: 480, pid: 900)
+        watch.recorder = recorder
+        var ended: [Int] = []
+        watch.onGameProcessGone = { ended.append($0) }
+
+        watch.sample()
+        machine.cpuNanoseconds[900] = nil
+        machine.advance(2)
+        watch.sample()
+        recorder.noteStopped(appID: 480)
+        machine.advance(StallWatch.Rules.clientStopGrace)
+        watch.sample()
+        #expect(ended.isEmpty)
+        #expect(!machine.lines.contains { $0.contains("gone") })
+    }
+
     // MARK: - Roles
 
     @Test

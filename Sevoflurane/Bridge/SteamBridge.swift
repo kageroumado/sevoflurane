@@ -284,6 +284,27 @@ actor SteamBridge {
         return (hidden ?? "").split(separator: "\n").map(String.init)
     }
 
+    /// Asks the client to end `appID` the way its own Stop button does, on the
+    /// connection the bridge already holds. Sent for a run whose process is gone
+    /// while Steam still lists it: the call clears the entry, and a later launch
+    /// is answered again rather than dropped.
+    ///
+    /// Straight over CDP rather than through the page's forward path, which
+    /// records a stop request and would turn the run's record into a stop the
+    /// user never asked for.
+    ///
+    /// Answers whether the client took the call. False when the bridge holds no
+    /// connection or the call did not return in time.
+    func terminateApp(_ appID: Int) async -> Bool {
+        guard let cdp, await !cdp.isClosed else { return false }
+        let answer = try? await withDeadline(ClientLifecycle.cdpCallCap) {
+            try await cdp.evaluate(
+                "SteamClient.Apps.TerminateApp(\(JSLiteral.string(String(appID))), false), \"sent\"",
+            )
+        }
+        return answer != nil
+    }
+
     /// The sweep, with the names it may hide compiled in.
     ///
     /// A twin sweep carries ``SteamWindowRole``'s own table rather than a

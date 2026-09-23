@@ -39,6 +39,12 @@ final class StallWatch {
         /// The engine beats once a second from the game's Cocoa main thread. This long
         /// without one and the window answers nothing: no click, no key, no close.
         static let notAnsweringAfter: TimeInterval = 10
+        /// How long a run whose own process is gone waits for the client's stop edge
+        /// before the watch ends Steam's entry itself and closes the run. The client
+        /// reports an exit within a couple of seconds when it saw it; an entry that
+        /// outlives its process by this much has been forgotten, and every later
+        /// launch is a silent no-op until it clears.
+        static let clientStopGrace: TimeInterval = 15
     }
 
     /// What a process is to us.
@@ -97,6 +103,13 @@ final class StallWatch {
     /// sleeping Mac stops a main thread too.
     @ObservationIgnored var onNotAnswering: ((Process) -> Void)?
     @ObservationIgnored private var reportedNotAnswering: Set<pid_t> = []
+
+    /// Called once for each run whose process has been gone for ``Rules/clientStopGrace``
+    /// with no stop edge from the client. The app asks the client to end the app, which
+    /// clears the entry Steam kept for a process it lost track of.
+    @ObservationIgnored var onGameProcessGone: ((Int) -> Void)?
+    /// When each open run's process was first found gone, by app id.
+    @ObservationIgnored private var goneSince: [Int: TimeInterval] = [:]
 
     /// Ends a game the user gave up on: the whole tree under it, and the run closes as a
     /// watchdog ending.
@@ -183,6 +196,7 @@ final class StallWatch {
     func sample() {
         readChronicle()
         let now = probes.now()
+        closeRunsWhoseProcessIsGone(at: now)
         let roots = liveRoots()
         let all = tree(under: roots)
         var seen: Set<pid_t> = []
@@ -208,6 +222,32 @@ final class StallWatch {
             climb(for: process, at: now)
         }
         if found.contains(where: { $0.state == .stalled }) { refreshDialogs() }
+    }
+
+    /// Ends a run whose process has been gone for ``Rules/clientStopGrace`` without the
+    /// client saying it stopped. A stop edge inside the grace closes the run the usual
+    /// way and drops it from here; a process the client lost is ended in Steam through
+    /// ``onGameProcessGone`` and the run closes as the user's ending, since no exit
+    /// status exists for it.
+    private func closeRunsWhoseProcessIsGone(at now: TimeInterval) {
+        let running = runningPIDs
+        goneSince = goneSince.filter { running[$0.key] != nil }
+        for (appID, pid) in running {
+            guard probes.usage(pid) == nil else {
+                goneSince[appID] = nil
+                continue
+            }
+            let since = goneSince[appID] ?? now
+            goneSince[appID] = since
+            guard now - since >= Rules.clientStopGrace else { continue }
+            probes.log(
+                "run \(appID): its process (pid \(pid)) is gone and the client has not said it stopped "
+                    + "in \(Int(Rules.clientStopGrace)) s — ending Steam's entry and closing the run",
+            )
+            goneSince[appID] = nil
+            onGameProcessGone?(appID)
+            recorder?.close(appID: appID, unrecorded: .user)
+        }
     }
 
     /// The pids the chronicle named that are still alive, plus whatever the
