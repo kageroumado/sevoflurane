@@ -107,6 +107,7 @@ let package = Package(
                 "Sevoflurane/Support/DiagnosticsBundle.swift",
                 "Sevoflurane/Support/DiscordApplications.swift",
                 "Sevoflurane/Support/DiscordPresence.swift",
+                "Sevoflurane/Support/DisplayHolds.swift",
                 "Sevoflurane/Support/Engine.swift",
                 "Sevoflurane/Support/EngineRenderers.swift",
                 "Sevoflurane/Support/FileDigest.swift",

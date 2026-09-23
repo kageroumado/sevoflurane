@@ -19,7 +19,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, NWJSCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
-            RunsCommand.self, PerfCommand.self, OrphansCommand.self, DiagCommand.self, DebugCommand.self,
+            RunsCommand.self, PerfCommand.self, OrphansCommand.self, HoldsCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -2685,6 +2685,37 @@ struct DownloadsCommand: AsyncParsableCommand {
 }
 
 // MARK: - debug channels
+
+struct HoldsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "holds",
+        abstract: "What keeps this Mac's display awake, and which of it is Sevoflurane's.",
+        discussion: """
+        Every power assertion that stops the display sleeping, oldest first, with the \
+        process it counts against — a bottle process by its Windows program. Sevoflurane's \
+        own are marked. Exit status is 1 when one of ours stands while no game run is open.
+        """,
+    )
+
+    @Flag(name: .customLong("json")) var asJSON = false
+
+    func run() async throws {
+        let holds = DisplayHolds.current()
+        let runOpen = !RunLog.armedRuns().isEmpty
+        if asJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            print(String(decoding: try encoder.encode(holds), as: UTF8.self))
+        } else if holds.isEmpty {
+            print("nothing holds the display awake")
+        } else {
+            for hold in holds { print("\(hold.isOurs ? "*" : " ") \(DisplayHolds.describe(hold))") }
+            if holds.contains(where: \.isOurs) { print("* Sevoflurane's" + (runOpen ? " — a game run is open" : " — no game run is open")) }
+        }
+        if !runOpen, holds.contains(where: \.isOurs) { throw SevoExit.failed }
+    }
+}
 
 struct OrphansCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

@@ -341,11 +341,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runMeter?.cancel()
         runMeter = Task(name: "Sample the open runs' meters") { [runRecorder] in
             var ticks = 0
+            var holdWatch = DisplayHoldWatch()
             while !Task.isCancelled {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
                 runRecorder.sample()
                 if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
                 ticks += 1
+                if ticks.isMultiple(of: Self.displayHoldCheckEvery) {
+                    let holds = await Task.detached(name: "Read the display holds") { DisplayHolds.current() }.value
+                    for hold in holdWatch.check(holds, runOpen: runRecorder.isRecording) {
+                        EventLog.shared.log(
+                            .app, "display: held with no game running — \(DisplayHolds.describe(hold))",
+                        )
+                    }
+                }
                 if ticks.isMultiple(of: RunRecorder.nativeCheckEvery) {
                     await Self.checkNativeRuns(runRecorder)
                 }
@@ -356,6 +365,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    /// Every how many meter ticks the display holds are read: once a minute.
+    private static let displayHoldCheckEvery = 30
 
     /// A game on the native NW.js runner is a macOS process Steam does not
     /// track, and the client sends no lifetime edge for it: the run ends when
