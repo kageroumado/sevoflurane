@@ -133,6 +133,34 @@ struct ActivationTests {
     }
 
     @Test
+    func `a foreign app that keeps the front through three declined attempts ends the retries`() async {
+        let terminal: pid_t = 651
+        let surface = surface(frontmostByAttempt: [terminal])
+        surface.accepts = [false]
+        let front = await Activation(surface: surface)
+            .bringForward(pid: game, describedAs: "the game")
+        #expect(!front)
+        #expect(Activation.declinedStreakLimit == 3)
+        #expect(surface.activateCount == Activation.declinedStreakLimit)
+        #expect(surface.waitCount == Activation.declinedStreakLimit - 1)
+        #expect(surface.lines.count == Activation.declinedStreakLimit + 1)
+        #expect(surface.lines.last?.contains("giving up") == true)
+        #expect(surface.lines.last?.contains("651") == true)
+    }
+
+    @Test
+    func `declined attempts with a different app in front each time spend the whole budget`() async {
+        let alternating: [pid_t?] = (0 ..< Activation.attemptLimit).map { $0 % 2 == 0 ? 651 : 700 }
+        let surface = surface(frontmostByAttempt: alternating)
+        surface.accepts = [false]
+        let front = await Activation(surface: surface)
+            .bringForward(pid: game, describedAs: "the game")
+        #expect(!front)
+        #expect(surface.activateCount == Activation.attemptLimit)
+        #expect(!surface.lines.contains { $0.contains("giving up") })
+    }
+
+    @Test
     func `a pid with no process behind it is refused before any activation`() async {
         let surface = surface()
         surface.running = []

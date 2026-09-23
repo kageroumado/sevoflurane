@@ -48,6 +48,13 @@ struct Activation {
     /// One attempt, plus a retry every ``retryEvery`` for ``retryBudget``.
     static let attemptLimit = 1 + retryBudgetMilliseconds / retryEveryMilliseconds
 
+    /// How many declined attempts in a row, with the same foreign process in
+    /// front after each, end the retries early. Cooperative activation on
+    /// macOS 14 and later declines while the user is in another app; the same
+    /// answer three times with the same pid in front means they are staying
+    /// there, and the rest of the budget would only fill the log.
+    static let declinedStreakLimit = 3
+
     private let surface: any ActivationSurface
 
     init(surface: any ActivationSurface = SystemActivation()) {
@@ -83,7 +90,9 @@ struct Activation {
     ///   records this app's activation state, what the call returned and who
     ///   ended up in front, because a bare "declined" says nothing about
     ///   which of the three preconditions was missing.
-    /// - Returns: whether `pid` is frontmost when this returns.
+    /// - Returns: whether `pid` is frontmost when this returns. `false` comes
+    ///   early when a foreign process keeps the front through
+    ///   ``declinedStreakLimit`` declined attempts.
     @discardableResult
     func bringForward(pid: pid_t, describedAs subject: String) async -> Bool {
         guard surface.isRunning(pid) else {
@@ -96,6 +105,8 @@ struct Activation {
             // loop turns; activating in the same pass is swallowed.
             await surface.turnRunLoop()
         }
+        var heldBy: pid_t?
+        var declinedStreak = 0
         for attempt in 1 ... Self.attemptLimit {
             surface.yieldActivation(to: pid)
             let accepted = surface.activate(pid: pid)
@@ -107,6 +118,19 @@ struct Activation {
                     + "\(accepted), frontmost pid \(frontmost.map(String.init) ?? "none")",
             )
             if frontmost == pid { return true }
+            if !accepted, let front = frontmost, front == heldBy {
+                declinedStreak += 1
+            } else {
+                declinedStreak = (accepted || frontmost == nil) ? 0 : 1
+            }
+            heldBy = frontmost
+            if declinedStreak == Self.declinedStreakLimit, let front = frontmost {
+                surface.log(
+                    "\(subject): giving up — pid \(front) has kept the front through "
+                        + "\(declinedStreak) declined attempts",
+                )
+                return false
+            }
             guard attempt < Self.attemptLimit else { break }
             await surface.wait(Self.retryEvery)
         }
