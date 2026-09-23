@@ -117,9 +117,9 @@ struct PerfCommand: AsyncParsableCommand {
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
-            let groups = PerfComparison.groups(try selection.resolve())
+            let groups = try PerfComparison.groups(selection.resolve())
             if asJSON {
-                print(Sevo.json(PerfReport.model(groups), pretty: true))
+                print(Sevo.json(PerfReport.model(groups, series: false), pretty: true))
                 return
             }
             for line in PerfReport.textLines(groups) { print(line) }

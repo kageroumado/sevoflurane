@@ -34,7 +34,18 @@ nonisolated enum FrameStats {
         var hitches: Int
 
         enum CodingKeys: String, CodingKey {
-            case frames, seconds, avg, low1, low01, p50, p95, p99, p999, max, stdev, hitches
+            case frames
+            case seconds
+            case avg
+            case low1
+            case low01
+            case p50
+            case p95
+            case p99
+            case p999
+            case max
+            case stdev
+            case hitches
         }
     }
 

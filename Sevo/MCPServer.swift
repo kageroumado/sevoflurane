@@ -185,6 +185,17 @@ final class MCPServer {
             ),
             tool("app_launch", "Launch a game.", properties: appid, required: ["appid"]),
             tool(
+                "perf_compare",
+                "Compare frame-time traces of a game's recent runs: runs are grouped by what they ran on "
+                    + "(engine, renderer, upscaler, tuning, msync, D3DMetal, label) and each group is tested "
+                    + "against the first, with 95 % intervals for the average and the 1 % low.",
+                properties: appid.merging([
+                    "last": ["type": "integer", "description": "How many of the game's newest runs (default 6)"],
+                    "skip": ["type": "number", "description": "Seconds to leave out at the start of each run"],
+                ], uniquingKeysWith: { a, _ in a }),
+                readOnly: true,
+            ),
+            tool(
                 "app_terminate",
                 "Terminate a running game.",
                 properties: appid,
@@ -294,6 +305,12 @@ final class MCPServer {
         }
         var progress: [String] = []
         switch name {
+        case "perf_compare":
+            var selection = try PerfCommand.Selection.parse([])
+            selection.game = Self.integer(args["appid"])
+            selection.last = Self.integer(args["last"]) ?? 6
+            selection.skip = (args["skip"] as? NSNumber)?.doubleValue ?? 0
+            return Sevo.json(PerfReport.model(PerfComparison.groups(try selection.resolve()), series: false), pretty: true)
         case "doctor":
             let snapshot = await Doctor.snapshot()
             return Sevo.json(

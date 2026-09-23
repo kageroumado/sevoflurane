@@ -5,14 +5,14 @@ nonisolated enum PerfReport {
     // MARK: - The model
 
     /// Everything the page draws, as JSON-ready values. Groups in order; the first is the
-    /// baseline the others are measured against.
-    static func model(_ groups: [PerfComparison.Group]) -> [String: Any] {
+    /// baseline the others are measured against. Without `series` it is the numbers alone.
+    static func model(_ groups: [PerfComparison.Group], series: Bool = true) -> [String: Any] {
         let baseline = groups.first
         return [
             "groups": groups.enumerated().map { index, group in
                 var entry: [String: Any] = [
                     "name": group.name,
-                    "runs": group.runs.map(runModel),
+                    "runs": group.runs.map { runModel($0, series: series) },
                     "summary": groupSummary(group),
                 ]
                 if let baseline, index > 0 {
@@ -27,7 +27,7 @@ nonisolated enum PerfReport {
         ]
     }
 
-    private static func runModel(_ run: PerfComparison.Run) -> [String: Any] {
+    private static func runModel(_ run: PerfComparison.Run, series: Bool) -> [String: Any] {
         let summary = run.summary
         var model: [String: Any] = [
             "t": run.record.t,
@@ -36,10 +36,12 @@ nonisolated enum PerfReport {
             "trace": run.trace,
             "dropped": run.dropped,
             "config": Dictionary(uniqueKeysWithValues: PerfComparison.configuration(of: run).map { ($0.field, $0.value) }),
-            "frameTime": frameTimeSeries(run.frameTimes),
-            "fps": perSecondSeries(run.frameTimes),
-            "percentiles": percentileCurve(run.frameTimes),
         ]
+        if series {
+            model["frameTime"] = frameTimeSeries(run.frameTimes)
+            model["fps"] = perSecondSeries(run.frameTimes)
+            model["percentiles"] = percentileCurve(run.frameTimes)
+        }
         if let label = run.label { model["label"] = label }
         if let summary { model["summary"] = summaryModel(summary) }
         return model
@@ -265,34 +267,34 @@ nonisolated enum PerfReport {
     <main>
       <h1 id="title"></h1>
       <p class="sub" id="sub"></p>
-
+    
       <section>
         <h2>Configurations</h2>
         <p class="note" id="method"></p>
         <div class="scroll"><table id="groups"></table></div>
       </section>
-
+    
       <section>
         <h2>Frame time</h2>
         <p class="note">The line is each moment's mean frame time; the band reaches its slowest frame (first run of each configuration). Lower is better.</p>
         <div class="legend" data-legend></div>
         <div class="chart" id="frametime"></div>
       </section>
-
+    
       <section>
         <h2>Frame rate</h2>
         <p class="note">Frames in each second. Higher is better.</p>
         <div class="legend" data-legend></div>
         <div class="chart" id="fps"></div>
       </section>
-
+    
       <section>
         <h2>Frame time by percentile</h2>
         <p class="note">How long the slowest frames take: at 99, one frame in a hundred is this slow or slower. A flat curve is a smooth run.</p>
         <div class="legend" data-legend></div>
         <div class="chart" id="percentiles"></div>
       </section>
-
+    
       <section>
         <h2>Runs</h2>
         <div class="scroll"><table id="runs"></table></div>
@@ -309,11 +311,11 @@ nonisolated enum PerfReport {
     const fmt = (v, d = 1) => v == null || isNaN(v) ? "–" : Number(v).toFixed(d);
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
     const runName = r => DATA.groups[r.group].name + (DATA.groups[r.group].runs.length > 1 ? ` · run ${r.repeat + 1}` : "");
-
+    
     document.getElementById("title").textContent = DATA.title || "Frame times";
     document.getElementById("sub").textContent =
       `${runs.length} run${runs.length === 1 ? "" : "s"} in ${DATA.groups.length} configuration${DATA.groups.length === 1 ? "" : "s"} · ${DATA.window} · made ${DATA.generated}`;
-
+    
     // --- Configurations table
     (function () {
       const withRepeats = DATA.groups.length > 1 && DATA.groups.every(g => g.runs.length >= 2);
@@ -341,7 +343,7 @@ nonisolated enum PerfReport {
       }).join("");
       document.getElementById("groups").innerHTML = head + rows;
     })();
-
+    
     // --- Runs table
     (function () {
       const head = "<tr><th>Run</th><th>Started</th><th>Frames</th><th>Seconds</th><th>Average</th><th>1 %</th><th>0.1 %</th><th>p50 ms</th><th>p99 ms</th><th>Max ms</th><th>Hitches</th></tr>";
@@ -355,7 +357,7 @@ nonisolated enum PerfReport {
       }).join("");
       document.getElementById("runs").innerHTML = head + rows;
     })();
-
+    
     // --- Charts
     const NS = "http://www.w3.org/2000/svg";
     const el = (name, attrs, parent) => {
@@ -371,7 +373,7 @@ nonisolated enum PerfReport {
       for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) ticks.push(+v.toFixed(6));
       return ticks;
     }
-
+    
     // spec: { id, series: run => [[x, y, yHigh?]], xLabel, yLabel, xTicks?, xFormat, yFormat, xMap? }
     const charts = [];
     function lineChart(spec) {
@@ -442,7 +444,7 @@ nonisolated enum PerfReport {
       charts.push(draw);
       draw();
     }
-
+    
     lineChart({
       id: "frametime", series: r => r.frameTime, xLabel: "seconds", yLabel: "ms", yMin: 20,
       xFormat: (v, long) => long ? `${fmt(v, 1)} s` : `${Math.round(v)}`, yFormat: (v, long) => long ? `${fmt(v, 2)} ms` : `${Math.round(v)}`,
@@ -458,7 +460,7 @@ nonisolated enum PerfReport {
       xTicks: [50, 90, 99, 99.9, 99.99],
       xFormat: (v, long) => long ? `${fmt(v, 2)}th percentile` : `${v}`, yFormat: (v, long) => long ? `${fmt(v, 2)} ms` : `${Math.round(v)}`,
     });
-
+    
     // --- Legends: one per chart, toggling a configuration everywhere
     function legends() {
       document.querySelectorAll("[data-legend]").forEach(box => {

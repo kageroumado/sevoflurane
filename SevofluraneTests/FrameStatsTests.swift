@@ -106,7 +106,7 @@ struct FrameStatsTests {
     @Test
     func `the ring is read from the offsets the engine writes it at`() throws {
         var page = Data(count: 4096)
-        func put<T>(_ value: T, at offset: Int) {
+        func put(_ value: some Any, at offset: Int) {
             withUnsafeBytes(of: value) { page.replaceSubrange(offset ..< offset + $0.count, with: $0) }
         }
         put(UInt64(0x5345_564F_5354_5331), at: 0)
@@ -186,7 +186,7 @@ struct FrameStatsTests {
         )
         let decoded = try JSONDecoder().decode(RunRecord.self, from: JSONEncoder().encode(record))
         #expect(decoded == record)
-        let json = String(decoding: try JSONEncoder().encode(record), as: UTF8.self)
+        let json = try String(decoding: JSONEncoder().encode(record), as: UTF8.self)
         #expect(json.contains("\"frame_times\""))
         #expect(json.contains("\"tuning\":\"experimental\""))
     }

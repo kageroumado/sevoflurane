@@ -27,7 +27,7 @@ struct WineOrphansTests {
 
     @Test
     func `the server directory is lowercase hex without padding`() {
-        #expect(WineOrphans.serverDirectory(device: 0x100000D, inode: 0x10057EF5, uid: 501)
+        #expect(WineOrphans.serverDirectory(device: 0x100000D, inode: 0x1005_7EF5, uid: 501)
             == "/tmp/.wine-501/server-100000d-10057ef5")
         // A negative dev_t reaches Wine's %llx sign-extended.
         #expect(WineOrphans.serverDirectory(device: UInt64(bitPattern: -2), inode: 1, uid: 0)
@@ -40,7 +40,7 @@ struct WineOrphansTests {
     }
 
     @Test
-    func `a lock held by another process reads as held, and a free one as free`() async throws {
+    func `a lock held by another process reads as held, and a free one as free`() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("lock-\(UUID().uuidString)")
         try Data().write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
