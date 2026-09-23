@@ -116,3 +116,27 @@ struct StorageBreakdownTests {
         #expect(widths.allSatisfy { $0 >= StorageCapacityBar.Metrics.minimumSegmentWidth })
     }
 }
+
+/// What the Storage pane may reclaim while the bottle runs.
+struct StorageReclaimTests {
+    private func entry(_ id: String) -> StorageInventory.Entry {
+        StorageInventory.Entry(
+            id: id, name: id, detail: "", url: URL(fileURLWithPath: "/demo/\(id)"), bytes: 0,
+            removal: .regenerated(""),
+        )
+    }
+
+    @Test
+    func `what the running bottle reads is refused until it stops`() {
+        for id in ["caches", "engines", "renderers", "toolkits"] {
+            #expect(StorageInventory.isRefused(entry(id), bottleRunning: true))
+            #expect(!StorageInventory.isRefused(entry(id), bottleRunning: false))
+        }
+    }
+
+    @Test
+    func `logs and shader downloads are reclaimed while it runs`() {
+        #expect(!StorageInventory.isRefused(entry("logs"), bottleRunning: true))
+        #expect(!StorageInventory.isRefused(entry("shaders"), bottleRunning: true))
+    }
+}

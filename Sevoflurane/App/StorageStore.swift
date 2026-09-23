@@ -154,8 +154,14 @@ final class StorageStore {
         linkable = environment.linkable().filter { !pending.contains($0.appID) }
     }
 
+    /// Moves an entry to the Trash, unless the running bottle is using it
+    /// (``StorageInventory/isRefused(_:bottleRunning:)``).
     func reclaim(_ entry: StorageInventory.Entry) {
         do {
+            let running = !environment.isSimulation && StorageInventory.isBottleRunning
+            if StorageInventory.isRefused(entry, bottleRunning: running) {
+                throw StorageInventory.InUse(entry: entry.name)
+            }
             try environment.trash(entry)
             EventLog.shared.log(.setup, "moved \(entry.name.lowercased()) to the Trash")
             if let index = entries.firstIndex(where: { $0.id == entry.id }) {

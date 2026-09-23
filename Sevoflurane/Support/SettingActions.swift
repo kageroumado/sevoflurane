@@ -69,7 +69,8 @@ protocol SettingsEnvironment: Sendable {
 }
 
 /// The real thing: the JSON store, the change trail, the env files and the
-/// registry pass, all behind ``GameConfig/update(bottle:prefix:_:)``.
+/// registry pass, all behind ``GameConfig/update(bottle:prefix:inBackground:_:)``.
+/// Settings runs on the main actor, so the files are written off it.
 nonisolated struct LiveSettingsEnvironment: SettingsEnvironment {
     func values(_ scope: SettingScope) -> ConfigValues {
         switch scope {
@@ -81,9 +82,9 @@ nonisolated struct LiveSettingsEnvironment: SettingsEnvironment {
     func update(_ scope: SettingScope, _ change: (inout ConfigValues) -> Void) {
         switch scope {
         case let .bottle(name):
-            GameConfig.update(bottle: name, prefix: SteamBottle.root, change)
+            GameConfig.update(bottle: name, prefix: SteamBottle.root, inBackground: true, change)
         case let .game(id, name):
-            GameConfig.update(game: id, bottle: name, prefix: SteamBottle.root, change)
+            GameConfig.update(game: id, bottle: name, prefix: SteamBottle.root, inBackground: true, change)
         }
     }
 

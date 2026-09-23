@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// What the player is playing, published to the Discord client on this Mac
 /// under the game's own Discord application.
@@ -55,6 +56,13 @@ actor DiscordPresence {
     /// The application the open session handshook with, so a session opened
     /// for one game is closed before another game claims the status line.
     private var openApplicationID: String?
+    /// The Steam game whose activity is on the status line.
+    private var shownGame: Int?
+    /// How many times each Steam game has stopped. A publish carries the count
+    /// it saw when the game's window came up, and one that finds the count
+    /// moved is for a game that has already gone. Synchronous, so the main
+    /// actor orders a stop against the publishes it started before it.
+    private nonisolated let stops = Mutex<[Int: UInt64]>([:])
 
     /// - Parameter directory: where the `discord-ipc-N` sockets live. Discord
     ///   resolves the same per-user `TMPDIR` the app does, since neither is
@@ -65,19 +73,41 @@ actor DiscordPresence {
 
     // MARK: - Publishing
 
-    /// Shows `activity` as what the user is playing, opening the session first
-    /// if it is not already open.
+    /// The ticket a publish for `appID` carries: it stays good until the game
+    /// stops.
+    nonisolated func ticket(forGame appID: Int) -> UInt64 {
+        stops.withLock { $0[appID, default: 0] }
+    }
+
+    /// Marks `appID` as stopped, which voids every ticket taken for it so far.
+    nonisolated func gameStopped(_ appID: Int) {
+        stops.withLock { $0[appID, default: 0] &+= 1 }
+    }
+
+    /// Shows `activity` as what the user is playing `appID`, opening the
+    /// session first if it is not already open.
+    ///
+    /// A `ticket` that `gameStopped(_:)` has voided publishes nothing: the
+    /// game ended while its Discord application was being looked up.
     ///
     /// A Discord that refuses the handshake answers with a close frame; the
     /// session ends there and nothing is published. That is an answer, not an
     /// error, so it does not throw.
-    func show(_ activity: Activity) throws {
-        guard !activity.applicationID.isEmpty else { return }
+    func show(_ activity: Activity, forGame appID: Int, ticket: UInt64) throws {
+        guard !activity.applicationID.isEmpty, ticket == self.ticket(forGame: appID) else { return }
         if openApplicationID != activity.applicationID { end() }
         if socket == nil {
             guard try openSession(applicationID: activity.applicationID) else { return }
         }
         try send(opcode: .frame, payload: Self.setActivity(activity))
+        shownGame = appID
+    }
+
+    /// Withdraws the activity if it is `appID`'s, and ends the session. Another
+    /// game's activity stays.
+    func clear(forGame appID: Int) {
+        guard shownGame == appID else { return }
+        clear()
     }
 
     /// Withdraws the activity and ends the session.
@@ -93,6 +123,7 @@ actor DiscordPresence {
         if let socket { Darwin.close(socket) }
         socket = nil
         openApplicationID = nil
+        shownGame = nil
     }
 
     /// Opens the socket and completes the handshake as `applicationID`.
@@ -228,21 +259,34 @@ actor DiscordPresence {
         setsockopt(
             descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size),
         )
+        // A write to a Discord that has quit fails with EPIPE; without this
+        // it raises SIGPIPE, whose default action ends the app.
+        var noSignal: Int32 = 1
+        setsockopt(
+            descriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size),
+        )
         return descriptor
     }
 
+    /// Writes one frame. A write that fails ends the session, so the next
+    /// publish connects afresh to whichever Discord is running then.
     private func send(opcode: Opcode, payload: Data) throws {
         guard let socket else { throw Failure.connectionLost }
         var bytes = Self.frame(opcode: opcode, payload: payload)
-        try bytes.withUnsafeMutableBytes { buffer in
+        let delivered = bytes.withUnsafeMutableBytes { buffer in
             var offset = 0
             while offset < buffer.count {
                 let written = Darwin.send(
                     socket, buffer.baseAddress! + offset, buffer.count - offset, 0,
                 )
-                guard written > 0 else { throw Failure.connectionLost }
+                guard written > 0 else { return false }
                 offset += written
             }
+            return true
+        }
+        guard delivered else {
+            end()
+            throw Failure.connectionLost
         }
     }
 

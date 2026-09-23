@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Turns the settings hierarchy into what the engine reads at process start:
 /// `<prefix>/.sevo/bottle.env` for the bottle's resolved values and
@@ -15,7 +16,28 @@ nonisolated enum ConfigMaterializer {
     private static let header = "# written by Sevoflurane; edits are overwritten"
 
     /// Rewrites the bottle's env files from the store.
+    ///
+    /// Passes over one prefix run one at a time, and a call that arrives while
+    /// one runs waits for the next pass rather than starting its own: any
+    /// number of calls made during a pass are answered by a single pass after
+    /// it, which reads the store as it stands by then.
     static func materialize(bottle name: String, prefix: URL) {
+        passes.run(key: "\(name)\n\(prefix.standardizedFileURL.path)") {
+            pass(bottle: name, prefix: prefix)
+        }
+    }
+
+    /// ``materialize(bottle:prefix:)`` on a detached task, for a caller on the
+    /// main actor: a pass signs loader bundles and waits on `codesign`.
+    static func materializeInBackground(bottle name: String, prefix: URL) {
+        Task.detached(name: "Write the env files") {
+            materialize(bottle: name, prefix: prefix)
+        }
+    }
+
+    private static let passes = CoalescingGate()
+
+    private static func pass(bottle name: String, prefix: URL) {
         let manager = FileManager.default
         let dir = prefix.appendingPathComponent(".sevo")
         let appsDir = dir.appendingPathComponent("apps")
@@ -23,37 +45,37 @@ nonisolated enum ConfigMaterializer {
 
         write(bottleLines(name), to: dir.appendingPathComponent("bottle.env"))
 
-        var wanted: Set<String> = []
+        var games: [GameFiles] = []
         var native: Set<Int> = []
         var launchers: Set<Int> = []
         // Every game with an executable on record, not only one with settings:
         // the loader bundle is what gives a game its own name, icon and Game
         // Mode, and a game nobody has configured wants those too.
-        for (appID, values) in GameConfig.games() where values.hasSettings || values.exes != nil {
-            var lines = gameLines(appID, values)
-            var loaderLine: String?
+        for (appID, values) in GameConfig.games().sorted(by: { $0.key < $1.key })
+            where values.hasSettings || values.exes != nil {
+            var game = GameFiles(appID: appID, settings: gameLines(appID, values), exes: values.exes ?? [])
             if let title = values.name, !values.runsNatively,
                let loader = GameLaunchers.materialize(
                    appID: appID, title: title, engine: Engine.active,
                ) {
                 launchers.insert(appID)
-                loaderLine = "SEVO_LOADER=\(loader.path)"
+                game.loader = "SEVO_LOADER=\(loader.path)"
             }
             if values.runsNatively, let info = values.nwjs,
                let environment = NWJSRunner.environment(
                    appID: appID, info: info, runtimeVersion: values.nwjsRuntime, prefix: prefix,
                ) {
                 native.insert(appID)
-                lines += environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                game.runner = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
             }
-            for exe in values.exes ?? [] {
-                let file = "\(exe).env"
-                wanted.insert(file)
-                // The loader is the game's Dock identity, which a companion
-                // program never takes (``GameConfig/isCompanionExecutable(_:)``).
-                let identity = GameConfig.isCompanionExecutable(exe) ? [] : [loaderLine].compactMap(\.self)
-                write(lines + identity, to: appsDir.appendingPathComponent(file))
-            }
+            games.append(game)
+        }
+        let files = appFiles(games)
+        for (exe, claimants) in sharedExecutables(games) {
+            noteShared(exe, by: claimants)
+        }
+        for (file, lines) in files {
+            write(lines, to: appsDir.appendingPathComponent(file))
         }
         // Debug mode's file folds the bottle's wine-debug channels in, so a
         // change to them has to reach the file the engine reads after
@@ -69,12 +91,84 @@ nonisolated enum ConfigMaterializer {
         // nothing from spawning anything.
         ConfigRegistry.apply(bottle: name, prefix: prefix)
 
-        removeStale(in: appsDir, keeping: wanted)
+        removeStale(in: appsDir, keeping: Set(files.keys))
         GameLaunchers.remove(keeping: launchers)
         // A game switched back to wine keeps its browsing-data link (the two
         // runners share one store by design) and loses the wrapper package,
         // which describes a run that is no longer arranged.
         NWJSRunner.removeWrappers(keeping: native)
+    }
+
+    // MARK: - One file per executable
+
+    /// What one game puts in the env file of each executable it owns.
+    struct GameFiles {
+        var appID: Int
+        /// ``gameLines(_:_:engine:)``: the game's own settings.
+        var settings: [String]
+        /// The lowercased executables the game has on record.
+        var exes: [String]
+        /// `SEVO_LOADER=…`, the bundle that is the game's Dock identity.
+        var loader: String?
+        /// The native runner's variables, which run the exe as this game.
+        var runner: [String] = []
+    }
+
+    /// The env file of every executable, by file name.
+    ///
+    /// The engine finds a file by exe name alone, and games do share names:
+    /// every RPG Maker MV/MZ game ships `game.exe`, and many a game ships
+    /// `launcher.exe`. A file claimed by one game carries its settings, its
+    /// runner and its Dock identity. A file claimed by several carries only
+    /// the settings every one of them agrees on: another game's loader or
+    /// runner would start the exe as that other game. The result is the same
+    /// whatever order `games` comes in.
+    static func appFiles(_ games: [GameFiles]) -> [String: [String]] {
+        let ordered = games.sorted { $0.appID < $1.appID }
+        var claimants: [String: [GameFiles]] = [:]
+        for game in ordered {
+            for exe in Set(game.exes) { claimants[exe, default: []].append(game) }
+        }
+        var files: [String: [String]] = [:]
+        for (exe, owners) in claimants {
+            let file = "\(exe).env"
+            guard owners.count > 1 else {
+                let game = owners[0]
+                // The loader is the game's Dock identity, which a companion
+                // program never takes (``GameConfig/isCompanionExecutable(_:)``).
+                let identity = GameConfig.isCompanionExecutable(exe) ? [] : [game.loader].compactMap(\.self)
+                files[file] = game.settings + game.runner + identity
+                continue
+            }
+            let settings = owners.map { $0.settings.filter { !$0.hasPrefix("#") } }
+            let agreed = settings[0].filter { line in settings.allSatisfy { $0.contains(line) } }
+            let apps = owners.map { String($0.appID) }.joined(separator: ", ")
+            files[file] = ["# apps \(apps) all ship \(exe)"] + agreed
+        }
+        return files
+    }
+
+    /// Executables more than one game claims, each with its claimants in
+    /// app id order.
+    static func sharedExecutables(_ games: [GameFiles]) -> [(exe: String, appIDs: [Int])] {
+        var claimants: [String: [Int]] = [:]
+        for game in games {
+            for exe in Set(game.exes) { claimants[exe, default: []].append(game.appID) }
+        }
+        return claimants.filter { $0.value.count > 1 }
+            .map { ($0.key, $0.value.sorted()) }
+            .sorted { $0.exe < $1.exe }
+    }
+
+    /// Shared executables already narrated, so each is said once per process.
+    private static let narratedShares = Mutex<Set<String>>([])
+
+    private static func noteShared(_ exe: String, by appIDs: [Int]) {
+        let key = "\(exe) \(appIDs)"
+        let isNew = narratedShares.withLock { $0.insert(key).inserted }
+        guard isNew else { return }
+        let apps = appIDs.map(String.init).joined(separator: ", ")
+        GameExecutables.log("apps \(apps) all ship \(exe): its env file carries only the settings they share")
     }
 
     /// Writes ``DebugMode``'s own file, which the engine reads after the
@@ -249,5 +343,44 @@ nonisolated enum ConfigMaterializer {
                   text.hasPrefix(header) else { continue }
             try? manager.removeItem(at: url)
         }
+    }
+}
+
+/// Runs one pass at a time per key, and answers every call that arrived during
+/// a pass with a single pass after it.
+///
+/// A caller returns once a pass that began after its call has finished, so
+/// what it changed before calling is on disk when it returns.
+final nonisolated class CoalescingGate: @unchecked Sendable {
+    private let condition = NSCondition()
+    /// Keys with a pass in progress.
+    private var running: Set<String> = []
+    /// The newest request number handed out, per key.
+    private var requested: [String: UInt64] = [:]
+    /// The newest request number a finished pass began after, per key.
+    private var answered: [String: UInt64] = [:]
+
+    func run(key: String, _ pass: () -> Void) {
+        condition.lock()
+        let request = requested[key, default: 0] + 1
+        requested[key] = request
+        while running.contains(key) {
+            condition.wait()
+        }
+        guard answered[key, default: 0] < request else {
+            condition.unlock()
+            return
+        }
+        running.insert(key)
+        let covers = requested[key, default: request]
+        condition.unlock()
+
+        pass()
+
+        condition.lock()
+        running.remove(key)
+        answered[key] = covers
+        condition.broadcast()
+        condition.unlock()
     }
 }

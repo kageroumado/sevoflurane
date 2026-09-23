@@ -314,8 +314,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             self?.runRecorder.noteStopped(appID: appID)
+            DiscordPresence.shared.gameStopped(appID)
             Task.detached(name: "Clear the Discord activity") {
-                await DiscordPresence.shared.clear()
+                await DiscordPresence.shared.clear(forGame: appID)
             }
         }
     }
@@ -397,10 +398,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Detached, because the name comes off disk and the socket is the Discord
     /// client's to answer at its own pace. A game that ships its own Discord
     /// library publishes a richer activity through the in-bottle bridge, so the
-    /// app leaves that one alone.
+    /// app leaves that one alone. The ticket is taken here on the main actor,
+    /// so a stop that lands during the lookup voids the publish.
     private func publishToDiscord(appID: Int) {
         guard Preferences.discordPresence else { return }
         let configured = GameConfig.game(appID).name
+        let ticket = DiscordPresence.shared.ticket(forGame: appID)
         Task.detached(name: "Publish app \(appID) to Discord") {
             guard let name = configured ?? SharedGames.installed(appID: appID)?.name else { return }
             guard !DiscordPresence.publishesItsOwn(appID: appID) else { return }
@@ -414,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let activity = DiscordPresence.Activity(
                 applicationID: application.id, name: application.name,
             )
-            try? await DiscordPresence.shared.show(activity)
+            try? await DiscordPresence.shared.show(activity, forGame: appID, ticket: ticket)
         }
     }
 

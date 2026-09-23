@@ -499,16 +499,34 @@ nonisolated enum NWJSRunner {
         guard (try? process.run()) != nil else { return ([], []) }
         let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
         process.waitUntilExit()
+        return processes(inPS: String(decoding: data, as: UTF8.self), directory: directory)
+    }
+
+    /// The browser and helpers among `ps -axo pid=,ppid=,command=` lines
+    /// whose command names `directory` as a whole path: the path followed by
+    /// `/`, a space or the end of the line. App 400's wrapper is not a prefix
+    /// match for app 4000's.
+    static func processes(inPS output: String, directory: String) -> (browser: [pid_t], helpers: [pid_t]) {
         var parents: [pid_t: pid_t] = [:]
-        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
-            var fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+        for line in output.split(separator: "\n") {
+            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
             guard fields.count == 3, let pid = pid_t(fields[0]), let parent = pid_t(fields[1]),
-                  fields[2].contains(directory) else { continue }
+                  names(directory, in: fields[2]) else { continue }
             parents[pid] = parent
         }
         let matched = Set(parents.keys)
         let browser = parents.filter { !matched.contains($0.value) }.map(\.key)
         return (browser.sorted(), matched.subtracting(browser).sorted())
+    }
+
+    private static func names(_ directory: String, in command: Substring) -> Bool {
+        var remainder = command[...]
+        while let found = remainder.range(of: directory) {
+            let next = remainder[found.upperBound...].first
+            if next == nil || next == "/" || next == " " { return true }
+            remainder = remainder[found.upperBound...]
+        }
+        return false
     }
 
     /// Ends a native run. Steam's own terminate reaches into the bottle, and

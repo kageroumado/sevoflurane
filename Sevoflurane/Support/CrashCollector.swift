@@ -167,25 +167,58 @@ nonisolated enum CrashCollector {
     /// reader is never comparing two different checks.
     ///
     /// Blocking, on the queue the record was written from: a doctor pass is a
-    /// few seconds, and it only runs at the level someone set on purpose.
-    /// Answers nothing when the helper is not there, which is every process
-    /// that is not the app.
+    /// few seconds, and it only runs at the level someone set on purpose. A
+    /// pass still running after ``doctorTimeout`` is killed and the report
+    /// goes without it, so a doctor stuck on a wedged bottle never holds the
+    /// queue. Answers nothing when the helper is not there, which is every
+    /// process that is not the app.
     @discardableResult
     static func addDoctorReport(to report: Report) -> Bool {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
         guard FileManager.default.isExecutableFile(atPath: helper.path) else { return false }
-        let pipe = Pipe()
-        let doctor = Process()
-        doctor.executableURL = helper
-        doctor.arguments = ["doctor", "--json"]
-        doctor.standardOutput = pipe
-        doctor.standardError = FileHandle.nullDevice
-        guard (try? doctor.run()) != nil else { return false }
-        let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
-        doctor.waitUntilExit()
-        guard !data.isEmpty else { return false }
         let url = report.directory.appendingPathComponent("doctor.json")
-        return (try? data.write(to: url)) != nil
+        return runBounded(helper, ["doctor", "--json"], into: url, timeout: doctorTimeout)
+    }
+
+    static let doctorTimeout: TimeInterval = 30
+
+    /// Runs `tool` with its output going to `url`, and kills it once
+    /// `timeout` has passed. Answers whether it exited by itself, cleanly,
+    /// having written something; a run that did not leaves no file.
+    ///
+    /// Output goes to a file rather than a pipe, so a tool that prints more
+    /// than a pipe holds never blocks on a reader that is waiting for it.
+    static func runBounded(_ tool: URL, _ arguments: [String], into url: URL, timeout: TimeInterval) -> Bool {
+        let manager = FileManager.default
+        guard manager.createFile(atPath: url.path, contents: nil),
+              let output = try? FileHandle(forWritingTo: url) else { return false }
+        let process = Process()
+        process.executableURL = tool
+        process.arguments = arguments
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        guard (try? process.run()) != nil else {
+            try? output.close()
+            try? manager.removeItem(at: url)
+            return false
+        }
+        let finished = exited.wait(timeout: .now() + timeout) == .success
+        if !finished {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                exited.wait()
+            }
+        }
+        try? output.close()
+        let size = (try? manager.attributesOfItem(atPath: url.path))?[.size] as? Int ?? 0
+        guard finished, process.terminationStatus == 0, size > 0 else {
+            try? manager.removeItem(at: url)
+            return false
+        }
+        return true
     }
 
     /// `<appid>-<when the run began>`, which sorts by app and then by time and
@@ -305,15 +338,14 @@ nonisolated enum CrashCollector {
 
     /// Unreal's `Saved/Logs` and `Saved/Crashes`, Unity's `Player.log`, and
     /// the renderer's own files: ``GameLogs`` already knows where each of them
-    /// is for a given run and has read them redacted and capped.
+    /// is for a given run and has read them path-redacted and capped. The
+    /// writer strips them again with the account's persona names, which a
+    /// game prints and no path rule can find.
     private static func collectGameLogs(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
         for log in places.gameLogs(record) {
-            writer.write(
-                log.text, as: log.path, kind: kind(ofGameLog: log.path),
-                from: log.path, stripped: true,
-            )
+            writer.write(log.text, as: log.path, kind: kind(ofGameLog: log.path), from: log.path)
         }
     }
 
@@ -337,7 +369,7 @@ nonisolated enum CrashCollector {
             where entry.isDirectory && entry.name.hasSuffix("_Data") {
             let log = entry.url.appendingPathComponent("output_log.txt")
             guard let text = ReportStripper.tail(
-                of: log, limit: maximumBytesPerFile, personas: [],
+                of: log, limit: maximumBytesPerFile, personas: places.personas,
             ) else { continue }
             writer.write(
                 text, as: "games/\(record.appid)/\(entry.name)-output_log.txt",
@@ -363,7 +395,9 @@ nonisolated enum CrashCollector {
             )
         }
         let crashpad = install.appendingPathComponent("User Data/Crashpad/reports")
-        writer.writeDumps(in: crashpad, as: "nwjs-dumps.txt", kind: "nw.js crashpad")
+        if let window = window(of: record) {
+            writer.writeDumps(in: crashpad, as: "nwjs-dumps.txt", kind: "nw.js crashpad", within: window)
+        }
     }
 
     // MARK: - Steam's own logs
@@ -409,17 +443,21 @@ nonisolated enum CrashCollector {
     private static func collectDumps(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
+        // A dump written outside the run's window is another run's, and the
+        // bottle's dump folder holds every game's.
+        guard let window = window(of: record) else { return }
         for user in InstallDirectory.entries(
             in: places.bottle.appendingPathComponent("drive_c/users"),
         ) where user.isDirectory {
             writer.writeDumps(
                 in: user.url.appendingPathComponent("AppData/Local/CrashDumps"),
-                as: "wine-dumps.txt", kind: "wine minidump", whole: places.keepsWholeDumps,
+                as: "wine-dumps.txt", kind: "wine minidump", within: window,
+                whole: places.keepsWholeDumps,
             )
         }
         guard let install = places.installDirectory(record.appid) else { return }
         writer.writeDumps(
-            in: install, as: "game-dumps.txt", kind: "game minidump",
+            in: install, as: "game-dumps.txt", kind: "game minidump", within: window,
             whole: places.keepsWholeDumps,
         )
     }
@@ -623,14 +661,19 @@ nonisolated enum CrashCollector {
             )
         }
 
-        /// What a directory of minidumps holds, as one text file — and the
-        /// dumps themselves when `whole`, which is a level someone chose.
+        /// What a directory of minidumps written during `window` holds, as
+        /// one text file — and the dumps themselves when `whole`, which is a
+        /// level someone chose.
         mutating func writeDumps(
-            in directory: URL, as file: String, kind: String, whole: Bool = false,
+            in directory: URL, as file: String, kind: String, within window: ClosedRange<Date>,
+            whole: Bool = false,
         ) {
             var lines: [String] = []
             for entry in InstallDirectory.entries(in: directory)
                 where !entry.isDirectory && entry.name.lowercased().hasSuffix(".dmp") {
+                guard let written = CrashCollector.modified(entry.url), window.contains(written) else {
+                    continue
+                }
                 guard let dump = MinidumpMetadata.read(entry.url) else { continue }
                 lines.append("\(entry.name): \(dump.summary)")
                 if whole { copy(entry.url, as: "dumps/\(entry.name)", kind: kind) }

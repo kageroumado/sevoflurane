@@ -79,12 +79,23 @@ nonisolated enum ReportStripper {
     /// The end of a file as a report carries it, with a line saying what was
     /// cut when the file was longer than `limit`.
     static func tail(of url: URL, limit: Int, personas: [String] = []) -> String? {
-        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-        let tail = data.suffix(limit)
-        let elided = tail.count < data.count
-            ? "… the first \(data.count - tail.count) bytes are not in this report\n"
-            : ""
-        return elided + strip(String(decoding: tail, as: UTF8.self), personas: personas)
+        guard let (text, elided) = rawTail(of: url, limit: limit) else { return nil }
+        return elided + strip(text, personas: personas)
+    }
+
+    /// The last `limit` bytes of a file, read from where they start rather
+    /// than with the whole file, and the line that says what came before
+    /// them (empty when nothing did). `nil` when the file is not there or is
+    /// empty.
+    static func rawTail(of url: URL, limit: Int) -> (text: String, elided: String)? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > 0 else { return nil }
+        let start = size > UInt64(limit) ? size - UInt64(limit) : 0
+        guard (try? handle.seek(toOffset: start)) != nil,
+              let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
+        let elided = start > 0 ? "… the first \(start) bytes are not in this report\n" : ""
+        return (String(decoding: data, as: UTF8.self), elided)
     }
 }
 

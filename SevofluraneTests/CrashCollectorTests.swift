@@ -345,6 +345,74 @@ struct CrashCollectorTests {
         #expect(manager.fileExists(atPath: directory.path))
     }
 
+    @Test
+    func `dumps written outside the run are left out`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let places = Self.places(in: root)
+        let dumps = places.bottle.appendingPathComponent("drive_c/users/crossover/AppData/Local/CrashDumps")
+        try manager.createDirectory(at: dumps, withIntermediateDirectories: true)
+        let dump = try Self.minidump(modules: ["game.exe"])
+        let during = dumps.appendingPathComponent("during.dmp")
+        let before = dumps.appendingPathComponent("yesterday.dmp")
+        try dump.write(to: during)
+        try dump.write(to: before)
+        let start = try #require(ISO8601DateFormatter().date(from: "2026-09-11T17:23:09Z"))
+        try manager.setAttributes([.modificationDate: start.addingTimeInterval(120)], ofItemAtPath: during.path)
+        try manager.setAttributes([.modificationDate: start.addingTimeInterval(-86400)], ofItemAtPath: before.path)
+
+        let report = try #require(CrashCollector.collect(for: Self.record(), places: places))
+        let listed = try String(
+            contentsOf: report.directory.appendingPathComponent("wine-dumps.txt"), encoding: .utf8,
+        )
+        #expect(listed.contains("during.dmp"))
+        #expect(!listed.contains("yesterday.dmp"))
+    }
+
+    @Test
+    func `the persona is stripped from a game's own logs`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        var places = Self.places(in: root)
+        places.personas = ["Kagarino"]
+        places.gameLogs = { _ in
+            [GameLogs.Collected(path: "games/367520/Player.log", text: "Signed in as Kagarino\n")]
+        }
+        let install = root.appendingPathComponent("install")
+        let data = install.appendingPathComponent("hollow_knight_Data")
+        try manager.createDirectory(at: data, withIntermediateDirectories: true)
+        try Data("Welcome, Kagarino\n".utf8).write(to: data.appendingPathComponent("output_log.txt"))
+        places.installDirectory = { _ in install }
+
+        let report = try #require(CrashCollector.collect(for: Self.record(), places: places))
+        let player = try String(
+            contentsOf: report.directory.appendingPathComponent("games/367520/Player.log"), encoding: .utf8,
+        )
+        #expect(!player.contains("Kagarino"))
+        let unity = try String(
+            contentsOf: report.directory
+                .appendingPathComponent("games/367520/hollow_knight_Data-output_log.txt"),
+            encoding: .utf8,
+        )
+        #expect(!unity.contains("Kagarino"))
+    }
+
+    @Test
+    func `a long file gives up only its tail and says what was cut`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let url = root.appendingPathComponent("big.log")
+        let limit = 2_000_000
+        var bytes = Data(repeating: UInt8(ascii: "a"), count: 1_000_000)
+        bytes.append(Data(repeating: UInt8(ascii: "b"), count: limit))
+        try bytes.write(to: url)
+
+        let (text, elided) = try #require(ReportStripper.rawTail(of: url, limit: limit))
+        #expect(elided == "… the first 1000000 bytes are not in this report\n")
+        #expect(text.utf8.count == limit)
+        #expect(!text.contains("a"))
+    }
+
     // MARK: - Fixtures
 
     /// Every path pointed inside `root`, and the two lookups that would

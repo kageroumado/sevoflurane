@@ -121,13 +121,20 @@ nonisolated enum WineLog {
     /// inode would keep taking their output while readers watched the new
     /// file.
     static func handle(labeled label: String) -> FileHandle? {
-        let manager = FileManager.default
-        rotateIfLarge()
-        if !manager.fileExists(atPath: fileURL.path) {
-            manager.createFile(atPath: fileURL.path, contents: nil)
-        }
-        guard let handle = try? FileHandle(forWritingTo: fileURL) else { return nil }
-        _ = try? handle.seekToEnd()
+        handle(labeled: label, at: fileURL, rotatingOver: rotateOverBytes)
+    }
+
+    /// The same handle for a log at `url`, rotated past `limit` bytes.
+    ///
+    /// The descriptor is opened `O_APPEND`, and every process that inherits it
+    /// writes at the end of the file as it is at that moment. A shared offset
+    /// would carry each writer past a truncation and leave a hole of NUL bytes
+    /// the size of the rotated log in front of its next line.
+    static func handle(labeled label: String, at url: URL, rotatingOver limit: Int) -> FileHandle? {
+        rotateIfLarge(url, over: limit)
+        let descriptor = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { return nil }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         let stamp = ISO8601DateFormatter().string(from: .now)
         handle.write(Data("==== \(stamp) \(label) (WINEDEBUG=\(channels))\n".utf8))
         return handle
@@ -135,13 +142,13 @@ nonisolated enum WineLog {
 
     private static let rotateOverBytes = 20_000_000
 
-    private static func rotateIfLarge() {
+    private static func rotateIfLarge(_ url: URL, over limit: Int) {
         let manager = FileManager.default
-        guard let size = (try? manager.attributesOfItem(atPath: fileURL.path))?[.size] as? Int,
-              size > rotateOverBytes else { return }
-        let old = fileURL.deletingPathExtension().appendingPathExtension("old.log")
+        guard let size = (try? manager.attributesOfItem(atPath: url.path))?[.size] as? Int,
+              size > limit else { return }
+        let old = url.deletingPathExtension().appendingPathExtension("old.log")
         try? manager.removeItem(at: old)
-        try? manager.copyItem(at: fileURL, to: old)
-        try? FileHandle(forWritingTo: fileURL).truncate(atOffset: 0)
+        try? manager.copyItem(at: url, to: old)
+        truncate(url.path, 0)
     }
 }

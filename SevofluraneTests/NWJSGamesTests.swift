@@ -141,3 +141,23 @@ struct NWJSDetectionTests {
         #expect(NWJSGames.detect(inDirectory: root) == nil)
     }
 }
+
+/// Which processes a native NW.js run owns.
+struct NWJSNativeProcessTests {
+    @Test
+    func `a native run's processes are matched by the whole wrapper path`() {
+        let wrappers = "/Users/me/Library/Application Support/Sevoflurane/NWJS"
+        let output = """
+          10     1 /nwjs/nwjs.app/Contents/MacOS/nwjs \(wrappers)/400
+          11    10 /nwjs/Helper --type=renderer \(wrappers)/400/package.nw
+          20     1 /nwjs/nwjs.app/Contents/MacOS/nwjs \(wrappers)/4000
+          21    20 /nwjs/Helper --type=gpu-process \(wrappers)/4000 --flag
+        """
+        let four = NWJSRunner.processes(inPS: output, directory: wrappers + "/400")
+        #expect(four.browser == [10])
+        #expect(four.helpers == [11])
+        let fourThousand = NWJSRunner.processes(inPS: output, directory: wrappers + "/4000")
+        #expect(fourThousand.browser == [20])
+        #expect(fourThousand.helpers == [21])
+    }
+}

@@ -1,8 +1,8 @@
 import Foundation
 
 /// The Windows pieces games assume are present and a fresh prefix lacks —
-/// CrossOver's own Steam bottle recipe ("Game Launcher Dependencies",
-/// c4.21822 in its profile database) distilled, plus the two heavyweights
+/// CrossOver's own Steam bottle recipe ("Game Launcher Dependencies" in its
+/// profile database) distilled, plus the two heavyweights
 /// older games ask for. Every install is silent and idempotent: downloads go
 /// to the bottle's own temp, installers run inside the bottle through the
 /// same engine invocation as the client, and "installed" is judged by what

@@ -59,6 +59,24 @@ struct HostPressureTests {
     }
 
     @Test
+    func `a game's launcher bundle and a native run's wrapper are ours`() {
+        let roots = HostPressureSampler.defaultOwnRoots
+        let support = Engine.managedRoot.deletingLastPathComponent().path
+        #expect(HostPressureSampler.isOurs(
+            path: support + "/Launchers/1962700.app/Contents/MacOS/loader", roots: roots,
+        ))
+        #expect(HostPressureSampler.isOurs(
+            path: support + "/NWJS/bundles/400.app/Contents/MacOS/nwjs", roots: roots,
+        ))
+        #expect(HostPressureSampler.isOurs(
+            path: "/Applications/CrossOver Preview.app/Contents/SharedSupport/CrossOver/bin/wine",
+            roots: roots,
+        ))
+        #expect(!HostPressureSampler.isOurs(path: support + "Beta/tool", roots: roots))
+        #expect(!HostPressureSampler.isOurs(path: "/Applications/Xcode.app/Contents/MacOS/Xcode", roots: roots))
+    }
+
+    @Test
     func `the sampler's second reading is a share between zero and one, and this test host is not the bottle`() {
         let sampler = HostPressureSampler(ownRoots: [])
         _ = sampler.sample()

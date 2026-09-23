@@ -63,13 +63,20 @@ enum AgentIntegration {
     /// Unregisters every agent and takes the symlink away. The uninstall
     /// flow passes `allowAdminPrompt: false` — a second password dialog
     /// mid-uninstall is worse than reporting a leftover link.
+    ///
+    /// Only a link into an app bundle's `Contents/Helpers/sevo` is taken: a
+    /// `sevo` someone put at that path themselves is theirs.
     static func remove(allowAdminPrompt: Bool = true) async {
-        for harness in Harness.allCases where isRegistered(harness) {
+        for harness in Harness.allCases {
+            guard await isRegistered(harness) else { continue }
             _ = await unregister(harness)
         }
-        guard FileManager.default.fileExists(atPath: symlinkPath)
-            || (try? FileManager.default.destinationOfSymbolicLink(atPath: symlinkPath)) != nil
-        else { return }
+        let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: symlinkPath)
+        guard destination != nil || FileManager.default.fileExists(atPath: symlinkPath) else { return }
+        guard isOurLink(destination: destination) else {
+            EventLog.enqueue(.app, "\(symlinkPath) is not a link to this app's sevo, so it stays")
+            return
+        }
         if (try? FileManager.default.removeItem(atPath: symlinkPath)) != nil {
             EventLog.enqueue(.app, "sevo CLI symlink removed")
             return
@@ -81,6 +88,13 @@ enum AgentIntegration {
         if await runPrivileged("rm -f \(symlinkPath)") == nil {
             EventLog.enqueue(.app, "sevo CLI symlink removed")
         }
+    }
+
+    /// Whether a link at ``symlinkPath`` pointing at `destination` is one
+    /// ``installCLI()`` made: into some copy of the app, whichever version.
+    /// `nil` is a file that is no link at all.
+    nonisolated static func isOurLink(destination: String?) -> Bool {
+        destination?.hasSuffix(".app/Contents/Helpers/sevo") ?? false
     }
 
     // MARK: - Harnesses
@@ -134,8 +148,10 @@ enum AgentIntegration {
 
     /// Whether the agent's config carries the sevo server right now — read
     /// from the config itself, so state written by an earlier run, another
-    /// copy of the app, or the user's own hand all count.
-    static func isRegistered(_ harness: Harness) -> Bool {
+    /// copy of the app, or the user's own hand all count. Off the main actor:
+    /// `~/.claude.json` holds every project's history and runs to megabytes.
+    @concurrent
+    nonisolated static func isRegistered(_ harness: Harness) async -> Bool {
         switch harness {
         case .claudeCode:
             jsonServers(at: claudeCodeConfig)?[serverName] != nil
@@ -178,7 +194,7 @@ enum AgentIntegration {
                 capture: .combined, timeout: .seconds(30),
             )
             // "not found" is the state we wanted; only a live refusal counts.
-            if result.status != 0, isRegistered(.claudeCode) {
+            if result.status != 0, await isRegistered(.claudeCode) {
                 return String(result.output.suffix(120))
             }
             return nil
@@ -192,7 +208,7 @@ enum AgentIntegration {
                 codex, ["mcp", "remove", serverName],
                 capture: .combined, timeout: .seconds(30),
             )
-            if result.status != 0, isRegistered(.codex) {
+            if result.status != 0, await isRegistered(.codex) {
                 return String(result.output.suffix(120))
             }
             return nil
@@ -223,7 +239,7 @@ enum AgentIntegration {
 
     /// User-scope servers live in `~/.claude.json` — read for state, but
     /// written only through the claude CLI, which owns that file.
-    private static var claudeCodeConfig: URL {
+    private nonisolated static var claudeCodeConfig: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude.json")
     }
@@ -242,12 +258,12 @@ enum AgentIntegration {
 
     // MARK: - Claude Desktop
 
-    private static var claudeDesktopDirectory: URL {
+    private nonisolated static var claudeDesktopDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Claude")
     }
 
-    private static var claudeDesktopConfig: URL {
+    private nonisolated static var claudeDesktopConfig: URL {
         claudeDesktopDirectory.appendingPathComponent("claude_desktop_config.json")
     }
 
@@ -282,14 +298,14 @@ enum AgentIntegration {
             let data = try JSONSerialization.data(
                 withJSONObject: root, options: [.prettyPrinted, .sortedKeys],
             )
-            try data.write(to: config)
+            try data.write(to: config, options: .atomic)
             return nil
         } catch {
             return "couldn't write \(config.lastPathComponent): \(error.localizedDescription)"
         }
     }
 
-    private static func jsonServers(at config: URL) -> [String: Any]? {
+    private nonisolated static func jsonServers(at config: URL) -> [String: Any]? {
         guard let data = try? Data(contentsOf: config),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return nil }
@@ -311,7 +327,7 @@ enum AgentIntegration {
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    private static var codexConfig: URL {
+    private nonisolated static var codexConfig: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/config.toml")
     }
@@ -328,7 +344,8 @@ enum AgentIntegration {
             codex, ["mcp", "add", serverName, "--", symlinkPath, "mcp"],
             capture: .combined, timeout: .seconds(30),
         )
-        if result.status == 0 || isRegistered(.codex) {
+        if result.status == 0 { return nil }
+        if await isRegistered(.codex) {
             return nil
         }
         return String(result.output.suffix(120))
@@ -342,11 +359,11 @@ enum AgentIntegration {
     /// surgery rather than a parse/serialize round-trip (which would reorder
     /// and reformat the user's whole file). Removal is recognizer-based, so
     /// user content survives even a damaged marker block.
-    private static var hermesDirectory: URL {
+    private nonisolated static var hermesDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".hermes")
     }
 
-    private static var hermesConfig: URL {
+    private nonisolated static var hermesConfig: URL {
         hermesDirectory.appendingPathComponent("config.yaml")
     }
 
@@ -456,7 +473,7 @@ enum AgentIntegration {
 
     // MARK: - Shared plumbing
 
-    private static func fileText(_ url: URL) -> String? {
+    private nonisolated static func fileText(_ url: URL) -> String? {
         try? String(contentsOf: url, encoding: .utf8)
     }
 

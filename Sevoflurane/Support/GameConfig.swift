@@ -603,27 +603,43 @@ nonisolated enum GameConfig {
     /// Changes the bottle's own values and rewrites the engine's env files
     /// from the result — the one write path Settings › Engine and `sevo
     /// bottle config` share.
-    static func update(bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void) {
+    ///
+    /// - Parameter inBackground: whether the env files are written on a
+    ///   detached task, for a caller on the main actor. Otherwise they are on
+    ///   disk when this returns.
+    static func update(
+        bottle name: String, prefix: URL, inBackground: Bool = false,
+        _ change: (inout ConfigValues) -> Void,
+    ) {
         let before = bottle(name)
         var values = before
         change(&values)
         setBottle(name, values)
         noteChanges(from: before, to: values, of: "bottle \(name)")
-        ConfigMaterializer.materialize(bottle: name, prefix: prefix)
+        rewriteFiles(bottle: name, prefix: prefix, inBackground: inBackground)
     }
 
     /// Changes a game's own values and rewrites the engine's env files from
     /// the result — the one write path Settings › Games and `sevo app
-    /// config` share.
+    /// config` share. `inBackground` is as for ``update(bottle:prefix:inBackground:_:)``.
     static func update(
-        game appID: Int, bottle name: String, prefix: URL, _ change: (inout ConfigValues) -> Void,
+        game appID: Int, bottle name: String, prefix: URL, inBackground: Bool = false,
+        _ change: (inout ConfigValues) -> Void,
     ) {
         let before = game(appID)
         var values = before
         change(&values)
         setGame(appID, values)
         noteChanges(from: before, to: values, of: "game \(appID)")
-        ConfigMaterializer.materialize(bottle: name, prefix: prefix)
+        rewriteFiles(bottle: name, prefix: prefix, inBackground: inBackground)
+    }
+
+    private static func rewriteFiles(bottle name: String, prefix: URL, inBackground: Bool) {
+        if inBackground {
+            ConfigMaterializer.materializeInBackground(bottle: name, prefix: prefix)
+        } else {
+            ConfigMaterializer.materialize(bottle: name, prefix: prefix)
+        }
     }
 
     // MARK: - The trail of changes

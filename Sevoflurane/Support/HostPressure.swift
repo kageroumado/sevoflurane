@@ -124,16 +124,30 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
         self.ownRoots = ownRoots
     }
 
+    /// Everything the app keeps in Application Support — engines, a game's
+    /// Dock launcher bundle, the NW.js runtimes and their wrapper bundles —
+    /// both CrossOver apps, and the app itself.
     static var defaultOwnRoots: [String] {
         // The daemon's bundle is a folder inside the app's; the app is ours
         // whichever of the two asks.
         var app = Bundle.main.bundleURL
         while app.pathComponents.count > 1, app.pathExtension != "app" { app.deleteLastPathComponent() }
         return [
-            Engine.managedRoot.path,
+            Engine.managedRoot.deletingLastPathComponent().path,
             "/Applications/CrossOver.app",
+            "/Applications/CrossOver Preview.app",
             app.pathExtension == "app" ? app.path : Bundle.main.bundleURL.path,
         ]
+    }
+
+    /// Whether the executable at `path` lies inside one of `roots`, taken as
+    /// whole directories.
+    static func isOurs(path: String, roots: [String]) -> Bool {
+        roots.contains { root in
+            guard !root.isEmpty else { return false }
+            let directory = root.hasSuffix("/") ? String(root.dropLast()) : root
+            return path == directory || path.hasPrefix(directory + "/")
+        }
     }
 
     func sample() -> HostPressure {
@@ -206,7 +220,7 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
         let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         let path = length > 0 ? String(cString: buffer) : ""
         let name = path.isEmpty ? "pid \(pid)" : (path as NSString).lastPathComponent
-        return (name, ownRoots.contains { !$0.isEmpty && path.hasPrefix($0) })
+        return (name, Self.isOurs(path: path, roots: ownRoots))
     }
 
     /// Busy and total ticks of every core together.

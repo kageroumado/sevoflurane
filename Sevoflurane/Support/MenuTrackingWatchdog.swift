@@ -477,8 +477,10 @@ final class MenuTrackingWatchdog {
         return perform(cls as AnyObject, "currentSession")
     }
 
-    /// A menu's private impl, through the accessor that does not create one
-    /// first, so a menu with no impl is left untouched.
+    /// A menu's private impl. `_menuImplIfExists` comes first because it
+    /// never creates one; where AppKit lacks it, `_menuImpl` and
+    /// `_menuImplForCallbacks` answer instead, and those may create an impl
+    /// for a menu that had none.
     private static func menuImpl(of menu: NSMenu) -> NSObject? {
         for accessor in ["_menuImplIfExists", "_menuImpl", "_menuImplForCallbacks"] {
             if let impl = perform(menu, accessor) { return impl }

@@ -150,8 +150,13 @@ private struct GeneralAutomationSection: View {
     }
 
     private func refreshAgents() {
-        agents = AgentIntegration.detectedHarnesses.map {
-            AgentRow(harness: $0, registered: AgentIntegration.isRegistered($0))
+        let detected = AgentIntegration.detectedHarnesses
+        Task(name: "Read the assistants' configs") {
+            var rows: [AgentRow] = []
+            for harness in detected {
+                await rows.append(AgentRow(harness: harness, registered: AgentIntegration.isRegistered(harness)))
+            }
+            agents = rows
         }
     }
 }
@@ -242,7 +247,7 @@ private struct AgentToggleRow: View {
                 ? await AgentIntegration.register(harness)
                 : await AgentIntegration.unregister(harness)
             row.error = failure
-            row.registered = AgentIntegration.isRegistered(harness)
+            row.registered = await AgentIntegration.isRegistered(harness)
             row.busy = false
         }
     }

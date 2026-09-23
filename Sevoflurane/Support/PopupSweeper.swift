@@ -111,10 +111,12 @@ actor PopupSweeper {
 
     private func runSchedule() async {
         try? await Task.sleep(for: Self.firstSweepDelay)
-        while let end = scheduleEnd {
+        while scheduleEnd != nil {
             let hidden = await sweep(.twins)
             if !hidden.names.isEmpty { report?(hidden) }
-            guard ContinuousClock.now < end else { break }
+            // Read after the sweep: a notification that arrived during it
+            // pushed the end out, and this schedule is the one that serves it.
+            guard let end = scheduleEnd, ContinuousClock.now < end else { break }
         }
         scheduleEnd = nil
         report = nil

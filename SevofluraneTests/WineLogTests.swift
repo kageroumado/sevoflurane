@@ -63,3 +63,30 @@ struct WineLogChannelCompositionTests {
         #expect(WineLog.compose("", with: "+d3d") == "+d3d")
     }
 }
+
+/// How the log survives its own rotation while other processes write to it.
+struct WineLogRotationTests {
+    @Test
+    func `rotation keeps an inherited writer at the end of the file`() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("winelog-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("wine.log")
+
+        let early = try #require(WineLog.handle(labeled: "client", at: url, rotatingOver: 1000))
+        early.write(Data((String(repeating: "x", count: 2000) + "\n").utf8))
+        // The next launch finds the file over the limit and truncates it while
+        // the client still holds its descriptor.
+        let late = try #require(WineLog.handle(labeled: "game", at: url, rotatingOver: 1000))
+        early.write(Data("client line\n".utf8))
+        try early.close()
+        try late.close()
+
+        let contents = try Data(contentsOf: url)
+        #expect(!contents.contains(0))
+        #expect(contents.count < 1000)
+        #expect(String(decoding: contents, as: UTF8.self).hasSuffix("client line\n"))
+        #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("wine.old.log").path))
+    }
+}

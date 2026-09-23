@@ -442,7 +442,7 @@ private struct GameRow: View {
 
     private func setPin(_ renderer: Renderer?) {
         GameConfig.update(
-            game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root,
+            game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root, inBackground: true,
         ) {
             $0.renderer = renderer
             if $0.name == nil { $0.name = game.name }

@@ -6,6 +6,16 @@ import Testing
 /// that edit files Sevoflurane doesn't own, where a wrong line eats someone's
 /// config.
 struct AgentIntegrationTests {
+    // MARK: - The CLI link
+
+    @Test
+    func `removal leaves a sevo that is not the app's own`() {
+        #expect(!AgentIntegration.isOurLink(destination: "/opt/homebrew/Cellar/sevo/1.0/bin/sevo"))
+        // A plain file at the path is no link at all.
+        #expect(!AgentIntegration.isOurLink(destination: nil))
+        #expect(AgentIntegration.isOurLink(destination: "/Applications/Sevoflurane.app/Contents/Helpers/sevo"))
+    }
+
     // MARK: - Hermes YAML
 
     @Test

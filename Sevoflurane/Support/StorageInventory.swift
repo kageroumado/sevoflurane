@@ -287,9 +287,9 @@ nonisolated enum StorageInventory {
             }
             return total
         case "client":
-            return await max(0, bytes(at: entry.url) - bytes(
-                at: entry.url.appendingPathComponent("steamapps"),
-            ))
+            // `du` skips the games itself rather than walking them twice,
+            // once in the client and once to subtract them.
+            return await bytes(at: entry.url, skipping: "steamapps")
         case "bottle":
             let whole = await bytes(at: entry.url)
             let steam = await bytes(at: SteamBottle.steamRoot)
@@ -324,15 +324,45 @@ nonisolated enum StorageInventory {
         try manager.trashItem(at: entry.url, resultingItemURL: nil)
     }
 
+    /// Entries a running bottle has open.
+    static let usedWhileRunning: Set<String> = [
+        Entry.gamesID, Entry.programsID, "client", "caches", "bottle", "engines", "renderers", "toolkits",
+    ]
+
+    /// Whether reclaiming `entry` is refused: an entry the running bottle
+    /// reads from waits until the bottle stops, since the client writes its
+    /// caches as it runs and a running game has its engine, renderer and
+    /// toolkit files mapped. `bottleRunning` is ``isBottleRunning``.
+    static func isRefused(_ entry: Entry, bottleRunning: Bool) -> Bool {
+        bottleRunning && usedWhileRunning.contains(entry.id)
+    }
+
+    /// Whether the bottle's wineserver holds its lock, which is true from the
+    /// first Wine process to the last.
+    static var isBottleRunning: Bool {
+        WineOrphans.isServerAlive(forPrefix: SteamBottle.root.path)
+    }
+
+    /// A reclaim refused because the bottle is using what it would remove.
+    struct InUse: Error, CustomStringConvertible {
+        let entry: String
+        var description: String {
+            "\(entry) is in use while Steam or a game runs; stop the client first"
+        }
+    }
+
     private static var cacheDirectories: [URL] {
         ["appcache", "depotcache", "dumps"].map(SteamBottle.steamRoot.appendingPathComponent)
             + [SteamBottle.htmlcache]
     }
 
-    private static func bytes(at url: URL) async -> Int64 {
+    /// What `url` occupies, leaving out every directory or file named
+    /// `skipping` inside it.
+    private static func bytes(at url: URL, skipping name: String? = nil) async -> Int64 {
         guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
         let result = await Subprocess.run(
-            "/usr/bin/du", ["-sk", url.path], capture: .stdout, timeout: .seconds(240),
+            "/usr/bin/du", ["-sk"] + (name.map { ["-I", $0] } ?? []) + [url.path],
+            capture: .stdout, timeout: .seconds(240),
         )
         let kilobytes = result.output.split(separator: "\t").first.flatMap { Int64($0) } ?? 0
         return kilobytes * 1024

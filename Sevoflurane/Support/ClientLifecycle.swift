@@ -1,10 +1,11 @@
 import Foundation
 import os
+import Synchronization
 
 /// The mechanics of the bottled client's life: probing, launching, and the
-/// kill ladder. Policy lives with the callers — the app's ``ClientSupervisor``
-/// decides *when* to act, the `sevo` CLI exposes the same actions to a
-/// terminal or an agent — so both drive one implementation.
+/// kill ladder. Policy lives with the callers — the daemon's
+/// `BottleSupervisor` decides *when* to act, the `sevo` CLI exposes the same
+/// actions to a terminal or an agent — so both drive one implementation.
 nonisolated enum ClientLifecycle {
     /// The names the kill ladder owns. Mac Steam's own `ipcserver`
     /// (launchd `com.valvesoftware.steam.ipctool`) matches none of them.
@@ -32,18 +33,24 @@ nonisolated enum ClientLifecycle {
     }
 
     /// Called with its status when the wine launcher that spawned the client
-    /// exits. The app points this at its supervisor so a death is an event
-    /// rather than something the next poll happens to notice — with a game up
-    /// the poll is a minute apart, which was the whole of the 58 s a dead
-    /// client once went unnoticed. Same contract as ``log``.
+    /// exits. The daemon points this at its `BottleSupervisor` so a death is
+    /// an event rather than something the next poll happens to notice, and
+    /// with a game up the poll is a minute apart. Same contract as ``log``.
     nonisolated(unsafe) static var clientDidExit: @Sendable (Int32) -> Void = { _ in }
 
     /// When this process last began bringing the bottle's programs down. What exits within
     /// ``stopWindow`` of it was asked to: the launcher by SIGTERM (status 15), the Discord
-    /// relay by losing its wineserver (status 1).
-    nonisolated(unsafe) static var stopRequestedAt: Date?
+    /// relay by losing its wineserver (status 1). Read from termination handlers on
+    /// Foundation's own threads, so it is kept under a lock.
+    static var stopRequestedAt: Date? {
+        get { stopRequest.withLock { $0 } }
+        set { stopRequest.withLock { $0 = newValue } }
+    }
 
-    /// A client stop takes about 80 s and a restart up to 150 s.
+    private static let stopRequest = Mutex<Date?>(nil)
+
+    /// Long enough to cover a whole restart, so the launcher's exit at its end
+    /// still reads as asked for.
     static let stopWindow: TimeInterval = 300
 
     /// The log line for a program of ours that exited.
@@ -86,14 +93,16 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Whether the bottle's client process exists at all, told by command
+    /// Whether this bottle's client process exists at all, told by command
     /// line (`Steam.exe -silent` is this app's own launch line; the Mac
-    /// Steam client is `steam_osx` and cannot match). Cheap on purpose —
-    /// one `pgrep`, no per-pid `lsof` scoping — because it runs on the
-    /// probe's failure path to separate "CDP is slow" from "nothing is
-    /// running".
+    /// Steam client is `steam_osx` and cannot match) and scoped to the bottle
+    /// like ``bottleProcessIDs(matchingAnyOf:)``. It runs on the probe's
+    /// failure path to separate "CDP is slow" from "nothing is running", and
+    /// the client's working directory is inside the prefix, so the answer
+    /// is one `pgrep` and a kernel call.
     static func clientProcessAlive() async -> Bool {
-        await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).status == 0
+        let out = await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).output
+        return await !inBottle(processIDs(in: out)).isEmpty
     }
 
     // MARK: - Processes
@@ -108,20 +117,89 @@ nonisolated enum ClientLifecycle {
         var candidates: Set<pid_t> = []
         for processName in names {
             let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
-            for token in out.split(whereSeparator: \.isNewline) {
-                if let pid = pid_t(token.trimmingCharacters(in: .whitespaces)) {
-                    candidates.insert(pid)
-                }
+            candidates.formUnion(processIDs(in: out))
+        }
+        return await inBottle(Array(candidates))
+    }
+
+    /// One pid per line, as `pgrep` prints them.
+    private static func processIDs(in output: String) -> [pid_t] {
+        output.split(whereSeparator: \.isNewline).compactMap {
+            pid_t($0.trimmingCharacters(in: .whitespaces))
+        }
+    }
+
+    /// The pids among `candidates` that belong to this bottle.
+    ///
+    /// A process whose working directory lies in the prefix, or is the
+    /// prefix's wineserver directory, is decided without spawning anything.
+    /// The rest (a game working in a library folder outside the prefix, or a
+    /// process between directories) are read in one `lsof` over all of them:
+    /// the wineserver keeps the prefix itself open, and every other Wine
+    /// process has a file inside it.
+    private static func inBottle(_ candidates: [pid_t]) async -> [pid_t] {
+        guard !candidates.isEmpty else { return [] }
+        let roots = bottleRoots
+        let serverDirectory = WineOrphans.serverDirectory(forPrefix: SteamBottle.root.path)
+        var scoped: [pid_t] = []
+        var unsure: [pid_t] = []
+        for pid in candidates {
+            guard let directory = WineOrphans.workingDirectory(of: pid) else {
+                unsure.append(pid)
+                continue
+            }
+            if directory == serverDirectory || isInBottle(openPaths: [directory], roots: roots) {
+                scoped.append(pid)
+            } else {
+                unsure.append(pid)
             }
         }
-        var scoped: [pid_t] = []
-        for pid in candidates {
-            let count = await Subprocess.run(
-                "/bin/sh", ["-c", "lsof -p \(pid) 2>/dev/null | grep -c 'Bottles/\(SteamBottle.name)'"],
-            ).output.trimmingCharacters(in: .whitespacesAndNewlines)
-            if (Int(count) ?? 0) > 0 { scoped.append(pid) }
+        if !unsure.isEmpty {
+            let out = await Subprocess.run(
+                "/usr/sbin/lsof", ["-w", "-Fn", "-p", unsure.map(String.init).joined(separator: ",")],
+                timeout: .seconds(20),
+            ).output
+            for (pid, paths) in openPaths(inLsofFields: out) where isInBottle(openPaths: paths, roots: roots) {
+                scoped.append(pid)
+            }
         }
-        return scoped.sorted()
+        return Set(scoped).sorted()
+    }
+
+    /// The bottle's directory as a path and, where it differs, as the path
+    /// with its links resolved, which is how the kernel reports open files.
+    private static var bottleRoots: [String] {
+        let root = SteamBottle.root
+        return Array(Set([root.path, root.resolvingSymlinksInPath().path]))
+    }
+
+    /// Whether any of `paths` is `roots`' directory itself or lies inside it.
+    /// A sibling that merely begins with the same name (`Steam2` beside
+    /// `Steam`) and another app's `Bottles/Steam` are elsewhere.
+    static func isInBottle(openPaths paths: [String], roots: [String]) -> Bool {
+        paths.contains { path in
+            roots.contains { root in
+                let directory = root.hasSuffix("/") ? String(root.dropLast()) : root
+                return path == directory || path.hasPrefix(directory + "/")
+            }
+        }
+    }
+
+    /// The names `lsof -Fn` lists per process: a `p<pid>` line opens a
+    /// process and each `n<name>` line after it is one of its files.
+    static func openPaths(inLsofFields output: String) -> [pid_t: [String]] {
+        var paths: [pid_t: [String]] = [:]
+        var current: pid_t?
+        for line in output.split(whereSeparator: \.isNewline) {
+            guard let tag = line.first else { continue }
+            let value = String(line.dropFirst())
+            switch tag {
+            case "p": current = pid_t(value)
+            case "n": if let current { paths[current, default: []].append(value) }
+            default: continue
+            }
+        }
+        return paths
     }
 
     /// What a force-quit reaches. `steam` takes the client down and leaves
@@ -166,7 +244,7 @@ nonisolated enum ClientLifecycle {
             guard let space = trimmed.firstIndex(of: " "),
                   let pid = pid_t(trimmed[..<space]) else { continue }
             let command = trimmed[trimmed.index(after: space)...]
-            // "C:\Program Files\Steam\steam.exe -silent" → "steam.exe": the
+            // "C:\Program Files (x86)\Steam\Steam.exe -silent" → "Steam.exe": the
             // path holds spaces, so split on the separators first, then drop
             // the arguments that trail the last component.
             let lastComponent = command
@@ -249,15 +327,15 @@ nonisolated enum ClientLifecycle {
         )
     }
 
-    /// Brings every bottle process down: graceful `-shutdown`, then
-    /// `wineserver -k`, then signals, each rung only for what the previous
-    /// one left alive. `gracePolls` bounds the graceful rung at 2 s per
-    /// poll — a restart can afford 30 s of patience, quit cannot.
-    /// Stops Steam and leaves Windows booted: wineserver, services and the
-    /// device hosts stay resident, so the next client start skips the
-    /// machine boot entirely. The callers decide when Windows itself must
-    /// go instead (`stopAll`): a different engine's wineserver, an msync
-    /// change (sync primitives are negotiated with the server), a quit.
+    /// Stops Steam's own processes and leaves Windows booted: a CDP shutdown
+    /// ask, one-second polls for `gracePolls`, then SIGTERM and SIGKILL.
+    ///
+    /// Wineserver, services and the device hosts stay resident, so the next
+    /// client start skips the machine boot entirely. The callers decide when
+    /// Windows itself must go instead (``stopAll(gracePolls:hidingPopups:phase:)``):
+    /// a different engine's wineserver, an msync change (sync primitives are
+    /// negotiated with the server), a quit. A client that is already gone
+    /// leaves nothing to wait for, so its leftovers go straight to the signals.
     static func stopClient(
         gracePolls: Int,
         phase: (String) -> Void = { _ in },
@@ -271,15 +349,15 @@ nonisolated enum ClientLifecycle {
         let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
         if await clientProcessAlive() {
             await gracefulShutdown(until: cdpDeadline)
-        }
-        for _ in 0 ..< gracePolls {
-            _ = await hideVisibleClientPopups()
-            if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
-                log("stop audit: client-only graceful exit in "
-                    + "\(stopBegan.duration(to: .now).components.seconds)s")
-                return
+            for _ in 0 ..< gracePolls {
+                _ = await hideVisibleClientPopups()
+                if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
+                    log("stop audit: client-only graceful exit in "
+                        + "\(stopBegan.duration(to: .now).components.seconds)s")
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1))
             }
-            try? await Task.sleep(for: .seconds(1))
         }
         phase("force-quitting Steam")
         var survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
@@ -303,6 +381,10 @@ nonisolated enum ClientLifecycle {
         cdpCallCap + .seconds(gracePolls)
     }
 
+    /// Brings every bottle process down: the CDP shutdown ask while a client
+    /// is alive, then `wineserver -k`, then signals, each rung only for what
+    /// the previous one left alive. `gracePolls` is the graceful rung's
+    /// patience in one-second polls: a restart can afford 30 s, a quit cannot.
     static func stopAll(
         gracePolls: Int,
         hidingPopups: Bool = false,
@@ -366,10 +448,6 @@ nonisolated enum ClientLifecycle {
             + "\(stopBegan.duration(to: .now).components.seconds)s")
     }
 
-    /// Fire and forget: the wine launcher regularly outlives its useful work
-    /// by half a minute, so CDP polling — not the launcher exiting — decides
-    /// whether the client is up. The exit is still logged for the trail.
-    /// `@concurrent` so the spawn never runs on the calling actor.
     /// Extra `steam.exe` arguments from `SEVO_STEAM_ARGS` in the app's
     /// environment, whitespace-separated — an experiment knob (`-nojoy`,
     /// `-noshaders`, `-cef-*`) that reaches the client through the
@@ -380,6 +458,10 @@ nonisolated enum ClientLifecycle {
             .map(String.init)
     }
 
+    /// Fire and forget: the wine launcher regularly outlives its useful work
+    /// by half a minute, so CDP polling — not the launcher exiting — decides
+    /// whether the client is up. The exit is still logged for the trail.
+    /// `@concurrent` so the spawn never runs on the calling actor.
     @concurrent
     static func launchClient() async {
         // Reconcile the engine tree to the desired selection before steam.exe
@@ -429,6 +511,7 @@ nonisolated enum ClientLifecycle {
             BottleGraphics.recordBootedSelection()
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
+            closeTrail(trail)
         }
         // What each installed game is built on and which executables it
         // ships, recorded for the library once per client start: a directory
@@ -648,18 +731,58 @@ nonisolated enum ClientLifecycle {
     /// tree survives whatever closes above it. The direct fall-back is the
     /// machine with no daemon answering: the first run, before the app has
     /// registered one, and `--no-app`.
+    ///
+    /// Only a daemon that could not be reached, or that has no `/bottle/run`,
+    /// hands the program back to this process. A request that timed out or
+    /// broke off may have started the program already, and a second copy of
+    /// an installer in the same bottle is worse than a failed run.
     @discardableResult
     static func runSupervisedInBottle(
         _ program: [String],
         timeout: Duration = .seconds(600),
     ) async -> (status: Int32?, output: String) {
-        if let request = daemonRunRequest(program, timeout: timeout),
-           let (data, response) = try? await URLSession.shared.data(for: request),
-           let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode),
-           let result = daemonRunResult(data) {
-            return result
+        guard let request = daemonRunRequest(program, timeout: timeout) else {
+            return await runInBottle(program, timeout: timeout)
         }
-        return await runInBottle(program, timeout: timeout)
+        switch await daemonRun(request) {
+        case let .answered(result):
+            return result
+        case .unreachable:
+            return await runInBottle(program, timeout: timeout)
+        case let .failed(reason):
+            log("bottle run through the daemon failed: \(reason)")
+            return (nil, reason)
+        }
+    }
+
+    /// What asking the daemon to run a program came to.
+    enum DaemonRun {
+        /// The daemon ran it and this is its result.
+        case answered((status: Int32?, output: String))
+        /// No daemon took the request, so nothing was started.
+        case unreachable
+        /// The daemon took the request, and whether the program started is
+        /// unknown.
+        case failed(String)
+    }
+
+    static func daemonRun(_ request: URLRequest, session: URLSession = .shared) async -> DaemonRun {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .cannotConnectToHost {
+            return .unreachable
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // A daemon older than `/bottle/run` refuses the path before running anything.
+        if status == 404 || status == 405 { return .unreachable }
+        guard (200 ..< 300).contains(status), let result = daemonRunResult(data) else {
+            return .failed("the daemon answered HTTP \(status)")
+        }
+        return .answered(result)
     }
 
     /// The `/bottle/run` request one bottle command becomes: one argument per
@@ -719,7 +842,15 @@ nonisolated enum ClientLifecycle {
             try process.run()
         } catch {
             log("\(name) failed to start: \(error.localizedDescription)")
+            closeTrail(trail)
         }
+    }
+
+    /// Closes a log handle whose process never started, which leaves no
+    /// termination handler to close it. The null device is shared and stays.
+    private static func closeTrail(_ trail: FileHandle) {
+        guard trail !== FileHandle.nullDevice else { return }
+        try? trail.close()
     }
 
     // MARK: - Update pinning

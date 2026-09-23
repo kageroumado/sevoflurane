@@ -8,9 +8,9 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     case auto
     /// Apple's Game Porting Toolkit layer: D3D11 + D3D12.
     case d3dmetal
-    /// DXMT: D3D10/11 straight to Metal (CrossOver 26 bundles 0.72).
+    /// DXMT: D3D10/11 straight to Metal.
     case dxmt
-    /// DXVK: D3D9–11 over Vulkan/MoltenVK.
+    /// DXVK: D3D10/11 over Vulkan/MoltenVK.
     case dxvk
     /// Wine's own GL/Vulkan-backed wined3d.
     case wined3d
@@ -259,9 +259,7 @@ nonisolated enum BottleGraphics {
     /// moved. Nil for an engine that keeps no managed tree.
     ///
     /// Every spawn and every hot restage says this, because a black-screen
-    /// report has to name the layer the game actually loaded — and a renderer
-    /// switch used to be visible only as a translation layer's own lines
-    /// going missing from the wine log.
+    /// report has to name the layer the game actually loaded.
     static func stagingNote(_ staged: [String]) -> String? {
         guard case .managed = Engine.active else { return nil }
         let toolkit = D3DMetalInstaller.active(inEngine: Engine.active.root)?.version
@@ -429,7 +427,11 @@ nonisolated enum BottleGraphics {
     /// reached the registry has not reached that renderer. `regedit` imports
     /// the file through the engine's own wine, which reaches a prefix that is
     /// already running and starts one for a bottle that is down.
-    /// `Process.run()` returns at the spawn, so the caller pays a fork.
+    ///
+    /// For the Steam bottle the import is the daemon's to run, on a detached
+    /// task with a minute's bound, and its outcome is logged: the daemon owns
+    /// every process in that bottle. Another bottle has no daemon, so the
+    /// import is spawned directly and not waited for.
     ///
     /// The file lands in the bottle whether or not the import does, and
     /// ``SetupEnvironment`` writes the same two values at the next app start,
@@ -438,9 +440,22 @@ nonisolated enum BottleGraphics {
         guard GPUIdentity.writeWineD3DRegistry(identity, intoBottle: bottle) != nil,
               !registryHolds(identity, inBottle: bottle)
         else { return }
+        let program = ["regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath]
+        guard bottle.standardizedFileURL.path == SteamBottle.root.standardizedFileURL.path else {
+            spawn(program, inBottle: bottle)
+            return
+        }
+        Task.detached(name: "Carry the GPU choice to the registry") {
+            let result = await ClientLifecycle.runSupervisedInBottle(program, timeout: .seconds(60))
+            ClientLifecycle.log(result.status == 0
+                ? "the GPU choice reached the bottle's registry"
+                : "regedit of the GPU choice ended with status \(result.status.map(String.init) ?? "killed")")
+        }
+    }
+
+    private static func spawn(_ program: [String], inBottle bottle: URL) {
         let invocation = Engine.active.wineInvocation(
-            bottle: bottle.lastPathComponent, wait: .children,
-            program: ["regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath],
+            bottle: bottle.lastPathComponent, wait: .children, program: program,
         )
         let process = Process()
         process.executableURL = invocation.executable
@@ -574,7 +589,8 @@ nonisolated enum BottleGraphics {
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
         // DXMT rather than ``defaultRenderer``: D3DMetal comes from Apple's
-        // Game Porting Toolkit, which the managed engine does not carry.
+        // Game Porting Toolkit, which a managed engine holds only once the
+        // user has added it (``D3DMetalInstaller``).
         let renderer = defaults.string(forKey: rendererKey)
             .flatMap(Renderer.init(rawValue:)) ?? .dxmt
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true

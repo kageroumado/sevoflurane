@@ -7,8 +7,8 @@ import Foundation
 /// The payloads (DXMT's "builtin" release, DXVK-macOS "builtin", GPTk's
 /// D3DMetal) are winelib builds carrying Wine's builtin signature — and Wine
 /// resolves a builtin DLL to its canonical tree copy no matter what sits in
-/// `system32`. Staging them there was measured to load Wine's own vkd3d
-/// d3d12 with D3DMetal fully installed ("DirectX 12 is not supported"). So
+/// `system32`, so a payload staged only there loses to Wine's own (vkd3d's
+/// d3d12 answers "DirectX 12 is not supported" with D3DMetal present). So
 /// activation swaps the canonical copies instead, keeping
 /// each displaced original beside the tree for the swap back.
 ///
@@ -21,9 +21,8 @@ import Foundation
 ///
 /// The halves are one release and are never crossed. A PE DLL is a thin
 /// bridge whose calls carry a function index into the unix-side dylib, and
-/// the two releases do not number those alike: 4.0b2's dylib under 3.0's
-/// DLLs took Steam's client down 14 s into every boot, silently, where each
-/// version whole boots healthy.
+/// the releases do not number those alike, so a crossed pair of D3DMetal
+/// halves calls the wrong functions.
 nonisolated enum EngineRenderers {
     /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
     /// `bottle`'s system32 holds a file for each renderer DLL. Answers what

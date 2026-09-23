@@ -293,12 +293,10 @@ nonisolated enum GameLogs {
 
     /// The end of a file, redacted. `nil` when it is not there or is empty.
     private static func read(_ url: URL) -> String? {
-        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-        let tail = data.suffix(maximumBytesPerFile)
-        let elided = tail.count < data.count
-            ? "… the first \(data.count - tail.count) bytes are not in this report\n"
-            : ""
-        return elided + Redaction.apply(to: String(decoding: tail, as: UTF8.self))
+        guard let (text, elided) = ReportStripper.rawTail(of: url, limit: maximumBytesPerFile) else {
+            return nil
+        }
+        return elided + Redaction.apply(to: text)
     }
 
     private static func modified(_ url: URL) -> Date? {

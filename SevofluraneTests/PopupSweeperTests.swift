@@ -25,6 +25,20 @@ struct PopupSweeperTests {
         }
     }
 
+    /// A one-way switch a sweep hook and a test can both read.
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+
+        func set() {
+            lock.withLock { value = true }
+        }
+
+        var isSet: Bool {
+            lock.withLock { value }
+        }
+    }
+
     @Test
     func `concurrent asks share one sweep`() async {
         let sweeps = Counter()
@@ -75,6 +89,31 @@ struct PopupSweeperTests {
         // One schedule ran, so every sweep was reported exactly once. Two
         // racing schedules would report each other's sweeps as well.
         #expect(reported.count == sweeps.count)
+    }
+
+    @Test
+    func `a notification during the last sweep extends the schedule`() async {
+        let sweeps = Counter()
+        let inFirstSweep = Flag()
+        let released = Flag()
+        let sweeper = PopupSweeper(minimumInterval: .zero, scheduleLength: .milliseconds(100)) { _ in
+            let number = sweeps.bump()
+            if number == 1 {
+                // Held until the second notification is in, which puts it
+                // past the first schedule's end and inside its last sweep.
+                inFirstSweep.set()
+                while !released.isSet { try? await Task.sleep(for: .milliseconds(10)) }
+            }
+            return ["notificationtoasts_\(number)_desktop"]
+        }
+        await sweeper.sweepAfterNotification { _ in }
+        while !inFirstSweep.isSet { try? await Task.sleep(for: .milliseconds(10)) }
+        await sweeper.sweepAfterNotification { _ in }
+        released.set()
+        for _ in 0 ..< 300 where sweeps.count < 2 {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(sweeps.count >= 2)
     }
 
     @Test

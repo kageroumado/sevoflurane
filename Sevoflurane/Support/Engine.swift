@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Which Wine runs the bottle: CrossOver's, or a managed engine Sevoflurane
 /// installed itself.
@@ -39,18 +40,21 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// The engine every wine invocation routes through. Resolved from disk on
     /// first use (so the CLI needs no entry-point ceremony); the app reasserts
-    /// it whenever a full detection lands. Resolution is idempotent, so a
-    /// first-access race between callers is benign.
-    private nonisolated(unsafe) static var resolved: Engine?
+    /// it whenever a full detection lands. Read from every actor and from
+    /// `@concurrent` work, so the value is kept under a lock; resolution runs
+    /// outside it, and two first readers that race both resolve and store the
+    /// same answer.
     static var active: Engine {
         get {
-            if let resolved { return resolved }
+            if let engine = resolved.withLock({ $0 }) { return engine }
             let engine = resolveFromDisk()
-            resolved = engine
+            resolved.withLock { $0 = engine }
             return engine
         }
-        set { resolved = newValue }
+        set { resolved.withLock { $0 = newValue } }
     }
+
+    private static let resolved = Mutex<Engine?>(nil)
 
     /// The user's explicit choice first (Settings › Engine, validated
     /// against what's actually on disk); otherwise CrossOver (its Steam/CEF
@@ -153,7 +157,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// and disk — the renderer selection is part of managed resolution, so
     /// its writers call this.
     static func refreshResolution() {
-        resolved = nil
+        resolved.withLock { $0 = nil }
     }
 
     /// What this engine can render through. CrossOver hosts everything; a
@@ -473,9 +477,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
             // the `.so` stubs a game loads are symlinks to this same file, so
             // ntdll's early dlopen and the game's stubs share one image —
             // one dispatch table, one code range for the ms_abi trampoline.
-            // Naming the toolkit's own copy instead put a second file in the
-            // process, and the game ran whatever the tree held (3.0's caps
-            // with "4.0 beta 2" picked).
+            // Never point this at the toolkit's own copy: a second image
+            // means a second dispatch table.
             let sharedLib = D3DMetalInstaller.bridgeLibrary(inEngine: root)
             if FileManager.default.fileExists(atPath: sharedLib.path) {
                 env["SEVO_LIBD3DSHARED_PATH"] = sharedLib.path

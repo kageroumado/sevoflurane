@@ -34,6 +34,7 @@ struct DiscordPresenceTests {
         let started = Date(timeIntervalSince1970: 1_700_000_000)
         try await presence.show(
             .init(applicationID: "1505320535268261888", name: "Subnautica 2", started: started),
+            forGame: 1, ticket: 0,
         )
         try await Self.wait(for: 2, on: discord)
 
@@ -71,7 +72,7 @@ struct DiscordPresenceTests {
 
         let presence = DiscordPresence(directory: discord.directory)
         // Discord refusing the application id is an answer, not a fault.
-        try await presence.show(.init(applicationID: "0", name: "Subnautica"))
+        try await presence.show(.init(applicationID: "0", name: "Subnautica"), forGame: 1, ticket: 0)
         try await Self.wait(for: 1, on: discord)
         try await Task.sleep(for: .milliseconds(200))
         #expect(discord.frames.count == 1)
@@ -83,9 +84,9 @@ struct DiscordPresenceTests {
         defer { discord.stop() }
 
         let presence = DiscordPresence(directory: discord.directory)
-        try await presence.show(.init(applicationID: "111", name: "First"))
+        try await presence.show(.init(applicationID: "111", name: "First"), forGame: 1, ticket: 0)
         try await Self.wait(for: 2, on: discord)
-        try await presence.show(.init(applicationID: "222", name: "Second"))
+        try await presence.show(.init(applicationID: "222", name: "Second"), forGame: 1, ticket: 0)
         try await Self.wait(for: 4, on: discord)
 
         #expect(discord.frames[2].opcode == DiscordPresence.Opcode.handshake.rawValue)
@@ -99,9 +100,60 @@ struct DiscordPresenceTests {
         defer { discord.stop() }
 
         let presence = DiscordPresence(directory: discord.directory)
-        try await presence.show(.init(applicationID: "", name: "Subnautica"))
+        try await presence.show(.init(applicationID: "", name: "Subnautica"), forGame: 1, ticket: 0)
         try await Task.sleep(for: .milliseconds(200))
         #expect(discord.frames.isEmpty)
+    }
+
+    @Test
+    func `a write to a Discord that has hung up throws instead of signalling`() async throws {
+        let discord = try FakeDiscord(replyingWith: .hangsUpAfterActivity)
+        defer { discord.stop() }
+
+        let presence = DiscordPresence(directory: discord.directory)
+        try await presence.show(.init(applicationID: "111", name: "First"), forGame: 1, ticket: 0)
+        try await Self.wait(for: 2, on: discord)
+        try await Task.sleep(for: .milliseconds(100))
+        // The peer is gone. A write raises SIGPIPE unless the socket opts out,
+        // and the signal ends the test host before this line returns.
+        await #expect(throws: DiscordPresence.Failure.self) {
+            try await presence.show(.init(applicationID: "111", name: "First"), forGame: 1, ticket: 0)
+        }
+    }
+
+    @Test
+    func `clearing another game keeps the activity`() async throws {
+        let discord = try FakeDiscord(replyingWith: .ready)
+        defer { discord.stop() }
+
+        let presence = DiscordPresence(directory: discord.directory)
+        try await presence.show(.init(applicationID: "111", name: "First"), forGame: 1, ticket: 0)
+        try await Self.wait(for: 2, on: discord)
+        await presence.clear(forGame: 2)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(discord.frames.count == 2)
+
+        await presence.clear(forGame: 1)
+        try await Self.wait(for: 3, on: discord)
+    }
+
+    @Test
+    func `a game that stopped during the lookup publishes nothing`() async throws {
+        let discord = try FakeDiscord(replyingWith: .ready)
+        defer { discord.stop() }
+
+        let presence = DiscordPresence(directory: discord.directory)
+        let ticket = presence.ticket(forGame: 7)
+        presence.gameStopped(7)
+        try await presence.show(.init(applicationID: "111", name: "First"), forGame: 7, ticket: ticket)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(discord.frames.isEmpty)
+
+        try await presence.show(
+            .init(applicationID: "111", name: "First"),
+            forGame: 7, ticket: presence.ticket(forGame: 7),
+        )
+        try await Self.wait(for: 2, on: discord)
     }
 
     // MARK: - Helpers
@@ -134,6 +186,8 @@ private final class FakeDiscord: @unchecked Sendable {
         case ready
         /// What a Discord that refused it sends back.
         case close
+        /// A Discord that accepts the application id and one activity, then quits.
+        case hangsUpAfterActivity
     }
 
     let directory: URL
@@ -204,9 +258,12 @@ private final class FakeDiscord: @unchecked Sendable {
                 return
             }
             lock.withLock { received.append((UInt32(littleEndian: opcode), payload)) }
-            guard opcode == DiscordPresence.Opcode.handshake.rawValue else { continue }
+            guard opcode == DiscordPresence.Opcode.handshake.rawValue else {
+                if reply == .hangsUpAfterActivity { return }
+                continue
+            }
             switch reply {
-            case .ready:
+            case .ready, .hangsUpAfterActivity:
                 write(client, DiscordPresence.frame(
                     opcode: .frame, payload: Data(#"{"evt":"READY"}"#.utf8),
                 ))
