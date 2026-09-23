@@ -10,14 +10,22 @@ import AppKit
 /// window on a display left of or above the primary has a negative origin;
 /// `offPrimary` says so, and `display` names which screen it landed on.
 enum GameWindow {
-    /// The first on-screen, normal-level window owned by a game process — the
+    private static func area(of entry: [String: Any]) -> CGFloat {
+        guard let bounds = entry[kCGWindowBounds as String] as? [String: Any],
+              let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return 0 }
+        return rect.width * rect.height
+    }
+
+    /// The largest on-screen, normal-level window owned by a game process — the
     /// same test `GameLaunchWatch` uses to decide "a game is up", plus the
     /// geometry. `nil` when no game window is on screen.
     static func current() -> [String: Any]? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
         else { return nil }
-        for entry in list {
+        // Largest first: the frame-rate counter and a launcher can share the game's process.
+        let sorted = list.sorted { area(of: $0) > area(of: $1) }
+        for entry in sorted {
             guard entry[kCGWindowLayer as String] as? Int == 0,
                   let ownerName = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t,

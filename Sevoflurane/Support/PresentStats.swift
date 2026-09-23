@@ -55,10 +55,12 @@ final nonisolated class PresentStats: @unchecked Sendable {
         var presenting: Bool
     }
 
-    /// A launch of `appID` has begun: its pages are sampled from now on.
-    func arm(appID: Int) {
+    /// A launch of `appID` has begun: its pages are sampled from now on, and its frames go
+    /// to `trace` when one is given.
+    func arm(appID: Int, trace: FrameTrace.Writer? = nil) {
         lock.lock()
-        armed[appID] = Run()
+        armed[appID]?.trace?.close()
+        armed[appID] = Run(trace: trace)
         let needsTimer = timer == nil
         lock.unlock()
         if needsTimer { startTimer() }
@@ -70,8 +72,9 @@ final nonisolated class PresentStats: @unchecked Sendable {
     @discardableResult
     func disarm(appID: Int) -> RunRecord.FrameRate? {
         lock.lock()
-        let run = armed.removeValue(forKey: appID)
+        var run = armed.removeValue(forKey: appID)
         let idle = armed.isEmpty
+        run?.trace?.close()
         lock.unlock()
         if idle { stopTimer() }
         return run?.frameRate
@@ -101,9 +104,21 @@ final nonisolated class PresentStats: @unchecked Sendable {
 
     // MARK: - One run's samples
 
+    /// How many frame times one run keeps in memory for its summary: about fourteen hours
+    /// at 144 fps. The trace on disk has every frame either way.
+    static let frameTimesKept = 8_000_000
+
     /// The counters of one launch: the page it is following, the per-second
-    /// rates, and the totals the average comes from.
+    /// rates, the totals the average comes from, and every frame time the ring gave.
     private struct Run {
+        var trace: FrameTrace.Writer?
+        private var frameTimes: [Float] = []
+        private var droppedFrames = 0
+        /// The process whose ring is being followed, the next ring index to read, and the
+        /// last frame's stamp, which the next frame's time is measured from.
+        private var ringPID: pid_t?
+        private var ringNext: UInt64 = 0
+        private var lastStamp: UInt32?
         private var lastCount: UInt64?
         private var lastSampledAt: TimeInterval?
         private var countedFrames: UInt64 = 0
@@ -132,6 +147,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
             }
             lastCount = page.count
             lastSampledAt = now
+            follow(page)
             reading = Reading(
                 pid: page.pid, windowID: page.windowID, fps: rates.last ?? 0,
                 silentFor: max(0, now - page.lastPresentUptime),
@@ -139,8 +155,49 @@ final nonisolated class PresentStats: @unchecked Sendable {
             )
         }
 
-        /// The record's frame rate: the average over the whole run, and the
-        /// mean of the slowest one per cent of the per-second samples.
+        /// Reads the frames the page's ring gained since the last sample. A new process starts
+        /// the ring over; a ring that turned more than once since the last read lost frames,
+        /// which are counted rather than guessed.
+        private mutating func follow(_ page: PresentStats.Page) {
+            guard let ring = page.ring, page.ringCapacity > 8, page.ringHead > 1 else { return }
+            let capacity = UInt64(page.ringCapacity)
+            // One short of the head, where a slot may still be being written, and a few short
+            // of a full ring at the tail, where the next frames overwrite the oldest.
+            let end = page.ringHead - 1
+            let oldest = end > capacity - 8 ? end - (capacity - 8) : 0
+            if ringPID != page.pid {
+                ringPID = page.pid
+                ringNext = oldest
+                lastStamp = nil
+            }
+            if ringNext < oldest {
+                let lost = Int(oldest - ringNext)
+                droppedFrames += lost
+                trace?.noteDropped(lost)
+                ringNext = oldest
+                lastStamp = nil
+            }
+            guard ringNext < end else { return }
+            var gained: [Float] = []
+            gained.reserveCapacity(Int(end - ringNext))
+            for index in ringNext ..< end {
+                let stamp = ring[Int(index % capacity)]
+                if let lastStamp {
+                    // Wrapping microseconds: the difference of two neighbors is exact.
+                    gained.append(Float(stamp &- lastStamp) / 1000)
+                }
+                lastStamp = stamp
+            }
+            ringNext = end
+            trace?.append(gained)
+            if frameTimes.count < PresentStats.frameTimesKept {
+                frameTimes += gained.prefix(PresentStats.frameTimesKept - frameTimes.count)
+            }
+        }
+
+        /// The record's frame rate: the average over the whole run, the mean of the slowest
+        /// one per cent of the per-second samples, and when the engine has the ring, the
+        /// frame-time summary and the trace it came from.
         var frameRate: RunRecord.FrameRate? {
             guard countedSeconds > 0, countedFrames > 0, !rates.isEmpty else { return nil }
             let slowest = rates.sorted().prefix(max(1, rates.count / 100))
@@ -148,6 +205,9 @@ final nonisolated class PresentStats: @unchecked Sendable {
                 avg: rounded(Double(countedFrames) / countedSeconds),
                 low1: rounded(slowest.reduce(0, +) / Double(slowest.count)),
                 samples: rates.count,
+                frameTimes: FrameStats.summarize(frameTimes),
+                dropped: droppedFrames > 0 ? droppedFrames : nil,
+                trace: frameTimes.isEmpty ? nil : trace?.url.lastPathComponent,
             )
         }
     }
@@ -177,6 +237,11 @@ final nonisolated class PresentStats: @unchecked Sendable {
         /// The process that wrote the page is still running. A killed
         /// process cannot unlink its own page.
         var alive: Bool
+        /// The frame-time ring (`sevo_stats_page.ring`): frames written so far, the slots,
+        /// and each slot's stamp in wrapping microseconds. Nil ring on an engine without one.
+        var ringHead: UInt64 = 0
+        var ringCapacity: Int = 0
+        var ring: [UInt32]? = nil
 
         /// Which path counted `frames`.
         enum Source: UInt32, Sendable {
@@ -231,6 +296,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
         guard word(0) == magic, half(48) == version else { return nil }
         let pid = pid_t(half(52))
         let exe = data[64 ..< 96]
+        let ring = ring(in: data)
         return Page(
             pid: pid,
             appid: Int(half(60)),
@@ -243,7 +309,25 @@ final nonisolated class PresentStats: @unchecked Sendable {
             startedUptime: seconds(word(32)),
             mainBeatUptime: data.count >= 104 && word(96) != 0 ? seconds(word(96)) : nil,
             alive: kill(pid, 0) == 0 || errno != ESRCH,
+            ringHead: ring?.head ?? 0,
+            ringCapacity: ring?.slots.count ?? 0,
+            ring: ring?.slots,
         )
+    }
+
+    /// The ring at offset 104: the head, the capacity, the slots from 120. Nil when the
+    /// page has none or claims more slots than it holds.
+    private static func ring(in data: Data) -> (head: UInt64, slots: [UInt32])? {
+        guard data.count >= 120 else { return nil }
+        return data.withUnsafeBytes { raw in
+            let capacity = Int(raw.loadUnaligned(fromByteOffset: 112, as: UInt32.self))
+            guard capacity > 0, 120 + capacity * 4 <= raw.count else { return nil }
+            let head = raw.loadUnaligned(fromByteOffset: 104, as: UInt64.self)
+            let slots = (0 ..< capacity).map {
+                raw.loadUnaligned(fromByteOffset: 120 + $0 * 4, as: UInt32.self)
+            }
+            return (head, slots)
+        }
     }
 
     /// `SEVOSTS1`.

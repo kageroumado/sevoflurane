@@ -266,6 +266,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// game's window (`SEVO_FPS`): one number, from the engine's own count of
     /// presented frames, whichever renderer draws them.
     var fps: Bool?
+    /// Whether the counter grows into a card with a frame-time graph of the last
+    /// seconds and the 1 % low (`SEVO_FPS_GRAPH`). On, it shows the counter too.
+    var fpsGraph: Bool?
     /// Whether a 32-bit game gets the whole 4 GB of address space rather than
     /// the low 2 GB.
     ///
@@ -324,7 +327,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
-            || hud != nil || fps != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
+            || hud != nil || fps != nil || fpsGraph != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
             || unifiedMemory != nil || tuning != nil
     }
 
@@ -430,7 +433,7 @@ nonisolated enum GameConfig {
         // were written, and a growing number of titles read the CPUID answer
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
-        hud: false, fps: false, largeAddressAware: true, avx: true, unifiedMemory: false,
+        hud: false, fps: false, fpsGraph: false, largeAddressAware: true, avx: true, unifiedMemory: false,
         cursorConfine: false,
     )
 
@@ -546,6 +549,10 @@ nonisolated enum GameConfig {
 
     static func fps(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.fps, bottle: bottle, game: appID)
+    }
+
+    static func fpsGraph(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.fpsGraph, bottle: bottle, game: appID)
     }
 
     static func largeAddressAware(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {

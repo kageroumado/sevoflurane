@@ -74,6 +74,8 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case runner
         case arch
         case windows
+        case tuning
+        case upscaler
         case msync
         case d3dmetal
         case runtime
@@ -96,6 +98,19 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         /// The slowest one per cent of the per-second samples.
         var low1: Double
         var samples: Int
+        /// Every frame's time summarized (``FrameStats/Summary``), on an engine whose stats
+        /// page carries the frame-time ring.
+        var frameTimes: FrameStats.Summary? = nil
+        /// Frames the ring turned over before they were read, which the trace skips.
+        var dropped: Int? = nil
+        /// The trace file in `Runs/traces` (``FrameTrace``).
+        var trace: String? = nil
+
+        enum CodingKeys: String, CodingKey {
+            case avg, low1, samples
+            case frameTimes = "frame_times"
+            case dropped, trace
+        }
     }
 
     struct Stall: Codable, Equatable, Sendable {

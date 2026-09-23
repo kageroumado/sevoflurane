@@ -19,7 +19,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, NWJSCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
-            RunsCommand.self, OrphansCommand.self, DiagCommand.self, DebugCommand.self,
+            RunsCommand.self, PerfCommand.self, OrphansCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -892,6 +892,7 @@ enum ConfigSwitches {
     static let all: [Entry] = [
         Entry(key: "hud", path: \.hud),
         Entry(key: "fps", path: \.fps),
+        Entry(key: "fps-graph", path: \.fpsGraph),
         Entry(key: "cursor-confine", path: \.cursorConfine),
         Entry(key: "avx", path: \.avx),
         Entry(key: "large-address-aware", path: \.largeAddressAware),
@@ -911,6 +912,7 @@ enum ConfigSwitches {
         switch key {
         case "hud": GameConfig.hud(bottle: bottle, game: appID)
         case "fps": GameConfig.fps(bottle: bottle, game: appID)
+        case "fps-graph": GameConfig.fpsGraph(bottle: bottle, game: appID)
         case "cursor-confine": GameConfig.cursorConfine(bottle: bottle, game: appID)
         case "avx": GameConfig.avx(bottle: bottle, game: appID)
         case "large-address-aware": GameConfig.largeAddressAware(bottle: bottle, game: appID)

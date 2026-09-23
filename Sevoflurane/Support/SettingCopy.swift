@@ -112,6 +112,19 @@ nonisolated extension SettingCopy {
         ),
     )
 
+    static let fpsGraph = SettingCopy(
+        title: "Frame time graph",
+        caption: "The counter with the last five seconds of frames and the 1 % low.",
+        help: SettingHelp(
+            title: "Frame time graph",
+            summary: "Draws every frame of the last five seconds at the time it took, so a hitch "
+                + "shows as a spike the average hides. The 1 % low is the frame rate of the "
+                + "slowest one in a hundred frames of the last ten seconds.",
+            footnote: "View › Show Frame Time Graph (⌥⌘G) switches it while a game runs. "
+                + "sevo perf report charts a whole run after it ends.",
+        ),
+    )
+
     static let hud = SettingCopy(
         title: "Performance HUD",
         caption: "Apple's overlay: frame time, GPU time and memory.",

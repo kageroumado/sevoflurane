@@ -161,18 +161,18 @@ nonisolated enum WineWindowWatch {
         var gameWindowUp: Bool { game != nil }
     }
 
-    /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
-    /// to the window server, which answers in its own time on a busy host —
-    /// on the main thread that time would be a UI stall every probe cycle.
     /// The smallest side a game's own window has. The engine's frame-rate
-    /// counter is a child window of the game's, 22 points tall and in front
-    /// of it, and would otherwise be the first window a scan meets.
-    static let smallestGameWindowSide = 64
+    /// counter is a child window of the game's in front of it: a capsule 22
+    /// points tall, or with the frame-time graph a card 96 points tall.
+    static let smallestGameWindowSide = 128
 
     static func isOverlay(width: Int, height: Int) -> Bool {
         min(width, height) < smallestGameWindowSide
     }
 
+    /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
+    /// to the window server, which answers in its own time on a busy host —
+    /// on the main thread that time would be a UI stall every probe cycle.
     @concurrent
     static func scan() async -> Scan {
         let interval = PerfProbe.system.beginInterval("WineWindowScan")
@@ -200,7 +200,11 @@ nonisolated enum WineWindowWatch {
                 height: (bounds["Height"] as? NSNumber)?.intValue ?? 0,
             )
             if isGame {
-                if !isOverlay(width: window.width, height: window.height) { game = game ?? window }
+                // The largest: a game can show a launcher, a splash and its own window at once.
+                if !isOverlay(width: window.width, height: window.height),
+                   window.width * window.height > (game.map { $0.width * $0.height } ?? 0) {
+                    game = window
+                }
             } else {
                 wineWindows.append(window)
             }

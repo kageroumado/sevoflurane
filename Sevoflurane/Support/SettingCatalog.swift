@@ -12,6 +12,7 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
     case retina
     case emulateModeset
     case fps
+    case fpsGraph
     case hud
     case mouse
     case cursorConfine
@@ -225,6 +226,7 @@ nonisolated enum SettingCatalog {
             carrier: .registry("EmulateModeset"), reach: { _ in .registry },
         ),
         .flag(.fps, in: .picture, key: \.fps, copy: .fps, carrier: .environment(["SEVO_FPS"])),
+        .flag(.fpsGraph, in: .picture, key: \.fpsGraph, copy: .fpsGraph, carrier: .environment(["SEVO_FPS_GRAPH"])),
         .flag(.hud, in: .picture, key: \.hud, copy: .hud, carrier: .environment(["MTL_HUD_ENABLED"])),
         .choice(
             .mouse, in: .mouse, key: \.mouse, label: \.label, copy: .mouse,

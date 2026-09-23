@@ -13,7 +13,11 @@ import Foundation
 /// the app and the CLI share, so a test can drive a whole recorder without
 /// writing into it.
 nonisolated enum RunLog {
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    /// `SEVO_RUNS_DIR` points a process somewhere else: a harness keeping its runs apart
+    /// from the ones played on the Mac, or `sevo perf` reading a copy.
+    static let root = ProcessInfo.processInfo.environment["SEVO_RUNS_DIR"]
+        .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        ?? URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/Runs")
 
     /// How many months are kept.

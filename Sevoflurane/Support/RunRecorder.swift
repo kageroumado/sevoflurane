@@ -229,10 +229,15 @@ final nonisolated class RunRecorder {
             processLog: steamLog,
         )
         persist(appID: appID)
-        presentStats.arm(appID: appID)
+        presentStats.arm(appID: appID, trace: FrameTrace.Writer(
+            url: FrameTrace.url(appID: appID, stamp: record.t, in: runs), appID: appID, stamp: record.t,
+        ))
         if !hasGroomed {
             hasGroomed = true
-            Task.detached(name: "Groom the run records") { [runs] in RunLog.groom(in: runs) }
+            Task.detached(name: "Groom the run records") { [runs] in
+                RunLog.groom(in: runs)
+                FrameTrace.groom(in: runs)
+            }
         }
     }
 
@@ -465,7 +470,8 @@ final nonisolated class RunRecorder {
                 && SteamGameProcessLog.exits(forApp: appID, in: tail).isEmpty
             if stillUp {
                 // The counter starts from this moment: the frames of the run
-                // before the app went away are in no page this process read.
+                // before the app went away are in no page this process read, and the
+                // trace the earlier process wrote stays as it is.
                 presentStats.arm(appID: appID)
                 Self.log("run reattached — \(armed.record.summary)")
             } else {
