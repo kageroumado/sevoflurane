@@ -222,6 +222,22 @@ struct RunMetersTests {
     }
 
     @Test
+    func `a native run whose processes never appear closes after its checks`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 1_933_660)
+        for _ in 1 ..< RunRecorder.nativeNeverSeenChecks {
+            recorder.noteNativeProcesses(alive: false, forApp: 1_933_660)
+        }
+        #expect(recorder.openRecord(forApp: 1_933_660) != nil)
+        recorder.noteNativeProcesses(alive: false, forApp: 1_933_660)
+        #expect(recorder.openRecord(forApp: 1_933_660) == nil)
+        let records = try await records(in: root, waitingFor: 1)
+        #expect(records.first?.exit?.kind == .unknown)
+    }
+
+    @Test
     func `a game the client reports running without a launch gets a run`() throws {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }

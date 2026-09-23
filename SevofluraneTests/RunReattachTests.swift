@@ -100,6 +100,8 @@ struct RunReattachTests {
         #expect(records.count == 1)
         #expect(records.first?.exit?.kind == .user)
         #expect(records.first?.exit?.code == 0)
+        // How long it ran is unknown: the time since it was armed includes the app's absence.
+        #expect(records.first?.durationSeconds == nil)
         #expect(RunLog.armedRuns(in: root).isEmpty)
     }
 

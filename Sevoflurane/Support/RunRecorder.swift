@@ -33,7 +33,7 @@ nonisolated struct RunInProgress: Sendable {
     ///     path. A quit takes the bottle down with the app, so Steam is gone
     ///     before it can record the exit it caused.
     func write(
-        lasting seconds: Double,
+        lasting seconds: Double?,
         kind: RunRecord.Exit.Kind?,
         unrecorded: RunRecord.Exit.Kind = .unknown,
     ) {
@@ -290,16 +290,27 @@ final nonisolated class RunRecorder {
 
     /// Native runs whose processes have been seen alive.
     private var nativeSeen: Set<Int> = []
+    /// Checks in a row that found no process of a native run never seen alive.
+    private var nativeUnseen: [Int: Int] = [:]
+    /// How many empty checks close a native run whose processes never appeared: about
+    /// thirty seconds at ``nativeCheckEvery`` meter ticks apart.
+    static let nativeNeverSeenChecks = 5
 
     /// A native run's processes were looked for. Seen and then gone is the
-    /// end of the run; never seen yet is a game still starting.
+    /// end of the run; never seen is a game still starting, until
+    /// ``nativeNeverSeenChecks`` looks have found nothing and it never started.
     func noteNativeProcesses(alive: Bool, forApp appID: Int) {
         if alive {
             nativeSeen.insert(appID)
+            nativeUnseen[appID] = nil
         } else if nativeSeen.remove(appID) != nil {
             // No exit code exists for a process Steam never tracked: it was
             // asked to stop, or the player closed it.
             close(appID: appID, kind: RunLog.takeStopRequest(forApp: appID, in: runs) ? .stopped : .user)
+        } else {
+            let checks = nativeUnseen[appID, default: 0] + 1
+            nativeUnseen[appID] = checks
+            if checks >= Self.nativeNeverSeenChecks { close(appID: appID, kind: .unknown) }
         }
     }
 
@@ -410,16 +421,23 @@ final nonisolated class RunRecorder {
     ///   - kind: The ending the caller knows for a fact whatever the logs say.
     ///   - unrecorded: What the ending is when Steam wrote no exit for it and
     ///     the logs name nothing else.
-    func close(appID: Int, kind: RunRecord.Exit.Kind? = nil, unrecorded: RunRecord.Exit.Kind = .unknown) {
+    ///   - durationKnown: False for a run that ended while no process of this app watched
+    ///     it: the time since it was armed is not how long it ran, and the record says
+    ///     nothing rather than that.
+    func close(
+        appID: Int, kind: RunRecord.Exit.Kind? = nil, unrecorded: RunRecord.Exit.Kind = .unknown,
+        durationKnown: Bool = true,
+    ) {
         guard var run = open.removeValue(forKey: appID) else { return }
         confirmedRunning.remove(appID)
         nativeSeen.remove(appID)
+        nativeUnseen[appID] = nil
         run.record.fps = presentStats.disarm(appID: appID)
         // Before the write rather than after it: the same app id can be armed
         // again in the next moment, and a disarm behind that would take the
         // new run's file with it.
         RunLog.disarm(appID: appID, in: runs)
-        let lasted = Self.seconds(since: run.started)
+        let lasted = durationKnown ? Self.seconds(since: run.started) : nil
         Self.closings.async { run.write(lasting: lasted, kind: kind, unrecorded: unrecorded) }
     }
 
@@ -475,7 +493,7 @@ final nonisolated class RunRecorder {
                 presentStats.arm(appID: appID)
                 Self.log("run reattached — \(armed.record.summary)")
             } else {
-                close(appID: appID)
+                close(appID: appID, durationKnown: false)
             }
         }
     }
