@@ -195,15 +195,28 @@ nonisolated enum ConfigMaterializer {
     /// The `sevo` inside the app bundle, whether this code runs in the app or
     /// in that `sevo` itself.
     private static var bundledCLI: URL? {
-        let bundle = Bundle.main.bundleURL
-        let candidate: URL? = bundle.pathExtension == "app"
-            ? bundle.appendingPathComponent("Contents/Helpers/sevo")
-            : Bundle.main.executableURL?.resolvingSymlinksInPath()
-        var isDirectory: ObjCBool = false
-        guard let candidate, FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue, FileManager.default.isExecutableFile(atPath: candidate.path)
-        else { return nil }
-        return candidate
+        Bundle.main.executableURL.flatMap { cli(forExecutable: $0.resolvingSymlinksInPath()) }
+    }
+
+    /// The `sevo` a process running `executable` hands to the engine: the one inside the
+    /// enclosing app — whether the process is the app or its daemon, which runs from
+    /// `Contents/Library/LaunchAgents` — or the executable itself when it is a `sevo`.
+    static func cli(forExecutable executable: URL) -> URL? {
+        var candidates: [URL] = []
+        var directory = executable.deletingLastPathComponent()
+        while directory.path != "/", !directory.path.isEmpty {
+            if directory.pathExtension == "app" {
+                candidates.append(directory.appendingPathComponent("Contents/Helpers/sevo"))
+                break
+            }
+            directory = directory.deletingLastPathComponent()
+        }
+        if executable.lastPathComponent == "sevo" { candidates.append(executable) }
+        return candidates.first { candidate in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory)
+                && !isDirectory.boolValue && FileManager.default.isExecutableFile(atPath: candidate.path)
+        }
     }
 
     static func debugEnvURL(prefix: URL) -> URL {

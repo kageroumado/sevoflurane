@@ -117,3 +117,41 @@ struct ConfigDefaultsTests {
         #expect(defaults.cursorConfine != nil)
     }
 }
+
+/// The `sevo` handed to the engine for its View menu, from each process that writes env files.
+struct BundledCLITests {
+    private func app() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cli-\(UUID().uuidString)/Sevoflurane.app")
+        for path in ["Contents/MacOS/Sevoflurane", "Contents/Helpers/sevo", "Contents/Library/LaunchAgents/SevofluraneDaemon"] {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        }
+        return root
+    }
+
+    @Test
+    func `the app and its daemon both hand over the app's own sevo`() throws {
+        let root = try app()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let sevo = root.appendingPathComponent("Contents/Helpers/sevo")
+        #expect(ConfigMaterializer.cli(forExecutable: root.appendingPathComponent("Contents/MacOS/Sevoflurane")) == sevo)
+        #expect(ConfigMaterializer.cli(
+            forExecutable: root.appendingPathComponent("Contents/Library/LaunchAgents/SevofluraneDaemon"),
+        ) == sevo)
+    }
+
+    @Test
+    func `a sevo outside an app hands over itself and nothing else does`() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sevo = directory.appendingPathComponent("sevo"), other = directory.appendingPathComponent("tool")
+        for url in [sevo, other] {
+            FileManager.default.createFile(atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        }
+        #expect(ConfigMaterializer.cli(forExecutable: sevo) == sevo)
+        #expect(ConfigMaterializer.cli(forExecutable: other) == nil)
+    }
+}
