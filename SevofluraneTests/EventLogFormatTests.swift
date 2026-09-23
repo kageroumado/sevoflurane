@@ -54,10 +54,41 @@ struct EventLogFormatTests {
 struct ExceptionReportTests {
     @Test
     func `the sidecar sits beside the log, one file per throw`() {
-        let moment = Date(timeIntervalSince1970: 1_788_932_921)
-        let url = ExceptionReport.fileURL(at: moment)
-        #expect(url.lastPathComponent == "Sevoflurane-exception-1788932921.json")
+        let moment = Date(timeIntervalSince1970: 1_788_932_921.5)
+        let url = ExceptionReport.fileURL(at: moment, sequence: 3)
+        #expect(url.lastPathComponent == "Sevoflurane-exception-1788932921500-3.json")
         #expect(url.deletingLastPathComponent() == EventLog.fileURL.deletingLastPathComponent())
+        #expect(ExceptionReport.fileURL(at: moment, sequence: 4) != url)
+    }
+
+    @Test
+    func `only the newest sidecars are kept`() {
+        let names = [
+            "Sevoflurane-exception-1788932921500-2.json",
+            "Sevoflurane-exception-1788932921.json",
+            "Sevoflurane.log",
+            "Sevoflurane-exception-1788932921500-10.json",
+            "Sevoflurane-exception-1788932922000-1.json",
+        ]
+        #expect(ExceptionReport.staleSidecars(names, keeping: 2) == [
+            "Sevoflurane-exception-1788932921.json",
+            "Sevoflurane-exception-1788932921500-2.json",
+        ])
+        #expect(ExceptionReport.staleSidecars(names, keeping: 20).isEmpty)
+    }
+
+    @Test
+    func `a burst of throws is recorded ten a minute and the rest are counted`() {
+        var throttle = ExceptionThrottle()
+        let start = Date(timeIntervalSince1970: 1_788_932_921)
+        for index in 0 ..< ExceptionThrottle.limit {
+            #expect(throttle.admit(at: start + Double(index))?.sequence == index + 1)
+        }
+        #expect(throttle.admit(at: start + 30) == nil)
+        #expect(throttle.admit(at: start + 31) == nil)
+        let later = throttle.admit(at: start + 61)
+        #expect(later?.sequence == ExceptionThrottle.limit + 1)
+        #expect(later?.suppressedBefore == 2)
     }
 
     @Test

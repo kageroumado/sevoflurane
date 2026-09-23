@@ -81,6 +81,7 @@ nonisolated enum EngineSignature {
     }
 
     /// Fetches the `.sig` beside `asset` and verifies `file` against it.
+    @concurrent
     static func verify(file: URL, asset: URL, key: Curve25519.Signing.PublicKey? = nil) async throws {
         let signatureURL = signatureURL(for: asset)
         guard isAllowedAssetURL(signatureURL) else { throw Failure.urlNotAllowed(signatureURL) }

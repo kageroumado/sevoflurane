@@ -19,6 +19,8 @@ final class AboutWindows {
     }
 
     private var windows: [Kind: NSWindow] = [:]
+    /// Each open window's close observer, removed when it fires.
+    private var closeObservers: [Kind: any NSObjectProtocol] = [:]
 
     func showAbout() {
         show(.about) {
@@ -68,11 +70,14 @@ final class AboutWindows {
         let window = make()
         window.isRestorable = false
         windows[kind] = window
-        NotificationCenter.default.addObserver(
+        closeObservers[kind] = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main,
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.windows[kind] = nil
+                if let observer = self?.closeObservers.removeValue(forKey: kind) {
+                    NotificationCenter.default.removeObserver(observer)
+                }
                 ActivationPolicy.recedeIfLastWindow(closing: window)
             }
         }

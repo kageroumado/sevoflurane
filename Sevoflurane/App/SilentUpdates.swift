@@ -147,10 +147,27 @@ final class SilentUpdates {
 
     // MARK: - The gate
 
-    /// A game's window on screen means a Steam session is in play, and the swap would take the
-    /// client down with the app. `GameLaunchWatch` already knows how to tell a game's window from
-    /// the client's own plumbing, so the veto is that same sighting.
+    /// What the app knows of a play session beyond the screen: whether a run is being recorded
+    /// and whether a launch is in flight. Set by the app delegate, which owns both.
+    @ObservationIgnored var sessionState: () -> (recording: Bool, launching: Bool) = { (false, false) }
+
+    /// A Steam session is in play while a run is open, a launch is on its way, or a game's window
+    /// is on screen — a game still loading has no window, and one on another Space or minimized
+    /// may not show one. Any of them vetoes the swap.
+    nonisolated static func mayInstall(recording: Bool, activeLaunch: Bool, gameWindow: Bool) -> Bool {
+        !recording && !activeLaunch && !gameWindow
+    }
+
+    /// `GameLaunchWatch` already knows how to tell a game's window from the client's own
+    /// plumbing, so the window half of the veto is that same sighting.
     private static func noGameRunning() async -> Bool {
-        await MainActor.run { GameLaunchWatch.firstGameWindow() == nil }
+        await MainActor.run {
+            let session = shared.sessionState()
+            return mayInstall(
+                recording: session.recording,
+                activeLaunch: session.launching,
+                gameWindow: GameLaunchWatch.firstGameWindow() != nil,
+            )
+        }
     }
 }

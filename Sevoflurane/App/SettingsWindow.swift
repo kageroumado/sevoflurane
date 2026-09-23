@@ -12,6 +12,8 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private weak var supervisor: ClientSupervisor?
     private weak var host: SteamWebHost?
     private var window: NSWindow?
+    /// The open window's close observer, removed when it fires.
+    private var closeObserver: (any NSObjectProtocol)?
     private let navigation = SettingsNavigation()
     private let makeGraphics: () -> GraphicsStore
     private let makeStorage: () -> StorageStore
@@ -129,11 +131,15 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         window.minSize = NSSize(width: 720, height: 460)
         window.isMovableByWindowBackground = true
         window.isRestorable = false
-        NotificationCenter.default.addObserver(
+        closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main,
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.window = nil
+                if let observer = self?.closeObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.closeObserver = nil
+                }
                 EventLog.shared.log(.window, "settings: closed")
                 ActivationPolicy.recedeIfLastWindow(closing: window)
             }

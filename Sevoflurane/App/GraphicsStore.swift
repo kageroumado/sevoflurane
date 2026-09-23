@@ -205,12 +205,15 @@ final class GraphicsStore {
         }
     }
 
-    /// Answers the failure, so the pane can show it.
-    func installD3DMetal(from source: URL) async -> String? {
+    /// Answers the failure, so the pane can show it. `choosing` is for the one
+    /// disk image the user picked, which becomes their choice; the downloads
+    /// from Apple's page leave the newest installed version active.
+    func installD3DMetal(from source: URL, choosing: Bool) async -> String? {
         do {
             let entry = try await environment.installToolkit(from: source)
             d3dMetalVersions = environment.installedToolkits()
-            activeD3DMetal = entry.version
+            if choosing { try environment.chooseToolkit(version: entry.version) }
+            activeD3DMetal = environment.activeToolkit()?.version
             EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the engine")
             return nil
         } catch {

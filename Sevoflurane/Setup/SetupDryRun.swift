@@ -299,6 +299,10 @@
             }
         }
 
+        func endWineProcesses(inBottle name: String) async {
+            log("would run: wineserver -k in \(name)")
+        }
+
         func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool {
             installedDependencies.contains(dependency.id)
         }

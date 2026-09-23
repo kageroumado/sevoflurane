@@ -279,12 +279,81 @@ struct EngineInstallerTests {
         try manager.createDirectory(at: resources.appendingPathComponent("Engine"), withIntermediateDirectories: true)
         let bundle = dir.appendingPathComponent("App.app")
         #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle) == nil)
-        try Data().write(to: dir.appendingPathComponent("dormison-r2.tar.xz"))
-        try Data().write(to: dir.appendingPathComponent("notes.tar.xz"))
+        try writeSigned(dir.appendingPathComponent("dormison-r2.tar.xz"))
+        try writeSigned(dir.appendingPathComponent("notes.tar.xz"))
         #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle)?.lastPathComponent == "dormison-r2.tar.xz")
-        try Data().write(to: resources.appendingPathComponent("Engine/dormison-r10.tar.xz"))
+        try writeSigned(resources.appendingPathComponent("Engine/dormison-r10.tar.xz"))
         #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle)?.lastPathComponent == "dormison-r10.tar.xz")
     }
+
+    @Test
+    func `an unsigned tarball beside the app is not offered`() throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        let resources = dir.appendingPathComponent("App.app/Contents/Resources")
+        try manager.createDirectory(at: resources, withIntermediateDirectories: true)
+        let bundle = dir.appendingPathComponent("App.app")
+        try Data().write(to: dir.appendingPathComponent("dormison-r50.tar.xz"))
+        #expect(EngineInstaller.bundledTarball(resources: resources, beside: bundle) == nil)
+    }
+
+    @Test
+    func `a tarball nobody chose is refused without its signature`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r93")
+        defer { try? manager.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("Engines")
+        await #expect(throws: EngineSignature.Failure.signatureMissing(EngineSignature.signatureURL(for: tarball))) {
+            _ = try await EngineInstaller.install(from: tarball, into: root, requiringSignature: true)
+        }
+        #expect(!manager.fileExists(atPath: root.appendingPathComponent("dormison-r93").path))
+    }
+
+    @Test
+    func `a download answered with an error status fails and leaves no file`() async throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        try manager.createDirectory(at: dir, withIntermediateDirectories: true)
+        let tarball = dir.appendingPathComponent("engine.tar.xz")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NotFoundProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let release = try EngineManifest.Release(
+            version: "dormison-r92", minAppVersion: "1.0",
+            url: #require(URL(string: "https://github.com/kageroumado/dormison/releases/download/r92/x.tar.xz")),
+            sha256: "", sizeBytes: 1, notes: nil,
+        )
+        await #expect(throws: (any Error).self) {
+            try await EngineInstaller.download(release, to: tarball, label: "", session: session) { _, _ in }
+        }
+        #expect(!manager.fileExists(atPath: tarball.path))
+    }
+
+    private func writeSigned(_ tarball: URL) throws {
+        try Data().write(to: tarball)
+        try Data().write(to: EngineSignature.signatureURL(for: tarball))
+    }
+}
+
+/// Answers every request with a 404 page, the way a missing release asset is.
+private final class NotFoundProtocol: URLProtocol {
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
+        else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("Not Found".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 
 struct BottleGraphicsTests {

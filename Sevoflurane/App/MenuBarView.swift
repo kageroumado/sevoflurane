@@ -298,10 +298,47 @@ private struct HostPressureNotice: View {
 private struct RecentGames: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
+    /// Each row's pin and restart need, read from the game configs off the
+    /// main actor rather than on every body evaluation.
+    @State private var facts: [Int: RowFacts] = [:]
+    /// Bumped by a pin change, which rewrites a game's config.
+    @State private var pinEdits = 0
+
+    /// What a row reads from disk.
+    nonisolated struct RowFacts: Equatable, Sendable {
+        let pinned: Renderer?
+        let restartFor: Renderer?
+    }
+
+    /// What the facts depend on: the rows, and the moments the booted record
+    /// or a pin can change (see ``trackGraphicsStorage(host:supervisor:)``).
+    private struct FactsKey: Equatable {
+        let games: [Int]
+        let health: SupervisorHealth
+        let launch: Int?
+        let pinEdits: Int
+    }
 
     var body: some View {
-        trackGraphicsStorage(host: host, supervisor: supervisor)
-        return content
+        content
+            .task(id: FactsKey(
+                games: host.recentGames.map(\.id),
+                health: supervisor.health,
+                launch: host.activeLaunch?.appID,
+                pinEdits: pinEdits,
+            )) {
+                facts = await Self.readFacts(host.recentGames.map(\.id))
+            }
+    }
+
+    @concurrent
+    private nonisolated static func readFacts(_ games: [Int]) async -> [Int: RowFacts] {
+        Dictionary(uniqueKeysWithValues: games.map { id in
+            (id, RowFacts(
+                pinned: GameConfig.game(id).renderer,
+                restartFor: BottleGraphics.rendererNeedingRestart(forApp: id),
+            ))
+        })
     }
 
     @ViewBuilder private var content: some View {
@@ -320,9 +357,11 @@ private struct RecentGames: View {
                         game: game,
                         launchDetail: host.activeLaunch
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
-                        pinned: GameConfig.game(game.id).renderer,
+                        pinned: facts[game.id]?.pinned,
+                        restartFor: facts[game.id]?.restartFor,
                         isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
                         supervisor: supervisor,
+                        onPinChanged: { pinEdits += 1 },
                     )
                 }
             }
@@ -338,9 +377,12 @@ private struct GameRow: View {
     let launchDetail: String?
     /// The renderer this game is pinned to, if any.
     let pinned: Renderer?
+    /// The renderer this launch would have to restart the client for.
+    let restartFor: Renderer?
     /// The client has kept this game at Synchronizing for longer than a sync takes.
     let isHeldInCloudSync: Bool
     let supervisor: ClientSupervisor
+    let onPinChanged: () -> Void
     @State private var isHovered = false
     /// Instant acknowledgment for the click; the client's first
     /// game-action event takes over from it, and it stands alone as an
@@ -447,16 +489,12 @@ private struct GameRow: View {
             $0.renderer = renderer
             if $0.name == nil { $0.name = game.name }
         }
+        onPinChanged()
     }
 
     /// What the pin menu reads and writes.
     private var pinBinding: Binding<Renderer?> {
         Binding(get: { pinned }, set: { setPin($0) })
-    }
-
-    /// The renderer this launch would have to restart the client for.
-    private var restartFor: Renderer? {
-        BottleGraphics.rendererNeedingRestart(forApp: game.id)
     }
 
     private var capsuleArt: some View {

@@ -656,6 +656,7 @@ struct EngineCommand: AsyncParsableCommand {
                 from: URL(fileURLWithPath: (from as NSString).expandingTildeInPath),
                 intoEngine: engine,
             )
+            D3DMetalInstaller.choose(version: entry.version)
             print("D3DMetal \(entry.version) installed for \(label)")
         } catch {
             Sevo.printError("\(error)")

@@ -162,15 +162,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Points the engine manifest at the URL a developer named, from the
     /// environment or from the defaults key.
+    ///
+    /// An override manifest is trusted unsigned, and so are the tarballs it
+    /// names. A release build takes only a `file://` one — a test rig on this
+    /// Mac — so a defaults write alone cannot point it at a remote engine.
     private func applyEngineManifestOverride() {
         // The defaults key exists because `open` (the only launch path that
         // gets a real Aqua session) strips the environment.
-        if let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
+        guard let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
             ?? Preferences.shared.string(forKey: "engineManifestOverride"),
-            let url = URL(string: manifest) {
-            EngineManifest.overrideURL = url
-            EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
-        }
+            let url = URL(string: manifest) else { return }
+        #if !DEBUG
+            guard url.isFileURL else {
+                EventLog.enqueue(.setup, "engine manifest override ignored: \(manifest) is not a file:// URL")
+                return
+            }
+        #endif
+        EngineManifest.overrideURL = url
+        EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
     }
 
     /// The app's own menus, its notifications, and the menu bar popover.
@@ -324,6 +333,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Reads every open run's meters on a timer. Energy, retired instructions
     /// and the Game Mode session exist only while the game's process does, so
     /// they are sampled during the run rather than read at its close.
+    ///
+    /// The same tick lets the display sleep again once no run is open: every
+    /// way a run closes — Steam's exit edge, a native runner's processes
+    /// going, the stall watch ending a game — passes through the recorder.
     private func startRunMeter() {
         runMeter?.cancel()
         runMeter = Task(name: "Sample the open runs' meters") { [runRecorder] in
@@ -331,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             while !Task.isCancelled {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
                 runRecorder.sample()
+                if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
                 ticks += 1
                 if ticks.isMultiple(of: RunRecorder.nativeCheckEvery) {
                     await Self.checkNativeRuns(runRecorder)
@@ -425,13 +439,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// already claimed that exe — a window or a process another game owns is
     /// that game's, whatever launch is in flight.
     ///
-    /// Detached, because reading a game's directory and rewriting the env
-    /// files is disk work and this is the main actor.
+    /// Detached, because reading the game configs and a game's directory and
+    /// rewriting the env files is disk work and this is the main actor.
     private func record(_ exe: String, forApp appID: Int, detectingRuntime: Bool) {
-        guard appID != 0, GameConfig.app(claiming: exe).map({ $0 == appID }) ?? true else { return }
-        let known = GameConfig.game(appID).exes?.contains(exe) ?? false
-        guard !known || detectingRuntime else { return }
+        guard appID != 0 else { return }
         Task.detached(name: "Record app \(appID)'s \(exe)") {
+            guard GameConfig.app(claiming: exe).map({ $0 == appID }) ?? true else { return }
+            let known = GameConfig.game(appID).exes?.contains(exe) ?? false
+            guard !known || detectingRuntime else { return }
             GameConfig.noteExecutable(exe, forApp: appID)
             if detectingRuntime { NWJSGames.record(appID: appID) }
             ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
@@ -455,10 +470,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openPendingPrograms()
     }
 
+    /// Set once this process has found another copy holding the ports. The
+    /// bottle and the debug session belong to that copy, so this one's quit
+    /// sends nothing on its way out.
+    private var isDuplicate = false
+
     /// Another copy of Sevoflurane holds the ports. A half-alive instance —
     /// one that renders no Steam but answers the daemon's commands — is worse
-    /// than saying so and going away.
+    /// than saying so and going away. The link port and the bridge ports both
+    /// find the other copy, and the alert shows once.
     private func reportAnotherCopyIsRunning() {
+        guard !isDuplicate else { return }
+        isDuplicate = true
         let alert = NSAlert()
         alert.messageText = "Sevoflurane is already running"
         alert.informativeText = "Another copy of Sevoflurane holds its ports. "
@@ -479,8 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task {
             guard await bridge.start() else {
-                // Almost always a second copy of the app holding the ports
-                // (watched happen: a tester copy plus the installed one).
+                // Almost always a second copy of the app holding the ports.
                 reportAnotherCopyIsRunning()
                 return
             }
@@ -514,6 +536,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startSilentUpdates() {
+        SilentUpdates.shared.sessionState = { [runRecorder, host] in
+            (runRecorder.isRecording, host.activeLaunch != nil)
+        }
         SilentUpdates.shared.start(
             autoInstall: UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true,
         )
@@ -548,7 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         // Again, once SwiftUI has sized the content: the first center ran
         // against the hosting controller's placeholder frame, and the window
-        // then grew from a corner (seen bottom-left and top-right).
+        // then grew from a corner.
         DispatchQueue.main.async { window.center() }
     }
 
@@ -661,7 +686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// after this: the lines describing the shutdown are the ones a reader
     /// wants most, so the process waits for them to reach the disk.
     func applicationWillTerminate(_: Notification) {
-        DebugModeSwitch.shared.endSession()
+        if !isDuplicate { DebugModeSwitch.shared.endSession() }
         EventLog.shared.log(.app, "the app is stopping")
         EventLog.flush()
     }
@@ -680,6 +705,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Same for a harness boot.
             if isSimulatedBoot { return .terminateNow }
         #endif
+        // The Steam this copy found running is the other copy's.
+        if isDuplicate { return .terminateNow }
         guard quitTask == nil else { return .terminateCancel }
         // Before the bottle comes down: a game still up ends here, and after
         // the teardown nothing is left that could say how.
@@ -688,6 +715,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runRecorder.closeAll()
         quitTask = Task(name: "Quit teardown") {
             GameDisplayHold.gameDidExit()
+            await provisioner.endForQuit()
             await supervisor.shutdownForQuit()
             sender.reply(toApplicationShouldTerminate: true)
         }

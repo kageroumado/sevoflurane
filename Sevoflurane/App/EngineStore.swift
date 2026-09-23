@@ -35,8 +35,7 @@ final class EngineStore {
     /// The download's progress while the pane is fetching the default engine.
     private(set) var engineFetchFraction: Double?
     /// The failure the pane keeps showing: this session's switch error, or
-    /// the last provisioning pass's, which the pane is usually not open for
-    /// and which a rebuild used to erase.
+    /// the last provisioning pass's, which the pane is usually not open for.
     private(set) var standingFailure: String?
 
     private let provisioner: Provisioner
@@ -137,10 +136,6 @@ final class EngineStore {
 
     private var isLookingUpDefault = false
 
-    /// The feed is asked until it answers, and then left alone: it is a
-    /// signed fetch over the network, and the stable release does not move
-    /// while Settings is open. Off to the side of ``refresh()``, which a
-    /// switch awaits and which must not wait on a network that may be gone.
     /// Which channel the feed is read on. Changing it drops the release
     /// already fetched and asks the feed again.
     var channel: EngineChannel {
@@ -153,6 +148,10 @@ final class EngineStore {
         }
     }
 
+    /// The feed is asked until it answers, and then left alone: it is a
+    /// signed fetch over the network, and the stable release does not move
+    /// while Settings is open. Off to the side of ``refresh()``, which a
+    /// switch awaits and which must not wait on a network that may be gone.
     private func refreshStableRelease() {
         guard !environment.isSimulation, stableRelease == nil, !isLookingUpDefault else {
             return
@@ -321,8 +320,8 @@ final class EngineStore {
             refreshStandingFailure()
             if clientStartIsBlocked {
                 // A prefix whose Steam installer failed has no client to
-                // start; starting one anyway is how the switch ended with a
-                // supervised bottle that had no Steam in it.
+                // start, and the switch stops here rather than supervise a
+                // bottle with no Steam in it.
                 switchPhase = nil
                 isSwitching = false
                 await refresh()

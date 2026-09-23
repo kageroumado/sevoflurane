@@ -99,15 +99,14 @@ final class GPTkDownload: NSObject {
     }()
 
     /// Reports the newest release and newest beta toolkit DMGs to Swift,
-    /// which downloads them directly — clicking two links in one tick made
-    /// the second navigation cancel the first before it could become a
-    /// download (measured: only the last click's file arrived). Hard-won
-    /// parsing rules, from the live anchor list: versions parse from the
+    /// which downloads them directly: two links clicked in one tick let the
+    /// second navigation cancel the first before it becomes a download.
+    /// Parsing rules, from the live anchor list: versions parse from the
     /// *filename* segment only (a row's path can say 1.1 while its file is
     /// 2.1); "Evaluation environment for Windows games" is the same product
-    /// under Apple's alternate name; and the list renders incrementally (an
-    /// eager sweep once grabbed 1.0, a debounced one 2.1), so picks wait
-    /// until the parsed candidate set has been stable for three seconds.
+    /// under Apple's alternate name; and the list renders incrementally, so
+    /// picks wait until the parsed candidate set has been stable for three
+    /// seconds.
     /// "list" fires when the signed-in download table first exists, "none"
     /// when it stabilizes with nothing parseable — the panel's overlay and
     /// fallback hint key off those.
@@ -197,6 +196,23 @@ final class GPTkDownload: NSObject {
     })();
     """
 
+    /// Whether a URL is one of Apple's authenticated developer downloads, the
+    /// only place a toolkit is fetched from.
+    nonisolated static func isAppleDownload(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
+            && url.host()?.lowercased() == "download.developer.apple.com"
+            && url.user == nil && url.password == nil
+    }
+
+    /// The version a toolkit DMG's filename names, as Apple writes it:
+    /// "Evaluation_environment_for_Windows_games_4.0_beta_2.dmg" → "4.0 beta 2".
+    nonisolated static func version(inFilename filename: String) -> String? {
+        guard let range = filename.range(
+            of: #"[0-9]+\.[0-9]+(?:[ _]beta[ _][0-9]+)?"#, options: .regularExpression,
+        ) else { return nil }
+        return filename[range].replacingOccurrences(of: "_", with: " ")
+    }
+
     /// Whether a downloaded file looks like a toolkit DMG rather than some
     /// other file the user might grab from the developer site.
     private static func isToolkitDMG(_ filename: String) -> Bool {
@@ -229,7 +245,12 @@ extension GPTkDownload: WKScriptMessageHandler {
     func userContentController(
         _: WKUserContentController, didReceive message: WKScriptMessage,
     ) {
-        guard let body = message.body as? [String: Any],
+        // The web view follows links anywhere, and the script runs on every
+        // page it lands on; only Apple's own page speaks for the downloads.
+        guard message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.protocol == "https",
+              message.frameInfo.securityOrigin.host == Self.pageURL.host(),
+              let body = message.body as? [String: Any],
               let type = body["type"] as? String else { return }
         switch type {
         case "list":
@@ -239,7 +260,7 @@ extension GPTkDownload: WKScriptMessageHandler {
         case "picks":
             guard let urls = body["urls"] as? [String] else { return }
             for raw in urls where !startedDownloads.contains(raw) {
-                guard let url = URL(string: raw) else { continue }
+                guard let url = URL(string: raw), Self.isAppleDownload(url) else { continue }
                 startedDownloads.insert(raw)
                 webView.startDownload(using: URLRequest(url: url)) { [weak self] download in
                     download.delegate = self
@@ -283,9 +304,9 @@ extension GPTkDownload: WKDownloadDelegate {
     func download(
         _ download: WKDownload, decideDestinationUsing _: URLResponse, suggestedFilename: String,
     ) async -> URL? {
-        guard Self.isToolkitDMG(suggestedFilename) else {
-            // Not a toolkit; let the browser's normal download take it to
-            // ~/Downloads rather than pull it into our temp dir.
+        guard Self.isToolkitDMG(suggestedFilename),
+              let url = download.originalRequest?.url, Self.isAppleDownload(url) else {
+            // Not a toolkit from Apple: the download is cancelled.
             return nil
         }
         guard !items.contains(where: {
@@ -323,7 +344,7 @@ extension GPTkDownload: WKDownloadDelegate {
             try? FileManager.default.removeItem(at: source.deletingLastPathComponent())
             if let failure {
                 updatePhase(id: id, .failed(failure))
-            } else if let version = installedVersion(matching: source.lastPathComponent) {
+            } else if let version = Self.version(inFilename: source.lastPathComponent) {
                 updatePhase(id: id, .installed(version: version))
                 onInstalled?(version)
             } else {
@@ -348,16 +369,5 @@ extension GPTkDownload: WKDownloadDelegate {
     private func updatePhase(id: Int, _ phase: Item.Phase) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].phase = phase
-    }
-
-    /// The version string that would have come from the DMG's filename, so a
-    /// finished item can name what it installed even before the store refreshes.
-    private func installedVersion(matching filename: String) -> String? {
-        let range = NSRange(filename.startIndex..., in: filename)
-        guard let match = try? NSRegularExpression(
-            pattern: #"[0-9]+\.[0-9]+( beta [0-9]+)?"#,
-        ).firstMatch(in: filename, range: range),
-            let matchRange = Range(match.range, in: filename) else { return nil }
-        return String(filename[matchRange])
     }
 }

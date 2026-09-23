@@ -150,7 +150,7 @@ final class Provisioner {
             try await installEngineIfMissing()
             try await createBottleIfMissing(bottleName)
             try await installBootstrapper(inBottle: bottleName, force: rebuildingSteam)
-            try await updateClient(inBottle: bottleName)
+            try await updateClient(inBottle: bottleName, force: rebuildingSteam)
             try await installGameDependencies()
             activity = .done
             if !environment.isSimulation { BottleReadiness.recordProvisionSucceeded() }
@@ -287,12 +287,14 @@ final class Provisioner {
     /// the fraction rides along for the progress bar.
     private func engineProgress() -> @Sendable (String, Double?) -> Void {
         { [weak self] phase, fraction in
-            Task { @MainActor in
-                if self?.activity != .working(phase) {
-                    SetupLog.log("engine install: \(phase)")
-                    self?.activity = .working(phase)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if self?.activity != .working(phase) {
+                        SetupLog.log("engine install: \(phase)")
+                        self?.activity = .working(phase)
+                    }
+                    self?.stageFraction = fraction
                 }
-                self?.stageFraction = fraction
             }
         }
     }
@@ -340,10 +342,14 @@ final class Provisioner {
     }
 
     /// Bootstrapper → full client, no login needed (the lancache-prefill
-    /// trick). On a bottle that already has Steam this is the update pass —
-    /// `-forcesteamupdate -forcepackagedownload` brings a client of any age
-    /// up to current, which is why adoption and Repair both run it.
-    private func updateClient(inBottle bottleName: String) async throws {
+    /// trick). On a bottle whose client is unfinished this is the update pass
+    /// — `-forcesteamupdate -forcepackagedownload` brings a client of any age
+    /// up to current. A complete client is left to update itself: the
+    /// updater would run inside the bottle of the client that is up, and
+    /// that client's own updater owns the same files. `force` is the rebuild,
+    /// which stops the client first.
+    private func updateClient(inBottle bottleName: String, force: Bool) async throws {
+        guard force || !clientFullyUpdated(inBottle: bottleName) else { return }
         beginStage(
             5,
             steamPresent(inBottle: bottleName)
@@ -352,9 +358,9 @@ final class Provisioner {
         )
         // The CDN's bootstrapper is old enough that its first update replaces
         // the updater itself, and the new updater then wants the separate
-        // win64 client package. One pass leaves that package for the user's
-        // first launch to download (measured: 235 MB and ~80 s of updater
-        // window); looping until the win64 manifest lands absorbs it here,
+        // win64 client package. One pass leaves that package — hundreds of
+        // megabytes behind an updater window — for the user's first launch
+        // to download; looping until the win64 manifest lands absorbs it here,
         // where "Updating Steam…" is already on screen. Passes continue
         // while each one moves bytes into `package/`, because a small fixed
         // cap gives up mid-download on a slow switch.
@@ -436,6 +442,14 @@ final class Provisioner {
         // Leaves `activity` alone: the wizard's Continue button gates on
         // `.done`, which this reassert must not overwrite.
         await environment.configureBottle(named: name)
+    }
+
+    /// The quit's half of setup: a stage still running has Wine processes in
+    /// the bottle that nothing else owns, so they end with the app.
+    func endForQuit() async {
+        guard isWorking else { return }
+        SetupLog.log("provision: quitting mid-setup — ending the bottle's processes")
+        await environment.endWineProcesses(inBottle: environment.bottleName)
     }
 
     /// The wizard's whole sequence: install Steam, then apply the idempotent

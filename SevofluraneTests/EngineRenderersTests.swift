@@ -382,3 +382,33 @@ struct EngineRendererStrayTests {
         #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "stock dxgi")
     }
 }
+
+/// Installing a toolkit from Apple's image, and which version a game then gets.
+struct D3DMetalInstallTests {
+    private let manager = FileManager.default
+
+    /// An unpacked toolkit named the way Apple's volume is, carrying the
+    /// framework the installer identifies it by.
+    private func toolkit(_ version: String, in dir: URL) throws -> URL {
+        let volume = dir.appendingPathComponent("Evaluation environment for Windows games \(version)")
+        try manager.createDirectory(
+            at: volume.appendingPathComponent("redist/lib/external/D3DMetal.framework"),
+            withIntermediateDirectories: true,
+        )
+        return volume
+    }
+
+    @Test
+    func `the newest installed toolkit is active whichever download finished last`() async throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("d3dmetal-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        let engine = dir.appendingPathComponent("engine")
+        let suite = "d3dmetal-tests-\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+
+        _ = try await D3DMetalInstaller.install(from: toolkit("4.0 beta 2", in: dir), intoEngine: engine)
+        _ = try await D3DMetalInstaller.install(from: toolkit("3.0", in: dir), intoEngine: engine)
+        #expect(D3DMetalInstaller.active(inEngine: engine, preferences: preferences)?.version == "4.0 beta 2")
+    }
+}

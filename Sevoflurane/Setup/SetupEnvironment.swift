@@ -35,8 +35,8 @@ protocol SetupEnvironment: AnyObject {
     func installRosetta() async -> SetupCommandOutcome
 
     /// Installs the managed engine — the path taken when no usable CrossOver
-    /// exists: from `tarball` when someone has the file, else the one shipped
-    /// with this copy of the app, else the manifest's stable release,
+    /// exists: from `tarball` when someone has the file, else the signed one
+    /// shipped with this copy of the app, else the manifest's stable release,
     /// downloaded. The outcome's output is the version installed. The
     /// fraction is download progress, or `nil` where none is measurable.
     func installEngine(
@@ -67,6 +67,11 @@ protocol SetupEnvironment: AnyObject {
 
     /// The idempotent per-bottle registry configuration (tray suppression).
     func configureBottle(named name: String) async
+
+    /// Ends every Wine process in the bottle (`wineserver -k`): what a timed
+    /// out stage, or a quit in the middle of setup, leaves behind has no
+    /// other owner.
+    func endWineProcesses(inBottle name: String) async
 
     /// Whether the active bottle contains the dependency's installed payload.
     func isDependencyInstalled(_ dependency: BottleDependencies.Dependency) -> Bool
@@ -146,9 +151,16 @@ final class LiveSetupEnvironment: SetupEnvironment {
         progress: @escaping @Sendable (String, Double?) -> Void,
     ) async -> SetupCommandOutcome {
         do {
-            if let tarball = tarball ?? EngineInstaller.bundledTarball() {
+            if let tarball {
                 SetupLog.log("engine install from \(tarball.path)")
                 let version = try await EngineInstaller.install(from: tarball, progress: progress)
+                return .success(version)
+            }
+            if let bundled = EngineInstaller.bundledTarball() {
+                SetupLog.log("engine install from the copy shipped with the app: \(bundled.path)")
+                let version = try await EngineInstaller.install(
+                    from: bundled, requiringSignature: true, progress: progress,
+                )
                 return .success(version)
             }
             let release = try await EngineInstaller.stableRelease()
@@ -187,9 +199,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
             let boot = await runWine(bottle: name, args: ["wineboot", "-u"])
             guard boot.succeeded else { return boot }
             // A fresh prefix reports a pre-Windows-10 version, and Steam
-            // then installs its legacy CEF build instead of the modern one
-            // (measured on a clean machine: `bin/cef/cef.win7x64` and no
-            // `cef.win64`). This is the plain-Wine equivalent of the
+            // then installs its legacy CEF build (`bin/cef/cef.win7x64`)
+            // instead of the modern `cef.win64`. This is the plain-Wine equivalent of the
             // `win10_64` template CrossOver bottles are created from.
             return await runWine(bottle: name, args: ["winecfg", "/v", "win10"])
         }
@@ -198,7 +209,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
     /// Whether a registry file already carries the given `"name"=value`
     /// line. A plain text scan: the hive files are flat `"key"="value"`
     /// dumps, and a false negative only costs one redundant `reg add`.
-    private nonisolated func registry(
+    private nonisolated static func registry(
         of bottle: URL, file: String, contains needle: String,
     ) -> Bool {
         let url = bottle.appendingPathComponent(file)
@@ -216,8 +227,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
 
     /// Polls the prefix's `system.reg` until it stops changing. `wineboot`
     /// writes the registry as its last act, and the process that started it
-    /// returns before the writing is done — on a fresh prefix the Steam
-    /// installer that follows failed 0.58 s later with no output at all.
+    /// returns before the writing is done, and a Steam installer started
+    /// into a registry still being written fails at once with no output.
     func settleBottle(named name: String) async {
         let registry = Engine.active.bottlesRoot
             .appendingPathComponent(name)
@@ -248,8 +259,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
 
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
         // The one invocation whose failure a user is asked to act on, so it
-        // is also the one that never runs silenced: `WINEDEBUG=-all`, the
-        // default, is why "Steam installer failed:" once ended in a colon.
+        // is also the one that never runs silenced: under the default
+        // `WINEDEBUG=-all` a failure carries no reason at all.
         await runWine(
             bottle: name, args: [#"C:\SteamSetup.exe"#, "/S"],
             wineDebug: "err+all",
@@ -270,15 +281,23 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     func configureBottle(named name: String) async {
-        // Each write is skipped when the value already sits in the hive —
-        // a `reg add` against a booting client can hang on the registry for
-        // the whole subprocess timeout, and every boot after the first
-        // has nothing to write anyway.
-        let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
-        if !registry(
-            of: bottleURL, file: "user.reg", contains: #""ShowSystray"="N""#,
-        ) {
-            _ = await runWine(bottle: name, args: [
+        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        for args in await Self.registryWrites(forBottle: bottle) {
+            _ = await runWine(bottle: name, args: args)
+        }
+        await Self.stageBottleFiles(bottle, named: name)
+    }
+
+    /// The `wine` invocations the bottle's registry still needs. Each write is
+    /// skipped when the value already sits in the hive: a `reg add` against a
+    /// booting client can hang on the registry for the whole subprocess
+    /// timeout, and every boot after the first has nothing to write anyway.
+    /// Off the main actor, because it reads the hive files.
+    @concurrent
+    private nonisolated static func registryWrites(forBottle bottle: URL) async -> [[String]] {
+        var writes: [[String]] = []
+        if !registry(of: bottle, file: "user.reg", contains: #""ShowSystray"="N""#) {
+            writes.append([
                 "reg", "add", #"HKCU\Software\Wine\Explorer"#,
                 "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
             ])
@@ -289,15 +308,15 @@ final class LiveSetupEnvironment: SetupEnvironment {
         // ever written or removed, so a bottle that moves between engines
         // follows the engine it boots on.
         let sdlOff = registry(
-            of: bottleURL, file: "system.reg", contains: #""Enable SDL"=dword:00000000"#,
+            of: bottle, file: "system.reg", contains: #""Enable SDL"=dword:00000000"#,
         )
         if Engine.active.keepsSDLBus, sdlOff {
-            _ = await runWine(bottle: name, args: [
+            writes.append([
                 "reg", "delete", #"HKLM\System\CurrentControlSet\Services\winebus"#,
                 "/v", "Enable SDL", "/f",
             ])
         } else if !Engine.active.keepsSDLBus, !sdlOff {
-            _ = await runWine(bottle: name, args: [
+            writes.append([
                 "reg", "add", #"HKLM\System\CurrentControlSet\Services\winebus"#,
                 "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",
             ])
@@ -308,13 +327,18 @@ final class LiveSetupEnvironment: SetupEnvironment {
         // the pass that catches a bottle whose import never landed, and it
         // imports the same file so both routes say the same thing.
         let gpu = BottleGraphics.currentSelection().gpu
-        if !BottleGraphics.registryHolds(gpu, inBottle: bottleURL),
-           GPUIdentity.writeWineD3DRegistry(gpu, intoBottle: bottleURL) != nil {
-            _ = await runWine(bottle: name, args: [
-                "regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath,
-            ])
+        if !BottleGraphics.registryHolds(gpu, inBottle: bottle),
+           GPUIdentity.writeWineD3DRegistry(gpu, intoBottle: bottle) != nil {
+            writes.append(["regedit", "/S", GPUIdentity.wineD3DRegistryWindowsPath])
         }
-        let bottle = Engine.active.bottlesRoot.appendingPathComponent(name)
+        return writes
+    }
+
+    /// The graphics files the prefix carries beside its registry: the GPU
+    /// default, DXVK's config, and a managed engine's renderer DLLs. Off the
+    /// main actor, because staging copies DLLs.
+    @concurrent
+    private nonisolated static func stageBottleFiles(_ bottle: URL, named name: String) async {
         BottleGraphics.adoptDefaultGPU(forBottle: bottle)
         // A bottle nobody has opened the picker for still needs DXVK's file:
         // the other layers read the launch environment, DXVK reads only this.
@@ -379,11 +403,29 @@ final class LiveSetupEnvironment: SetupEnvironment {
             merged["WINEDEBUG"] = wineDebug
             environment = merged
         }
-        return await run(
+        let started = ContinuousClock.now
+        let outcome = await run(
             invocation.executable.path,
             invocation.arguments,
             environment: environment,
             timeout: timeout,
+        )
+        // The deadline killed only the launcher; the programs it started
+        // live on in the prefix's wineserver.
+        if ContinuousClock.now - started >= timeout {
+            SetupLog.log("provision: wine \(args.first ?? "") timed out — ending the bottle's processes")
+            await endWineProcesses(inBottle: bottle)
+        }
+        return outcome
+    }
+
+    nonisolated func endWineProcesses(inBottle name: String) async {
+        // wineserver finds its prefix by WINEPREFIX, under CrossOver too.
+        let prefix = Engine.active.bottlesRoot.appendingPathComponent(name)
+        _ = await Subprocess.run(
+            Engine.active.wineserverURL.path, ["-k"],
+            environment: ["WINEPREFIX": prefix.path, "PATH": "/usr/bin"],
+            capture: .none, timeout: .seconds(15),
         )
     }
 

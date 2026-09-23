@@ -182,8 +182,8 @@ nonisolated enum D3DMetalInstaller {
     /// The version a game gets: the user's choice when it is still
     /// installed, otherwise the newest — unless they have asked for the
     /// engine's own, which is a choice and not an absence.
-    static func active(inEngine engine: URL) -> Installed? {
-        let chosen = Preferences.shared.string(forKey: versionKey)
+    static func active(inEngine engine: URL, preferences: UserDefaults = Preferences.shared) -> Installed? {
+        let chosen = preferences.string(forKey: versionKey)
         if chosen == engineOwn { return nil }
         let available = installed(inEngine: engine)
         if let chosen, let match = available.first(where: { $0.version == chosen }) {
@@ -207,6 +207,11 @@ nonisolated enum D3DMetalInstaller {
     /// Copies D3DMetal out of `source` — a Game Porting Toolkit disk image, a
     /// mounted volume, or an unpacked copy of either — into `engine`.
     /// Answers the version it installed.
+    ///
+    /// Installing chooses nothing: with no choice recorded the newest version
+    /// is the active one, whichever of two parallel downloads lands last. A
+    /// caller installing one file the user picked records it with
+    /// ``choose(version:)``.
     @concurrent
     static func install(from source: URL, intoEngine engine: URL) async throws -> Installed {
         var attached: [URL] = []
@@ -249,12 +254,10 @@ nonisolated enum D3DMetalInstaller {
             try? manager.removeItem(at: destination)
             throw InstallError.copyFailed(error.localizedDescription)
         }
-        let installed = Installed(version: version, root: destination)
-        // Record only: staging both halves is the next spawn's job
-        // (``EngineRenderers/stage``), so an install that lands mid-session
-        // cannot cross this version's dylib with the running tree's DLLs.
-        choose(version: installed.version)
-        return installed
+        // Staging both halves is the next spawn's job (``EngineRenderers/stage``),
+        // so an install that lands mid-session cannot cross this version's
+        // dylib with the running tree's DLLs.
+        return Installed(version: version, root: destination)
     }
 
     // MARK: - Reading the image

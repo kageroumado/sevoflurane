@@ -327,7 +327,7 @@ struct GraphicsSettings: View {
         VStack(spacing: 0) {
             GPTkDownloadPanel(
                 download: gptk,
-                install: { url in await store.installD3DMetal(from: url) },
+                install: { url in await store.installD3DMetal(from: url, choosing: false) },
                 isSimulated: store.isSimulated,
             )
             .padding(16)
@@ -352,7 +352,7 @@ struct GraphicsSettings: View {
         isAddingD3DMetal = true
         d3dMetalError = nil
         Task(name: "Install D3DMetal") {
-            d3dMetalError = await store.installD3DMetal(from: source)
+            d3dMetalError = await store.installD3DMetal(from: source, choosing: true)
             isAddingD3DMetal = false
         }
     }

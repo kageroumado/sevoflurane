@@ -26,9 +26,16 @@ final class GameLaunchWatch {
     /// Steam's dialogs surface under `steam.exe`/`steamwebhelper.exe`
     /// (`WineWindowWatch`), and the game's window belongs to the game's own
     /// exe.
-    private static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
+    private nonisolated static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
+
+    /// How recent an arm's chronicle tail has to be for the next arm to read
+    /// on from it. The bridge's `RunGame` and the client's launch-start report
+    /// arm the same launch a moment apart, and a fresh tail for the second
+    /// would skip what the shim wrote between them.
+    private static let tailReuseWindow: Duration = .seconds(10)
 
     private var watch: Task<Void, Never>?
+    private var lastTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
     private let activation = Activation()
 
     /// A window of the launch's own game is up — the host clears the
@@ -41,7 +48,7 @@ final class GameLaunchWatch {
     var onGameProcessArmed: ((_ exe: String, _ pid: pid_t) -> Void)?
 
     /// The window a launch may claim, and how its program was named.
-    struct Sighting {
+    nonisolated struct Sighting: Sendable {
         let owner: String
         let pid: pid_t
         /// Whether the game is running through its own launcher bundle,
@@ -53,22 +60,32 @@ final class GameLaunchWatch {
     /// when the client reports a launch starting, which is the path that
     /// knows which app it is.
     func noteLaunchRequested(appID: Int? = nil) {
-        watch?.cancel()
+        let previous = watch
+        previous?.cancel()
         EventLog.shared.log(.window, "game launch requested — watching for its window")
         // From here on: what the shim wrote before this launch is another
         // launch's story.
-        let chronicle = WineChronicleTail()
+        let now = ContinuousClock.now
+        let chronicle: WineChronicleTail
+        if let lastTail, now - lastTail.startedAt < Self.tailReuseWindow {
+            chronicle = lastTail.tail
+        } else {
+            chronicle = WineChronicleTail()
+            lastTail = (chronicle, now)
+        }
         watch = Task(name: "Game window watch") { [weak self] in
+            // The previous watch may be mid-scan on the same tail.
+            await previous?.value
+            let scan = Scan(chronicle: chronicle, appID: appID)
             let deadline = ContinuousClock.now + Self.armedFor
-            var reported: Set<String> = []
-            var programs = ProgramCache()
             while !Task.isCancelled, ContinuousClock.now < deadline {
-                self?.noteArmedProcesses(chronicle.newEntries())
-                let sighting = Self.firstGameWindow(launching: appID, programs: &programs) { line in
-                    guard reported.insert(line).inserted else { return }
+                let tick = await Self.tick(scan)
+                guard !Task.isCancelled else { return }
+                for line in tick.passedOver {
                     EventLog.shared.log(.window, line)
                 }
-                if let sighting {
+                self?.noteArmedProcesses(tick.entries)
+                if let sighting = tick.sighting {
                     await self?.activate(sighting)
                     return
                 }
@@ -80,6 +97,42 @@ final class GameLaunchWatch {
             // Dock tile it came with belongs to a window that never arrived.
             ActivationPolicy.recedeIfLastWindow(closing: nil)
         }
+    }
+
+    /// One watch's working state. Only that watch's loop holds it, and it
+    /// hands it to one tick at a time.
+    private final nonisolated class Scan: @unchecked Sendable {
+        let chronicle: WineChronicleTail
+        let appID: Int?
+        var programs = ProgramCache()
+        var reported: Set<String> = []
+
+        init(chronicle: WineChronicleTail, appID: Int?) {
+            self.chronicle = chronicle
+            self.appID = appID
+        }
+    }
+
+    /// What one tick found: the chronicle's new lines, the windows passed
+    /// over for the first time and why, and the window the launch may claim.
+    private nonisolated struct Tick: Sendable {
+        let entries: [WineChronicle.Entry]
+        let passedOver: [String]
+        let sighting: Sighting?
+    }
+
+    /// Reads the chronicle and the window list, and resolves each window's
+    /// program. Off the main actor: every tick copies the window list,
+    /// offscreen windows included, and a new pid costs a process-arguments
+    /// read.
+    @concurrent
+    private nonisolated static func tick(_ scan: Scan) async -> Tick {
+        let entries = scan.chronicle.newEntries()
+        var passedOver: [String] = []
+        let sighting = firstGameWindow(launching: scan.appID, programs: &scan.programs) { line in
+            if scan.reported.insert(line).inserted { passedOver.append(line) }
+        }
+        return Tick(entries: entries, passedOver: passedOver, sighting: sighting)
     }
 
     /// The chronicle's `armed` lines name a launch's processes before any of
@@ -133,7 +186,7 @@ final class GameLaunchWatch {
     /// answer cannot change while the process lives. A pid reused by another
     /// process inside the same three minutes would be named after the dead
     /// one, which costs a wrong name in a log line.
-    struct ProgramCache {
+    nonisolated struct ProgramCache {
         private var programs: [pid_t: WineWindowWatch.Program?] = [:]
 
         mutating func program(owner: String, pid: pid_t) -> WineWindowWatch.Program? {
@@ -146,7 +199,7 @@ final class GameLaunchWatch {
 
     /// Whether a game's window is on screen — the updater's gate reads it
     /// that way.
-    static func firstGameWindow() -> (owner: String, pid: pid_t)? {
+    nonisolated static func firstGameWindow() -> (owner: String, pid: pid_t)? {
         var programs = ProgramCache()
         return firstGameWindow(launching: nil, programs: &programs).map { ($0.owner, $0.pid) }
     }
@@ -159,11 +212,14 @@ final class GameLaunchWatch {
     /// not this launch's is handed to `report` with the reason it was passed
     /// over: which of the tests refuses a window that the shim did put on
     /// screen is otherwise unknowable after the fact.
-    static func firstGameWindow(
+    nonisolated static func firstGameWindow(
         launching appID: Int?,
         programs: inout ProgramCache,
         report: (String) -> Void = { _ in },
     ) -> Sighting? {
+        // Read once per pass, at the first window that needs it: which game
+        // claims an exe is a directory of config files.
+        var games: [Int: ConfigValues]?
         // Windows the window server keeps but does not show are listed too,
         // so a game that puts one up without ever showing it is reported
         // rather than silently passed over.
@@ -189,9 +245,15 @@ final class GameLaunchWatch {
                 report("game window (\(program.name)) is not on screen — still waiting")
                 continue
             }
-            if let appID, let claimant = GameConfig.app(claiming: program.name), claimant != appID {
-                report("game window (\(program.name)) belongs to app \(claimant) — still waiting")
-                continue
+            if let appID {
+                let known = games ?? GameConfig.games()
+                games = known
+                let exe = program.name.lowercased()
+                if let claimant = known.first(where: { $0.value.exes?.contains(exe) == true })?.key,
+                   claimant != appID {
+                    report("game window (\(program.name)) belongs to app \(claimant) — still waiting")
+                    continue
+                }
             }
             return Sighting(
                 owner: program.name, pid: pid, viaBundle: program.source == .bundle,

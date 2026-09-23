@@ -85,7 +85,29 @@ final class ClientSupervisor {
     /// Whether the launch's attach has settled which daemon the app talks to.
     @ObservationIgnored private var hasAttached = false
     /// Verbs asked for before that, in order.
-    @ObservationIgnored private var heldVerbs: [(path: String, verb: String)] = []
+    @ObservationIgnored private var heldVerbs: [HeldVerb] = []
+
+    /// A verb waiting for the attach. One the user clicked goes stale: a
+    /// restart asked for while the daemon was waiting for approval in Login
+    /// Items means nothing minutes later. The launch's own wish to show the
+    /// library stays true however long the attach takes.
+    nonisolated struct HeldVerb: Sendable {
+        let path: String
+        let verb: String
+        let heldAt: ContinuousClock.Instant
+        let expires: Bool
+    }
+
+    /// What the attach replays: each verb once, in the order its newest ask
+    /// arrived, without the ones that went stale while it waited.
+    nonisolated static func replayable(
+        _ held: [HeldVerb], at now: ContinuousClock.Instant, staleAfter: Duration = .seconds(30),
+    ) -> [HeldVerb] {
+        held.enumerated()
+            .filter { index, verb in !held[(index + 1)...].contains { $0.verb == verb.verb } }
+            .map(\.element)
+            .filter { !$0.expires || now - $0.heldAt < staleAfter }
+    }
 
     func start() {
         let attachment = Task(name: "Attach to the daemon") { await self.attach() }
@@ -133,7 +155,10 @@ final class ClientSupervisor {
         await postFacts()
         await refreshFromDaemon()
         hasAttached = true
-        let verbs = heldVerbs
+        let verbs = Self.replayable(heldVerbs, at: .now)
+        if verbs.count < heldVerbs.count {
+            log.log(.supervisor, "dropped \(heldVerbs.count - verbs.count) stale or repeated verbs held for the attach")
+        }
         heldVerbs = []
         for held in verbs { send(held.path, called: held.verb) }
     }
@@ -262,7 +287,7 @@ final class ClientSupervisor {
     /// person who opened the app came for that window, and the daemon is the
     /// one that knows when the client gets there.
     func showLibraryWhenHealthy() {
-        send("/library/show-when-healthy", called: "show the library when healthy")
+        send("/library/show-when-healthy", called: "show the library when healthy", expires: false)
     }
 
     /// Quit teardown: quitting Sevoflurane quits Steam. The daemon holds the
@@ -291,12 +316,12 @@ final class ClientSupervisor {
         return true
     }
 
-    private func send(_ path: String, called verb: String) {
+    private func send(_ path: String, called verb: String, expires: Bool = true) {
         // A verb sent before the attach has settled reaches whichever daemon
         // is answering, and one of another build is about to be replaced: a
         // client it starts dies with it, half booted. The attach sends it.
         guard hasAttached else {
-            heldVerbs.append((path, verb))
+            heldVerbs.append(HeldVerb(path: path, verb: verb, heldAt: .now, expires: expires))
             return
         }
         Task(name: "Send \(verb) to the daemon") {

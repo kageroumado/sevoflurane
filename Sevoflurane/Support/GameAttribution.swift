@@ -1,6 +1,6 @@
 import Foundation
 
-extension GameConfig {
+nonisolated extension GameConfig {
     /// The app whose recorded exes include this one, if any: a window owned
     /// by an exe another game has already claimed is that game's, whatever
     /// launch is in flight.

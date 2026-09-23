@@ -182,6 +182,8 @@ final class CrashPromptModel {
     /// left to ask.
     var onFinish: ((Bool) -> Void)?
 
+    @ObservationIgnored private var preparing: Task<URL?, Never>?
+    @ObservationIgnored private var sending: Task<Void, Never>?
     private let bundle: @Sendable (URL) async throws -> URL
     private let upload: ReportUpload
 
@@ -226,12 +228,23 @@ final class CrashPromptModel {
         }
     }
 
+    /// A zip built only to be shown goes to the Trash with the answer, so
+    /// declining leaves nothing behind in Reports.
     func decline() {
+        let building = preparing
+        Task(name: "Trash the declined crash report") {
+            guard let zip = await building?.value else { return }
+            try? FileManager.default.trashItem(at: zip, resultingItemURL: nil)
+        }
+        zip = nil
         onFinish?(neverAskAgain)
     }
 
+    /// Sends once: a second press while the first is under way does nothing.
     func send() {
-        Task(name: "Send the crash report") {
+        guard sending == nil else { return }
+        sending = Task(name: "Send the crash report") {
+            defer { sending = nil }
             guard let zip = await prepared() else { return }
             stage = .sending
             do {
@@ -258,23 +271,27 @@ final class CrashPromptModel {
         onFinish?(neverAskAgain)
     }
 
-    /// The zip, built on first use. Off the main actor: it copies logs.
+    /// The zip, built on first use and once: every caller while it builds
+    /// waits on the same build. Off the main actor: it copies logs.
     private func prepared() async -> URL? {
-        if let zip { return zip }
+        if let preparing { return await preparing.value }
         stage = .preparing
         let bundle = bundle
         let directory = Self.reportsDirectory
-        do {
-            let built = try await Task.detached(name: "Build the crash report") {
-                try await bundle(directory)
-            }.value
-            zip = built
-            stage = .asking
-            return built
-        } catch {
-            stage = .failed("The report could not be written: \(error)")
-            return nil
+        let build = Task<URL?, Never>(name: "Build the crash report") {
+            do {
+                let built = try await Task.detached { try await bundle(directory) }.value
+                zip = built
+                stage = .asking
+                return built
+            } catch {
+                stage = .failed("The report could not be written: \(error)")
+                preparing = nil
+                return nil
+            }
         }
+        preparing = build
+        return await build.value
     }
 }
 

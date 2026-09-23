@@ -40,6 +40,7 @@ nonisolated enum EngineInstaller {
     /// sha256, and its `.sig` verifies against the pinned key — all before
     /// `tar` sees a byte. A release from an override manifest is checked by
     /// size and hash.
+    @concurrent
     static func install(
         _ release: EngineManifest.Release,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
@@ -83,18 +84,28 @@ nonisolated enum EngineInstaller {
     /// directory `package-engine.sh` assembled, which is what is inside that
     /// tarball. Either way the version has to be new — an installed engine is
     /// never replaced.
+    ///
+    /// `requiringSignature` is for a file nobody chose: the copy found beside
+    /// the app is installed only with a `.sig` that verifies against the
+    /// pinned key. A file a person picked or named may go unsigned.
+    @concurrent
     static func install(
         from source: URL,
         into root: URL = Engine.managedRoot,
+        requiringSignature: Bool = false,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws -> String {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDirectory) else {
             throw InstallError("no engine at \(source.path)")
         }
-        return isDirectory.boolValue
-            ? try await install(fromFolder: source, into: root, progress: progress)
-            : try await install(fromTarball: source, into: root, progress: progress)
+        if isDirectory.boolValue {
+            if requiringSignature { throw EngineSignature.Failure.signatureMissing(source) }
+            return try await install(fromFolder: source, into: root, progress: progress)
+        }
+        return try await install(
+            fromTarball: source, into: root, requiringSignature: requiringSignature, progress: progress,
+        )
     }
 
     /// An engine tree built here: named for its version, holding `wine/bin`,
@@ -137,10 +148,11 @@ nonisolated enum EngineInstaller {
 
     /// A `<name>.sig` beside the tarball is verified against the pinned key,
     /// and one that fails refuses the install; a tarball with nothing beside
-    /// it is the operator's own choice and is installed as such, logged. The
-    /// tarball's single top-level directory names the version.
+    /// it is the operator's own choice and is installed as such, logged,
+    /// unless a signature is required. The tarball's single top-level
+    /// directory names the version.
     private static func install(
-        fromTarball tarball: URL, into root: URL,
+        fromTarball tarball: URL, into root: URL, requiringSignature: Bool,
         progress: @escaping @Sendable (String, Double?) -> Void,
     ) async throws -> String {
         let manager = FileManager.default
@@ -153,6 +165,8 @@ nonisolated enum EngineInstaller {
         if let signatureFile = try? Data(contentsOf: signatureURL) {
             try EngineSignature.verify(file: tarball, signatureFile: signatureFile)
             SetupLog.log("engine tarball \(tarball.lastPathComponent): signature verified")
+        } else if requiringSignature {
+            throw EngineSignature.Failure.signatureMissing(signatureURL)
         } else {
             SetupLog.log("engine tarball \(tarball.lastPathComponent): no .sig beside it, installed as the operator's own")
         }
@@ -175,18 +189,22 @@ nonisolated enum EngineInstaller {
     /// An engine tarball shipped with this copy of the app, so a disk image
     /// can carry the engine and setup needs no download: in
     /// `Contents/Resources/Engine/`, or beside the app bundle — the disk
-    /// image's root while the app runs from it. The newest release wins
+    /// image's root while the app runs from it. Only a tarball with its
+    /// `.sig` beside it counts: the folder beside the app is often Downloads
+    /// or /Applications, where any file can land. The newest release wins
     /// when there are several.
     static func bundledTarball(
         resources: URL? = Bundle.main.resourceURL,
         beside bundle: URL = Bundle.main.bundleURL,
     ) -> URL? {
+        let manager = FileManager.default
         let places = [resources?.appendingPathComponent("Engine"), bundle.deletingLastPathComponent()]
             .compactMap(\.self)
         let candidates = places.flatMap { place in
-            ((try? FileManager.default.contentsOfDirectory(atPath: place.path)) ?? [])
+            ((try? manager.contentsOfDirectory(atPath: place.path)) ?? [])
                 .filter { $0.hasPrefix("dormison-") && $0.hasSuffix(".tar.xz") }
                 .map(place.appendingPathComponent)
+                .filter { manager.fileExists(atPath: EngineSignature.signatureURL(for: $0).path) }
         }
         return candidates.max {
             versionName(of: $0).localizedStandardCompare(versionName(of: $1)) == .orderedAscending
@@ -239,54 +257,98 @@ nonisolated enum EngineInstaller {
     }
 
     /// Downloads the tarball with real progress: a plain download task whose
-    /// `Progress` is observed, the same shape the GPTk panel uses. (An
-    /// `AsyncBytes` loop crawls — per-byte iteration costs an await per byte,
-    /// minutes for a tarball a plain download moves in seconds.) The temp file
-    /// must be moved inside the completion handler —
-    /// URLSession deletes it when the handler returns.
-    private static func download(
+    /// `Progress` is observed, the same shape the GPTk panel uses. Never an
+    /// `AsyncBytes` loop: it costs an await per byte, which turns seconds
+    /// into minutes. The temp file must be moved inside the completion
+    /// handler — URLSession deletes it when the handler returns.
+    ///
+    /// Cancelling the calling task cancels the transfer, and a response other
+    /// than 2xx fails the download with its status rather than handing an
+    /// error page to the size check.
+    static func download(
         _ release: EngineManifest.Release, to tarball: URL,
-        label: String, progress: @escaping @Sendable (String, Double?) -> Void,
+        label: String, session: URLSession = .shared,
+        progress: @escaping @Sendable (String, Double?) -> Void,
     ) async throws {
         progress(label, 0)
         let declaredBytes = release.sizeBytes
-        // Keeps the KVO observation alive until the completion handler runs —
-        // the handler captures the box, the box holds the observation.
-        final class ObservationBox: @unchecked Sendable {
-            var observation: NSKeyValueObservation?
-        }
-        let box = ObservationBox()
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            let task = URLSession.shared.downloadTask(with: release.url) { temp, _, error in
-                box.observation?.invalidate()
-                box.observation = nil
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
+        let transfer = Transfer()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                let task = session.downloadTask(with: release.url) { temp, response, error in
+                    transfer.finish()
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {
+                        continuation.resume(throwing: InstallError(
+                            "engine download failed: HTTP \(http.statusCode) from \(release.url.absoluteString)",
+                        ))
+                        return
+                    }
+                    guard let temp else {
+                        continuation.resume(throwing: InstallError("engine download produced no file"))
+                        return
+                    }
+                    do {
+                        try FileManager.default.moveItem(at: temp, to: tarball)
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
-                guard let temp else {
-                    continuation.resume(throwing: InstallError("engine download produced no file"))
-                    return
+                nonisolated(unsafe) var lastReported = 0.0
+                let observation = task.progress.observe(\.fractionCompleted) { taskProgress, _ in
+                    // The response may not carry a length; the manifest's
+                    // declared size stands in.
+                    let fraction = taskProgress.totalUnitCount > 0
+                        ? taskProgress.fractionCompleted
+                        : Double(taskProgress.completedUnitCount) / Double(declaredBytes)
+                    guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
+                    lastReported = fraction
+                    progress(label, min(1, fraction))
                 }
-                do {
-                    try FileManager.default.moveItem(at: temp, to: tarball)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+                transfer.start(task, observing: observation)
             }
-            nonisolated(unsafe) var lastReported = 0.0
-            box.observation = task.progress.observe(\.fractionCompleted) { taskProgress, _ in
-                // The response may not carry a length; the manifest's
-                // declared size stands in.
-                let fraction = taskProgress.totalUnitCount > 0
-                    ? taskProgress.fractionCompleted
-                    : Double(taskProgress.completedUnitCount) / Double(declaredBytes)
-                guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
-                lastReported = fraction
-                progress(label, min(1, fraction))
+        } onCancel: {
+            transfer.cancel()
+        }
+    }
+
+    /// One download's task and progress observation, held until the
+    /// completion handler runs. A cancel that arrives before the task exists
+    /// is remembered, and the task is cancelled the moment it starts.
+    private final class Transfer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var task: URLSessionDownloadTask?
+        private var observation: NSKeyValueObservation?
+        private var isCancelled = false
+
+        func start(_ task: URLSessionDownloadTask, observing observation: NSKeyValueObservation) {
+            let cancelled = lock.withLock {
+                self.task = task
+                self.observation = observation
+                return isCancelled
             }
             task.resume()
+            if cancelled { task.cancel() }
+        }
+
+        func cancel() {
+            let task = lock.withLock {
+                isCancelled = true
+                return self.task
+            }
+            task?.cancel()
+        }
+
+        func finish() {
+            let observation = lock.withLock {
+                defer { self.observation = nil }
+                return self.observation
+            }
+            observation?.invalidate()
         }
     }
 

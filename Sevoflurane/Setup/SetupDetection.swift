@@ -76,19 +76,10 @@ nonisolated enum SetupProbe {
 
     /// The whole stack is x86_64; without Rosetta nothing below runs.
     static func rosettaWorks() async -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/arch")
-        process.arguments = ["-x86_64", "/usr/bin/true"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return false
-        }
-        return await withCheckedContinuation { continuation in
-            process.terminationHandler = { continuation.resume(returning: $0.terminationStatus == 0) }
-        }
+        let result = await Subprocess.run(
+            "/usr/bin/arch", ["-x86_64", "/usr/bin/true"], capture: .none, timeout: .seconds(10),
+        )
+        return result.status == 0
     }
 
     /// The license is a plain INI (`[crossmac] … expires=YYYY/MM/DD` +
