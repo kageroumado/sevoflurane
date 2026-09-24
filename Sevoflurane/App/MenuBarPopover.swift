@@ -32,6 +32,13 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     /// closing is already gone — and it would reopen it. Clicks that land in
     /// that window are the second half of a dismissal, not a request.
     private var closedAt = ContinuousClock.now
+    /// The menu bar's session for the open popover, which draws the item's
+    /// pill; held from its start until the popover closes.
+    private var pillSession: NSObject?
+    /// Watches for a click on the item while the popover is up. The menu
+    /// bar's session keeps such a click from the button, and it reaches this
+    /// app only as a mouse event elsewhere in the system.
+    private var itemClickMonitor: Any?
 
     init(
         host: SteamWebHost,
@@ -47,6 +54,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggle)
         statusItem.button?.setAccessibilityLabel("Sevoflurane")
+        if statusItem.responds(to: Pill.setDelegate) {
+            statusItem.perform(Pill.setDelegate, with: self)
+        }
         trackIcon()
     }
 
@@ -111,13 +121,21 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         position(panel)
         panel.makeKeyAndOrderFront(nil)
-        // Deferred one turn: this runs inside the button's own mouse tracking,
-        // and the cell clears a highlight when that tracking ends.
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated {
-                guard self?.panel?.isVisible == true else { return }
-                self?.showsOpenPill(true)
+        // A click opens through a session the menu bar has already begun;
+        // an accessibility press reaches the button's action and asks for one.
+        // Deferred one turn, out of the button's own mouse tracking: the
+        // session watches the mouse, and the fallback highlight is cleared
+        // when that tracking ends.
+        if pillSession == nil {
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard self?.panel?.isVisible == true, self?.pillSession == nil else { return }
+                    self?.showsOpenPill(true)
+                }
             }
+        }
+        itemClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closeIfItemClicked() }
         }
         // Escape reaches the panel as a key event no SwiftUI control claims.
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -136,23 +154,72 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
             NSEvent.removeMonitor(escapeMonitor)
             self.escapeMonitor = nil
         }
+        if let itemClickMonitor {
+            NSEvent.removeMonitor(itemClickMonitor)
+            self.itemClickMonitor = nil
+        }
         closedAt = .now
+    }
+
+    /// A second click on the item closes the popover, as it does a system one.
+    private func closeIfItemClicked() {
+        guard let item = statusItem.button?.window?.frame,
+              item.contains(NSEvent.mouseLocation) else { return }
+        close()
     }
 
     func windowDidResignKey(_: Notification) {
         close()
     }
 
-    /// The pill a system item wears while its popover is up. The menu bar is
-    /// drawn out of process, and a button's `highlight(_:)` never reaches it:
-    /// the item's own flag does, through the setter AppKit keeps for
-    /// `MenuBarExtra` (`NSStatusItem_Private_ForSwiftUI`, `setButtonHighlighted:`).
+    /// The pill a system item wears while its popover is up, which the menu
+    /// bar draws out of process. It follows an expanded-interface session:
+    /// AppKit's private scene-item API that `MenuBarExtra` rides. A button's
+    /// `highlight(_:)` and the item's `setButtonHighlighted:` flag both leave
+    /// the pill off on macOS 27.
     private func showsOpenPill(_ isOpen: Bool) {
-        if statusItem.responds(to: NSSelectorFromString("setButtonHighlighted:")) {
-            statusItem.setValue(isOpen, forKey: "buttonHighlighted")
-        } else {
+        guard statusItem.responds(to: Pill.request) else {
             statusItem.button?.highlight(isOpen)
+            return
         }
+        if isOpen {
+            statusItem.perform(Pill.request)
+        } else if let session = pillSession {
+            // Cleared first: the cancel reports back through the end callback.
+            pillSession = nil
+            _ = session.perform(Pill.cancel)
+        }
+    }
+
+    /// The session has started, and the pill is up. With a delegate set, a
+    /// click on the item begins one instead of sending the button's action,
+    /// so a session arriving with the popover down is the click asking for it.
+    @objc(statusItem:didBeginExpandedInterfaceSession:)
+    private func statusItem(_: NSStatusItem, didBeginExpandedInterfaceSession session: NSObject) {
+        pillSession = session
+        guard panel?.isVisible != true else { return }
+        if closedAt.duration(to: .now) > .milliseconds(200) {
+            open()
+        } else {
+            // The popover closed as this began: the second half of the click
+            // that closed it, or a request it outlived.
+            showsOpenPill(false)
+        }
+    }
+
+    /// The menu bar ended the session — a click on the item, or elsewhere —
+    /// and the popover goes with it.
+    @objc(statusItemDidEndExpandedInterfaceSession:animated:)
+    private func statusItemDidEndExpandedInterfaceSession(_: NSStatusItem, animated _: Bool) {
+        pillSession = nil
+        if panel?.isVisible == true { close() }
+    }
+
+    /// The private selectors, spelled once.
+    private enum Pill {
+        static let setDelegate = NSSelectorFromString("setExpandedInterfaceDelegate:")
+        static let request = NSSelectorFromString("_requestExpandedInterfaceSession")
+        static let cancel = NSSelectorFromString("cancel")
     }
 
     // MARK: - The panel
