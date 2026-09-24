@@ -578,6 +578,19 @@ final class SteamWebHost {
     /// way it boots at launch, and the desktop window is adopted a second or
     /// so later.
     func showSteam() {
+        if let loginWindow, isAwaitingSignIn {
+            // Signed out, the window the user is asking for is the login
+            // popup. The desktop window can exist beside it, but a signed-out
+            // client never boots its stores, so it would show empty and fail
+            // to route; and a reload would detach the popup, which Steam reads
+            // as the user closing its sign-in window, and quits.
+            EventLog.shared.log(
+                .window, "asked for Steam while signed out — bringing the login window forward",
+            )
+            signInIsSkipped = false
+            loginWindow.show(activating: true)
+            return
+        }
         if let desktop {
             // The window exists from the moment Steam's UI boots, but on no
             // route — a `-silent` client is the same until its tray item is
@@ -598,17 +611,6 @@ final class SteamWebHost {
         // was frontmost with its traffic lights gray.
         ActivationPolicy.becomeRegular(forAWindowWithin: ActivationPolicy.graceForAPromisedWindow)
         NSApp.activate()
-        guard !isAwaitingSignIn else {
-            // Signed out, the window the user is asking for is the login
-            // popup, and a reload would detach it — which Steam reads as the
-            // user closing its sign-in window, and quits.
-            EventLog.shared.log(
-                .window, "asked for Steam while signed out — bringing the login window forward",
-            )
-            signInIsSkipped = false
-            loginWindow?.show(activating: true)
-            return
-        }
         // The window the user asked for does not exist yet: a reload boots
         // the UI and Steam re-creates its desktop window hidden, on the
         // route it had. Nothing else would ever show it, so the request is
