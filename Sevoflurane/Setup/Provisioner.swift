@@ -433,11 +433,11 @@ final class Provisioner {
     /// Applies the idempotent bottle configuration every adoption gets —
     /// today the tray suppression; renderer/msync knobs land here too.
     ///
-    /// The tray values gate explorer.exe's own systray window, which the Mac
-    /// driver's path bypasses entirely, so neither removes Steam's
-    /// status item here — `BottleSupervisor.suppressWineTray` does. They are
-    /// still written because they are correct for the non-driver path an OSS
-    /// Wine build may take.
+    /// Dormison's Mac driver reads `Mac Driver\StatusItems` and, off, hands
+    /// Steam's tray icon to explorer.exe's own systray window, which the
+    /// Explorer tray values keep hidden: no status item ever appears.
+    /// CrossOver's driver makes one regardless, and
+    /// `BottleSupervisor.suppressWineTray` removes it once the client is up.
     func configureBottle(named name: String) async {
         // Leaves `activity` alone: the wizard's Continue button gates on
         // `.done`, which this reassert must not overwrite.

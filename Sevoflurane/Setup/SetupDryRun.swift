@@ -289,6 +289,8 @@
         func configureBottle(named name: String) async {
             log(#"would run: wine --bottle \#(name) reg add HKCU\Software\Wine\Explorer "#
                 + "/v ShowSystray /t REG_SZ /d N /f")
+            log(#"would run: wine --bottle \#(name) reg add "HKCU\Software\Wine\Mac Driver" "#
+                + "/v StatusItems /t REG_SZ /d N /f")
             if Engine.active.keepsSDLBus {
                 log(#"would run: wine --bottle \#(name) reg delete "#
                     + #"HKLM\System\CurrentControlSet\Services\winebus /v "Enable SDL" /f"#)

@@ -302,6 +302,15 @@ final class LiveSetupEnvironment: SetupEnvironment {
                 "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
             ])
         }
+        // Dormison's Mac driver hands Steam's tray icon back to explorer
+        // instead of making it a menu-bar status item, from the client's
+        // first moment. Other engines ignore the value.
+        if !registry(of: bottle, file: "user.reg", contains: #""StatusItems"="N""#) {
+            writes.append([
+                "reg", "add", #"HKCU\Software\Wine\Mac Driver"#,
+                "/v", "StatusItems", "/t", "REG_SZ", "/d", "N", "/f",
+            ])
+        }
         // The SDL bus is on or off by engine (`Engine.keepsSDLBus`): on, it is
         // the backend that reaches a Bluetooth Xbox pad; off, an older engine's
         // bus would wake winedevice.exe every millisecond. The value is only
