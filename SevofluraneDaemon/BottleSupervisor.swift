@@ -837,6 +837,15 @@ final class BottleSupervisor {
     /// "Sign in to Steam") needs the full restart — a reload alone reattaches
     /// to the same dead session.
     private func recoverDeadServices(wineWindows: [WineWindowWatch.Window]) async {
+        if clientShowsLoginWindow, !app.facts.isAwaitingSignIn,
+           await ClientLifecycle.clientServicesReady() == true {
+            // The client signed itself in behind the sign-in window its boot
+            // showed, before the page adopted that window. Nothing else would
+            // clear the boot's sighting: the page never held the popup, and
+            // its services wait on the reload below, which waits on sign-in.
+            clientShowsLoginWindow = false
+            log.log(.client, "the client signed in by itself — its sign-in window is gone")
+        }
         if isAwaitingSignIn {
             // A signed-out bottle's services never initialize until the user
             // signs in — the login window being up means the machine is
