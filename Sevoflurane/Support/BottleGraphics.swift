@@ -588,14 +588,24 @@ nonisolated enum BottleGraphics {
     private static let msyncKey = "managedMsync"
     static func managedSelection() -> Selection {
         let defaults = Preferences.shared
-        // DXMT rather than ``defaultRenderer``: D3DMetal comes from Apple's
-        // Game Porting Toolkit, which a managed engine holds only once the
-        // user has added it (``D3DMetalInstaller``).
         let renderer = defaults.string(forKey: rendererKey)
-            .flatMap(Renderer.init(rawValue:)) ?? .dxmt
+            .flatMap(Renderer.init(rawValue:))
+            ?? unchosenManagedRenderer(
+                toolkitInstalled: D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store) != nil,
+            )
         let msync = defaults.object(forKey: msyncKey) as? Bool ?? true
         let gpu = defaults.string(forKey: gpuKey).flatMap(GPUIdentity.init(rawValue:))
         return Selection(renderer: renderer, msync: msync, gpu: gpu ?? defaultGPU)
+    }
+
+    /// What a managed engine runs when the user never picked a renderer:
+    /// ``defaultRenderer`` once a D3DMetal toolkit is installed, and DXMT
+    /// until then — D3DMetal comes from Apple's Game Porting Toolkit, which
+    /// a managed engine holds only once the user has added it. Installing one
+    /// is what moves an unchosen bottle onto it, so DirectX 12 games run
+    /// without a trip to Settings.
+    static func unchosenManagedRenderer(toolkitInstalled: Bool) -> Renderer {
+        toolkitInstalled ? defaultRenderer : .dxmt
     }
 
     static func setManagedSelection(_ selection: Selection) {

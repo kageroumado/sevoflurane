@@ -513,3 +513,18 @@ struct BundledEngineUpgradeTests {
         #expect(EngineInstaller.bundledUpgrade(bundled: nil, installed: ["dormison-r9"]) == nil)
     }
 }
+
+/// What a managed engine runs before anyone picks a renderer.
+struct UnchosenRendererTests {
+    /// D3DMetal is the only layer that speaks Direct3D 12, so a bottle nobody
+    /// configured moves onto it the moment a toolkit is installed.
+    @Test
+    func `an installed toolkit makes D3DMetal the default`() {
+        #expect(BottleGraphics.unchosenManagedRenderer(toolkitInstalled: true) == .d3dmetal)
+    }
+
+    @Test
+    func `without a toolkit the default is DXMT`() {
+        #expect(BottleGraphics.unchosenManagedRenderer(toolkitInstalled: false) == .dxmt)
+    }
+}
