@@ -53,7 +53,10 @@ nonisolated enum ConfigMaterializer {
         // Mode, and a game nobody has configured wants those too.
         for (appID, values) in GameConfig.games().sorted(by: { $0.key < $1.key })
             where values.hasSettings || values.exes != nil {
-            var game = GameFiles(appID: appID, settings: gameLines(appID, values), exes: values.exes ?? [])
+            // A tool recorded as a game's before the filter knew it would start
+            // through the game's bundle, with its settings, from any launch.
+            let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
+            var game = GameFiles(appID: appID, settings: gameLines(appID, values), exes: exes)
             if let title = values.name, !values.runsNatively,
                let loader = GameLaunchers.materialize(
                    appID: appID, title: title, engine: Engine.active,

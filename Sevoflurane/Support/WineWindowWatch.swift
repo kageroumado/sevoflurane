@@ -127,7 +127,7 @@ nonisolated enum WineWindowWatch {
     /// Wine's plumbing: an on-screen `.exe` window owned by none of these is
     /// a game. `GameLaunchWatch` uses the same set to spot a launch's first
     /// window.
-    static let gameInfrastructureOwners = clientOwners.union(bottleOwners)
+    static let gameInfrastructureOwners = clientOwners.union(bottleOwners).union(GameExecutables.windowsTools)
 
     /// Steam's own processes in the bottle.
     private static let clientOwners: Set<String> = [

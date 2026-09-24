@@ -97,6 +97,21 @@ nonisolated enum GameExecutables {
         return found.sorted { $0.depth < $1.depth }.map(\.url)
     }
 
+    /// Windows' own tools, which a game's install script runs inside the
+    /// launch: DirectX's setup registers its DLLs through `regsvr32`, and a
+    /// redistributable runs `msiexec`. Taken for the game, one of them
+    /// becomes the run's process, its exit ends the launch in Steam halfway
+    /// through the script, and the next launch runs the script again.
+    static let windowsTools: Set<String> = [
+        "regsvr32.exe", "msiexec.exe", "cmd.exe", "reg.exe", "regedit.exe", "dllhost.exe",
+        "wscript.exe", "cscript.exe", "powershell.exe", "oalinst.exe", "dxwsetup.exe",
+    ]
+
+    /// Whether a running executable can be recorded as a game's own.
+    static func isRecordable(_ name: String) -> Bool {
+        !windowsTools.contains(name.lowercased())
+    }
+
     static func isGameLike(_ name: String) -> Bool {
         !excludedFragments.contains { name.contains($0) }
     }

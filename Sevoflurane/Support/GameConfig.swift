@@ -717,6 +717,7 @@ nonisolated enum GameConfig {
     /// per-program env file is written for every exe recorded here.
     static func noteExecutable(_ exe: String, forApp appID: Int, named name: String? = nil) {
         let lowered = exe.lowercased()
+        guard GameExecutables.isRecordable(lowered) else { return }
         var values = game(appID)
         var exes = values.exes ?? []
         let changed = !exes.contains(lowered) || (name != nil && values.name != name)

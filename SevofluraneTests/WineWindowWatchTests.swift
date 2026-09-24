@@ -8,6 +8,16 @@ struct WineWindowWatchTests {
         #expect(WineWindowWatch.isGameProgram("game-win64-shipping.exe"))
     }
 
+    /// Higurashi's DirectX install script ran `regsvr32` inside the launch;
+    /// taken for the game, its exit cancelled the launch in Steam mid-script
+    /// and every later Play ran the script again.
+    @Test
+    func `the tools an install script runs are not`() {
+        for program in ["regsvr32.exe", "msiexec.exe", "cmd.exe", "reg.exe", "dllhost.exe", "oalinst.exe"] {
+            #expect(!WineWindowWatch.isGameProgram(program), "\(program) is not a game")
+        }
+    }
+
     @Test
     func `the client's own processes are not`() {
         #expect(!WineWindowWatch.isGameProgram("steam.exe"))
