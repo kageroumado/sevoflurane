@@ -12,34 +12,99 @@ enum SetupEngineChoice {
 }
 
 struct SetupWelcomeStep: View {
+    /// The website's feature highlights, word for word, so the first page and
+    /// the page that sent someone here promise the same things.
+    private static let highlights: [SetupHighlight] = [
+        SetupHighlight(
+            icon: "arrow.up.left.and.arrow.down.right",
+            title: "Optional upscaling",
+            caption: "Old games render small. Sevoflurane can upscale the picture past the game\u{2019}s own "
+                + "resolution, with filters for 3D games and for 2D anime art.",
+        ),
+        SetupHighlight(
+            icon: "macwindow",
+            title: "Windows that behave",
+            caption: "Every game is a real Mac window. Fixed-size games, even old ones that never allowed "
+                + "it, become resizable and go native full screen.",
+        ),
+        SetupHighlight(
+            icon: "cube.transparent",
+            title: "DirectX 12 support",
+            caption: "Games run through Dormison, Sevoflurane\u{2019}s own build of Wine with DirectX 12 "
+                + "support and fixes for the games themselves.",
+        ),
+        SetupHighlight(
+            icon: "gamecontroller",
+            title: "Game Mode, automatically",
+            caption: "Each game launches as its own app. When it fills the screen, macOS engages Game Mode "
+                + "on its own. Nothing to toggle.",
+        ),
+        SetupHighlight(
+            icon: "display",
+            title: "Steam, always Retina",
+            caption: "Steam\u{2019}s interface runs in native WKWebViews at the screen\u{2019}s real scale, "
+                + "with its menus in the menu bar and Mac notifications.",
+        ),
+        SetupHighlight(
+            icon: "folder",
+            title: "Not just Steam",
+            caption: "Open any Windows program from Finder. Sevoflurane tells a game from an installer, "
+                + "runs or installs it, and gives it the same treatment.",
+        ),
+    ]
+
     var body: some View {
         SetupHero(
             title: "Sevoflurane",
-            caption: Text("Windows Steam games, in a Mac app."),
+            caption: Text("Windows games on macOS"),
         ) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 112, height: 112)
                 .accessibilityHidden(true)
         } content: {
-            SetupList {
-                SetupRow(
-                    icon: "engine.combustion",
-                    title: "A Wine engine",
-                    caption: "Runs Windows games on this Mac. Dormison is free.",
-                )
-                SetupRow(
-                    icon: "arrow.down.circle",
-                    title: "Steam for Windows",
-                    caption: "Downloaded from Valve, kept in its own folder.",
-                )
-                SetupRow(
-                    icon: "person.crop.circle",
-                    title: "Your Steam account",
-                    caption: "Sign in at the end and your library opens.",
-                )
+            Grid(
+                alignment: .topLeading,
+                horizontalSpacing: Theme.Space.xl,
+                verticalSpacing: Theme.Space.lg,
+            ) {
+                ForEach(0 ..< Self.highlights.count / 2, id: \.self) { row in
+                    GridRow {
+                        SetupHighlightView(highlight: Self.highlights[row * 2])
+                        SetupHighlightView(highlight: Self.highlights[row * 2 + 1])
+                    }
+                }
             }
         }
+    }
+}
+
+/// One of the welcome page's feature highlights.
+struct SetupHighlight {
+    let icon: String
+    let title: String
+    let caption: String
+}
+
+private struct SetupHighlightView: View {
+    let highlight: SetupHighlight
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+            Image(systemName: highlight.icon)
+                .foregroundStyle(.tint)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(highlight.title)
+                    .font(.callout.weight(.semibold))
+                Text(highlight.caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -274,7 +339,7 @@ struct SetupGraphicsStep: View {
         SetupPage(
             glyph: "cube.transparent",
             title: "DirectX 12 games",
-            subtitle: "Optional. Apple's Game Porting Toolkit, downloaded with your Apple Account.",
+            subtitle: "Optional. Apple\u{2019}s D3DMetal, free with an Apple developer sign-in.",
         ) {
             GPTkDownloadPanel(
                 download: download,
@@ -323,7 +388,7 @@ struct SetupOptionsStep: View {
 }
 
 struct SetupDoneStep: View {
-    let signInPending: Bool
+    let window: SetupSteamWindow
 
     var body: some View {
         SetupHero(title: "Ready to play", caption: caption) {
@@ -342,9 +407,15 @@ struct SetupDoneStep: View {
     /// into the sentence so the eye has something to match against the menu bar.
     private var caption: Text {
         let icon = Image(nsImage: MenuBarIcon.image(badged: false))
-        if signInPending {
-            return Text("Your library lives in the menu bar, behind \(icon). Sign in to Steam and it opens.")
+        return switch window {
+        case .signIn:
+            Text("Your library lives in the menu bar, behind \(icon). Sign in to Steam and it opens.")
+        case .library:
+            Text("Your library lives in the menu bar, behind \(icon).")
+        case .starting:
+            Text("Your library lives in the menu bar, behind \(icon). Steam is starting; a first start takes a minute.")
+        case let .helperDown(reason):
+            Text(reason)
         }
-        return Text("Your library lives in the menu bar, behind \(icon).")
     }
 }

@@ -55,7 +55,11 @@ final class ClientSupervisor {
     /// The facts last posted, so an unchanged second is not a second POST.
     @ObservationIgnored private var posted: PageFacts?
     @ObservationIgnored private var facts = Task<Void, Never>?.none
-    @ObservationIgnored private var isQuitting = false
+    /// Set from the moment the user confirms a quit. The popover shows the
+    /// quit instead of the health the daemon reports while it tears the bottle
+    /// down — a client nobody wants any more reads as paused there.
+    private(set) var isQuitting = false
+    @ObservationIgnored private var hasShutDown = false
 
     init(host: SteamWebHost, bridge: SteamBridge? = nil) {
         self.host = host
@@ -232,9 +236,11 @@ final class ClientSupervisor {
 
     // MARK: - Verbs
 
-    func togglePaused() {
-        let path = health == .paused ? "/supervisor/resume" : "/supervisor/pause"
-        Task(name: "Toggle auto-restart") {
+    /// Turns auto-restart on or off for the daemon's current run. Off, the
+    /// supervisor stands aside entirely: it neither restarts nor starts Steam.
+    func setAutoRestart(_ isOn: Bool) {
+        let path = isOn ? "/supervisor/resume" : "/supervisor/pause"
+        Task(name: "Set auto-restart") {
             _ = await DaemonService.post(path)
             await self.refreshFromDaemon()
         }
@@ -293,8 +299,14 @@ final class ClientSupervisor {
     /// Quit teardown: quitting Sevoflurane quits Steam. The daemon holds the
     /// bottle, so the contract is one verb — and a crash, which sends nothing,
     /// is exactly why a crash leaves a running game alone.
+    /// Marks the quit as under way, before anything is torn down.
+    func beginQuit() {
+        isQuitting = true
+    }
+
     func shutdownForQuit() async {
-        guard !isQuitting else { return }
+        guard !hasShutDown else { return }
+        hasShutDown = true
         isQuitting = true
         facts?.cancel()
         facts = nil

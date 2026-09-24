@@ -13,6 +13,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let host: SteamWebHost
     private let supervisor: ClientSupervisor
     private let notifications: SteamNotifications
+    private let setup: SetupWindow
     /// The adopted Windows programs the popover lists beside the library.
     private let quickLaunch = QuickLaunchStore()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -32,10 +33,12 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         host: SteamWebHost,
         supervisor: ClientSupervisor,
         notifications: SteamNotifications,
+        setup: SetupWindow,
     ) {
         self.host = host
         self.supervisor = supervisor
         self.notifications = notifications
+        self.setup = setup
         super.init()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggle)
@@ -169,7 +172,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         let content = NSHostingView(
             rootView: MenuBarView(
                 host: host, supervisor: supervisor, notifications: notifications,
-                quickLaunch: quickLaunch,
+                quickLaunch: quickLaunch, setup: setup,
             ),
         )
         background.contentView = content

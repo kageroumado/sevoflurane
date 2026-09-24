@@ -2,7 +2,14 @@ import Foundation
 import Observation
 import WebKit
 
-/// Drives an in-app download of Apple's Game Porting Toolkit.
+/// Drives the download of Apple's D3DMetal, by one of two routes: Apple's page
+/// hosted here, or the user's own browser with ``GPTkFolderWatch`` waiting for
+/// the file. A file the user already has is installed directly.
+///
+/// D3DMetal lives in the "Evaluation environment for Windows games" disk image.
+/// The larger "Game Porting Toolkit" image carries that same image inside it,
+/// beside developer tools this app never uses; either installs, and one per
+/// version is enough.
 ///
 /// The toolkit is behind Apple's own sign-in — `download.developer.apple.com`
 /// refuses anyone without an authenticated developer session, and that
@@ -24,6 +31,11 @@ final class GPTkDownload: NSObject {
         var fraction: Double
         var phase: Phase
 
+        /// "D3DMetal 4.0 beta 2", or the filename when it names no version.
+        var title: String {
+            GPTkDownload.version(inFilename: filename).map { "D3DMetal \($0)" } ?? filename
+        }
+
         enum Phase: Equatable {
             case downloading
             case installing
@@ -42,6 +54,17 @@ final class GPTkDownload: NSObject {
         string: "https://developer.apple.com/download/all/?q=game%20porting%20toolkit",
     )!
 
+    /// Which route the panel shows.
+    enum Route: Hashable {
+        /// Apple's page, signed in inside this app.
+        case here
+        /// The user's own browser, with the download folders watched.
+        case browser
+    }
+
+    var route = Route.here
+    let folderWatch = GPTkFolderWatch()
+
     private(set) var items: [Item] = []
     /// Whether the web view has finished its first load, so the panel can show
     /// a spinner until Apple's page is up.
@@ -53,6 +76,31 @@ final class GPTkDownload: NSObject {
     var install: (@MainActor (URL) async -> String?)?
     /// Called with each version as it finishes installing.
     var onInstalled: (@MainActor (String) -> Void)?
+
+    override init() {
+        super.init()
+        folderWatch.onFound = { [weak self] url in self?.installLocal(url, found: true) }
+    }
+
+    /// Installs a disk image already on this Mac: one the user chose, or one
+    /// the folder watch saw arrive. The file is left where it is.
+    ///
+    /// A version already installed, or already on its way, is passed over, so
+    /// both of Apple's images for one version install once. A file the user
+    /// chose installs whatever is there: choosing it is asking.
+    func installLocal(_ url: URL, found: Bool = false) {
+        let filename = url.lastPathComponent
+        if found, let version = Self.version(inFilename: filename) {
+            let installed = D3DMetalInstaller.installed(inEngine: D3DMetalInstaller.store).map(\.version)
+            let pending = items.filter { !$0.phase.isFailure }
+                .compactMap { Self.version(inFilename: $0.filename) }
+            guard !installed.contains(version), !pending.contains(version) else { return }
+        }
+        nextID += 1
+        let id = nextID
+        items.append(Item(id: id, filename: filename, fraction: 1, phase: .installing))
+        Task { await finishInstall(id: id, from: url) }
+    }
 
     var isBusy: Bool {
         items.contains { $0.phase == .downloading || $0.phase == .installing }
@@ -128,6 +176,11 @@ final class GPTkDownload: NSObject {
           beta: m[2] ? Number(m[2]) : null,
         };
       };
+      const evaluation = (c) =>
+        (decodeURIComponent(c.href).split("/").pop() || "").toLowerCase().startsWith("evaluation");
+      // Of two images for one version, the evaluation environment: it is the
+      // one D3DMetal is in, a quarter the size of the toolkit that wraps it.
+      const prefer = (a, b) => a.key === b.key && evaluation(a) && !evaluation(b);
       const newer = (a, b) => {
         const len = Math.max(a.version.length, b.version.length);
         for (let i = 0; i < len; i += 1) {
@@ -152,8 +205,8 @@ final class GPTkDownload: NSObject {
         let beta = null;
         for (const c of found) {
           if (c.beta === null) {
-            if (!release || newer(c, release)) { release = c; }
-          } else if (!beta || newer(c, beta)) {
+            if (!release || newer(c, release) || prefer(c, release)) { release = c; }
+          } else if (!beta || newer(c, beta) || prefer(c, beta)) {
             beta = c;
           }
         }
@@ -215,7 +268,7 @@ final class GPTkDownload: NSObject {
 
     /// Whether a downloaded file looks like a toolkit DMG rather than some
     /// other file the user might grab from the developer site.
-    private static func isToolkitDMG(_ filename: String) -> Bool {
+    nonisolated static func isToolkitDMG(_ filename: String) -> Bool {
         let lower = filename.lowercased()
         guard lower.hasSuffix(".dmg") else { return false }
         // Apple serves the same product under both names — several rows'
@@ -340,16 +393,20 @@ extension GPTkDownload: WKDownloadDelegate {
         guard let id = itemIDs[key], let source = destinations[key] else { return }
         updatePhase(id: id, .installing)
         Task {
-            let failure = await install?(source)
+            await finishInstall(id: id, from: source)
             try? FileManager.default.removeItem(at: source.deletingLastPathComponent())
-            if let failure {
-                updatePhase(id: id, .failed(failure))
-            } else if let version = Self.version(inFilename: source.lastPathComponent) {
-                updatePhase(id: id, .installed(version: version))
-                onInstalled?(version)
-            } else {
-                updatePhase(id: id, .installed(version: source.lastPathComponent))
-            }
+        }
+    }
+
+    private func finishInstall(id: Int, from source: URL) async {
+        let failure = await install?(source)
+        if let failure {
+            updatePhase(id: id, .failed(failure))
+        } else if let version = Self.version(inFilename: source.lastPathComponent) {
+            updatePhase(id: id, .installed(version: version))
+            onInstalled?(version)
+        } else {
+            updatePhase(id: id, .installed(version: source.lastPathComponent))
         }
     }
 

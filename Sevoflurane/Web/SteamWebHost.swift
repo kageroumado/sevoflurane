@@ -47,6 +47,16 @@ final class SteamWebHost {
         popupRoles.contains(.login)
     }
 
+    /// ``isAwaitingSignIn``, observable: the popup table is not, and the setup
+    /// assistant's finish button waits on this to name the window it opens.
+    /// Refreshed wherever a popup is adopted or closes.
+    private(set) var hasLoginWindow = false
+
+    func refreshLoginWindowState() {
+        let awaiting = isAwaitingSignIn
+        if hasLoginWindow != awaiting { hasLoginWindow = awaiting }
+    }
+
     /// The login window itself, for the paths that must put it in front of
     /// the user rather than rebuild the page under it.
     var loginWindow: SteamWindow? {
@@ -57,6 +67,22 @@ final class SteamWebHost {
     /// screen — the onboarding wizard is still up, and the wizard's finish
     /// button is the moment the user asked for a window.
     private(set) var isHoldingWindows = false
+
+    /// Whether the user chose to use the app without signing in to Steam: its
+    /// own Windows programs run from Quick Launch, and Steam stays signed out
+    /// in the background. The login window Steam asks to show stays built and
+    /// off screen, as under the setup hold, until the user asks for Steam —
+    /// which is choosing to sign in after all, and clears this.
+    var signInIsSkipped = Preferences.app.bool(forKey: SteamWebHost.signInSkippedKey) {
+        didSet { Preferences.app.set(signInIsSkipped, forKey: Self.signInSkippedKey) }
+    }
+
+    private static let signInSkippedKey = "steamSignInSkipped"
+
+    /// Whether a login window Steam asks to show stays off screen.
+    var defersLoginWindow: Bool {
+        isHoldingWindows || signInIsSkipped
+    }
 
     /// Set while the supervisor brings the client down (a quit, a stop, a
     /// restart). The client asks for its windows again on the way out, and
@@ -579,6 +605,7 @@ final class SteamWebHost {
             EventLog.shared.log(
                 .window, "asked for Steam while signed out — bringing the login window forward",
             )
+            signInIsSkipped = false
             loginWindow?.show(activating: true)
             return
         }
@@ -861,6 +888,7 @@ final class SteamWebHost {
         // The name is what classifies a popup, so an unexpected window on
         // screen can be traced to the name Steam gave it.
         EventLog.shared.log(.window, "popup adopted: \(window.name) as \(window.role)")
+        refreshLoginWindowState()
         defer { logWindowInventory("adopting \(window.name)") }
         // A popup adopted while the overlay is up belongs to it (its Settings,
         // a dialog): track it so it is ordered in and out with the overlay and
@@ -926,6 +954,7 @@ final class SteamWebHost {
 
     func windowDidClose(_ window: SteamWindow, reason: SteamWindow.DetachReason) {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
+        refreshLoginWindowState()
         defer { logWindowInventory("closing \(window.name)") }
         // A window the overlay adopted is held until the overlay dismisses, so
         // that it rides in and out with it. Once it has closed there is

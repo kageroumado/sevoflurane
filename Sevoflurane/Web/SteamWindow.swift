@@ -460,9 +460,10 @@ final class SteamWindow: NSObject {
 
     // MARK: - Visibility
 
-    /// Whether a Steam-driven show arrived while the host was holding
-    /// windows (the onboarding wizard still up). The window is built and
-    /// ready; ``SteamWebHost/releaseWindowHold()`` replays the show.
+    /// Whether a Steam-driven show of the login window arrived while the host
+    /// was deferring it (the onboarding wizard still up, or sign-in skipped).
+    /// The window is built and ready; ``SteamWebHost/releaseWindowHold()``
+    /// replays the show.
     private(set) var showWasDeferredByHold = false
 
     /// A chat window Steam opened for an incoming message, kept built and off
@@ -489,7 +490,7 @@ final class SteamWindow: NSObject {
         // nothing downstream can tell it was never on screen.
         guard role.isShowable else { return }
         guard let window else { return }
-        if role == .login, host?.isHoldingWindows == true {
+        if role == .login, host?.defersLoginWindow == true {
             showWasDeferredByHold = true
             return
         }

@@ -59,9 +59,23 @@ struct NoticeCard<Actions: View>: View {
     var level: Double?
     let title: String
     let detail: String
+    /// Makes the whole card the button, marked by a trailing chevron — the
+    /// compact form for a card with one way forward.
+    var onTap: (() -> Void)?
     @ViewBuilder var actions: Actions
 
     var body: some View {
+        if let onTap {
+            Button(action: onTap) {
+                card.contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         HStack(alignment: .top, spacing: Theme.Space.md) {
             Image(systemName: symbol, variableValue: level)
                 .font(.system(size: NoticeCardMetrics.symbolSize))
@@ -90,6 +104,13 @@ struct NoticeCard<Actions: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if onTap != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxHeight: .infinity)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(Theme.Space.md)
         .glassCard()
@@ -100,6 +121,11 @@ extension NoticeCard where Actions == EmptyView {
     /// A card that says something and offers nothing to press.
     init(symbol: String, tint: Color? = nil, level: Double? = nil, title: String, detail: String) {
         self.init(symbol: symbol, tint: tint, level: level, title: title, detail: detail) { EmptyView() }
+    }
+
+    /// A card that is itself the press, for the one thing it leads to.
+    init(symbol: String, tint: Color? = nil, title: String, detail: String, onTap: @escaping () -> Void) {
+        self.init(symbol: symbol, tint: tint, title: title, detail: detail, onTap: onTap) { EmptyView() }
     }
 }
 

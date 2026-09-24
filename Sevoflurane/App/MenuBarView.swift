@@ -16,33 +16,56 @@ struct MenuBarView: View {
     let supervisor: ClientSupervisor
     let notifications: SteamNotifications
     let quickLaunch: QuickLaunchStore
+    /// The first-run assistant, while one is open or set aside. The gallery
+    /// draws the popover of a finished setup and passes none.
+    var setup: SetupWindow?
+    @State private var confirmingQuit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             PopoverHeader("Sevoflurane")
-            SteamWindowRow(host: host, supervisor: supervisor)
-            SupervisorNotice(supervisor: supervisor)
-            HostPressureNotice(pressure: supervisor.hostPressure)
-            BottleIncompleteChip()
-            RecentGames(host: host, supervisor: supervisor)
-            StagedRendererCaption(host: host, supervisor: supervisor)
-            QuickLaunchSection(quickLaunch: quickLaunch)
-            FriendsRow(host: host)
-            NotificationPermissionCard(notifications: notifications)
-            OpenSteamButton(host: host, supervisor: supervisor)
-            FooterBar(host: host, supervisor: supervisor)
+            if supervisor.isQuitting {
+                QuittingNotice()
+            } else if let setup, setup.isUnfinished {
+                SetupUnfinishedNotice(setup: setup)
+                FooterBar(host: host, supervisor: supervisor, isSettingUp: true) { confirmingQuit = true }
+            } else {
+                SteamWindowRow(host: host, supervisor: supervisor)
+                SupervisorNotice(host: host, supervisor: supervisor)
+                HostPressureNotice(pressure: supervisor.hostPressure)
+                BottleIncompleteChip()
+                RecentGames(host: host, supervisor: supervisor)
+                StagedRendererCaption(host: host, supervisor: supervisor)
+                QuickLaunchSection(quickLaunch: quickLaunch)
+                FriendsRow(host: host)
+                NotificationPermissionCard(notifications: notifications)
+                OpenSteamButton(host: host, supervisor: supervisor)
+                FooterBar(host: host, supervisor: supervisor) { confirmingQuit = true }
+            }
         }
         // Tighter than Propofol's outer `lg`: this popover's rows carry their
         // own inset, and at `lg` the two stack into a wide empty gutter.
         .padding(Theme.Space.md)
         .frame(width: Theme.popoverWidth)
         .fixedSize(horizontal: false, vertical: true)
+        // Grows out of the ✕ over the footer rather than replacing the popover, which would jump
+        // its size.
+        .overlay(alignment: .bottom) {
+            if confirmingQuit, !supervisor.isQuitting {
+                QuitConfirmation { confirmingQuit = false }
+                    .padding(Theme.Space.md)
+                    .transition(.scale(scale: 0.18, anchor: .bottomTrailing).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: confirmingQuit)
         .modifier(
             PopoverAnimations(
                 host: host, supervisor: supervisor, notifications: notifications,
                 quickLaunch: quickLaunch,
             ),
         )
+        // Reopening lands on the popover, never on a stale question.
+        .onDisappear { confirmingQuit = false }
         .onAppear {
             host.refreshRecentGames()
             quickLaunch.refresh()
@@ -121,7 +144,8 @@ private struct SteamWindowRow: View {
     let supervisor: ClientSupervisor
 
     var body: some View {
-        if supervisor.health.canOpenSteam, !host.isSteamOnScreen {
+        // Signed out, the health card below carries the way to the window.
+        if supervisor.health.canOpenSteam, supervisor.health != .waitingForSignIn, !host.isSteamOnScreen {
             HStack(spacing: Theme.Space.xs) {
                 Image(systemName: "macwindow")
                 Text("Steam window: hidden")
@@ -135,11 +159,54 @@ private struct SteamWindowRow: View {
     }
 }
 
+// MARK: - Quitting
+
+/// The whole popover while the app quits: the bottle takes several seconds to come down, and
+/// until it has, the daemon reports a client nobody wants — which reads as auto-restart being
+/// paused, not as a quit in progress.
+private struct QuittingNotice: View {
+    var body: some View {
+        HStack(spacing: Theme.Space.md) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Quitting")
+                    .font(.system(.body, design: .rounded).weight(.medium))
+                Text("Closing Steam and anything running in it. Sevoflurane quits when it is down.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Space.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
+    }
+}
+
+// MARK: - Unfinished setup
+
+/// Everything else the popover offers is Steam's, and Steam's windows are held
+/// behind the assistant until its finish button — so while setup is unfinished
+/// the way back into it is the whole popover.
+private struct SetupUnfinishedNotice: View {
+    let setup: SetupWindow
+
+    var body: some View {
+        NoticeCard(
+            symbol: "wand.and.stars", tint: .accentColor,
+            title: "Finish setting up",
+            detail: "The assistant is where you left it. Steam opens from its last step.",
+        ) { setup.show() }
+            .accessibilityLabel("Continue setup")
+    }
+}
+
 // MARK: - Health card
 
 /// The supervisor's card: what is wrong with the client and the way out of
 /// it, absent while the client is healthy.
 private struct SupervisorNotice: View {
+    let host: SteamWebHost
     let supervisor: ClientSupervisor
 
     var body: some View {
@@ -218,13 +285,21 @@ private struct SupervisorNotice: View {
                 tint: nil,
                 action: nil,
             )
+        case .waitingForSignIn where host.signInIsSkipped:
+            HealthCard(
+                symbol: "person.crop.circle",
+                title: "Steam is signed out",
+                detail: "Your Windows programs run from Quick Launch. Sign in for your Steam library.",
+                tint: nil,
+                action: ("Sign In to Steam", { host.showSteam() }),
+            )
         case .waitingForSignIn:
             HealthCard(
                 symbol: "person.crop.circle",
                 title: "Waiting for sign-in",
-                detail: "Sign in to the Steam login window to finish setup.",
+                detail: "Sign in to Steam to see your library.",
                 tint: nil,
-                action: nil,
+                action: ("Show Login Window", { host.showSteam() }),
             )
         case .degraded:
             HealthCard(
@@ -256,10 +331,10 @@ private struct SupervisorNotice: View {
         case .paused:
             HealthCard(
                 symbol: "moon.zzz",
-                title: "Auto-restart paused",
-                detail: "Restart Steam yourself while this is paused.",
+                title: "Auto-restart is off",
+                detail: "Steam starts and stops only when you ask.",
                 tint: nil,
-                action: ("Resume", { supervisor.togglePaused() }),
+                action: ("Turn On", { supervisor.setAutoRestart(true) }),
             )
         }
     }

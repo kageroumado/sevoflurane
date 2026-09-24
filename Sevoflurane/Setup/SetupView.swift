@@ -8,13 +8,19 @@ import SwiftUI
 struct SetupView: View {
     let provisioner: Provisioner
     let onFinished: () -> Void
-    /// Reports whether Steam is sitting at its sign-in window, so the final
-    /// button can say what clicking it will actually show.
-    var signInPending: () -> Bool = { false }
+    /// Which of Steam's windows the finish button would show, and whether it
+    /// exists yet: the button waits for it, so pressing it swaps the assistant
+    /// for that window at once. A simulated run has no Steam and says library.
+    var steamWindow: () -> SetupSteamWindow = { .library }
+    /// Rebuilds the background helper when it will not start.
+    var onRepairHelper: (() -> Void)?
     /// Fired once when provisioning completes, so the app can start the
     /// client behind the wizard — by the last page the window is already
     /// loaded and the finish button shows it instantly.
     var onProvisioned: () -> Void = {}
+    /// The finish that leaves Steam signed out: the app then runs Windows
+    /// programs from Quick Launch, and Steam's sign-in waits until asked for.
+    var onSkipSignIn: (() -> Void)?
     /// Where the graphics step's store comes from. A simulated run supplies
     /// one with no engine behind it, which is what lets that step be walked
     /// at all: without it a dry run has to skip past it.
@@ -62,14 +68,18 @@ struct SetupView: View {
     init(
         provisioner: Provisioner,
         startingAt step: Step = .welcome,
-        signInPending: @escaping () -> Bool = { false },
+        steamWindow: @escaping () -> SetupSteamWindow = { .library },
+        onRepairHelper: (() -> Void)? = nil,
         onProvisioned: @escaping () -> Void = {},
+        onSkipSignIn: (() -> Void)? = nil,
         makeGraphics: (() -> GraphicsStore)? = nil,
         onFinished: @escaping () -> Void,
     ) {
         self.provisioner = provisioner
-        self.signInPending = signInPending
+        self.steamWindow = steamWindow
+        self.onRepairHelper = onRepairHelper
         self.onProvisioned = onProvisioned
+        self.onSkipSignIn = onSkipSignIn
         self.makeGraphics = makeGraphics
         self.onFinished = onFinished
         _step = State(initialValue: step)
@@ -84,6 +94,11 @@ struct SetupView: View {
             footer
         }
         .frame(width: SetupMetrics.windowSize.width, height: SetupMetrics.windowSize.height)
+        // The page is the whole window, titlebar included: its own top inset
+        // clears the traffic lights. Inside the titlebar's safe area the fixed
+        // frame is pushed down by the titlebar's height and the footer is cut
+        // off at the bottom.
+        .ignoresSafeArea()
         .task {
             if !provisioner.isDryRun {
                 bundledEngine = EngineInstaller.bundledTarball()
@@ -132,7 +147,7 @@ struct SetupView: View {
         case .options:
             SetupOptionsStep(openAtLogin: $openAtLogin, installsCommand: $connectAgents)
         case .done:
-            SetupDoneStep(signInPending: signInPending())
+            SetupDoneStep(window: steamWindow())
         }
     }
 
@@ -167,6 +182,15 @@ struct SetupView: View {
             Button("Try Again") {
                 Task { await provisioner.retry() }
             }
+        case .done where steamWindow().isHelperDown:
+            if let onRepairHelper {
+                Button("Repair Background Helper", action: onRepairHelper)
+            }
+        case .done where steamWindow() == .signIn:
+            if let onSkipSignIn {
+                Button("Skip Sign-In", action: onSkipSignIn)
+                    .help("Run your own Windows programs from Quick Launch now, and sign in to Steam later from the menu bar")
+            }
         default:
             EmptyView()
         }
@@ -193,7 +217,15 @@ struct SetupView: View {
         case .options:
             Button("Continue") { advanceFromOptions() }
         case .done:
-            Button(signInPending() ? "Log In to Steam" : "Open My Library") { onFinished() }
+            switch steamWindow() {
+            case .signIn:
+                Button("Log In to Steam") { onFinished() }
+            case .library:
+                Button("Open My Library") { onFinished() }
+            case .starting, .helperDown:
+                Button("Starting Steam…") {}
+                    .disabled(true)
+            }
         }
     }
 
@@ -314,5 +346,22 @@ struct SetupView: View {
             }
         }
         step = .done
+    }
+}
+
+/// What the assistant's finish button would put on screen.
+enum SetupSteamWindow: Equatable {
+    /// Steam is still coming up; neither of its windows exists yet.
+    case starting
+    /// The background helper that starts Steam will not run; the reason, as
+    /// the supervisor words it.
+    case helperDown(String)
+    /// Steam's login window exists.
+    case signIn
+    /// Steam's library window exists.
+    case library
+
+    var isHelperDown: Bool {
+        if case .helperDown = self { true } else { false }
     }
 }

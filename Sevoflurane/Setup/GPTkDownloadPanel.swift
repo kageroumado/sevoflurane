@@ -1,13 +1,15 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
-/// Hosts Apple's Game Porting Toolkit download page and installs what the user
-/// downloads, without leaving the app. Used by the onboarding graphics step
-/// and by Settings › Graphics.
+/// Gets D3DMetal onto this Mac by the user's choice of route — Apple's page
+/// signed in here, their own browser with the download folders watched, or a
+/// file they already have — and installs what arrives. Used by the onboarding
+/// graphics step and by Settings › Graphics.
 struct GPTkDownloadPanel: View {
     /// Owned by the caller, so a download survives view re-renders and the
     /// caller can see when one is in flight (`download.isBusy`).
-    let download: GPTkDownload
+    @Bindable var download: GPTkDownload
     /// Installs a DMG and answers a failure string; wired to `GraphicsStore`.
     let install: @MainActor (URL) async -> String?
     /// Called with each version as it lands, so the caller can refresh.
@@ -18,20 +20,65 @@ struct GPTkDownloadPanel: View {
     var isSimulated = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            if isSimulated {
-                simulatedStandIn
-            } else {
-                instructions
-                webView
-                if !download.items.isEmpty { itemList }
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Download", selection: $download.route) {
+                Text("Sign In Here").tag(GPTkDownload.Route.here)
+                Text("Use My Browser").tag(GPTkDownload.Route.browser)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            switch download.route {
+            case .here:
+                if isSimulated {
+                    simulatedStandIn
+                } else {
+                    instructions
+                    webView
+                }
+            case .browser:
+                GPTkBrowserRoute(watch: download.folderWatch)
+            }
+            if !download.items.isEmpty { itemList }
+            chooseFileRow
         }
         .onAppear {
             guard !isSimulated else { return }
             download.install = install
             download.onInstalled = onInstalled
+            watch(download.route)
         }
+        .onChange(of: download.route) { _, route in watch(route) }
+        .onDisappear { download.folderWatch.stop() }
+    }
+
+    /// The folders are watched only while their route is on screen. A
+    /// simulated run watches nothing: it has no engine to install into.
+    private func watch(_ route: GPTkDownload.Route) {
+        if route == .browser, !isSimulated {
+            download.folderWatch.start()
+        } else {
+            download.folderWatch.stop()
+        }
+    }
+
+    private var chooseFileRow: some View {
+        HStack(spacing: 8) {
+            Text("Already have the disk image?")
+                .foregroundStyle(.secondary)
+            Button("Choose the File…", action: chooseFile)
+                .disabled(isSimulated)
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+    }
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose “Evaluation environment for Windows games” or the Game Porting Toolkit."
+        panel.allowedContentTypes = [.diskImage]
+        panel.directoryURL = GPTkFolderWatch.downloads
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        download.installLocal(url)
     }
 
     /// What sits where Apple's page would be, so the step still reads as
@@ -66,8 +113,8 @@ struct GPTkDownloadPanel: View {
             Text(download.autoPhase == .manual
                 ? "Click Download on the release and the beta you want. "
                 + "Each installs here when its download ends."
-                : "Sign in with your Apple Account. The newest release and beta "
-                + "toolkits then download and install here automatically.")
+                : "Sign in with your Apple Account. The first time, Apple asks you to accept its "
+                + "free developer agreement. The newest release and beta then download and install here.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -111,7 +158,7 @@ struct GPTkDownloadPanel: View {
                     icon(for: item.phase)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(item.filename).font(.callout).lineLimit(1).truncationMode(.middle)
+                        Text(item.title).font(.callout).lineLimit(1).truncationMode(.middle)
                         caption(for: item)
                     }
                     Spacer()
@@ -148,7 +195,8 @@ struct GPTkDownloadPanel: View {
         case .installing:
             Text("Installing…").font(.caption).foregroundStyle(.secondary)
         case let .installed(version):
-            Text("Installed as D3DMetal \(version)").font(.caption).foregroundStyle(.secondary)
+            Text(version.contains("beta") ? "Installed · beta" : "Installed")
+                .font(.caption).foregroundStyle(.secondary)
         case let .failed(reason):
             Text(reason).font(.caption).foregroundStyle(.orange).lineLimit(2)
         }
@@ -166,4 +214,71 @@ private struct GPTkWebViewRepresentable: NSViewRepresentable {
 
     func makeNSView(context _: Context) -> WKWebView { webView }
     func updateNSView(_: WKWebView, context _: Context) {}
+}
+
+/// The route through the user's own browser: the page opens there, and the
+/// folders it saves into are watched, visibly, until the image lands.
+private struct GPTkBrowserRoute: View {
+    let watch: GPTkFolderWatch
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Text("Sign in on Apple\u{2019}s page and download \u{201C}Evaluation environment for Windows "
+                    + "games\u{201D}, the small file with D3DMetal in it. The Game Porting Toolkit works too. "
+                    + "Sevoflurane installs it the moment it lands.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Open Apple\u{2019}s Download Page") {
+                NSWorkspace.shared.open(GPTkDownload.pageURL)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    if watch.isWatching { ProgressView().controlSize(.small) }
+                    Text(watch.isWatching ? "Watching for the download in" : "Watching is paused")
+                        .font(.callout.weight(.medium))
+                }
+                ForEach(watch.folders, id: \.self) { folder in
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder").foregroundStyle(.secondary)
+                        Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                            .font(.callout)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 0)
+                        if watch.isRemovable(folder) {
+                            Button {
+                                watch.remove(folder)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Stop watching this folder")
+                        }
+                    }
+                }
+                Button("Add a Folder\u{2026}", action: addFolder)
+                    .font(.callout)
+                    .help("For a browser that saves somewhere other than Downloads")
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.quaternary.opacity(0.4)),
+            )
+        }
+    }
+
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose the folder your browser saves downloads into."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        watch.add(url)
+    }
 }

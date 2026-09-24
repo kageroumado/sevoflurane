@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?
-    private var setupWindow: NSWindow?
+    private let setupWindow = SetupWindow()
     private lazy var aboutWindows = AboutWindows()
     private lazy var reportWindows = ReportWindows()
     private lazy var processMonitorWindows = ProcessMonitorWindows(watch: stallWatch)
@@ -196,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications.start()
         menuBarPopover = MenuBarPopover(
             host: host, supervisor: supervisor, notifications: notifications,
+            setup: setupWindow,
         )
     }
 
@@ -254,8 +255,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Engine.active = Engine.resolve(from: detection)
             }
             if provisioner.needsSetup {
-                showSetupWizard(provisioner: provisioner) { [weak self] in
-                    self?.closeSetupWindow()
+                showSetupWizard(
+                    provisioner: provisioner,
+                    onSkipSignIn: { [weak self] in
+                        guard let self else { return }
+                        EventLog.shared.log(.setup, "finished without signing in to Steam")
+                        host.signInIsSkipped = true
+                        setupWindow.finish()
+                        finishOnboarding()
+                        // No window follows this finish: the app is a
+                        // menu-bar app from here.
+                        ActivationPolicy.recedeIfLastWindow(closing: nil)
+                    },
+                ) { [weak self] in
+                    self?.setupWindow.finish()
                     self?.finishOnboarding()
                 }
             } else {
@@ -577,42 +590,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// The window the assistant's finish button would bring up. Steam's own
+    /// windows, read directly: the supervisor's health reaches the app a probe
+    /// cycle later.
+    private var setupSteamWindow: SetupSteamWindow {
+        if supervisor.daemonIsUnreachable { return .helperDown(supervisor.statusText.sentenceCased) }
+        if host.hasLoginWindow { return .signIn }
+        if host.desktop != nil { return .library }
+        return .starting
+    }
+
     private func showSetupWizard(
         provisioner: Provisioner,
         graphics: (() -> GraphicsStore)? = nil,
+        onSkipSignIn: (() -> Void)? = nil,
         onFinished: @escaping () -> Void,
     ) {
         let view = SetupView(
             provisioner: provisioner,
-            signInPending: { [weak self] in self?.supervisor.health == .waitingForSignIn },
+            // A simulated run starts no Steam; its finish opens straight away.
+            steamWindow: { [weak self] in
+                provisioner.isDryRun ? .library : self?.setupSteamWindow ?? .starting
+            },
+            onRepairHelper: { [weak self] in
+                Task(name: "Repair the background helper from setup") {
+                    let result = await DaemonService.repair()
+                    EventLog.shared.log(.setup, "background helper repair from setup: \(result)")
+                    await self?.supervisor.attach()
+                }
+            },
             onProvisioned: { [weak self] in
                 // A dry-run wizard "provisions" fixtures; nothing real may start.
                 guard !provisioner.isDryRun else { return }
                 self?.startRunning(holdingWindows: true)
             },
+            onSkipSignIn: onSkipSignIn,
             makeGraphics: graphics,
             onFinished: onFinished,
         )
-        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-        window.title = "Welcome to Sevoflurane"
-        window.styleMask = [.titled, .closable, .fullSizeContentView]
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
-        window.center()
-        window.isReleasedWhenClosed = false
-        setupWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        // Again, once SwiftUI has sized the content: the first center ran
-        // against the hosting controller's placeholder frame, and the window
-        // then grew from a corner.
-        DispatchQueue.main.async { window.center() }
-    }
-
-    private func closeSetupWindow() {
-        setupWindow?.close()
-        setupWindow = nil
+        setupWindow.present(view)
     }
 
     #if DEBUG
@@ -678,7 +694,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 compatibility: { compatibility },
             )
             showSetupWizard(provisioner: provisioner, graphics: { graphics }) { [weak self] in
-                self?.closeSetupWindow()
+                self?.setupWindow.finish()
                 self?.demoSettingsWindow?.show()
             }
         }
@@ -693,7 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         private func presentDryRunWizard(_ scenario: SetupScenario) {
-            closeSetupWindow()
+            setupWindow.finish()
             let provisioner = Provisioner(
                 environment: DryRunSetupEnvironment(scenario: scenario),
             )
@@ -704,7 +720,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "dry-run: wizard finished — a real run would start the bridge, "
                         + "page, and supervisor now",
                 )
-                self?.closeSetupWindow()
+                self?.setupWindow.finish()
                 self?.dryRunProvisioner = nil
             }
         }
@@ -746,6 +762,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runMeter?.cancel()
         stallWatch.stop()
         runRecorder.closeAll()
+        supervisor.beginQuit()
         quitTask = Task(name: "Quit teardown") {
             GameDisplayHold.gameDidExit()
             await provisioner.endForQuit()
@@ -765,7 +782,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_: NSApplication, open urls: [URL]) {
         let programs = urls.filter(\.isFileURL)
         let links = urls.filter { $0.scheme?.lowercased() == "steam" }
-        if !links.isEmpty {
+        // Steam is held behind an unfinished setup; the link has nowhere to
+        // land yet, and the assistant is what gets it somewhere.
+        if !links.isEmpty, setupWindow.show() {
+            EventLog.shared.log(.window, "steam:// link while setup is unfinished — showing setup")
+        } else if !links.isEmpty {
             host.showSteam()
             for url in links {
                 host.executeSteamURL(url)
@@ -784,7 +805,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows the adoption panel, or holds the program until the app is past
     /// setup and has a bottle to offer it.
     private func openWindowsProgram(_ url: URL) {
-        guard isRuntimeStarted, setupWindow == nil else {
+        guard isRuntimeStarted, !setupWindow.isUnfinished else {
             pendingPrograms.append(url)
             return
         }
@@ -807,6 +828,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _: NSApplication,
         hasVisibleWindows _: Bool,
     ) -> Bool {
+        // Steam's windows are held behind an unfinished setup, so the window
+        // a reopen can actually bring up is the assistant's.
+        if setupWindow.show() {
+            EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — setup is unfinished; showing it")
+            return true
+        }
         EventLog.shared.log(
             .window,
             "reopen request (Dock icon or Finder) — Steam's window is "
@@ -825,6 +852,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Steam's settings are its own, and keep ⌘, in the mirrored Steam menu.
     @objc
     func showSettings(_: Any?) {
+        // Settings edits a bottle and an engine the assistant is still
+        // choosing; it opens once setup is finished.
+        if setupWindow.show() { return }
         settingsWindow.show()
     }
 

@@ -11,6 +11,13 @@ import SwiftUI
 struct FooterBar: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
+    /// While the first-run assistant is unfinished there is no client to
+    /// report on or restart, and nothing configured for Settings to change:
+    /// the bar keeps the version and Quit.
+    var isSettingUp = false
+    /// The ✕: asks before quitting (``QuitConfirmation``), because quitting
+    /// takes Steam and a running game down with it.
+    var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
 
     var body: some View {
         // One `GlassEffectContainer` over the whole bar: glass sampled per control picks up
@@ -18,12 +25,14 @@ struct FooterBar: View {
         // like different materials. Zero blend distance, because the controls sit closer together
         // than any nonzero spacing allows before their glass pools into one shape.
         // Tight spacing, because the width is the binding constraint: five controls share a
-        // 320-point popover and two of them grow on hover into a switch and its name. Loosening
-        // it costs a label its last characters.
+        // 320-point popover and the version chip grows on hover into a switch and its name.
+        // Loosening it costs a label its last characters.
         GlassEffectContainer(spacing: 0) {
             HStack(spacing: Theme.Space.xs) {
-                StatusChip(host: host, supervisor: supervisor)
-                if hasGivenUp {
+                if !isSettingUp {
+                    StatusChip(host: host, supervisor: supervisor)
+                }
+                if hasGivenUp, !isSettingUp {
                     Button("Recovery…") {
                         NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
                     }
@@ -35,9 +44,11 @@ struct FooterBar: View {
                 // and while the client is down the way back up is the one that matters.
                 UpdateChip(showsRestingVersion: !hasGivenUp)
                 Spacer(minLength: 0)
-                actionsMenu
-                settingsButton
-                FooterIconButton("Quit", systemImage: "xmark") { NSApplication.shared.terminate(nil) }
+                if !isSettingUp {
+                    actionsMenu
+                    settingsButton
+                }
+                FooterIconButton("Quit", systemImage: "xmark", action: onQuit)
                     .keyboardShortcut("q")
                     .help("Quit Sevoflurane and close Steam")
             }
@@ -145,12 +156,12 @@ struct FooterBar: View {
 
 // MARK: - Status chip
 
-/// The footer's status atom: a health dot and the state of the Steam client at rest; on hover it
-/// flips into the auto-restart switch, so the setting costs no space.
+/// The footer's status atom: a health dot and the state of the Steam client. Never give it a
+/// control: a status light that also toggles gets pressed as a light — the playtest's two
+/// unexplained pauses were exactly that. The auto-restart switch is in Settings › General.
 private struct StatusChip: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
-    @State private var isHovered = false
 
     /// Every label that reports the client's run state names Steam, because the dot alone says
     /// only "good" and nothing in the footer says what it is good about. The three that skip the
@@ -165,7 +176,7 @@ private struct StatusChip: View {
         case .restarting: ("Restarting", .accentColor)
         case .launching: ("Steam starting", .accentColor)
         case .gaveUp: ("Steam stopped", .red)
-        case .paused: ("Paused", .gray)
+        case .paused: ("Auto-restart off", .gray)
         }
     }
 
@@ -175,35 +186,17 @@ private struct StatusChip: View {
             let time = event.date.formatted(date: .omitted, time: .shortened)
             lines.append("last event \(time) · \(event.message)")
         }
-        lines.append("Hover for the auto-restart switch.")
         return lines.joined(separator: "\n")
     }
 
     var body: some View {
         HStack(spacing: Theme.Space.xs) {
-            if isHovered {
-                // Only the switch takes the press. A readout that reads as a status light and
-                // acts as a toggle is a trap: the playtest's two unexplained pauses were both
-                // clicks on what looked like the light.
-                Button { supervisor.togglePaused() } label: {
-                    SwitchPip(isOn: supervisor.health != .paused)
-                }
-                .buttonStyle(.plain)
-                .help("Turn auto-restart on or off")
-                Text("Auto-restart")
-            } else {
-                StatusDot(color: status.color, diameter: 7)
-                Text(status.word)
-            }
+            StatusDot(color: status.color, diameter: 7)
+            Text(status.word)
         }
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
-        // A truncated switch label is unreadable — "Auto-…" names nothing — so the chip takes
-        // the width its label asks for and the bar is sized to afford it.
         .fixedSize()
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-        }
         .help(tooltip)
     }
 }
@@ -324,5 +317,52 @@ struct SwitchPip: View {
                     .padding(2)
             }
             .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isOn)
+    }
+}
+
+// MARK: - Quit confirmation
+
+/// What the ✕ opens: a strip that grows out of it over the footer and says what quitting takes
+/// with it. The ✕ keeps its corner and turns red; Cancel takes the gear's place beside it. The
+/// shape is Adrafinil's, so every menu-bar app of ours quits the same way.
+struct QuitConfirmation: View {
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Quit Sevoflurane?")
+                    .font(.system(.body, design: .rounded).weight(.semibold))
+                Text("Steam closes with it, and so does any game it is running.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: Theme.Space.sm) {
+                Spacer(minLength: 0)
+                FooterIconButton("Cancel", systemImage: "arrow.uturn.backward", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                    .help("Cancel")
+                Button { NSApplication.shared.terminate(nil) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: Theme.footerControlHeight, height: Theme.footerControlHeight)
+                        .contentShape(Circle())
+                        .glassEffect(.regular.tint(.red).interactive(), in: Circle())
+                }
+                .buttonStyle(.plain)
+                // Return, not ⌘Q: the ✕ under this strip holds ⌘Q, and it is what opened it.
+                .keyboardShortcut(.defaultAction)
+                .accessibilityLabel("Quit Sevoflurane")
+                .help("Quit Sevoflurane and close Steam")
+            }
+        }
+        .padding(Theme.Space.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
+        // Takes the taps, so the footer under it cannot be reached.
+        .contentShape(.rect)
     }
 }

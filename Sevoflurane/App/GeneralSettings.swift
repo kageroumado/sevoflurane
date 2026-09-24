@@ -13,7 +13,9 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            GeneralStartupSection(provisioner: provisioner, steam: steam, highlighted: highlighted)
+            GeneralStartupSection(
+                provisioner: provisioner, steam: steam, supervisor: supervisor, highlighted: highlighted,
+            )
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             GeneralDiscordSection(highlighted: highlighted)
@@ -34,6 +36,7 @@ struct GeneralSettings: View {
 private struct GeneralStartupSection: View {
     let provisioner: Provisioner
     let steam: SteamActions?
+    let supervisor: ClientSupervisor?
     let highlighted: SettingsAnchor?
     @State private var openAtLogin = false
 
@@ -46,12 +49,37 @@ private struct GeneralStartupSection: View {
                 }
                 .highlightable(.generalOpenAtLogin, highlighted: highlighted)
                 .onAppear { openAtLogin = provisioner.openAtLogin }
+            if let supervisor {
+                AutoRestartRow(supervisor: supervisor)
+            }
             if let steam {
                 SteamSettingsRow(steam: steam)
                     .highlightable(.generalSteamSettings, highlighted: highlighted)
             }
             SteamLinksRow()
         }
+    }
+}
+
+/// Whether the supervisor keeps Steam running. It holds until Sevoflurane's
+/// background helper restarts, so it says what off costs rather than
+/// pretending to be a stored preference.
+private struct AutoRestartRow: View {
+    let supervisor: ClientSupervisor
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { supervisor.health != .paused },
+            set: { supervisor.setAutoRestart($0) },
+        )) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Auto-restart Steam")
+                Text("Restarts Steam when it crashes or hangs. Off, Steam starts and stops only when you ask.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .toggleStyle(.switch)
     }
 }
 

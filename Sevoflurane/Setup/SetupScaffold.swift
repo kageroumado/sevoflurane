@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The measurements every step of the first-run assistant shares.
 enum SetupMetrics {
-    static let windowSize = CGSize(width: 600, height: 660)
+    static let windowSize = CGSize(width: 600, height: 700)
     /// The column the glyph, the titles and the lists sit in.
     static let contentInset: CGFloat = 60
     static let topInset: CGFloat = 64
