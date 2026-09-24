@@ -31,9 +31,6 @@ nonisolated enum PEResources {
         var icons: [Icon] = []
         /// The `StringFileInfo` table of `VS_VERSIONINFO`, by key.
         var versionStrings: [String: String] = [:]
-        /// The manifest's `requestedExecutionLevel`, such as
-        /// `requireAdministrator`.
-        var requestedExecutionLevel: String?
 
         var productName: String? {
             versionStrings["ProductName"]
@@ -77,11 +74,6 @@ nonisolated enum PEResources {
             ofType: Kind.version, in: data, root: root, sections: sections,
         ) {
             info.versionStrings = versionStrings(in: block)
-        }
-        if let manifest = firstResource(
-            ofType: Kind.manifest, in: data, root: root, sections: sections,
-        ) {
-            info.requestedExecutionLevel = executionLevel(in: manifest)
         }
         return info
     }
@@ -150,7 +142,6 @@ nonisolated enum PEResources {
         static let icon = 3
         static let groupIcon = 14
         static let version = 16
-        static let manifest = 24
     }
 
     /// One section of the image, which is what turns a relative virtual
@@ -505,21 +496,6 @@ nonisolated enum PEResources {
 
     private static func aligned(_ offset: Int) -> Int {
         (offset + 3) & ~3
-    }
-
-    // MARK: - Manifest
-
-    /// The level the manifest asks Windows for, which is what marks a program
-    /// that expects to be elevated.
-    private static func executionLevel(in manifest: Data) -> String? {
-        let text = String(decoding: manifest, as: UTF8.self)
-        guard let key = text.range(of: "requestedExecutionLevel") else { return nil }
-        let rest = text[key.upperBound...]
-        guard let attribute = rest.range(of: "level=") else { return nil }
-        let value = rest[attribute.upperBound...]
-            .drop { $0 == "\"" || $0 == "'" || $0 == " " }
-            .prefix { $0 != "\"" && $0 != "'" }
-        return value.isEmpty ? nil : String(value)
     }
 
     // MARK: - Little-endian reads

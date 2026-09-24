@@ -70,8 +70,13 @@ final class AdoptionModel {
 
     let url: URL
     let info: PEResources.Info?
-    let verdict: ProgramDetection.Verdict
+    private(set) var verdict: ProgramDetection.Verdict
     private(set) var stage = Stage.choosing
+    /// Whether the user overruled an installer verdict for this file.
+    private(set) var isOverruled = false
+    /// Whether an overruled verdict is remembered for the next time this file
+    /// is opened.
+    var remembersOverrule = true
     /// The name the record will carry, which the user may correct.
     var name: String
     /// Executables from an install the user has chosen to keep.
@@ -118,8 +123,24 @@ final class AdoptionModel {
 
     // MARK: - What the panel does
 
+    /// The user's word that this file is a program: its launcher, or the game
+    /// itself. The verdict is read again without the installer signals, so a
+    /// game's own signals still name it a game.
+    func overruleInstaller() {
+        isOverruled = true
+        verdict = ProgramDetection.classify(url, notInstallers: [url.standardizedFileURL.path])
+        EventLog.shared.log(.setup, "\(url.lastPathComponent): the user says it is not an installer")
+    }
+
+    /// Stores the overrule once the user acts on it, as they asked.
+    private func rememberOverrule() {
+        guard isOverruled, remembersOverrule else { return }
+        ProgramDetection.markNotInstaller(url)
+    }
+
     /// Records the program, and starts it when asked.
     func adopt(andPlay play: Bool) {
+        rememberOverrule()
         let id = AdoptedPrograms.adopt(
             exe: url, name: trimmedName, kind: verdict.kind, bottle: SteamBottle.name,
         )
@@ -130,6 +151,7 @@ final class AdoptionModel {
 
     /// Starts the program once, keeping no record of it.
     func playOnce() {
+        rememberOverrule()
         Task(name: "Run \(url.lastPathComponent) once") {
             await Self.runOnce(url, wait: false)
         }
@@ -242,6 +264,11 @@ private struct AdoptionView: View {
                 Text(model.destination)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                if model.isOverruled {
+                    Toggle("Remember for this file", isOn: $model.remembersOverrule)
+                        .toggleStyle(.checkbox)
+                        .font(.system(size: 11))
+                }
                 choices
             case .installing:
                 progress
@@ -304,6 +331,8 @@ private struct AdoptionView: View {
                 .keyboardShortcut(.cancelAction)
             Spacer()
             if model.isInstaller {
+                Button("Not an Installer") { model.overruleInstaller() }
+                    .help("Offer to play it or add it to Quick Launch instead")
                 Button("Run Once") { model.playOnce() }
                 Button("Install into Bottle") { model.install() }
                     .keyboardShortcut(.defaultAction)

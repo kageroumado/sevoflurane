@@ -66,12 +66,6 @@ struct PEResourcesTests {
     }
 
     @Test
-    func `the manifest's requested execution level is read`() throws {
-        let info = try #require(Self.info)
-        #expect(info.requestedExecutionLevel == "asInvoker")
-    }
-
-    @Test
     func `every icon in the group is found, at its own size`() throws {
         let info = try #require(Self.info)
         #expect(info.icons.map(\.pixels).sorted() == [16, 24, 32, 48, 256])

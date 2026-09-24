@@ -139,14 +139,24 @@ struct ProgramDetectionTests {
     }
 
     @Test
-    func `asking for administrator backs up another installer signal`() throws {
+    func `asking for administrator adds nothing to an installer's reasons`() throws {
         let tree = try Tree()
         try tree.file("payload.msi")
         let exe = tree.root.appending(path: "start.exe")
         try FileManager.default.copyItem(at: adminFixture, to: exe)
         let verdict = ProgramDetection.classify(exe)
         #expect(verdict.kind == ProgramKind.installer)
-        #expect(verdict.reasons == ["an .msi beside it", "it asks for administrator"])
+        #expect(verdict.reasons == ["an .msi beside it"])
+    }
+
+    @Test
+    func `a file the user said is not an installer is classified without the installer signals`() throws {
+        let tree = try Tree()
+        try tree.file("UnityPlayer.dll")
+        let exe = try tree.file("launcher_update.exe")
+        #expect(ProgramDetection.classify(exe, notInstallers: []).kind == ProgramKind.installer)
+        let verdict = ProgramDetection.classify(exe, notInstallers: [exe.standardizedFileURL.path])
+        #expect(verdict.kind == ProgramKind.game)
     }
 
     @Test

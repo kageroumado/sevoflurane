@@ -7,8 +7,11 @@ import Foundation
 /// asking the user to classify their own download is asking them to know how
 /// this app works. The file says enough by itself: its name, the strings in
 /// its version resource, the installer toolkits' own markers, and what lies
-/// beside it in its folder; the privilege its manifest asks for only backs
-/// those up.
+/// beside it in its folder. The privilege a manifest asks for is no signal:
+/// games and their launchers ask for administrator as often as installers do.
+///
+/// The verdict can still be wrong, so the user can overrule it for one file,
+/// and that answer is remembered (``markNotInstaller(_:)``).
 nonisolated enum ProgramDetection {
     /// A kind and the signals that chose it, so the panel can show its work.
     struct Verdict: Sendable, Equatable {
@@ -31,9 +34,11 @@ nonisolated enum ProgramDetection {
     /// Classifies one executable. An installer's signals win: running a game
     /// once costs a launch, while adopting an installer leaves a Quick Launch
     /// entry that reinstalls something every time it is clicked.
-    static func classify(_ url: URL) -> Verdict {
-        let info = PEResources.read(url)
-        let installer = installerSignals(url, info: info)
+    ///
+    /// A file the user said is not an installer skips the installer signals.
+    static func classify(_ url: URL, notInstallers: Set<String> = rememberedNotInstallers()) -> Verdict {
+        let isOverruled = notInstallers.contains(url.standardizedFileURL.path)
+        let installer = isOverruled ? [] : installerSignals(url, info: PEResources.read(url))
         if !installer.isEmpty {
             return Verdict(kind: ProgramKind.installer, reasons: installer)
         }
@@ -74,13 +79,24 @@ nonisolated enum ProgramDetection {
         if let sibling = installerSibling(url) {
             reasons.append("\(sibling) beside it")
         }
-        // Asking for administrator corroborates an installer; alone it names
-        // one only by coincidence. Games ask for it too: Genshin Impact's
-        // manifest says `requireAdministrator` for its anti-cheat driver.
-        if !reasons.isEmpty, info?.requestedExecutionLevel == "requireAdministrator" {
-            reasons.append("it asks for administrator")
-        }
         return reasons
+    }
+
+    // MARK: - The user's word
+
+    private static let notInstallersKey = "notInstallers"
+
+    /// The executables the user said are not installers, as standardized paths.
+    static func rememberedNotInstallers() -> Set<String> {
+        Set(Preferences.shared.stringArray(forKey: notInstallersKey) ?? [])
+    }
+
+    /// Remembers that this file is not an installer, so every later look at it
+    /// — the panel, `sevo program add` — offers it as a program.
+    static func markNotInstaller(_ url: URL) {
+        var paths = rememberedNotInstallers()
+        paths.insert(url.standardizedFileURL.path)
+        Preferences.shared.set(paths.sorted(), forKey: notInstallersKey)
     }
 
     /// The word in the version resource that names an installer, if one is
