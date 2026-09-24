@@ -28,7 +28,7 @@ nonisolated enum SteamBottle {
     private static let nameKey = "bottleName"
 
     /// CrossOver's bottles directory, holding every bottle by name.
-    static let bottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let bottlesRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/CrossOver/Bottles")
 
     /// The Steam bottle itself, wherever the active engine keeps bottles.

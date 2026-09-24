@@ -228,7 +228,7 @@ enum AgentIntegration {
     // MARK: - Claude Code
 
     private static var claudeBinary: String? {
-        let home = NSHomeDirectory()
+        let home = UserHome.path
         return [
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude",
@@ -240,7 +240,7 @@ enum AgentIntegration {
     /// User-scope servers live in `~/.claude.json` — read for state, but
     /// written only through the claude CLI, which owns that file.
     private nonisolated static var claudeCodeConfig: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        UserHome.url
             .appendingPathComponent(".claude.json")
     }
 
@@ -259,7 +259,7 @@ enum AgentIntegration {
     // MARK: - Claude Desktop
 
     private nonisolated static var claudeDesktopDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        UserHome.url
             .appendingPathComponent("Library/Application Support/Claude")
     }
 
@@ -318,7 +318,7 @@ enum AgentIntegration {
     /// and the app bundles the CLI — so registration goes through
     /// `codex mcp add`, which parses the TOML properly, whichever is present.
     private static var codexBinary: String? {
-        let home = NSHomeDirectory()
+        let home = UserHome.path
         return [
             "/opt/homebrew/bin/codex",
             "/usr/local/bin/codex",
@@ -328,7 +328,7 @@ enum AgentIntegration {
     }
 
     private nonisolated static var codexConfig: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        UserHome.url
             .appendingPathComponent(".codex/config.toml")
     }
 
@@ -360,7 +360,7 @@ enum AgentIntegration {
     /// and reformat the user's whole file). Removal is recognizer-based, so
     /// user content survives even a damaged marker block.
     private nonisolated static var hermesDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".hermes")
+        UserHome.url.appendingPathComponent(".hermes")
     }
 
     private nonisolated static var hermesConfig: URL {

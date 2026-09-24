@@ -17,7 +17,7 @@ actor GameCompatService {
     /// tables change a few times a month; ProtonDB's summaries drift slowly.
     static let maxAge: TimeInterval = 7 * 24 * 3600
 
-    static let cacheRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let cacheRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Compat")
 
     private let session: URLSession

@@ -10,21 +10,37 @@ import Foundation
 nonisolated enum Preferences {
     /// `UserDefaults` is thread-safe by contract and predates `Sendable`; the
     /// suite is opened once and only ever read and written through it.
+    ///
+    /// A test run reads and writes a copy in its own home (``UserHome``).
     nonisolated(unsafe) static let shared: UserDefaults = {
-        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        let defaults = UserDefaults(suiteName: domain) ?? .standard
         adoptLegacyValues(into: defaults)
         return defaults
     }()
+
+    /// The app's own domain, for what only the app reads: `standard`, or a
+    /// copy in the test home for a test run, whose process runs under the
+    /// shipping bundle identifier and would otherwise read the installed
+    /// app's settings.
+    nonisolated(unsafe) static let app: UserDefaults =
+        UserHome.testDefaults(named: "glass.kagerou.sevoflurane") ?? .standard
 
     /// Deliberately not the bundle identifier: `UserDefaults(suiteName:)`
     /// answers nil for the caller's own domain.
     private static let suiteName = "glass.kagerou.sevoflurane.shared"
 
+    /// The suite's name, or its file in the test home for a test run.
+    private static var domain: String {
+        UserHome.isTestRun
+            ? UserHome.url.appendingPathComponent("Library/Preferences/\(suiteName)").path
+            : suiteName
+    }
+
     /// Forgets every choice this app stored — the settings half of an
     /// uninstall, so a reinstall starts as a first run rather than inheriting
     /// a renderer, a bottle name and a pinned toolkit that no longer exist.
     static func reset() {
-        shared.removePersistentDomain(forName: suiteName)
+        shared.removePersistentDomain(forName: domain)
         shared.synchronize()
     }
 
@@ -34,7 +50,7 @@ nonisolated enum Preferences {
     private static func adoptLegacyValues(into defaults: UserDefaults) {
         for key in ["managedRenderer", "managedMsync"]
             where defaults.object(forKey: key) == nil {
-            guard let legacy = UserDefaults.standard.object(forKey: key) else { continue }
+            guard let legacy = app.object(forKey: key) else { continue }
             defaults.set(legacy, forKey: key)
         }
     }

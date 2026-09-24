@@ -96,7 +96,7 @@ nonisolated enum StorageInventory {
 
     /// What Sevoflurane keeps for itself: engines, graphics layers, and logs.
     private static func supportEntries() -> [Entry] {
-        let support = URL(fileURLWithPath: NSHomeDirectory())
+        let support = UserHome.url
             .appendingPathComponent("Library/Application Support/Sevoflurane")
         return [
             Entry(
@@ -145,7 +145,7 @@ nonisolated enum StorageInventory {
                 detail: "The event log this app writes.",
                 // Named here rather than taken from `EventLog`, which lives in
                 // the app: `sevo` reports storage too, and shares this file.
-                url: FileManager.default.homeDirectoryForCurrentUser
+                url: UserHome.url
                     .appending(path: "Library/Logs/Sevoflurane.log"),
                 bytes: -1,
                 removal: .regenerated("A new one starts on the next launch."),
@@ -171,7 +171,7 @@ nonisolated enum StorageInventory {
         let manager = FileManager.default
         let root = manager.fileExists(atPath: SteamBottle.root.path)
             ? SteamBottle.root
-            : manager.homeDirectoryForCurrentUser
+            : UserHome.url
         guard let values = try? root.resourceValues(forKeys: [
             .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeNameKey,
         ]), let capacity = values.volumeTotalCapacity,

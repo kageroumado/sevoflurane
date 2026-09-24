@@ -13,7 +13,7 @@ import Foundation
 /// `sevo bottle config wine-debug +seh,+loaddll` sets the channels for the
 /// next client start; `sevo logs --wine` reads the trail.
 nonisolated enum WineLog {
-    static let fileURL = FileManager.default.homeDirectoryForCurrentUser
+    static let fileURL = UserHome.url
         .appending(path: "Library/Logs/Sevoflurane-wine.log")
 
     /// The `WINEDEBUG` a managed launch carries.

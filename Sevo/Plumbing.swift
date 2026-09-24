@@ -28,7 +28,7 @@ nonisolated enum Sevo {
     }()
 
     /// The app's event log — one trail whether the app or the CLI drove.
-    static let logFile = FileManager.default.homeDirectoryForCurrentUser
+    static let logFile = UserHome.url
         .appending(path: "Library/Logs/Sevoflurane.log")
 
     static func printError(_ message: String) {

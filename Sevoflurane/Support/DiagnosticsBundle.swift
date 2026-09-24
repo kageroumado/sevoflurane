@@ -65,7 +65,7 @@ nonisolated enum Diagnostics {
         let zip: URL = if let destination, destination.pathExtension == "zip" {
             destination
         } else {
-            (destination ?? manager.homeDirectoryForCurrentUser.appending(path: "Desktop"))
+            (destination ?? UserHome.url.appending(path: "Desktop"))
                 .appendingPathComponent("\(name).zip")
         }
         let staging = Staging(root: manager.temporaryDirectory.appendingPathComponent(name))
@@ -206,7 +206,7 @@ nonisolated enum Diagnostics {
     }
 
     private static var logs: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs")
+        UserHome.url.appending(path: "Library/Logs")
     }
 
     /// The files in a directory modified inside the crash report window.

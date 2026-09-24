@@ -167,7 +167,7 @@ final class CrashPromptModel {
 
     /// Where the prompt writes its zip. Out of the way, unlike the Desktop
     /// `sevo diag` writes to: a sent report leaves nothing behind.
-    static let reportsDirectory = URL(fileURLWithPath: NSHomeDirectory())
+    static let reportsDirectory = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Reports")
 
     static let offer = "Send the report to the Sevoflurane developers? It contains: the run summary, "

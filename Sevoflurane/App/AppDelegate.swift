@@ -573,7 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (runRecorder.isRecording, host.activeLaunch != nil)
         }
         SilentUpdates.shared.start(
-            autoInstall: UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true,
+            autoInstall: Preferences.app.object(forKey: "autoUpdate") as? Bool ?? true,
         )
     }
 

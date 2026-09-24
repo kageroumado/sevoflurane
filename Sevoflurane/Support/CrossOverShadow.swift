@@ -19,7 +19,7 @@ import Foundation
 /// applied *before* the launcher sets that path, and `DYLD_*` is stripped
 /// because `wineloader` runs under the hardened runtime.
 nonisolated enum CrossOverShadow {
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/CrossOverShadow")
 
     /// The launcher to run instead of CrossOver's, or `nil` when the tree is

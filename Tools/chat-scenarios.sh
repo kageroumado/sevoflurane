@@ -77,7 +77,7 @@ if [[ -z $ACCOUNT ]]; then
     })()')
 fi
 if [[ -z $ACCOUNT || $ACCOUNT == *[!0-9]* ]]; then
-    print -r -- "FAIL  no friend account id — pass one: Tools/chat-scenarios.sh 37871103"
+    print -r -- "FAIL  no friend account id — pass one: Tools/chat-scenarios.sh <friend account id>"
     exit 1
 fi
 print -r -- "      friend account id $ACCOUNT"

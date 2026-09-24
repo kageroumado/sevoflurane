@@ -128,7 +128,7 @@ final class LiveStorageEnvironment: StorageEnvironment {
 
     func trashAppCaches() {
         guard let bundleID = Bundle.main.bundleIdentifier else { return }
-        let library = FileManager.default.homeDirectoryForCurrentUser
+        let library = UserHome.url
             .appendingPathComponent("Library")
         for path in ["WebKit/\(bundleID)", "Caches/\(bundleID)", "HTTPStorages/\(bundleID)"] {
             try? FileManager.default.trashItem(

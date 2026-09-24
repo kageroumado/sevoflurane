@@ -22,7 +22,7 @@ nonisolated enum GameIcon {
         if let program = AdoptedPrograms.program(appID) {
             return shapedICNS(forProgramAt: program.url, named: "\(appID)")
         }
-        let cached = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(
+        let cached = UserHome.url.appendingPathComponent(
             "Library/Caches/Sevoflurane/DockIcons/\(fileSafe(title)).app/Contents/Resources/icon.icns",
         )
         if manager.fileExists(atPath: cached.path) { return cached }
@@ -74,7 +74,7 @@ nonisolated enum GameIcon {
     }
 
     private static var iconCache: URL {
-        URL(fileURLWithPath: NSHomeDirectory())
+        UserHome.url
             .appendingPathComponent("Library/Caches/Sevoflurane/GameIcons")
     }
 

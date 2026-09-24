@@ -31,11 +31,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// Managed engines, one directory per version:
     /// `wine/` (WineHQ tree), `dxvk/`, `dxmt/`, `d3dmetal/`, the dock shim
     /// and the Steamworks stub.
-    static let managedRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let managedRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Engines")
 
     /// Where managed engines keep their bottles (plain `WINEPREFIX` trees).
-    static let managedBottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let managedBottlesRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Bottles")
 
     /// The engine every wine invocation routes through. Resolved from disk on
@@ -313,7 +313,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// Preview's own bottle directory, which it creates the first time it
     /// makes (or adopts) a bottle of its own.
-    static let previewBottlesRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let previewBottlesRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/CrossOver Preview/Bottles")
 
     /// Where this engine's bottles live. CrossOver bottles stay in

@@ -17,7 +17,7 @@ nonisolated enum RunLog {
     /// from the ones played on the Mac, or `sevo perf` reading a copy.
     static let root = ProcessInfo.processInfo.environment["SEVO_RUNS_DIR"]
         .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-        ?? URL(fileURLWithPath: NSHomeDirectory())
+        ?? UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Runs")
 
     /// How many months are kept.

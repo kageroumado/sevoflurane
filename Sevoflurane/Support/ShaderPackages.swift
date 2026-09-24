@@ -77,7 +77,7 @@ nonisolated enum ShaderPackages {
         }
     }
 
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Shaders")
 
     /// The files a directory needs to be a package the driver can run.

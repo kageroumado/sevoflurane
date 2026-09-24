@@ -55,7 +55,7 @@ nonisolated enum D3DMetalInstaller {
     /// ``CrossOverShadow``. A managed engine holds only the version staging places in its
     /// Wine tree, so an engine that arrives new — an update, the copy an app carries — finds
     /// the user's toolkits already there, and none ships with an engine.
-    static let sharedRoot = URL(fileURLWithPath: NSHomeDirectory())
+    static let sharedRoot = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/D3DMetal")
 
     /// The toolkit store every lookup and install goes to.

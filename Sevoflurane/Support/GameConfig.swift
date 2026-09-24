@@ -418,7 +418,7 @@ nonisolated struct Resolved<Value: Sendable>: Sendable {
 /// the source of truth; the env files the engine reads at every process
 /// start (`ConfigMaterializer`) are derived from them.
 nonisolated enum GameConfig {
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Config")
 
     /// What every level inherits when nothing is set anywhere.
@@ -703,7 +703,7 @@ nonisolated enum GameConfig {
     private static func appendToLogFile(_ message: String) {
         // A test run changes settings in scratch folders by the hundred.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
-        let url = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Sevoflurane.log")
+        let url = UserHome.url.appending(path: "Library/Logs/Sevoflurane.log")
         let line = "\(changeStamp.string(from: .now)) [app] \(message)\n"
         guard let handle = try? FileHandle(forWritingTo: url) else { return }
         defer { try? handle.close() }

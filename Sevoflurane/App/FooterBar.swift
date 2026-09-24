@@ -234,7 +234,7 @@ private struct DebugChip: View {
 /// setting costs no footer space.
 private struct UpdateChip: View {
     let showsRestingVersion: Bool
-    @AppStorage("autoUpdate") private var autoUpdate = true
+    @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
     @State private var isHovered = false
 
     var body: some View {

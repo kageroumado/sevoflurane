@@ -167,6 +167,7 @@ let package = Package(
                 "Sevoflurane/Support/Subprocess.swift",
                 "Sevoflurane/Support/SupervisorLink.swift",
                 "Sevoflurane/Support/SupervisorState.swift",
+                "Sevoflurane/Support/UserHome.swift",
                 "Sevoflurane/Support/WineExceptionTrail.swift",
                 "Sevoflurane/Support/WineLog.swift",
                 "Sevoflurane/Support/WineProvenance.swift",

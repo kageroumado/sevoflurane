@@ -85,7 +85,7 @@ nonisolated enum Redaction {
         }
         // The account's own home first: it is the longest match and the one
         // whose replacement is a plain `~` rather than a rewritten prefix.
-        result = result.replacingOccurrences(of: NSHomeDirectory(), with: home)
+        result = result.replacingOccurrences(of: UserHome.path, with: home)
         result = result.replacing(macHome) { _ in home }
         result = result.replacing(windowsUser) { match in "\(match.output.1)~" }
         result = result.replacing(steamIDDigits) { _ in steamID }

@@ -36,7 +36,7 @@ nonisolated enum WineChronicle {
         let executable: String
     }
 
-    static let url = FileManager.default.homeDirectoryForCurrentUser
+    static let url = UserHome.url
         .appending(path: "Library/Logs/Sevoflurane-windows.log")
 
     /// One line, or `nil` for anything that is not one.

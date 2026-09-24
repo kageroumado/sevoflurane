@@ -58,9 +58,9 @@ nonisolated enum SetupProbe {
     static let crossoverPreviewApp = URL(fileURLWithPath: "/Applications/CrossOver Preview.app")
     static let crossoverBottles = SteamBottle.bottlesRoot
     static let managedEngines = Engine.managedRoot
-    private static let license = URL(fileURLWithPath: NSHomeDirectory())
+    private static let license = UserHome.url
         .appendingPathComponent("Library/Preferences/com.codeweavers.CrossOver.license")
-    private static let preferences = URL(fileURLWithPath: NSHomeDirectory())
+    private static let preferences = UserHome.url
         .appendingPathComponent("Library/Preferences/com.codeweavers.CrossOver.plist")
     private static let trialDays = 14.0
 

@@ -27,7 +27,7 @@ actor DiscordApplications {
 
     static let databaseURL = URL(string: "https://discord.com/api/v9/applications/detectable")!
 
-    static let indexFile = URL(fileURLWithPath: NSHomeDirectory())
+    static let indexFile = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Discord/applications.json")
 
     /// The database as the app reads it: the two ways in, and the names to

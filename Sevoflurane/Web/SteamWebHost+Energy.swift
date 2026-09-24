@@ -48,10 +48,10 @@ extension SteamWebHost {
 
     private func applyEnergyPreference(lowPower: Bool, reduceMotion: Bool) async {
         if lowPower || reduceMotion {
-            if UserDefaults.standard.string(forKey: Self.renderBaselineKey) == nil {
+            if Preferences.app.string(forKey: Self.renderBaselineKey) == nil {
                 guard let saved = await evaluateInContext(Self.captureRenderSettingsScript),
                       saved != "unavailable" else { return }
-                UserDefaults.standard.set(saved, forKey: Self.renderBaselineKey)
+                Preferences.app.set(saved, forKey: Self.renderBaselineKey)
             }
             _ = await evaluateInContext(Self.setRenderSettingsScript(
                 lowPerf: lowPower, reduceMotion: true, smoothScroll: !lowPower,
@@ -60,8 +60,8 @@ extension SteamWebHost {
                 .app,
                 "matched macOS power preference (low power=\(lowPower), reduce motion=\(reduceMotion)) — eased Steam's rendering",
             )
-        } else if let baseline = UserDefaults.standard.string(forKey: Self.renderBaselineKey) {
-            UserDefaults.standard.removeObject(forKey: Self.renderBaselineKey)
+        } else if let baseline = Preferences.app.string(forKey: Self.renderBaselineKey) {
+            Preferences.app.removeObject(forKey: Self.renderBaselineKey)
             guard let values = try? JSONDecoder().decode([String: Bool].self, from: Data(baseline.utf8))
             else { return }
             _ = await evaluateInContext(Self.setRenderSettingsScript(

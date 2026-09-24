@@ -6,7 +6,7 @@ import Testing
 struct RedactionTests {
     @Test
     func `a path under this Mac's home becomes a tilde`() {
-        let line = "loading \(NSHomeDirectory())/Library/Logs/Sevoflurane.log"
+        let line = "loading \(UserHome.path)/Library/Logs/Sevoflurane.log"
         #expect(Redaction.apply(to: line) == "loading ~/Library/Logs/Sevoflurane.log")
     }
 
@@ -79,9 +79,9 @@ struct RedactionTests {
     @Test
     func `a long log is redacted on the lines that carry something and left alone elsewhere`() {
         let quiet = String(repeating: "0024:trace:seh:dispatch_exception code=c0000005\n", count: 4000)
-        let text = quiet + "loading \(NSHomeDirectory())/Library/x.dll for 76561198000000001\n" + quiet
+        let text = quiet + "loading \(UserHome.path)/Library/x.dll for 76561198000000001\n" + quiet
         let redacted = Redaction.apply(to: text)
-        #expect(!redacted.contains(NSHomeDirectory()))
+        #expect(!redacted.contains(UserHome.path))
         #expect(!redacted.contains("76561198000000001"))
         #expect(redacted.hasPrefix(quiet))
         #expect(redacted.hasSuffix(quiet))

@@ -22,7 +22,7 @@ nonisolated enum GameLaunchers {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
 
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Launchers")
 
     /// Whether any game has a bundle right now — the cheap question to ask

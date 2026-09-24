@@ -99,7 +99,7 @@ nonisolated enum LoopbackAssets {
     private static let untouched = Mutex<Set<String>>([])
 
     private static var cacheDirectory: URL {
-        URL(fileURLWithPath: NSHomeDirectory())
+        UserHome.url
             .appendingPathComponent("Library/Caches/Sevoflurane/LoopbackRewrite")
     }
 

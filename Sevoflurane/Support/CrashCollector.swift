@@ -16,7 +16,7 @@ import Foundation
 /// attached to an issue.
 nonisolated enum CrashCollector {
     /// Where reports live, one directory per run.
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Reports")
 
     /// The whole directory's budget, spent oldest first.
@@ -38,7 +38,7 @@ nonisolated enum CrashCollector {
         var reports = root
         var bottle = SteamBottle.root
         var steamLogs = SteamBottle.steamRoot.appendingPathComponent("logs")
-        var diagnosticReports = FileManager.default.homeDirectoryForCurrentUser
+        var diagnosticReports = UserHome.url
             .appending(path: "Library/Logs/DiagnosticReports")
         /// The names a report's redaction is given, since no rule can derive
         /// them from the text.

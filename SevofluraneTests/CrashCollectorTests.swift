@@ -46,11 +46,11 @@ struct CrashCollectorTests {
 
     @Test
     func `the account and a persona are gone from a stripped line`() {
-        let text = "LogInit: saving to C:\\users\\crossover\\Saved as Kagarino"
-        let stripped = ReportStripper.strip(text, personas: ["Kagarino"])
+        let text = "LogInit: saving to C:\\users\\crossover\\Saved as Wanderer"
+        let stripped = ReportStripper.strip(text, personas: ["Wanderer"])
         #expect(stripped.contains("C:\\users\\~"))
         #expect(stripped.contains(Redaction.persona))
-        #expect(!stripped.contains("Kagarino"))
+        #expect(!stripped.contains("Wanderer"))
     }
 
     // MARK: - The Steam accounts a redaction is given
@@ -62,17 +62,17 @@ struct CrashCollectorTests {
         {
         \t"76561198000000000"
         \t{
-        \t\t"AccountName"\t\t"kirie_kagarino"
-        \t\t"PersonaName"\t\t"Kagarino"
+        \t\t"AccountName"\t\t"someone_example"
+        \t\t"PersonaName"\t\t"Wanderer"
         \t\t"RememberPassword"\t\t"1"
         \t}
         }
         """
         let names = SteamAccounts.names(inLoginUsers: vdf)
-        #expect(names.contains("kirie_kagarino"))
-        #expect(names.contains("Kagarino"))
+        #expect(names.contains("someone_example"))
+        #expect(names.contains("Wanderer"))
         // Longest first, so a name that contains another is replaced whole.
-        #expect(names.first == "kirie_kagarino")
+        #expect(names.first == "someone_example")
         // Only the two name keys; a flag is not a name.
         #expect(!names.contains("1"))
     }
@@ -254,7 +254,7 @@ struct CrashCollectorTests {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }
         var places = Self.places(in: root)
-        places.personas = ["Kagarino"]
+        places.personas = ["Wanderer"]
 
         let report = try #require(
             CrashCollector.collect(for: Self.record(), wineTail: Self.wineTail, places: places),
@@ -374,27 +374,27 @@ struct CrashCollectorTests {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }
         var places = Self.places(in: root)
-        places.personas = ["Kagarino"]
+        places.personas = ["Wanderer"]
         places.gameLogs = { _ in
-            [GameLogs.Collected(path: "games/367520/Player.log", text: "Signed in as Kagarino\n")]
+            [GameLogs.Collected(path: "games/367520/Player.log", text: "Signed in as Wanderer\n")]
         }
         let install = root.appendingPathComponent("install")
         let data = install.appendingPathComponent("hollow_knight_Data")
         try manager.createDirectory(at: data, withIntermediateDirectories: true)
-        try Data("Welcome, Kagarino\n".utf8).write(to: data.appendingPathComponent("output_log.txt"))
+        try Data("Welcome, Wanderer\n".utf8).write(to: data.appendingPathComponent("output_log.txt"))
         places.installDirectory = { _ in install }
 
         let report = try #require(CrashCollector.collect(for: Self.record(), places: places))
         let player = try String(
             contentsOf: report.directory.appendingPathComponent("games/367520/Player.log"), encoding: .utf8,
         )
-        #expect(!player.contains("Kagarino"))
+        #expect(!player.contains("Wanderer"))
         let unity = try String(
             contentsOf: report.directory
                 .appendingPathComponent("games/367520/hollow_knight_Data-output_log.txt"),
             encoding: .utf8,
         )
-        #expect(!unity.contains("Kagarino"))
+        #expect(!unity.contains("Wanderer"))
     }
 
     @Test

@@ -18,7 +18,7 @@ nonisolated enum NWJSRunner {
     /// One directory per game, holding the generated `package.json`. NW.js
     /// takes the directory as its argument and reads the package there, so
     /// the game's own package file is never touched.
-    static let root = URL(fileURLWithPath: NSHomeDirectory())
+    static let root = UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/NWJS")
 
     static func wrapperDirectory(appID: Int) -> URL {
@@ -560,7 +560,7 @@ nonisolated enum NWJSRunner {
         let bottleSide = prefix
             .appendingPathComponent("drive_c/users/\(SteamBottle.windowsUser)")
             .appendingPathComponent("AppData/Local/\(info.packageName)/User Data")
-        let macOSSide = URL(fileURLWithPath: NSHomeDirectory())
+        let macOSSide = UserHome.url
             .appendingPathComponent("Library/Application Support/\(info.packageName)")
 
         if let existing = try? manager.destinationOfSymbolicLink(atPath: macOSSide.path) {

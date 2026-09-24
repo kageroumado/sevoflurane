@@ -117,7 +117,7 @@ struct SteamNotificationPresentationTests {
         id: String = "9001",
         title: String = "",
         body: String = "",
-        accountID: String = "37871103",
+        accountID: String = "12345678",
         gameName: String = "",
         appID: String = "",
         sound: Bool? = nil,
@@ -128,7 +128,7 @@ struct SteamNotificationPresentationTests {
         let json = """
         {"kind":\(kind),"source":\(source),"id":"\(id)","title":"\(title)",
          "body":"\(body)","icon":"https://avatars.steamstatic.com/x_medium.jpg",
-         "steamid":"76561198035136831","accountid":"\(accountID)",
+         "steamid":"76561197972611406","accountid":"\(accountID)",
          "appid":"\(appID)","gameName":"\(gameName)"\(soundField)}
         """
         return try JSONDecoder().decode(
@@ -138,14 +138,14 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a message reads as its sender and opens their chat`() throws {
-        let notification = try Self.payload(kind: 8, title: "Mika", body: "are you up?")
+        let notification = try Self.payload(kind: 8, title: "Alex", body: "are you up?")
         let presentation = try #require(SteamNotifications.Presentation(notification))
-        #expect(presentation.title == "Mika")
+        #expect(presentation.title == "Alex")
         #expect(presentation.body == "are you up?")
-        #expect(presentation.route == .chat(accountID: "37871103"))
+        #expect(presentation.route == .chat(accountID: "12345678"))
         // A conversation is one thread in Notification Center, however many
         // messages arrive while it is held.
-        #expect(presentation.route.threadIdentifier == "chat-37871103")
+        #expect(presentation.route.threadIdentifier == "chat-12345678")
         // A message is a record: it stays until the user deals with it.
         #expect(!presentation.isTransient)
     }
@@ -158,23 +158,23 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a group message lands on the friends list`() throws {
-        let notification = try Self.payload(kind: 9, title: "Game Night", body: "Mika: hey")
+        let notification = try Self.payload(kind: 9, title: "Game Night", body: "Alex: hey")
         let presentation = try #require(SteamNotifications.Presentation(notification))
         #expect(presentation.route == .friends)
     }
 
     @Test
     func `a friend starting a game is a banner and not a record`() throws {
-        let notification = try Self.payload(kind: 3, title: "Mika", gameName: "Half-Life")
+        let notification = try Self.payload(kind: 3, title: "Alex", gameName: "Half-Life")
         let presentation = try #require(SteamNotifications.Presentation(notification))
-        #expect(presentation.title == "Mika")
+        #expect(presentation.title == "Alex")
         #expect(presentation.body == "is playing Half-Life")
         #expect(presentation.isTransient)
     }
 
     @Test
     func `a friend coming online is a banner and not a record`() throws {
-        let notification = try Self.payload(kind: 4, title: "Mika")
+        let notification = try Self.payload(kind: 4, title: "Alex")
         let presentation = try #require(SteamNotifications.Presentation(notification))
         #expect(presentation.body == "is now online")
         #expect(presentation.isTransient)
@@ -187,21 +187,21 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a message sounds when Steam's setting says it should`() throws {
-        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi", sound: true)
+        let notification = try Self.payload(kind: 8, title: "Alex", body: "hi", sound: true)
         let presentation = try #require(SteamNotifications.Presentation(notification))
         #expect(presentation.isSounded)
     }
 
     @Test
     func `a message stays silent when Steam's setting says silent`() throws {
-        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi", sound: false)
+        let notification = try Self.payload(kind: 8, title: "Alex", body: "hi", sound: false)
         let presentation = try #require(SteamNotifications.Presentation(notification))
         #expect(!presentation.isSounded)
     }
 
     @Test
     func `a payload with no answer about sound is silent`() throws {
-        let notification = try Self.payload(kind: 8, title: "Mika", body: "hi")
+        let notification = try Self.payload(kind: 8, title: "Alex", body: "hi")
         #expect(notification.playsSound == nil)
         let presentation = try #require(SteamNotifications.Presentation(notification))
         #expect(!presentation.isSounded)
@@ -209,9 +209,9 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a group message carries the chat room's own sound setting`() throws {
-        let loud = try Self.payload(kind: 9, title: "Game Night", body: "Mika: hey", sound: true)
+        let loud = try Self.payload(kind: 9, title: "Game Night", body: "Alex: hey", sound: true)
         #expect(try #require(SteamNotifications.Presentation(loud)).isSounded)
-        let quiet = try Self.payload(kind: 9, title: "Game Night", body: "Mika: hey", sound: false)
+        let quiet = try Self.payload(kind: 9, title: "Game Night", body: "Alex: hey", sound: false)
         #expect(try !#require(SteamNotifications.Presentation(quiet)).isSounded)
     }
 
@@ -221,7 +221,7 @@ struct SteamNotificationPresentationTests {
         // saying `sound: true` for one of these changes nothing.
         for kind in [1, 3, 4] {
             let notification = try Self.payload(
-                kind: kind, title: "Mika", gameName: "Half-Life", sound: true,
+                kind: kind, title: "Alex", gameName: "Half-Life", sound: true,
             )
             #expect(try !#require(SteamNotifications.Presentation(notification)).isSounded)
         }
@@ -229,7 +229,7 @@ struct SteamNotificationPresentationTests {
 
     @Test
     func `a click routes back to the chat it came from`() {
-        let route = SteamNotifications.Route.chat(accountID: "37871103")
+        let route = SteamNotifications.Route.chat(accountID: "12345678")
         #expect(SteamNotifications.Route(userInfo: route.userInfo) == route)
         #expect(SteamNotifications.Route(userInfo: [:]) == .friends)
     }
@@ -241,8 +241,8 @@ struct SteamNotificationPresentationTests {
 struct SteamNotificationPostingTests {
     private static func payload(kind: Int, source: Int) throws -> SteamNotification {
         let json = """
-        {"kind":\(kind),"source":\(source),"id":"9002","title":"Mika","body":"hi",
-         "icon":"","steamid":"76561198035136831","accountid":"37871103",
+        {"kind":\(kind),"source":\(source),"id":"9002","title":"Alex","body":"hi",
+         "icon":"","steamid":"76561197972611406","accountid":"12345678",
          "appid":"","gameName":""}
         """
         return try JSONDecoder().decode(SteamNotification.self, from: Data(json.utf8))

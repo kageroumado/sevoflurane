@@ -13,7 +13,7 @@ final class EventLog {
     /// Where Console.app and testers look. A process that stands in for the
     /// app (the test host, the gallery, a simulated boot) writes beside it, so
     /// the log a bug report carries holds only what the app really did.
-    nonisolated static let fileURL = FileManager.default.homeDirectoryForCurrentUser
+    nonisolated static let fileURL = UserHome.url
         .appending(path: isSimulatedProcess ? "Library/Logs/Sevoflurane-simulated.log" : "Library/Logs/Sevoflurane.log")
 
     private nonisolated static var isSimulatedProcess: Bool {
