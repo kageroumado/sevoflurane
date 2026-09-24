@@ -19,6 +19,9 @@ protocol GraphicsEnvironment: AnyObject {
     /// then replaces rather than supplies.
     var engineHasOwnD3DMetal: Bool { get }
 
+    /// What the engine the bottle runs on is called, for the popover.
+    var engineName: String { get }
+
     /// What the installed engines between them can host, as each declares in
     /// its `engine-info.json`; a renderer nothing hosts cannot be offered.
     func hostedRenderers() -> [Renderer]
@@ -62,6 +65,10 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
     init() {
         toolkitStore = D3DMetalInstaller.store
         engineHasOwnD3DMetal = Engine.active.isCrossOver
+    }
+
+    var engineName: String {
+        Engine.active.description
     }
 
     func hostedRenderers() -> [Renderer] {

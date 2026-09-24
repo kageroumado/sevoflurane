@@ -120,6 +120,7 @@
 				App/MenuBarView.swift,
 				App/ProcessMonitorWindow.swift,
 				App/QuickLaunchStore.swift,
+				App/RendererPicker.swift,
 				App/RepairSettings.swift,
 				App/ReportWindow.swift,
 				App/SettingsNavigation.swift,

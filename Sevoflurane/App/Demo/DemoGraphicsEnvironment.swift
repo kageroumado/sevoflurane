@@ -71,6 +71,10 @@
             scenario == .crossOver
         }
 
+        var engineName: String {
+            scenario == .crossOver ? "CrossOver" : "Dormison r15"
+        }
+
         /// A managed engine hosts what it was built for: DXMT and DXVK
         /// always, D3DMetal once a toolkit has been added.
         func hostedRenderers() -> [Renderer] {

@@ -57,8 +57,8 @@ struct NoticeCard<Actions: View>: View {
     var isSpinning = false
     /// How far a variable symbol is filled, 0 to 1.
     var level: Double?
-    let title: String
-    let detail: String
+    let title: LocalizedStringResource
+    let detail: LocalizedStringResource
     /// Makes the whole card the button, marked by a trailing chevron — the
     /// compact form for a card with one way forward.
     var onTap: (() -> Void)?
@@ -71,7 +71,9 @@ struct NoticeCard<Actions: View>: View {
             }
             .buttonStyle(.plain)
         } else {
-            card
+            // One element for the words, its buttons beside it: VoiceOver reads
+            // the notice whole, then offers what can be done about it.
+            card.accessibilityElement(children: .contain)
         }
     }
 
@@ -89,12 +91,16 @@ struct NoticeCard<Actions: View>: View {
                 .frame(width: NoticeCardMetrics.symbolSlot)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(.body, design: .rounded).weight(.medium))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(.body, design: .rounded).weight(.medium))
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
                 if Actions.self != EmptyView.self {
                     HStack(spacing: Theme.Space.sm) {
                         actions
@@ -119,12 +125,18 @@ struct NoticeCard<Actions: View>: View {
 
 extension NoticeCard where Actions == EmptyView {
     /// A card that says something and offers nothing to press.
-    init(symbol: String, tint: Color? = nil, level: Double? = nil, title: String, detail: String) {
+    init(
+        symbol: String, tint: Color? = nil, level: Double? = nil,
+        title: LocalizedStringResource, detail: LocalizedStringResource,
+    ) {
         self.init(symbol: symbol, tint: tint, level: level, title: title, detail: detail) { EmptyView() }
     }
 
     /// A card that is itself the press, for the one thing it leads to.
-    init(symbol: String, tint: Color? = nil, title: String, detail: String, onTap: @escaping () -> Void) {
+    init(
+        symbol: String, tint: Color? = nil,
+        title: LocalizedStringResource, detail: LocalizedStringResource, onTap: @escaping () -> Void,
+    ) {
         self.init(symbol: symbol, tint: tint, title: title, detail: detail, onTap: onTap) { EmptyView() }
     }
 }

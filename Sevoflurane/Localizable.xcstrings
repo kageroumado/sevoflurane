@@ -1,0 +1,1134 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    " " : {
+
+    },
+    "—" : {
+
+    },
+    "·" : {
+
+    },
+    "@kageroumado" : {
+
+    },
+    "%@" : {
+
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · set when it launches" : {
+
+    },
+    "%@ · tested" : {
+
+    },
+    "%@ · untested" : {
+
+    },
+    "%@ (new)" : {
+
+    },
+    "%@ (not installed)" : {
+
+    },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ Games launch and run slower meanwhile." : {
+
+    },
+    "%@ is available" : {
+
+    },
+    "%@ is available and tested with this engine." : {
+
+    },
+    "%@ is available and untested here." : {
+
+    },
+    "%@ is what a fresh installation runs." : {
+
+    },
+    "%@ manages this bottle" : {
+
+    },
+    "%@ of %@ used" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@ used"
+          }
+        }
+      }
+    },
+    "%@. Install them in Settings › Engine › Game dependencies." : {
+
+    },
+    "%d" : {
+
+    },
+    "%lld" : {
+
+    },
+    "%lld %%" : {
+
+    },
+    "%llu" : {
+
+    },
+    "~/Library/Logs/Sevoflurane-wine.log always records errors. This adds every exception and every library load. The log then grows fast." : {
+
+    },
+    "A change applies the same way. Reset restores the engine's own version." : {
+
+    },
+    "About %@" : {
+
+    },
+    "Acknowledgments" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add a Folder…" : {
+
+    },
+    "Add a library in Steam’s settings, under Storage." : {
+
+    },
+    "Add and Play" : {
+
+    },
+    "Add from a Disk Image…" : {
+
+    },
+    "Add from Folder or Archive…" : {
+
+    },
+    "Add to Quick Launch" : {
+
+    },
+    "Add Windows Game…" : {
+
+    },
+    "Adds sevo for Terminal and MCP. Needs an administrator password." : {
+
+    },
+    "Adds support for DirectX 12 games." : {
+
+    },
+    "Allow Notifications" : {
+
+    },
+    "Allow Sevoflurane in System Settings to see Steam's messages." : {
+
+    },
+    "Already have the disk image?" : {
+
+    },
+    "Always run with" : {
+
+    },
+    "Apple's sign-in page appears here" : {
+
+    },
+    "Auto" : {
+      "comment" : "Automatic renderer, in a narrow segment"
+    },
+    "Auto update" : {
+
+    },
+    "Auto-restart is off" : {
+
+    },
+    "Auto-restart Steam" : {
+
+    },
+    "Automation" : {
+
+    },
+    "Back off where spinning keeps missing" : {
+
+    },
+    "Background helper" : {
+
+    },
+    "Betas arrive before releases and have been run on fewer Macs." : {
+
+    },
+    "Bottle" : {
+
+    },
+    "Bottle & Wine" : {
+
+    },
+    "Bottle default" : {
+
+    },
+    "Bottle incomplete" : {
+
+    },
+    "Bottle name" : {
+
+    },
+    "Bring Steam's window to the front" : {
+
+    },
+    "Bring to front" : {
+
+    },
+    "Caches and downloads go to the Trash. Uninstall games through Steam." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Change the Engine File…" : {
+
+    },
+    "Check Again" : {
+
+    },
+    "Choose a game" : {
+
+    },
+    "Choose an Engine File…" : {
+
+    },
+    "Choose an engine with D3DMetal in Engine settings. Toolkits you downloaded stay installed." : {
+
+    },
+    "Choose an upscaler in Engine or Games." : {
+
+    },
+    "Choose the File…" : {
+
+    },
+    "Choose…" : {
+
+    },
+    "Click to install version %@" : {
+
+    },
+    "Close" : {
+
+    },
+    "Closing Steam and anything running in it. Sevoflurane quits when it is down." : {
+
+    },
+    "Collect reports" : {
+
+    },
+    "Collect reports now" : {
+
+    },
+    "Command-line tool" : {
+
+    },
+    "Common problems" : {
+
+    },
+    "Continue" : {
+
+    },
+    "Continue setup" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy all logs" : {
+
+    },
+    "Copyright © 2026 kageroumado. MIT License." : {
+
+    },
+    "CPU" : {
+
+    },
+    "CrossOver ships the version it supports. Add a newer one from Apple to replace it." : {
+
+    },
+    "CrossOver's own" : {
+
+    },
+    "Customize its window, upscaler, and mouse settings." : {
+
+    },
+    "Cuts synchronization overhead. Turn it off if a game freezes." : {
+
+    },
+    "D3DMetal" : {
+
+    },
+    "D3DMetal uses the newest version left. Remove the last one and Dormison loses DirectX 12." : {
+
+    },
+    "Debug" : {
+
+    },
+    "Debug mode" : {
+
+    },
+    "Debug Mode" : {
+
+    },
+    "Default engine" : {
+
+    },
+    "DEMO" : {
+
+    },
+    "Diagnostics archive" : {
+
+    },
+    "Discord" : {
+
+    },
+    "Discord presence in games" : {
+
+    },
+    "DLL overrides" : {
+
+    },
+    "Don't Send" : {
+
+    },
+    "Done" : {
+
+    },
+    "Download" : {
+
+    },
+    "Download (%@)" : {
+
+    },
+    "Download everything" : {
+
+    },
+    "Downloading %@…" : {
+
+    },
+    "Downloads, controllers, and the Steam interface." : {
+
+    },
+    "Each bottle has its own Steam installation, games, and settings." : {
+
+    },
+    "Engine" : {
+
+    },
+    "Engine from a file or folder" : {
+
+    },
+    "Engine updates" : {
+
+    },
+    "Engine's own" : {
+
+    },
+    "Engine's own (%@)" : {
+
+    },
+    "Enhanced synchronization (msync)" : {
+
+    },
+    "Every game you launch is recorded here." : {
+
+    },
+    "Failed" : {
+
+    },
+    "Finding the latest versions…" : {
+
+    },
+    "Finish setting up" : {
+
+    },
+    "For a browser that saves somewhere other than Downloads" : {
+
+    },
+    "For anything else, Settings › Diagnostics saves what a bug report needs." : {
+
+    },
+    "For every program in the bottle, from a game's next launch. winecfg shows the same values; Settings › Games holds one game's." : {
+
+    },
+    "Force-Quit Everything" : {
+
+    },
+    "Force-Quit Steam" : {
+
+    },
+    "Frame rate" : {
+
+    },
+    "Frames" : {
+
+    },
+    "Friends" : {
+
+    },
+    "Friends · %lld new messages" : {
+
+    },
+    "Friends · 1 new message" : {
+
+    },
+    "Game dependencies" : {
+
+    },
+    "Game libraries" : {
+
+    },
+    "Game renderer" : {
+
+    },
+    "Game Settings" : {
+
+    },
+    "Game Settings…" : {
+
+    },
+    "Games appear here after their first launch." : {
+
+    },
+    "Games in Discord's database show as what you play." : {
+
+    },
+    "Games using it fall back to Lanczos." : {
+
+    },
+    "Games with their own Discord support show their status. Restart Steam to apply a change." : {
+
+    },
+    "Get CrossOver" : {
+
+    },
+    "Get It from Apple…" : {
+
+    },
+    "Get Started" : {
+
+    },
+    "GitHub" : {
+
+    },
+    "GitHub %@" : {
+
+    },
+    "GPU reported to games" : {
+
+    },
+    "Hide %@" : {
+
+    },
+    "Hide the list" : {
+
+    },
+    "In “%@” · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "In “%1$@” · %2$@"
+          }
+        }
+      }
+    },
+    "In your other bottles" : {
+
+    },
+    "Inherit" : {
+
+    },
+    "Inherit (%@)" : {
+
+    },
+    "Install" : {
+
+    },
+    "Install %@" : {
+
+    },
+    "Install into Bottle" : {
+
+    },
+    "Install one when a game reports a missing DLL or blank text." : {
+
+    },
+    "Install the sevo command" : {
+
+    },
+    "Install updates automatically while no game runs" : {
+
+    },
+    "Install version %@" : {
+
+    },
+    "Install…" : {
+
+    },
+    "Installed" : {
+
+    },
+    "Installed · beta" : {
+
+    },
+    "Installed at /usr/local/bin/sevo." : {
+
+    },
+    "Installing into the bottle. The next step lists what it added." : {
+
+    },
+    "Installing the toolkit…" : {
+
+    },
+    "Installing…" : {
+
+    },
+    "Iterations of about 0.4 ns. 5200 is two microseconds; 0 turns a spin off." : {
+
+    },
+    "kagerou.glass" : {
+
+    },
+    "Launching" : {
+
+    },
+    "Let each assistant control Steam through MCP." : {
+
+    },
+    "License" : {
+
+    },
+    "Link" : {
+
+    },
+    "Linked. Appears after a Steam restart." : {
+
+    },
+    "Load order" : {
+
+    },
+    "Log every library a game loads" : {
+
+    },
+    "Log In to Steam" : {
+
+    },
+    "Look inside" : {
+
+    },
+    "Looking…" : {
+
+    },
+    "Mac compatibility strip" : {
+
+    },
+    "made by kageroumado %@" : {
+
+    },
+    "memory" : {
+
+    },
+    "Memory" : {
+
+    },
+    "More actions" : {
+
+    },
+    "Move %@ to the Trash" : {
+
+    },
+    "Move to Trash" : {
+
+    },
+    "moved or deleted" : {
+
+    },
+    "Name" : {
+
+    },
+    "Never ask again" : {
+
+    },
+    "New bottle…" : {
+
+    },
+    "No games installed yet." : {
+
+    },
+    "No games yet" : {
+
+    },
+    "No packages installed. The download catalog is unreachable." : {
+
+    },
+    "No runs yet" : {
+
+    },
+    "No supported AI assistant is installed." : {
+
+    },
+    "None added" : {
+
+    },
+    "Not an Installer" : {
+
+    },
+    "Nothing newer to fetch" : {
+
+    },
+    "Notifications are off" : {
+
+    },
+    "Off" : {
+
+    },
+    "Offer to play it or add it to Quick Launch instead" : {
+
+    },
+    "On" : {
+
+    },
+    "Only the built-in engine carries the Discord relay. Switch to it in Engine." : {
+
+    },
+    "Open %@" : {
+
+    },
+    "Open an issue" : {
+
+    },
+    "Open Apple’s Download Page" : {
+
+    },
+    "Open at login" : {
+
+    },
+    "Open Event Log" : {
+
+    },
+    "Open Login Items" : {
+
+    },
+    "Open My Library" : {
+
+    },
+    "Open Settings › Recovery: restart, repair, or report" : {
+
+    },
+    "Open Steam" : {
+
+    },
+    "Open Steam Settings…" : {
+
+    },
+    "Open System Settings" : {
+
+    },
+    "Open Them Here" : {
+
+    },
+    "Open…" : {
+
+    },
+    "Other MCP assistants" : {
+
+    },
+    "Pick a run" : {
+
+    },
+    "PID" : {
+
+    },
+    "Play Once" : {
+
+    },
+    "Plays the game" : {
+
+    },
+    "Program" : {
+
+    },
+    "Project website" : {
+
+    },
+    "Quit Sevoflurane" : {
+
+    },
+    "Quit Sevoflurane and close Steam" : {
+
+    },
+    "Quit Sevoflurane?" : {
+
+    },
+    "Quitting" : {
+
+    },
+    "Rebuilding the background helper…" : {
+
+    },
+    "Recommended" : {
+
+    },
+    "Record" : {
+
+    },
+    "Recording" : {
+
+    },
+    "Recovery…" : {
+
+    },
+    "Reinstall" : {
+
+    },
+    "Reinstall the Direct3D shader compiler" : {
+
+    },
+    "Releases only." : {
+
+    },
+    "Reload Steam UI" : {
+
+    },
+    "Reload, restart, and the event log" : {
+
+    },
+    "Remember for this file" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove %@ %@?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove %1$@ %2$@?"
+          }
+        }
+      }
+    },
+    "Remove %@?" : {
+
+    },
+    "Remove %@…" : {
+
+    },
+    "Remove D3DMetal %@?" : {
+
+    },
+    "Remove it and move what its installer wrote to the Trash." : {
+
+    },
+    "Remove it. The program's own files stay where they are." : {
+
+    },
+    "Remove the %@ override" : {
+
+    },
+    "Remove the link. The files stay in their own bottle." : {
+
+    },
+    "Remove the override for %@" : {
+
+    },
+    "Remove…" : {
+
+    },
+    "Removes Sevoflurane and the engines and toolkits it downloaded. You choose whether games go too." : {
+
+    },
+    "Renderer" : {
+
+    },
+    "Renderer versions" : {
+
+    },
+    "Repair" : {
+
+    },
+    "Repair Background Helper" : {
+
+    },
+    "Repair checks the engine, the bottle, and Steam. Your games and saves stay. Restart Steam to apply a logging change." : {
+
+    },
+    "Repair could not finish." : {
+
+    },
+    "Repair Steam" : {
+
+    },
+    "Repair the background helper" : {
+
+    },
+    "Reports" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset to Engine's Own" : {
+
+    },
+    "Restart Now" : {
+
+    },
+    "Restart Steam" : {
+
+    },
+    "Restart Steam Client" : {
+
+    },
+    "Restart Steam to Apply Debug Mode" : {
+
+    },
+    "Restart Steam to apply this setting." : {
+
+    },
+    "Restart Steam to see linked and unlinked games." : {
+
+    },
+    "Restart Windows" : {
+
+    },
+    "Restarting Steam" : {
+
+    },
+    "Restarts Steam when it crashes or hangs. Off, Steam starts and stops only when you ask." : {
+
+    },
+    "Retry" : {
+
+    },
+    "Role" : {
+
+    },
+    "Run Once" : {
+
+    },
+    "Run reports" : {
+
+    },
+    "Run with…" : {
+
+    },
+    "Run your own Windows programs from Quick Launch now, and sign in to Steam later from the menu bar" : {
+
+    },
+    "Runs" : {
+
+    },
+    "Saves logs, system details, and recent crashes to a ZIP on your Desktop, with your name, paths and Steam ids taken out." : {
+
+    },
+    "Search Settings" : {
+
+    },
+    "Send" : {
+
+    },
+    "Sent. Thank you." : {
+
+    },
+    "Settings" : {
+
+    },
+    "Settings — %@" : {
+
+    },
+    "Sevoflurane" : {
+
+    },
+    "Sevoflurane can post Steam's messages to Notification Center." : {
+
+    },
+    "Sevoflurane needs its background helper" : {
+
+    },
+    "Shader packages" : {
+
+    },
+    "Share this run" : {
+
+    },
+    "Shared from another bottle. One copy on disk." : {
+
+    },
+    "Show %@" : {
+
+    },
+    "Show each one" : {
+
+    },
+    "Show in Finder" : {
+
+    },
+    "Show Login Window" : {
+
+    },
+    "Show What Will Be Sent" : {
+
+    },
+    "Show what you play in Discord" : {
+
+    },
+    "Sign In Here" : {
+
+    },
+    "Sign In to Steam" : {
+
+    },
+    "Sign in to Steam to see your library." : {
+
+    },
+    "Simulated setup. Nothing on this Mac changes." : {
+
+    },
+    "Skip for Now" : {
+
+    },
+    "Skip Sign-In" : {
+
+    },
+    "Start Steam Anyway" : {
+
+    },
+    "Starting Steam" : {
+
+    },
+    "Starting Steam…" : {
+
+    },
+    "Starting up" : {
+
+    },
+    "State" : {
+
+    },
+    "Steam" : {
+
+    },
+    "Steam closes with it, and so does any game it is running. For trouble with Steam, the ⋯ button has restarts and other recovery options." : {
+
+    },
+    "Steam closes. Sevoflurane removes the engines and toolkits it downloaded, resets its settings, and disconnects assistants.\n\nKeep Games leaves Steam and its %@ of files in place. Uninstall Everything moves those files to the Trash, local saves included.\n\nSevoflurane moves itself to the Trash and quits. Your Steam account and cloud saves stay." : {
+
+    },
+    "Steam has a message" : {
+
+    },
+    "Steam holds it at Synchronizing · restart Steam to play" : {
+
+    },
+    "Steam is ready." : {
+
+    },
+    "Steam is signed out" : {
+
+    },
+    "Steam is struggling" : {
+
+    },
+    "Steam links" : {
+
+    },
+    "Steam needs a hand" : {
+
+    },
+    "Steam pages" : {
+
+    },
+    "Steam restarts around the next launch, about 30 seconds." : {
+
+    },
+    "Steam running" : {
+
+    },
+    "Steam settings" : {
+
+    },
+    "Steam started on %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Steam started on %1$@. %2$@"
+          }
+        }
+      }
+    },
+    "Steam starts and stops only when you ask." : {
+
+    },
+    "Steam stays down until this is fixed." : {
+
+    },
+    "Steam's window is hidden" : {
+
+    },
+    "Stop watching this folder" : {
+
+    },
+    "Switch" : {
+
+    },
+    "Synchronizing with Steam Cloud" : {
+
+    },
+    "Terminate" : {
+
+    },
+    "The assistant is where you left it. Steam opens from its last step." : {
+
+    },
+    "The engine's own version takes over." : {
+
+    },
+    "Troubleshooting" : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Turn On" : {
+
+    },
+    "Undo the link" : {
+
+    },
+    "Uninstall Everything" : {
+
+    },
+    "Uninstall Sevoflurane" : {
+
+    },
+    "Uninstall Sevoflurane?" : {
+
+    },
+    "Uninstall through Steam. It asks first." : {
+
+    },
+    "Uninstall, Keep Games" : {
+
+    },
+    "Uninstall…" : {
+
+    },
+    "Update" : {
+
+    },
+    "Update failed" : {
+
+    },
+    "Update the engine for DirectX 12" : {
+
+    },
+    "Updated to version %@" : {
+
+    },
+    "Updating…" : {
+
+    },
+    "Upscaler" : {
+
+    },
+    "Use" : {
+
+    },
+    "Use a Downloaded Engine…" : {
+
+    },
+    "Use My Browser" : {
+
+    },
+    "Use recommended" : {
+
+    },
+    "Version %@" : {
+
+    },
+    "Waiting for sign-in" : {
+
+    },
+    "Watching for the download in" : {
+
+    },
+    "Watching is paused" : {
+
+    },
+    "What it may take" : {
+
+    },
+    "What its report holds" : {
+
+    },
+    "Where Steam runs" : {
+
+    },
+    "Windows games on macOS" : {
+
+    },
+    "Windows settings" : {
+
+    },
+    "Windows version, drives, audio, and game overrides." : {
+
+    },
+    "Wine" : {
+      "comment" : "Wine's built-in renderer, in a narrow segment"
+    },
+    "Wine channels" : {
+
+    },
+    "Writing…" : {
+
+    },
+    "Your games and saves stay." : {
+
+    },
+    "Your library lives in the menu bar, behind %@." : {
+
+    },
+    "Your library lives in the menu bar, behind %@. Sign in to Steam and it opens." : {
+
+    },
+    "Your library lives in the menu bar, behind %@. Steam is starting; a first start takes a minute." : {
+
+    },
+    "Your Mac is busy with other work" : {
+
+    },
+    "Your Windows programs run from Quick Launch. Sign in for your Steam library." : {
+
+    }
+  },
+  "version" : "1.0"
+}

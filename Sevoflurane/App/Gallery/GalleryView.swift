@@ -35,6 +35,7 @@
                                 supervisor: fixture.supervisor,
                                 notifications: fixture.notifications,
                                 quickLaunch: Fixtures.quickLaunch,
+                                graphics: Fixtures.graphics,
                             )
                             .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
                             .background(.background, in: Theme.cardShape)

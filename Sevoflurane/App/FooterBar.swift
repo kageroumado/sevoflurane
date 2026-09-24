@@ -2,8 +2,9 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The popover's bottom bar: what the client is doing on the left, what to do about it on the
-/// right.
+/// The popover's bottom bar: the app's own state on the left — debug mode, its version, the way
+/// back from a client that gave up — the renderer the games run on in the middle, and the app's
+/// controls on the right.
 ///
 /// Every action that isn't a universal glyph carries its name: reload and restart live in the
 /// actions menu, as words. What stays iconic is the pair every menu-bar app draws the same way —
@@ -15,23 +16,25 @@ struct FooterBar: View {
     /// report on or restart, and nothing configured for Settings to change:
     /// the bar keeps the version and Quit.
     var isSettingUp = false
+    /// The renderer switch, between the app's state and its controls; absent
+    /// while setup is unfinished.
+    var graphics: GraphicsStore?
     /// The ✕: asks before quitting (``QuitConfirmation``), because quitting
     /// takes Steam and a running game down with it.
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
+    @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
+
+    private static var versionString: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
+    }
 
     var body: some View {
         // One `GlassEffectContainer` over the whole bar: glass sampled per control picks up
         // whatever sits behind that spot, which is what made the chips and the glyph buttons look
         // like different materials. Zero blend distance, because the controls sit closer together
         // than any nonzero spacing allows before their glass pools into one shape.
-        // Tight spacing, because the width is the binding constraint: five controls share a
-        // 320-point popover and the version chip grows on hover into a switch and its name.
-        // Loosening it costs a label its last characters.
         GlassEffectContainer(spacing: 0) {
             HStack(spacing: Theme.Space.xs) {
-                if !isSettingUp {
-                    StatusChip(host: host, supervisor: supervisor)
-                }
                 if hasGivenUp, !isSettingUp {
                     Button("Recovery…") {
                         NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
@@ -40,15 +43,17 @@ struct FooterBar: View {
                     .help("Open Settings › Recovery: restart, repair, or report")
                 }
                 DebugChip()
-                // The resting version gives its place to Recovery…: the bar holds one of the two,
-                // and while the client is down the way back up is the one that matters.
-                UpdateChip(showsRestingVersion: !hasGivenUp)
-                Spacer(minLength: 0)
+                UpdateChip()
+                if let graphics, !isSettingUp {
+                    RendererPicker(graphics: graphics)
+                } else {
+                    Spacer(minLength: 0)
+                }
                 if !isSettingUp {
                     actionsMenu
                     settingsButton
                 }
-                FooterIconButton("Quit", systemImage: "xmark", action: onQuit)
+                FooterIconButton(String(localized: "Quit Sevoflurane"), systemImage: "xmark", action: onQuit)
                     .keyboardShortcut("q")
                     .help("Quit Sevoflurane and close Steam")
             }
@@ -64,10 +69,11 @@ struct FooterBar: View {
     /// is fetched from Settings.
     private var settingsButton: some View {
         let summary = UpdateSummary.shared.summary
-        return FooterIconButton(summary.map { "Settings — \($0)" } ?? "Settings", systemImage: "gearshape") {
+        let label = summary.map { String(localized: "Settings — \($0)") } ?? String(localized: "Settings")
+        return FooterIconButton(label, systemImage: "gearshape") {
             NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
         }
-        .help(summary ?? "Settings")
+        .help(summary.map { Text(verbatim: $0) } ?? Text("Settings"))
         .overlay(alignment: .topTrailing) {
             if summary != nil {
                 Circle()
@@ -83,8 +89,10 @@ struct FooterBar: View {
     /// control is a real `FooterIconButton` — a sibling of the other two, identical by
     /// construction — and the menu is a transparent layer over it that takes the click.
     private var actionsMenu: some View {
-        FooterIconButton("More actions", systemImage: "ellipsis") {}
+        FooterIconButton(String(localized: "More actions"), systemImage: "ellipsis") {}
             .allowsHitTesting(false)
+            // The menu over it is the control; the drawing is not a second one.
+            .accessibilityHidden(true)
             .overlay {
                 Menu {
                     Button("Reload Steam UI", systemImage: "arrow.clockwise") { host.reload() }
@@ -115,13 +123,26 @@ struct FooterBar: View {
                         NSWorkspace.shared.open(EventLog.fileURL)
                     }
                     debugModeItem
+                    Divider()
+                    Toggle(isOn: Binding(
+                        get: { autoUpdate },
+                        set: { isOn in
+                            autoUpdate = isOn
+                            SilentUpdates.shared.setAutoInstall(isOn)
+                        },
+                    )) {
+                        Label("Auto Update", systemImage: "arrow.down.circle")
+                    }
+                    .help("Install updates automatically while no game runs")
+                    Text("Version \(Self.versionString)")
                 } label: {
                     Color.clear.contentShape(.rect)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
+                .accessibilityLabel("More actions")
             }
-            .help("Reload, restart, and the event log")
+            .help("Reload, restart, the event log, and updates")
     }
 
     /// The playtest switch, and — while a client is already up under the old environment — the
@@ -154,53 +175,6 @@ struct FooterBar: View {
     }
 }
 
-// MARK: - Status chip
-
-/// The footer's status atom: a health dot and the state of the Steam client. Never give it a
-/// control: a status light that also toggles gets pressed as a light — the playtest's two
-/// unexplained pauses were exactly that. The auto-restart switch is in Settings › General.
-private struct StatusChip: View {
-    let host: SteamWebHost
-    let supervisor: ClientSupervisor
-
-    /// Every label that reports the client's run state names Steam, because the dot alone says
-    /// only "good" and nothing in the footer says what it is good about. The three that skip the
-    /// name report something else: the Steam account, this app's own switch, and the restart it is
-    /// in the middle of.
-    private var status: (word: String, color: Color) {
-        switch supervisor.health {
-        case .starting: ("Steam starting", .gray)
-        case .healthy: ("Steam running", .green)
-        case .waitingForSignIn: ("Signed out", .gray)
-        case .degraded: ("Steam wedged", .orange)
-        case .restarting: ("Restarting", .accentColor)
-        case .launching: ("Steam starting", .accentColor)
-        case .gaveUp: ("Steam stopped", .red)
-        case .paused: ("Auto-restart off", .gray)
-        }
-    }
-
-    private var tooltip: String {
-        var lines = ["\(supervisor.statusText) · \(host.status)"]
-        if let event = EventLog.shared.latest {
-            let time = event.date.formatted(date: .omitted, time: .shortened)
-            lines.append("last event \(time) · \(event.message)")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    var body: some View {
-        HStack(spacing: Theme.Space.xs) {
-            StatusDot(color: status.color, diameter: 7)
-            Text(status.word)
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .fixedSize()
-        .help(tooltip)
-    }
-}
-
 // MARK: - Debug chip
 
 /// Present only while debug mode is on, because that is the whole of what it says: the logs are
@@ -222,14 +196,10 @@ private struct DebugChip: View {
 
 // MARK: - Update chip
 
-/// The version chip is the whole update UI: it announces an update (click installs), confirms one
-/// just landed (click acknowledges), and at rest flips into the Auto-Update switch on hover so the
-/// setting costs no footer space.
+/// An update, while there is something to say about one: it announces an update (click installs),
+/// confirms one just landed (click acknowledges), and reports a failure. At rest it is absent; the
+/// version and the Auto Update switch live in the actions menu.
 private struct UpdateChip: View {
-    let showsRestingVersion: Bool
-    @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
-    @State private var isHovered = false
-
     var body: some View {
         let updates = SilentUpdates.shared
         switch updates.manualPhase {
@@ -257,66 +227,21 @@ private struct UpdateChip: View {
     private func idleChip(_ updates: SilentUpdates) -> some View {
         if let justUpdated = updates.justUpdatedVersion {
             Button { updates.acknowledgeUpdate() } label: {
-                Label("v\(justUpdated)", systemImage: "checkmark")
+                Label(justUpdated, systemImage: "checkmark")
                     .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.footerChipProminent)
             .help("Updated to version \(justUpdated)")
+            .accessibilityLabel("Updated to version \(justUpdated)")
         } else if let available = updates.availableVersion ?? updates.pendingVersion {
             Button { Task { await updates.updateNow() } } label: {
-                Label("v\(available)", systemImage: "arrow.down.circle.fill")
+                Label(available, systemImage: "arrow.down.circle.fill")
                     .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.footerChipProminent)
             .help("Click to install version \(available)")
-        } else if showsRestingVersion {
-            Button {
-                autoUpdate.toggle()
-                updates.setAutoInstall(autoUpdate)
-            } label: {
-                Group {
-                    if isHovered {
-                        HStack(spacing: 5) {
-                            SwitchPip(isOn: autoUpdate)
-                            Text("Auto")
-                        }
-                    } else {
-                        Text(Self.versionString)
-                    }
-                }
-                .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.footerChip)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-            }
-            .help("Install updates automatically while no game runs")
+            .accessibilityLabel("Install version \(available)")
         }
-    }
-
-    private static var versionString: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-        return "v\(version)"
-    }
-}
-
-// MARK: - Switch pip
-
-/// The miniature toggle both hover-flip chips wear in place of their resting label.
-struct SwitchPip: View {
-    let isOn: Bool
-
-    var body: some View {
-        Capsule()
-            .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
-            .frame(width: 20, height: 12)
-            .overlay(alignment: isOn ? .trailing : .leading) {
-                Circle()
-                    .fill(.white)
-                    .frame(width: 8, height: 8)
-                    .padding(2)
-            }
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isOn)
     }
 }
 
@@ -333,7 +258,7 @@ struct QuitConfirmation: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quit Sevoflurane?")
                     .font(.system(.body, design: .rounded).weight(.semibold))
-                Text("Steam closes with it, and so does any game it is running.")
+                Text("Steam closes with it, and so does any game it is running. For trouble with Steam, the ⋯ button has restarts and other recovery options.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -341,7 +266,7 @@ struct QuitConfirmation: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: Theme.Space.sm) {
                 Spacer(minLength: 0)
-                FooterIconButton("Cancel", systemImage: "arrow.uturn.backward", action: onCancel)
+                FooterIconButton(String(localized: "Cancel"), systemImage: "arrow.uturn.backward", action: onCancel)
                     .keyboardShortcut(.cancelAction)
                     .help("Cancel")
                 Button { NSApplication.shared.terminate(nil) } label: {

@@ -161,6 +161,16 @@ final class GraphicsStore {
         return Renderer.allCases.filter(Set(environment.hostedRenderers()).contains)
     }
 
+    var engineName: String {
+        environment.engineName
+    }
+
+    /// Reads the selection again, for a surface that outlives the change —
+    /// the popover stays built while Settings rewrites the bottle.
+    func refresh() {
+        selection = environment.currentSelection()
+    }
+
     func update(_ selection: BottleGraphics.Selection) {
         guard selection != self.selection else { return }
         self.selection = selection

@@ -16,6 +16,10 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let setup: SetupWindow
     /// The adopted Windows programs the popover lists beside the library.
     private let quickLaunch = QuickLaunchStore()
+    /// The renderer switch. Made with the panel, so a launch that never opens
+    /// the popover never reads the bottle for it.
+    private lazy var graphics = GraphicsStore()
+    private let presentation = PopoverPresentation()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: PopoverPanel?
     private var escapeMonitor: Any?
@@ -86,8 +90,10 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         // own guard. Left alone the popover reads "No games installed yet."
         // for the rest of the session. Asking on every open costs one page
         // evaluation and always reflects the library as it stands.
+        presentation.opened()
         host.refreshRecentGames()
         quickLaunch.refresh()
+        graphics.refresh()
         // And keep asking while the popover stays up: someone who leaves it
         // open across an install or a play session should watch the list
         // move, not have to close and reopen it. One page evaluation per
@@ -105,15 +111,12 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         position(panel)
         panel.makeKeyAndOrderFront(nil)
-        // The full highlight pill every system item shows while its popover
-        // is up; `MenuBarExtra` does this by itself, an AppKit item does not.
         // Deferred one turn: this runs inside the button's own mouse tracking,
-        // and the cell clears the highlight when that tracking ends, so a
-        // highlight set here directly lasts only as long as the press.
+        // and the cell clears a highlight when that tracking ends.
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
                 guard self?.panel?.isVisible == true else { return }
-                self?.statusItem.button?.highlight(true)
+                self?.showsOpenPill(true)
             }
         }
         // Escape reaches the panel as a key event no SwiftUI control claims.
@@ -126,7 +129,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
     private func close() {
         panel?.orderOut(nil)
-        statusItem.button?.highlight(false)
+        showsOpenPill(false)
         refreshLoop?.cancel()
         refreshLoop = nil
         if let escapeMonitor {
@@ -138,6 +141,18 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_: Notification) {
         close()
+    }
+
+    /// The pill a system item wears while its popover is up. The menu bar is
+    /// drawn out of process, and a button's `highlight(_:)` never reaches it:
+    /// the item's own flag does, through the setter AppKit keeps for
+    /// `MenuBarExtra` (`NSStatusItem_Private_ForSwiftUI`, `setButtonHighlighted:`).
+    private func showsOpenPill(_ isOpen: Bool) {
+        if statusItem.responds(to: NSSelectorFromString("setButtonHighlighted:")) {
+            statusItem.setValue(isOpen, forKey: "buttonHighlighted")
+        } else {
+            statusItem.button?.highlight(isOpen)
+        }
     }
 
     // MARK: - The panel
@@ -172,7 +187,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         let content = NSHostingView(
             rootView: MenuBarView(
                 host: host, supervisor: supervisor, notifications: notifications,
-                quickLaunch: quickLaunch, setup: setup,
+                quickLaunch: quickLaunch, graphics: graphics, setup: setup,
+                presentation: presentation,
             ),
         )
         background.contentView = content
