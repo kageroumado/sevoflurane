@@ -83,6 +83,24 @@
             )
         }
 
+        /// The bottle's own library, and one on an exFAT drive, which is the
+        /// state the pane has to warn about.
+        func libraries() -> [StorageInventory.Library] {
+            guard scenario != .empty else { return [] }
+            return [
+                .init(
+                    id: URL(fileURLWithPath: "/demo/Bottles/Steam/drive_c/Program Files (x86)/Steam"),
+                    isInsideBottle: true, fileSystem: .mac, available: 382_662_584_320,
+                    games: 3, bytes: 138_727_443_860,
+                ),
+                .init(
+                    id: URL(fileURLWithPath: "/Volumes/Games/SteamLibrary"),
+                    isInsideBottle: false, fileSystem: .foreign("exFAT"), available: 1_204_862_000_000,
+                    games: 1, bytes: 71_940_702_208,
+                ),
+            ]
+        }
+
         func installedGames() -> [StorageInventory.Game] {
             guard scenario != .empty else { return [] }
             return [

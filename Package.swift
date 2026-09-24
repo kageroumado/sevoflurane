@@ -161,6 +161,7 @@ let package = Package(
                 "Sevoflurane/Support/SteamBottle.swift",
                 "Sevoflurane/Support/SteamChatAutoOpen.swift",
                 "Sevoflurane/Support/SteamGameProcessLog.swift",
+                "Sevoflurane/Support/SteamLibraries.swift",
                 "Sevoflurane/Support/SteamMessageSound.swift",
                 "Sevoflurane/Support/StorageInventory.swift",
                 "Sevoflurane/Support/SteamWebCookie.swift",

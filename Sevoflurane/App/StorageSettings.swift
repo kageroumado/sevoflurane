@@ -53,6 +53,7 @@ struct StorageSettings: View {
             } footer: {
                 Text("Caches and downloads go to the Trash. Uninstall games through Steam.")
             }
+            StorageLibrariesSection(libraries: store.libraries, steam: steam)
             sharingSection
         }
         .formStyle(.grouped)
@@ -283,6 +284,88 @@ struct StorageOwnTotalHeader: View {
             Spacer()
             if isMeasuring { ProgressView().controlSize(.small) }
             Text(StorageSettings.size(total)).monospacedDigit().foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Game libraries
+
+/// Where Steam keeps games: its own library inside the bottle, and any folder
+/// added in Steam's settings, with the drive each is on. Libraries are Steam's
+/// to add, so the way to one is Steam's own settings window.
+private struct StorageLibrariesSection: View {
+    let libraries: [StorageInventory.Library]
+    let steam: SteamActions?
+
+    var body: some View {
+        Section {
+            ForEach(libraries) { library in
+                StorageLibraryRow(library: library)
+            }
+            if let steam {
+                HStack {
+                    Text("Add a library in Steam\u{2019}s settings, under Storage.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open Steam Settings\u{2026}") { steam.openSteamSettings() }
+                }
+            }
+        } header: {
+            Text("Game libraries")
+        } footer: {
+            Text("Put a library on a drive formatted as APFS or Mac OS Extended. exFAT and FAT drives "
+                + "have no file permissions or links, which Wine and some games rely on.")
+        }
+    }
+}
+
+private struct StorageLibraryRow: View {
+    let library: StorageInventory.Library
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.md) {
+            Image(systemName: library.isInsideBottle ? "internaldrive" : "externaldrive")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(library.isInsideBottle ? "Inside the bottle" : library.location)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(summary)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let warning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .help(library.location)
+    }
+
+    private var summary: String {
+        var parts = [library.games == 1 ? "1 game" : "\(library.games) games"]
+        if library.bytes > 0 {
+            parts.append(library.bytes.formatted(.byteCount(style: .file)))
+        }
+        if let available = library.available {
+            parts.append("\(available.formatted(.byteCount(style: .file))) free")
+        }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    private var warning: String? {
+        switch library.fileSystem {
+        case let .foreign(name):
+            "This drive is \(name). Games here can fail to install, update or start. "
+                + "Reformat it as APFS, or move the games to another library in Steam."
+        case let .network(name):
+            "This library is on a \(name) network share. Updates and saves are slow and can fail there."
+        case .mac, .unknown:
+            nil
         }
     }
 }

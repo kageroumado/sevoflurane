@@ -13,6 +13,7 @@ protocol StorageEnvironment: AnyObject {
     /// The disk the bottle sits on, or `nil` when the system will not say.
     func volume() -> StorageInventory.Volume?
     func installedGames() -> [StorageInventory.Game]
+    func libraries() -> [StorageInventory.Library]
     func size(of entry: StorageInventory.Entry) async -> Int64
     func trash(_ entry: StorageInventory.Entry) throws
 
@@ -60,6 +61,10 @@ final class LiveStorageEnvironment: StorageEnvironment {
 
     func volume() -> StorageInventory.Volume? {
         StorageInventory.volume()
+    }
+
+    func libraries() -> [StorageInventory.Library] {
+        StorageInventory.libraries()
     }
 
     func installedGames() -> [StorageInventory.Game] {

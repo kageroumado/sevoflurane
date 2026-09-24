@@ -51,7 +51,7 @@ struct GamesSettings: View {
 
     /// By name, then id, so two games without a name keep a stable order.
     private func reload() {
-        let installed = SharedGames.installedAppIDs(in: SharedGames.activeSteamapps)
+        let installed = SharedGames.installedAppIDs
         games = GameConfig.games()
             .filter { id, _ in installed.contains(id) || AdoptedPrograms.isAdopted(id) }
             .map { id, values in

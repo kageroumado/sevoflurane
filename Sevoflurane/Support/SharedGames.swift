@@ -33,6 +33,18 @@ nonisolated enum SharedGames {
         steamapps(inBottle: SteamBottle.root)
     }
 
+    /// One game installed in the active bottle, in whichever of Steam's
+    /// libraries holds it.
+    struct Installed: Sendable, Equatable {
+        let appID: Int
+        let name: String
+        let directory: URL
+        /// Steam's own count of the game's size on disk.
+        let bytes: Int64
+        /// The library's `steamapps` the game's manifest is in.
+        let steamapps: URL
+    }
+
     /// Games installed in other bottles (any engine's) that the active
     /// bottle doesn't already have — one candidate per app, first bottle
     /// found wins.
@@ -53,7 +65,7 @@ nonisolated enum SharedGames {
                 )
             }
         }
-        let present = installedAppIDs(in: activeSteamapps)
+        let present = installedAppIDs
         var seenApps: Set<Int> = []
         return found
             .filter { !present.contains($0.appID) && seenApps.insert($0.appID).inserted }
@@ -83,8 +95,9 @@ nonisolated enum SharedGames {
         }
     }
 
-    static func installedAppIDs(in steamapps: URL) -> Set<Int> {
-        Set(manifests(in: steamapps).compactMap { read(manifest: $0)?.appID })
+    /// Every app with a manifest in any of the active bottle's libraries.
+    static var installedAppIDs: Set<Int> {
+        Set(SteamLibraries.steamapps().flatMap(manifests(in:)).compactMap { read(manifest: $0)?.appID })
     }
 
     /// The inert half of a link: the game directory's symlink. Steam pays
@@ -162,26 +175,34 @@ nonisolated enum SharedGames {
         installed(appID: appID)?.directory
     }
 
-    /// What Steam calls a game and where its files are, from the manifest in
-    /// the active bottle. `nil` when the app is not installed here.
-    static func installed(appID: Int) -> (name: String, directory: URL)? {
-        let manifest = activeSteamapps.appendingPathComponent("appmanifest_\(appID).acf")
-        guard let fields = read(manifest: manifest) else { return nil }
-        let directory = activeSteamapps.appendingPathComponent("common/\(fields.installdir)")
-        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
-        return (fields.name, directory)
+    /// What Steam calls a game and where its files are, from its manifest in
+    /// whichever library holds it. `nil` when the app is not installed here.
+    static func installed(appID: Int) -> Installed? {
+        for steamapps in SteamLibraries.steamapps() {
+            let manifest = steamapps.appendingPathComponent("appmanifest_\(appID).acf")
+            if let game = installed(manifest: manifest, in: steamapps) { return game }
+        }
+        return nil
     }
 
-    /// Every game installed in the active bottle, from the manifests Steam
-    /// keeps — the library as it stands on disk, readable without the client.
-    static func installedGames() -> [(appID: Int, name: String, directory: URL)] {
-        manifests(in: activeSteamapps).compactMap { manifest in
-            guard let fields = read(manifest: manifest) else { return nil }
-            let directory = activeSteamapps
-                .appendingPathComponent("common/\(fields.installdir)")
-            guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
-            return (fields.appID, fields.name, directory)
+    /// Every game installed in the active bottle, across all of Steam's
+    /// libraries, from the manifests Steam keeps — the library as it stands on
+    /// disk, readable without the client. `steamapps` narrows it to one.
+    static func installedGames(in steamapps: URL? = nil) -> [Installed] {
+        let libraries = steamapps.map { [$0] } ?? SteamLibraries.steamapps()
+        return libraries.flatMap { library in
+            manifests(in: library).compactMap { installed(manifest: $0, in: library) }
         }
+    }
+
+    private static func installed(manifest: URL, in steamapps: URL) -> Installed? {
+        guard let fields = read(manifest: manifest) else { return nil }
+        let directory = steamapps.appendingPathComponent("common/\(fields.installdir)")
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        return Installed(
+            appID: fields.appID, name: fields.name, directory: directory,
+            bytes: fields.bytes, steamapps: steamapps,
+        )
     }
 
     // MARK: - ACF plumbing

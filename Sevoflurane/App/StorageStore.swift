@@ -17,6 +17,8 @@ final class StorageStore {
     /// The Windows programs added by hand — the detail behind the Added
     /// programs row.
     private(set) var programs: [StorageInventory.Program] = []
+    /// Steam's game libraries and the drives they are on.
+    private(set) var libraries: [StorageInventory.Library] = []
     /// The last thing this pane could not do, for the line under the list.
     private(set) var problem: String?
     private(set) var isMeasuring = false
@@ -148,6 +150,7 @@ final class StorageStore {
 
     private func refreshSharing() {
         games = environment.installedGames()
+        libraries = environment.libraries()
         programs = environment.addedPrograms()
         linkedGames = Set(games.map(\.id).filter(environment.isLinked(appID:)))
         let pending = Set(pendingLinks.map(\.appID))

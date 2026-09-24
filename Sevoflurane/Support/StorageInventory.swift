@@ -52,7 +52,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: Entry.gamesID,
                 name: "Games",
-                detail: "Every game Steam has installed on this Mac.",
+                detail: "The games in Steam\u{2019}s library inside the bottle.",
                 url: steam.appendingPathComponent("steamapps"),
                 bytes: -1,
                 removal: nil,
@@ -190,38 +190,61 @@ nonisolated enum StorageInventory {
         let bytes: Int64
     }
 
-    /// What is installed, largest first.
+    /// What is installed in the library inside the bottle, largest first —
+    /// the games the Games row measures. Libraries elsewhere are listed on
+    /// their own (``libraries()``).
     ///
     /// Read from Steam's own `appmanifest_*.acf` files rather than measured:
     /// the client already knows every game's size on disk, and asking the
     /// filesystem the same question would walk a quarter of a million files
     /// to reach the same number.
     static func installedGames() -> [Game] {
-        let steamapps = SteamBottle.steamRoot.appendingPathComponent("steamapps")
-        let manifests = (try? FileManager.default.contentsOfDirectory(
-            at: steamapps, includingPropertiesForKeys: nil,
-        ))?.filter {
-            $0.lastPathComponent.hasPrefix("appmanifest_") && $0.pathExtension == "acf"
-        } ?? []
-        return manifests.compactMap(game(inManifest:)).sorted { $0.bytes > $1.bytes }
+        SharedGames.installedGames(in: SharedGames.activeSteamapps)
+            .map { Game(id: $0.appID, name: $0.name, bytes: $0.bytes) }
+            .sorted { $0.bytes > $1.bytes }
     }
 
-    /// The three fields worth having out of an ACF: a flat `"key" "value"`
-    /// format, so a full VDF parser would be ceremony.
-    private static func game(inManifest url: URL) -> Game? {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        func value(_ key: String) -> String? {
-            guard let range = text.range(of: "\"\(key)\"") else { return nil }
-            let rest = text[range.upperBound...]
-            guard let open = rest.firstIndex(of: "\""),
-                  let close = rest[rest.index(after: open)...].firstIndex(of: "\"")
-            else { return nil }
-            return String(rest[rest.index(after: open) ..< close])
+    /// One of Steam's game libraries, and the drive it is on.
+    struct Library: Identifiable, Sendable, Equatable {
+        /// The library's folder, which is its identity.
+        let id: URL
+        /// The inside-the-bottle library Steam installs into by default.
+        let isInsideBottle: Bool
+        let fileSystem: SteamLibraries.FileSystem
+        /// Free space on the library's drive, when the drive says.
+        let available: Int64?
+        let games: Int
+        /// Steam's own count of the games' size.
+        let bytes: Int64
+
+        /// The folder as a person writes it: `~/…` or `/Volumes/…`.
+        var location: String {
+            (id.path as NSString).abbreviatingWithTildeInPath
         }
-        guard let id = value("appid").flatMap(Int.init), let name = value("name") else {
-            return nil
+    }
+
+    /// Every library Steam knows in the active bottle whose drive is here,
+    /// the one inside the bottle first.
+    static func libraries() -> [Library] {
+        let games = SharedGames.installedGames()
+        // By path: a URL made for a folder that exists carries a trailing
+        // slash, and one made for the same folder by name does not.
+        let inBottle = SharedGames.activeSteamapps.standardizedFileURL.path
+        return SteamLibraries.steamapps().map { steamapps in
+            let path = steamapps.standardizedFileURL.path
+            let inLibrary = games.filter { $0.steamapps.standardizedFileURL.path == path }
+            let available = (try? steamapps.resourceValues(
+                forKeys: [.volumeAvailableCapacityForImportantUsageKey],
+            ))?.volumeAvailableCapacityForImportantUsage
+            return Library(
+                id: steamapps.deletingLastPathComponent(),
+                isInsideBottle: path == inBottle,
+                fileSystem: SteamLibraries.fileSystem(at: steamapps),
+                available: available,
+                games: inLibrary.count,
+                bytes: inLibrary.map(\.bytes).reduce(0, +),
+            )
         }
-        return Game(id: id, name: name, bytes: value("SizeOnDisk").flatMap(Int64.init) ?? 0)
     }
 
     /// One Windows program the user added.
