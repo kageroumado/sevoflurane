@@ -81,6 +81,11 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         show()
     }
 
+    func showGame(id: Int, name: String) {
+        navigation.showGame(id: id, name: name)
+        show()
+    }
+
     private func makeWindow() -> NSWindow {
         let steam = host.map { host in
             SteamActions(
@@ -120,12 +125,16 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         let window = NSWindow(contentViewController: controller)
         titleByPane(window)
         window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
         // The separator is the whole toolbar: it is what aligns the split
         // view's divider with the titlebar, and without a toolbar at all the
         // sidebar and the pane get their own disjoint title areas.
         let toolbar = NSToolbar(identifier: "Settings")
         toolbar.delegate = self
+        // The default mode reserves a label line under every item, which
+        // grows the titlebar by that line though the toolbar has no items.
+        toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
         window.setContentSize(NSSize(width: 800, height: 560))
         window.minSize = NSSize(width: 720, height: 460)

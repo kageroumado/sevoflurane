@@ -12,6 +12,9 @@ struct GamesSettings: View {
     @State private var selected: Int?
     /// Opens on the first game, for the gallery, which has nobody to pick one.
     var selectsFirstGame = false
+    /// A game someone asked to see from elsewhere — a game's menu in the
+    /// popover. Taken and cleared.
+    var requestedGame: Binding<SettingsNavigation.GameRequest?> = .constant(nil)
     /// What the fix table says about the selected game.
     @State private var recommendation = KnownFixes.Recommendation(fixes: [])
 
@@ -36,10 +39,27 @@ struct GamesSettings: View {
                 GamesPlaceholder(hasGames: !games.isEmpty)
             }
         }
-        .onAppear(perform: reload)
+        .onAppear {
+            reload()
+            takeRequest()
+        }
+        .onChange(of: requestedGame.wrappedValue) { takeRequest() }
         .onChange(of: selected) { _, id in
             select(id)
         }
+    }
+
+    /// Selects the requested game. One that has never launched has no file
+    /// yet and is not in the list; it joins it, and its first setting
+    /// writes the file.
+    private func takeRequest() {
+        guard let request = requestedGame.wrappedValue else { return }
+        requestedGame.wrappedValue = nil
+        if !games.contains(where: { $0.id == request.id }) {
+            games.append(Entry(id: request.id, name: request.name, exes: []))
+            games.sort(by: Self.byName)
+        }
+        selected = request.id
     }
 
     /// Loads what the fix table says about a game.
@@ -50,6 +70,11 @@ struct GamesSettings: View {
     }
 
     /// By name, then id, so two games without a name keep a stable order.
+    private static func byName(_ a: Entry, _ b: Entry) -> Bool {
+        let order = a.name.localizedStandardCompare(b.name)
+        return order == .orderedSame ? a.id < b.id : order == .orderedAscending
+    }
+
     private func reload() {
         let installed = SharedGames.installedAppIDs
         games = GameConfig.games()
@@ -57,10 +82,7 @@ struct GamesSettings: View {
             .map { id, values in
                 Entry(id: id, name: values.name ?? "App \(id)", exes: values.exes ?? [])
             }
-            .sorted { a, b in
-                let order = a.name.localizedStandardCompare(b.name)
-                return order == .orderedSame ? a.id < b.id : order == .orderedAscending
-            }
+            .sorted(by: Self.byName)
         if let selected, !games.contains(where: { $0.id == selected }) {
             self.selected = nil
         }

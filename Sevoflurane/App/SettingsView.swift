@@ -62,6 +62,7 @@ struct SettingsView: View {
                 compatibility: compatibility,
                 steam: steam,
                 highlighted: navigation.highlighted,
+                requestedGame: $navigation.requestedGame,
                 supervisor: supervisor,
                 showReports: showReports,
             )
@@ -570,11 +571,16 @@ struct SettingsSidebar: View {
             } else {
                 ForEach(matches) { match in
                     Button { reveal(match.item, in: match.category) } label: {
+                        // The pane under the setting's name: side by side, the
+                        // sidebar's width truncates both to a few letters.
                         Label {
-                            HStack {
-                                Text(match.item.title).foregroundStyle(.primary)
-                                Spacer(minLength: 8)
-                                Text(match.category.title).foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(match.item.title)
+                                    .foregroundStyle(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(match.category.title)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         } icon: {
                             Image(systemName: match.category.icon)
@@ -613,6 +619,7 @@ private struct SettingsPane: View {
     let compatibility: CompatibilityStore
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
+    @Binding var requestedGame: SettingsNavigation.GameRequest?
     var supervisor: ClientSupervisor?
     var showReports: (() -> Void)?
 
@@ -632,7 +639,7 @@ private struct SettingsPane: View {
                     provisioner: provisioner, highlighted: highlighted,
                 )
             case .games:
-                GamesSettings(shaders: shaders, highlighted: highlighted)
+                GamesSettings(shaders: shaders, highlighted: highlighted, requestedGame: $requestedGame)
             case .storage:
                 StorageSettings(store: storage, steam: steam, highlighted: highlighted)
             case .recovery:
@@ -646,7 +653,16 @@ private struct SettingsPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The toolbar's safe area is sized for a title and a subtitle, and a
+        // pane has only the title. The form runs under the titlebar and this
+        // bar holds back just the title's height; it needs content to exist,
+        // and the soft edge effect needs a bar to fade under.
+        .safeAreaBar(edge: .top) {
+            Text(" ").frame(width: 1, height: 42)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .all)
         .navigationTitle(category.title)
+        .ignoresSafeArea(edges: .vertical)
     }
 }
 

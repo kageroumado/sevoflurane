@@ -863,6 +863,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.showRecovery()
     }
 
+    /// Settings › Games, open on one game's own settings. Waits behind an
+    /// unfinished setup, as ``showSettings(_:)`` does.
+    func showGameSettings(id: Int, name: String) {
+        if setupWindow.show() { return }
+        settingsWindow.showGame(id: id, name: name)
+    }
+
     /// The last runs, what each of them left behind, and the two ways to
     /// share one. Settings › Recovery and the app menu both open it.
     @objc
