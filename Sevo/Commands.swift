@@ -591,13 +591,12 @@ struct EngineCommand: AsyncParsableCommand {
     /// Adds Apple's D3DMetal to the managed engine from the user's own copy
     /// of the Game Porting Toolkit — the CLI face of Settings › Graphics.
     private func addD3DMetal() async throws {
-        // Without `--into`, the toolkit goes wherever this engine keeps it:
-        // inside a managed engine, or the shared store that CrossOver is
-        // pointed at through the shadow tree.
+        // Toolkits live in one store for every engine; `--into` names the managed engine
+        // whose Wine tree is reported, the active one without it.
         var version = into
         if version == nil, case let .managed(active) = Engine.active { version = active }
-        let engine = version.map(Engine.managedRoot.appendingPathComponent)
-            ?? D3DMetalInstaller.sharedRoot
+        let engine = D3DMetalInstaller.store
+        let tree = version.map(Engine.managedRoot.appendingPathComponent)
         let label = version ?? "CrossOver"
         if let use {
             if use == "own" {
@@ -637,8 +636,8 @@ struct EngineCommand: AsyncParsableCommand {
             // The on-disk truth: what a game actually loads, both halves,
             // independent of what the picker recorded. A crossed tree here is
             // the silent 14 s boot death.
-            if version != nil, !installed.isEmpty {
-                let placement = D3DMetalInstaller.placement(inEngine: engine)
+            if let tree, !installed.isEmpty {
+                let placement = D3DMetalInstaller.placement(inEngine: tree)
                 if let macOS = placement.macOS, placement.halvesAgree {
                     print("in the Wine tree: \(macOS)  (both halves)")
                 } else if placement.macOS != nil || placement.windows != nil {

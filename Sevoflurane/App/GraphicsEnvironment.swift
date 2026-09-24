@@ -60,11 +60,7 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
     let engineHasOwnD3DMetal: Bool
 
     init() {
-        toolkitStore = if case let .managed(version) = Engine.active {
-            Engine.managedRoot.appendingPathComponent(version)
-        } else {
-            D3DMetalInstaller.sharedRoot
-        }
+        toolkitStore = D3DMetalInstaller.store
         engineHasOwnD3DMetal = Engine.active.isCrossOver
     }
 

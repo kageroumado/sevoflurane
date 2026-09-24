@@ -412,3 +412,24 @@ struct D3DMetalInstallTests {
         #expect(D3DMetalInstaller.active(inEngine: engine, preferences: preferences)?.version == "4.0 beta 2")
     }
 }
+
+/// Toolkits an engine carries move into the one shared store.
+struct ToolkitStoreTests {
+    @Test
+    func `an engine's toolkit is copied into the store once, and the store's own is kept`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("toolkits-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let engine = root.appendingPathComponent("dormison-r15"), store = root.appendingPathComponent("store")
+        for (base, version) in [(engine, "4.0 beta 2"), (engine, "3.0"), (store, "3.0")] {
+            let framework = base.appendingPathComponent("d3dmetal/\(version)/lib/external/D3DMetal.framework")
+            try FileManager.default.createDirectory(at: framework, withIntermediateDirectories: true)
+            try Data(base == store ? "store".utf8 : "engine".utf8).write(to: framework.appendingPathComponent("marker"))
+        }
+
+        #expect(D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store) == ["4.0 beta 2"])
+        #expect(D3DMetalInstaller.installed(inEngine: store).map(\.version) == ["3.0", "4.0 beta 2"])
+        let kept = store.appendingPathComponent("d3dmetal/3.0/lib/external/D3DMetal.framework/marker")
+        #expect(try String(contentsOf: kept, encoding: .utf8) == "store")
+        #expect(D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store).isEmpty)
+    }
+}

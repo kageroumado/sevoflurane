@@ -33,7 +33,7 @@ nonisolated enum EngineRenderers {
     ) -> [String] {
         stage(
             renderer, engine: engine, bottle: bottle,
-            toolkit: D3DMetalInstaller.active(inEngine: engine),
+            toolkit: D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store),
         )
     }
 
@@ -175,7 +175,7 @@ nonisolated enum EngineRenderers {
     static func prependDirectory(for renderer: Renderer, engine: URL) -> URL? {
         prependDirectory(
             for: renderer, engine: engine,
-            toolkit: D3DMetalInstaller.active(inEngine: engine),
+            toolkit: D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store),
         )
     }
 
@@ -466,7 +466,9 @@ nonisolated enum EngineRenderers {
         // Every added version too, so a file staged from one of them is
         // still recognized as a payload after the choice moves on.
         directories += RendererVersions.allDirectories()
-        for toolkit in D3DMetalInstaller.installed(inEngine: engine) {
+        // The store's versions, and any an engine still carries in its own d3dmetal/.
+        for toolkit in D3DMetalInstaller.installed(inEngine: D3DMetalInstaller.store)
+            + D3DMetalInstaller.installed(inEngine: engine) {
             directories.append(D3DMetalInstaller.windowsLibraries(of: toolkit))
         }
         return directories

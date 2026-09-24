@@ -50,10 +50,41 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// Where toolkits live when they are not inside a managed engine — the
-    /// versions CrossOver can be pointed at through ``CrossOverShadow``.
+    /// Where toolkits live: one store for every engine, in an engine's layout
+    /// (`d3dmetal/<version>`), and the versions CrossOver is pointed at through
+    /// ``CrossOverShadow``. A managed engine holds only the version staging places in its
+    /// Wine tree, so an engine that arrives new — an update, the copy an app carries — finds
+    /// the user's toolkits already there, and none ships with an engine.
     static let sharedRoot = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/Sevoflurane/D3DMetal")
+
+    /// The toolkit store every lookup and install goes to.
+    static var store: URL { sharedRoot }
+
+    /// ``adoptEngineToolkits(from:into:)`` over every installed managed engine, logged.
+    static func adoptInstalledEnginesToolkits() {
+        let engines = SetupProbe.managedEngineVersions().map(Engine.managedRoot.appendingPathComponent)
+        let adopted = adoptEngineToolkits(from: engines)
+        if !adopted.isEmpty { SetupLog.log("D3DMetal \(adopted.joined(separator: ", ")) moved into the shared toolkit store") }
+    }
+
+    /// Copies the toolkits engines carry in their own `d3dmetal/` into the store, when the
+    /// store lacks that version: engines installed before the store was shared, and releases
+    /// that shipped one. Answers the versions adopted.
+    @discardableResult
+    static func adoptEngineToolkits(from engines: [URL], into store: URL = store) -> [String] {
+        let manager = FileManager.default
+        var adopted: [String] = []
+        for engine in engines {
+            for toolkit in installed(inEngine: engine) {
+                let destination = store.appendingPathComponent("d3dmetal").appendingPathComponent(toolkit.version)
+                guard !manager.fileExists(atPath: destination.path) else { continue }
+                try? manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if (try? manager.copyItem(at: toolkit.root, to: destination)) != nil { adopted.append(toolkit.version) }
+            }
+        }
+        return adopted
+    }
 
     // MARK: - What is installed
 

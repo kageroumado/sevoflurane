@@ -25,6 +25,8 @@ final class Daemon {
         // Ownership first: everything spawned from here carries this pid, and
         // the engine's dock shim brings the prefix down if it dies.
         BottleOwner.claim()
+        // Toolkits an engine carries join the shared store before anything is staged.
+        D3DMetalInstaller.adoptInstalledEnginesToolkits()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         // Both questions are the client's, and the only live connection to it
         // belongs to the app's bridge — so both travel the link rather than

@@ -245,6 +245,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task.detached(name: "Copy bundled shader packages") {
             ShaderPackages.ensureBundled()
         }
+        Task.detached(name: "Adopt the engines' D3DMetal toolkits") {
+            D3DMetalInstaller.adoptInstalledEnginesToolkits()
+        }
         Task {
             await provisioner.refreshDetection()
             if let detection = provisioner.detection {

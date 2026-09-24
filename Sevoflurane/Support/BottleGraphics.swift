@@ -120,7 +120,7 @@ nonisolated enum BottleGraphics {
             return selection(forBottle: SteamBottle.root)
         }
         var selection = managedSelection()
-        selection.d3dMetalVersion = D3DMetalInstaller.active(inEngine: Engine.active.root)?.version
+        selection.d3dMetalVersion = D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store)?.version
         return selection
     }
 
@@ -262,7 +262,7 @@ nonisolated enum BottleGraphics {
     /// report has to name the layer the game actually loaded.
     static func stagingNote(_ staged: [String]) -> String? {
         guard case .managed = Engine.active else { return nil }
-        let toolkit = D3DMetalInstaller.active(inEngine: Engine.active.root)?.version
+        let toolkit = D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store)?.version
         return "staged \(staged.count) renderer DLL(s) for \(managedSelection().renderer.label)"
             + (toolkit.map { ", D3DMetal \($0)" } ?? "")
     }
