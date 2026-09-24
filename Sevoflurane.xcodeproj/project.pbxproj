@@ -342,6 +342,7 @@
 				0B33EFD730290E5E00182A68 /* Frameworks */,
 				0B33EFD830290E5E00182A68 /* Resources */,
 				0BAA000000000000000C0001 /* Build sevo CLI */,
+				0BAA000000000000000C0002 /* Embed engine */,
 				0BAA000000000000000D0003 /* CopyFiles */,
 				0BAA000000000000000E000B /* Embed Foundation Extensions */,
 			);
@@ -511,6 +512,17 @@
 				"cp \"$SRCROOT/.build/$CONF/sevo\" \"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Helpers/sevo\"",
 				"",
 			);
+		};
+		0BAA000000000000000C0002 /* Embed engine */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+			);
+			name = "Embed engine";
+			outputPaths = (
+			);
+			shellPath = /bin/zsh;
+			shellScript = "\"$SRCROOT/Tools/embed-engine.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

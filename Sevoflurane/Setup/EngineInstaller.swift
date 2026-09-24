@@ -211,6 +211,19 @@ nonisolated enum EngineInstaller {
         }
     }
 
+    /// The engine this copy of the app carries, when it is newer than every managed engine
+    /// installed: an app update that brings a newer engine hands it over. Nil before setup
+    /// (setup installs the bundled one itself) and when the newest installed is as new.
+    static func bundledUpgrade(bundled: URL? = bundledTarball(), installed: [String]) -> URL? {
+        guard let bundled, let newest = installed.max(by: {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }) else { return nil }
+        let version = versionName(of: bundled)
+        guard !installed.contains(version),
+              version.localizedStandardCompare(newest) == .orderedDescending else { return nil }
+        return bundled
+    }
+
     private static func makeStaging() throws -> URL {
         let staging = FileManager.default.temporaryDirectory
             .appendingPathComponent("sevo-engine-\(UUID().uuidString)")

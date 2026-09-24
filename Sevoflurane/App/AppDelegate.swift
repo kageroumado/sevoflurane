@@ -257,6 +257,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             } else {
                 startRunning()
+                Self.installBundledEngineIfNewer()
+            }
+        }
+    }
+
+    /// An app update that carries a newer engine installs it, off the main actor. The newest
+    /// managed engine is the active one unless the user chose another, so it takes over at
+    /// the client's next start.
+    private static func installBundledEngineIfNewer() {
+        Task.detached(name: "Install the engine this app carries") {
+            guard let bundled = EngineInstaller.bundledUpgrade(installed: SetupProbe.managedEngineVersions())
+            else { return }
+            EventLog.enqueue(.setup, "engine: installing \(bundled.lastPathComponent), which this app carries")
+            do {
+                let version = try await EngineInstaller.install(from: bundled, requiringSignature: true)
+                EventLog.enqueue(.setup, "engine: \(version) installed from the app; it runs from the client's next start")
+            } catch {
+                EventLog.enqueue(.setup, "engine: the engine this app carries did not install — \(error)")
             }
         }
     }

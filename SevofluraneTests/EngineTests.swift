@@ -491,3 +491,25 @@ struct EngineRecordIdentifierTests {
         #expect(Engine.booted(fromRoot: "") == nil)
     }
 }
+
+/// When an app update's own engine replaces what is installed.
+struct BundledEngineUpgradeTests {
+    private let bundled = URL(fileURLWithPath: "/App.app/Contents/Resources/Engine/dormison-r17.tar.xz")
+
+    @Test
+    func `a newer engine in the app is installed over older ones`() {
+        #expect(EngineInstaller.bundledUpgrade(bundled: bundled, installed: ["dormison-r9", "dormison-r16"]) == bundled)
+    }
+
+    @Test
+    func `an engine already installed or older than the newest is left alone`() {
+        #expect(EngineInstaller.bundledUpgrade(bundled: bundled, installed: ["dormison-r17"]) == nil)
+        #expect(EngineInstaller.bundledUpgrade(bundled: bundled, installed: ["dormison-r18"]) == nil)
+    }
+
+    @Test
+    func `before setup nothing is installed here`() {
+        #expect(EngineInstaller.bundledUpgrade(bundled: bundled, installed: []) == nil)
+        #expect(EngineInstaller.bundledUpgrade(bundled: nil, installed: ["dormison-r9"]) == nil)
+    }
+}
