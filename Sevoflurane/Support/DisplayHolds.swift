@@ -33,7 +33,7 @@ nonisolated enum DisplayHolds {
         guard IOPMCopyAssertionsByProcess(&table) == kIOReturnSuccess,
               let byProcess = table?.takeRetainedValue() as? [NSNumber: [[String: Any]]]
         else { return [] }
-        return byProcess.values.flatMap { $0 }.compactMap { hold(from: $0, ownRoots: ownRoots) }
+        return byProcess.values.flatMap(\.self).compactMap { hold(from: $0, ownRoots: ownRoots) }
             .sorted { ($0.since ?? .distantPast) < ($1.since ?? .distantPast) }
     }
 

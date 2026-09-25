@@ -107,7 +107,9 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         var trace: String? = nil
 
         enum CodingKeys: String, CodingKey {
-            case avg, low1, samples
+            case avg
+            case low1
+            case samples
             case frameTimes = "frame_times"
             case dropped, trace
         }

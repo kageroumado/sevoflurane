@@ -241,7 +241,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
         /// and each slot's stamp in wrapping microseconds. Nil ring on an engine without one.
         var ringHead: UInt64 = 0
         var ringCapacity: Int = 0
-        var ring: [UInt32]? = nil
+        var ring: [UInt32]?
 
         /// Which path counted `frames`.
         enum Source: UInt32, Sendable {
