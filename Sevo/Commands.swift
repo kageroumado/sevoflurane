@@ -2371,6 +2371,7 @@ struct AppCommand: AsyncParsableCommand {
 
         func run() async throws {
             try await handlingFailures {
+                try await refuseUnlessInstalledHere()
                 let before = await WindowReport.currentWindow()
                 await warnAboutRunningApps()
                 let stuckInSync = await isStuckInCloudSync()
@@ -2432,6 +2433,31 @@ struct AppCommand: AsyncParsableCommand {
                 )
             }
             return route
+        }
+
+        /// A game installed only by another of the account's Steam clients —
+        /// a native Mac Steam, another PC — shows as installed in Steam's
+        /// library, and launching it here fails at its app ticket and offers
+        /// an install. Said up front, with exit 1.
+        private func refuseUnlessInstalledHere() async throws {
+            guard let info = try? await SteamOps.appInfo(appid),
+                  let overview = Sevo.jsonObject(info),
+                  overview["installed"] as? Bool == false
+            else { return }
+            let elsewhere = overview["installed_elsewhere"] as? [String] ?? []
+            let name = overview["name"] as? String ?? String(appid)
+            let message = elsewhere.isEmpty
+                ? "\(name) is not installed in this bottle"
+                : "\(name) is installed on \(elsewhere.joined(separator: ", ")), not in this bottle"
+            if asJSON {
+                print(Sevo.json([
+                    "verdict": "noEffect", "intent": "app launch", "appid": appid,
+                    "installed": false, "installed_elsewhere": elsewhere,
+                ], pretty: true))
+            } else {
+                print("app launch: no effect — \(message) (install it from Steam in Sevoflurane first)")
+            }
+            throw SevoExit.failed
         }
 
         /// Steam's own index for the option numbered `number` from 1, in

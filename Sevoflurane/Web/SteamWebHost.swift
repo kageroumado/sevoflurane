@@ -186,7 +186,11 @@ final class SteamWebHost {
         Task(name: "Refresh recent games") {
             let script = """
             JSON.stringify((window.appStore ? appStore.allApps : [])
-              .filter(function (a) { return a.installed && a.app_type === 1; })
+              // Installed in this bottle: `installed` alone is also true for a
+              // game another of the account's Steam clients has installed.
+              .filter(function (a) {
+                return a.local_per_client_data && a.local_per_client_data.installed && a.app_type === 1;
+              })
               .sort(function (x, y) {
                 return (y.rt_last_time_played || 0) - (x.rt_last_time_played || 0);
               })

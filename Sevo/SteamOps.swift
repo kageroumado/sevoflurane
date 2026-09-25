@@ -6,15 +6,25 @@ import Foundation
 nonisolated enum SteamOps {
     /// `appStore.allApps` projected to the stable fields the spec promises.
     static func libraryList(installedOnly: Bool) async throws -> String {
-        let filter = installedOnly ? ".filter(a => a.installed)" : ""
+        let filter = installedOnly ? ".filter(here)" : ""
         let js = """
-        (() => JSON.stringify(appStore.allApps\(filter).map(a => ({
-          appid: a.appid, name: a.display_name, installed: !!a.installed,
+        (() => { \(installedHere) return JSON.stringify(appStore.allApps\(filter).map(a => ({
+          appid: a.appid, name: a.display_name, installed: here(a),
           size_on_disk: a.size_on_disk || null,
-          minutes_playtime: a.minutes_playtime || 0 }))))()
+          minutes_playtime: a.minutes_playtime || 0 }))); })()
         """
         return try await SteamJS.eval(js) ?? "[]"
     }
+
+    /// `here(a)`: whether an app is installed in this bottle. Steam's own
+    /// `installed` is also true for an app another of the account's clients
+    /// has installed (a native Mac Steam, another PC), which this bottle
+    /// cannot launch; `elsewhere(a)` names those clients.
+    static let installedHere = """
+    const here = a => !!(a.local_per_client_data && a.local_per_client_data.installed);
+    const elsewhere = a => (a.per_client_data || [])
+      .filter(c => c.installed && c.clientid !== "0").map(c => c.client_name);
+    """
 
     /// One app's overview, `null` when the appid is not in the library.
     /// `steam_deck_compat_category`: 0 unknown, 1 unsupported, 2 playable,
@@ -22,10 +32,12 @@ nonisolated enum SteamOps {
     static func appInfo(_ appid: Int) async throws -> String {
         let js = """
         (() => {
+          \(installedHere)
           const a = appStore.allApps.find(x => x.appid === \(appid));
           if (!a) return "null";
           return JSON.stringify({
-            appid: a.appid, name: a.display_name, installed: !!a.installed,
+            appid: a.appid, name: a.display_name, installed: here(a),
+            installed_elsewhere: here(a) ? [] : elsewhere(a),
             size_on_disk: a.size_on_disk || null,
             minutes_playtime: a.minutes_playtime || 0,
             deck_compat_category: a.steam_deck_compat_category ?? null,
