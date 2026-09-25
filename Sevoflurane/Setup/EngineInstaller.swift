@@ -241,13 +241,17 @@ nonisolated enum EngineInstaller {
         let manager = FileManager.default
         let extracted = staging.appendingPathComponent("extracted")
         try manager.createDirectory(at: extracted, withIntermediateDirectories: true)
+        // Through a pipe: tar reading the file itself copies the archive's quarantine onto
+        // every file it writes, and an ad-hoc signed binary carrying it never gets past exec.
+        // A disk image that came by browser or AirDrop quarantines the tarball inside the app.
         let untar = await Subprocess.run(
-            "/usr/bin/tar", ["-xf", tarball.path, "-C", extracted.path],
+            "/bin/sh", ["-c", #"/bin/cat -- "$0" | /usr/bin/tar -xf - -C "$1""#, tarball.path, extracted.path],
             capture: .combined, timeout: .seconds(600),
         )
         guard untar.status == 0 else {
             throw InstallError("engine extraction failed: \(untar.output.suffix(200))")
         }
+        try await clearQuarantine(under: extracted)
 
         let contents = try manager.contentsOfDirectory(atPath: extracted.path)
             .filter { !$0.hasPrefix(".") }
@@ -268,6 +272,31 @@ nonisolated enum EngineInstaller {
         try manager.moveItem(at: tree, to: destination)
         return version
     }
+
+    /// Makes the extracted tree its owner's to change and leaves no file quarantined. Checked
+    /// before anything in it runs: Gatekeeper keeps the verdict it gave an executed binary, so
+    /// a flag removed afterwards no longer helps.
+    static func clearQuarantine(under root: URL) async throws {
+        _ = await Subprocess.run("/bin/chmod", ["-R", "u+w", root.path])
+        let stuck = removeQuarantine(under: root)
+        guard stuck.isEmpty else {
+            throw InstallError("engine files still quarantined: \(stuck.prefix(3).joined(separator: ", "))")
+        }
+    }
+
+    /// Strips the quarantine flag from every file under `root`, answering the ones it stayed on.
+    private static func removeQuarantine(under root: URL) -> [String] {
+        guard let walk = FileManager.default.enumerator(atPath: root.path) else { return [] }
+        var stuck: [String] = []
+        for case let relative as String in walk {
+            let path = root.appendingPathComponent(relative).path
+            guard getxattr(path, quarantineAttribute, nil, 0, 0, XATTR_NOFOLLOW) >= 0 else { continue }
+            if removexattr(path, quarantineAttribute, XATTR_NOFOLLOW) != 0 { stuck.append(relative) }
+        }
+        return stuck
+    }
+
+    private static let quarantineAttribute = "com.apple.quarantine"
 
     /// Downloads the tarball with real progress: a plain download task whose
     /// `Progress` is observed, the same shape the GPTk panel uses. Never an

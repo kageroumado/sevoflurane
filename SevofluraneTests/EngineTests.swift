@@ -162,11 +162,16 @@ struct EngineInstallerTests {
 
     /// A scratch directory holding `<version>/wine/bin/wine` and an
     /// `engine-info.json`, packed as `<version>.tar.xz` beside it.
-    private func makeTarball(version: String, extraTopLevel: String? = nil) async throws -> (dir: URL, tarball: URL) {
+    private func makeTarball(
+        version: String, extraTopLevel: String? = nil, readOnlyWine: Bool = false,
+    ) async throws -> (dir: URL, tarball: URL) {
         let dir = manager.temporaryDirectory.appendingPathComponent("engine-tests-\(UUID().uuidString)")
         let tree = dir.appendingPathComponent("src/\(version)")
         try manager.createDirectory(at: tree.appendingPathComponent("wine/bin"), withIntermediateDirectories: true)
         try Data("wine".utf8).write(to: tree.appendingPathComponent("wine/bin/wine"))
+        if readOnlyWine {
+            try manager.setAttributes([.posixPermissions: 0o444], ofItemAtPath: tree.appendingPathComponent("wine/bin/wine").path)
+        }
         try Data(#"{"version":"\#(version)"}"#.utf8).write(to: tree.appendingPathComponent("engine-info.json"))
         var members = [version]
         if let extraTopLevel {
@@ -191,6 +196,19 @@ struct EngineInstallerTests {
         #expect(version == "dormison-r99")
         #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/wine/bin/wine").path))
         #expect(manager.fileExists(atPath: root.appendingPathComponent("dormison-r99/engine-info.json").path))
+    }
+
+    @Test
+    func `a quarantined tarball installs an engine with no file quarantined and every file writable`() async throws {
+        let (dir, tarball) = try await makeTarball(version: "dormison-r97", readOnlyWine: true)
+        defer { try? manager.removeItem(at: dir) }
+        let flag = "0181;66f2a000;sharingd;"
+        try #require(setxattr(tarball.path, "com.apple.quarantine", flag, flag.utf8.count, 0, 0) == 0)
+        let root = dir.appendingPathComponent("Engines")
+        _ = try await EngineInstaller.install(from: tarball, into: root)
+        let wine = root.appendingPathComponent("dormison-r97/wine/bin/wine").path
+        #expect(getxattr(wine, "com.apple.quarantine", nil, 0, 0, XATTR_NOFOLLOW) < 0)
+        #expect(manager.isWritableFile(atPath: wine))
     }
 
     @Test
