@@ -48,6 +48,7 @@ final class QuickLaunchStore {
         ActivationPolicy.claimRightForALaunch()
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
+            let logOffset = KernelDriverFailure.size()
             guard await DaemonService.post("/program/launch?id=\(entry.id)\(query)") != nil else {
                 EventLog.shared.log(
                     .client,
@@ -55,7 +56,23 @@ final class QuickLaunchStore {
                 )
                 return
             }
+            guard let driver = await KernelDriverFailure.watch(from: logOffset) else { return }
+            EventLog.shared.log(.client, "\(entry.name) needs the kernel driver \(driver), which Wine cannot load")
+            Self.explainKernelDriver(driver, program: entry.name)
         }
+    }
+
+    /// A program whose kernel driver failed ends or waits with nothing on
+    /// screen, so the reason is said out loud once.
+    private static func explainKernelDriver(_ driver: String, program: String) {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "\(program) needs a Windows kernel driver")
+        alert.informativeText = String(localized: """
+        It tried to load \(driver), which is usually kernel-level anti-cheat. Windows kernel drivers \
+        cannot run on a Mac, so this program will not start under Sevoflurane.
+        """)
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.runModal()
     }
 
     /// Forgets a program. The executable it points at is the user's and is
