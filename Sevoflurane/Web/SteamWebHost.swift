@@ -231,6 +231,9 @@ final class SteamWebHost {
 
     /// The app whose launch-option alert is on screen, while it is.
     @ObservationIgnored var launchOptionPending: Int?
+    /// The game action whose launch-option request was last taken up: the
+    /// context page and the shim's tap can both report one request.
+    @ObservationIgnored var launchOptionAction: Int?
 
     /// What a sweep of the client's popups leaves alone right now: the popup
     /// named after the game a launch is in flight for, and any other

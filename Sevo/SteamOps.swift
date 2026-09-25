@@ -96,6 +96,23 @@ nonisolated enum SteamOps {
     }
 
     /// The ways Steam lists to start an app, as the client's JSON.
+    /// The task Steam's pending game action for `appid` waits on the user
+    /// for (`ShowLaunchOption`, a EULA, a CD key), or `nil` when none waits.
+    static func pendingUserRequest(_ appid: Int) async -> String? {
+        let js = """
+        new Promise(function (answer) {
+          SteamClient.Apps.GetGameActionForApp('\(appid)', function (id) {
+            if (id == null || id < 0) return answer('');
+            SteamClient.Apps.GetGameActionDetails(id, function (d) {
+              answer(d && d.bWaitingForUI ? String(d.strTaskName || '') : '');
+            });
+          });
+        })
+        """
+        let task = await (try? SteamJS.eval(js))?.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        return task?.isEmpty == false ? task : nil
+    }
+
     static func launchOptions(_ appid: Int) async throws -> String {
         try await SteamJS.eval(LaunchOptions.listScript(appID: appid)) ?? "[]"
     }

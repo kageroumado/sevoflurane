@@ -91,6 +91,8 @@ extension SteamWebHost {
     /// dialog, or when there is nothing to choose between; otherwise a native
     /// alert asks, after this message handler returns.
     func noteLaunchOptions(appID: Int, actionID: Int, json: String, remembered: String) {
+        guard launchOptionAction != actionID else { return }
+        launchOptionAction = actionID
         let options = LaunchOptions.parse(json)
         EventLog.shared.log(
             .client,

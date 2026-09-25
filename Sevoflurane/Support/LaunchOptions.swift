@@ -138,18 +138,15 @@ nonisolated enum LaunchOptions {
         (function () {
           var appid = \(appID), wanted = \(JSLiteral.string(String(option)));
           var key = \(rememberedKeyScript);
-          var actionID = null, done = false, start = null, ask = null;
+          var done = false, ask = null;
           var finish = function () {
             if (done) return;
             done = true;
-            try { start.unregister(); } catch (e) {}
             try { ask.unregister(); } catch (e) {}
           };
-          start = SteamClient.Apps.RegisterForGameActionStart(function (id, gameid) {
-            if (String(gameid) === String(appid)) actionID = id;
-          });
-          ask = SteamClient.Apps.RegisterForGameActionUserRequest(function (gameid, action, request) {
-            if (String(gameid) !== String(appid) || request !== "ShowLaunchOption" || actionID === null) return;
+          // Steam calls it with (action id, app id, action, request).
+          ask = SteamClient.Apps.RegisterForGameActionUserRequest(function (actionID, gameid, action, request) {
+            if (String(gameid) !== String(appid) || request !== "ShowLaunchOption") return;
             SteamClient.Apps.ContinueGameAction(actionID, wanted);
             finish();
           });

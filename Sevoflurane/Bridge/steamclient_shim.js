@@ -371,10 +371,7 @@
      RegisterForGameActionUserRequest and answers it with its own dialog, or
      silently from a remembered choice; here the request goes to the host as
      __launchOptions instead, which puts it as a native alert. Every other
-     request reaches the page's handler untouched. The action id the answer
-     needs arrives through RegisterForGameActionStart, so that registration is
-     tapped too. */
-  var launchAction = { id: null, appid: null };
+     request reaches the page's handler untouched. */
   function launchOptionKey(appid, options) {
     /* Steam's own key and hash (LaunchOptions.rememberedKeyScript is its twin). */
     var text = JSON.stringify(options), hash = 0;
@@ -386,20 +383,13 @@
       + (hash < 0 ? 4294967295 + hash + 1 : hash).toString(16);
   }
   var CALLBACK_TAPS = {
-    "SteamClient.Apps.RegisterForGameActionStart": function (cb) {
-      return function (id, gameid) {
-        launchAction = { id: id, appid: String(gameid) };
-        return cb.apply(this, arguments);
-      };
-    },
     "SteamClient.Apps.RegisterForGameActionUserRequest": function (cb) {
-      return function (gameid, action, request) {
+      /* Steam calls it with (action id, app id, action, request). */
+      return function (actionID, gameid, action, request) {
         var handler = nativeWindowHandler(window);
-        if (request !== "ShowLaunchOption" || !handler
-            || launchAction.appid !== String(gameid)) {
+        if (request !== "ShowLaunchOption" || !handler) {
           return cb.apply(this, arguments);
         }
-        var actionID = launchAction.id;
         var post = function (options, remembered) {
           try {
             handler.postMessage({ fn: "__launchOptions", args: [
