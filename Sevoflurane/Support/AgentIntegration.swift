@@ -121,7 +121,7 @@ enum AgentIntegration {
         /// Where the switch writes — the fine print under each row.
         var configDescription: String {
             switch self {
-            case .claudeCode: "registered with the claude CLI (user scope)"
+            case .claudeCode: "registered with the claude CLI (user scope), with a skill in ~/.claude/skills/sevoflurane"
             case .claudeDesktop: "~/Library/Application Support/Claude/claude_desktop_config.json"
             case .codex: "~/.codex/config.toml, via the codex CLI"
             case .hermes: "~/.hermes/config.yaml"
@@ -188,6 +188,7 @@ enum AgentIntegration {
     static func unregister(_ harness: Harness) async -> String? {
         switch harness {
         case .claudeCode:
+            removeClaudeSkill()
             guard let claude = claudeBinary else { return nil }
             let result = await Subprocess.run(
                 claude, ["mcp", "remove", "--scope", "user", serverName],
@@ -251,9 +252,52 @@ enum AgentIntegration {
             capture: .combined, timeout: .seconds(30),
         )
         if result.status == 0 || result.output.contains("already exists") {
+            installClaudeSkill()
             return nil
         }
         return String(result.output.suffix(120))
+    }
+
+    /// Where Claude Code reads the skill that teaches it `sevo`: the commands,
+    /// how a diagnostic run is made, and where its files land.
+    nonisolated static var claudeSkillDirectory: URL {
+        UserHome.url.appendingPathComponent(".claude/skills/sevoflurane")
+    }
+
+    /// Copies the bundled skill over whatever an earlier registration left, so
+    /// every registration carries the running version's guide. The skill is
+    /// `Resources/Agent/SKILL.md` in the source tree and
+    /// `Contents/Resources/SKILL.md` in the built app. One that fails to land
+    /// costs the agent its guide and leaves the server working, so it is
+    /// logged rather than failing the row.
+    private static func installClaudeSkill() {
+        guard let source = BundledResources.url("SKILL.md") else {
+            EventLog.enqueue(.app, "Claude Code skill not installed: the bundle carries no SKILL.md")
+            return
+        }
+        let destination = claudeSkillDirectory.appendingPathComponent("SKILL.md")
+        do {
+            try FileManager.default.createDirectory(at: claudeSkillDirectory, withIntermediateDirectories: true)
+            try Data(contentsOf: source).write(to: destination, options: .atomic)
+            EventLog.enqueue(.app, "Claude Code skill installed at ~/.claude/skills/sevoflurane")
+        } catch {
+            EventLog.enqueue(.app, "Claude Code skill not installed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Moves the skill's directory to the Trash, where anything a person added
+    /// to it can still be found.
+    private static func removeClaudeSkill() {
+        let directory = claudeSkillDirectory
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+        do {
+            try FileManager.default.trashItem(at: directory, resultingItemURL: nil)
+            EventLog.enqueue(.app, "Claude Code skill moved to the Trash")
+        } catch {
+            EventLog.enqueue(
+                .app, "Claude Code skill left at ~/.claude/skills/sevoflurane: \(error.localizedDescription)",
+            )
+        }
     }
 
     // MARK: - Claude Desktop

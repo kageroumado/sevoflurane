@@ -154,6 +154,7 @@
 				Bridge/WebSocketServer.swift,
 				Bridge/steamclient_shim.js,
 				Info.plist,
+				Resources/Agent/SKILL.md,
 				Resources/Licenses/license-anime4k.txt,
 				Resources/Licenses/license-apache-2.0.txt,
 				Resources/Licenses/license-applegamingwiki.txt,

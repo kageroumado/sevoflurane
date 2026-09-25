@@ -416,6 +416,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     ],
                 ),
                 SearchableSetting(
+                    id: .diagnosticsGuide,
+                    title: "Making a useful report",
+                    keywords: [
+                        "report", "bug", "guide", "how", "steps", "reproduce", "compare",
+                        "benchmark", "performance", "fps", "frame rate", "useful",
+                    ],
+                ),
+                SearchableSetting(
                     id: .diagnosticsDebugMode,
                     title: "Debug mode",
                     keywords: [
@@ -524,6 +532,7 @@ enum SettingsAnchor: String, CaseIterable {
     case recoveryRebuildSteam = "recovery.rebuildSteam"
     case recoveryWinecfg = "recovery.winecfg"
     case diagnosticsLevel = "diagnostics.level"
+    case diagnosticsGuide = "diagnostics.guide"
     case diagnosticsDebugMode = "diagnostics.debugMode"
     case diagnosticsReports = "diagnostics.reports"
     case diagnosticsSave = "diagnostics.save"

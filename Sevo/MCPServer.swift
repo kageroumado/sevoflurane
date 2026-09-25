@@ -48,6 +48,29 @@ final class MCPServer {
         return supportedVersions[0]
     }
 
+    /// What a host puts in front of its model before the first tool call: what the
+    /// server drives, and the order a diagnostic run is made in.
+    static let instructions = """
+    sevo drives Sevoflurane, which runs Windows games from a bottled Steam client on a \
+    Wine engine. Start with doctor when anything is wrong; status is the short form.
+    
+    A diagnostic run worth reading:
+    1. diag_level with level 1 before launching (2 for a bug level 1 does not explain; \
+    it turns itself off after one run). A level reaches a game at its next launch.
+    2. app_launch, then let the game run at least 60 s past loading, in one scene.
+    3. For a performance question change one setting between runs (app config, engine, \
+    renderer) and run each side at least twice. perf_label names what the record cannot \
+    see; perf_compare with skip ≈ 20 leaves loading out.
+    4. runs_recent reads how each launch ended; its known_failure is the diagnosis when \
+    the app recognizes one. logs_tail is the app's event trail.
+    5. diag_save right after the problem, then diag_level with level 0.
+    
+    Files: ~/Library/Application Support/Sevoflurane/Runs (run records, traces/), \
+    …/Sevoflurane/Reports (one collected report per run), ~/Library/Logs/Sevoflurane.log \
+    and Sevoflurane-wine.log. Everything a report or the zip carries is redacted: home \
+    paths become ~, Steam ids <steamid>, the account and the Mac's names <user> and <host>.
+    """
+
     /// A JSON integer argument. `JSONSerialization` bridges `true` to an
     /// `NSNumber` that `as? Int` accepts as 1, so booleans are refused here.
     static func integer(_ value: Any?) -> Int? {
@@ -75,6 +98,7 @@ final class MCPServer {
                 "protocolVersion": Self.negotiatedVersion(params["protocolVersion"] as? String),
                 "capabilities": ["tools": [:], "resources": [:]] as [String: Any],
                 "serverInfo": ["name": "sevo", "version": Sevo.version],
+                "instructions": Self.instructions,
             ])
         case "ping":
             return result(id: id, [:])
@@ -187,8 +211,13 @@ final class MCPServer {
             tool(
                 "perf_compare",
                 "Compare frame-time traces of a game's recent runs: runs are grouped by what they ran on "
-                    + "(engine, renderer, upscaler, tuning, msync, D3DMetal, label) and each group is tested "
-                    + "against the first, with 95 % intervals for the average and the 1 % low.",
+                    + "(engine, renderer, upscaler, tuning, msync, D3DMetal, window treatment, label) and "
+                    + "each group is tested against the first, with 95 % intervals for the average and "
+                    + "the 1 % low. versus.*.method \"welch\" is Welch's t-test over runs (two or more per "
+                    + "side); \"block-bootstrap\" means a side had one run and is weaker evidence. A "
+                    + "difference counts only where significant is true: its interval excludes zero. "
+                    + "Runs need at least 60 s past loading in a comparable scene; pass skip to leave "
+                    + "loading out.",
                 properties: appid.merging([
                     "last": ["type": "integer", "description": "How many of the game's newest runs (default 6)"],
                     "skip": ["type": "number", "description": "Seconds to leave out at the start of each run"],
@@ -249,8 +278,53 @@ final class MCPServer {
             tool("downloads_pause", "Disable all downloads."),
             tool("downloads_resume", "Re-enable downloads."),
             tool(
+                "perf_list",
+                "Runs that have a frame trace, newest first: number (what perf_label takes), start "
+                    + "time, game, engine, renderer, label, and the frame-time summary.",
+                properties: [
+                    "appid": ["type": "integer", "description": "Only this game's runs"],
+                    "last": ["type": "integer", "description": "How many (default 20)"],
+                ],
+                readOnly: true,
+            ),
+            tool(
+                "perf_label",
+                "Name a run, so two runs the record cannot tell apart (a setting inside the game, a "
+                    + "different scene) compare as different configurations. An empty label removes it.",
+                properties: [
+                    "run": ["type": "string", "description": "A perf_list number, a start time, or a trace path"],
+                    "label": ["type": "string", "description": "The name; empty removes it"],
+                ],
+                required: ["run", "label"],
+            ),
+            tool(
+                "runs_recent",
+                "The last game launches as run records: what each ran on, when its first window "
+                    + "appeared, how long it ran, how it ended, the last exception, renderer notes, "
+                    + "the frame-rate summary, and known_failure when the app recognizes the ending.",
+                properties: ["last": ["type": "integer", "description": "How many (default 10)"]],
+                readOnly: true,
+            ),
+            tool(
+                "diag_level",
+                "How much the next game run records. Without level, reads it. 0: the run record, frame "
+                    + "trace, event log and Wine's errors, with a report after a crash. 1: adds Wine's "
+                    + "exception channel, the renderers' logs and a report after every run. 2: adds "
+                    + "every library load, the presenter logs, whole minidumps and host samples, and "
+                    + "turns itself off after one run. A level reaches a game at its next launch.",
+                properties: ["level": ["type": "integer", "enum": [0, 1, 2]]],
+            ),
+            tool(
+                "diag_save",
+                "Write the diagnostics zip to the Desktop and answer its path: the logs, doctor, host, "
+                    + "the engine's identity, the bottle's env files, Steam's logs, this month's run "
+                    + "records with the games' own logs, and 48 h of crash reports, all redacted. "
+                    + "Call it right after the problem shows.",
+            ),
+            tool(
                 "logs_tail",
-                "The last N lines of the unified event log.",
+                "The last N lines of the unified event log: what the app and sevo did, the "
+                    + "launch trail, and at level 2 the host's state every 10 s.",
                 properties: ["lines": ["type": "integer", "description": "Default 50"]],
                 readOnly: true,
             ),
@@ -310,7 +384,39 @@ final class MCPServer {
             selection.game = Self.integer(args["appid"])
             selection.last = Self.integer(args["last"]) ?? 6
             selection.skip = (args["skip"] as? NSNumber)?.doubleValue ?? 0
-            return Sevo.json(PerfReport.model(PerfComparison.groups(try selection.resolve()), series: false), pretty: true)
+            return try Sevo.json(PerfReport.model(PerfComparison.groups(selection.resolve()), series: false), pretty: true)
+        case "perf_list":
+            let runs = PerfRuns.available(game: Self.integer(args["appid"]))
+                .prefix(max(1, Self.integer(args["last"]) ?? 20))
+            return Sevo.json(runs.enumerated().map { PerfRuns.row($0.offset + 1, $0.element) }, pretty: true)
+        case "perf_label":
+            guard let reference = args["run"] as? String, let label = args["label"] as? String else {
+                throw ClientOps.Failure.message("run (string) and label (string) are required")
+            }
+            guard let entry = PerfRuns.find(reference, in: PerfRuns.available(game: nil)) else {
+                throw ClientOps.Failure.message("no run \(reference) — perf_list names them")
+            }
+            try PerfLabels.set(label, forTrace: entry.url.lastPathComponent)
+            return label.isEmpty ? "label removed" : "labeled “\(label)”"
+        case "runs_recent":
+            let records = RunLog.recent(max(1, Self.integer(args["last"]) ?? 10))
+            return Sevo.json(records.map(RunsCommand.row), pretty: true)
+        case "diag_level":
+            var level = DiagnosticLevel.current
+            if args["level"] != nil {
+                guard let wanted = Self.integer(args["level"]).flatMap(DiagnosticLevel.init(rawValue:)) else {
+                    throw ClientOps.Failure.message("level must be 0, 1 or 2")
+                }
+                level = DiagnosticLevel.set(wanted)
+            }
+            return Sevo.json([
+                "level": level.rawValue, "title": level.title, "detail": level.detail,
+                "wine_debug": level.channels(), "reports": CrashCollector.root.path,
+                "single_run": level.isSingleRun,
+            ], pretty: true)
+        case "diag_save":
+            Diagnostics.faceReport = { await DiagCommand.faceReport() }
+            return try await Diagnostics.bundle(to: nil, steamLogs: true).path
         case "doctor":
             let snapshot = await Doctor.snapshot()
             return Sevo.json(

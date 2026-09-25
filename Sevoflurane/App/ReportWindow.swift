@@ -17,6 +17,8 @@ import SwiftUI
 @MainActor
 final class ReportWindows {
     private var window: NSWindow?
+    /// Opens Settings › Diagnostics on the steps for a useful report.
+    var showGuide: (() -> Void)?
 
     func show() {
         ActivationPolicy.becomeRegular()
@@ -27,7 +29,7 @@ final class ReportWindows {
         }
         EventLog.shared.log(.window, "report window: opened")
         let window = NSWindow(
-            contentViewController: NSHostingController(rootView: ReportView()),
+            contentViewController: NSHostingController(rootView: ReportView(showGuide: showGuide)),
         )
         window.title = "Reports"
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
@@ -234,6 +236,9 @@ extension RunRecord: Identifiable {
 // MARK: - The view
 
 struct ReportView: View {
+    /// Opens the steps for a useful report. Absent in the gallery, where no
+    /// second window opens.
+    var showGuide: (() -> Void)?
     @State private var store = ReportStore()
 
     var body: some View {
@@ -263,10 +268,15 @@ struct ReportView: View {
         .navigationTitle("Runs")
         .overlay {
             if store.runs.isEmpty {
-                ContentUnavailableView(
-                    "No runs yet", systemImage: "gamecontroller",
-                    description: Text("Every game you launch is recorded here."),
-                )
+                ContentUnavailableView {
+                    Label("No runs yet", systemImage: "gamecontroller")
+                } description: {
+                    Text("Every game you launch is recorded here. Settings › Diagnostics says how to make a run worth reporting.")
+                } actions: {
+                    if let showGuide {
+                        Button("Making a Useful Report…") { showGuide() }
+                    }
+                }
             }
         }
     }

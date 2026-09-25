@@ -10,10 +10,25 @@ struct PerfCommand: AsyncParsableCommand {
         ~/Library/Application Support/Sevoflurane/Runs/traces (one CSV line per frame). \
         A run is named by its number in `sevo perf list` (1 is the newest), by its \
         start time as the list prints it, or by a trace file's path. Runs that ran on \
-        the same engine, renderer, upscaler, tuning, msync, D3DMetal and label are one \
-        configuration; repeat a configuration to make its difference from another \
-        testable (Welch's t-test over the runs). With one run on a side the comparison \
+        the same engine, renderer, upscaler, tuning, msync, D3DMetal, window treatment \
+        and label are one configuration; repeat a configuration to make its \
+        difference from another testable (Welch's t-test over the runs). With one run on a side the comparison \
         is a block bootstrap over that run's seconds, which is weaker evidence.
+        
+        A comparison worth reading:
+          1. Play each run at least 60 s past loading, in the same scene.
+          2. Change one setting between configurations; run each twice or more.
+          3. Label what the record cannot see: sevo perf label 1 "vsync off".
+          4. sevo perf compare --game <appid> --last <n> --skip 20
+        
+        compare prints the first configuration as the baseline, then each other one \
+        with its mean ± standard deviation over its runs (average fps, 1 % low, p99 \
+        frame time) and a verdict for average and 1 % low: the change in percent, its \
+        95 % interval, and the method. "higher" or "lower" means the interval \
+        excludes zero; "no measurable difference" means it does not. A "Welch p" \
+        is the test over runs; "block bootstrap" means a side had one run. \
+        report draws the same numbers as an HTML page with the frame-time series. \
+        sevo diag --help has the whole diagnostic-run guide.
         """,
         subcommands: [List.self, Report.self, Compare.self, Label.self],
         defaultSubcommand: List.self,

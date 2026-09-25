@@ -30,4 +30,11 @@ final class SettingsNavigation {
         searchText = ""
         highlighted = nil
     }
+
+    /// Settings › Diagnostics with the steps for a useful report lit.
+    func showReportGuide() {
+        category = .diagnostics
+        searchText = ""
+        highlighted = .diagnosticsGuide
+    }
 }

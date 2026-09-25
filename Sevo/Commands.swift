@@ -2871,6 +2871,11 @@ struct RunCommand: AsyncParsableCommand {
         everything from it onward is the program's — so a program's own \
         flags need no -- separator. Wine's output goes to the terminal; set \
         its channels with sevo bottle config wine-debug.
+        
+        A program started here gets no run record, frame trace or collected \
+        report: those open when the app sees a game launch start, as sevo \
+        app launch and the library do. For a diagnostic run of a game, launch \
+        it that way; sevo diag --help has the guide.
         """,
     )
 
@@ -3080,6 +3085,16 @@ struct RunsCommand: AsyncParsableCommand {
         One line per launch, oldest first, with the recognized failure beneath \
         the ones the app knows. Records live in ~/Library/Application \
         Support/Sevoflurane/Runs, one JSON Lines file per month.
+        
+        A record is written for every launch at every diagnostic level: the \
+        engine, renderer, tuning and upscaler it ran on, when its first window \
+        appeared, how long it ran, how it ended, the last exception in the Wine \
+        log, the renderer's notes, and the frame-rate summary (average, 1 % low, \
+        percentiles, hitches). --json adds known_failure where the app \
+        recognizes the ending. A run with no window and a short duration is a \
+        start-up failure; a collected report, when the run has one, is under \
+        Application Support/Sevoflurane/Reports. sevo diag --help says how to \
+        make a run worth reading.
         """,
     )
 
@@ -3106,7 +3121,7 @@ struct RunsCommand: AsyncParsableCommand {
 
     /// The record as it sits on disk, plus what the app recognizes in it — a
     /// caller reading JSON wants the match without repeating the table.
-    private static func row(_ record: RunRecord) -> [String: Any] {
+    static func row(_ record: RunRecord) -> [String: Any] {
         var row = (try? JSONEncoder().encode(record))
             .flatMap { Sevo.jsonObject(String(decoding: $0, as: UTF8.self)) } ?? [:]
         if let failure = KnownFailures.match(record) {

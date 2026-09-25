@@ -23,7 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPopover: MenuBarPopover?
     private let setupWindow = SetupWindow()
     private lazy var aboutWindows = AboutWindows()
-    private lazy var reportWindows = ReportWindows()
+    private lazy var reportWindows: ReportWindows = {
+        let windows = ReportWindows()
+        windows.showGuide = { [weak self] in self?.showReportGuide() }
+        return windows
+    }()
     private lazy var processMonitorWindows = ProcessMonitorWindows(watch: stallWatch)
     private lazy var liveSettingsWindow: SettingsWindow = {
         let window = SettingsWindow(
@@ -867,6 +871,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showRecovery(_: Any?) {
         settingsWindow.showRecovery()
+    }
+
+    /// Settings › Diagnostics, open on the steps for a useful report. Waits
+    /// behind an unfinished setup, as ``showSettings(_:)`` does.
+    func showReportGuide() {
+        if setupWindow.show() { return }
+        settingsWindow.showReportGuide()
     }
 
     /// Settings › Games, open on one game's own settings. Waits behind an

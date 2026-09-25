@@ -20,6 +20,7 @@ struct DiagnosticsSettings: View {
     var body: some View {
         Form {
             levelSection
+            guideSection
             reportsSection
             capsSection
         }
@@ -66,6 +67,39 @@ struct DiagnosticsSettings: View {
             },
         )
     }
+
+    // MARK: - The guide
+
+    /// How to make a run someone can act on, in the order it is done. The same
+    /// guide, longer, is `sevo diag --help`.
+    private var guideSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                ForEach(Array(Self.guide.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+                        Text(verbatim: "\(index + 1).")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        Text(step)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .highlightable(.diagnosticsGuide, highlighted: highlighted)
+        } header: {
+            Text("Making a useful report")
+        } footer: {
+            Text("In Terminal, sevo diag --help has the same steps and sevo perf compare measures a setting's effect.")
+        }
+    }
+
+    private static let guide: [LocalizedStringResource] = [
+        "Set Record to Diagnostics before you launch the game.",
+        "Play for at least a minute after the game finishes loading, in a place you can return to.",
+        "To test a setting, change only that one, and play the same place twice with each value.",
+        "As soon as the problem shows, save the diagnostics archive below.",
+        "Set Record back to Off when you are done.",
+    ]
 
     // MARK: - Where it goes
 

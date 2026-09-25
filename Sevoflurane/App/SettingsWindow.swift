@@ -81,6 +81,11 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         show()
     }
 
+    func showReportGuide() {
+        navigation.showReportGuide()
+        show()
+    }
+
     func showGame(id: Int, name: String) {
         navigation.showGame(id: id, name: name)
         show()

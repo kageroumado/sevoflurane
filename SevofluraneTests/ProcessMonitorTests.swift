@@ -46,7 +46,7 @@ struct ProcessMonitorTests {
 
     @Test
     func `the diagnostics pane lays out at every level`() {
-        for anchor in [SettingsAnchor.diagnosticsLevel, .diagnosticsReports, .diagnosticsCaps] {
+        for anchor in [SettingsAnchor.diagnosticsLevel, .diagnosticsGuide, .diagnosticsReports, .diagnosticsCaps] {
             let window = Self.window(around: DiagnosticsSettings(highlighted: anchor))
             defer { window.close() }
             settle(window)
