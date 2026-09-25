@@ -72,27 +72,30 @@ nonisolated struct HostPressure: Codable, Equatable, Sendable {
         var causes: [String] = []
         if isBusy {
             let load = "\(Int((otherProcessorShare * 100).rounded()))%"
-            causes.append(busiestProcess.map { "other apps have the CPU at \(load), mostly \($0)" }
-                ?? "other apps have the CPU at \(load)")
+            causes.append(busiestProcess.map { String(localized: "other apps have the CPU at \(load), mostly \($0)") }
+                ?? String(localized: "other apps have the CPU at \(load)"))
         }
         switch memory {
-        case .critical: causes.append("memory is critically short")
-        case .warning: causes.append("memory is running short")
+        case .critical: causes.append(InterfaceCopy.localized("memory is critically short"))
+        case .warning: causes.append(InterfaceCopy.localized("memory is running short"))
         case .normal: break
         }
         if isHot {
             let degrees = temperature.map { " (\(Int($0.rounded())) °C)" } ?? ""
-            causes.append(isThrottling ? "the Mac is hot\(degrees) and macOS is slowing it down" : "the Mac is hot\(degrees)")
+            causes.append(isThrottling
+                ? String(localized: "the Mac is hot\(degrees) and macOS is slowing it down")
+                : String(localized: "the Mac is hot\(degrees)"))
         }
-        if isLowPowerMode { causes.append("Low Power Mode is on") }
+        if isLowPowerMode { causes.append(InterfaceCopy.localized("Low Power Mode is on")) }
         return causes
     }
 
     /// One sentence for the popover and the log, or `nil` at ordinary levels.
     var sentence: String? {
         guard let first = causes.first else { return nil }
-        let text = ([first] + causes.dropFirst()).joined(separator: "; ")
-        return text.prefix(1).uppercased() + text.dropFirst() + "."
+        let isChinese = Bundle.main.preferredLocalizations.first?.hasPrefix("zh") == true
+        let text = ([first] + causes.dropFirst()).joined(separator: isChinese ? "；" : "; ")
+        return text.prefix(1).uppercased() + text.dropFirst() + (isChinese ? "。" : ".")
     }
 
     /// The reading with its numbers rounded to what a change of wording

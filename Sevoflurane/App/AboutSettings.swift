@@ -49,7 +49,7 @@ struct AboutSettings: View {
             }
             .controlSize(.small)
             .padding(.top, 6)
-            Text("Saves logs, system details, and recent crashes to a ZIP on your Desktop, with your name, paths and Steam ids taken out.")
+            Text("Saves logs, system details, and recent crash reports in a ZIP file on your Desktop. Your name, file paths, and Steam IDs are removed.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

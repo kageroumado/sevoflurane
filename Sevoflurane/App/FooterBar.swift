@@ -40,7 +40,7 @@ struct FooterBar: View {
                         NSApp.sendAction(#selector(AppDelegate.showRecovery(_:)), to: nil, from: nil)
                     }
                     .buttonStyle(.footerChip)
-                    .help("Open Settings › Recovery: restart, repair, or report")
+                    .help("Open Recovery settings to restart or repair Steam, or save a report.")
                 }
                 DebugChip()
                 UpdateChip()
@@ -258,7 +258,7 @@ struct QuitConfirmation: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quit Sevoflurane?")
                     .font(.system(.body, design: .rounded).weight(.semibold))
-                Text("Steam closes with it, and so does any game it is running. For trouble with Steam, the ⋯ button has restarts and other recovery options.")
+                Text("Steam and anything running in it close when Sevoflurane quits. For Steam problems, use the ⋯ menu to restart or open Recovery.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

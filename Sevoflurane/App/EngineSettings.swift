@@ -139,7 +139,7 @@ private struct BottlePicker: View {
     var body: some View {
         Picker("Bottle", selection: $bottleChoice) {
             ForEach(store.bottles, id: \.name) { bottle in
-                Text(bottle.hasSteam ? bottle.name : "\(bottle.name) (no Steam yet)")
+                Text(bottle.hasSteam ? bottle.name : String(localized: "\(bottle.name) (no Steam yet)"))
                     .tag(bottle.name)
             }
             Text("New bottle…").tag(EngineSelectionSection.newBottleTag)
@@ -191,7 +191,7 @@ private struct EngineUpdateRow: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(Engine.managedDisplayName(newer.version)) is available")
-                    Text(newer.notes ?? "A newer Dormison than any installed here.")
+                    Text(newer.notes ?? InterfaceCopy.localized("A newer Dormison than any installed here."))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -256,7 +256,7 @@ private struct EngineFileRow: View {
     @State private var engineFileError: String?
 
     var body: some View {
-        CaptionedRow(caption: engineFileDetail, isWarning: engineFileError != nil) {
+        CaptionedRow(caption: InterfaceCopy.localized(engineFileDetail), isWarning: engineFileError != nil) {
             LabeledContent("Engine from a file or folder") {
                 if isInstallingEngineFile {
                     ProgressView().controlSize(.small)
@@ -343,8 +343,8 @@ private struct EngineSwitchRow: View {
         let target = "\(store.stagedEngine.description), bottle "
             + "\u{201C}\(store.stagedBottle)\u{201D}"
         return store.stagedBottleIsNew
-            ? "Steam closes and installs in \(target). Your current bottle and games stay."
-            : "Steam closes, prepares \(target), then reopens there."
+            ? String(localized: "Steam closes and installs in \(target). Your current bottle and games stay.")
+            : String(localized: "Steam closes, prepares \(target), then reopens there.")
     }
 
     private var switchDetail: String {
@@ -369,7 +369,7 @@ private struct EngineStandingFailure: View {
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
             if store.clientStartIsBlocked {
-                Text("Steam stays down until this is fixed.")
+                Text("Steam cannot start until this is fixed.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -393,7 +393,7 @@ private struct CrossOverNotice: View {
 
     var body: some View {
         Section {
-            CaptionedRow(caption: "Its dependencies and Windows settings are CrossOver's to change.") {
+            CaptionedRow(caption: InterfaceCopy.localized("Its dependencies and Windows settings are CrossOver's to change.")) {
                 LabeledContent("\(engine.description) manages this bottle") {
                     Button("Open \(engine == .crossoverPreview ? "Preview" : "CrossOver")") {
                         if let app = engine.crossoverApp {
@@ -418,7 +418,7 @@ private struct MsyncSection: View {
             Toggle(isOn: msyncBinding) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Enhanced synchronization (msync)")
-                    Text("Cuts synchronization overhead. Turn it off if a game freezes.")
+                    Text("Reduces synchronization overhead. Turn it off if a game freezes.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -463,7 +463,7 @@ private struct DependenciesSection: View {
             Text("Game dependencies")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Install one when a game reports a missing DLL or blank text.")
+                Text("Install a package if a game reports a missing DLL or displays blank text.")
                 if let summary = compatibility.incompleteSummary {
                     Text(summary)
                         .foregroundStyle(.orange)
@@ -483,8 +483,7 @@ private struct DownloadEverythingToggle: View {
         Toggle(isOn: $downloadEverything) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Download everything")
-                Text("A new bottle gets the fonts and legacy runtimes too, not the "
-                    + "required ones alone.")
+                Text("A new bottle gets the fonts and legacy runtimes too, not the required ones alone.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -506,7 +505,7 @@ private struct DependencyInstallRow: View {
         HStack(alignment: .center, spacing: Theme.Space.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.dependency.name)
-                Text(row.busy ? (row.phase ?? "working…") : row.dependency.detail)
+                Text(InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : row.dependency.detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -557,7 +556,7 @@ private struct DLLOverridesSection: View {
                 SettingHelpButton(help: SettingCopy.dllOverrides)
             }
         } footer: {
-            Text("For every program in the bottle, from a game's next launch. winecfg shows the same values; Settings › Games holds one game's.")
+            Text("Applies to every program in this bottle starting with the next game launch. winecfg shows the same values; Settings › Games has per-game overrides.")
         }
         .highlightable(.engineOverrides, highlighted: highlighted)
     }
@@ -635,7 +634,7 @@ private struct TroubleshootingSection: View {
         } header: {
             Text("Troubleshooting")
         } footer: {
-            Text("Repair checks the engine, the bottle, and Steam. Your games and saves stay. Restart Steam to apply a logging change.")
+            Text("Repair checks the engine, bottle, and Steam. Your games and saves remain. Restart Steam to apply logging changes.")
         }
     }
 }
@@ -668,7 +667,7 @@ private struct WineDiagnosticsToggle: View {
         Toggle(isOn: $wineDiagnostics) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Log every library a game loads")
-                Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This adds every exception and every library load. The log then grows fast.")
+                Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This setting also records every exception and library load, so the log grows quickly.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

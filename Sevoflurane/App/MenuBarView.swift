@@ -172,7 +172,7 @@ private struct QuittingNotice: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quitting")
                     .font(.system(.body, design: .rounded).weight(.medium))
-                Text("Closing Steam and anything running in it. Sevoflurane quits when it is down.")
+                Text("Closing Steam and anything running in it. Sevoflurane quits after Steam closes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -196,7 +196,7 @@ private struct SetupUnfinishedNotice: View {
         NoticeCard(
             symbol: "wand.and.stars", tint: .accentColor,
             title: "Finish setting up",
-            detail: "The assistant is where you left it. Steam opens from its last step.",
+            detail: "Continue setup where you left off. Steam opens from its last step.",
         ) { setup.show() }
             .accessibilityLabel("Continue setup")
     }
@@ -290,7 +290,7 @@ private struct SupervisorNotice: View {
             HealthCard(
                 symbol: "person.crop.circle",
                 title: "Steam is signed out",
-                detail: "Your Windows programs run from Quick Launch. Sign in for your Steam library.",
+                detail: "Run Windows programs from Quick Launch. Sign in to Steam to view your library.",
                 tint: nil,
                 action: ("Sign In to Steam", { host.showSteam() }),
             )
@@ -305,7 +305,7 @@ private struct SupervisorNotice: View {
         case .degraded:
             HealthCard(
                 symbol: "exclamationmark.triangle.fill",
-                title: "Steam is struggling",
+                title: "Steam is having trouble",
                 detail: status,
                 tint: .orange,
                 action: nil,
@@ -321,7 +321,7 @@ private struct SupervisorNotice: View {
         case .gaveUp:
             HealthCard(
                 symbol: "exclamationmark.octagon.fill",
-                title: "Steam needs a hand",
+                title: "Steam needs attention",
                 detail: status,
                 tint: .red,
                 action: ("Restart Now", { supervisor.restartNow() }),
@@ -362,8 +362,8 @@ private struct HostPressureNotice: View {
         if let pressure, let sentence = pressure.sentence {
             NoticeCard(
                 symbol: "thermometer.gauge.open", tint: .orange, level: pressure.level,
-                title: "Your Mac is busy with other work",
-                detail: "\(sentence) Games launch and run slower meanwhile.",
+                title: "Your Mac is under heavy load",
+                detail: "\(sentence) Games launch and run more slowly while this continues.",
             )
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
@@ -557,7 +557,7 @@ private struct GameRow: View {
         }
         if game.isInCloudSync {
             return isHeldInCloudSync
-                ? (Text("Steam holds it at Synchronizing · restart Steam to play"), true)
+                ? (Text("Steam is stuck synchronizing. Restart Steam to play."), true)
                 : (Text("Synchronizing with Steam Cloud"), false)
         }
         if let restartFor {
@@ -779,8 +779,8 @@ private struct NotificationPermissionCard: View {
                 symbol: "bell.badge",
                 title: denied ? "Notifications are off" : "Steam has a message",
                 detail: denied
-                    ? "Allow Sevoflurane in System Settings to see Steam's messages."
-                    : "Sevoflurane can post Steam's messages to Notification Center.",
+                    ? "Allow Sevoflurane notifications in System Settings to see Steam messages."
+                    : "Allow Sevoflurane to show Steam messages in Notification Center.",
             ) {
                 Button {
                     if denied {
@@ -811,7 +811,7 @@ private struct SharingQuestionCard: View {
             NoticeCard(
                 symbol: "chart.bar.xaxis",
                 title: "Help other Mac players",
-                detail: "Share each game's frame rate, resolution and settings with your Mac's model. Nothing names you. Settings › General shows exactly what is sent.",
+                detail: "Share each game's frame rate, resolution, and settings along with your Mac model. The data does not include your name. See Settings › General for exactly what is sent.",
             ) {
                 HStack(spacing: Theme.Space.sm) {
                     Button("Share") { answer(true) }
@@ -938,7 +938,7 @@ private struct StatusChip: View {
         var lines = ["\(supervisor.statusText) · \(host.status)"]
         if let event = EventLog.shared.latest {
             let time = event.date.formatted(date: .omitted, time: .shortened)
-            lines.append("last event \(time) · \(event.message)")
+            lines.append(String(localized: "last event \(time) · \(event.message)"))
         }
         return lines.joined(separator: "\n")
     }

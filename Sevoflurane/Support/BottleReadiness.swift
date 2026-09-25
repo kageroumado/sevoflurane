@@ -170,14 +170,10 @@ nonisolated enum BottleReadiness {
     /// reads its rows, which a simulated environment can pose.
     static func incompleteSummary(missing names: [String]) -> String? {
         guard !names.isEmpty else { return nil }
-        let list = names.count == 2
-            ? names.joined(separator: " and ")
-            : names.enumerated().map { index, name in
-                index == names.count - 1 && names.count > 1 ? "and \(name)" : name
-            }.joined(separator: ", ")
+        let list = ListFormatter.localizedString(byJoining: names)
         return names.count == 1
-            ? "\(list) is required and not installed"
-            : "\(list) are required and not installed"
+            ? String(localized: "\(list) is required and not installed")
+            : String(localized: "\(list) are required and not installed")
     }
 
     // MARK: - Storage

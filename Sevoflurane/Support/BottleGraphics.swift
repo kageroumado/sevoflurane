@@ -16,30 +16,32 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     case wined3d
 
     var label: String {
-        switch self {
+        let value: String = switch self {
         case .auto: "Automatic"
         case .d3dmetal: "D3DMetal"
         case .dxmt: "DXMT"
         case .dxvk: "DXVK"
         case .wined3d: "Wine built-in"
         }
+        return InterfaceCopy.localized(value)
     }
 
     var detail: String {
-        switch self {
+        let value: String = switch self {
         case .auto: "Uses CrossOver's game settings, then Wine's renderer."
         case .d3dmetal: "DirectX 11 and 12 through Apple's Game Porting Toolkit."
         case .dxmt: "DirectX 11, translated straight to Metal."
         case .dxvk: "DirectX 10 and 11, by way of Vulkan."
         case .wined3d: "Wine's built-in Direct3D renderer."
         }
+        return InterfaceCopy.localized(value)
     }
 
     /// When to reach for this one, for the Graphics pane's explainer.
     /// Sourced from CodeWeavers' own toggle documentation and their ARM64
     /// guidance.
     var guidance: String {
-        switch self {
+        let value: String = switch self {
         case .auto:
             "Uses CrossOver's per-game settings, then Wine's renderer."
         case .d3dmetal:
@@ -53,6 +55,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         case .wined3d:
             "Wine's built-in renderer. Try it when the others fail."
         }
+        return InterfaceCopy.localized(value)
     }
 
     /// The layers a game can be given for itself, plus the level-clearing

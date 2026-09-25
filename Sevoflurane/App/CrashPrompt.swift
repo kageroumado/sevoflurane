@@ -205,17 +205,18 @@ final class CrashPromptModel {
     // MARK: - What the panel shows
 
     var title: String {
-        "\(record.name ?? "The game") stopped unexpectedly."
+        String(localized: "\(record.name ?? String(localized: "The game")) stopped unexpectedly.")
     }
 
     /// The known failure's sentence and its fix, when this run matches one.
     var knownSentence: String? {
-        known.map { [$0.summary, $0.fix].compactMap(\.self).joined(separator: " ") }
+        known.map { [InterfaceCopy.localized($0.summary), $0.fix.map(InterfaceCopy.localized)]
+            .compactMap(\.self).joined(separator: " ") }
     }
 
     var keptSentence: String {
-        let name = zip?.lastPathComponent ?? "the zip"
-        return "The report was not accepted. \(name) is kept in Finder for you to send another way."
+        let name = zip?.lastPathComponent ?? String(localized: "the zip")
+        return String(localized: "The report was not accepted. \(name) is kept in Finder for you to send another way.")
     }
 
     // MARK: - The three answers
@@ -262,7 +263,7 @@ final class CrashPromptModel {
                 stage = .kept
                 EventLog.enqueue(.client, "crash report is \(bytes) bytes, over the cap — kept \(zip.lastPathComponent)")
             } catch {
-                stage = .failed("The report could not be sent: \(error.localizedDescription)")
+                stage = .failed(String(localized: "The report could not be sent: \(error.localizedDescription)"))
             }
         }
     }
@@ -285,7 +286,7 @@ final class CrashPromptModel {
                 stage = .asking
                 return built
             } catch {
-                stage = .failed("The report could not be written: \(error)")
+                stage = .failed(String(localized: "The report could not be written: \(error)"))
                 preparing = nil
                 return nil
             }
@@ -310,7 +311,7 @@ private struct CrashPromptView: View {
             }
             switch model.stage {
             case .asking:
-                Text(CrashPromptModel.offer)
+                Text(InterfaceCopy.localized(CrashPromptModel.offer))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -357,7 +358,7 @@ private struct CrashPromptView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.title)
                     .font(.system(size: 15, weight: .semibold))
-                Text(model.record.summary)
+                Text(model.record.displaySummary)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -369,7 +370,7 @@ private struct CrashPromptView: View {
     private func progress(_ text: String) -> some View {
         HStack(spacing: Theme.Space.md) {
             ProgressView().controlSize(.small)
-            Text(text)
+            Text(InterfaceCopy.localized(text))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }

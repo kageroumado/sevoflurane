@@ -97,7 +97,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     }
 
     var title: String {
-        switch self {
+        let key: String = switch self {
         case .general: "General"
         case .graphics: "Graphics"
         case .engine: "Engine"
@@ -107,6 +107,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .diagnostics: "Diagnostics"
         case .about: "About"
         }
+        return InterfaceCopy.localized(key)
     }
 
     var icon: String {
@@ -480,6 +481,12 @@ struct SearchableSetting: Identifiable, Equatable {
     let id: SettingsAnchor
     let title: String
     let keywords: [String]
+
+    init(id: SettingsAnchor, title: String, keywords: [String]) {
+        self.id = id
+        self.title = InterfaceCopy.localized(title)
+        self.keywords = keywords
+    }
 
     func matches(_ search: String) -> Bool {
         let needle = search.lowercased()

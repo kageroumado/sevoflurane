@@ -89,7 +89,7 @@ struct SettingRow: View {
                 TuningParametersFields(parameters: store.tuningParametersBinding)
             }
             if setting.reach(store.own(setting)) == .clientRestart {
-                Text("Steam restarts around the next launch, about 30 seconds.")
+                Text("Steam restarts at the next launch, which takes about 30 seconds.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -106,7 +106,7 @@ struct SettingRow: View {
     private var caption: String {
         let what = setting.detail?(store.effective(setting)) ?? setting.copy.caption
         guard store.level == .game, store.own(setting) == nil, setting.control != .toggle else { return what }
-        let inherited = "Engine's value: \(setting.label(of: store.inherited(setting)))."
+        let inherited = String(localized: "Engine's value: \(setting.label(of: store.inherited(setting))).")
         return what.isEmpty ? inherited : "\(inherited) \(what)"
     }
 
@@ -201,7 +201,7 @@ private struct RecommendedChip: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .help(reason)
+        .help(InterfaceCopy.localized(reason))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

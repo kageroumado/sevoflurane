@@ -28,7 +28,7 @@ final class ProcessMonitorWindows {
         EventLog.shared.log(.window, "process monitor: opened")
         let view = ProcessMonitorView(watch: watch)
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-        window.title = "Processes"
+        window.title = InterfaceCopy.localized("Processes")
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.setContentSize(NSSize(width: 820, height: 480))
         window.minSize = NSSize(width: 640, height: 320)
@@ -66,8 +66,8 @@ final class ProcessMonitorActions {
                 pid: process.pid, describedAs: process.name,
             )
             note = front
-                ? "\(process.name) is frontmost."
-                : "macOS declined to activate \(process.name)."
+                ? String(localized: "\(process.name) is frontmost.")
+                : String(localized: "macOS declined to activate \(process.name).")
         }
     }
 
@@ -78,8 +78,7 @@ final class ProcessMonitorActions {
     func terminate(_ process: StallWatch.Process) {
         let tree = ProcessUsage.tree(under: [process.pid])
         for pid in tree { kill(pid, SIGTERM) }
-        note = "Asked \(tree.count) \(tree.count == 1 ? "process" : "processes") "
-            + "under \(process.name) to quit."
+        note = String(localized: "Asked \(tree.count) processes under \(process.name) to quit.")
         EventLog.shared.log(.app, "process monitor: terminated \(process.name) (\(process.pid))")
     }
 
@@ -88,7 +87,7 @@ final class ProcessMonitorActions {
     func collectReports(_ process: StallWatch.Process) {
         guard let appID = process.appID,
               let record = watch.recorder?.openRecord(forApp: appID) else {
-            note = "\(process.name) is not a game this app has a run open for."
+            note = String(localized: "\(process.name) has no active game run in Sevoflurane.")
             return
         }
         note = "Collecting…"
@@ -96,8 +95,7 @@ final class ProcessMonitorActions {
             let report = CrashCollector.collect(for: record)
             await MainActor.run {
                 self.note = report.map {
-                    "Wrote \($0.manifest.sources.count) sources to "
-                        + "\($0.directory.lastPathComponent)."
+                    String(localized: "Wrote \($0.manifest.sources.count) sources to \($0.directory.lastPathComponent).")
                 } ?? "Could not write a report."
             }
         }
@@ -130,7 +128,7 @@ struct ProcessMonitorView: View {
             ForEach(counts, id: \.label) { count in
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(count.value)").font(.title3.monospacedDigit())
-                    Text(count.label).font(.caption).foregroundStyle(.secondary)
+                    Text(InterfaceCopy.localized(count.label)).font(.caption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
@@ -165,7 +163,7 @@ struct ProcessMonitorView: View {
             TableColumn("PID") { Text("\($0.pid)").monospacedDigit() }
                 .width(60)
             TableColumn("Program", value: \.name)
-            TableColumn("Role") { Text($0.role.title) }
+            TableColumn("Role") { Text(InterfaceCopy.localized($0.role.title)) }
                 .width(90)
             TableColumn("CPU") { process in
                 Text("\(Int(process.cpuShare * 100)) %").monospacedDigit()
@@ -184,12 +182,12 @@ struct ProcessMonitorView: View {
             .width(80)
             TableColumn("State") { process in
                 if process.holdsOneCore {
-                    StateChip(text: "one core at 100 %", tint: .orange)
+                    StateChip(text: InterfaceCopy.localized("one core at 100 %"), tint: .orange)
                         .help("This game has held exactly one core for over a minute. A game at rest on a menu "
                             + "should use far less: it is usually a busy loop in the game, and sometimes a sign "
                             + "that something it waits for never arrives.")
                 } else {
-                    StateChip(text: process.state.rawValue, tint: process.state.tint)
+                    StateChip(text: InterfaceCopy.localized(process.state.rawValue), tint: process.state.tint)
                 }
             }
             .width(min: 90, ideal: 130)
@@ -214,7 +212,7 @@ struct ProcessMonitorView: View {
 
     private var footer: some View {
         HStack(spacing: Theme.Space.sm) {
-            Text(actions.note ?? "Right-click a row for what can be done with it.")
+            Text(actions.note ?? InterfaceCopy.localized("Right-click a row for available actions."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

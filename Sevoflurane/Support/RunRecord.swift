@@ -267,6 +267,56 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         outcomeParts.joined(separator: " · ")
     }
 
+    var displaySummary: String {
+        ([name.map { "\($0) (\(appid))" } ?? String(localized: "App \(appid)")]
+            + displayOutcomeParts).joined(separator: " · ")
+    }
+
+    var displayOutcome: String {
+        displayOutcomeParts.joined(separator: " · ")
+    }
+
+    var displayRendererLabel: String {
+        rendererConfirmed == false
+            ? String(localized: "\(renderer) (unconfirmed)") : renderer
+    }
+
+    private var displayOutcomeParts: [String] {
+        var parts = [engine, displayRendererLabel]
+        if let tuning, tuning != PerformanceTuning.standard.rawValue {
+            parts.append(String(localized: "\(tuning) tuning"))
+        }
+        if let upscaler, upscaler != UpscalerChoice.off.rawValue {
+            parts.append(String(localized: "upscaler \(upscaler)"))
+        }
+        if let durationSeconds {
+            let seconds = Int(durationSeconds.rounded())
+            let minutes = Int((durationSeconds / 60).rounded())
+            parts.append(durationSeconds < 90
+                ? String(localized: "ran \(seconds) s")
+                : String(localized: "ran \(minutes) min"))
+        }
+        parts.append(displayExitSummary)
+        return parts
+    }
+
+    private var displayExitSummary: String {
+        guard let exit else { return String(localized: "still running") }
+        return switch exit.kind {
+        case .user: String(localized: "exited normally")
+        case .crash: exit.code.map { String(localized: "crashed — exit \($0)") }
+            ?? String(localized: "crashed")
+        case .stopped: String(localized: "stopped on request")
+        case .endedNotResponding: String(localized: "ended by the user while it was not responding")
+        case .exitError: exit.code.map { String(localized: "exited with an error — exit \($0)") }
+            ?? String(localized: "exited with an error")
+        case .steamTerminate: String(localized: "stopped by Steam")
+        case .watchdog: String(localized: "killed after a stall")
+        case .appQuit: String(localized: "ended when Sevoflurane quit")
+        case .unknown: String(localized: "ended, exit unknown")
+        }
+    }
+
     /// ``renderer`` as a reader should take it: marked when no process of the
     /// run confirmed it.
     var rendererLabel: String {

@@ -21,6 +21,14 @@ nonisolated enum BottleDependencies {
         /// fonts, whose absence costs glyphs and old titles, not launches.
         /// Nothing gates a launch on either kind.
         let required: Bool
+
+        init(id: String, name: String, detail: String, download: String, required: Bool) {
+            self.id = id
+            self.name = InterfaceCopy.localized(name)
+            self.detail = InterfaceCopy.localized(detail)
+            self.download = download
+            self.required = required
+        }
     }
 
     static let catalog: [Dependency] = [
@@ -179,7 +187,7 @@ nonisolated enum BottleDependencies {
         await InstallQueue.shared.enqueue {
             await perform(id, phase: phase)
         } waiting: {
-            phase("waiting for the other install to finish")
+            phase(InterfaceCopy.localized("waiting for the other install to finish"))
         }
     }
 
@@ -196,7 +204,7 @@ nonisolated enum BottleDependencies {
             case "d3dcompiler": try await installD3DCompiler(scratch: scratch, phase: phase)
             case "directx2010": try await installDirectX2010(scratch: scratch, phase: phase)
             case "cjkfonts": try await installCJKFonts(scratch: scratch, phase: phase)
-            default: return "unknown dependency \(id)"
+            default: return String(localized: "unknown dependency \(id)")
             }
             return nil
         } catch {
@@ -255,7 +263,7 @@ nonisolated enum BottleDependencies {
         let extracted = scratch.directory("fonts")
         try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: true)
         for (index, archive) in archives.enumerated() {
-            phase("downloading fonts (\(index + 1) of \(archives.count))")
+            phase(String(localized: "downloading fonts (\(index + 1) of \(archives.count))"))
             let file = try await download(
                 "https://github.com/pushcx/corefonts/raw/master/\(archive)",
                 as: archive, into: scratch,
@@ -266,11 +274,12 @@ nonisolated enum BottleDependencies {
             )
             guard result.status == 0 else {
                 let reason = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                throw InstallFailure(message: "\(archive) did not extract"
-                    + (reason.isEmpty ? "" : ": \(reason)"))
+                throw InstallFailure(message: reason.isEmpty
+                    ? String(localized: "\(archive) did not extract")
+                    : String(localized: "\(archive) did not extract: \(reason)"))
             }
         }
-        phase("installing fonts")
+        phase(InterfaceCopy.localized("installing fonts"))
         try copyFonts(from: extracted, matching: ["ttf", "ttc"])
     }
 
@@ -281,12 +290,12 @@ nonisolated enum BottleDependencies {
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
         for arch in ["x64", "x86"] {
-            phase("downloading VC++ (\(arch))")
+            phase(String(localized: "downloading VC++ (\(arch))"))
             let installer = try await download(
                 "https://aka.ms/vs/17/release/vc_redist.\(arch).exe",
                 as: "vc_redist.\(arch).exe", into: scratch,
             )
-            phase("installing VC++ (\(arch))")
+            phase(String(localized: "installing VC++ (\(arch))"))
             let result = await ClientLifecycle.runSupervisedInBottle([
                 SteamBottle.windowsPath(for: installer),
                 "/install", "/quiet", "/norestart",
@@ -294,11 +303,11 @@ nonisolated enum BottleDependencies {
             // 1638: a newer version is already installed. 3010: success,
             // wants a reboot it won't get and doesn't need.
             guard let status = result.status, [0, 1638, 3010].contains(Int(status)) else {
-                throw InstallFailure(message: "vc_redist.\(arch).exe failed "
-                    + "(\(result.status.map(String.init) ?? "no exit"))")
+                let status = result.status.map(String.init) ?? InterfaceCopy.localized("no exit")
+                throw InstallFailure(message: String(localized: "vc_redist.\(arch).exe failed (\(status))"))
             }
         }
-        phase("setting DLL overrides")
+        phase(InterfaceCopy.localized("setting DLL overrides"))
         let family = [
             "concrt140", "msvcp140", "msvcp140_1", "msvcp140_2",
             "msvcp140_atomic_wait", "msvcp140_codecvt_ids", "vcamp140",
@@ -318,7 +327,7 @@ nonisolated enum BottleDependencies {
     private static func installD3DCompiler(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
-        phase("downloading d3dcompiler_47")
+        phase(InterfaceCopy.localized("downloading d3dcompiler_47"))
         let x64 = try await download(
             "\(fxc2Revision)/dll/d3dcompiler_47.dll",
             as: "d3dcompiler_47.dll", into: scratch,
@@ -329,7 +338,7 @@ nonisolated enum BottleDependencies {
             as: "d3dcompiler_47_32.dll", into: scratch,
             sha256: "2ad0d4987fc4624566b190e747c9d95038443956ed816abfd1e2d389b5ec0851",
         )
-        phase("installing d3dcompiler_47")
+        phase(InterfaceCopy.localized("installing d3dcompiler_47"))
         try replaceFile(at: system32.appendingPathComponent("d3dcompiler_47.dll"), with: x64)
         try replaceFile(at: syswow64.appendingPathComponent("d3dcompiler_47.dll"), with: x86)
     }
@@ -340,26 +349,26 @@ nonisolated enum BottleDependencies {
     private static func installDirectX2010(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
-        phase("downloading DirectX redistributable")
+        phase(InterfaceCopy.localized("downloading DirectX redistributable"))
         let redist = try await download(
             "https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe",
             as: "directx_Jun2010_redist.exe", into: scratch,
         )
-        phase("extracting")
+        phase(InterfaceCopy.localized("extracting"))
         let extract = await ClientLifecycle.runSupervisedInBottle([
             SteamBottle.windowsPath(for: redist),
             "/Q", "/T:\(scratch.windowsPath("dx"))",
         ], timeout: .seconds(300))
         guard extract.status == 0 else {
-            throw InstallFailure(message: "the redistributable refused to extract")
+            throw InstallFailure(message: InterfaceCopy.localized("the redistributable refused to extract"))
         }
-        phase("running DXSETUP")
+        phase(InterfaceCopy.localized("running DXSETUP"))
         let setup = await ClientLifecycle.runSupervisedInBottle([
             scratch.windowsPath(#"dx\DXSETUP.exe"#), "/silent",
         ], timeout: .seconds(900))
         guard setup.status == 0 else {
-            throw InstallFailure(message: "DXSETUP failed "
-                + "(\(setup.status.map(String.init) ?? "no exit"))")
+            let status = setup.status.map(String.init) ?? InterfaceCopy.localized("no exit")
+            throw InstallFailure(message: String(localized: "DXSETUP failed (\(status))"))
         }
     }
 
@@ -370,19 +379,19 @@ nonisolated enum BottleDependencies {
     ) async throws {
         let regions = ["J", "SC", "TC", "K"]
         for (index, region) in regions.enumerated() {
-            phase("downloading fonts (\(index + 1) of \(regions.count))")
+            phase(String(localized: "downloading fonts (\(index + 1) of \(regions.count))"))
             let zip = try await download(
                 "https://github.com/adobe-fonts/source-han-sans/releases/download/2.004R/SourceHanSans\(region).zip",
                 as: "SourceHanSans\(region).zip", into: scratch,
             )
-            phase("installing fonts (\(index + 1) of \(regions.count))")
+            phase(String(localized: "installing fonts (\(index + 1) of \(regions.count))"))
             let result = await Subprocess.run(
                 "/usr/bin/unzip",
                 ["-jo", zip.path, "*.otf", "-d", fontsDirectory.path],
                 capture: .combined, timeout: .seconds(300),
             )
             guard result.status == 0 else {
-                throw InstallFailure(message: "SourceHanSans\(region).zip refused to unzip")
+                throw InstallFailure(message: String(localized: "SourceHanSans\(region).zip refused to unzip"))
             }
             try? FileManager.default.removeItem(at: zip)
         }
@@ -462,9 +471,9 @@ nonisolated enum BottleDependencies {
         session: URLSession = .shared, backoff: [Duration] = downloadBackoff,
     ) async throws -> URL {
         guard let source = URL(string: url) else {
-            throw InstallFailure(message: "bad URL \(url)")
+            throw InstallFailure(message: String(localized: "bad URL \(url)"))
         }
-        var lastFailure = InstallFailure(message: "\(name): no attempt was made")
+        var lastFailure = InstallFailure(message: String(localized: "\(name): no attempt was made"))
         for attempt in 0 ... backoff.count {
             do {
                 return try await fetch(
@@ -500,10 +509,10 @@ nonisolated enum BottleDependencies {
         do {
             (temp, response) = try await session.download(from: source)
         } catch {
-            throw RetryableDownload(message: "\(name): \(error.localizedDescription)")
+            throw RetryableDownload(message: String(localized: "\(name): \(error.localizedDescription)"))
         }
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            let message = "\(name): HTTP \(http.statusCode)"
+            let message = String(localized: "\(name): HTTP \(http.statusCode)")
             guard http.statusCode == 429 || http.statusCode >= 500 else {
                 throw InstallFailure(message: message)
             }
@@ -514,8 +523,7 @@ nonisolated enum BottleDependencies {
             guard digest == sha256 else {
                 try? FileManager.default.removeItem(at: temp)
                 throw InstallFailure(
-                    message: "\(name): the download is not the file it should be "
-                        + "(sha256 \(digest))",
+                    message: String(localized: "\(name): the download is not the file it should be (sha256 \(digest))"),
                 )
             }
         }
@@ -543,7 +551,7 @@ nonisolated enum BottleDependencies {
             extensions.contains { name.lowercased().hasSuffix(".\($0)") }
         }
         guard !faces.isEmpty else {
-            throw InstallFailure(message: "no font files came out of the archives")
+            throw InstallFailure(message: InterfaceCopy.localized("no font files came out of the archives"))
         }
         try FileManager.default.createDirectory(
             at: fontsDirectory, withIntermediateDirectories: true,
@@ -577,7 +585,7 @@ nonisolated enum BottleDependencies {
             "regedit", "/S", SteamBottle.windowsPath(for: regFile),
         ], timeout: .seconds(60))
         guard result.status == 0 else {
-            throw InstallFailure(message: "regedit refused the overrides import")
+            throw InstallFailure(message: InterfaceCopy.localized("regedit refused the overrides import"))
         }
     }
 }

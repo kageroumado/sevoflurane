@@ -53,8 +53,7 @@ struct DiagnosticsSettings: View {
         } header: {
             Text("Recording")
         } footer: {
-            Text("A level reaches each game the next time it is launched. "
-                + "Debug mode restarts Steam, and ends when Sevoflurane quits.")
+            Text("A level reaches each game the next time it is launched. Debug mode restarts Steam, and ends when Sevoflurane quits.")
         }
     }
 
@@ -89,15 +88,15 @@ struct DiagnosticsSettings: View {
         } header: {
             Text("Making a useful report")
         } footer: {
-            Text("In Terminal, sevo diag --help has the same steps and sevo perf compare measures a setting's effect.")
+            Text("In Terminal, sevo diag --help shows these steps. Use sevo perf compare to measure a setting's effect.")
         }
     }
 
     private static let guide: [LocalizedStringResource] = [
         "Set Record to Diagnostics before you launch the game.",
-        "Play for at least a minute after the game finishes loading, in a place you can return to.",
-        "To test a setting, change only that one, and play the same place twice with each value.",
-        "As soon as the problem shows, save the diagnostics archive below.",
+        "After the game loads, play for at least a minute in an area you can return to.",
+        "To test a setting, change one value at a time and play the same area twice with each value.",
+        "When the problem occurs, save a diagnostics archive below.",
         "Set Record back to Off when you are done.",
     ]
 
@@ -125,9 +124,7 @@ struct DiagnosticsSettings: View {
         } header: {
             Text("Reports")
         } footer: {
-            Text("Each report holds the run's record, Wine's exception trail, the game's "
-                + "own crash logs and Steam's, with paths, account names and Steam ids "
-                + "taken out.")
+            Text("Each report holds the run's record, Wine's exception trail, the game's own crash logs and Steam's, with paths, account names and Steam ids taken out.")
         }
     }
 
@@ -137,7 +134,7 @@ struct DiagnosticsSettings: View {
         let size = ByteCountFormatter.string(
             fromByteCount: Int64(reportBytes), countStyle: .file,
         )
-        return "\(count) \(count == 1 ? "report" : "reports"), \(size)."
+        return String(localized: "\(count) reports, \(size).")
     }
 
     // MARK: - The caps
@@ -145,16 +142,15 @@ struct DiagnosticsSettings: View {
     private var capsSection: some View {
         Section {
             ForEach(Self.caps, id: \.what) { cap in
-                LabeledContent(cap.what) {
-                    Text(cap.limit).foregroundStyle(.secondary)
+                LabeledContent(InterfaceCopy.localized(cap.what)) {
+                    Text(InterfaceCopy.localized(cap.limit)).foregroundStyle(.secondary)
                 }
             }
             .highlightable(.diagnosticsCaps, highlighted: highlighted)
         } header: {
-            Text("What it may take")
+            Text("Storage limits")
         } footer: {
-            Text("Every one of these is enforced as it is written: the oldest goes first, "
-                + "and nothing here can grow without a bound.")
+            Text("Every one of these is enforced as it is written: the oldest goes first, and nothing here can grow without a bound.")
         }
     }
 
@@ -204,7 +200,7 @@ private struct DebugModeRow: View {
     )
 
     var body: some View {
-        HelpedRow(caption: "Records everything for one session. Turn it on before reproducing a bug.", help: Self.help) {
+        HelpedRow(caption: InterfaceCopy.localized("Records everything for one session. Turn it on before reproducing a bug."), help: Self.help) {
             Toggle("Debug mode", isOn: Binding(
                 get: { DebugModeSwitch.shared.isOn },
                 set: { DebugModeSwitch.shared.set($0) },

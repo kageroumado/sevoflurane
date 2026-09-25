@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// The one sentence the pane, its notice and the renderer popover all say
 /// about a renderer change reaching a game.
 private let applyRendererCopy =
-    "Launch a game from the menu bar to apply changes. Steam restarts if needed."
+    InterfaceCopy.localized("Launch a game from the menu bar to apply changes. Steam restarts if needed.")
 
 struct GraphicsSettings: View {
     let store: GraphicsStore
@@ -128,7 +128,7 @@ struct GraphicsSettings: View {
             Button("Move to Trash", role: .destructive) { shaders.remove(package) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Games using it fall back to Lanczos.")
+            Text("Games using this upscaler fall back to Lanczos.")
         }
     }
 
@@ -141,7 +141,7 @@ struct GraphicsSettings: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(package.manifest.content)
+                Text(InterfaceCopy.localized(package.manifest.content))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -167,7 +167,7 @@ struct GraphicsSettings: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(entry.content)
+                Text(InterfaceCopy.localized(entry.content))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -270,7 +270,7 @@ struct GraphicsSettings: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("D3DMetal uses the newest version left. Remove the last one and Dormison loses DirectX 12.")
+                    Text("D3DMetal uses the newest installed version. Removing the last version disables DirectX 12 in Dormison.")
                 }
             }
             if isAddingD3DMetal {
@@ -305,7 +305,7 @@ struct GraphicsSettings: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Update the engine for DirectX 12")
                 .font(.callout.weight(.medium))
-            Text("Choose an engine with D3DMetal in Engine settings. Toolkits you downloaded stay installed.")
+            Text("In Engine settings, choose an engine that includes D3DMetal. Downloaded toolkits stay installed.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -345,7 +345,7 @@ struct GraphicsSettings: View {
 
     private func addD3DMetal() {
         let panel = NSOpenPanel()
-        panel.message = "Choose the Game Porting Toolkit disk image you downloaded."
+        panel.message = String(localized: "Choose the Game Porting Toolkit disk image you downloaded.")
         panel.allowedContentTypes = [.diskImage]
         panel.canChooseDirectories = true
         guard panel.runModal() == .OK, let source = panel.url else { return }
@@ -390,7 +390,7 @@ private struct RendererVersionRow: View {
                 Menu {
                     Section("Download") {
                         if state.downloadable.isEmpty {
-                            Text(state.releasesLoaded ? "Nothing newer to fetch" : "Looking…")
+                            Text(state.releasesLoaded ? "No newer versions available" : "Looking…")
                         }
                         ForEach(state.downloadable) { release in
                             Button(release.tested ? "\(release.version) · tested" : "\(release.version) · untested") {
@@ -423,7 +423,7 @@ private struct RendererVersionRow: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("The engine's own version takes over.")
+                    Text("The engine's built-in version is used.")
                 }
             }
             if let busy = state.busy {
@@ -449,7 +449,7 @@ private struct RendererVersionRow: View {
 
     private func addFromDisk() {
         let panel = NSOpenPanel()
-        panel.message = "Choose a \(component.label) release archive, or a folder holding its DLLs."
+        panel.message = String(localized: "Choose a \(component.label) release archive, or a folder holding its DLLs.")
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false

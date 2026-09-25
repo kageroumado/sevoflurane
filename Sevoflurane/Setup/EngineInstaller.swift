@@ -56,7 +56,7 @@ nonisolated enum EngineInstaller {
         let tarball = staging.appendingPathComponent("engine.tar.xz")
         try await download(
             release, to: tarball,
-            label: "Downloading the engine (~\(release.sizeBytes / 1_000_000) MB)…",
+            label: String(localized: "Downloading the engine (~\(release.sizeBytes / 1_000_000) MB)…"),
             progress: progress,
         )
 
@@ -129,7 +129,7 @@ nonisolated enum EngineInstaller {
         guard !manager.fileExists(atPath: destination.path) else {
             throw InstallError("engine \(version) is already installed")
         }
-        progress("Copying \(version)…", nil)
+        progress(String(localized: "Copying \(version)…"), nil)
         let staging = try makeStaging()
         defer { try? manager.removeItem(at: staging) }
         let tree = staging.appendingPathComponent(version)
@@ -160,7 +160,7 @@ nonisolated enum EngineInstaller {
         guard !manager.fileExists(atPath: root.appendingPathComponent(named).path) else {
             throw InstallError("engine \(named) is already installed")
         }
-        progress("Verifying \(tarball.lastPathComponent)…", nil)
+        progress(String(localized: "Verifying \(tarball.lastPathComponent)…"), nil)
         let signatureURL = EngineSignature.signatureURL(for: tarball)
         if let signatureFile = try? Data(contentsOf: signatureURL) {
             try EngineSignature.verify(file: tarball, signatureFile: signatureFile)

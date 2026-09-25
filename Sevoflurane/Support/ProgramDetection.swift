@@ -23,9 +23,9 @@ nonisolated enum ProgramDetection {
         /// The verdict as one sentence.
         var summary: String {
             let what = switch kind {
-            case ProgramKind.installer: "Looks like an installer"
-            case ProgramKind.game: "Looks like a game"
-            default: "A Windows program"
+            case ProgramKind.installer: InterfaceCopy.localized("Looks like an installer")
+            case ProgramKind.game: InterfaceCopy.localized("Looks like a game")
+            default: InterfaceCopy.localized("A Windows program")
             }
             return reasons.isEmpty ? what : "\(what): \(reasons.joined(separator: ", "))"
         }
@@ -68,16 +68,16 @@ nonisolated enum ProgramDetection {
         var reasons: [String] = []
         let name = url.lastPathComponent.lowercased()
         if let fragment = installerFragments.first(where: { name.contains($0) }) {
-            reasons.append("named \u{201C}\(fragment)\u{201D}")
+            reasons.append(String(localized: "named \u{201C}\(fragment)\u{201D}"))
         }
         if let described = versionSaysInstaller(info) {
-            reasons.append("its version resource says \u{201C}\(described)\u{201D}")
+            reasons.append(String(localized: "its version resource says \u{201C}\(described)\u{201D}"))
         }
         if let toolkit = toolkit(in: url) {
-            reasons.append("built with \(toolkit)")
+            reasons.append(String(localized: "built with \(toolkit)"))
         }
         if let sibling = installerSibling(url) {
-            reasons.append("\(sibling) beside it")
+            reasons.append(String(localized: "\(sibling) beside it"))
         }
         return reasons
     }
@@ -154,23 +154,23 @@ nonisolated enum ProgramDetection {
         let directories = entries.filter(\.isDirectory).map { $0.name.lowercased() }
 
         if files.contains(where: { $0.hasPrefix("steam_api") && $0.hasSuffix(".dll") }) {
-            reasons.append("Steam's API beside it")
+            reasons.append(InterfaceCopy.localized("Steam's API beside it"))
         }
         for (file, engine) in engineFiles.sorted(by: { $0.key < $1.key })
             where files.contains(file) {
-            reasons.append("\(engine) beside it")
+            reasons.append(String(localized: "\(engine) beside it"))
         }
         if directories.contains(where: { $0.hasSuffix("_data") }) {
-            reasons.append("a game data folder beside it")
+            reasons.append(InterfaceCopy.localized("a game data folder beside it"))
         }
         if directories.contains("engine") {
-            reasons.append("an Engine folder beside it")
+            reasons.append(InterfaceCopy.localized("an Engine folder beside it"))
         }
         if files.contains(where: { $0.hasPrefix("d3d") && $0.hasSuffix(".dll") }) {
-            reasons.append("Direct3D libraries beside it")
+            reasons.append(InterfaceCopy.localized("Direct3D libraries beside it"))
         }
         if files.contains(where: { $0.hasSuffix(".pak") }) {
-            reasons.append("packed game data beside it")
+            reasons.append(InterfaceCopy.localized("packed game data beside it"))
         }
         // The tool-name exclusions the library scan uses: a crash reporter
         // sitting in a game's folder inherits every signal above.

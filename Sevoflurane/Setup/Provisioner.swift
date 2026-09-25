@@ -181,14 +181,14 @@ final class Provisioner {
     private func beginStage(_ index: Int, _ phase: String) {
         stage = Stage(index: index)
         stageFraction = nil
-        activity = .working(phase)
+        activity = .working(InterfaceCopy.localized(phase))
     }
 
     private func installGameDependencies() async throws {
         let all = installsEveryDependency ?? BottleDependencies.installsEverything
         for dependency in BottleDependencies.provisioned(all: all) {
             guard !environment.isDependencyInstalled(dependency) else { continue }
-            beginStage(6, "Installing \(dependency.name)…")
+            beginStage(6, String(localized: "Installing \(dependency.name)…"))
             let result = await environment.installDependency(dependency)
             guard result.succeeded, environment.isDependencyInstalled(dependency) else {
                 // A bottle without a font pack or a legacy runtime still runs
@@ -200,7 +200,7 @@ final class Provisioner {
                         + "\(result.output.suffix(200))")
                     continue
                 }
-                throw ProvisionError("\(dependency.name) installation failed: \(result.output.suffix(300))")
+                throw ProvisionError(String(localized: "\(dependency.name) installation failed: \(result.output.suffix(300))"))
             }
         }
     }
@@ -218,10 +218,7 @@ final class Provisioner {
             // here; the one honest exit is naming the command an admin can
             // run, in the wizard instead of a forum.
             throw ProvisionError(
-                "Rosetta install failed: \(result.output.suffix(200)). "
-                    + "If this account isn't an administrator, run "
-                    + "\"softwareupdate --install-rosetta --agree-to-license\" "
-                    + "in Terminal as one, then Try Again.",
+                String(localized: "Rosetta install failed: \(result.output.suffix(200)). If this account isn't an administrator, run \"softwareupdate --install-rosetta --agree-to-license\" in Terminal as one, then Try Again."),
             )
         }
         await refreshDetection()
@@ -241,7 +238,7 @@ final class Provisioner {
             let result = await environment.installEngine(from: engineTarball, progress: engineProgress())
             guard result.succeeded else {
                 throw ProvisionError(
-                    "engine install failed: \(result.output.suffix(200))",
+                    String(localized: "engine install failed: \(result.output.suffix(200))"),
                     leavesNothingToStart: true,
                 )
             }
@@ -253,7 +250,7 @@ final class Provisioner {
             Engine.active = Engine.resolve(from: refreshed)
         }
         guard self.detection?.hasEngine == true else {
-            throw ProvisionError("no usable engine after install", leavesNothingToStart: true)
+            throw ProvisionError(InterfaceCopy.localized("no usable engine after install"), leavesNothingToStart: true)
         }
     }
 
@@ -264,7 +261,7 @@ final class Provisioner {
     /// and the caller decides whether to switch to it.
     func installEngine(from source: URL) async throws -> String {
         guard !isWorking else {
-            throw ProvisionError("setup is already running")
+            throw ProvisionError(InterfaceCopy.localized("setup is already running"))
         }
         beginStage(2, "Installing the game engine…")
         SetupLog.log("installing engine from \(source.path)")
@@ -274,7 +271,7 @@ final class Provisioner {
         activity = .idle
         await refreshDetection()
         guard result.succeeded else {
-            throw ProvisionError("engine install failed: \(result.output.suffix(200))")
+            throw ProvisionError(String(localized: "engine install failed: \(result.output.suffix(200))"))
         }
         return result.output
     }
@@ -289,9 +286,10 @@ final class Provisioner {
         { [weak self] phase, fraction in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    if self?.activity != .working(phase) {
+                    let localizedPhase = InterfaceCopy.localized(phase)
+                    if self?.activity != .working(localizedPhase) {
                         SetupLog.log("engine install: \(phase)")
-                        self?.activity = .working(phase)
+                        self?.activity = .working(localizedPhase)
                     }
                     self?.stageFraction = fraction
                 }
@@ -308,7 +306,7 @@ final class Provisioner {
         let create = await environment.createBottle(named: bottleName)
         guard create.succeeded else {
             throw ProvisionError(
-                "bottle creation failed: \(create.output.suffix(200))",
+                String(localized: "bottle creation failed: \(create.output.suffix(200))"),
                 leavesNothingToStart: true,
             )
         }
@@ -324,18 +322,17 @@ final class Provisioner {
         SetupLog.log("provision: downloading SteamSetup.exe")
         try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
-        activity = .working("Installing Steam…")
+        activity = .working(InterfaceCopy.localized("Installing Steam…"))
         await environment.settleBottle(named: bottleName)
         SetupLog.log("provision: silent NSIS install")
         let install = await environment.runSteamInstaller(inBottle: bottleName)
         guard install.succeeded else {
-            let status = install.status.map(String.init) ?? "no exit status"
+            let status = install.status.map(String.init) ?? InterfaceCopy.localized("no exit status")
             let output = install.output.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ProvisionError(
-                "Steam installer failed (exit \(status))"
-                    + (output.isEmpty
-                        ? " without printing anything"
-                        : ": \(output.suffix(200))"),
+                output.isEmpty
+                    ? String(localized: "Steam installer failed (exit \(status)) without printing anything")
+                    : String(localized: "Steam installer failed (exit \(status)): \(output.suffix(200))"),
                 leavesNothingToStart: true,
             )
         }
@@ -368,7 +365,7 @@ final class Provisioner {
         for pass in 1 ... 6 {
             if pass > 1 {
                 SetupLog.log("provision: updater replaced itself — update pass \(pass)")
-                activity = .working("Updating Steam…")
+                activity = .working(InterfaceCopy.localized("Updating Steam…"))
             } else {
                 SetupLog.log("provision: headless client update")
             }
@@ -383,7 +380,7 @@ final class Provisioner {
             || FileManager.default.fileExists(atPath: steamExePath(inBottle: bottleName))
         else {
             throw ProvisionError(
-                "client update finished but steamclient64.dll is missing",
+                InterfaceCopy.localized("client update finished but steamclient64.dll is missing"),
                 leavesNothingToStart: true,
             )
         }

@@ -84,14 +84,14 @@ final class GraphicsStore {
     func downloadRendererVersion(_ release: RendererVersions.Release) {
         installRendererVersion(
             release.component, from: release.url, version: release.version, sha256: release.sha256,
-            describedAs: "Downloading \(release.component.label) \(release.version)…",
+            describedAs: String(localized: "Downloading \(release.component.label) \(release.version)…"),
         )
     }
 
     func addRendererVersion(_ component: RendererVersions.Component, from source: URL) {
         installRendererVersion(
             component, from: source, version: nil, sha256: nil,
-            describedAs: "Adding \(source.lastPathComponent)…",
+            describedAs: String(localized: "Adding \(source.lastPathComponent)…"),
         )
     }
 

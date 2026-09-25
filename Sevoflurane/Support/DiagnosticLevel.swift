@@ -125,15 +125,16 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
     // MARK: - What it is called
 
     var title: String {
-        switch self {
+        let value: String = switch self {
         case .zero: "Off"
         case .one: "Diagnostics"
         case .two: "Everything"
         }
+        return InterfaceCopy.localized(value)
     }
 
     var detail: String {
-        switch self {
+        let value: String = switch self {
         case .zero:
             "Each game's run is recorded, and a crash collects its reports. "
                 + "Nothing measurable is spent."
@@ -145,6 +146,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
                 + "report and the machine's state while it runs. Turns itself "
                 + "off after the next game."
         }
+        return InterfaceCopy.localized(value)
     }
 
     // MARK: - Where it is kept

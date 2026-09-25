@@ -6,6 +6,12 @@ nonisolated struct SettingCopy: Sendable {
     let title: String
     var caption = ""
     var help: SettingHelp?
+
+    init(title: String, caption: String = "", help: SettingHelp? = nil) {
+        self.title = InterfaceCopy.localized(title)
+        self.caption = InterfaceCopy.localized(caption)
+        self.help = help
+    }
 }
 
 nonisolated extension SettingCopy {

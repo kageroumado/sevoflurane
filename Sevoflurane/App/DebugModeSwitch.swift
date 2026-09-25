@@ -51,14 +51,14 @@ final class DebugModeSwitch {
     /// What the mode is doing and what it costs, for the footer chip's
     /// tooltip: the three logs it makes grow, with what they weigh now.
     var summary: String {
-        var lines = ["Debug mode is on. Logs grow."]
+        var lines = [InterfaceCopy.localized("Debug mode is on. Logs grow.")]
         lines += Self.logs.map { name, url in
             "\(name): \(Self.size(of: url))"
         }
         if Engine.active.isCrossOver {
-            lines.append("CrossOver skips the engine logs. The app logs are on.")
+            lines.append(InterfaceCopy.localized("CrossOver skips the engine logs. The app logs are on."))
         } else {
-            lines.append("Restart Steam to apply it to the client and its games.")
+            lines.append(InterfaceCopy.localized("Restart Steam to apply it to the client and its games."))
         }
         return lines.joined(separator: "\n")
     }
@@ -74,7 +74,7 @@ final class DebugModeSwitch {
 
     private static func size(of url: URL) -> String {
         guard let bytes = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
-            return "not written yet"
+            return InterfaceCopy.localized("not written yet")
         }
         return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }

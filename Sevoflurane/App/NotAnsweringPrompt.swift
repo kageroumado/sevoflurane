@@ -9,11 +9,10 @@ enum NotAnsweringPrompt {
     static func userEnds(_ name: String) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "\u{201C}\(name)\u{201D} has stopped answering"
-        alert.informativeText = "Its window no longer takes clicks, keys or its close button. "
-            + "Ending it loses anything it has not saved."
-        alert.addButton(withTitle: "Keep Waiting")
-        alert.addButton(withTitle: "End Game").hasDestructiveAction = true
+        alert.messageText = String(localized: "\u{201C}\(name)\u{201D} has stopped answering")
+        alert.informativeText = String(localized: "Its window no longer takes clicks, keys or its close button. Ending it loses anything it has not saved.")
+        alert.addButton(withTitle: String(localized: "Keep Waiting"))
+        alert.addButton(withTitle: String(localized: "End Game")).hasDestructiveAction = true
         // An agent app has no activation of its own, and the alert would open behind the game.
         alert.window.level = .floating
         NSApp.activate()

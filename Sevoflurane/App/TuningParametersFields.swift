@@ -12,8 +12,8 @@ struct TuningParametersFields: View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             spin("Wait spin", value: $parameters.waitSpin)
             spin("Object spin", value: $parameters.objectSpin)
-            Toggle("Back off where spinning keeps missing", isOn: $parameters.adaptive)
-            Text("Iterations of about 0.4 ns. 5200 is two microseconds; 0 turns a spin off.")
+            Toggle("Reduce spinning after repeated misses", isOn: $parameters.adaptive)
+            Text("Each iteration takes about 0.4 ns. 5200 iterations take two microseconds; 0 disables spinning.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

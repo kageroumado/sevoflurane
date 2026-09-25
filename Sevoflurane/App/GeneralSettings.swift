@@ -75,7 +75,7 @@ private struct AutoRestartRow: View {
         )) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Auto-restart Steam")
-                Text("Restarts Steam when it crashes or hangs. Off, Steam starts and stops only when you ask.")
+                Text("Automatically restarts Steam if it crashes or stops responding.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -111,9 +111,8 @@ private struct SteamLinksRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Steam links")
                 Text(steamLinksComeHere
-                    ? "Install buttons and invitations on the web open here."
-                    : "Install buttons and invitations on the web open in "
-                    + "\(SteamLinks.handlerName ?? "another app").")
+                    ? InterfaceCopy.localized("Install buttons and invitations on the web open here.")
+                    : String(localized: "Install buttons and invitations on the web open in \(SteamLinks.handlerName ?? String(localized: "another app"))."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -173,7 +172,7 @@ private struct GeneralAutomationSection: View {
             Text("Automation")
         } footer: {
             if cliInstalled {
-                Text("Let each assistant control Steam through MCP.")
+                Text("Allow each assistant to control Steam through MCP.")
             }
         }
     }
@@ -205,7 +204,7 @@ private struct CommandLineToolRow: View {
                 Text("Command-line tool")
                 Text(installed
                     ? "Installed at /usr/local/bin/sevo."
-                    : "Adds sevo for Terminal and MCP. Needs an administrator password.")
+                    : "Installs the sevo command for Terminal and MCP. Requires an administrator password.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let error {
@@ -320,8 +319,7 @@ private struct GeneralSteamPagesSection: View {
                         Preferences.compatibilityStrip = enabled
                         steam?.applyCompatibilityStrip()
                     }
-                Text("A game's page says how it runs on a Mac and what its anti-cheat "
-                    + "does, in the slot Steam's own Deck strip leaves empty here.")
+                Text("A game's page says how it runs on a Mac and what its anti-cheat does, in the slot Steam's own Deck strip leaves empty here.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -358,9 +356,7 @@ private struct GeneralCommunitySection: View {
                             StatsStore.writeQueue([])
                         }
                     }
-                Text("After a game closes, its frame rate, resolution, engine and settings go to the public "
-                    + "Sevoflurane game database with your Mac\u{2019}s model and chip. Nothing names you, "
-                    + "your Mac or your account.")
+                Text("After a game closes, its frame rate, resolution, engine and settings go to the public Sevoflurane game database with your Mac\u{2019}s model and chip. Nothing names you, your Mac or your account.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let sent = sentLine {
@@ -390,7 +386,7 @@ private struct GeneralCommunitySection: View {
         ) {
             Button("Delete", role: .destructive) { delete() }
         } message: {
-            Text("The database forgets them, and the next run you share comes from a new, unrelated identity.")
+            Text("The database deletes these runs. The next run you share uses a new, unrelated identity.")
         }
     }
 
@@ -413,7 +409,7 @@ private struct GeneralCommunitySection: View {
                 try await StatsUploader.shared.deleteShared()
                 deleteFailure = nil
             } catch {
-                deleteFailure = String(localized: "The database did not answer. Try again later.")
+                deleteFailure = String(localized: "The database is unavailable. Try again later.")
             }
             reload()
         }
@@ -444,9 +440,9 @@ private struct GeneralDiscordSection: View {
                     .onChange(of: discordBridge) { _, enabled in
                         Preferences.discordBridge = enabled
                     }
-                Text(hasDiscordBridge
+                Text(InterfaceCopy.localized(hasDiscordBridge
                     ? "Games with their own Discord support show their status. Restart Steam to apply a change."
-                    : "Only the built-in engine carries the Discord relay. Switch to it in Engine.")
+                    : "Only the built-in engine includes the Discord relay. Select it in Engine settings."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -488,7 +484,7 @@ private struct GeneralUninstallSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Uninstall Sevoflurane").font(.headline)
-                    Text("Removes Sevoflurane and the engines and toolkits it downloaded. You choose whether games go too.")
+                    Text("Removes Sevoflurane and its downloaded engines and toolkits. You can choose whether to remove games.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

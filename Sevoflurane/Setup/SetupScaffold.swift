@@ -30,10 +30,10 @@ struct SetupPage<Content: View>: View {
                 .foregroundStyle(.tint)
                 .frame(height: SetupMetrics.glyphSize + 8, alignment: .bottomLeading)
                 .accessibilityHidden(true)
-            Text(title)
+            Text(InterfaceCopy.localized(title))
                 .font(.title2.weight(.semibold))
                 .padding(.top, Theme.Space.xl)
-            Text(subtitle)
+            Text(InterfaceCopy.localized(subtitle))
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -60,7 +60,7 @@ struct SetupHero<Picture: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             picture
-            Text(title)
+            Text(InterfaceCopy.localized(title))
                 .font(.title.weight(.semibold))
                 .padding(.top, Theme.Space.lg)
             caption
@@ -117,9 +117,9 @@ struct SetupRow<Accessory: View>: View {
                 .frame(width: SetupMetrics.rowIconWidth)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
+                Text(InterfaceCopy.localized(title))
                 if let caption {
-                    Text(caption)
+                    Text(InterfaceCopy.localized(caption))
                         .font(.callout)
                         .foregroundStyle(captionStyle)
                         .fixedSize(horizontal: false, vertical: true)
@@ -154,7 +154,7 @@ struct SetupChoiceRow: View {
         Button(action: select) {
             SetupRow(icon: icon, title: title, caption: caption) {
                 if let value {
-                    Text(value).foregroundStyle(.secondary)
+                    Text(InterfaceCopy.localized(value)).foregroundStyle(.secondary)
                 }
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
@@ -173,7 +173,7 @@ struct SetupFootnote: View {
     var style: AnyShapeStyle = .init(.secondary)
 
     var body: some View {
-        Text(text)
+        Text(InterfaceCopy.localized(text))
             .font(.callout)
             .foregroundStyle(style)
             .fixedSize(horizontal: false, vertical: true)

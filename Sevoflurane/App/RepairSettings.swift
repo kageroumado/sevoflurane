@@ -139,13 +139,13 @@ struct RecoverySettings: View {
         .formStyle(.grouped)
         .task { compatibility.refresh() }
         .confirmationDialog(
-            pendingReset?.title ?? "", isPresented: confirmingReset,
+            pendingReset.map { InterfaceCopy.localized($0.title) } ?? "", isPresented: confirmingReset,
             titleVisibility: .visible, presenting: pendingReset,
         ) { reset in
-            Button(reset.confirmLabel, role: .destructive) { perform(reset) }
+            Button(InterfaceCopy.localized(reset.confirmLabel), role: .destructive) { perform(reset) }
             Button("Cancel", role: .cancel) {}
         } message: { reset in
-            Text(reset.message)
+            Text(InterfaceCopy.localized(reset.message))
         }
     }
 
@@ -176,7 +176,7 @@ struct RecoverySettings: View {
                 let open = steam?.cancelStuckMenus() ?? []
                 lastMenuResult = open.isEmpty
                     ? "No menu was tracking."
-                    : "Ended: \(open.joined(separator: ", "))."
+                    : String(localized: "Ended: \(open.joined(separator: ", ")).")
             }
             .highlightable(.recoveryCancelMenus, highlighted: highlighted)
         } header: {
@@ -205,8 +205,7 @@ struct RecoverySettings: View {
         } header: {
             Text("Background helper")
         } footer: {
-            Text("The helper keeps Steam supervised even when this app is closed. "
-                + "Rebuilding it registers it fresh; approve it in Login Items if asked.")
+            Text("The helper keeps Steam supervised even when this app is closed. Rebuilding it registers it fresh; approve it in Login Items if asked.")
         }
     }
 
@@ -220,11 +219,11 @@ struct RecoverySettings: View {
         case let .done(message):
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-            Text(message)
+            Text(InterfaceCopy.localized(message))
         case let .failed(message):
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text(message)
+            Text(InterfaceCopy.localized(message))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -265,8 +264,7 @@ struct RecoverySettings: View {
         } header: {
             Text("Bottle & Wine")
         } footer: {
-            Text("Repair reinstalls the Windows components Steam needs and leaves your "
-                + "games and saves alone.")
+            Text("Repair reinstalls the Windows components Steam needs and leaves your games and saves alone.")
         }
     }
 
@@ -275,7 +273,7 @@ struct RecoverySettings: View {
             HStack(alignment: .center, spacing: Theme.Space.md) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reinstall the Direct3D shader compiler")
-                    Text(row.busy ? (row.phase ?? "working…") : shaderCompilerDetail(row))
+                    Text(InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : shaderCompilerDetail(row)))
                         .font(.caption)
                         .foregroundStyle(row.error == nil ? Color.secondary : Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
@@ -306,14 +304,14 @@ struct RecoverySettings: View {
         Section {
             ForEach(Self.knownIssues) { issue in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(issue.symptom)
+                    Text(InterfaceCopy.localized(issue.symptom))
                     if let example = issue.example {
-                        Text(example)
+                        Text(InterfaceCopy.localized(example))
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(issue.fix)
+                    Text(InterfaceCopy.localized(issue.fix))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -323,7 +321,7 @@ struct RecoverySettings: View {
         } header: {
             Text("Common problems")
         } footer: {
-            Text("For anything else, Settings › Diagnostics saves what a bug report needs.")
+            Text("For other problems, save a diagnostics archive in Settings › Diagnostics.")
         }
     }
 
@@ -337,14 +335,14 @@ struct RecoverySettings: View {
     ) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
+                Text(InterfaceCopy.localized(title))
+                Text(InterfaceCopy.localized(detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Button(button, action: action)
+            Button(InterfaceCopy.localized(button), action: action)
                 .disabled(disabled)
         }
     }
@@ -379,7 +377,7 @@ struct RecoverySettings: View {
     private var rebuildDetail: String {
         if case let .working(phase) = provisioner.activity { return phase }
         if case let .failed(reason) = provisioner.activity {
-            return "The last attempt stopped: \(reason)"
+            return String(localized: "The last attempt stopped: \(reason)")
         }
         return "Stops Steam and installs the client over this bottle again — for a "
             + "client whose own files are damaged and that Repair leaves alone. "

@@ -51,7 +51,7 @@ struct StorageSettings: View {
             } header: {
                 StorageOwnTotalHeader(total: store.total, isMeasuring: store.isMeasuring)
             } footer: {
-                Text("Caches and downloads go to the Trash. Uninstall games through Steam.")
+                Text("Caches and downloads move to the Trash. Uninstall games in Steam.")
             }
             StorageLibrariesSection(libraries: store.libraries, steam: steam)
             sharingSection
@@ -80,7 +80,7 @@ struct StorageSettings: View {
                 Image(systemName: "link")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .help("Shared from another bottle. One copy on disk.")
+                    .help("Shared from another bottle. Only one copy is stored on disk.")
             }
             Spacer(minLength: Theme.Space.md)
             Text(Self.size(game.bytes))
@@ -126,7 +126,7 @@ struct StorageSettings: View {
                 Text(program.name).lineLimit(1)
                 Text(program.isInsideBottle
                     ? program.path
-                    : "\(program.path) · stays in place")
+                    : String(localized: "\(program.path) · stays in place"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -144,8 +144,8 @@ struct StorageSettings: View {
             .buttonStyle(.borderless)
             .frame(width: Self.actionColumnWidth)
             .help(program.isInsideBottle
-                ? "Remove it and move what its installer wrote to the Trash."
-                : "Remove it. The program's own files stay where they are.")
+                ? "Remove this program and move its installed files to the Trash."
+                : "Remove this program from the list. Its files remain in place.")
         }
         .font(.callout)
     }
@@ -158,7 +158,7 @@ struct StorageSettings: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(candidate.name).lineLimit(1)
-                            Text("Linked. Appears after a Steam restart.")
+                            Text("Linked. Restart Steam to see it.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -195,9 +195,7 @@ struct StorageSettings: View {
             } header: {
                 Text("In your other bottles")
             } footer: {
-                Text("A link shares another bottle's copy of a game. One copy "
-                    + "on disk, no second download. Steam verifies it on first "
-                    + "launch. Each bottle keeps its own saves.")
+                Text("A link shares another bottle's copy of a game. One copy on disk, no second download. Steam verifies it on first launch. Each bottle keeps its own saves.")
             }
             .highlightable(.storageSharing, highlighted: highlighted)
         }
@@ -314,8 +312,7 @@ private struct StorageLibrariesSection: View {
         } header: {
             Text("Game libraries")
         } footer: {
-            Text("Put a library on a drive formatted as APFS or Mac OS Extended. exFAT and FAT drives "
-                + "have no file permissions or links, which Wine and some games rely on.")
+            Text("Put a library on a drive formatted as APFS or Mac OS Extended. exFAT and FAT drives have no file permissions or links, which Wine and some games rely on.")
         }
     }
 }
@@ -329,7 +326,7 @@ private struct StorageLibraryRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
-                Text(library.isInsideBottle ? "Inside the bottle" : library.location)
+                Text(library.isInsideBottle ? InterfaceCopy.localized("Inside the bottle") : library.location)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(summary)
@@ -347,12 +344,12 @@ private struct StorageLibraryRow: View {
     }
 
     private var summary: String {
-        var parts = [library.games == 1 ? "1 game" : "\(library.games) games"]
+        var parts = [String(localized: "\(library.games) games")]
         if library.bytes > 0 {
             parts.append(library.bytes.formatted(.byteCount(style: .file)))
         }
         if let available = library.available {
-            parts.append("\(available.formatted(.byteCount(style: .file))) free")
+            parts.append(String(localized: "\(available.formatted(.byteCount(style: .file))) free"))
         }
         return parts.joined(separator: " \u{00B7} ")
     }
@@ -360,10 +357,9 @@ private struct StorageLibraryRow: View {
     private var warning: String? {
         switch library.fileSystem {
         case let .foreign(name):
-            "This drive is \(name). Games here can fail to install, update or start. "
-                + "Reformat it as APFS, or move the games to another library in Steam."
+            String(localized: "This drive is \(name). Games here can fail to install, update or start. Reformat it as APFS, or move the games to another library in Steam.")
         case let .network(name):
-            "This library is on a \(name) network share. Updates and saves are slow and can fail there."
+            String(localized: "This library is on a \(name) network share. Updates and saves are slow and can fail there.")
         case .mac, .unknown:
             nil
         }

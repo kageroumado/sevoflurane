@@ -29,11 +29,12 @@ nonisolated enum SettingGroup: String, CaseIterable, Sendable {
     case performance
 
     var title: String {
-        switch self {
+        let value: String = switch self {
         case .picture: "Picture"
         case .mouse: "Mouse"
         case .performance: "Performance and compatibility"
         }
+        return InterfaceCopy.localized(value)
     }
 }
 
@@ -63,6 +64,11 @@ nonisolated struct SettingChoice: Equatable, Sendable, Identifiable {
     let label: String
 
     var id: String { value }
+
+    init(value: String, label: String) {
+        self.value = value
+        self.label = InterfaceCopy.localized(label)
+    }
 }
 
 /// Which control a row is.
@@ -114,7 +120,7 @@ nonisolated struct Setting: Identifiable, Sendable {
     /// The label of a value, for the line that says what Inherit stands for.
     func label(of value: SettingValue) -> String {
         switch (control, value) {
-        case let (_, .flag(on)): on ? "On" : "Off"
+        case let (_, .flag(on)): InterfaceCopy.localized(on ? "On" : "Off")
         case let (.choices(choices), .choice(raw)), let (.tuning(choices), .choice(raw)):
             choices.first { $0.value == raw }?.label ?? raw
         case let (_, .choice(raw)): raw

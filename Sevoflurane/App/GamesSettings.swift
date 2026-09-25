@@ -215,8 +215,7 @@ private struct GameDLLOverridesSection: View {
                 SettingHelpButton(help: SettingCopy.dllOverrides)
             }
         } footer: {
-            Text("For this game alone, from its next launch. winecfg shows the same values; "
-                + "Settings › Engine holds the bottle's.")
+            Text("For this game alone, from its next launch. winecfg shows the same values; Settings › Engine holds the bottle's.")
         }
     }
 }

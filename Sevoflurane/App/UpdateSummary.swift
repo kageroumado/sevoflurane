@@ -18,7 +18,7 @@ final class UpdateSummary {
 
     /// One line for the gear, or `nil` when there is nothing to say.
     var summary: String? {
-        waiting.isEmpty ? nil : "Newer in Settings: \(waiting.joined(separator: ", "))"
+        waiting.isEmpty ? nil : String(localized: "Newer in Settings: \(ListFormatter.localizedString(byJoining: waiting))")
     }
 
     private var hasChecked = false

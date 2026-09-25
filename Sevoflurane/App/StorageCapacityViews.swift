@@ -136,7 +136,7 @@ struct StorageLegend: View {
             ForEach(segments) { segment in
                 HStack(spacing: Theme.Space.xs) {
                     StorageDot(color: segment.kind.color)
-                    Text(segment.name)
+                    Text(InterfaceCopy.localized(segment.name))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize()

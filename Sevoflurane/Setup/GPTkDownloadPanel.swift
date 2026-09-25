@@ -74,7 +74,7 @@ struct GPTkDownloadPanel: View {
 
     private func chooseFile() {
         let panel = NSOpenPanel()
-        panel.message = "Choose “Evaluation environment for Windows games” or the Game Porting Toolkit."
+        panel.message = String(localized: "Choose “Evaluation environment for Windows games” or the Game Porting Toolkit.")
         panel.allowedContentTypes = [.diskImage]
         panel.directoryURL = GPTkFolderWatch.downloads
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -90,8 +90,7 @@ struct GPTkDownloadPanel: View {
                 .foregroundStyle(.secondary)
             Text("Apple's sign-in page appears here")
                 .font(.callout.weight(.medium))
-            Text("A real run signs in with your Apple Account and downloads the "
-                + "toolkit. This one loads nothing.")
+            Text("A real run signs in with your Apple Account and downloads the toolkit. This one loads nothing.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -110,11 +109,9 @@ struct GPTkDownloadPanel: View {
             Image(systemName: download.autoPhase == .manual
                 ? "hand.point.up.left" : "info.circle")
                 .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
-            Text(download.autoPhase == .manual
-                ? "Click Download on the release and the beta you want. "
-                + "Each installs here when its download ends."
-                : "Sign in with your Apple Account. The first time, Apple asks you to accept its "
-                + "free developer agreement. The newest release and beta then download and install here.")
+            Text(InterfaceCopy.localized(download.autoPhase == .manual
+                ? "Click Download on the release and the beta you want. Each installs here when its download ends."
+                : "Sign in with your Apple Account. The first time, Apple asks you to accept its free developer agreement. The newest release and beta then download and install here."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -195,7 +192,7 @@ struct GPTkDownloadPanel: View {
         case .installing:
             Text("Installing…").font(.caption).foregroundStyle(.secondary)
         case let .installed(version):
-            Text(version.contains("beta") ? "Installed · beta" : "Installed")
+            Text(InterfaceCopy.localized(version.contains("beta") ? "Installed · beta" : "Installed"))
                 .font(.caption).foregroundStyle(.secondary)
         case let .failed(reason):
             Text(reason).font(.caption).foregroundStyle(.orange).lineLimit(2)
@@ -225,9 +222,7 @@ private struct GPTkBrowserRoute: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "info.circle").foregroundStyle(.secondary)
-                Text("Sign in on Apple\u{2019}s page and download \u{201C}Evaluation environment for Windows "
-                    + "games\u{201D}, the small file with D3DMetal in it. The Game Porting Toolkit works too. "
-                    + "Sevoflurane installs it the moment it lands.")
+                Text("Sign in on Apple\u{2019}s page and download \u{201C}Evaluation environment for Windows games\u{201D}, the small file with D3DMetal in it. The Game Porting Toolkit works too. Sevoflurane installs it the moment it lands.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -238,7 +233,7 @@ private struct GPTkBrowserRoute: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if watch.isWatching { ProgressView().controlSize(.small) }
-                    Text(watch.isWatching ? "Watching for the download in" : "Watching is paused")
+                    Text(InterfaceCopy.localized(watch.isWatching ? "Watching for the download in" : "Watching is paused"))
                         .font(.callout.weight(.medium))
                 }
                 ForEach(watch.folders, id: \.self) { folder in
@@ -275,7 +270,7 @@ private struct GPTkBrowserRoute: View {
 
     private func addFolder() {
         let panel = NSOpenPanel()
-        panel.message = "Choose the folder your browser saves downloads into."
+        panel.message = String(localized: "Choose the folder your browser saves downloads into.")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }

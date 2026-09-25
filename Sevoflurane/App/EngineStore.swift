@@ -16,6 +16,12 @@ final class EngineStore {
         let label: String
         let detail: String
         var id: String { engine.description }
+
+        init(engine: Engine, label: String, detail: String) {
+            self.engine = engine
+            self.label = InterfaceCopy.localized(label)
+            self.detail = InterfaceCopy.localized(detail)
+        }
     }
 
     private(set) var options: [EngineOption] = []
@@ -201,7 +207,7 @@ final class EngineStore {
         switchError = nil
         Task(name: "Retry provisioning") { [weak self] in
             guard let self else { return }
-            switchPhase = "Setting up the bottle…"
+            switchPhase = InterfaceCopy.localized("Setting up the bottle…")
             await provisioner.retry()
             if case let .failed(reason) = provisioner.activity { switchError = reason }
             switchPhase = nil
@@ -229,14 +235,14 @@ final class EngineStore {
         if let crossover = detection.usableCrossOver {
             built.append(EngineOption(
                 engine: .crossover,
-                label: "CrossOver \(crossover.version)",
+                label: String(localized: "CrossOver \(crossover.version)"),
                 detail: crossover.licensed ? "Licensed" : "Trial",
             ))
         }
         if let preview = detection.usableCrossOverPreview {
             built.append(EngineOption(
                 engine: .crossoverPreview,
-                label: "CrossOver Preview \(preview.version)",
+                label: String(localized: "CrossOver Preview \(preview.version)"),
                 detail: "Keeps its own bottles. Adopting the stable ones is "
                     + "a switch inside Preview.",
             ))
@@ -287,21 +293,21 @@ final class EngineStore {
         let engine = stagedEngine
         let bottle = stagedBottle.trimmingCharacters(in: .whitespaces)
         guard !bottle.isEmpty, !bottle.contains("/") else {
-            switchError = "A bottle name cannot be empty or contain \u{201C}/\u{201D}."
+            switchError = InterfaceCopy.localized("A bottle name cannot be empty or contain \u{201C}/\u{201D}.")
             return
         }
         isSwitching = true
         switchError = nil
         Task(name: "Switch to \(engine) / \(bottle)") { [weak self] in
             guard let self else { return }
-            switchPhase = "Stopping Steam…"
+            switchPhase = InterfaceCopy.localized("Stopping Steam…")
             await environment.stopClient(supervisor: supervisor)
             environment.choose(engine: engine, bottle: bottle)
             EventLog.enqueue(.app, "switched to \(engine), bottle \(bottle)")
-            switchPhase = "Checking the new environment…"
+            switchPhase = InterfaceCopy.localized("Checking the new environment…")
             await provisioner.refreshDetection()
             if provisioner.needsSetup {
-                switchPhase = "Setting up the bottle…"
+                switchPhase = InterfaceCopy.localized("Setting up the bottle…")
                 await provisioner.provisionAndConfigure()
                 if case let .failed(reason) = provisioner.activity {
                     // The choice stays: detection drives everything, so

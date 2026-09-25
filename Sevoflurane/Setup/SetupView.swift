@@ -195,7 +195,7 @@ struct SetupView: View {
         case .done where steamWindow() == .signIn:
             if let onSkipSignIn {
                 Button("Skip Sign-In", action: onSkipSignIn)
-                    .help("Run your own Windows programs from Quick Launch now, and sign in to Steam later from the menu bar")
+                    .help("Run Windows programs from Quick Launch. You can sign in to Steam later from the menu bar.")
             }
         default:
             EmptyView()

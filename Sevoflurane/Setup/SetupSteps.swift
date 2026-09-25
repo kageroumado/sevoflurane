@@ -96,9 +96,9 @@ private struct SetupHighlightView: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(highlight.title)
+                Text(InterfaceCopy.localized(highlight.title))
                     .font(.callout.weight(.semibold))
-                Text(highlight.caption)
+                Text(InterfaceCopy.localized(highlight.caption))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -133,7 +133,7 @@ struct SetupEngineStep: View {
                 ) { choice = .builtIn }
                 SetupChoiceRow(
                     icon: "wineglass",
-                    title: crossover.map { "CrossOver \($0.version)" } ?? "CrossOver",
+                    title: crossover.map { String(localized: "CrossOver \($0.version)") } ?? "CrossOver",
                     caption: "CodeWeavers' paid engine, with per-game fixes and a support team.",
                     value: crossOverValue,
                     isSelected: choice == .crossover,
@@ -141,8 +141,7 @@ struct SetupEngineStep: View {
             }
             if let crossover, crossover.trialExpired {
                 SetupFootnote(
-                    text: "The CrossOver \(crossover.version) trial on this Mac has ended. "
-                        + "License it at codeweavers.com, or use Dormison.",
+                    text: String(localized: "The CrossOver \(crossover.version) trial on this Mac has ended. License it at codeweavers.com, or use Dormison."),
                     style: .init(.orange),
                 )
             }
@@ -157,11 +156,10 @@ struct SetupEngineStep: View {
     /// app ships with, or a file someone chose.
     private var dormisonCaption: String {
         if let tarball = provisioner.engineTarball {
-            return "Installs from \(tarball.lastPathComponent)."
+            return String(localized: "Installs from \(tarball.lastPathComponent).")
         }
         if let bundledEngine {
-            return "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine))) "
-                + "comes with this copy. Nothing to download."
+            return String(localized: "\(Engine.managedDisplayName(EngineInstaller.versionName(of: bundledEngine))) comes with this copy. Nothing to download.")
         }
         return "Sevoflurane's own engine: DirectX 12 through Apple's toolkit, and game upscaling."
     }
@@ -291,8 +289,9 @@ struct SetupInstallStep: View {
 
     private func caption(forStage index: Int) -> String? {
         guard index == currentStage, case let .working(phase) = provisioner.activity else { return nil }
-        guard let fraction = provisioner.stageFraction else { return phase }
-        return "\(phase) \(Int(fraction * 100))%"
+        let localizedPhase = InterfaceCopy.localized(phase)
+        guard let fraction = provisioner.stageFraction else { return localizedPhase }
+        return "\(localizedPhase) \(Int(fraction * 100))%"
     }
 
     @ViewBuilder
@@ -409,11 +408,11 @@ struct SetupDoneStep: View {
         let icon = Image(nsImage: MenuBarIcon.image(badged: false))
         return switch window {
         case .signIn:
-            Text("Your library lives in the menu bar, behind \(icon). Sign in to Steam and it opens.")
+            Text("Your library is in the menu bar under \(icon). Sign in to Steam to view it.")
         case .library:
-            Text("Your library lives in the menu bar, behind \(icon).")
+            Text("Your library is in the menu bar under \(icon).")
         case .starting:
-            Text("Your library lives in the menu bar, behind \(icon). Steam is starting; a first start takes a minute.")
+            Text("Your library is in the menu bar under \(icon). Steam is starting; the first launch can take a minute.")
         case let .helperDown(reason):
             Text(reason)
         }

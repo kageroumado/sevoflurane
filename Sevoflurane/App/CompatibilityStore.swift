@@ -59,7 +59,7 @@ final class CompatibilityStore {
               !rows[index].busy else { return }
         rows[index].busy = true
         rows[index].error = nil
-        rows[index].phase = "starting"
+        rows[index].phase = InterfaceCopy.localized("starting")
         let name = rows[index].dependency.name
         Task(name: "Install \(name)") { [weak self] in
             guard let self else { return }

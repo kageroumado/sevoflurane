@@ -114,7 +114,7 @@ final class AdoptionModel {
 
     /// Where a launch would happen.
     var destination: String {
-        "Runs in the \(SteamBottle.name) bottle on \(Engine.active.description)."
+        String(localized: "Runs in the \(SteamBottle.name) bottle on \(Engine.active.description).")
     }
 
     var isInstaller: Bool {
@@ -166,7 +166,7 @@ final class AdoptionModel {
             let result = await Self.runOnce(url, wait: true)
             let added = Self.topLevelDirectories().subtracting(before)
             guard result else {
-                stage = .failed("The installer did not start.")
+                stage = .failed(InterfaceCopy.localized("The installer did not start."))
                 return
             }
             let root = added.sorted { $0.path < $1.path }.first
@@ -319,7 +319,7 @@ private struct AdoptionView: View {
     private var progress: some View {
         HStack(spacing: Theme.Space.md) {
             ProgressView().controlSize(.small)
-            Text("Installing into the bottle. The next step lists what it added.")
+            Text("Installing into the bottle. The next step lists what was added.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
@@ -332,7 +332,7 @@ private struct AdoptionView: View {
             Spacer()
             if model.isInstaller {
                 Button("Not an Installer") { model.overruleInstaller() }
-                    .help("Offer to play it or add it to Quick Launch instead")
+                    .help("Choose whether to play it once or add it to Quick Launch.")
                 Button("Run Once") { model.playOnce() }
                 Button("Install into Bottle") { model.install() }
                     .keyboardShortcut(.defaultAction)
@@ -384,10 +384,10 @@ private struct InstalledStep: View {
     }
 
     private var summary: String {
-        guard let root else { return "Sevoflurane found nothing the installer added." }
+        guard let root else { return InterfaceCopy.localized("Sevoflurane found nothing the installer added.") }
         return executables.isEmpty
-            ? "It installed \(root.lastPathComponent). No program inside it can start."
-            : "It installed \(root.lastPathComponent). Pick what to keep."
+            ? String(localized: "It installed \(root.lastPathComponent). No program inside it can start.")
+            : String(localized: "It installed \(root.lastPathComponent). Pick what to keep.")
     }
 
     private func binding(for exe: URL) -> Binding<Bool> {

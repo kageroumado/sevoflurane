@@ -17,7 +17,7 @@ struct UpscalerPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HelpedRow(caption: detail, help: SettingCopy.scaling) {
+            HelpedRow(caption: InterfaceCopy.localized(detail), help: SettingCopy.scaling) {
                 Picker("Upscaler", selection: pickerSelection) {
                     if let inherited {
                         Text("Inherit").tag("")
@@ -59,7 +59,7 @@ struct UpscalerPicker: View {
     private func label(for choice: ShaderPackages.Choice) -> String {
         guard case let .downloadable(entry) = choice else { return choice.label }
         let size = entry.size.map { " (\(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)))" } ?? ""
-        return "\(entry.title) · Download\(size)"
+        return "\(entry.title) · \(InterfaceCopy.localized("Download"))\(size)"
     }
 
     /// One line on the current choice — the inherited one's when inheriting.
@@ -70,7 +70,7 @@ struct UpscalerPicker: View {
             return "This package is missing. Games fall back to Lanczos."
         }
         guard selection == nil, pending == nil, inherited != nil else { return choice.detail }
-        return "Engine's value: \(choice.label). \(choice.detail)"
+        return String(localized: "Engine's value: \(choice.label). \(choice.detail)")
     }
 }
 

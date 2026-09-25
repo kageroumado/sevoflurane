@@ -57,6 +57,19 @@ nonisolated enum SupervisorHealth: Equatable, Sendable {
         }
     }
 
+    var displayStatusText: String {
+        switch self {
+        case .starting: InterfaceCopy.localized("checking the client…")
+        case .healthy: InterfaceCopy.localized("client healthy")
+        case .waitingForSignIn: InterfaceCopy.localized("waiting for sign-in")
+        case let .degraded(reason): InterfaceCopy.localized(reason)
+        case let .restarting(phase): String(localized: "restarting: \(InterfaceCopy.localized(phase))")
+        case let .launching(phase): InterfaceCopy.localized(phase)
+        case let .gaveUp(reason): InterfaceCopy.localized(reason)
+        case .paused: InterfaceCopy.localized("auto-restart paused")
+        }
+    }
+
     /// Whether the menu-bar glyph should carry the attention badge: the states
     /// where nothing is healing itself and the user should look.
     var needsAttention: Bool {

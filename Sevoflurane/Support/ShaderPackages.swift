@@ -242,8 +242,8 @@ nonisolated enum ShaderPackages {
         var detail: String {
             switch self {
             case let .fixed(choice): choice.detail
-            case let .installed(package): package.manifest.description
-            case let .downloadable(entry): entry.description
+            case let .installed(package): InterfaceCopy.localized(package.manifest.description)
+            case let .downloadable(entry): InterfaceCopy.localized(entry.description)
             }
         }
     }

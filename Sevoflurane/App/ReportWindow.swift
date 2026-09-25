@@ -31,7 +31,7 @@ final class ReportWindows {
         let window = NSWindow(
             contentViewController: NSHostingController(rootView: ReportView(showGuide: showGuide)),
         )
-        window.title = "Reports"
+        window.title = InterfaceCopy.localized("Reports")
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.setContentSize(NSSize(width: 860, height: 560))
         window.minSize = NSSize(width: 680, height: 420)
@@ -87,7 +87,7 @@ final class ReportStore {
         }
         reportPath = CrashCollector.report(for: run)
         findings = reportPath.map { path in
-            path.pathExtension == "xz" ? ["The report was compressed at level 2."]
+            path.pathExtension == "xz" ? [String(localized: "The report was compressed at level 2.")]
                 : CrashCollector.findings(in: path)
         } ?? []
     }
@@ -135,14 +135,14 @@ final class ReportStore {
             writing = false
             let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
             guard result.status == 0, path.hasSuffix(".zip") else {
-                note = "Could not write the report: \(result.output.suffix(200))"
+                note = String(localized: "Could not write the report: \(result.output.suffix(200))")
                 return
             }
             let zip = URL(filePath: path)
             let board = NSPasteboard.general
             board.clearContents()
             board.setString(manifest(zip: zip), forType: .string)
-            note = "Wrote \(zip.lastPathComponent) to the Desktop. The manifest is on the clipboard."
+            note = String(localized: "Wrote \(zip.lastPathComponent) to the Desktop. The manifest is on the clipboard.")
             NSWorkspace.shared.activateFileViewerSelecting([zip])
         }
     }
@@ -170,7 +170,7 @@ final class ReportStore {
     /// `Demons Roots: crashed in opengl32.dll+0xd7691 on r2/DXMT` — the game,
     /// where it died, and what it was running on.
     static func title(for run: RunRecord) -> String {
-        let game = run.name ?? "App \(run.appid)"
+        let game = run.name ?? String(localized: "App \(run.appid)")
         let engine = "\(run.engine)/\(run.renderer)"
         guard let crash = run.crash else {
             let ending = run.exit.map { "ended \($0.kind.rawValue)" } ?? "did not finish"
@@ -255,9 +255,9 @@ struct ReportView: View {
     private var runList: some View {
         List(store.runs, selection: $store.selected) { run in
             VStack(alignment: .leading, spacing: 2) {
-                Text(run.name ?? "App \(run.appid)")
+                Text(run.name ?? String(localized: "App \(run.appid)"))
                     .font(.body)
-                Text(run.outcome)
+                Text(run.displayOutcome)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -271,7 +271,7 @@ struct ReportView: View {
                 ContentUnavailableView {
                     Label("No runs yet", systemImage: "gamecontroller")
                 } description: {
-                    Text("Every game you launch is recorded here. Settings › Diagnostics says how to make a run worth reporting.")
+                    Text("Every game you launch appears here. See Settings › Diagnostics for how to record a useful run.")
                 } actions: {
                     if let showGuide {
                         Button("Making a Useful Report…") { showGuide() }
@@ -293,7 +293,7 @@ struct ReportView: View {
                 .padding(Theme.Space.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle(run.name ?? "App \(run.appid)")
+            .navigationTitle(run.name ?? String(localized: "App \(run.appid)"))
         } else {
             ContentUnavailableView("Pick a run", systemImage: "list.bullet.rectangle")
         }
@@ -303,7 +303,7 @@ struct ReportView: View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
             Text("Share this run")
                 .font(.headline)
-            Text(ReportStore.contentsSentence)
+            Text(InterfaceCopy.localized(ReportStore.contentsSentence))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -334,7 +334,7 @@ private struct RunSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
-            Text(run.summary)
+            Text(run.displaySummary)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
             LazyVGrid(
@@ -343,8 +343,8 @@ private struct RunSummaryCard: View {
                 spacing: Theme.Space.sm,
             ) {
                 ForEach(facts, id: \.label) { fact in
-                    LabeledContent(fact.label) {
-                        Text(fact.value).foregroundStyle(.secondary)
+                    LabeledContent(InterfaceCopy.localized(fact.label)) {
+                        Text(InterfaceCopy.localized(fact.value)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -356,10 +356,10 @@ private struct RunSummaryCard: View {
 
     private func knownFailure(_ entry: KnownFailures.Entry) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(entry.summary, systemImage: "lightbulb")
+            Label(InterfaceCopy.localized(entry.summary), systemImage: "lightbulb")
                 .fixedSize(horizontal: false, vertical: true)
             if let fix = entry.fix {
-                Text(fix)
+                Text(InterfaceCopy.localized(fix))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -372,7 +372,7 @@ private struct RunSummaryCard: View {
     private var facts: [(label: String, value: String)] {
         var facts = [
             ("Engine", run.engine),
-            ("Renderer", run.rendererLabel),
+            ("Renderer", run.displayRendererLabel),
             ("Runner", run.runner),
             ("Windows", run.windows),
             ("macOS", run.macos),
@@ -417,9 +417,7 @@ private struct FrameRateCard: View {
                 }
                 bars(fps)
             } else {
-                Text("Nothing counted this run's frames. A game with no Metal layer has no "
-                    + "counter, and the driver's counter reaches records from the engine "
-                    + "that carries it.")
+                Text("Nothing counted this run's frames. A game with no Metal layer has no counter, and the driver's counter reaches records from the engine that carries it.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -432,7 +430,7 @@ private struct FrameRateCard: View {
     private func reading(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value).font(.title3.monospacedDigit())
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(InterfaceCopy.localized(label)).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -464,13 +462,12 @@ private struct FindingsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            Text("What its report holds")
+            Text("Report contents")
                 .font(.headline)
             if findings.isEmpty {
-                Text(hasReport
+                Text(InterfaceCopy.localized(hasReport
                     ? "A report was collected and nothing in it names an error."
-                    : "No report was collected: this run ended normally and diagnostics "
-                    + "were off. Settings › Diagnostics collects one after every run.")
+                    : "No report was collected: this run ended normally and diagnostics were off. Settings › Diagnostics collects one after every run."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

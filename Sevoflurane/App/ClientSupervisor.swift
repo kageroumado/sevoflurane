@@ -41,7 +41,7 @@ final class ClientSupervisor {
     private(set) var hostPressure: HostPressure?
 
     var statusText: String {
-        health.statusText
+        health.displayStatusText
     }
 
     var needsAttention: Bool {

@@ -338,20 +338,20 @@ final class SteamNotifications {
             let person = notification.title
             switch notification.kind {
             case 1:
-                let game = notification.gameName.isEmpty ? "A game" : notification.gameName
+                let game = notification.gameName.isEmpty ? InterfaceCopy.localized("A game") : notification.gameName
                 title = game
-                body = "Download complete"
+                body = InterfaceCopy.localized("Download complete")
                 route = .steam
             case 3:
                 guard !person.isEmpty, !notification.gameName.isEmpty else { return nil }
                 title = person
-                body = "is playing \(notification.gameName)"
+                body = String(localized: "is playing \(notification.gameName)")
                 route = .chat(accountID: notification.accountID)
                 isTransient = true
             case 4:
                 guard !person.isEmpty else { return nil }
                 title = person
-                body = "is now online"
+                body = InterfaceCopy.localized("is now online")
                 route = .chat(accountID: notification.accountID)
                 isTransient = true
             case 8:
