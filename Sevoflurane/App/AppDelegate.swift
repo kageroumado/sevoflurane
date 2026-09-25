@@ -249,6 +249,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task.detached(name: "Adopt the engines' D3DMetal toolkits") {
             D3DMetalInstaller.adoptInstalledEnginesToolkits()
         }
+        // Setup too: the assistant also opens for an existing Mac whose bottle is missing,
+        // and its own engine stage installs only onto a Mac with no managed engine.
+        Self.installBundledEngineIfNewer()
         Task {
             await provisioner.refreshDetection()
             if let detection = provisioner.detection {
@@ -273,7 +276,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             } else {
                 startRunning()
-                Self.installBundledEngineIfNewer()
             }
         }
     }
