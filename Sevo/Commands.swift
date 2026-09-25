@@ -1771,7 +1771,9 @@ struct DaemonCommand: AsyncParsableCommand {
 
         func run() async throws {
             let path = force ? "/daemon/repair?force=1" : "/daemon/repair"
-            guard let reply = await AppControl.appLinkPost(path) else {
+            // The old helper's teardown, the new one's start and its attach
+            // to the app are each bounded by the app; this outlasts all three.
+            guard let reply = await AppControl.appLinkPost(path, timeout: 120) else {
                 Sevo.printError("Sevoflurane is not running — open it and try again "
                     + "(only the app can rebuild the helper's registration).")
                 throw SevoExit.unreachable
@@ -3265,7 +3267,7 @@ struct DebugCommand: AsyncParsableCommand {
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
-            guard let reply = await AppControl.post("/debug/on") else {
+            guard let reply = await DebugCommand.ask("/debug/on", method: "POST") else {
                 Sevo.printError(
                     "the app is not running — debug mode is a session of it; open Sevoflurane first",
                 )
@@ -3282,7 +3284,7 @@ struct DebugCommand: AsyncParsableCommand {
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
-            if let reply = await AppControl.post("/debug/off") {
+            if let reply = await DebugCommand.ask("/debug/off", method: "POST") {
                 DebugCommand.report(reply, asJSON: asJSON)
                 return
             }
@@ -3303,7 +3305,7 @@ struct DebugCommand: AsyncParsableCommand {
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
-            if let reply = await AppControl.get("/debug") {
+            if let reply = await DebugCommand.ask("/debug", method: "GET") {
                 DebugCommand.report(reply, asJSON: asJSON)
                 return
             }
@@ -3314,6 +3316,22 @@ struct DebugCommand: AsyncParsableCommand {
                 : "the app is not running"
             print(asJSON ? Sevo.json(["on": false, "note": note], pretty: true) : "debug mode off — \(note)")
         }
+    }
+
+    /// The app's answer to one debug verb, through the helper and else from
+    /// the app's own link port. The helper is silent while it is being
+    /// replaced, and an app it has not heard from yet is still the one that
+    /// owns the switch. `nil` only when no app answers on either port.
+    fileprivate static func ask(_ path: String, method: String) async -> Data? {
+        let isRead = method == "GET"
+        if let viaHelper = isRead ? await AppControl.get(path) : await AppControl.post(path) {
+            return viaHelper
+        }
+        let direct = isRead
+            ? await AppControl.appLinkGet(path)
+            : await AppControl.appLinkPost(path, timeout: 10)
+        guard let direct, (200 ..< 300).contains(direct.status) else { return nil }
+        return direct.body
     }
 
     /// The app's own answer, printed as JSON or as the line it describes.

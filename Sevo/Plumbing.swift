@@ -124,6 +124,22 @@ nonisolated enum AppControl {
         return (http.statusCode, data)
     }
 
+    /// A read from the app's own link port, for the same reason as
+    /// ``appLinkPost(_:timeout:)``. `nil` when no app is running to answer.
+    static func appLinkGet(
+        _ path: String, timeout: TimeInterval = 10,
+    ) async -> (status: Int, body: Data)? {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.appLink)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return nil }
+        return (http.statusCode, data)
+    }
+
     /// Whether the app process is answering its own link port, regardless of
     /// whether the daemon still holds its attachment. A detached-but-alive app
     /// — the window after a daemon rebuild, before the app re-posts its facts —

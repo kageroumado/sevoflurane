@@ -137,11 +137,42 @@ final class ClientSupervisor {
     /// The user-driven rebuild of the daemon's registration, from `sevo daemon
     /// repair` and Settings › Recovery. A rebuild replaces the daemon process,
     /// and the new one knows nothing of this app until it is greeted, so a
-    /// rebuild that came back is followed by the hello an attach makes.
+    /// rebuild that came back is followed by the hello an attach makes, and
+    /// the repair answers only once the new helper reports the app attached,
+    /// or with the failure when it has not within
+    /// ``DaemonHeal/repairAttachBudget`` seconds.
     func repairDaemon(force: Bool = false) async -> DaemonService.RepairResult {
         let result = await DaemonService.repair(force: force)
-        if result == .reachable { await attach() }
-        return result
+        guard result == .reachable else { return result }
+        await attach()
+        var saidHelloAgain = false
+        var elapsed = 0
+        while true {
+            let seesApp = await DaemonService.status()?["app"] as? String == "running"
+            switch DaemonHeal.repairAttach(
+                daemonSeesApp: seesApp, elapsed: elapsed, saidHelloAgain: saidHelloAgain,
+            ) {
+            case .attached:
+                return .reachable
+            case .helloAgain:
+                saidHelloAgain = true
+                log.log(.supervisor, "the rebuilt helper has not taken the app yet — saying hello again")
+                await attach()
+            case .timedOut:
+                log.log(
+                    .supervisor,
+                    "the rebuilt helper has not taken the app after \(elapsed)s — quit and reopen Sevoflurane",
+                )
+                return .failed(
+                    "the background helper was rebuilt but has not attached to the app after "
+                        + "\(elapsed)s — quit and reopen Sevoflurane",
+                )
+            case .wait:
+                break
+            }
+            try? await Task.sleep(for: .seconds(1))
+            elapsed += 1
+        }
     }
 
     /// Brings the daemon up if it is not, then says hello. The registration is

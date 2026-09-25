@@ -70,6 +70,34 @@ nonisolated enum DaemonHeal {
         return supervisionGaveUp ? .restartClient : .alreadyHealthy
     }
 
+    /// One step of the wait after a rebuild that came back: the new helper
+    /// knows nothing of the running app until the app's facts reach it, and a
+    /// repair reports success only once the helper says the app is attached.
+    enum RepairAttach: Equatable {
+        /// The helper reports the app attached; the repair is done.
+        case attached
+        /// Keep polling.
+        case wait
+        /// Say hello again: the first one may have reached the helper that
+        /// was on its way out.
+        case helloAgain
+        /// The helper has not taken the app within the budget; the repair
+        /// reports that instead of leaving the app detached and silent.
+        case timedOut
+    }
+
+    /// Seconds a rebuilt helper has to report the app attached.
+    static let repairAttachBudget = 20
+    /// Seconds before the one repeated hello.
+    static let repairHelloAgainAfter = 5
+
+    static func repairAttach(daemonSeesApp: Bool, elapsed: Int, saidHelloAgain: Bool) -> RepairAttach {
+        if daemonSeesApp { return .attached }
+        if elapsed >= repairAttachBudget { return .timedOut }
+        if !saidHelloAgain, elapsed >= repairHelloAgainAfter { return .helloAgain }
+        return .wait
+    }
+
     static func decide(_ inputs: Inputs) -> Action {
         if inputs.isAnswering {
             if let daemonVersion = inputs.daemonVersion,

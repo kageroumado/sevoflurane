@@ -154,10 +154,14 @@ final class AppLink {
     /// Passes one of the app's own verbs through from the control port. The
     /// page, the windows and the benchmarks live in the app, and `sevo` should
     /// not have to know that — it asks the control port for everything.
+    ///
+    /// The request goes to the link port whether or not an app is attached.
+    /// An app can be alive and answering there while this daemon has not
+    /// heard its facts yet — the seconds after a rebuild or a launchd
+    /// relaunch of the helper — and a person typing `sevo debug on` at that
+    /// moment is talking to a running app. Only a port nobody answers means
+    /// the app is not running.
     func proxy(_ request: HTTPRequest) async -> HTTPResponse {
-        guard isAttached else {
-            return .error(409, "Sevoflurane is not running")
-        }
         var url = URLComponents()
         url.scheme = "http"
         url.host = "127.0.0.1"
@@ -168,10 +172,12 @@ final class AppLink {
         var proxied = URLRequest(url: target)
         proxied.httpMethod = request.method
         proxied.httpBody = request.body.isEmpty ? nil : request.body
-        proxied.timeoutInterval = Timing.proxy
+        proxied.timeoutInterval = isAttached ? Timing.proxy : Timing.detachedProxy
         guard let (data, response) = try? await URLSession.shared.data(for: proxied),
               let http = response as? HTTPURLResponse else {
-            return .error(504, "Sevoflurane did not answer")
+            return isAttached
+                ? .error(504, "Sevoflurane did not answer")
+                : .error(409, "Sevoflurane is not running")
         }
         let type = http.value(forHTTPHeaderField: "Content-Type") ?? "application/json"
         return HTTPResponse(
@@ -193,6 +199,10 @@ final class AppLink {
         static let command: TimeInterval = 15
         /// A proxied verb can be a benchmark or a window inventory.
         static let proxy: TimeInterval = 120
+        /// A verb for an app this daemon has not heard from: a refused
+        /// connection answers at once, and a live app answers its link port
+        /// within this even while it re-attaches.
+        static let detachedProxy: TimeInterval = 10
     }
 
     private func post(_ path: String, body: Data? = nil) async -> Data? {

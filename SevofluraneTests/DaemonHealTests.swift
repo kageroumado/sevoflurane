@@ -115,6 +115,27 @@ struct DaemonHealTests {
     }
 
     @Test
+    func `a rebuilt helper that reports the app attached ends the repair`() {
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: true, elapsed: 0, saidHelloAgain: false) == .attached)
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: true, elapsed: 19, saidHelloAgain: true) == .attached)
+    }
+
+    @Test
+    func `a rebuilt helper that has not taken the app gets one more hello`() {
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: 1, saidHelloAgain: false) == .wait)
+        let helloAt = DaemonHeal.repairHelloAgainAfter
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: helloAt, saidHelloAgain: false) == .helloAgain)
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: helloAt + 1, saidHelloAgain: true) == .wait)
+    }
+
+    @Test
+    func `the wait for the attach after a repair is bounded`() {
+        let budget = DaemonHeal.repairAttachBudget
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: budget, saidHelloAgain: true) == .timedOut)
+        #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: budget, saidHelloAgain: false) == .timedOut)
+    }
+
+    @Test
     func `version ordering compares component by component`() {
         #expect(DaemonHeal.isOlder("1.5", than: "1.6"))
         #expect(DaemonHeal.isOlder("1.6", than: "1.6.1"))
