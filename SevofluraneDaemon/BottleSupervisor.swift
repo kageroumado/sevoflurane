@@ -31,6 +31,11 @@ final class BottleSupervisor {
     /// since the last quit. Until it has, every failure is the first launch
     /// still happening.
     var hasSeenClientUp = false
+    /// Whether this boot has looked for a wineserver that answers no one.
+    var checkedForStaleServer = false
+    /// Seconds into a boot before Wine's log is read for "cannot connect":
+    /// a launcher that cannot reach its server says so within a few seconds.
+    static let staleServerCheckAfter = 12
     /// Whether this session's client has been healthy once: what tells a
     /// launch from a recovery, in the verdict and in the log.
     var hasBeenHealthy = false
@@ -554,6 +559,7 @@ final class BottleSupervisor {
     func enterBoot(_ phase: BootPhase) {
         boot = phase
         bootBegan = .now
+        checkedForStaleServer = false
     }
 
     func endBoot() {
@@ -767,6 +773,16 @@ final class BottleSupervisor {
             fault = .degraded(reason)
             transition(logging: .client, reason)
             return
+        }
+        // A launch against a wineserver that answers no one exits at once,
+        // and every relaunch does the same until that server is gone.
+        if waited >= Self.staleServerCheckAfter, !checkedForStaleServer {
+            checkedForStaleServer = true
+            if let stale = StaleWineserver.pid(in: StaleWineserver.logTail()), StaleWineserver.end(stale) {
+                log.log(.client, "boot audit: ended wineserver \(stale), which held the bottle and answered no one")
+                endBoot()
+                return
+            }
         }
         // A Wine window with CDP still dead this far in is Steam saying
         // something instead of starting, and waiting out the full budget
