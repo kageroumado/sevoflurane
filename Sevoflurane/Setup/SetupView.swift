@@ -296,15 +296,24 @@ struct SetupView: View {
             beginProvisioning()
             return
         }
-        bottleChoice = bottleCandidates
-            .first { $0.name == SteamBottle.name }?.name ?? bottleCandidates.first?.name
+        // The bottle this Mac is set to drive, and when it does not exist yet, a new one by
+        // that name: adopting a different bottle under it is never the default.
+        let stored = SteamBottle.name
+        if bottleCandidates.contains(where: { $0.name == stored }) {
+            bottleChoice = stored
+        } else {
+            bottleChoice = nil
+            newBottleName = stored
+        }
         step = .bottle
     }
 
     private func advanceFromBottle() {
-        provisioner.chooseBottle(
-            named: bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces),
+        let name = bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces)
+        EventLog.shared.log(
+            .setup, bottleChoice == nil ? "setup: creating bottle \(name)" : "setup: adopting bottle \(name)",
         )
+        provisioner.chooseBottle(named: name)
         // Before the stage that reads it: provisioning starts on this press
         // and installs the catalog it names.
         if !provisioner.isDryRun {
