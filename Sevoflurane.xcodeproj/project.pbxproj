@@ -121,6 +121,7 @@
 				App/ProcessMonitorWindow.swift,
 				App/QuickLaunchStore.swift,
 				App/RendererPicker.swift,
+				App/SharedRunPreview.swift,
 				App/RepairSettings.swift,
 				App/ReportWindow.swift,
 				App/SettingsNavigation.swift,

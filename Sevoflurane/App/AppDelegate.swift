@@ -88,7 +88,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RunRecorder.log = { EventLog.enqueue(.client, $0) }
         Diagnostics.faceReport = { await Diagnostics.appFaceReport() }
         CrashPrompt.shared.install()
-        RunRecorder.didRecord = Self.collectReports
+        RunRecorder.didRecord = { record, wineTail in
+            Self.collectReports(record, wineTail: wineTail)
+            StatsUploader.submit(record)
+        }
+        Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
     }
 
     /// What a finished run leaves on disk beyond its record: a report at level

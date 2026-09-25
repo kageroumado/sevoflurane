@@ -1,0 +1,101 @@
+import CryptoKit
+import Foundation
+import Testing
+@testable import Sevoflurane
+
+/// What a run sends to the community database, and the identity it is sent under.
+struct SharedRunTests {
+    @Test
+    func `a run with every field set sends exactly the wire keys and nothing that names anyone`() throws {
+        let run = try #require(SharedRun(record: Self.fullRecord(), appVersion: "1.14"))
+        let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder.stats.encode(run)) as? [String: Any])
+        #expect(Set(object.keys) == [
+            "v", "t", "app", "appid", "exe", "engine", "renderer", "runner", "arch", "runtime", "settings",
+            "macos", "chip", "mac", "gpu_cores", "memory_gb", "resolution", "window_after_s", "duration_s",
+            "fps", "stalls", "exit", "crashed", "game_mode", "host_load",
+        ])
+        let text = try String(decoding: JSONEncoder.stats.encode(run), as: UTF8.self)
+        for private_ in ["Secret Game Title", "/Users/", "C:\\\\", "0xdeadbeef", "a renderer note"] {
+            #expect(!text.contains(private_))
+        }
+        #expect(run.t == "2026-09-25T14:00:00Z")
+        #expect(run.exe == "Game-Win64-Shipping.exe")
+        #expect(run.fps?.p99Milliseconds == 24.5)
+        #expect(run.crashed)
+    }
+
+    @Test
+    func `a program Steam does not know sends its product name in place of an appid`() throws {
+        var record = Self.fullRecord()
+        record.appid = AdoptedPrograms.firstID + 3
+        let run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.appid == nil)
+        #expect(run.product == "Genshin Impact")
+    }
+
+    @Test
+    func `a short run that never drew is not sent, a short run that drew is`() {
+        var record = Self.fullRecord()
+        record.windowAfterSeconds = nil
+        record.fps = nil
+        record.durationSeconds = 8
+        #expect(SharedRun(record: record, appVersion: "1.14") == nil)
+        record.durationSeconds = 25
+        #expect(SharedRun(record: record, appVersion: "1.14") != nil)
+        record.durationSeconds = 3
+        record.windowAfterSeconds = 2
+        #expect(SharedRun(record: record, appVersion: "1.14") != nil)
+    }
+
+    @Test
+    func `base32 matches RFC 4648 and the install id is derived from the key`() {
+        #expect(Base32.encode(Data("foobar".utf8)) == "mzxw6ytboi")
+        #expect(Base32.encode(Data("f".utf8)) == "my")
+        let key = P256.Signing.PrivateKey().publicKey.derRepresentation
+        let id = StatsIdentity.installID(publicKeyDER: key)
+        #expect(id.count == 26)
+        #expect(id == StatsIdentity.installID(publicKeyDER: key))
+    }
+
+    @Test
+    func `memory rounds to the nearest size Apple sells`() {
+        let gib: UInt64 = 1_073_741_824
+        #expect(MacHardware.memoryTier(bytes: 64 * gib) == 64)
+        #expect(MacHardware.memoryTier(bytes: 36 * gib - 200_000_000) == 36)
+        #expect(MacHardware.memoryTier(bytes: 17 * gib) == 16 || MacHardware.memoryTier(bytes: 17 * gib) == 18)
+    }
+
+    @Test
+    func `the queue survives a round trip through its file`() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("queue-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let run = try #require(SharedRun(record: Self.fullRecord(), appVersion: "1.14"))
+        let queued = StatsStore.Queued(queued: Date(timeIntervalSince1970: 1_790_000_000), run: run)
+        StatsStore.writeQueue([queued, queued], to: url)
+        #expect(StatsStore.readQueue(from: url) == [queued, queued])
+    }
+
+    private static func fullRecord() -> RunRecord {
+        RunRecord(
+            t: "2026-09-25T14:12:06Z", appid: 1_962_700, name: "Secret Game Title",
+            exe: "Game-Win64-Shipping.exe", engine: "dormison-r16", renderer: "d3dmetal", runner: "wine",
+            arch: 64, windows: "fixed", tuning: "standard", upscaler: "lanczos", msync: true,
+            d3dmetal: "4.0 beta 2", runtime: "unreal", macos: "27.0.0", chip: "Apple M4 Max", mac: "Mac16,5",
+            gpuCores: 40, memoryGB: 64, product: "Genshin Impact", windowAfterSeconds: 6.2, durationSeconds: 900,
+            fps: RunRecord.FrameRate(
+                avg: 60, low1: 42, samples: 880,
+                frameTimes: FrameStats.Summary(
+                    frames: 54000, seconds: 900, avg: 60, low1: 42, low01: 30, p50: 16.6, p95: 20, p99: 24.5,
+                    p999: 40, max: 80, stdev: 2, hitches: 3,
+                ),
+                trace: "/Users/someone/Library/trace.csv",
+            ),
+            resolution: RunRecord.Resolution(window: RunRecord.Pixels(width: 3456, height: 2234)),
+            stalls: [RunRecord.Stall(at: 30, duration: 4, unwedged: nil)],
+            exit: RunRecord.Exit(kind: .crash, code: -1),
+            crash: RunRecord.Crash(code: "0xc0000005", flags: nil, address: "0xdeadbeef", module: "C:\\\\game.exe"),
+            notes: ["a renderer note"], gameMode: true,
+            host: RunRecord.Host(thermal: "nominal", load: 2),
+        )
+    }
+}

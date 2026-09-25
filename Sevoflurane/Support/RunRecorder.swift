@@ -217,6 +217,9 @@ final nonisolated class RunRecorder {
             d3dmetal: selection.d3dMetalVersion,
             macos: Self.macOSVersion,
             chip: Self.chip,
+            mac: MacHardware.model,
+            gpuCores: MacHardware.gpuCores,
+            memoryGB: MacHardware.memoryGB,
             host: Self.hostState(),
         )
         open[appID] = OpenRun(
@@ -253,6 +256,9 @@ final nonisolated class RunRecorder {
         open[appID]?.record.exe = exe
         let file = url ?? Self.executableURL(named: exe, forApp: appID)
         open[appID]?.record.arch = file.flatMap(PEResources.machine(of:))?.bits
+        if AdoptedPrograms.isAdopted(appID), let info = file.flatMap(PEResources.read) {
+            open[appID]?.record.product = info.productName ?? info.fileDescription
+        }
         persist(appID: appID)
     }
 
@@ -274,7 +280,16 @@ final nonisolated class RunRecorder {
             // Sticky: a session that began when the game went full screen and
             // ended before the game did is still a fact about the run.
             open[appID]?.record.gameMode = gameMode || run.record.gameMode == true
-            guard let pid = run.gamePID, let usage = ProcessUsage.read(pid: pid) else { continue }
+            guard let pid = run.gamePID else { continue }
+            // The largest window seen: a game opens on a launcher or splash
+            // window before the one it plays in.
+            if let window = MacHardware.largestWindow(ofPID: pid),
+               window.area > (run.record.resolution?.window?.area ?? 0) {
+                open[appID]?.record.resolution = RunRecord.Resolution(
+                    window: window, render: run.record.resolution?.render,
+                )
+            }
+            guard let usage = ProcessUsage.read(pid: pid) else { continue }
             open[appID]?.record.energy = RunRecord.Energy(usage)
         }
     }

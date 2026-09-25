@@ -43,12 +43,24 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     var runtime: String? = nil
     var macos: String
     var chip: String? = nil
+    /// The model identifier (``MacHardware/model``).
+    var mac: String? = nil
+    var gpuCores: Int? = nil
+    /// Installed memory, as the tier Apple sells (``MacHardware/memoryGB``).
+    var memoryGB: Int? = nil
+    /// The executable's own name for itself, its `ProductName` or else its
+    /// `FileDescription`: for a program Steam has no id for, what matches it
+    /// to a title.
+    var product: String? = nil
     /// How long after the launch began the game's first window appeared.
     /// Absent for a run that never drew.
     var windowAfterSeconds: Double? = nil
     var durationSeconds: Double? = nil
     /// Present once the driver's present counter lands (`Docs/diagnostics-plan.md`).
     var fps: FrameRate? = nil
+    /// The pixels the game drew into. Absent until one of its windows was
+    /// seen on screen.
+    var resolution: Resolution? = nil
     /// Present once the stall watchdog lands.
     var stalls: [Stall]? = nil
     var exit: Exit? = nil
@@ -81,9 +93,14 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case runtime
         case macos
         case chip
+        case mac
+        case gpuCores = "gpu_cores"
+        case memoryGB = "memory_gb"
+        case product
         case windowAfterSeconds = "window_after_s"
         case durationSeconds = "duration_s"
         case fps
+        case resolution
         case stalls
         case exit
         case crash
@@ -113,6 +130,23 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             case frameTimes = "frame_times"
             case dropped, trace
         }
+    }
+
+    struct Pixels: Codable, Equatable, Sendable {
+        var width: Int
+        var height: Int
+
+        var area: Int {
+            width * height
+        }
+    }
+
+    struct Resolution: Codable, Equatable, Sendable {
+        /// The largest window the game's process put on screen, in pixels.
+        var window: Pixels?
+        /// The size the game's swapchain presents at, from the engine's
+        /// stats page; with an upscaler it is smaller than the window.
+        var render: Pixels? = nil
     }
 
     struct Stall: Codable, Equatable, Sendable {

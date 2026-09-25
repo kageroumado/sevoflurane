@@ -19,7 +19,7 @@ struct SevoCommand: AsyncParsableCommand {
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, NWJSCommand.self, DownloadsCommand.self,
             EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
-            RunsCommand.self, PerfCommand.self, OrphansCommand.self, HoldsCommand.self, DiagCommand.self, DebugCommand.self,
+            RunsCommand.self, PerfCommand.self, StatsCommand.self, OrphansCommand.self, HoldsCommand.self, DiagCommand.self, DebugCommand.self,
             RunCommand.self,
             MCPCommand.self, InstallCLICommand.self, VersionCommand.self,
         ],
@@ -2705,7 +2705,7 @@ struct HoldsCommand: AsyncParsableCommand {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
-            print(String(decoding: try encoder.encode(holds), as: UTF8.self))
+            try print(String(decoding: encoder.encode(holds), as: UTF8.self))
         } else if holds.isEmpty {
             print("nothing holds the display awake")
         } else {

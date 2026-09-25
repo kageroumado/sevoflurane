@@ -407,7 +407,7 @@
                 case .welcome, .engine: .freshMachine
                 case .bottle: .multipleBottles
                 case .steam: .licensedNoBottle
-                case .graphics, .options, .done: .provisioned
+                case .graphics, .options, .sharing, .done: .provisioned
                 }
                 return (step, Provisioner(
                     previewActivity: step == .steam ? .working("Downloading Steam…") : .idle,

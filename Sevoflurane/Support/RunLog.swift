@@ -20,6 +20,12 @@ nonisolated enum RunLog {
         ?? UserHome.url
         .appendingPathComponent("Library/Application Support/Sevoflurane/Runs")
 
+    /// Whether any run was ever recorded here.
+    static func hasRecords(in root: URL = root) -> Bool {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return names.contains { $0.hasSuffix(".jsonl") }
+    }
+
     /// How many months are kept.
     static let monthsKept = 12
 

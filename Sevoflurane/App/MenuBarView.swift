@@ -40,6 +40,7 @@ struct MenuBarView: View {
                     AddProgramRow(quickLaunch: quickLaunch)
                 }
                 NotificationPermissionCard(notifications: notifications)
+                SharingQuestionCard()
                 BottleIncompleteChip()
                     .font(.system(size: 10))
                     .padding(.horizontal, Theme.Space.sm)
@@ -797,6 +798,40 @@ private struct NotificationPermissionCard: View {
             }
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
+    }
+}
+
+/// The community database's question, for a player who set up before setup
+/// asked it: shown once a run exists to share, gone for good once answered.
+private struct SharingQuestionCard: View {
+    @State private var isAsking = Preferences.sharesRunStats == nil && RunLog.hasRecords()
+
+    var body: some View {
+        if isAsking {
+            NoticeCard(
+                symbol: "chart.bar.xaxis",
+                title: "Help other Mac players",
+                detail: "Share each game's frame rate, resolution and settings with your Mac's model. Nothing names you. Settings › General shows exactly what is sent.",
+            ) {
+                HStack(spacing: Theme.Space.sm) {
+                    Button("Share") { answer(true) }
+                        .buttonStyle(.glassProminent)
+                        .foregroundStyle(Theme.onAccent)
+                    Button("Not Now") { answer(false) }
+                        .buttonStyle(.glass)
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
+
+    private func answer(_ shares: Bool) {
+        Preferences.sharesRunStats = shares
+        EventLog.shared.log(.app, shares ? "run statistics: sharing" : "run statistics: not sharing")
+        if shares {
+            Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
+        }
+        withAnimation { isAsking = false }
     }
 }
 

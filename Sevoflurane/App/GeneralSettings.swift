@@ -18,6 +18,7 @@ struct GeneralSettings: View {
             )
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
+            GeneralCommunitySection(highlighted: highlighted)
             GeneralDiscordSection(highlighted: highlighted)
             GeneralUninstallSection(
                 provisioner: provisioner, store: store, supervisor: supervisor,
@@ -328,6 +329,93 @@ private struct GeneralSteamPagesSection: View {
             .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
         } header: {
             Text("Steam pages")
+        }
+    }
+}
+
+// MARK: - Community database
+
+/// Whether closed runs go to the community database, what has gone, and the
+/// way to take it back.
+private struct GeneralCommunitySection: View {
+    let highlighted: SettingsAnchor?
+    @State private var shares = false
+    @State private var state = StatsStore.State()
+    @State private var isConfirmingDelete = false
+    @State private var deleteFailure: String?
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Share run statistics", isOn: $shares)
+                    .toggleStyle(.switch)
+                    .onChange(of: shares) { _, shares in
+                        guard Preferences.sharesRunStats != shares else { return }
+                        Preferences.sharesRunStats = shares
+                        if shares {
+                            Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
+                        } else {
+                            StatsStore.writeQueue([])
+                        }
+                    }
+                Text("After a game closes, its frame rate, resolution, engine and settings go to the public "
+                    + "Sevoflurane game database with your Mac\u{2019}s model and chip. Nothing names you, "
+                    + "your Mac or your account.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let sent = sentLine {
+                    Text(sent)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .highlightable(.generalShareRuns, highlighted: highlighted)
+            SharedRunPreview()
+            if state.registered != nil || state.sentRuns > 0 {
+                HStack {
+                    Button("Delete What I Shared\u{2026}") { isConfirmingDelete = true }
+                    if let deleteFailure {
+                        Text(deleteFailure)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Community")
+        }
+        .onAppear(perform: reload)
+        .confirmationDialog(
+            "Delete every run this Mac shared?", isPresented: $isConfirmingDelete,
+        ) {
+            Button("Delete", role: .destructive) { delete() }
+        } message: {
+            Text("The database forgets them, and the next run you share comes from a new, unrelated identity.")
+        }
+    }
+
+    private var sentLine: String? {
+        guard state.sentRuns > 0, let last = state.lastSent else {
+            return state.lastError.map { String(localized: "Not sent yet: \($0)") }
+        }
+        let when = last.formatted(.relative(presentation: .named))
+        return String(localized: "\(state.sentRuns) runs shared, the last one \(when).")
+    }
+
+    private func reload() {
+        shares = Preferences.sharesRunStats == true
+        state = StatsStore.readState()
+    }
+
+    private func delete() {
+        Task {
+            do {
+                try await StatsUploader.shared.deleteShared()
+                deleteFailure = nil
+            } catch {
+                deleteFailure = String(localized: "The database did not answer. Try again later.")
+            }
+            reload()
         }
     }
 }

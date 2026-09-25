@@ -419,3 +419,24 @@ struct SetupDoneStep: View {
         }
     }
 }
+
+struct SetupSharingStep: View {
+    var body: some View {
+        SetupPage(
+            glyph: "chart.bar.xaxis",
+            title: "Help other Mac players",
+            subtitle: "Share how each game ran, so everyone can see what plays well on which Mac.",
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Text(
+                    "After a game closes, Sevoflurane sends its frame rate, resolution, engine and settings, "
+                        + "with your Mac\u{2019}s model and chip. Nothing names you, your Mac or your account.",
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                Text("You can stop, or delete what you shared, in Settings \u{203A} General.")
+                    .foregroundStyle(.secondary)
+                SharedRunPreview()
+            }
+        }
+    }
+}
