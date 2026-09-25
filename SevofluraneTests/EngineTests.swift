@@ -546,3 +546,13 @@ struct UnchosenRendererTests {
         #expect(BottleGraphics.unchosenManagedRenderer(toolkitInstalled: false) == .dxmt)
     }
 }
+
+/// A newer release the app installs replaces a stored choice of an older release.
+struct EngineReleaseAdoptionTests {
+    @Test
+    func `release numbers come from release names only`() {
+        #expect(Engine.releaseNumber("dormison-r17") == 17)
+        #expect(Engine.releaseNumber("dormison-r16-tray") == nil)
+        #expect(Engine.releaseNumber("crossover") == nil)
+    }
+}

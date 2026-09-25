@@ -299,6 +299,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let version = try await EngineInstaller.install(from: bundled, requiringSignature: true)
                 EventLog.enqueue(.setup, "engine: \(version) installed from the app; it runs from the client's next start")
+                if Engine.adoptNewerRelease(version) {
+                    EventLog.enqueue(.setup, "engine: the stored choice named an older release; it names \(version) now")
+                }
             } catch {
                 EventLog.enqueue(.setup, "engine: the engine this app carries did not install — \(error)")
             }

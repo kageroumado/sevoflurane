@@ -106,6 +106,27 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         active = engine
     }
 
+    /// After the app installs a newer release engine: a stored choice that
+    /// names an older release (`managed:dormison-r16`) moves to it, so the
+    /// client's next start runs what the app carries. A hand-picked build
+    /// (`dormison-r16-tray`), CrossOver, or a bare `managed` stays as it is.
+    /// Answers whether the choice moved.
+    @discardableResult
+    static func adoptNewerRelease(_ version: String) -> Bool {
+        guard let stored = Preferences.shared.string(forKey: preferenceKey), stored.hasPrefix(managedPrefix),
+              let old = releaseNumber(String(stored.dropFirst(managedPrefix.count))),
+              let new = releaseNumber(version), new > old
+        else { return false }
+        Preferences.shared.set(managedPrefix + version, forKey: preferenceKey)
+        return true
+    }
+
+    /// `17` for `dormison-r17`; `nil` for anything that is not a release name.
+    static func releaseNumber(_ version: String) -> Int? {
+        guard let match = version.wholeMatch(of: /dormison-r(\d+)/) else { return nil }
+        return Int(match.1)
+    }
+
     /// The stored form of the choice. A managed engine is stored by its
     /// directory name (`managed:<version>`), so the Engine pane can pick any
     /// installed build — a Gcenx release, a sevo-wine candidate, a hand-built
