@@ -236,9 +236,14 @@ nonisolated enum BottleDependencies {
     }
 
     /// The eleven classic self-extracting font archives, from the mirror
-    /// winetricks uses. Each extracts with the `/T: /C /Q` flags CrossOver's
-    /// profile records, then the faces are copied into the bottle's Fonts —
-    /// Wine registers everything it finds there on its own.
+    /// winetricks uses. They are cabinets inside a small Windows extractor,
+    /// and macOS's `tar` (libarchive) reads them directly; then the faces are
+    /// copied into the bottle's Fonts — Wine registers everything it finds
+    /// there on its own.
+    ///
+    /// Never run the archives' own extractor into one shared folder: every
+    /// archive carries `fontinst.exe`, so from the second one on it stops at
+    /// an "Overwrite file" prompt `/Q` does not answer.
     private static func installCoreFonts(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -248,18 +253,21 @@ nonisolated enum BottleDependencies {
             "trebuc32.exe", "verdan32.exe", "webdin32.exe",
         ]
         let extracted = scratch.directory("fonts")
+        try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: true)
         for (index, archive) in archives.enumerated() {
             phase("downloading fonts (\(index + 1) of \(archives.count))")
             let file = try await download(
                 "https://github.com/pushcx/corefonts/raw/master/\(archive)",
                 as: archive, into: scratch,
             )
-            let result = await ClientLifecycle.runSupervisedInBottle([
-                SteamBottle.windowsPath(for: file),
-                "/T:\(scratch.windowsPath("fonts"))", "/C", "/Q",
-            ], timeout: .seconds(120))
+            let result = await Subprocess.run(
+                "/usr/bin/tar", ["-xf", file.path, "-C", extracted.path],
+                capture: .combined, timeout: .seconds(60),
+            )
             guard result.status == 0 else {
-                throw InstallFailure(message: "\(archive) refused to extract")
+                let reason = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw InstallFailure(message: "\(archive) did not extract"
+                    + (reason.isEmpty ? "" : ": \(reason)"))
             }
         }
         phase("installing fonts")
