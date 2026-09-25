@@ -62,6 +62,7 @@ extension BottleSupervisor {
         await app.send(.dismissWindows)
 
         setRestartPhase("checking for a running client")
+        adoptEngineInstalledSinceStart()
         // Windows stays booted through a plain client restart — the ~20s
         // machine boot is the biggest slice of a restart, and the resident
         // wineserver only has to go when the next launch actually needs a
@@ -84,6 +85,19 @@ extension BottleSupervisor {
         }
 
         await launchAfterStop(reason: reason)
+    }
+
+    /// The engine the preferences and disk name now, when it differs from the
+    /// one this process resolved at its start: an engine the app installed
+    /// after the helper came up, which ``Engine/active`` never sees. Routed
+    /// through the held switch, so the stop still addresses the running
+    /// engine's prefix and its wineserver comes down with the client.
+    func adoptEngineInstalledSinceStart() {
+        guard pendingSwitch == nil else { return }
+        let fresh = Engine.resolveFromDisk()
+        guard fresh != Engine.active else { return }
+        pendingSwitch = EngineSwitch(engine: fresh, bottle: nil, persists: false)
+        log.log(.supervisor, "engine resolves to \(fresh.description) now, where it was \(Engine.active.description); the restart switches to it")
     }
 
     /// The launch that ends a pass, once its stop has run. It launches only

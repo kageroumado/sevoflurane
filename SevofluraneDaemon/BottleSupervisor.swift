@@ -222,6 +222,9 @@ final class BottleSupervisor {
     struct EngineSwitch {
         let engine: Engine
         let bottle: String?
+        /// Whether the switch becomes the stored choice. A switch the ladder
+        /// found on disk by itself leaves an unnamed choice unnamed.
+        var persists = true
     }
     var recentRestarts: [Date] = []
     /// The restart whose boot has not been classified yet. A boot that ends

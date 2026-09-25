@@ -92,7 +92,11 @@ extension BottleSupervisor {
     func applyPendingSwitch() -> Bool {
         guard let next = pendingSwitch else { return false }
         pendingSwitch = nil
-        Engine.choose(next.engine)
+        if next.persists {
+            Engine.choose(next.engine)
+        } else {
+            Engine.active = next.engine
+        }
         if let bottle = next.bottle { SteamBottle.choose(bottle) }
         log.log(
             .supervisor,

@@ -75,8 +75,10 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// The synchronous subset of ``SetupProbe/detect()`` that decides the
     /// engine: the stored choice, CrossOver's license state, the
-    /// managed-engine directory.
-    private static func resolveFromDisk() -> Engine {
+    /// managed-engine directory. Uncached: ``active`` keeps the first answer
+    /// for the life of the process, and this is how a long-lived process sees
+    /// an engine installed after it started.
+    static func resolveFromDisk() -> Engine {
         if let chosen = preferred(), chosen.existsOnDisk {
             return chosen
         }
