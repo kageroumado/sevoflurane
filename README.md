@@ -9,13 +9,13 @@ in the background.
 
 > **Status: pre-release.** A first public build is being prepared.
 
-Requires macOS 26.5 or later on Apple silicon.
+Requires macOS 26 or later on Apple silicon.
 
 ## Get started
 
 Build the app from source while the first public release is being prepared:
 
-1. Open `Sevoflurane.xcodeproj` in Xcode with the macOS 26.5 SDK or later.
+1. Open `Sevoflurane.xcodeproj` in Xcode with the macOS 26 SDK or later.
 2. Choose your team under Signing & Capabilities and build the `Sevoflurane` scheme.
 3. Open the app and follow setup to install Steam, then sign in.
 

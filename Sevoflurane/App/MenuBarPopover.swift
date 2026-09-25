@@ -54,7 +54,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggle)
         statusItem.button?.setAccessibilityLabel("Sevoflurane")
-        if statusItem.responds(to: Pill.setDelegate) {
+        if Pill.isSupported, statusItem.responds(to: Pill.setDelegate) {
             statusItem.perform(Pill.setDelegate, with: self)
         }
         trackIcon()
@@ -178,7 +178,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     /// `highlight(_:)` and the item's `setButtonHighlighted:` flag both leave
     /// the pill off on macOS 27.
     private func showsOpenPill(_ isOpen: Bool) {
-        guard statusItem.responds(to: Pill.request) else {
+        guard Pill.isSupported, statusItem.responds(to: Pill.request) else {
             statusItem.button?.highlight(isOpen)
             return
         }
@@ -217,6 +217,11 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
 
     /// The private selectors, spelled once.
     private enum Pill {
+        /// The session is proven on macOS 27. Once the delegate is set, a click
+        /// begins a session in place of the button's action, so on a system
+        /// whose session differs the item would stop opening the popover.
+        static let isSupported = ProcessInfo.processInfo.isOperatingSystemAtLeast(
+            OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
         static let setDelegate = NSSelectorFromString("setExpandedInterfaceDelegate:")
         static let request = NSSelectorFromString("_requestExpandedInterfaceSession")
         static let cancel = NSSelectorFromString("cancel")
