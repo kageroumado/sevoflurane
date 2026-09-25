@@ -229,4 +229,14 @@ struct WindowTreatmentTests {
         }
         #expect(WindowTreatment.rungs.contains("inherit"))
     }
+
+    @Test
+    func `the command-line help gives each choice a line of its own`() {
+        let lines = WindowTreatment.help.split(separator: "\n")
+        #expect(lines.count == WindowTreatment.allCases.count + 1)
+        for (line, treatment) in zip(lines, WindowTreatment.allCases) {
+            #expect(line.trimmingCharacters(in: .whitespaces).hasPrefix(treatment.rawValue + " "))
+        }
+        #expect(lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("inherit") == true)
+    }
 }

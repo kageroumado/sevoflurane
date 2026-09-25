@@ -416,7 +416,7 @@ struct D3DMetalInstallTests {
 /// Toolkits an engine carries move into the one shared store.
 struct ToolkitStoreTests {
     @Test
-    func `an engine's toolkit is copied into the store once, and the store's own is kept`() throws {
+    func `an engine's toolkit is moved into the store, and its copy of one the store has is trashed`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("toolkits-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let engine = root.appendingPathComponent("dormison-r15"), store = root.appendingPathComponent("store")
@@ -426,10 +426,14 @@ struct ToolkitStoreTests {
             try Data(base == store ? "store".utf8 : "engine".utf8).write(to: framework.appendingPathComponent("marker"))
         }
 
-        #expect(D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store) == ["4.0 beta 2"])
+        let adoption = D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store)
+        #expect(adoption == D3DMetalInstaller.Adoption(moved: ["4.0 beta 2"], trashed: ["3.0"]))
         #expect(D3DMetalInstaller.installed(inEngine: store).map(\.version) == ["3.0", "4.0 beta 2"])
+        #expect(D3DMetalInstaller.installed(inEngine: engine).isEmpty)
         let kept = store.appendingPathComponent("d3dmetal/3.0/lib/external/D3DMetal.framework/marker")
         #expect(try String(contentsOf: kept, encoding: .utf8) == "store")
-        #expect(D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store).isEmpty)
+        let moved = store.appendingPathComponent("d3dmetal/4.0 beta 2/lib/external/D3DMetal.framework/marker")
+        #expect(try String(contentsOf: moved, encoding: .utf8) == "engine")
+        #expect(D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store) == D3DMetalInstaller.Adoption())
     }
 }

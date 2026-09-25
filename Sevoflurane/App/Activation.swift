@@ -112,7 +112,7 @@ struct Activation {
             let accepted = surface.activate(pid: pid)
             let frontmost = surface.frontmostPID
             surface.log(
-                "\(subject): activation attempt \(attempt) of \(Self.attemptLimit) — "
+                "\(subject): activation attempt \(attempt) — "
                     + "this app \(surface.appIsActive ? "active" : "inactive") as "
                     + "\(Self.name(surface.appPolicy)), activate returned "
                     + "\(accepted), frontmost pid \(frontmost.map(String.init) ?? "none")",

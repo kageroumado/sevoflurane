@@ -16,6 +16,10 @@ nonisolated enum PerfComparison {
         /// The trace's file name, which is also the run's key for a label.
         var trace: String
         var label: String?
+        /// How long the whole trace runs, in seconds, and the stretch of it
+        /// ``frameTimes`` covers after trimming (``trim(_:skip:duration:)``).
+        var traceSeconds: Double? = nil
+        var window: ClosedRange<Double>? = nil
 
         var summary: FrameStats.Summary? {
             FrameStats.summarize(frameTimes)

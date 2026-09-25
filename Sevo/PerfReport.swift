@@ -44,6 +44,8 @@ nonisolated enum PerfReport {
         }
         if let label = run.label { model["label"] = label }
         if let summary { model["summary"] = summaryModel(summary) }
+        if let traceSeconds = run.traceSeconds { model["traceSeconds"] = round3(traceSeconds) }
+        if let window = run.window { model["window"] = [round3(window.lowerBound), round3(window.upperBound)] }
         return model
     }
 
@@ -143,8 +145,24 @@ nonisolated enum PerfReport {
                 lines.append("    average: \(verdict(versus.average))")
                 lines.append("    1 % low: \(verdict(versus.low1))")
             }
+            for run in group.runs {
+                lines.append("    \(PerfRuns.moment(run.record.t)) · \(span(of: run))")
+            }
         }
         return lines
+    }
+
+    /// "trace 312 s · compared 45–105 s": how much of the run the numbers are, so a
+    /// comparison that took in the menus says so.
+    static func span(of run: PerfComparison.Run) -> String {
+        guard let total = run.traceSeconds, let window = run.window else { return "trace length unknown" }
+        let whole = window.lowerBound < 0.5 && total - window.upperBound < 0.5
+        return "trace \(seconds(total)) · compared \(Int(window.lowerBound.rounded()))–\(seconds(window.upperBound))"
+            + (whole ? ", the whole run" : "")
+    }
+
+    private static func seconds(_ value: Double) -> String {
+        "\(Int(value.rounded())) s"
     }
 
     private static func describe(_ values: [Double]) -> String {

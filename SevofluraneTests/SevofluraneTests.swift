@@ -29,3 +29,21 @@ struct LicenseParsingTests {
         #expect(SetupProbe.parseLicense("[license]\nid=abc123\n").licensed)
     }
 }
+
+struct SetAsideBottleTests {
+    @Test
+    func `a retired copy of a bottle is not offered as one`() {
+        #expect(SetupProbe.isSetAside("Steam ttest.discard"))
+        #expect(SetupProbe.isSetAside("Steam.stub-1308"))
+        #expect(SetupProbe.isSetAside("Steam.quarantined"))
+        #expect(SetupProbe.isSetAside("Steam.OLD"))
+        #expect(SetupProbe.isSetAside(".Steam"))
+    }
+
+    @Test
+    func `a bottle whose name has a dot in it is still a bottle`() {
+        #expect(!SetupProbe.isSetAside("Steam"))
+        #expect(!SetupProbe.isSetAside("Steam 2.0"))
+        #expect(!SetupProbe.isSetAside("Steam.games"))
+    }
+}

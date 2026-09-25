@@ -64,26 +64,48 @@ nonisolated enum D3DMetalInstaller {
     /// ``adoptEngineToolkits(from:into:)`` over every installed managed engine, logged.
     static func adoptInstalledEnginesToolkits() {
         let engines = SetupProbe.managedEngineVersions().map(Engine.managedRoot.appendingPathComponent)
-        let adopted = adoptEngineToolkits(from: engines)
-        if !adopted.isEmpty { SetupLog.log("D3DMetal \(adopted.joined(separator: ", ")) moved into the shared toolkit store") }
+        let adoption = adoptEngineToolkits(from: engines)
+        if !adoption.moved.isEmpty {
+            SetupLog.log("D3DMetal \(adoption.moved.joined(separator: ", ")) moved into the shared toolkit store")
+        }
+        if !adoption.trashed.isEmpty {
+            SetupLog.log("D3DMetal \(adoption.trashed.joined(separator: ", ")): the shared toolkit store "
+                + "already had it, so the engine's own copy went to the Trash")
+        }
     }
 
-    /// Copies the toolkits engines carry in their own `d3dmetal/` into the store, when the
-    /// store lacks that version: engines installed before the store was shared, and releases
-    /// that shipped one. Answers the versions adopted.
+    /// What ``adoptEngineToolkits(from:into:)`` did with each engine's toolkits.
+    struct Adoption: Equatable, Sendable {
+        /// Versions the store lacked, moved into it from an engine.
+        var moved: [String] = []
+        /// Versions the store already had, whose engine copy went to the Trash.
+        var trashed: [String] = []
+    }
+
+    /// Empties the toolkits engines carry in their own `d3dmetal/` into the store: engines
+    /// installed before the store was shared, and releases that shipped one. A version the
+    /// store lacks is moved into it; the engine's copy of one it already has goes to the
+    /// Trash, since the store's is the one every lookup reads.
     @discardableResult
-    static func adoptEngineToolkits(from engines: [URL], into store: URL = store) -> [String] {
+    static func adoptEngineToolkits(from engines: [URL], into store: URL = store) -> Adoption {
         let manager = FileManager.default
-        var adopted: [String] = []
+        var adoption = Adoption()
         for engine in engines {
             for toolkit in installed(inEngine: engine) {
                 let destination = store.appendingPathComponent("d3dmetal").appendingPathComponent(toolkit.version)
-                guard !manager.fileExists(atPath: destination.path) else { continue }
+                if manager.fileExists(atPath: destination.path) {
+                    if (try? manager.trashItem(at: toolkit.root, resultingItemURL: nil)) != nil {
+                        adoption.trashed.append(toolkit.version)
+                    }
+                    continue
+                }
                 try? manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                if (try? manager.copyItem(at: toolkit.root, to: destination)) != nil { adopted.append(toolkit.version) }
+                if (try? manager.moveItem(at: toolkit.root, to: destination)) != nil {
+                    adoption.moved.append(toolkit.version)
+                }
             }
         }
-        return adopted
+        return adoption
     }
 
     // MARK: - What is installed
@@ -165,7 +187,7 @@ nonisolated enum D3DMetalInstaller {
     /// The version whose **macOS half** is in the Wine tree right now, matched
     /// by content — the truth the picker's record is checked against.
     static func placedMacOSVersion(inEngine engine: URL) -> Installed? {
-        installed(inEngine: engine).first { isPlaced($0, inEngine: engine) }
+        placementCandidates(inEngine: engine).first { isPlaced($0, inEngine: engine) }
     }
 
     /// The version whose **Windows half** (the PE DLLs) fills the engine's
@@ -174,7 +196,7 @@ nonisolated enum D3DMetalInstaller {
     static func placedWindowsVersion(inEngine engine: URL) -> Installed? {
         let canonical = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
         let manager = FileManager.default
-        return installed(inEngine: engine).first { version in
+        return placementCandidates(inEngine: engine).first { version in
             let own = windowsLibraries(of: version)
             let dlls = (try? manager.contentsOfDirectory(
                 at: own, includingPropertiesForKeys: nil,
@@ -186,6 +208,16 @@ nonisolated enum D3DMetalInstaller {
                     andPath: canonical.appendingPathComponent(dll.lastPathComponent).path,
                 )
             }
+        }
+    }
+
+    /// The versions a Wine tree's contents are matched against: any the
+    /// engine carries in its own `d3dmetal/`, then the shared store's, which
+    /// is where an engine's toolkits are moved to.
+    private static func placementCandidates(inEngine engine: URL) -> [Installed] {
+        let own = installed(inEngine: engine)
+        return own + installed(inEngine: store).filter { shared in
+            !own.contains { $0.version == shared.version }
         }
     }
 

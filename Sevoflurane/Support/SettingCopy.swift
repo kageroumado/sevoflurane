@@ -28,20 +28,25 @@ nonisolated extension SettingCopy {
             summary: "A game draws at the size it chose. A resizable window scales that picture to "
                 + "the window through the upscaler, and the game keeps believing in its own size.",
             entries: [
-                .init(name: "Never", text: "Windows stay as the game makes them."),
                 .init(
-                    name: "Fixed-size windows",
-                    text: "A window the game locks to one size can be resized.",
+                    name: WindowTreatment.off.label,
+                    text: "Every window stays as the game makes it, and a full-screen game covers the screen.",
                 ),
                 .init(
-                    name: "Fixed-size and full-screen",
-                    text: "Also, a game that takes over the whole screen gets a window of its own, "
-                        + "and still believes it fills the screen.",
+                    name: WindowTreatment.fixed.label,
+                    text: "A window the game locks to one size gets a resize handle, and its picture scales "
+                        + "to fit. A full-screen game stays full screen.",
                 ),
                 .init(
-                    name: "All windows",
-                    text: "Also the windows a game already lets you resize. Such a game would "
-                        + "redraw at the new size; with this it is scaled like the rest.",
+                    name: WindowTreatment.window.label,
+                    text: "Also, a full-screen game plays in a window you can move and resize, and still "
+                        + "draws as if it filled the screen. Pick this to play a full-screen game in a window.",
+                ),
+                .init(
+                    name: WindowTreatment.all.label,
+                    text: "Every window with a title bar can be resized, the ones a game already lets you "
+                        + "resize included: such a game keeps its size and is scaled like the rest, rather "
+                        + "than redrawing at the new size. A full-screen game stays full screen.",
                 ),
             ],
         ),

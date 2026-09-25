@@ -163,6 +163,63 @@ struct RunReattachTests {
     }
 
     @Test
+    func `the renderer line read while the game plays names the record after the log is gone`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 339_800)
+        recorder.noteExecutable("HuniePop.exe", forApp: 339_800)
+        let wine = root.appendingPathComponent("wine.log")
+        try Data("""
+        sevo:run pid=4100 exe=HuniePop.exe appid=339800 engine=dormison-r16
+        fixme:d3d:wined3d_guess_card nothing to see
+        sevo:gfx pid=4100 renderer=wined3d-gl toolkit=none presenter=off upscaler=off msync=1
+
+        """.utf8).write(to: wine)
+
+        let read = try #require(recorder.provenanceReads.first)
+        let found = RunRecorder.provenance(in: read.log, from: read.offset)
+        recorder.noteProvenance(found.lines, readTo: found.end, for: read)
+        let armed = try #require(RunLog.armedRuns(in: root).first)
+        #expect(armed.record.renderer == "wined3d-gl")
+        #expect(armed.record.rendererConfirmed == true)
+
+        // The tail the close reads no longer holds the line.
+        try Data().write(to: wine)
+        recorder.close(appID: 339_800)
+        let records = await records(in: root, waitingFor: 1)
+        #expect(records.first?.renderer == "wined3d-gl")
+        #expect(records.first?.rendererConfirmed == true)
+    }
+
+    @Test
+    func `a run no process reported a renderer for is marked unconfirmed`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 367_520)
+        recorder.close(appID: 367_520)
+        let records = await records(in: root, waitingFor: 1)
+        #expect(records.first?.rendererConfirmed == false)
+        #expect(records.first?.summary.contains("(unconfirmed)") == true)
+    }
+
+    @Test
+    func `a renderer line still being written is read whole the next time`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let log = root.appendingPathComponent("wine.log")
+        let first = "sevo:run pid=7 exe=a.exe appid=480 engine=r16\nsevo:gfx pid=7 rend"
+        try Data(first.utf8).write(to: log)
+        let partial = RunRecorder.provenance(in: log, from: 0)
+        #expect(partial.lines == "sevo:run pid=7 exe=a.exe appid=480 engine=r16")
+
+        try Data((first + "erer=dxmt toolkit=none\n").utf8).write(to: log)
+        let rest = RunRecorder.provenance(in: log, from: partial.end)
+        #expect(rest.lines == "sevo:gfx pid=7 renderer=dxmt toolkit=none")
+    }
+
+    @Test
     func `an app with no line of its own is not tracked`() {
         let log = "[2026-09-11 17:23:09] AppID 480 adding PID 1400 as a tracked process \"\"a.exe\"\""
         #expect(SteamGameProcessLog.tracks(app: 480, in: log))

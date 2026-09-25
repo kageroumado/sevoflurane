@@ -381,15 +381,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The same tick lets the display sleep again once no run is open: every
     /// way a run closes — Steam's exit edge, a native runner's processes
     /// going, the stall watch ending a game — passes through the recorder.
+    /// The daemon holds the display too, and lets it go when its probe cycle
+    /// finds the game window gone; that cycle is a minute apart while a game
+    /// is up, so the last run closing wakes it.
     private func startRunMeter() {
         runMeter?.cancel()
-        runMeter = Task(name: "Sample the open runs' meters") { [runRecorder] in
+        runMeter = Task(name: "Sample the open runs' meters") { [runRecorder, weak self] in
             var ticks = 0
             var holdWatch = DisplayHoldWatch()
+            var wasRecording = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
                 runRecorder.sample()
-                if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
+                let recording = runRecorder.isRecording
+                if !recording { GameDisplayHold.gameDidExit() }
+                if wasRecording, !recording { self?.supervisor.wake(.gameWindowChanged) }
+                wasRecording = recording
                 ticks += 1
                 if ticks.isMultiple(of: Self.displayHoldCheckEvery) {
                     let holds = await Task.detached(name: "Read the display holds") { DisplayHolds.current() }.value
@@ -402,6 +409,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if ticks.isMultiple(of: RunRecorder.nativeCheckEvery) {
                     await Self.checkNativeRuns(runRecorder)
                 }
+                if ticks.isMultiple(of: RunRecorder.provenanceCheckEvery) {
+                    await Self.readProvenance(runRecorder)
+                }
                 guard runRecorder.isRecording,
                       let every = DiagnosticLevel.current.hostSampleInterval else { continue }
                 let period = max(1, Int(every / RunRecorder.meterInterval))
@@ -412,6 +422,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Every how many meter ticks the display holds are read: once a minute.
     private static let displayHoldCheckEvery = 30
+
+    /// The engine names the renderer that answered in the Wine log during the
+    /// run, and a long run's log outgrows what its close reads back, so the
+    /// line is gathered while the game plays. The reads run off the main actor.
+    private static func readProvenance(_ recorder: RunRecorder) async {
+        for read in recorder.provenanceReads {
+            let found = await Task.detached(name: "Read the engine's renderer lines") {
+                RunRecorder.provenance(in: read.log, from: read.offset)
+            }.value
+            recorder.noteProvenance(found.lines, readTo: found.end, for: read)
+        }
+    }
 
     /// A game on the native NW.js runner is a macOS process Steam does not
     /// track, and the client sends no lifetime edge for it: the run ends when

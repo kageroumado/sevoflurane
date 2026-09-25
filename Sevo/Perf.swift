@@ -9,7 +9,8 @@ struct PerfCommand: AsyncParsableCommand {
         Every run on an engine with the frame-time ring leaves a trace in \
         ~/Library/Application Support/Sevoflurane/Runs/traces (one CSV line per frame). \
         A run is named by its number in `sevo perf list` (1 is the newest), by its \
-        start time as the list prints it, or by a trace file's path. Runs that ran on \
+        start time as the list prints it, or by a trace file's path; a game's app id \
+        names its last runs, as --game does. Runs that ran on \
         the same engine, renderer, upscaler, tuning, msync, D3DMetal, window treatment \
         and label are one configuration; repeat a configuration to make its \
         difference from another testable (Welch's t-test over the runs). With one run on a side the comparison \
@@ -20,6 +21,13 @@ struct PerfCommand: AsyncParsableCommand {
           2. Change one setting between configurations; run each twice or more.
           3. Label what the record cannot see: sevo perf label 1 "vsync off".
           4. sevo perf compare --game <appid> --last <n> --skip 20
+        
+        A trace runs from the game's first frame to its last, menus and loading \
+        included. To compare one pass of a benchmark, keep the same stretch of every \
+        run: --skip leaves out the seconds before the pass starts and --duration keeps \
+        the seconds it lasts, so --skip 45 --duration 60 compares seconds 45 to 105 of \
+        each run. compare prints each run's trace length and the stretch it compared; \
+        a stretch as long as the trace means the idle time is in the numbers.
         
         compare prints the first configuration as the baseline, then each other one \
         with its mean ± standard deviation over its runs (average fps, 1 % low, p99 \
@@ -62,27 +70,44 @@ struct PerfCommand: AsyncParsableCommand {
     }
 
     struct Selection: ParsableArguments {
-        @Argument(help: "Runs: list numbers, start times, or trace paths. Default: the newest game's last runs.")
+        @Argument(help: """
+        Runs: list numbers, start times, or trace paths; an app id means that game's last runs. \
+        Default: the newest game's last runs.
+        """)
         var runs: [String] = []
         @Option(name: .long, help: "With no runs named: the last N runs (of --game, else of the newest run's game).")
         var last = 6
         @Option(name: .long, help: "With no runs named: this game's runs.") var game: Int?
-        @Option(name: .long, help: "Seconds to leave out at the start of every run (loading, shader compilation).")
+        @Option(name: .long, help: """
+        Seconds to leave out at the start of every run: loading, shader compilation, the menus \
+        before a benchmark pass.
+        """)
         var skip: Double = 0
-        @Option(name: .long, help: "Seconds of each run to keep after --skip.") var duration: Double?
+        @Option(name: .long, help: "Seconds of each run to keep after --skip: the length of the pass. Default: the rest.")
+        var duration: Double?
 
         func resolve() throws -> [PerfComparison.Run] {
             let available = PerfRuns.available(game: nil)
+            func lastRuns(of appID: Int?) -> [PerfRuns.Entry] {
+                Array(available.filter { $0.record.appid == appID }.prefix(max(1, last)).reversed())
+            }
             var chosen: [PerfRuns.Entry] = []
             if runs.isEmpty {
-                let appID = game ?? available.first?.record.appid
-                chosen = Array(available.filter { $0.record.appid == appID }.prefix(max(1, last)).reversed())
+                chosen = lastRuns(of: game ?? available.first?.record.appid)
             } else {
                 for reference in runs {
-                    guard let entry = PerfRuns.find(reference, in: available) else {
-                        throw ValidationError("no run \(reference) — sevo perf list names them")
+                    if let entry = PerfRuns.find(reference, in: available) {
+                        chosen.append(entry)
+                    } else if let appID = Int(reference), available.contains(where: { $0.record.appid == appID }) {
+                        // Past the end of the list, a number that names a game with traces is
+                        // that game: people reach for the app id they launch it by.
+                        Sevo.printError("\(reference) is app \(appID)'s id: comparing its last runs, as --game \(appID)")
+                        chosen += lastRuns(of: appID)
+                    } else {
+                        throw ValidationError(
+                            "no run \(reference) — sevo perf list names them; a game's runs are --game <appid>",
+                        )
                     }
-                    chosen.append(entry)
                 }
             }
             guard !chosen.isEmpty else { throw ValidationError("no runs with a frame trace") }
@@ -90,11 +115,19 @@ struct PerfCommand: AsyncParsableCommand {
                 guard let contents = FrameTrace.read(entry.url) else { return nil }
                 let times = PerfComparison.trim(contents.frameTimes, skip: skip, duration: duration)
                 guard times.count >= 2 else { return nil }
+                let total = Self.seconds(contents.frameTimes)
+                let from = min(skip, total)
                 return PerfComparison.Run(
                     record: entry.record, frameTimes: times, dropped: contents.dropped,
                     trace: entry.url.lastPathComponent, label: entry.label,
+                    traceSeconds: total, window: from ... from + Self.seconds(times),
                 )
             }
+        }
+
+        /// How long a run of frames lasts, in seconds.
+        private static func seconds(_ times: [Float]) -> Double {
+            times.reduce(0.0) { $0 + Double($1) } / 1000
         }
     }
 
@@ -138,6 +171,10 @@ struct PerfCommand: AsyncParsableCommand {
                 return
             }
             for line in PerfReport.textLines(groups) { print(line) }
+            if selection.skip == 0, selection.duration == nil {
+                print("whole runs compared, loading and menus included; "
+                    + "--skip and --duration keep the same stretch of each (sevo perf --help)")
+            }
         }
     }
 

@@ -185,7 +185,7 @@ final class ReportStore {
     /// does not.
     static func body(for run: RunRecord) -> String {
         var lines = ["\(run.summary)", ""]
-        lines.append("engine: \(run.engine) · renderer: \(run.renderer) · runner: \(run.runner)")
+        lines.append("engine: \(run.engine) · renderer: \(run.rendererLabel) · runner: \(run.runner)")
         lines.append("macOS \(run.macos)\(run.chip.map { " · \($0)" } ?? "")")
         if let arch = run.arch { lines.append("game: \(arch)-bit\(run.runtime.map { " \($0)" } ?? "")") }
         if let windowAfter = run.windowAfterSeconds {
@@ -372,7 +372,7 @@ private struct RunSummaryCard: View {
     private var facts: [(label: String, value: String)] {
         var facts = [
             ("Engine", run.engine),
-            ("Renderer", run.renderer),
+            ("Renderer", run.rendererLabel),
             ("Runner", run.runner),
             ("Windows", run.windows),
             ("macOS", run.macos),

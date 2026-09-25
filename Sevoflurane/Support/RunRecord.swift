@@ -21,6 +21,14 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     /// What the client booted with, which is what the game inherited — never
     /// the stored selection, which may already name the next restart's.
     var renderer: String
+    /// Whether the engine's own `sevo:gfx` line named ``renderer``
+    /// (``WineProvenance``). `false` for a Wine run no process of which
+    /// reported one — a process that never presented prints the line only
+    /// from its exit handler, which `TerminateProcess` skips — so
+    /// ``renderer`` is the booted selection, a guess that is wrong for a D3D9
+    /// or OpenGL title. Absent on the native runner, and on records older
+    /// than the field.
+    var rendererConfirmed: Bool? = nil
     /// `wine` or `nwjs` (``GameRunner``).
     var runner: String
     /// The executable's address width, 32 or 64, from its COFF header
@@ -83,6 +91,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case exe
         case engine
         case renderer
+        case rendererConfirmed = "renderer_confirmed"
         case runner
         case arch
         case windows
@@ -258,8 +267,14 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         outcomeParts.joined(separator: " · ")
     }
 
+    /// ``renderer`` as a reader should take it: marked when no process of the
+    /// run confirmed it.
+    var rendererLabel: String {
+        rendererConfirmed == false ? "\(renderer) (unconfirmed)" : renderer
+    }
+
     private var outcomeParts: [String] {
-        var parts = [engine, renderer]
+        var parts = [engine, rendererLabel]
         if let tuning, tuning != PerformanceTuning.standard.rawValue { parts.append("\(tuning) tuning") }
         if let upscaler, upscaler != UpscalerChoice.off.rawValue { parts.append("upscaler \(upscaler)") }
         if let durationSeconds { parts.append(Self.duration(durationSeconds)) }

@@ -159,7 +159,10 @@ nonisolated enum SetupProbe {
         guard let names = try? manager.contentsOfDirectory(atPath: root.path) else {
             return []
         }
+        let current = SteamBottle.name
         return names.sorted().compactMap { name in
+            // The bottle the app is set to use is one whatever its name says.
+            guard name == current || !isSetAside(name) else { return nil }
             let url = root.appendingPathComponent(name)
             guard manager.fileExists(atPath: url.appendingPathComponent(marker).path) else {
                 return nil
@@ -173,6 +176,23 @@ nonisolated enum SetupProbe {
             )
         }
     }
+
+    /// Whether a folder's name marks a bottle set aside rather than one in
+    /// use: hidden, or ending in a suffix that retires a copy —
+    /// `Steam.discard`, `Steam.stub-1308`, `Steam.old`. Such a folder can
+    /// hold a whole prefix and a Steam install, so its contents cannot tell.
+    static func isSetAside(_ name: String) -> Bool {
+        if name.hasPrefix(".") { return true }
+        let suffix = (name as NSString).pathExtension.lowercased()
+        guard let word = suffix.split(separator: "-", maxSplits: 1).first else { return false }
+        return setAsideSuffixes.contains(String(word))
+    }
+
+    /// The words a set-aside suffix starts with; `stub-1308` counts as `stub`.
+    private static let setAsideSuffixes: Set<String> = [
+        "discard", "discarded", "stub", "quarantine", "quarantined", "old", "bak", "backup",
+        "orig", "tmp", "partial", "broken", "trash",
+    ]
 
     /// Oldest first, by the number in the name: `dormison-r2` before
     /// `dormison-r10`, which a plain string sort gets backwards.

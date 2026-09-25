@@ -17,6 +17,14 @@ nonisolated struct RunInProgress: Sendable {
     let steamLogOffset: UInt64
     /// The client showed an error for this game action.
     var steamError: String?
+    /// The engine's `sevo:run` and `sevo:gfx` renderer lines, gathered while
+    /// the run is up (``RunRecorder/provenance(in:from:)``): a long run's
+    /// Wine log outgrows the tail read at its close, and these lines are
+    /// written in its first seconds.
+    var provenance = ""
+    /// Where ``provenance`` has read the Wine log to; nil until the first
+    /// read, which starts at ``wineLogOffset``.
+    var provenanceOffset: UInt64?
     /// Where the record goes when the run is over, and the two logs its
     /// ending is read from.
     var runsRoot = RunLog.root
@@ -47,8 +55,12 @@ nonisolated struct RunInProgress: Sendable {
         let exit = SteamGameProcessLog.exit(
             forApp: record.appid, running: record.exe, in: steamTail,
         )
-        if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: wineTail) {
+        let lines = provenance.isEmpty ? wineTail : provenance + "\n" + wineTail
+        if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: lines) {
             record.renderer = answered
+            record.rendererConfirmed = true
+        } else if record.runner != GameRunner.nwjs, record.rendererConfirmed != true {
+            record.rendererConfirmed = false
         }
         record.crash = WineExceptionTrail.lastException(in: wineTail)
         let notes = WineExceptionTrail.notes(in: wineTail)
@@ -292,6 +304,77 @@ final nonisolated class RunRecorder {
             guard let usage = ProcessUsage.read(pid: pid) else { continue }
             open[appID]?.record.energy = RunRecord.Energy(usage)
         }
+    }
+
+    /// Every how many meter ticks the Wine log is read for the engine's
+    /// renderer lines: ten seconds.
+    static let provenanceCheckEvery = 5
+
+    /// One open Wine run's next read of the Wine log.
+    nonisolated struct ProvenanceRead: Sendable {
+        let appID: Int
+        let log: URL
+        let offset: UInt64
+    }
+
+    /// The open Wine runs, each with where its Wine log was last read to.
+    var provenanceReads: [ProvenanceRead] {
+        open.compactMap { appID, run in
+            guard run.record.runner != GameRunner.nwjs else { return nil }
+            return ProvenanceRead(
+                appID: appID, log: run.wineLog, offset: run.provenanceOffset ?? run.wineLogOffset,
+            )
+        }
+    }
+
+    /// The engine's renderer lines that `read` found, and where it stopped.
+    /// The record takes the renderer as soon as a process names one, so a
+    /// report collected while the game plays already says what answered it.
+    ///
+    /// - Parameter read: The read that was started; a run closed or re-armed
+    ///   since then has moved on, and the lines are not its.
+    func noteProvenance(_ lines: String, readTo end: UInt64, for read: ProvenanceRead) {
+        guard var run = open[read.appID],
+              (run.provenanceOffset ?? run.wineLogOffset) == read.offset else { return }
+        run.provenanceOffset = end
+        if !lines.isEmpty {
+            run.provenance += run.provenance.isEmpty ? lines : "\n" + lines
+        }
+        let answered = WineProvenance.renderer(
+            forApp: read.appID, exe: run.record.exe, in: run.provenance,
+        )
+        let changed = answered.map { $0 != run.record.renderer || run.record.rendererConfirmed != true } ?? false
+        if let answered, changed {
+            run.record.renderer = answered
+            run.record.rendererConfirmed = true
+        }
+        open[read.appID] = run
+        if changed { persist(appID: read.appID) }
+    }
+
+    /// The `sevo:run` and `sevo:gfx` renderer lines the Wine log gained from
+    /// `offset`, and where the read stopped: after the last whole line, so a
+    /// line the engine is still writing is read whole the next time. A log
+    /// shorter than `offset` was replaced and is read from its start; growth
+    /// past ``maximumTailBytes`` is skipped to its last stretch.
+    static func provenance(in url: URL, from offset: UInt64) -> (lines: String, end: UInt64) {
+        let size = size(of: url)
+        var start = size < offset ? 0 : offset
+        guard size > start, let handle = try? FileHandle(forReadingFrom: url) else { return ("", start) }
+        defer { try? handle.close() }
+        let skipped = size - start > UInt64(maximumTailBytes)
+        if skipped { start = size - UInt64(maximumTailBytes) }
+        guard (try? handle.seek(toOffset: start)) != nil,
+              let data = try? handle.read(upToCount: Int(size - start)),
+              let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else { return ("", start) }
+        let whole = data[data.startIndex ... lastNewline]
+        var lines = whole.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true)
+        // The first line of a skipped-to stretch starts mid-line.
+        if skipped, !lines.isEmpty { lines.removeFirst() }
+        let kept = lines.lazy
+            .map { String(decoding: $0, as: UTF8.self) }
+            .filter { $0.contains("sevo:run pid=") || ($0.contains("sevo:gfx pid=") && $0.contains("renderer=")) }
+        return (kept.joined(separator: "\n"), start + UInt64(whole.count))
     }
 
     /// Every how many meter ticks the native runs' processes are looked for.

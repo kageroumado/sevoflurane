@@ -933,7 +933,7 @@ enum ConfigKeyParsing {
     static func windows(_ value: String) throws -> WindowTreatment? {
         if value == "inherit" { return nil }
         guard let treatment = WindowTreatment(rawValue: value) else {
-            Sevo.printError("windows must be \(WindowTreatment.help)")
+            Sevo.printError("windows must be one of:\n\(WindowTreatment.help)")
             throw SevoExit.badInvocation
         }
         return treatment
@@ -1149,7 +1149,7 @@ struct BottleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bottle",
         abstract: "Bottles, whether Steam is installed in each, and their settings.",
-        discussion: "windows takes \(WindowTreatment.help).",
+        discussion: "windows takes one of:\n\(WindowTreatment.help)",
     )
 
     @Argument(help: "list | config | deps [install <id>]") var verb: String = "list"
@@ -1935,8 +1935,7 @@ struct AppCommand: AsyncParsableCommand {
             empty for disabled; <name>= drops one, inherit drops the \
             table), the switches \(ConfigSwitches.names) (on | off | \
             inherit), recommended to print what the fix table knows about \
-            this game, windows \
-            (\(WindowTreatment.help)), upscaler (off | \
+            this game, windows (the values below), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
             shaders list names the packages), filter (nearest | bilinear | \
             lanczos | inherit — how the upscaler's last pass reaches the \
@@ -1948,6 +1947,9 @@ struct AppCommand: AsyncParsableCommand {
             game's files again, exe <name> to name an executable the game \
             runs under before its first launch has recorded one. Omit the \
             key to print every setting with the level it comes from.
+
+            windows takes one of:
+            \(WindowTreatment.help)
             """,
         )
         @Argument var appid: Int

@@ -4,54 +4,66 @@ import Foundation
 /// `ResizableWindows` option (dormison winemac.drv), which reads the first
 /// character of the value, so the raw values must stay distinct in it.
 ///
-/// The cases are an ordered scope, widest last, and the labels say which
-/// games each one reaches: a collapsed picker shows only the selected label,
-/// so a label that names what it does without naming what it leaves out
-/// cannot be read against its neighbors.
+/// The labels say which windows each case reaches: a collapsed picker shows
+/// only the selected label, so a label that names what it does without
+/// naming what it leaves out cannot be read against its neighbors. The raw
+/// values are stored in every config file and stay as they are; `fixed`
+/// names the windows it reaches, which a reader of `windows=fixed` alone
+/// takes for "cannot move or resize", so the command-line help spells each
+/// one out (``help``).
 nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// Windows are left as the game makes them.
     case off
-    /// A window the game locks to one size becomes resizable; the picture
-    /// scales to fit.
+    /// A titled window the game locks to one size becomes resizable; the
+    /// picture scales to fit. A borderless window covering the screen stays
+    /// as it is.
     case fixed
-    /// As `fixed`, and a game covering the screen gets a resizable window of
-    /// its own, still believing it fills the screen.
+    /// As `fixed`, and a borderless window covering a screen becomes an
+    /// ordinary titled window the player can move and resize, while the game
+    /// still believes it fills the screen.
     case window
     /// Every titled window becomes resizable, the ones the game already lets
     /// the user resize included — which those games would otherwise redraw at
-    /// the new size rather than scale.
+    /// the new size rather than scale. A borderless window covering the
+    /// screen stays as it is.
     case all
 
-    /// The picker's line for this rung.
+    /// The picker's line for this case.
     var label: String {
         switch self {
         case .off: "Never"
         case .fixed: "Fixed-size windows"
-        case .window: "Fixed-size and full-screen"
-        case .all: "All windows"
+        case .window: "Fixed-size windows and full-screen games"
+        case .all: "Every window with a title bar"
         }
     }
 
-    /// What the rung covers, for a command line that has no picker to read
-    /// the neighboring rungs from.
+    /// What the player gets, for a command line that has no picker to read
+    /// the neighboring cases from.
     var summary: String {
         switch self {
-        case .off: "leaves every game window the size the game makes it"
-        case .fixed: "makes a window the game locked to one size resizable"
-        case .window: "as fixed, and a game covering the screen gets a resizable window of its own"
-        case .all: "makes every titled game window resizable, the ones the game already resizes included"
+        case .off: "every window stays as the game makes it; a full-screen game covers the screen"
+        case .fixed: "a window the game locks to one size gets a resize handle and its picture scales; "
+            + "a full-screen game stays full screen"
+        case .window: "as fixed, and a full-screen game plays in a window you can move and resize, "
+            + "still drawing as if it filled the screen"
+        case .all: "every window with a title bar can be resized and its picture scales, windows the game "
+            + "resizes itself included; a full-screen game stays full screen"
         }
     }
 
-    /// Every rung and what it covers, plus the level-clearing value the
-    /// config commands accept.
+    /// Every case and what the player gets, one line each, plus the
+    /// level-clearing value the config commands accept.
     static var help: String {
-        allCases.map { "\($0.rawValue) — \($0.summary)" }
-            .joined(separator: "; ")
-            + "; inherit — take the level above's value"
+        let width = allCases.map(\.rawValue.count).max() ?? 0
+        let line = { (name: String, text: String) in
+            "  " + name.padding(toLength: width, withPad: " ", startingAt: 0) + "  " + text
+        }
+        return (allCases.map { line($0.rawValue, $0.summary) } + [line("inherit", "take the level above's value")])
+            .joined(separator: "\n")
     }
 
-    /// The rung names alone, for the places a line of help has room for the
+    /// The case names alone, for the places a line of help has room for the
     /// values but not for what they mean.
     static var rungs: String {
         allCases.map(\.rawValue).joined(separator: " | ") + " | inherit"
