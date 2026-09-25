@@ -55,7 +55,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// Every case and what the player gets, one line each, plus the
     /// level-clearing value the config commands accept.
     static var help: String {
-        let width = allCases.map(\.rawValue.count).max() ?? 0
+        let width = (allCases.map(\.rawValue) + ["inherit"]).map(\.count).max() ?? 0
         let line = { (name: String, text: String) in
             "  " + name.padding(toLength: width, withPad: " ", startingAt: 0) + "  " + text
         }
