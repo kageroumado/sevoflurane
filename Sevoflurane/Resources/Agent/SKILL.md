@@ -94,6 +94,17 @@ redaction:
 - Steam ids become `<steamid>`, and persona names in collected reports become
   `<persona>`.
 
+## The community game database
+
+With sharing on (Settings › General › Community), every run that drew a frame
+or lasted 20 s is sent to the public Sevoflurane game database after it
+closes: appid, executable name, engine, renderer, settings, resolution, frame
+rates, and the Mac's model, chip, GPU cores and memory tier. Requests are
+signed by a key in the Mac's Secure Enclave. `sevo stats` shows whether
+sharing is on, the install id and the queue; `sevo stats preview` prints
+exactly what the last run would send. A good diagnostic run is also a good
+data point there: 60 s past loading, one configuration, labeled.
+
 ## Common failure signatures
 
 - **`unity-exit-1-no-window`**: a Unity game quit with status 1 and never drew

@@ -29,6 +29,16 @@
         }
       }
     },
+    "%@ · %@\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@\n%3$@"
+          }
+        }
+      }
+    },
     "%@ · set when it launches" : {
 
     },
@@ -94,6 +104,16 @@
     "%lld %%" : {
 
     },
+    "%lld runs shared, the last one %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld runs shared, the last one %2$@."
+          }
+        }
+      }
+    },
     "%llu" : {
 
     },
@@ -154,10 +174,13 @@
     "Apple's sign-in page appears here" : {
 
     },
+    "As soon as the problem shows, save the diagnostics archive below." : {
+
+    },
     "Auto" : {
       "comment" : "Automatic renderer, in a narrow segment"
     },
-    "Auto update" : {
+    "Auto Update" : {
 
     },
     "Auto-restart is off" : {
@@ -250,6 +273,9 @@
     "Common problems" : {
 
     },
+    "Community" : {
+
+    },
     "Continue" : {
 
     },
@@ -296,6 +322,15 @@
 
     },
     "Default engine" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete every run this Mac shared?" : {
+
+    },
+    "Delete What I Shared…" : {
 
     },
     "DEMO" : {
@@ -355,7 +390,7 @@
     "Enhanced synchronization (msync)" : {
 
     },
-    "Every game you launch is recorded here." : {
+    "Every game you launch is recorded here. Settings › Diagnostics says how to make a run worth reporting." : {
 
     },
     "Failed" : {
@@ -442,6 +477,9 @@
     "GPU reported to games" : {
 
     },
+    "Help other Mac players" : {
+
+    },
     "Hide %@" : {
 
     },
@@ -457,6 +495,9 @@
           }
         }
       }
+    },
+    "In Terminal, sevo diag --help has the same steps and sevo perf compare measures a setting's effect." : {
+
     },
     "In your other bottles" : {
 
@@ -551,6 +592,12 @@
     "made by kageroumado %@" : {
 
     },
+    "Making a useful report" : {
+
+    },
+    "Making a Useful Report…" : {
+
+    },
     "memory" : {
 
     },
@@ -597,6 +644,12 @@
 
     },
     "Not an Installer" : {
+
+    },
+    "Not Now" : {
+
+    },
+    "Not sent yet: %@" : {
 
     },
     "Nothing newer to fetch" : {
@@ -665,6 +718,9 @@
     "PID" : {
 
     },
+    "Play for at least a minute after the game finishes loading, in a place you can return to." : {
+
+    },
     "Play Once" : {
 
     },
@@ -716,7 +772,7 @@
     "Reload Steam UI" : {
 
     },
-    "Reload, restart, and the event log" : {
+    "Reload, restart, the event log, and updates" : {
 
     },
     "Remember for this file" : {
@@ -858,6 +914,12 @@
     "Sent. Thank you." : {
 
     },
+    "Set Record back to Off when you are done." : {
+
+    },
+    "Set Record to Diagnostics before you launch the game." : {
+
+    },
     "Settings" : {
 
     },
@@ -876,6 +938,18 @@
     "Shader packages" : {
 
     },
+    "Share" : {
+
+    },
+    "Share each game's frame rate, resolution and settings with your Mac's model. Nothing names you. Settings › General shows exactly what is sent." : {
+
+    },
+    "Share run statistics" : {
+
+    },
+    "Share Run Statistics" : {
+
+    },
     "Share this run" : {
 
     },
@@ -886,6 +960,9 @@
 
     },
     "Show each one" : {
+
+    },
+    "Show exactly what is sent" : {
 
     },
     "Show in Finder" : {
@@ -1009,7 +1086,16 @@
     "The assistant is where you left it. Steam opens from its last step." : {
 
     },
+    "The database did not answer. Try again later." : {
+
+    },
+    "The database forgets them, and the next run you share comes from a new, unrelated identity." : {
+
+    },
     "The engine's own version takes over." : {
+
+    },
+    "To test a setting, change only that one, and play the same place twice with each value." : {
 
     },
     "Troubleshooting" : {
@@ -1109,6 +1195,9 @@
 
     },
     "Writing…" : {
+
+    },
+    "You can stop, or delete what you shared, in Settings › General." : {
 
     },
     "Your games and saves stay." : {
