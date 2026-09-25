@@ -205,6 +205,7 @@
 				"Web/SteamWebHost+Friends.swift",
 				"Web/SteamWebHost+Inventory.swift",
 				"Web/SteamWebHost+Launches.swift",
+				"Web/SteamWebHost+Library.swift",
 				"Web/SteamWebHost+MenuDismissal.swift",
 				"Web/SteamWebHost+Overlay.swift",
 				"Web/SteamWebHost+Popups.swift",

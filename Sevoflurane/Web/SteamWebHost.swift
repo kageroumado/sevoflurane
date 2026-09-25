@@ -142,17 +142,30 @@ final class SteamWebHost {
     /// the same list Steam's own tray menu leads with.
     private(set) var recentGames: [RecentGame] = []
 
+    /// Every installed game, in the order ``LibraryIndex`` files them: the
+    /// popover's index under the recent ones.
+    private(set) var libraryGames: [RecentGame] = []
+
     var benchmarkRunning = false
     let mainQueueLatency = MainQueueLatencyProbe()
     private var evaluationSequence = 0
     private var evaluationPending: [Int: CheckedContinuation<String?, Never>] = [:]
     private var evaluationTimeouts: [Int: Task<Void, Never>] = [:]
 
-    struct RecentGame: Identifiable, Decodable, Equatable {
+    nonisolated struct RecentGame: Identifiable, Decodable, Equatable, Sendable {
         let id: Int
         let name: String
         /// What Steam's library shows under the name, by the client's own numbering.
         var displayStatus: Int?
+        /// The name Steam's own library sorts by (`sort_as`): no leading
+        /// article, a romanized title for one written in another script.
+        var sortAs: String?
+
+        /// What the index files the game under.
+        var sortName: String {
+            guard let sortAs, !sortAs.isEmpty else { return name }
+            return sortAs
+        }
 
         /// Synchronizing (8): Steam Cloud has the game's saves in hand.
         var isInCloudSync: Bool { displayStatus == 8 }
@@ -182,31 +195,47 @@ final class SteamWebHost {
         if held != gamesHeldInCloudSync { gamesHeldInCloudSync = held }
     }
 
+    /// Asks the page for the installed games: the five most recently played,
+    /// and every one of them for the index. One evaluation answers both, so
+    /// the two lists never describe different moments of the library.
     func refreshRecentGames() {
         Task(name: "Refresh recent games") {
-            let script = """
-            JSON.stringify((window.appStore ? appStore.allApps : [])
-              // Installed in this bottle: `installed` alone is also true for a
-              // game another of the account's Steam clients has installed.
-              .filter(function (a) {
-                return a.local_per_client_data && a.local_per_client_data.installed && a.app_type === 1;
-              })
-              .sort(function (x, y) {
-                return (y.rt_last_time_played || 0) - (x.rt_last_time_played || 0);
-              })
-              .slice(0, 5)
-              .map(function (a) {
-                return { id: a.appid, name: a.display_name, displayStatus: a.display_status };
-              }))
-            """
-            guard let raw = await evaluateInContext(script),
+            guard let raw = await evaluateInContext(Self.installedGamesScript),
                   let data = raw.data(using: .utf8),
-                  let games = try? JSONDecoder().decode([RecentGame].self, from: data)
+                  let answer = try? JSONDecoder().decode(InstalledGames.self, from: data)
             else { return }
-            noteCloudSyncs(in: games, at: .now)
-            if games != recentGames { recentGames = games }
+            noteCloudSyncs(in: answer.library, at: .now)
+            if answer.recent != recentGames { recentGames = answer.recent }
+            let library = LibraryIndex.sorted(answer.library)
+            if library != libraryGames { libraryGames = library }
         }
     }
+
+    /// What ``installedGamesScript`` answers.
+    private struct InstalledGames: Decodable {
+        let recent: [RecentGame]
+        let library: [RecentGame]
+    }
+
+    private static let installedGamesScript = """
+    (function () {
+      // Installed in this bottle: `installed` alone is also true for a
+      // game another of the account's Steam clients has installed.
+      var installed = (window.appStore ? appStore.allApps : [])
+        .filter(function (a) {
+          return a.local_per_client_data && a.local_per_client_data.installed && a.app_type === 1;
+        });
+      function row(a) {
+        return { id: a.appid, name: a.display_name, displayStatus: a.display_status, sortAs: a.sort_as };
+      }
+      var recent = installed.slice()
+        .sort(function (x, y) {
+          return (y.rt_last_time_played || 0) - (x.rt_last_time_played || 0);
+        })
+        .slice(0, 5);
+      return JSON.stringify({ recent: recent.map(row), library: installed.map(row) });
+    })()
+    """
 
     /// Launches a game exactly as Steam's tray menu does.
     func launchGame(_ game: RecentGame) {
@@ -251,7 +280,8 @@ final class SteamWebHost {
 
     /// The game's name as the library shows it, or as its config names it.
     func gameName(_ appID: Int) -> String {
-        recentGames.first { $0.id == appID }?.name ?? GameConfig.game(appID).name ?? "app \(appID)"
+        (recentGames + libraryGames).first { $0.id == appID }?.name
+            ?? GameConfig.game(appID).name ?? "app \(appID)"
     }
 
     // MARK: - Friends, chat, and notifications
@@ -354,12 +384,15 @@ final class SteamWebHost {
         /// A host with a library and no client behind it, for the gallery.
         /// Nothing here starts a page: the web views exist only after
         /// ``bootstrap()``, which the gallery never calls.
+        /// `library` is every installed game; left out, it is the recent
+        /// ones, a library small enough that the popover shows no index.
         static func preview(
-            games: [RecentGame] = [], launching: GameLaunch? = nil,
+            games: [RecentGame] = [], library: [RecentGame]? = nil, launching: GameLaunch? = nil,
             status: String = "Steam is ready", unreadChats: Int = 0,
         ) -> SteamWebHost {
             let host = SteamWebHost()
             host.recentGames = games
+            host.libraryGames = LibraryIndex.sorted(library ?? games)
             host.activeLaunch = launching
             host.status = status
             host.unreadChats = unreadChats

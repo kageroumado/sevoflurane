@@ -34,11 +34,10 @@ struct MenuBarView: View {
             } else {
                 SupervisorNotice(host: host, supervisor: supervisor)
                 HostPressureNotice(pressure: supervisor.hostPressure)
-                VStack(alignment: .leading, spacing: 0) {
-                    RecentGames(host: host, supervisor: supervisor, graphics: graphics)
-                    QuickLaunchPrograms(quickLaunch: quickLaunch)
-                    AddProgramRow(quickLaunch: quickLaunch)
-                }
+                GamesColumn(
+                    host: host, supervisor: supervisor, graphics: graphics,
+                    quickLaunch: quickLaunch, presentation: presentation,
+                )
                 NotificationPermissionCard(notifications: notifications)
                 SharingQuestionCard()
                 BottleIncompleteChip()
@@ -140,6 +139,7 @@ private struct PopoverAnimations: ViewModifier {
             .animation(.smooth(duration: 0.3), value: supervisor.health)
             .animation(.smooth(duration: 0.3), value: supervisor.hostPressure?.sentence)
             .animation(.smooth(duration: 0.3), value: host.recentGames)
+            .animation(.smooth(duration: 0.3), value: host.libraryGames)
             .animation(.smooth(duration: 0.3), value: host.activeLaunch)
             .animation(.smooth(duration: 0.3), value: host.unreadChats)
             .animation(.smooth(duration: 0.3), value: notifications.hasUnaskedNotifications)
@@ -370,6 +370,136 @@ private struct HostPressureNotice: View {
     }
 }
 
+// MARK: - Games column
+
+/// What to play: the recent games and the Windows programs, the column the
+/// popover has always shown, at that column's own height. For a library
+/// bigger than the recent five, scrolling it brings every installed game up
+/// from below, under its letter; until then nothing hints at them, so the
+/// popover stands exactly as it did.
+private struct GamesColumn: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    let graphics: GraphicsStore
+    let quickLaunch: QuickLaunchStore
+    let presentation: PopoverPresentation
+    /// The height of the recent games and the programs, which the scroll
+    /// view stands at.
+    @State private var visibleHeight: CGFloat = 0
+    @State private var position = ScrollPosition(edge: .top)
+    /// Bumped by a pin change, which rewrites a game's config. Held here, so a
+    /// game pinned in one list reads as pinned in the other too.
+    @State private var pinEdits = 0
+
+    /// Whether the index adds anything: a library the recent rows already
+    /// show whole needs no second copy under letters.
+    private var showsIndex: Bool {
+        host.libraryGames.count > host.recentGames.count
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    RecentGames(
+                        host: host, supervisor: supervisor, graphics: graphics,
+                        pinEdits: pinEdits, onPinChanged: { pinEdits += 1 },
+                    )
+                    QuickLaunchPrograms(quickLaunch: quickLaunch)
+                    AddProgramRow(quickLaunch: quickLaunch)
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
+                if showsIndex {
+                    LibraryIndexList(
+                        host: host, supervisor: supervisor, graphics: graphics,
+                        pinEdits: pinEdits, onPinChanged: { pinEdits += 1 },
+                    )
+                }
+            }
+        }
+        .scrollPosition($position)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: visibleHeight)
+        // Every open starts at the recent games, not wherever the last one
+        // was left.
+        .onChange(of: presentation.isSettling) { _, isSettling in
+            if isSettling { position.scrollTo(edge: .top) }
+        }
+    }
+}
+
+/// A letter heading in the index, in the small hand the column's other
+/// secondary lines use.
+private struct ColumnHeading: View {
+    let text: Text
+
+    var body: some View {
+        text
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Theme.Space.sm)
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+// MARK: - Row facts
+
+/// What a game row reads from disk: its pin and its restart need.
+private nonisolated struct GameRowFacts: Equatable, Sendable {
+    let pinned: Renderer?
+    let restartFor: Renderer?
+}
+
+/// Reads the rows' facts from the game configs off the main actor rather
+/// than on every body evaluation, and again whenever they can have changed.
+private struct GameRowFactsReader: ViewModifier {
+    let games: [Int]
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    /// Its choice is what a row's restart need is measured against.
+    let graphics: GraphicsStore
+    let pinEdits: Int
+    @Binding var facts: [Int: GameRowFacts]
+
+    /// What the facts depend on: the rows, and the moments the booted record,
+    /// the bottle's renderer or a pin can change. The booted record and a pin
+    /// live in plain storage that observation cannot see; the client rewrites
+    /// the record when it boots and when a launch restages it, which is when
+    /// `health` and `activeLaunch` move.
+    private struct Key: Equatable {
+        let games: [Int]
+        let health: SupervisorHealth
+        let launch: Int?
+        let renderer: Renderer
+        let pinEdits: Int
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: Key(
+                games: games,
+                health: supervisor.health,
+                launch: host.activeLaunch?.appID,
+                renderer: graphics.selection.renderer,
+                pinEdits: pinEdits,
+            )) {
+                facts = await Self.read(games)
+            }
+    }
+
+    @concurrent
+    private nonisolated static func read(_ games: [Int]) async -> [Int: GameRowFacts] {
+        Dictionary(uniqueKeysWithValues: games.map { id in
+            (id, GameRowFacts(
+                pinned: GameConfig.game(id).renderer,
+                restartFor: BottleGraphics.rendererNeedingRestart(forApp: id),
+            ))
+        })
+    }
+}
+
 // MARK: - Recent games
 
 /// The library's five most recently played games.
@@ -379,54 +509,17 @@ private struct HostPressureNotice: View {
 private struct RecentGames: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
-    /// Its choice is what a row's restart need is measured against.
     let graphics: GraphicsStore
-    /// Each row's pin and restart need, read from the game configs off the
-    /// main actor rather than on every body evaluation.
-    @State private var facts: [Int: RowFacts] = [:]
-    /// Bumped by a pin change, which rewrites a game's config.
-    @State private var pinEdits = 0
-
-    /// What a row reads from disk.
-    nonisolated struct RowFacts: Equatable, Sendable {
-        let pinned: Renderer?
-        let restartFor: Renderer?
-    }
-
-    /// What the facts depend on: the rows, and the moments the booted record,
-    /// the bottle's renderer or a pin can change. The booted record and a pin
-    /// live in plain storage that observation cannot see; the client rewrites
-    /// the record when it boots and when a launch restages it, which is when
-    /// `health` and `activeLaunch` move.
-    private struct FactsKey: Equatable {
-        let games: [Int]
-        let health: SupervisorHealth
-        let launch: Int?
-        let renderer: Renderer
-        let pinEdits: Int
-    }
+    let pinEdits: Int
+    let onPinChanged: () -> Void
+    @State private var facts: [Int: GameRowFacts] = [:]
 
     var body: some View {
         content
-            .task(id: FactsKey(
-                games: host.recentGames.map(\.id),
-                health: supervisor.health,
-                launch: host.activeLaunch?.appID,
-                renderer: graphics.selection.renderer,
-                pinEdits: pinEdits,
-            )) {
-                facts = await Self.readFacts(host.recentGames.map(\.id))
-            }
-    }
-
-    @concurrent
-    private nonisolated static func readFacts(_ games: [Int]) async -> [Int: RowFacts] {
-        Dictionary(uniqueKeysWithValues: games.map { id in
-            (id, RowFacts(
-                pinned: GameConfig.game(id).renderer,
-                restartFor: BottleGraphics.rendererNeedingRestart(forApp: id),
+            .modifier(GameRowFactsReader(
+                games: host.recentGames.map(\.id), host: host, supervisor: supervisor,
+                graphics: graphics, pinEdits: pinEdits, facts: $facts,
             ))
-        })
     }
 
     @ViewBuilder private var content: some View {
@@ -453,11 +546,50 @@ private struct RecentGames: View {
                         restartFor: facts[game.id]?.restartFor,
                         isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
                         supervisor: supervisor,
-                        onPinChanged: { pinEdits += 1 },
+                        onPinChanged: onPinChanged,
                     )
                 }
             }
         }
+    }
+}
+
+// MARK: - Library index
+
+/// Every installed game, under the letter Steam's library sorts it by, after
+/// the recent games and the programs. The rows are the recent games' rows, so
+/// a game plays, pins and opens its settings the same from either list.
+private struct LibraryIndexList: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    let graphics: GraphicsStore
+    let pinEdits: Int
+    let onPinChanged: () -> Void
+    @State private var facts: [Int: GameRowFacts] = [:]
+
+    var body: some View {
+        // Lazy: a library of hundreds asks for art only for the rows scrolled to.
+        LazyVStack(alignment: .leading, spacing: 1) {
+            ForEach(LibraryIndex.sections(host.libraryGames)) { section in
+                ColumnHeading(text: Text(verbatim: section.heading))
+                ForEach(section.games) { game in
+                    GameRow(
+                        game: game,
+                        launchDetail: host.activeLaunch
+                            .flatMap { $0.appID == game.id ? $0.detail : nil },
+                        pinned: facts[game.id]?.pinned,
+                        restartFor: facts[game.id]?.restartFor,
+                        isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
+                        supervisor: supervisor,
+                        onPinChanged: onPinChanged,
+                    )
+                }
+            }
+        }
+        .modifier(GameRowFactsReader(
+            games: host.libraryGames.map(\.id), host: host, supervisor: supervisor,
+            graphics: graphics, pinEdits: pinEdits, facts: $facts,
+        ))
     }
 }
 

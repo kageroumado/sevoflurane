@@ -272,6 +272,35 @@
             .init(id: 427_520, name: "Factorio"),
         ]
 
+        /// A library past the recent five, for the popover's index.
+        static let library: [SteamWebHost.RecentGame] = games + [
+            .init(id: 244_210, name: "Assetto Corsa"),
+            .init(id: 1_066_890, name: "Automobilista 2"),
+            .init(id: 1_145_360, name: "Hades"),
+            .init(id: 367_520, name: "Hollow Knight"),
+            .init(id: 1_794_680, name: "Vampire Survivors"),
+            .init(id: 620, name: "Portal 2"),
+            .init(id: 646_570, name: "Slay the Spire"),
+            .init(id: 105_600, name: "Terraria"),
+            .init(id: 250_900, name: "The Binding of Isaac: Rebirth", sortAs: "Binding of Isaac: Rebirth"),
+            .init(id: 2_379_780, name: "Balatro"),
+            .init(id: 1_086_940, name: "Baldur's Gate 3"),
+            .init(id: 588_650, name: "Dead Cells"),
+            .init(id: 413_150, name: "Stardew Valley"),
+            .init(id: 1_593_500, name: "God of War"),
+            .init(id: 400, name: "Portal"),
+            .init(id: 1_172_470, name: "Apex Legends"),
+            .init(id: 377_160, name: "Fallout 4"),
+            .init(id: 292_030, name: "The Witcher 3: Wild Hunt", sortAs: "Witcher 3: Wild Hunt"),
+            .init(id: 1_174_180, name: "Red Dead Redemption 2"),
+            .init(id: 108_600, name: "Project Zomboid"),
+            .init(id: 2_358_720, name: "Black Myth: Wukong"),
+            .init(id: 1_091_500, name: "Cyberpunk 2077"),
+            .init(id: 553_850, name: "HELLDIVERS 2"),
+            .init(id: 945_360, name: "Among Us"),
+            .init(id: 251_570, name: "7 Days to Die"),
+        ]
+
         /// Built once and held: a fixture created inside a `body` is a new
         /// object on every evaluation, and an observable one at that — the
         /// gallery would rebuild itself forever.
@@ -279,6 +308,11 @@
             Popover(
                 label: "Healthy",
                 host: .preview(games: games),
+                supervisor: ClientSupervisor(previewHealth: .healthy),
+            ),
+            Popover(
+                label: "Library past the recent five",
+                host: .preview(games: games, library: library),
                 supervisor: ClientSupervisor(previewHealth: .healthy),
             ),
             Popover(
