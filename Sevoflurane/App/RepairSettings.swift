@@ -399,6 +399,8 @@ struct RecoverySettings: View {
                 helper = .done("The background helper is running.")
             case .alreadyHealthy:
                 helper = .done("The background helper is already healthy.")
+            case .restartedClient:
+                helper = .done("The background helper had given up on Steam. Steam is restarting.")
             case let .needsApproval(message):
                 helper = .failed(message)
             case let .failed(reason):

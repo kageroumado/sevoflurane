@@ -220,6 +220,14 @@ extension BottleSupervisor {
     /// it is not already up — the supervisor's ladder, not a bare launch.
     func startForControl() {
         setPaused(false, note: "auto-restart resumed (sevo client start)")
+        // A start asked for by a person begins a fresh count, as a manual restart does: kept,
+        // the crash-loop budget the ladder gave up on gives up again at the first rung.
+        recentRestarts.removeAll()
+        hygieneTried = false
+        if case .gaveUp = fault {
+            fault = nil
+            refreshHealth()
+        }
         Task(name: "sevo client start") {
             if await ClientLifecycle.probeClient() != .up {
                 await restartClient(reason: "sevo client start")

@@ -339,7 +339,14 @@ final class ClientSupervisor {
         Task(name: "Send \(verb) to the daemon") {
             guard await DaemonService.post(path, timeout: 120) != nil else {
                 self.daemonIsUnreachable = true
-                self.log.log(.supervisor, "the daemon did not take the \(verb)")
+                if expires {
+                    self.log.log(.supervisor, "the daemon did not answer \(verb); dropped")
+                } else {
+                    // The launch's own wish outlives a daemon that went away: the reattach
+                    // replays it.
+                    self.heldVerbs.append(HeldVerb(path: path, verb: verb, heldAt: .now, expires: false))
+                    self.log.log(.supervisor, "the daemon did not answer \(verb); held for the reattach")
+                }
                 return
             }
             await self.refreshFromDaemon()

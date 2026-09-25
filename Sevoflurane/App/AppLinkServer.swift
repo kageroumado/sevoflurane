@@ -184,6 +184,8 @@ final class AppLinkServer {
             ("repaired", "the background helper was rebuilt and is answering")
         case .alreadyHealthy:
             ("alreadyHealthy", "the background helper is already healthy — nothing to repair")
+        case .restartedClient:
+            ("restartedClient", "the background helper had given up on Steam — restarting it")
         case let .needsApproval(message):
             ("needsApproval", message)
         case let .failed(reason):

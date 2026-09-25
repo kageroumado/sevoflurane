@@ -98,6 +98,12 @@ struct DaemonHealTests {
     }
 
     @Test
+    func `repair restarts the client when an answering daemon has given up on it`() {
+        #expect(DaemonHeal.repairAction(isAnswering: true, supervisionGaveUp: true, force: false) == .restartClient)
+        #expect(DaemonHeal.repairAction(isAnswering: false, supervisionGaveUp: true, force: false) == .rebuild)
+    }
+
+    @Test
     func `repair rebuilds a silent daemon`() {
         #expect(DaemonHeal.repairAction(isAnswering: false, force: false) == .rebuild)
     }

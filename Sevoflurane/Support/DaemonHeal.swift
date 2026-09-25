@@ -57,13 +57,17 @@ nonisolated enum DaemonHeal {
     enum RepairAction: Equatable {
         /// The daemon is answering; leave it and the app's attachment alone.
         case alreadyHealthy
+        /// The daemon is answering but its supervision gave up on the client: restart the
+        /// client, which starts the crash-loop count over.
+        case restartClient
         /// Tear the registration down and rebuild it from this bundle.
         case rebuild
     }
 
-    static func repairAction(isAnswering: Bool, force: Bool) -> RepairAction {
+    static func repairAction(isAnswering: Bool, supervisionGaveUp: Bool = false, force: Bool) -> RepairAction {
         if force { return .rebuild }
-        return isAnswering ? .alreadyHealthy : .rebuild
+        guard isAnswering else { return .rebuild }
+        return supervisionGaveUp ? .restartClient : .alreadyHealthy
     }
 
     static func decide(_ inputs: Inputs) -> Action {

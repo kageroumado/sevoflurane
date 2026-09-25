@@ -32,6 +32,8 @@ enum DaemonService {
         /// common case for a `repair` run out of curiosity, which must not
         /// tear a healthy helper down.
         case alreadyHealthy
+        /// The daemon answered but had given up on the client; the client was restarted.
+        case restartedClient
         /// Rebuilt, and macOS is waiting on the user to approve it again.
         case needsApproval(String)
         /// The rebuild itself failed, or the daemon did not come back.
@@ -105,8 +107,9 @@ enum DaemonService {
             // rebuild runs directly rather than re-probing through `repair()`.
             return await outcome(of: rebuild())
         case .restartStale:
-            await restartStaleDaemonOnce()
-            return reachable
+            // A restart the helper does not come back from is the rebuild's to fix: the new
+            // build can be refused at launch by the old registration's code requirement.
+            return await restartStaleDaemonOnce() ? reachable : await outcome(of: rebuild())
         case .surfaceFailure:
             return stuck
         }
@@ -119,9 +122,18 @@ enum DaemonService {
     /// still wrong.
     static func repair(force: Bool = false) async -> RepairResult {
         if TestHost.isHosting { return .alreadyHealthy }
-        switch await DaemonHeal.repairAction(isAnswering: isAnswering(), force: force) {
+        let current = await status()
+        switch DaemonHeal.repairAction(
+            isAnswering: current != nil,
+            supervisionGaveUp: current?["health"] as? String == "gaveUp",
+            force: force,
+        ) {
         case .alreadyHealthy:
             return .alreadyHealthy
+        case .restartClient:
+            return await post("/client/restart") != nil
+                ? .restartedClient
+                : .failed("the background helper did not take the client restart")
         case .rebuild:
             return await rebuild()
         }
@@ -163,8 +175,9 @@ enum DaemonService {
 
     // MARK: - Healing
 
-    private static func restartStaleDaemonOnce() async {
-        guard !staleRestartAttempted else { return }
+    /// Answers whether the helper answered after the restart.
+    private static func restartStaleDaemonOnce() async -> Bool {
+        guard !staleRestartAttempted else { return await isAnswering() }
         staleRestartAttempted = true
         EventLog.enqueue(
             .supervisor,
@@ -174,12 +187,12 @@ enum DaemonService {
         _ = await Subprocess.run(
             "/bin/launchctl", ["kickstart", "-k", target], timeout: .seconds(15),
         )
-        _ = await waitForAnswer()
+        return await waitForAnswer()
     }
 
     private static func outcome(of result: RepairResult) -> Outcome {
         switch result {
-        case .reachable, .alreadyHealthy:
+        case .reachable, .alreadyHealthy, .restartedClient:
             reachable
         case let .needsApproval(message):
             Outcome(isReachable: false, message: message, needsApproval: true)
