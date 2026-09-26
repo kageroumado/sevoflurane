@@ -857,16 +857,25 @@ nonisolated enum ClientLifecycle {
     /// the control panel — and returns as soon as it's spawned, because a
     /// window the user is going to interact with has no useful exit to wait
     /// for. `@concurrent` so the spawn never runs on the calling actor.
+    ///
+    /// `environment` replaces the invocation's own, for a program that runs
+    /// in the bottle's companion prefix (``SteamParent``), and `directory`
+    /// is the working directory its Windows side starts in.
     @concurrent
-    static func launchInBottle(_ program: [String]) async {
+    static func launchInBottle(
+        _ program: [String], environment: [String: String]? = nil, directory: URL? = nil,
+    ) async {
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none, program: program,
         )
         let process = Process()
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments
-        if let environment = invocation.environment {
+        if let environment = environment ?? invocation.environment {
             process.environment = environment
+        }
+        if let directory {
+            process.currentDirectoryURL = directory
         }
         // The program's own name: a full path in a log line is the account's
         // name in a bug report, and nobody reads past it.

@@ -49,7 +49,11 @@ final class QuickLaunchStore {
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
             let logOffset = KernelDriverFailure.size()
-            guard await DaemonService.post("/program/launch?id=\(entry.id)\(query)") != nil else {
+            // Long enough for a first launch that creates the companion
+            // prefix of a program that needs a steam.exe parent (SteamParent).
+            guard await DaemonService.post(
+                "/program/launch?id=\(entry.id)\(query)", timeout: 240,
+            ) != nil else {
                 EventLog.shared.log(
                     .client,
                     "could not start \(entry.name): the background helper did not answer",

@@ -22,9 +22,37 @@ extension BottleSupervisor {
             return "\(program.url.lastPathComponent) is no longer at \(program.path)"
         }
         stageGraphics(for: program.url.lastPathComponent, renderer: explicit, appID: id)
+        if SteamParent.wants(program) {
+            return await launchUnderSteamParent(program)
+        }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
         note("started \(program.url.lastPathComponent) in \(SteamBottle.name)")
+        return nil
+    }
+
+    /// Starts a program that needs a `steam.exe` parent (``SteamParent``) in
+    /// the bottle's companion prefix, where no Steam client runs.
+    ///
+    /// The env files are written into the companion too, so the program's
+    /// own settings and launcher bundle reach it there exactly as they would
+    /// in the bottle. The working directory is the program's own folder,
+    /// which the parent passes on to it.
+    private func launchUnderSteamParent(_ program: AdoptedProgram) async -> String? {
+        let name = program.url.lastPathComponent
+        let engine = Engine.active
+        if let refusal = await SteamParent.prepare(bottle: SteamBottle.name, engine: engine) {
+            note("could not start \(name) under a steam.exe parent: \(refusal)")
+            return refusal
+        }
+        let companion = SteamParent.prefix(for: SteamBottle.name)
+        ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: companion)
+        await ClientLifecycle.launchInBottle(
+            SteamParent.invocation(program),
+            environment: SteamParent.environment(bottle: SteamBottle.name, engine: engine),
+            directory: program.url.deletingLastPathComponent(),
+        )
+        note("started \(name) under a steam.exe parent in \(SteamBottle.name)'s companion prefix, where no Steam client runs")
         return nil
     }
 

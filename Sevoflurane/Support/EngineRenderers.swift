@@ -426,14 +426,25 @@ nonisolated enum EngineRenderers {
             "drive_c/windows/\(architecture.system)",
         )
         guard manager.fileExists(atPath: system32.path) else { return }
-        let names = Set(
-            payloadDLLs(engine: engine, architecture: architecture)
-                .map(\.lastPathComponent),
-        )
+        let payloads = payloadDLLs(engine: engine, architecture: architecture)
+        let names = Set(payloads.map(\.lastPathComponent))
         for name in names {
             let target = system32.appendingPathComponent(name)
             let source = canonical.appendingPathComponent(name)
             guard manager.fileExists(atPath: source.path) else {
+                if loaderOnlyDLLs.contains(name.lowercased()),
+                   let payload = payloads.first(where: { $0.lastPathComponent == name }) {
+                    // Only another payload DLL imports this one, so a copy
+                    // here cannot be mistaken for anything the bottle's own
+                    // renderer loads, and a game pinned to that payload
+                    // needs it: Wine resolves an import only through a file
+                    // in system32, and DXMT's dxgi.dll imports winemetal.dll.
+                    if !manager.contentsEqual(atPath: payload.path, andPath: target.path) {
+                        try? manager.removeItem(at: target)
+                        try? manager.copyItem(at: payload, to: target)
+                    }
+                    continue
+                }
                 // The tree no longer carries this one, so neither may the
                 // prefix: a file left here is the previous renderer's, and
                 // Wine would load it as the real thing.
@@ -444,6 +455,14 @@ nonisolated enum EngineRenderers {
             try? manager.copyItem(at: source, to: target)
         }
     }
+
+    /// Payload DLLs that only other payload DLLs import, lowercased. A
+    /// per-game pin (`WINEDLLPATH_PREPEND`) reaches a payload's DLLs through
+    /// the loader files in system32, and these have no counterpart in Wine
+    /// or D3DMetal, so the tree never carries them while the bottle runs
+    /// another renderer. Without a file the pinned game dies at load:
+    /// `winemetal.dll (which is needed by …\system32\dxgi.dll) not found`.
+    static let loaderOnlyDLLs: Set<String> = ["winemetal.dll"]
 
     private static func isGPTkFlavor(_ engine: URL) -> Bool {
         engineInfo(engine)["flavor"] as? String == "gptk"

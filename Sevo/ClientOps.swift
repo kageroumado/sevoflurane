@@ -422,7 +422,10 @@ nonisolated enum ClientOps {
             throw Failure.message("no adopted program with id \(id) — sevo program list")
         }
         let query = renderer.map { "&renderer=\($0)" } ?? ""
-        guard await AppControl.post("/program/launch?id=\(id)\(query)") != nil else {
+        // The daemon answers once the program has started. The first launch
+        // of a program that needs a steam.exe parent creates that parent's
+        // companion prefix first (`wineboot`, about 15 s), so allow for it.
+        guard await AppControl.post("/program/launch?id=\(id)\(query)", timeout: 240) != nil else {
             throw Failure.message("the daemon would not start \(entry.name) — sevo status")
         }
         return Outcome(

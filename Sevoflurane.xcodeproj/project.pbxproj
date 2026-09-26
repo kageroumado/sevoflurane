@@ -174,6 +174,7 @@
 				Resources/Licenses/license-tiptoe.txt,
 				Resources/Licenses/license-version.txt,
 				Resources/Licenses/license-wine.txt,
+				Resources/SteamParent/steam-parent.exe,
 				Resources/nwjs/greenworks.js,
 				Resources/nwjs/preload.js,
 				Resources/sevoflurane-license.txt,

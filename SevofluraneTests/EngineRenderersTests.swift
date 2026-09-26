@@ -169,7 +169,10 @@ struct EngineRenderersTests {
 
     /// The stale-loader bug: under D3DMetal the 32-bit pass has no payload,
     /// and bailing there left the previous renderer's `syswow64` files in
-    /// place — a Sep 6 `winemetal.dll` under a tree that carries none.
+    /// place — a Sep 6 `winemetal.dll` under a tree that carries none. The
+    /// one file that stays is `winemetal.dll`, which only DXMT's own DLLs
+    /// import and which a game pinned to DXMT needs: it is the payload's
+    /// current copy, never the last renderer's.
     @Test
     func `an architecture with no payload still loses the last renderer's loader files`() throws {
         let engine = try FakeEngine()
@@ -185,7 +188,7 @@ struct EngineRenderersTests {
             .d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit,
         )
 
-        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == nil)
+        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == "pe32 winemetal dxmt")
         #expect(engine.read("wine/lib/wine/i386-windows/winemetal.dll") == nil)
         // The 64-bit half is D3DMetal's, and its loader files are still there.
         #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "pe dxgi 4.0 beta 2")
@@ -204,9 +207,11 @@ struct EngineRenderersTests {
         EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
         EngineRenderers.stage(.wined3d, engine: engine.root, bottle: engine.bottle, toolkit: nil)
 
-        // winemetal is DXMT's alone: the tree lost it, so the prefix must too.
-        #expect(engine.read("bottle/drive_c/windows/system32/winemetal.dll") == nil)
-        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == nil)
+        // winemetal is DXMT's alone: the tree lost it, and the prefix keeps
+        // the payload's copy, which nothing but a game pinned to DXMT loads.
+        #expect(engine.read("wine/lib/wine/x86_64-windows/winemetal.dll") == nil)
+        #expect(engine.read("bottle/drive_c/windows/system32/winemetal.dll") == "pe winemetal dxmt")
+        #expect(engine.read("bottle/drive_c/windows/syswow64/winemetal.dll") == "pe32 winemetal dxmt")
         // dxgi is Wine's own again, and the prefix still has a file for it —
         // without one, a game importing dxgi dies at load.
         #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "stock dxgi")
