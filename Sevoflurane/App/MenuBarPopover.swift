@@ -51,6 +51,11 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         self.notifications = notifications
         self.setup = setup
         super.init()
+        quickLaunch.launchHooks = QuickLaunchStore.LaunchHooks(
+            pressed: { [host] in host.beginProgramLaunch(appID: $0) },
+            started: { [host] in host.programDidStart(appID: $0) },
+            ended: { [host] in host.endProgramLaunch(appID: $0) },
+        )
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggle)
         statusItem.button?.setAccessibilityLabel("Sevoflurane")

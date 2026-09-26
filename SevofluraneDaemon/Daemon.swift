@@ -28,6 +28,10 @@ final class Daemon {
         // Toolkits an engine carries join the shared store before anything is staged.
         D3DMetalInstaller.adoptInstalledEnginesToolkits()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        // Staging runs here at every client start, and what it has to say
+        // (a toolkit that would not enter the tree, a D3DMetal build patched)
+        // went to a stderr nobody reads.
+        SetupLog.log = { EventLog.enqueue(.setup, $0) }
         ConfigMaterializer.engine = { Engine.active }
         // Both questions are the client's, and the only live connection to it
         // belongs to the app's bridge — so both travel the link rather than

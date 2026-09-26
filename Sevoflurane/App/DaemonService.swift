@@ -272,6 +272,14 @@ enum DaemonService {
         await exchange(path, method: "POST", body: nil, timeout: timeout)?.status
     }
 
+    /// A POST whose refusal carries a reason worth showing: the status and
+    /// the body together, or `nil` when nothing answered.
+    static func postReply(
+        _ path: String, timeout: TimeInterval = 15,
+    ) async -> (data: Data, status: Int)? {
+        await exchange(path, method: "POST", body: nil, timeout: timeout)
+    }
+
     private static func request(
         _ path: String, method: String, body: Data?, timeout: TimeInterval,
     ) async -> Data? {

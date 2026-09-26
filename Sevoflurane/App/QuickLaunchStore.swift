@@ -42,36 +42,88 @@ final class QuickLaunchStore {
         return image
     }
 
+    /// The launch story's beats, told to the Steam host by the popover that
+    /// owns both (``SteamWebHost/beginProgramLaunch(appID:)``): the row's
+    /// status line, then the window watch and the run record once the helper
+    /// has spawned the program, or the status cleared when it spawned nothing.
+    struct LaunchHooks {
+        let pressed: @MainActor (Int) -> Void
+        let started: @MainActor (Int) -> Void
+        let ended: @MainActor (Int) -> Void
+    }
+
+    @ObservationIgnored var launchHooks: LaunchHooks?
+
+    /// The programs whose launch request is in flight. A second press on one
+    /// of them is the same wish again, not a second launch: five presses
+    /// during a first companion launch made five games, 2026-09-26.
+    private(set) var launching: Set<Int> = []
+
     /// Starts a program through the daemon, which is the bottle's one parent.
     func launch(_ entry: AdoptedPrograms.Entry, renderer: Renderer? = nil) {
-        guard simulated == nil else { return }
+        guard simulated == nil, launching.insert(entry.id).inserted else { return }
         ActivationPolicy.claimRightForALaunch()
+        launchHooks?.pressed(entry.id)
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
+            defer { launching.remove(entry.id) }
             let logOffset = KernelDriverFailure.size()
             // Long enough for a first launch that creates the companion
             // prefix of a program that needs a steam.exe parent (SteamParent).
-            guard await DaemonService.post(
+            guard let reply = await DaemonService.postReply(
                 "/program/launch?id=\(entry.id)\(query)", timeout: 240,
-            ) != nil else {
+            ) else {
                 EventLog.shared.log(
                     .client,
                     "could not start \(entry.name): the background helper did not answer",
                 )
+                launchHooks?.ended(entry.id)
                 return
             }
+            guard (200 ..< 300).contains(reply.status) else {
+                // 409 is the helper declining a program that is starting or
+                // running already, which its log line says; anything else is
+                // a failure, said here with the helper's reason.
+                if reply.status != 409 {
+                    EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
+                }
+                launchHooks?.ended(entry.id)
+                return
+            }
+            launchHooks?.started(entry.id)
             guard let driver = await KernelDriverFailure.watch(
                 from: logOffset, program: entry.program.url.lastPathComponent,
             ) else { return }
             EventLog.shared.log(
                 .client, "\(entry.name) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load",
             )
-            ModalAlerts.present { Self.explainKernelDriver(driver, program: entry.name) }
+            // One alert per program at a time: every launch that failed the
+            // same way while one is up says nothing the first does not.
+            guard Self.explaining.insert(entry.name).inserted else { return }
+            ModalAlerts.present {
+                Self.explainKernelDriver(driver, program: entry.name)
+                Self.explaining.remove(entry.name)
+            }
         }
+    }
+
+    /// The programs whose kernel-driver alert is up.
+    private static var explaining: Set<String> = []
+
+    /// The reason in a helper refusal, whose body is `"<status> <reason>"`.
+    private static func reason(_ body: Data) -> String {
+        let text = String(decoding: body, as: UTF8.self)
+        guard let space = text.firstIndex(of: " ") else { return text }
+        return String(text[text.index(after: space)...])
     }
 
     /// A program that drew nothing after its kernel driver failed has no
     /// other way to say why, so the likely reason is said once.
+    ///
+    /// The app comes forward first. It runs as a menu bar app, so an alert
+    /// raised while another app is in front opened behind that app's
+    /// windows, and its modal session took every click and hover the popover
+    /// got until someone found it, 2026-09-26.
     private static func explainKernelDriver(_ driver: String, program: String) {
         let alert = NSAlert()
         alert.messageText = String(localized: "\(program) showed no window")
@@ -80,6 +132,8 @@ final class QuickLaunchStore {
         drivers cannot run on a Mac. If the program requires it, that is why it stopped.
         """)
         alert.addButton(withTitle: String(localized: "OK"))
+        NSApp.activate()
+        alert.window.level = .floating
         alert.runModal()
     }
 

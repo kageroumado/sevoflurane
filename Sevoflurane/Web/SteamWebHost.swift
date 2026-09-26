@@ -459,6 +459,29 @@ final class SteamWebHost {
         activeLaunch = nil
     }
 
+    /// A Quick Launch program was pressed. The client never hears of these,
+    /// so the app tells their launch story itself, in the same three beats a
+    /// Steam launch gets: the row's status line at once, …
+    func beginProgramLaunch(appID: Int) {
+        setLaunch(GameLaunch(appID: appID, detail: String(localized: "Starting…")), clearAfter: 180)
+    }
+
+    /// … then, once the helper has spawned it, the window watch and the run
+    /// record, which ``onGameLaunchStart`` opens for every launch, …
+    func programDidStart(appID: Int) {
+        setLaunch(
+            GameLaunch(appID: appID, detail: String(localized: "Waiting for its window…")), clearAfter: 180,
+        )
+        onGameLaunchStart?(appID)
+    }
+
+    /// … or, when the helper started nothing, the status line cleared again.
+    func endProgramLaunch(appID: Int) {
+        guard activeLaunch?.appID == appID else { return }
+        launchClear?.cancel()
+        activeLaunch = nil
+    }
+
     func setLaunch(_ launch: GameLaunch, clearAfter seconds: Int) {
         activeLaunch = launch
         launchClear?.cancel()

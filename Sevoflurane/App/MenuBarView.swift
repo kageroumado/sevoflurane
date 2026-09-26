@@ -405,7 +405,7 @@ private struct GamesColumn: View {
                         host: host, supervisor: supervisor, graphics: graphics,
                         pinEdits: pinEdits, onPinChanged: { pinEdits += 1 },
                     )
-                    QuickLaunchPrograms(quickLaunch: quickLaunch)
+                    QuickLaunchPrograms(quickLaunch: quickLaunch, activeLaunch: host.activeLaunch)
                     AddProgramRow(quickLaunch: quickLaunch)
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
@@ -753,25 +753,10 @@ private struct GameRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 
-    /// The launch affordance: a filled accent disc big enough to read as
-    /// the row's button, in place of the small tinted glyph a pointer had
-    /// to hunt for. It appears on hover, where the spinner replaces it for
-    /// the length of a launch.
-    @ViewBuilder private var trailing: some View {
-        if isLaunching || launchDetail != nil {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.8)
-                .frame(width: 26, height: 26)
-        } else {
-            Image(systemName: "play.fill")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.onAccent)
-                .frame(width: 26, height: 26)
-                .background(Color.accentColor, in: Circle())
-                .opacity(isHovered ? 1 : 0)
-                .scaleEffect(isHovered ? 1 : 0.7)
-        }
+    /// The launch affordance (``PlayBadge``); the spinner stands in for it
+    /// for the length of a launch.
+    private var trailing: some View {
+        PlayBadge(isBusy: isLaunching || launchDetail != nil, isHovered: isHovered)
     }
 }
 
@@ -781,6 +766,9 @@ private struct GameRow: View {
 /// column: they launch the same way, so they read as more of the same list.
 private struct QuickLaunchPrograms: View {
     let quickLaunch: QuickLaunchStore
+    /// The launch under way, which a program's row reads its status from as
+    /// a game's does (``SteamWebHost/beginProgramLaunch(appID:)``).
+    let activeLaunch: SteamWebHost.GameLaunch?
 
     var body: some View {
         ForEach(quickLaunch.programs) { entry in
@@ -788,17 +776,26 @@ private struct QuickLaunchPrograms: View {
                 entry: entry,
                 icon: quickLaunch.icon(for: entry),
                 quickLaunch: quickLaunch,
+                launchDetail: activeLaunch.flatMap { $0.appID == entry.id ? $0.detail : nil },
+                isLaunching: quickLaunch.launching.contains(entry.id),
             )
         }
     }
 }
 
 /// One adopted program: its own icon, its name, and a press that starts
-/// it through the daemon.
+/// it through the daemon. It reads as a game's row does, Play badge and
+/// status line included: in the same column, anything that looks different
+/// reads as something that does not play.
 private struct ProgramRow: View {
     let entry: AdoptedPrograms.Entry
     let icon: NSImage?
     let quickLaunch: QuickLaunchStore
+    /// What its launch is doing now; `nil` outside one.
+    let launchDetail: String?
+    /// Its launch request is with the helper, which a first HoYoverse launch
+    /// keeps for a quarter of a minute while it makes the companion prefix.
+    let isLaunching: Bool
     @State private var isHovered = false
     @State private var dockBundle: URL?
 
@@ -817,9 +814,18 @@ private struct ProgramRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                    } else if let launchDetail {
+                        Text(verbatim: launchDetail)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .transition(.opacity)
                     }
                 }
                 Spacer(minLength: Theme.Space.sm)
+                if entry.program.exists {
+                    PlayBadge(isBusy: isLaunching || launchDetail != nil, isHovered: isHovered)
+                }
             }
             .padding(.vertical, Theme.Space.xs)
             .contentShape(Theme.innerShape)

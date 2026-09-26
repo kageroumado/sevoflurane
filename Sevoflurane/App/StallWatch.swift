@@ -135,7 +135,13 @@ final class StallWatch {
         /// ``killsOnCPUAlone``.
         var presents: @Sendable (pid_t) -> UInt64? = { _ in nil }
         /// How long the process's Cocoa main thread has been silent, when its engine says.
-        var mainThreadSilence: @Sendable (pid_t) -> TimeInterval? = { PresentStats.mainThreadSilence(of: $0) }
+        var mainThreadSilence: @Sendable (pid_t) -> TimeInterval? = { pid in
+            // The companion's too: a HoYoverse game's page is written there.
+            PresentStats.mainThreadSilence(of: pid) ?? PresentStats.mainThreadSilence(
+                of: pid,
+                in: SteamBottle.companion.appendingPathComponent(".sevo/run"),
+            )
+        }
         var signal: @Sendable (pid_t, Int32) -> Void = { kill($0, $1) }
         /// Seconds on a monotonic clock.
         var now: @Sendable () -> TimeInterval = {

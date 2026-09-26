@@ -45,8 +45,7 @@ nonisolated enum SteamParent {
     /// supervisor stops any client or wineserver of another bottle it finds
     /// there, and a companion is not a bottle, nor one the setup assistant
     /// should offer.
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Companions")
+    static let root = SteamBottle.companionsRoot
 
     /// The companion prefix of one bottle.
     static func prefix(for bottle: String) -> URL {

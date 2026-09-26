@@ -53,6 +53,18 @@ nonisolated enum EngineRenderers {
         else { return [] }
 
         let payloads = payloadFiles(engine: engine)
+        if renderer == .d3dmetal, let toolkit {
+            // Into the store's copy, before the comparison below: the tree
+            // is kept equal to the store, so a tree patched alone would be
+            // put back at every boot.
+            switch D3DMetalPatches.apply(to: toolkit) {
+            case .unchanged: break
+            case let .patched(names):
+                SetupLog.log("D3DMetal \(toolkit.version) patched: \(names.joined(separator: ", "))")
+            case let .failed(reason):
+                SetupLog.log(reason)
+            }
+        }
         if renderer == .d3dmetal, let toolkit,
            !D3DMetalInstaller.isPlaced(toolkit, inEngine: engine) {
             do {

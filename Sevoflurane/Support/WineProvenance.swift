@@ -9,7 +9,11 @@ import Foundation
 nonisolated enum WineProvenance {
     /// The renderer that answered this app's own executable, or, failing that,
     /// any process the engine attributed to the app id.
-    static func renderer(forApp appID: Int, exe: String?, in text: String) -> String? {
+    ///
+    /// `pid` is the game's own process when the app knows it. A program
+    /// Steam did not start carries no app id (`appid=none`), so its process
+    /// is the only thing that names its `sevo:gfx` line.
+    static func renderer(forApp appID: Int, exe: String?, pid: pid_t? = nil, in text: String) -> String? {
         var pidsByExe: [(pid: Substring, exe: String)] = []
         var renderers: [Substring: Substring] = [:]
         for line in text.split(whereSeparator: \.isNewline) {
@@ -19,6 +23,7 @@ nonisolated enum WineProvenance {
                 renderers[match.output.1] = match.output.2
             }
         }
+        if let pid, let renderer = renderers[Substring(String(pid))] { return String(renderer) }
         let wanted = exe?.lowercased()
         let own = pidsByExe.last { $0.exe == wanted }
         let candidates = [own].compactMap(\.self) + pidsByExe.reversed()

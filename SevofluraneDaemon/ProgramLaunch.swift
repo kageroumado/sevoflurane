@@ -1,5 +1,30 @@
 import Foundation
 
+/// Why `/program/launch` started nothing, which decides its HTTP status.
+enum ProgramLaunchRefusal: Error, Equatable {
+    /// No such program, or its file is gone: 404.
+    case missing(String)
+    /// It is starting or running already, so this request is the extra
+    /// click: 409, which the app treats as done rather than failed.
+    case busy(String)
+    /// It could not be started: 500.
+    case failed(String)
+
+    var reason: String {
+        switch self {
+        case let .missing(reason), let .busy(reason), let .failed(reason): reason
+        }
+    }
+
+    var status: Int {
+        switch self {
+        case .missing: 404
+        case .busy: 409
+        case .failed: 500
+        }
+    }
+}
+
 /// Starting a Windows program that Steam knows nothing about.
 ///
 /// The supervisor owns every bottle process, adopted programs included, so
@@ -14,16 +39,31 @@ extension BottleSupervisor {
     /// treatment, upscaler and launcher bundle are on disk before the process
     /// reads them, and the spawn goes through the same engine invocation as
     /// everything else. Answers a refusal, or `nil` when the program started.
-    func launchProgram(id: Int, renderer explicit: Renderer? = nil) async -> String? {
+    func launchProgram(id: Int, renderer explicit: Renderer? = nil) async -> ProgramLaunchRefusal? {
         guard let program = AdoptedPrograms.program(id) else {
-            return "no adopted program with id \(id)"
+            return .missing("no adopted program with id \(id)")
         }
         guard program.exists else {
-            return "\(program.url.lastPathComponent) is no longer at \(program.path)"
+            return .missing("\(program.url.lastPathComponent) is no longer at \(program.path)")
         }
-        stageGraphics(for: program.url.lastPathComponent, renderer: explicit, appID: id)
+        let name = program.url.lastPathComponent
+        // Checked and marked before the first await: the main actor runs
+        // another request between awaits, and five clicks during a first
+        // companion launch made five prefixes and five games, 2026-09-26.
+        guard programsStarting.insert(id).inserted else {
+            note("\(name) is already starting; this request starts nothing")
+            return .busy("\(name) is already starting")
+        }
+        defer { programsStarting.remove(id) }
+        if SteamParent.wants(program), await Self.isRunning(name) {
+            // A second copy beside a running one sees another steam.exe
+            // child and takes the kernel-driver path: it would only die.
+            note("\(name) is already running; this request starts nothing")
+            return .busy("\(name) is already running")
+        }
+        stageGraphics(for: name, renderer: explicit, appID: id)
         if SteamParent.wants(program) {
-            return await launchUnderSteamParent(program)
+            return await launchUnderSteamParent(program).map(ProgramLaunchRefusal.failed)
         }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
@@ -46,14 +86,86 @@ extension BottleSupervisor {
             return refusal
         }
         let companion = SteamParent.prefix(for: SteamBottle.name)
+        let environment = SteamParent.environment(bottle: SteamBottle.name, engine: engine)
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: companion)
         await ClientLifecycle.launchInBottle(
             SteamParent.invocation(program),
-            environment: SteamParent.environment(bottle: SteamBottle.name, engine: engine),
+            environment: environment,
             directory: program.url.deletingLastPathComponent(),
         )
         note("started \(name) under a steam.exe parent in \(SteamBottle.name)'s companion prefix, where no Steam client runs")
+        if let unlocker = FPSUnlocker.unlocker(for: program) {
+            Task(name: "Start the frame-rate unlocker beside \(name)") {
+                await startUnlocker(unlocker, beside: program, environment: environment)
+            }
+        }
         return nil
+    }
+
+    /// Starts the frame-rate unlocker (``FPSUnlocker``) in the companion once
+    /// the game has been up for ``FPSUnlocker/delay``, and stops it when the
+    /// game is gone if it has not stopped by itself.
+    ///
+    /// Never before the game: an unlocker process that exists while the game
+    /// starts up makes it quit during its init (found with the launcher it
+    /// was measured with, 2026-08-05).
+    private func startUnlocker(
+        _ unlocker: URL, beside program: AdoptedProgram, environment: [String: String],
+    ) async {
+        let game = program.url.lastPathComponent
+        let own = unlocker.lastPathComponent
+        let clock = ContinuousClock()
+        let deadline = clock.now + FPSUnlocker.appearDeadline
+        while await !Self.isRunning(game) {
+            guard clock.now < deadline else {
+                note("\(game) never appeared, so its frame-rate unlocker was not started")
+                return
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        try? await Task.sleep(for: FPSUnlocker.delay)
+        guard await Self.isRunning(game) else { return }
+        guard await !Self.isRunning(own) else {
+            note("\(own) is already running beside \(game)")
+            return
+        }
+        let target = FPSUnlocker.target
+        if !FPSUnlocker.configure(unlocker, game: program, target: target) {
+            note("\(own) has no fps_config.json yet; it starts with its own frame rate")
+        }
+        // Its window must never reach the screen: shown the moment it
+        // starts, it took the foreground from the game, which minimized
+        // itself into the Dock at its next display-mode change, entering the
+        // world (2026-09-26). The engine's dock shim keeps a process with
+        // SEVO_QUIET=1 off the screen and out of the Dock (Dormison's
+        // `sevo_dock_shim.c`); an engine without that knob shows the window.
+        var quiet = environment
+        quiet["SEVO_QUIET"] = "1"
+        await ClientLifecycle.launchInBottle(
+            [SteamParent.windowsPath(unlocker.path)],
+            environment: quiet,
+            directory: unlocker.deletingLastPathComponent(),
+        )
+        note("started \(own) beside \(game), aiming for \(target) fps")
+        // The unlocker quits with the game by itself; this is for the one
+        // that does not, which would hold the companion's wineserver up.
+        while await Self.isRunning(game) {
+            try? await Task.sleep(for: .seconds(10))
+        }
+        let left = await Self.pids(named: own)
+        guard !left.isEmpty else { return }
+        for pid in left { kill(pid, SIGTERM) }
+        note("stopped \(own): \(game) is gone")
+    }
+
+    /// Whether a Windows program of that file name runs anywhere on this Mac.
+    static func isRunning(_ name: String) async -> Bool {
+        await !pids(named: name).isEmpty
+    }
+
+    static func pids(named name: String) async -> [pid_t] {
+        let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
+        return WineProcessList.pids(named: name, inPgrepLong: listing)
     }
 
     /// Runs one Windows program to completion in the bottle and answers what

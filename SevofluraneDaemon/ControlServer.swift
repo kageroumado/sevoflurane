@@ -241,7 +241,7 @@ final class ControlServer {
         }
         let renderer = Renderer(rawValue: Self.value(of: "renderer", in: query))
         if let refusal = await supervisor.launchProgram(id: id, renderer: renderer) {
-            return .error(404, refusal)
+            return .error(refusal.status, refusal.reason)
         }
         return Self.json(#"{"ok":true,"note":"program started"}"#)
     }

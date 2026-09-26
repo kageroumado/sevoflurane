@@ -36,6 +36,17 @@ nonisolated enum SteamBottle {
         Engine.active.bottlesRoot.appendingPathComponent(name)
     }
 
+    /// Where companion prefixes live (``SteamParent``): outside every
+    /// bottles directory, since a companion is not a bottle.
+    static let companionsRoot = UserHome.url
+        .appendingPathComponent("Library/Application Support/Sevoflurane/Companions")
+
+    /// The Steam bottle's companion prefix, where the programs that need a
+    /// `steam.exe` parent run and write their frame counters.
+    static var companion: URL {
+        companionsRoot.appendingPathComponent(name)
+    }
+
     /// The client's install prefix inside a given bottle.
     static func steamRoot(inBottle bottle: URL) -> URL {
         bottle.appendingPathComponent("drive_c/Program Files (x86)/Steam")

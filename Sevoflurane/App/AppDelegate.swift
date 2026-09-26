@@ -452,6 +452,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }.value
             recorder.noteNativeProcesses(alive: alive, forApp: appID)
         }
+        // A Quick Launch program is the same case in a Wine process: Steam
+        // never started it, so nothing but its process says it has ended.
+        let programs = recorder.programRuns.compactMap { appID in
+            AdoptedPrograms.program(appID).map { (appID, $0.url.lastPathComponent) }
+        }
+        guard !programs.isEmpty else { return }
+        let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
+        for (appID, exe) in programs {
+            recorder.noteNativeProcesses(
+                alive: !WineProcessList.pids(named: exe, inPgrepLong: listing).isEmpty,
+                forApp: appID, gone: nil, neverSeenChecks: RunRecorder.programNeverSeenChecks,
+            )
+        }
     }
 
     /// Watches every process the app owns and unwedges a game that has stopped

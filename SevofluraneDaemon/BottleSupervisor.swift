@@ -33,6 +33,11 @@ final class BottleSupervisor {
     var hasSeenClientUp = false
     /// Whether this boot has looked for a wineserver that answers no one.
     var checkedForStaleServer = false
+    /// The adopted programs whose launch is under way, from the request to
+    /// the spawn. A launch awaits the companion prefix for up to a minute on
+    /// its first run, and every request that arrives meanwhile would
+    /// otherwise make the prefix and start the program again beside it.
+    var programsStarting: Set<Int> = []
     /// Seconds into a boot before Wine's log is read for "cannot connect":
     /// a launcher that cannot reach its server says so within a few seconds.
     static let staleServerCheckAfter = 12

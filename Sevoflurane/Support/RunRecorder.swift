@@ -194,7 +194,7 @@ final nonisolated class RunRecorder {
         runs: URL = RunLog.root,
         wineLog: URL = WineLog.fileURL,
         processLog: URL? = nil,
-        presentStats: PresentStats = PresentStats(),
+        presentStats: PresentStats = PresentStats(companions: [SteamBottle.companion]),
     ) {
         self.runs = runs
         self.wineLog = wineLog
@@ -285,7 +285,12 @@ final nonisolated class RunRecorder {
     func noteExecutable(
         _ exe: String, pid: pid_t? = nil, forApp appID: Int, at url: URL? = nil,
     ) {
-        if let pid { open[appID]?.gamePID = pid }
+        if let pid {
+            open[appID]?.gamePID = pid
+            // A Quick Launch program's pages carry no app id either: its own
+            // process is how its frames are found.
+            if AdoptedPrograms.program(appID) != nil { presentStats.claim(pid: pid, forApp: appID) }
+        }
         guard open[appID]?.record.exe == nil else { return }
         open[appID]?.record.exe = exe
         let file = url ?? Self.executableURL(named: exe, forApp: appID)
@@ -374,7 +379,7 @@ final nonisolated class RunRecorder {
             run.provenance += run.provenance.isEmpty ? lines : "\n" + lines
         }
         let answered = WineProvenance.renderer(
-            forApp: read.appID, exe: run.record.exe, in: run.provenance,
+            forApp: read.appID, exe: run.record.exe, pid: run.gamePID, in: run.provenance,
         )
         let changed = answered.map { $0 != run.record.renderer || run.record.rendererConfirmed != true } ?? false
         if let answered, changed {
@@ -419,6 +424,21 @@ final nonisolated class RunRecorder {
         open.filter { $0.value.record.runner == GameRunner.nwjs }.map(\.key)
     }
 
+    /// The open runs of programs added to Quick Launch, which Steam never
+    /// started and sends no lifetime edge for: like a native run, only their
+    /// own processes tell their end. A game Steam launched through a
+    /// non-Steam shortcut has an id in the same range, but no program entry.
+    var programRuns: [Int] {
+        open.filter { appID, run in
+            run.record.runner != GameRunner.nwjs && AdoptedPrograms.program(appID) != nil
+        }.map(\.key)
+    }
+
+    /// How many empty checks close a program's run whose process never
+    /// appeared: about two minutes, since a HoYoverse game's first launch
+    /// makes its companion prefix before it starts.
+    static let programNeverSeenChecks = 20
+
     /// Native runs whose processes have been seen alive.
     private var nativeSeen: Set<Int> = []
     /// Checks in a row that found no process of a native run never seen alive.
@@ -430,7 +450,15 @@ final nonisolated class RunRecorder {
     /// A native run's processes were looked for. Seen and then gone is the
     /// end of the run; never seen is a game still starting, until
     /// ``nativeNeverSeenChecks`` looks have found nothing and it never started.
-    func noteNativeProcesses(alive: Bool, forApp appID: Int) {
+    ///
+    /// `gone` is how a run that was seen and then vanished ended when nobody
+    /// asked it to stop: a native run's player closed it; a Wine program's
+    /// ending is left to its Wine trail (`nil`), which tells a crash from an
+    /// exit.
+    func noteNativeProcesses(
+        alive: Bool, forApp appID: Int, gone: RunRecord.Exit.Kind? = .user,
+        neverSeenChecks: Int = nativeNeverSeenChecks,
+    ) {
         if alive {
             nativeSeen.insert(appID)
             nativeUnseen[appID] = nil
@@ -438,11 +466,11 @@ final nonisolated class RunRecorder {
             // No exit code exists for a process Steam never tracked: it was
             // asked to stop, or the player closed it.
             let stop = RunLog.takeStopRequest(forApp: appID, in: runs)
-            close(appID: appID, kind: stop.map(RunInProgress.stoppedKind) ?? .user)
+            close(appID: appID, kind: stop.map(RunInProgress.stoppedKind) ?? gone)
         } else {
             let checks = nativeUnseen[appID, default: 0] + 1
             nativeUnseen[appID] = checks
-            if checks >= Self.nativeNeverSeenChecks { close(appID: appID, kind: .unknown) }
+            if checks >= neverSeenChecks { close(appID: appID, kind: .unknown) }
         }
     }
 

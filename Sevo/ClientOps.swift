@@ -425,14 +425,33 @@ nonisolated enum ClientOps {
         // The daemon answers once the program has started. The first launch
         // of a program that needs a steam.exe parent creates that parent's
         // companion prefix first (`wineboot`, about 15 s), so allow for it.
-        guard await AppControl.post("/program/launch?id=\(id)\(query)", timeout: 240) != nil else {
+        guard let reply = await AppControl.postReply("/program/launch?id=\(id)\(query)", timeout: 240) else {
             throw Failure.message("the daemon would not start \(entry.name) — sevo status")
+        }
+        // 409: it is starting or running already, which is what was asked
+        // for, so the observation says that rather than failing.
+        if reply.status == 409 {
+            return Outcome(
+                verdict: .confirmed, intent: "program launch",
+                note: Self.refusalReason(reply.body) ?? "\(entry.name) is already running",
+            )
+        }
+        guard (200 ..< 300).contains(reply.status) else {
+            throw Failure.message(Self.refusalReason(reply.body) ?? "the daemon would not start \(entry.name) — sevo status")
         }
         return Outcome(
             verdict: .confirmed,
             intent: "program launch",
             note: "\(entry.name) started",
         )
+    }
+
+    /// The reason in a daemon refusal's body, which is `"<status> <reason>"`.
+    private static func refusalReason(_ body: Data) -> String? {
+        let text = String(decoding: body, as: UTF8.self)
+        guard let space = text.firstIndex(of: " ") else { return nil }
+        let reason = text[text.index(after: space)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? nil : reason
     }
 
     /// Runs one Windows program once, by path. Waiting is what an installer

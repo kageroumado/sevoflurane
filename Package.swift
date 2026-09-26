@@ -81,6 +81,7 @@ let package = Package(
                 "Shared",
                 "Sevoflurane/Bridge/CDPClient.swift",
                 "Sevoflurane/Setup/D3DMetalInstaller.swift",
+                "Sevoflurane/Setup/D3DMetalPatches.swift",
                 "Sevoflurane/Setup/EngineInstaller.swift",
                 "Sevoflurane/Setup/EngineManifest.swift",
                 "Sevoflurane/Setup/EngineSignature.swift",

@@ -24,15 +24,28 @@ final nonisolated class PresentStats: @unchecked Sendable {
     /// from the totals, which are not sampled.
     static let samplesKept = 4 * 60 * 60
 
-    private let runDirectory: URL
+    private let runDirectories: [URL]
     private let lock = NSLock()
     private var armed: [Int: Run] = [:]
     private var timer: DispatchSourceTimer?
 
-    /// - Parameter prefix: the bottle the games run in. Its `.sevo/run` is
-    ///   where the driver writes the pages.
-    init(prefix: URL = SteamBottle.root) {
-        self.runDirectory = prefix.appendingPathComponent(".sevo/run")
+    /// - Parameters:
+    ///   - prefix: the bottle the games run in. Its `.sevo/run` is where the
+    ///     driver writes the pages.
+    ///   - companions: the other prefixes games run in, whose pages are read
+    ///     too: the bottle's companion, where HoYoverse's games run
+    ///     (``SteamParent``).
+    init(prefix: URL = SteamBottle.root, companions: [URL] = []) {
+        self.runDirectories = ([prefix] + companions).map { $0.appendingPathComponent(".sevo/run") }
+    }
+
+    /// Counts `pid`'s page toward `appID`'s run whatever app id the page
+    /// carries: a program Steam did not start has none (``RunRecorder``
+    /// learns its process when it reaches the Mac driver).
+    func claim(pid: pid_t, forApp appID: Int) {
+        lock.lock()
+        armed[appID]?.claimed.insert(pid)
+        lock.unlock()
     }
 
     // MARK: - What a caller sees
@@ -133,11 +146,12 @@ final nonisolated class PresentStats: @unchecked Sendable {
     /// Reads every page once and folds it into the armed runs. Called by the
     /// timer; a test calls it directly.
     func sample() {
-        let pages = Self.pages(in: runDirectory)
+        let pages = runDirectories.flatMap(Self.pages(in:))
         let now = Self.uptime
         lock.lock()
         for appID in Array(armed.keys) {
-            armed[appID]?.absorb(pages.filter { $0.appid == appID }, at: now)
+            let claimed = armed[appID]?.claimed ?? []
+            armed[appID]?.absorb(pages.filter { $0.appid == appID || claimed.contains($0.pid) }, at: now)
         }
         lock.unlock()
     }
@@ -157,6 +171,9 @@ final nonisolated class PresentStats: @unchecked Sendable {
         /// What the trace last said of the window, so it says each change once.
         var focus: FrameTrace.Focus?
         var display: RunRecord.Display?
+        /// Processes counted for this run whatever app id their page carries
+        /// (``PresentStats/claim(pid:forApp:)``).
+        var claimed: Set<pid_t> = []
         /// Processes whose page this run has seen while they were alive. A page whose
         /// process is gone when the run first sees it is a dead launch's leftover — a
         /// killed process cannot unlink its own page — and its ring holds that launch's

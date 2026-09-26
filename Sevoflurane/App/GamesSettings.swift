@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings › Games: the installed games and adopted programs with a file in
 /// the settings hierarchy, and for the selected one the values it sets over
@@ -160,6 +161,7 @@ private struct GamesPlaceholder: View {
 /// The selected game's form: the catalog's groups at the game level, then
 /// its DLL overrides. Everything it changes goes through one store.
 private struct GameForm: View {
+    let gameID: Int
     let name: String
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
@@ -170,6 +172,7 @@ private struct GameForm: View {
         gameID: Int, name: String, shaders: ShaderStore, highlighted: SettingsAnchor?,
         recommendation: KnownFixes.Recommendation,
     ) {
+        self.gameID = gameID
         self.name = name
         self.shaders = shaders
         self.highlighted = highlighted
@@ -184,9 +187,84 @@ private struct GameForm: View {
                 heading: name, recommendation: recommendation,
             )
             GameDLLOverridesSection(store: store)
+            if let program = AdoptedPrograms.program(gameID),
+               FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
+                FPSUnlockerSection()
+            }
         }
         .formStyle(.grouped)
         .highlightable(.gamesSettings, highlighted: highlighted)
+    }
+}
+
+// MARK: - Frame-rate unlocker
+
+/// The unlocker Genshin Impact gets beside it (``FPSUnlocker``). One for
+/// every copy of the game, so it is set here and read by the helper at each
+/// launch.
+private struct FPSUnlockerSection: View {
+    @State private var executable = FPSUnlocker.executable
+    @State private var isEnabled = FPSUnlocker.isEnabled
+    @State private var target = FPSUnlocker.target
+
+    var body: some View {
+        Section {
+            LabeledContent("Unlocker") {
+                HStack(spacing: 6) {
+                    Text(verbatim: executable?.lastPathComponent ?? String(localized: "None"))
+                        .foregroundStyle(executable == nil ? .secondary : .primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(executable?.path ?? "")
+                    Button("Choose…", action: choose)
+                    if executable != nil {
+                        Button("Remove") {
+                            executable = nil
+                            FPSUnlocker.executable = nil
+                        }
+                    }
+                }
+            }
+            Toggle("Start it with the game", isOn: $isEnabled)
+                .disabled(executable == nil)
+                .onChange(of: isEnabled) { _, on in FPSUnlocker.isEnabled = on }
+            Picker("Frame rate", selection: $target) {
+                ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
+            }
+            .disabled(executable == nil)
+            .onChange(of: target) { _, fps in FPSUnlocker.target = fps }
+        } header: {
+            Text("FPS unlocker")
+        } footer: {
+            Text("""
+            Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: \
+            Sevoflurane starts it beside the game 30 seconds after launch, in the same Windows, and \
+            points its fps_config.json at the game. It changes the running game's memory, which \
+            HoYoverse's terms do not allow, so the choice is yours.
+            """)
+        }
+    }
+
+    /// The offered rates, and the stored one if it is not among them.
+    private var targets: [Int] {
+        FPSUnlocker.targets.contains(target) ? FPSUnlocker.targets : (FPSUnlocker.targets + [target]).sorted()
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.title = String(localized: "Choose the FPS Unlocker")
+        panel.prompt = String(localized: "Choose")
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if let exe = UTType("com.microsoft.windows-executable") {
+            panel.allowedContentTypes = [exe]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        executable = url
+        FPSUnlocker.executable = url
+        if !isEnabled {
+            isEnabled = true
+        }
     }
 }
 

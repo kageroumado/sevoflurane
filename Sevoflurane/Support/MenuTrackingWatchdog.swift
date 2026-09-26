@@ -236,6 +236,16 @@ final class MenuTrackingWatchdog {
     }
 
     private func evaluate() {
+        // A modal alert runs its own loop in the modal-panel mode, which
+        // starves the default mode exactly as a stuck menu does, and none of
+        // the levers can end it: the launch-option chooser and a kernel-driver
+        // alert each drew all four, down to `menu-freeze-unrecovered`, with
+        // the app answering throughout (2026-09-26). The clock holds until it
+        // closes.
+        if NSApp.modalWindow != nil {
+            lastDefaultTick = .now
+            return
+        }
         let starved = Self.seconds(ContinuousClock.now - lastDefaultTick)
         let tick = Self.tick(
             starvedSeconds: starved, state: state, privateLeverEngages: Self.privateLeverEngages,

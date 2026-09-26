@@ -119,6 +119,7 @@
 				App/MenuBarIcon.swift,
 				App/MenuBarPopover.swift,
 				App/MenuBarView.swift,
+				App/PlayBadge.swift,
 				App/ProcessMonitorWindow.swift,
 				App/QuickLaunchStore.swift,
 				App/RendererPicker.swift,
