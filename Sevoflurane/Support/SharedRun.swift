@@ -8,7 +8,7 @@ import Foundation
 /// The keys are the wire format, version ``version``; changing one is a
 /// version bump on both ends.
 nonisolated struct SharedRun: Codable, Equatable, Sendable {
-    static let version = 1
+    static let version = 2
 
     var v: Int
     /// The launch's hour, UTC.
@@ -34,13 +34,14 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     var resolution: RunRecord.Resolution?
     var windowAfterSeconds: Double?
     var durationSeconds: Double?
-    /// The display the game was played on.
+    /// The display the game was played on; absent for a run none of whose windows was
+    /// ever seen on screen.
     var display: RunRecord.Display?
-    /// Seconds of the run that were gameplay (``GameplayWindow``), absent for a run with no
-    /// frame trace. What ``fps`` is measured over.
-    var gameplaySeconds: Double?
+    /// Seconds of the run that were gameplay (``GameplayWindow``); 0 for a run that never
+    /// settled into play or left no frame trace. What ``fps`` is measured over.
+    var gameplaySeconds: Double
     /// The frame rate over the gameplay only, and only when it lasted
-    /// ``GameplayWindow/Rules/minimumSeconds`` on a display with hardware behind it.
+    /// ``GameplayWindow/Rules/minimumSeconds`` on a display known to have hardware behind it.
     var fps: FrameRate?
     var stalls: Int
     var exit: String
@@ -63,6 +64,8 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         var p99Milliseconds: Double?
         var hitches: Int?
         var samples: Int
+        /// ``RunRecord/Gameplay/steadyFPS``.
+        var steadyFPS: Double?
 
         enum CodingKeys: String, CodingKey {
             case avg
@@ -70,6 +73,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
             case low01
             case p99Milliseconds = "p99_ms"
             case hitches, samples
+            case steadyFPS = "steady_fps"
         }
     }
 
@@ -110,7 +114,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         guard let summary = gameplay.frameTimes else { return nil }
         return FrameRate(
             avg: summary.avg, low1: summary.low1, low01: summary.low01, p99Milliseconds: summary.p99,
-            hitches: summary.hitches, samples: Int(gameplay.seconds.rounded()),
+            hitches: summary.hitches, samples: Int(gameplay.seconds.rounded()), steadyFPS: gameplay.steadyFPS,
         )
     }
 
@@ -144,8 +148,8 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         durationSeconds = record.durationSeconds
         display = record.display
         let gameplay = record.fps?.gameplay
-        gameplaySeconds = gameplay?.seconds
-        fps = record.display?.virtual == true ? nil : gameplay.flatMap(Self.frameRate(of:))
+        gameplaySeconds = gameplay?.seconds ?? 0
+        fps = record.display?.virtual == false ? gameplay.flatMap(Self.frameRate(of:)) : nil
         stalls = record.stalls?.count ?? 0
         exit = record.exit?.kind.rawValue ?? RunRecord.Exit.Kind.unknown.rawValue
         // A crash on the way out comes after the user left the game, so it

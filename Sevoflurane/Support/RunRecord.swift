@@ -164,6 +164,9 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         /// The kept frames summarized; nil for a gameplay window shorter than
         /// ``GameplayWindow/Rules/minimumSeconds``, which carries no frame rate.
         var frameTimes: FrameStats.Summary?
+        /// The rate the game held its frames to, when it held them to one
+        /// (``GameplayWindow/steadyRate(_:)``): its own cap, or the display's refresh.
+        var steadyFPS: Double?
 
         enum CodingKeys: String, CodingKey {
             case from = "from_s"
@@ -171,6 +174,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             case away = "away_s"
             case gaps
             case frameTimes = "frame_times"
+            case steadyFPS = "steady_fps"
         }
     }
 
@@ -247,10 +251,15 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             /// user had left it, and it fell over on the way out. Collected like a crash, never
             /// offered as one, and a compatibility verdict leaves it out.
             case crashAtExit = "crash-at-exit"
-            /// The game was asked to stop, through Sevoflurane or `sevo`, and
-            /// went. Steam ends a game with `TerminateProcess`, which reads as
-            /// exit status 1 with no exception behind it.
+            /// A person asked the game to stop, through Steam's Stop button or
+            /// Sevoflurane's menu, and it went. Steam ends a game with
+            /// `TerminateProcess`, which reads as exit status 1 with no exception
+            /// behind it.
             case stopped
+            /// `sevo` asked the game to stop (`sevo app terminate`, an agent), and it
+            /// went: the run lasted as long as a script wanted it to, so its length
+            /// and its frame rate say nothing about the game.
+            case stoppedByTool = "stopped-by-tool"
             /// A non-zero exit status with no exception behind it and no stop
             /// on record: the game gave up by itself, or Steam's own Stop
             /// button ended it — the two read the same from here.
@@ -368,6 +377,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case .crashAtExit: exit.code.map { String(localized: "crashed while exiting — exit \($0)") }
             ?? String(localized: "crashed while exiting")
         case .stopped: String(localized: "stopped on request")
+        case .stoppedByTool: String(localized: "stopped by sevo")
         case .endedNotResponding: String(localized: "ended by the user while it was not responding")
         case .exitError: exit.code.map { String(localized: "exited with an error — exit \($0)") }
             ?? String(localized: "exited with an error")
@@ -401,6 +411,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case .crash: "crashed — exit\(code)"
         case .crashAtExit: "crashed while exiting — exit\(code)"
         case .stopped: "stopped on request"
+        case .stoppedByTool: "stopped by sevo"
         case .endedNotResponding: "ended by the user while it was not responding"
         case .exitError: "exited with an error — exit\(code)"
         case .steamTerminate: "stopped by Steam"

@@ -7897,6 +7897,17 @@
         }
       }
     },
+    "stopped by sevo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已由 sevo 停止"
+          }
+        }
+      }
+    },
     "stopped on request" : {
       "extractionState" : "manual",
       "localizations" : {

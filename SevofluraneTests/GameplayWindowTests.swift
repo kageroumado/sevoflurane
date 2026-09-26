@@ -129,6 +129,22 @@ struct GameplayWindowTests {
         #expect(gameplay.frameTimes != nil)
     }
 
+    @Test
+    func `a game held to one rate has that rate as its steady rate, one that wanders has none`() {
+        // Capped at 30: every frame within a millisecond of 33.3 ms.
+        let capped = (0 ..< 1800).map { Float(33.33) + Float($0 % 3) - 1 }
+        #expect(GameplayWindow.steadyRate(capped) == 30)
+        // GPU-bound: 40 fps in one scene, 25 in the next.
+        let bound = Array(repeating: Float(25), count: 900) + Array(repeating: Float(40), count: 900)
+        #expect(GameplayWindow.steadyRate(bound) == nil)
+    }
+
+    @Test
+    func `the played 9-nine run wandered too much to have held one rate`() throws {
+        let gameplay = try #require(GameplayWindow.gameplay(of: Self.trace("2026-09-26T00-43-41Z")))
+        #expect(gameplay.steadyFPS == nil)
+    }
+
     // MARK: - The pages a run follows
 
     @Test

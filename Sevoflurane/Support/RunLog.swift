@@ -36,22 +36,34 @@ nonisolated enum RunLog {
         root.appendingPathComponent(".stop-\(appID)")
     }
 
-    /// Leaves word that this app is about to be stopped on purpose, for the
-    /// recorder that will see its process exit with status 1. A file, because
-    /// the request can come from `sevo` and the recorder lives in the app.
-    static func noteStopRequest(forApp appID: Int, in root: URL = root) {
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try? Data().write(to: stopRequestURL(forApp: appID, in: root))
+    /// Who asked for a game to stop.
+    enum StopSource: String, Sendable {
+        /// A person: Steam's Stop button, Sevoflurane's menu or popover. Every one of
+        /// these reaches the client through the page's `TerminateApp`.
+        case player
+        /// `sevo` or an agent speaking through it, whose stops come whenever a script
+        /// was done with the game.
+        case tool
     }
 
-    /// Whether a stop was asked for within ``stopRequestLife``; the word is
-    /// taken, so it answers for one ending.
-    static func takeStopRequest(forApp appID: Int, in root: URL = root) -> Bool {
+    /// Leaves word that this app is about to be stopped on purpose, and by whom, for
+    /// the recorder that will see its process exit with status 1. A file, because
+    /// the request can come from `sevo` and the recorder lives in the app.
+    static func noteStopRequest(forApp appID: Int, by source: StopSource, in root: URL = root) {
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try? Data(source.rawValue.utf8).write(to: stopRequestURL(forApp: appID, in: root))
+    }
+
+    /// Who asked for a stop within ``stopRequestLife``, or nil; the word is taken,
+    /// so it answers for one ending.
+    static func takeStopRequest(forApp appID: Int, in root: URL = root) -> StopSource? {
         let url = stopRequestURL(forApp: appID, in: root)
-        guard let written = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        else { return false }
+        guard let written = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+              let contents = try? String(contentsOf: url, encoding: .utf8)
+        else { return nil }
         try? FileManager.default.removeItem(at: url)
-        return Date().timeIntervalSince(written) <= stopRequestLife
+        guard Date().timeIntervalSince(written) <= stopRequestLife else { return nil }
+        return StopSource(rawValue: contents)
     }
 
     /// A month's file, whether or not it exists.

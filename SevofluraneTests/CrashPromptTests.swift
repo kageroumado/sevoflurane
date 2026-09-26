@@ -52,7 +52,10 @@ struct CrashPromptTests {
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: 1))))
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: nil))))
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .watchdog, code: nil))))
-        for kind in [RunRecord.Exit.Kind.user, .crashAtExit, .stopped, .exitError, .steamTerminate, .appQuit, .unknown] {
+        for kind in [
+            RunRecord.Exit.Kind.user, .crashAtExit, .stopped, .stoppedByTool, .exitError, .steamTerminate, .appQuit,
+            .unknown,
+        ] {
             #expect(!CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: kind, code: 0))))
         }
         #expect(!CrashPromptPolicy.deserves(Self.record(exit: nil)))
@@ -185,9 +188,13 @@ struct CrashPromptTests {
         #expect(CrashPromptPolicy.deserves(ended) == (expected == .crash))
     }
 
-    @Test(arguments: [(413_151, true, RunRecord.Exit.Kind.stopped), (413_152, false, .exitError)])
+    @Test(arguments: [
+        (413_151, RunLog.StopSource?.some(.player), RunRecord.Exit.Kind.stopped),
+        (413_153, .some(.tool), .stoppedByTool),
+        (413_152, nil, .exitError),
+    ])
     func `exit status 1 without an exception is a stop or an error, never a crash`(
-        appID: Int, stopAsked: Bool, expected: RunRecord.Exit.Kind,
+        appID: Int, stopAsked: RunLog.StopSource?, expected: RunRecord.Exit.Kind,
     ) async throws {
         let manager = FileManager.default
         let root = manager.temporaryDirectory.appendingPathComponent("crash-prompt-tests-\(UUID().uuidString)")
@@ -207,7 +214,7 @@ struct CrashPromptTests {
         [2026-09-18 03:11:42] AppID \(appID) no longer tracking PID 1400, exit code 1
         
         """.utf8).write(to: processLog)
-        if stopAsked { RunLog.noteStopRequest(forApp: appID, in: root) }
+        if let stopAsked { RunLog.noteStopRequest(forApp: appID, by: stopAsked, in: root) }
         RunRecorder(runs: root, wineLog: wine, processLog: processLog).reattach()
 
         var record: RunRecord?

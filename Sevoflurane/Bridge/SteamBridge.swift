@@ -668,8 +668,8 @@ actor SteamBridge {
         if path == "SteamClient.Apps.TerminateApp",
            let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {
             // Every stop asked for in the page — the library's Stop button, the
-            // menu bar — passes here. The run that ends next ended on request.
-            RunLog.noteStopRequest(forApp: appID)
+            // menu bar — passes here. The run that ends next a person ended.
+            RunLog.noteStopRequest(forApp: appID, by: .player)
         }
         let call = PerfProbe.bridge.beginInterval(
             "SteamClientCall",

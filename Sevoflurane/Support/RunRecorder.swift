@@ -76,7 +76,7 @@ nonisolated struct RunInProgress: Sendable {
         record.exit = RunRecord.Exit(
             kind: kind ?? Self.kind(
                 code: exit?.code, ending: ending, endedNotResponding: endedNotResponding,
-                stopRequested: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
+                stopRequest: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
                 steamError: steamError, unrecorded: unrecorded,
             ),
             code: exit?.code,
@@ -89,16 +89,24 @@ nonisolated struct RunInProgress: Sendable {
 
     /// How a run ended, from what the client and Steam's log actually say.
     private static func kind(
-        code: Int?, ending: WineExceptionTrail.Ending, endedNotResponding: Bool, stopRequested: Bool,
+        code: Int?, ending: WineExceptionTrail.Ending, endedNotResponding: Bool, stopRequest: RunLog.StopSource?,
         steamError: String?, unrecorded: RunRecord.Exit.Kind,
     ) -> RunRecord.Exit.Kind {
         if ending.crash != nil { return ending.afterWindowsClosed ? .crashAtExit : .crash }
         if endedNotResponding { return .endedNotResponding }
         if let code {
             if code == 0 { return .user }
-            return stopRequested ? .stopped : .exitError
+            return stopRequest.map(stoppedKind) ?? .exitError
         }
         return steamError == nil ? unrecorded : .steamTerminate
+    }
+
+    /// The ending a stop asked for by `source` is.
+    static func stoppedKind(_ source: RunLog.StopSource) -> RunRecord.Exit.Kind {
+        switch source {
+        case .player: .stopped
+        case .tool: .stoppedByTool
+        }
     }
 
     /// The armed form of this run, for the file that outlives the process.
@@ -429,7 +437,8 @@ final nonisolated class RunRecorder {
         } else if nativeSeen.remove(appID) != nil {
             // No exit code exists for a process Steam never tracked: it was
             // asked to stop, or the player closed it.
-            close(appID: appID, kind: RunLog.takeStopRequest(forApp: appID, in: runs) ? .stopped : .user)
+            let stop = RunLog.takeStopRequest(forApp: appID, in: runs)
+            close(appID: appID, kind: stop.map(RunInProgress.stoppedKind) ?? .user)
         } else {
             let checks = nativeUnseen[appID, default: 0] + 1
             nativeUnseen[appID] = checks

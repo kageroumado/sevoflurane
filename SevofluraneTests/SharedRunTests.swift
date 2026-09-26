@@ -18,6 +18,7 @@ struct SharedRunTests {
         for private_ in ["Secret Game Title", "/Users/", "C:\\\\", "0xdeadbeef", "a renderer note"] {
             #expect(!text.contains(private_))
         }
+        #expect(run.v == 2)
         #expect(run.t == "2026-09-25T14:00:00Z")
         #expect(run.exe == "Game-Win64-Shipping.exe")
         #expect(run.fps?.p99Milliseconds == 24.5)
@@ -49,7 +50,12 @@ struct SharedRunTests {
         record.fps?.gameplay = nil
         run = try #require(SharedRun(record: record, appVersion: "1.14"))
         #expect(run.fps == nil)
-        #expect(run.gameplaySeconds == nil)
+        #expect(run.gameplaySeconds == 0)
+
+        record = Self.fullRecord()
+        record.display = nil
+        run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.fps == nil)
 
         record = Self.fullRecord()
         record.display?.virtual = true

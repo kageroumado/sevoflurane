@@ -92,10 +92,33 @@ nonisolated enum GameplayWindow {
     static func gameplay(of trace: FrameTrace.Contents, rules: Rules = .standard) -> RunRecord.Gameplay? {
         guard let result = compute(trace, rules: rules) else { return nil }
         let seconds = result.seconds
+        let measured = seconds >= rules.minimumSeconds
         return RunRecord.Gameplay(
             from: round(result.from), seconds: round(seconds), away: round(result.away), gaps: result.gaps,
-            frameTimes: seconds >= rules.minimumSeconds ? FrameStats.summarize(result.frameTimes) : nil,
+            frameTimes: measured ? FrameStats.summarize(result.frameTimes) : nil,
+            steadyFPS: measured ? steadyRate(result.frameTimes) : nil,
         )
+    }
+
+    /// How far from the median frame time the 5th and 95th percentiles may lie for a run
+    /// to count as held to one rate.
+    static let steadyBand = 1.1
+
+    /// The rate a run's frames were held to, or nil for frames that wandered.
+    ///
+    /// A game that caps itself, or is paced by the display, puts nine frames in ten
+    /// within a tenth of one frame time whatever the scene; a game limited by the GPU
+    /// slows and speeds up with what is on screen. The community database takes the
+    /// highest such rate any Mac held as the game's own cap, so a title that runs at a
+    /// fixed 30 is judged against 30 rather than against the display.
+    static func steadyRate(_ times: [Float]) -> Double? {
+        guard times.count >= 100 else { return nil }
+        let sorted = times.sorted()
+        let p5 = FrameStats.percentile(sorted, 0.05)
+        let p50 = FrameStats.percentile(sorted, 0.50)
+        let p95 = FrameStats.percentile(sorted, 0.95)
+        guard p50 > 0, p95 <= p50 * steadyBand, p5 >= p50 / steadyBand else { return nil }
+        return round(1000 / p50)
     }
 
     /// The first frame gameplay can start at (rule 1), or nil.

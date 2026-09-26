@@ -474,8 +474,8 @@ private struct FindingsCard: View {
                 .font(.headline)
             if findings.isEmpty {
                 Text(InterfaceCopy.localized(hasReport
-                    ? "A report was collected and nothing in it names an error."
-                    : "No report was collected: this run ended normally and diagnostics were off. Settings › Diagnostics collects one after every run."))
+                        ? "A report was collected and nothing in it names an error."
+                        : "No report was collected: this run ended normally and diagnostics were off. Settings › Diagnostics collects one after every run."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
