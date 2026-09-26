@@ -75,6 +75,34 @@ struct SharedRunTests {
     }
 
     @Test
+    func `a service that is not there stops the sends, anything else backs off`() {
+        let classOf = { StatsUploader.failureClass(of: $0) }
+        for status in [404, 410, 501] {
+            #expect(classOf(StatsUploader.Failure.refused(status: status, reason: nil)) == .serviceAbsent)
+        }
+        #expect(classOf(StatsUploader.Failure.refused(status: 503, reason: nil)) == .serverError)
+        #expect(classOf(StatsUploader.Failure.refused(status: 400, reason: "bad")) == .refused)
+        #expect(classOf(StatsUploader.Failure.unreachable("offline")) == .unreachable)
+        #expect((0 ..< 7).map(StatsUploader.wait(afterFailures:))
+            == [.seconds(60), .seconds(300), .seconds(1800), .seconds(7200), .seconds(21600), .seconds(21600), .seconds(21600)])
+    }
+
+    @Test
+    func `a state written before the backoff was kept still reads, sequence and all`() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("state-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(#"{"registered":"abc","seq":41,"sentRuns":3}"#.utf8).write(to: url)
+        let state = StatsStore.readState(from: url)
+        #expect(state.seq == 41)
+        #expect(state.failures == nil)
+        var next = state
+        next.failures = 2
+        next.nextTry = Date(timeIntervalSince1970: 1_790_000_000)
+        StatsStore.writeState(next, to: url)
+        #expect(StatsStore.readState(from: url) == next)
+    }
+
+    @Test
     func `the queue survives a round trip through its file`() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("queue-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: url) }

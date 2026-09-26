@@ -25,10 +25,40 @@ actor StatsUploader {
         case refused(status: Int, reason: String?)
     }
 
+    /// How a send failed, as far as what to do next is concerned.
+    enum FailureClass: Equatable, Sendable {
+        /// Nothing answers these paths: the service is not deployed (404,
+        /// 410, 501). Asking again in this launch would get the same answer.
+        case serviceAbsent
+        case unreachable
+        case serverError
+        case refused
+        case noSecureEnclave
+    }
+
+    nonisolated static func failureClass(of error: any Error) -> FailureClass {
+        switch error as? Failure {
+        case .noSecureEnclave: .noSecureEnclave
+        case .unreachable: .unreachable
+        case let .refused(status, _) where [404, 410, 501].contains(status): .serviceAbsent
+        case let .refused(status, _) where status >= 500: .serverError
+        case .refused, nil: .refused
+        }
+    }
+
+    /// The wait after `failures` sends in a row failed, the first at zero.
+    nonisolated static func wait(afterFailures failures: Int) -> Duration {
+        backoff[min(max(failures, 0), backoff.count - 1)]
+    }
+
     private var session = URLSession(configuration: .ephemeral)
-    private var failures = 0
     private var retry: Task<Void, Never>?
     private var isFlushing = false
+    /// The service answered that it is not there; nothing is sent again
+    /// until the app next launches.
+    private var serviceAbsent = false
+    /// The last failure's class, so a run of the same failure is logged once.
+    private var lastFailure: FailureClass?
 
     nonisolated static func log(_ message: String) {
         EventLog.enqueue(.app, "stats: \(message)")
@@ -59,7 +89,13 @@ actor StatsUploader {
     /// Sends what is queued, a batch at a time, registering first when the
     /// server does not know this install yet.
     func flush() async {
-        guard !isFlushing, Preferences.sharesRunStats == true else { return }
+        guard !isFlushing, !serviceAbsent, Preferences.sharesRunStats == true else { return }
+        // A backoff that outlived the last launch, or that a closing run
+        // arrived during, is waited out.
+        if let next = StatsStore.readState().nextTry, next > .now {
+            if retry == nil { scheduleRetry(in: .seconds(next.timeIntervalSinceNow)) }
+            return
+        }
         isFlushing = true
         defer { isFlushing = false }
         let cutoff = Date.now.addingTimeInterval(-Self.queueLife)
@@ -76,9 +112,11 @@ actor StatsUploader {
                 state.sentRuns += batch.count
                 state.lastSent = .now
                 state.lastError = nil
+                state.failures = nil
+                state.nextTry = nil
                 StatsStore.writeState(state)
             }
-            failures = 0
+            lastFailure = nil
         } catch {
             noteFailure(error)
         }
@@ -224,13 +262,36 @@ actor StatsUploader {
             state.registered = nil
             StatsStore.writeState(state)
         }
-        let wait = Self.backoff[min(failures, Self.backoff.count - 1)]
-        failures += 1
-        Self.log("send failed, \(description); next try in \(wait)")
+        let failure = Self.failureClass(of: error)
+        defer { lastFailure = failure }
+        if failure == .serviceAbsent {
+            serviceAbsent = true
+            retry?.cancel()
+            retry = nil
+            state.failures = nil
+            state.nextTry = nil
+            StatsStore.writeState(state)
+            Self.log("the statistics service is not available (\(description)); queued runs wait, "
+                + "and the next launch asks again")
+            return
+        }
+        let failures = state.failures ?? 0
+        let wait = Self.wait(afterFailures: failures)
+        state.failures = failures + 1
+        state.nextTry = Date.now.addingTimeInterval(TimeInterval(wait.components.seconds))
+        StatsStore.writeState(state)
+        if failure != lastFailure {
+            Self.log("send failed, \(description); next try in \(wait), and more failures like it are not logged")
+        }
+        scheduleRetry(in: wait)
+    }
+
+    private func scheduleRetry(in wait: Duration) {
         retry?.cancel()
         retry = Task(name: "Retry sending shared runs") {
             try? await Task.sleep(for: wait)
             guard !Task.isCancelled else { return }
+            self.retry = nil
             await self.flush()
         }
     }

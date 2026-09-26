@@ -29,6 +29,11 @@ nonisolated enum StatsStore {
         var sentRuns: Int = 0
         var lastSent: Date?
         var lastError: String?
+        /// Sends that failed in a row, and when the next may go. Kept on disk
+        /// so a relaunch waits out the same backoff rather than starting it
+        /// over.
+        var failures: Int?
+        var nextTry: Date?
     }
 
     static func readState(from url: URL = stateURL) -> State {
