@@ -59,12 +59,23 @@ nonisolated struct StatsIdentity: Sendable {
 
     /// What registration carries besides the key: App Attest's certificate
     /// chain binding an Apple-attested key to ours, and a DeviceCheck token
-    /// the server trades with Apple for this device's two bits. Either can be
-    /// absent; the server decides what an install without them is worth.
+    /// the server trades with Apple for this device's two bits. The server
+    /// makes an install `attested` on App Attest, `device` on DeviceCheck
+    /// alone, and `unverified` on neither. An attesting Mac sends the token
+    /// too: its bit is what tells a reinstall from a new Mac.
     struct Evidence: Sendable {
         var appAttestKeyID: String?
         var attestation: Data?
         var deviceToken: Data?
+
+        /// The tier this evidence can earn, for the log.
+        var tier: String {
+            switch (attestation, deviceToken) {
+            case (_?, _): "attested"
+            case (nil, _?): "device"
+            case (nil, nil): "unverified"
+            }
+        }
     }
 
     /// App Attest signs `SHA-256(publicKeyDER ‖ challenge)`, so the

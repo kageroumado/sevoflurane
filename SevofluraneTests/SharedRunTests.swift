@@ -107,6 +107,16 @@ struct SharedRunTests {
     }
 
     @Test
+    func `evidence names the strongest tier it can earn`() {
+        let attestation = Data([1])
+        let token = Data([2])
+        #expect(StatsIdentity.Evidence(appAttestKeyID: "k", attestation: attestation, deviceToken: token).tier == "attested")
+        #expect(StatsIdentity.Evidence(appAttestKeyID: "k", attestation: attestation).tier == "attested")
+        #expect(StatsIdentity.Evidence(deviceToken: token).tier == "device")
+        #expect(StatsIdentity.Evidence().tier == "unverified")
+    }
+
+    @Test
     func `memory rounds to the nearest size Apple sells`() {
         let gib: UInt64 = 1_073_741_824
         #expect(MacHardware.memoryTier(bytes: 64 * gib) == 64)

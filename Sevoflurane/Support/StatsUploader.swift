@@ -196,6 +196,7 @@ actor StatsUploader {
               let challengeBytes = Data(base64Encoded: challenge.challenge)
         else { throw Failure.refused(status: 200, reason: "no challenge") }
         let evidence = await identity.evidence(challenge: challengeBytes)
+        Self.log("registering with \(evidence.tier) evidence")
         var fields: [String: Any] = [
             "public_key": identity.publicKeyDER.base64EncodedString(),
             "challenge": challenge.challenge,
