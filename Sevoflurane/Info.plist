@@ -12,6 +12,14 @@
 				<string>steam</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Sevoflurane Game</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sevoflurane</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>

@@ -122,6 +122,26 @@ nonisolated enum GameLaunchers {
         return executable
     }
 
+    /// The game's bundle, when a Dock tile made of it would start the game:
+    /// its loader hands a LaunchServices open with no program to
+    /// `sevoflurane://play/<id>`. A loader copied from an engine without that
+    /// handoff would print wine's usage and quit, so its bundle is not offered.
+    static func dockableBundle(appID: Int) -> URL? {
+        let directory = directory(appID: appID)
+        guard let bundle = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil,
+        ))?.first(where: { $0.pathExtension == "app" }) else { return nil }
+        let stem = bundle.deletingPathExtension().lastPathComponent
+        let loader = bundle.appendingPathComponent("Contents/MacOS/\(stem)")
+        guard let bytes = try? Data(contentsOf: loader, options: .alwaysMapped),
+              bytes.range(of: Data(dockHandoff.utf8)) != nil
+        else { return nil }
+        return bundle
+    }
+
+    /// The URL prefix the loader's handoff opens, and what the app answers.
+    static let dockHandoff = "sevoflurane://play/"
+
     /// One line per bundle in the store — `<appid>/<Title>.app` and the
     /// engine its loader was copied from — for a diagnostics report.
     static func inventory() -> [String] {

@@ -446,10 +446,12 @@ private struct ColumnHeading: View {
 
 // MARK: - Row facts
 
-/// What a game row reads from disk: its pin and its restart need.
+/// What a game row reads from disk: its pin, its restart need and the
+/// bundle it can be kept in the Dock as.
 private nonisolated struct GameRowFacts: Equatable, Sendable {
     let pinned: Renderer?
     let restartFor: Renderer?
+    let dockBundle: URL?
 }
 
 /// Reads the rows' facts from the game configs off the main actor rather
@@ -495,6 +497,7 @@ private struct GameRowFactsReader: ViewModifier {
             (id, GameRowFacts(
                 pinned: GameConfig.game(id).renderer,
                 restartFor: BottleGraphics.rendererNeedingRestart(forApp: id),
+                dockBundle: GameLaunchers.dockableBundle(appID: id),
             ))
         })
     }
@@ -544,6 +547,7 @@ private struct RecentGames: View {
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
+                        dockBundle: facts[game.id]?.dockBundle,
                         isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
@@ -579,6 +583,7 @@ private struct LibraryIndexList: View {
                             .flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
+                        dockBundle: facts[game.id]?.dockBundle,
                         isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
@@ -603,6 +608,8 @@ private struct GameRow: View {
     let pinned: Renderer?
     /// The renderer this launch would have to restart the client for.
     let restartFor: Renderer?
+    /// The game's own bundle, once a launch has built one.
+    let dockBundle: URL?
     /// The client has kept this game at Synchronizing for longer than a sync takes.
     let isHeldInCloudSync: Bool
     let supervisor: ClientSupervisor
@@ -659,6 +666,7 @@ private struct GameRow: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
+        .modifier(DockDrag(bundle: dockBundle))
         .contextMenu {
             // One-shot: swap the renderer and launch now. The launch path
             // restages the tree (or restarts, if the engine or sync must
@@ -676,6 +684,7 @@ private struct GameRow: View {
                 }
             }
             Divider()
+            KeepInDockItem(bundle: dockBundle)
             GameSettingsItem(id: game.id, name: game.name)
         }
     }
@@ -791,6 +800,7 @@ private struct ProgramRow: View {
     let icon: NSImage?
     let quickLaunch: QuickLaunchStore
     @State private var isHovered = false
+    @State private var dockBundle: URL?
 
     var body: some View {
         Button {
@@ -827,6 +837,8 @@ private struct ProgramRow: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
+        .modifier(DockDrag(bundle: dockBundle))
+        .task(id: entry.id) { dockBundle = await Self.readDockBundle(entry.id) }
         .contextMenu {
             Menu("Run with…") {
                 ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
@@ -834,11 +846,17 @@ private struct ProgramRow: View {
                 }
             }
             Divider()
+            KeepInDockItem(bundle: dockBundle)
             Button("Show in Finder") { quickLaunch.showInFinder(entry) }
             Button("Remove") { quickLaunch.remove(entry) }
             Divider()
             GameSettingsItem(id: entry.id, name: entry.name)
         }
+    }
+
+    @concurrent
+    private nonisolated static func readDockBundle(_ id: Int) async -> URL? {
+        GameLaunchers.dockableBundle(appID: id)
     }
 
     private var artwork: some View {
@@ -853,6 +871,34 @@ private struct ProgramRow: View {
         }
         .frame(width: 27, height: 27)
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Dock
+
+/// Keeps the game's own bundle in the Dock, where a click starts it through
+/// the app and the running game lights the same tile. Offered once a launch
+/// has built the bundle.
+private struct KeepInDockItem: View {
+    let bundle: URL?
+
+    var body: some View {
+        if let bundle {
+            Button("Keep in Dock") { DockTiles.keep(bundle) }
+        }
+    }
+}
+
+/// A row with a bundle drags out as that bundle, for dropping on the Dock.
+private struct DockDrag: ViewModifier {
+    let bundle: URL?
+
+    func body(content: Content) -> some View {
+        if let bundle {
+            content.onDrag { NSItemProvider(object: bundle as NSURL) }
+        } else {
+            content
+        }
     }
 }
 

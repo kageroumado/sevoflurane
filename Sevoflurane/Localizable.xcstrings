@@ -4655,6 +4655,9 @@
         }
       }
     },
+    "Keep in Dock" : {
+
+    },
     "Keep the pointer in the window" : {
       "extractionState" : "manual",
       "localizations" : {

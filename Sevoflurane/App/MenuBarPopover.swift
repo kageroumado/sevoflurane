@@ -15,7 +15,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let notifications: SteamNotifications
     private let setup: SetupWindow
     /// The adopted Windows programs the popover lists beside the library.
-    private let quickLaunch = QuickLaunchStore()
+    let quickLaunch = QuickLaunchStore()
     /// The renderer switch. Made with the panel, so a launch that never opens
     /// the popover never reads the bottle for it.
     private lazy var graphics = GraphicsStore()

@@ -297,10 +297,14 @@ final class ClientSupervisor {
     /// restart are the daemon's; the launch itself comes back here, because
     /// the call that starts a game is a line of JavaScript in the page.
     func launch(_ game: SteamWebHost.RecentGame, renderer explicit: Renderer? = nil) async {
-        var path = "/game/launch?appid=\(game.id)&name=\(Self.escaped(game.name))"
+        await launch(appID: game.id, name: game.name, renderer: explicit)
+    }
+
+    func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
+        var path = "/game/launch?appid=\(appID)&name=\(Self.escaped(name))"
         if let explicit { path += "&renderer=\(explicit.rawValue)" }
         guard await DaemonService.post(path, timeout: 300) != nil else {
-            log.log(.client, "the daemon did not take the launch of \(game.name)")
+            log.log(.client, "the daemon did not take the launch of \(name)")
             return
         }
     }
