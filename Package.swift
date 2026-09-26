@@ -162,6 +162,7 @@ let package = Package(
                 "Sevoflurane/Support/SettingHelp.swift",
                 "Sevoflurane/Support/ShaderPackages.swift",
                 "Sevoflurane/Support/SharedGames.swift",
+                "Sevoflurane/Support/SteamAppInfo.swift",
                 "Sevoflurane/Support/SteamBottle.swift",
                 "Sevoflurane/Support/SteamChatAutoOpen.swift",
                 "Sevoflurane/Support/SteamGameProcessLog.swift",

@@ -22,32 +22,66 @@ nonisolated struct LaunchOption: Equatable, Sendable {
 /// same ones. Both the key and the hash are Steam's, mirrored here so the app
 /// can honor and clear the same memory Steam's dialog writes.
 nonisolated enum LaunchOptions {
-    /// The options in an app's list, in index order. An entry Steam did not
-    /// number is skipped; malformed JSON is an empty list.
-    static func parse(_ json: String) -> [LaunchOption] {
+    /// The options in an app's list, in index order, each labeled in words.
+    ///
+    /// Steam sends some descriptions as localization tokens; one of those
+    /// takes the option's own description from `descriptions` (the app's
+    /// `appinfo.vdf`, by index), read only when a token is there, and
+    /// otherwise reads as ``label(_:game:)`` makes it. Two options left with
+    /// one label are told apart by their number in the list. The JSON itself
+    /// is never changed: Steam's remembered choice is keyed by a hash of it.
+    /// An entry Steam did not number is skipped; malformed JSON is an empty
+    /// list.
+    static func parse(_ json: String, descriptions: () -> [Int: String] = { [:] }) -> [LaunchOption] {
         guard let data = json.data(using: .utf8),
               let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { return [] }
-        return entries.compactMap { entry -> LaunchOption? in
+        let tokens = entries.contains { ($0["strDescription"] as? String)?.hasPrefix("#") == true }
+        let own = tokens ? descriptions() : [:]
+        let options = entries.compactMap { entry -> LaunchOption? in
             guard let index = (entry["nIndex"] as? NSNumber)?.intValue else { return nil }
+            let description = entry["strDescription"] as? String ?? ""
             return LaunchOption(
                 index: index,
-                description: label(entry["strDescription"] as? String ?? ""),
+                description: description.hasPrefix("#")
+                    ? own[index] ?? label(description, game: entry["strGameName"] as? String)
+                    : description,
                 type: (entry["eType"] as? NSNumber)?.intValue ?? 0,
             )
         }.sorted { $0.index < $1.index }
+        return distinguished(options)
     }
 
-    /// A description in words. Steam sends some as localization tokens
-    /// (`#LaunchOption_Play`): the marker and the token's family go, and the
-    /// underscores become spaces.
-    static func label(_ description: String) -> String {
+    /// A description in words. Steam sends some as localization tokens:
+    /// `#Steam_LaunchOption_Game` is Steam's own "Play <game>", and any other
+    /// loses its marker and its `Steam_` and `LaunchOption_` prefixes, with
+    /// the underscores read as spaces (`#LaunchOption_Play_Safe_Mode` is
+    /// "Play Safe Mode").
+    static func label(_ description: String, game: String? = nil) -> String {
         guard description.hasPrefix("#") else { return description }
-        var token = String(description.dropFirst())
-        if let underscore = token.firstIndex(of: "_") {
-            token = String(token[token.index(after: underscore)...])
+        var token = Substring(description.dropFirst())
+        if token == "Steam_LaunchOption_Game" {
+            guard let game, !game.isEmpty else { return String(localized: "Play") }
+            return String(localized: "Play \(game)")
+        }
+        for prefix in ["Steam_", "LaunchOption_"] where token.hasPrefix(prefix) {
+            token = token.dropFirst(prefix.count)
         }
         return token.replacingOccurrences(of: "_", with: " ")
+    }
+
+    /// The options with every repeated label followed by the option's number
+    /// in the list, counted from 1 as `sevo app launch --option` counts them.
+    static func distinguished(_ options: [LaunchOption]) -> [LaunchOption] {
+        let counts = Dictionary(options.map { ($0.description, 1) }, uniquingKeysWith: +)
+        return options.enumerated().map { number, option in
+            guard counts[option.description, default: 0] > 1 else { return option }
+            return LaunchOption(
+                index: option.index,
+                description: String(localized: "\(option.description) (option \(number + 1))"),
+                type: option.type,
+            )
+        }
     }
 
     /// The index Steam's dialog would start with on its own: the stored

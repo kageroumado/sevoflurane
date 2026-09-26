@@ -21,6 +21,52 @@
         }
       }
     },
+    "%@ (option %lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (option %2$lld)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@（选项 %2$lld）"
+          }
+        }
+      }
+    },
+    "Choose how to start it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择启动方式。"
+          }
+        }
+      }
+    },
+    "Play" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始游戏"
+          }
+        }
+      }
+    },
+    "Play %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始游戏 %@"
+          }
+        }
+      }
+    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -37,6 +83,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "·"
+          }
+        }
+      }
+    },
+    "“%@” can start more than one way" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”有多种启动方式"
           }
         }
       }

@@ -93,7 +93,7 @@ extension SteamWebHost {
     func noteLaunchOptions(appID: Int, actionID: Int, json: String, remembered: String) {
         guard launchOptionAction != actionID else { return }
         launchOptionAction = actionID
-        let options = LaunchOptions.parse(json)
+        let options = LaunchOptions.parse(json) { SteamAppInfo.launchDescriptions(appID: appID) }
         EventLog.shared.log(
             .client,
             "launch \(appID): Steam asks how to start it — \(options.count) option"

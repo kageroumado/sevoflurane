@@ -1904,7 +1904,9 @@ struct AppCommand: AsyncParsableCommand {
                 // --option <n>` numbers them.
                 if var overview = Sevo.jsonObject(info), overview["installed"] as? Bool == true,
                    let listed = try? await SteamOps.launchOptions(appid) {
-                    overview["launch_options"] = LaunchOptions.parse(listed).enumerated().map { number, option in
+                    overview["launch_options"] = LaunchOptions.parse(listed) {
+                        SteamAppInfo.launchDescriptions(appID: appid)
+                    }.enumerated().map { number, option in
                         [
                             "number": number + 1,
                             "index": option.index,
@@ -1947,7 +1949,7 @@ struct AppCommand: AsyncParsableCommand {
             game's files again, exe <name> to name an executable the game \
             runs under before its first launch has recorded one. Omit the \
             key to print every setting with the level it comes from.
-
+            
             windows takes one of:
             \(WindowTreatment.help)
             """,
@@ -2468,7 +2470,8 @@ struct AppCommand: AsyncParsableCommand {
         /// the order `sevo app info` lists them: Steam's indexes can skip.
         private func steamIndex(ofOption number: Int?) async throws -> Int? {
             guard let number else { return nil }
-            let options = try await LaunchOptions.parse(SteamOps.launchOptions(appid))
+            let listed = try await SteamOps.launchOptions(appid)
+            let options = LaunchOptions.parse(listed) { SteamAppInfo.launchDescriptions(appID: appid) }
             guard options.indices.contains(number - 1) else {
                 throw ValidationError("--option \(number): \(appid) has \(options.count) launch option"
                     + "\(options.count == 1 ? "" : "s"), numbered from 1 (sevo app info lists them)")
