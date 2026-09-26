@@ -9,6 +9,10 @@ import Foundation
 /// version bump on both ends.
 nonisolated struct SharedRun: Codable, Equatable, Sendable {
     static let version = 2
+    /// The signed envelope the runs travel in has a format of its own, checked
+    /// by the server before the runs are (`envelopeVersion` in
+    /// `infrastructure/sevostats/server.go`); bumping one is a bump on both ends.
+    static let envelopeVersion = 1
 
     var v: Int
     /// The launch's hour, UTC.

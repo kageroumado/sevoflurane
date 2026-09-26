@@ -243,7 +243,7 @@ actor StatsUploader {
         state.seq += 1
         StatsStore.writeState(state)
         var all = fields
-        all["v"] = SharedRun.version
+        all["v"] = SharedRun.envelopeVersion
         all["seq"] = state.seq
         all["sent"] = ISO8601DateFormatter().string(from: .now)
         return try JSONSerialization.data(withJSONObject: all, options: [.sortedKeys])
