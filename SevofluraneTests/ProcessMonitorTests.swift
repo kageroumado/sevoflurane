@@ -22,7 +22,7 @@ struct ProcessMonitorTests {
         let watch = StallWatch()
         let actions = ProcessMonitorActions(watch: watch)
         actions.collectReports(Self.process(role: .helper, appID: nil))
-        #expect(actions.note?.contains("not a game") == true)
+        #expect(actions.note?.contains("has no active game run in Sevoflurane") == true)
     }
 
     // MARK: - The windows lay out
