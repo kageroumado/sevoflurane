@@ -1124,6 +1124,9 @@
         }
       }
     },
+    "Adding %@…" : {
+
+    },
     "Address width" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1810,6 +1813,9 @@
         }
       }
     },
+    "Choose" : {
+
+    },
     "Choose “Evaluation environment for Windows games” or the Game Porting Toolkit." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1901,6 +1907,9 @@
           }
         }
       }
+    },
+    "Choose the FPS Unlocker" : {
+
     },
     "Choose the Game Porting Toolkit disk image you downloaded." : {
       "extractionState" : "manual",
@@ -2380,6 +2389,9 @@
         }
       }
     },
+    "CrossOver Preview %@" : {
+
+    },
     "CrossOver ships the version it supports. Add a newer one from Apple to replace it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2798,6 +2810,16 @@
         }
       }
     },
+    "Downloading %@ %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading %1$@ %2$@…"
+          }
+        }
+      }
+    },
     "Downloading %@…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3158,6 +3180,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "引擎设置的值：%@。"
+          }
+        }
+      }
+    },
+    "Engine's value: %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Engine's value: %1$@. %2$@"
           }
         }
       }
@@ -3658,6 +3690,9 @@
         }
       }
     },
+    "FPS unlocker" : {
+
+    },
     "Frame rate" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3975,6 +4010,9 @@
           }
         }
       }
+    },
+    "Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: Sevoflurane starts it beside the game 30 seconds after launch, in the same Windows, and points its fps_config.json at the game. It changes the running game's memory, which HoYoverse's terms do not allow, so the choice is yours." : {
+
     },
     "Get CrossOver" : {
       "localizations" : {
@@ -5388,6 +5426,9 @@
           }
         }
       }
+    },
+    "None" : {
+
     },
     "None added" : {
       "localizations" : {
@@ -7401,6 +7442,9 @@
         }
       }
     },
+    "Start it with the game" : {
+
+    },
     "Start Steam Anyway" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7451,6 +7495,9 @@
           }
         }
       }
+    },
+    "Starting…" : {
+
     },
     "Startup and automation" : {
       "extractionState" : "manual",
@@ -7546,6 +7593,9 @@
         }
       }
     },
+    "Steam could not be stopped, so setup kept the bottle it had. Try again, or quit Steam from the menu bar first." : {
+
+    },
     "Steam has a message" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7629,6 +7679,9 @@
           }
         }
       }
+    },
+    "Steam is still restarting, so setup kept the bottle it had. Try again in a moment." : {
+
     },
     "Steam is stuck synchronizing. Restart Steam to play." : {
       "localizations" : {
@@ -7889,17 +7942,6 @@
         }
       }
     },
-    "stopped by Steam" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已由 Steam 停止"
-          }
-        }
-      }
-    },
     "stopped by sevo" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7907,6 +7949,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已由 sevo 停止"
+          }
+        }
+      }
+    },
+    "stopped by Steam" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已由 Steam 停止"
           }
         }
       }
@@ -8619,6 +8672,9 @@
         }
       }
     },
+    "Unlocker" : {
+
+    },
     "Unreal quit with status 3, the ending of an uncaught C++ exception. It writes its own crash report first." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8937,6 +8993,9 @@
           }
         }
       }
+    },
+    "Waiting for its window…" : {
+
     },
     "waiting for sign-in" : {
       "extractionState" : "manual",

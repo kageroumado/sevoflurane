@@ -172,10 +172,4 @@ nonisolated extension D3DMetalPatches.Patch {
         guard bytes.count >= offset + original.count else { return false }
         return bytes[offset ..< offset + original.count].elementsEqual(original)
     }
-
-    /// Whether `bytes` already carries this patch.
-    func isApplied(in bytes: Data) -> Bool {
-        guard bytes.count >= offset + replacement.count else { return false }
-        return bytes[offset ..< offset + replacement.count].elementsEqual(replacement)
-    }
 }

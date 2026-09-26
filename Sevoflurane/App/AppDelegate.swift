@@ -917,7 +917,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func playRecentGame(_ item: NSMenuItem) {
+    @objc
+    private func playRecentGame(_ item: NSMenuItem) {
         guard let game = host.recentGames.first(where: { $0.id == item.tag }) else { return }
         ActivationPolicy.claimRightForALaunch()
         Task(name: "Launch \(game.name) from the Dock menu") { await supervisor.launch(game) }

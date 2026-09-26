@@ -226,7 +226,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         /// begins a session in place of the button's action, so on a system
         /// whose session differs the item would stop opening the popover.
         static let isSupported = ProcessInfo.processInfo.isOperatingSystemAtLeast(
-            OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+            OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0),
+        )
         static let setDelegate = NSSelectorFromString("setExpandedInterfaceDelegate:")
         static let request = NSSelectorFromString("_requestExpandedInterfaceSession")
         static let cancel = NSSelectorFromString("cancel")
