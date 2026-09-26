@@ -82,7 +82,13 @@ nonisolated struct StatsIdentity: Sendable {
                 evidence.appAttestKeyID = keyID
             } catch {
                 let nsError = error as NSError
-                StatsUploader.log("App Attest declined at \(step): \(nsError.domain) \(nsError.code) \(nsError.userInfo)")
+                if step == "attestKey", nsError.domain == DCError.errorDomain, nsError.code == DCError.invalidKey.rawValue {
+                    // macOS binds App Attest keys to Full Security with SIP on; a Mac booted
+                    // in Reduced or Permissive Security generates the key and cannot sign with it.
+                    StatsUploader.log("App Attest: this Mac cannot attest (App Attest needs Full Security and SIP) — registering without it")
+                } else {
+                    StatsUploader.log("App Attest declined at \(step): \(nsError.domain) \(nsError.code) \(nsError.userInfo)")
+                }
             }
         }
         if DCDevice.current.isSupported {
