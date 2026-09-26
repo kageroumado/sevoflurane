@@ -101,6 +101,24 @@ struct FrameStatsTests {
         #expect(FrameTrace.name(appID: 7, stamp: "2026-09-23T10:00:00Z") == "2026-09-23T10-00-00Z-7.csv")
     }
 
+    @Test
+    func `a mark lands in the live trace at the seconds of frames before it`() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("trace-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("t.csv")
+        let writer = try #require(FrameTrace.Writer(url: url, appID: 7, stamp: "2026-09-23T10:00:00Z"))
+        writer.append(Array(repeating: 500, count: 4))
+        let stats = PresentStats(prefix: directory)
+        stats.arm(appID: 7, trace: writer)
+        defer { stats.disarm(appID: 7) }
+        #expect(stats.mark("pass start") == 1)
+        writer.append([250])
+        writer.flush()
+        let contents = try #require(FrameTrace.read(url))
+        #expect(contents.marks == [FrameTrace.Mark(seconds: 2, label: "pass start")])
+        #expect(contents.frameTimes.count == 5)
+    }
+
     // MARK: - The stats page's ring
 
     @Test
@@ -172,6 +190,17 @@ struct FrameStatsTests {
         let times = Array(repeating: Float(100), count: 100)
         #expect(PerfComparison.trim(times, skip: 2, duration: nil).count == 80)
         #expect(PerfComparison.trim(times, skip: 2, duration: 3).count == 30)
+    }
+
+    @Test
+    func `each run takes its own skip, and the last one holds for the rest`() {
+        #expect(PerfComparison.skips(parsing: "240,85") == [240, 85])
+        #expect(PerfComparison.skips(parsing: "20") == [20])
+        #expect(PerfComparison.skips(parsing: "240,,85") == nil)
+        #expect(PerfComparison.skips(parsing: "-5") == nil)
+        #expect(PerfComparison.skips(parsing: "ten") == nil)
+        #expect((0 ..< 4).map { PerfComparison.skip([240, 85], forRun: $0) } == [240, 85, 85, 85])
+        #expect(PerfComparison.skip([], forRun: 2) == 0)
     }
 
     // MARK: - The record

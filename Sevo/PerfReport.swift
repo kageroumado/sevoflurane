@@ -189,12 +189,20 @@ nonisolated enum PerfReport {
 
     // MARK: - The page
 
-    static func html(runs: [PerfComparison.Run], skip: Double, duration: Double?) -> String {
+    static func html(runs: [PerfComparison.Run], skip: [Double], fromMark: String? = nil, duration: Double?) -> String {
         let groups = PerfComparison.groups(runs)
         var page = model(groups)
         let games = Set(runs.map { $0.record.name ?? "app \($0.record.appid)" }).sorted()
         page["title"] = games.joined(separator: ", ")
-        var window = skip > 0 ? "first \(Int(skip)) s left out" : "whole runs"
+        var window = if let fromMark {
+            "from each run's mark \u{201C}\(fromMark)\u{201D}"
+        } else if Set(skip).count > 1 {
+            "first \(skip.map { String(Int($0)) }.joined(separator: ", ")) s left out, run by run"
+        } else if let first = skip.first, first > 0 {
+            "first \(Int(first)) s left out"
+        } else {
+            "whole runs"
+        }
         if let duration { window += ", \(Int(duration)) s kept" }
         page["window"] = window
         page["generated"] = PerfRuns.moment(runRecordStamp.string(from: .now))

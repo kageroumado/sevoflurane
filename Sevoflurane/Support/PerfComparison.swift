@@ -18,8 +18,8 @@ nonisolated enum PerfComparison {
         var label: String?
         /// How long the whole trace runs, in seconds, and the stretch of it
         /// ``frameTimes`` covers after trimming (``trim(_:skip:duration:)``).
-        var traceSeconds: Double? = nil
-        var window: ClosedRange<Double>? = nil
+        var traceSeconds: Double?
+        var window: ClosedRange<Double>?
 
         var summary: FrameStats.Summary? {
             FrameStats.summarize(frameTimes)
@@ -104,6 +104,23 @@ nonisolated enum PerfComparison {
             average: FrameStats.blockBootstrap(base, other, statistic: FrameStats.averageRate),
             low1: FrameStats.blockBootstrap(base, other, statistic: FrameStats.lowRate1),
         )
+    }
+
+    /// The seconds to leave out of the run at `position` among the chosen ones:
+    /// its own value in `skips`, the last value for every run past the list,
+    /// and none when the list is empty.
+    static func skip(_ skips: [Double], forRun position: Int) -> Double {
+        guard let last = skips.last else { return 0 }
+        return skips.indices.contains(position) ? skips[position] : last
+    }
+
+    /// `240,85` as seconds per run; nil for a list with anything but
+    /// non-negative numbers in it.
+    static func skips(parsing text: String) -> [Double]? {
+        let values = text.split(separator: ",", omittingEmptySubsequences: false)
+            .map { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard !values.isEmpty, values.allSatisfy({ ($0 ?? -1) >= 0 }) else { return nil }
+        return values.compactMap(\.self)
     }
 
     /// Frames from `skip` seconds after the first, for `duration` seconds when given.

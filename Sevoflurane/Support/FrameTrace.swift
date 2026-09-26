@@ -7,7 +7,8 @@ import Foundation
 /// naming the run, a header, then `time_s,frame_ms` per frame, where `time_s` is when the
 /// frame ended counted from the run's first frame. The present counter's ring is where the
 /// times come from (``PresentStats``); a gap the ring could not cover is a line of its own,
-/// `# dropped <n>`, so a reader knows the time axis skips there.
+/// `# dropped <n>`, so a reader knows the time axis skips there, and `# mark <label>` is a
+/// moment someone named while the run was up (`sevo perf mark`), between the frames around it.
 nonisolated enum FrameTrace {
     static let directoryName = "traces"
 
@@ -59,6 +60,14 @@ nonisolated enum FrameTrace {
             pending += "# dropped \(count)\n"
         }
 
+        /// Names this moment of the run. Written at once, so a reader of the
+        /// live file finds it.
+        func noteMark(_ label: String) {
+            let line = label.replacingOccurrences(of: "\n", with: " ")
+            pending += "# mark \(line)\n"
+            flush()
+        }
+
         func close() {
             flush()
             try? handle?.close()
@@ -104,25 +113,40 @@ nonisolated enum FrameTrace {
 
     // MARK: - Reading
 
-    /// A trace read back: the frame times in order and the frames the ring lost.
+    /// A trace read back: the frame times in order, the frames the ring lost,
+    /// and the marks.
     struct Contents: Equatable, Sendable {
         var frameTimes: [Float]
         var dropped: Int
+        var marks: [Mark] = []
+    }
+
+    /// A named moment: the seconds of frames before it, and its label.
+    struct Mark: Equatable, Sendable {
+        var seconds: Double
+        var label: String
     }
 
     static func read(_ url: URL) -> Contents? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         var times: [Float] = []
         var dropped = 0
+        var marks: [Mark] = []
+        var elapsed = 0.0
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             if line.hasPrefix("# dropped ") {
                 dropped += Int(line.dropFirst("# dropped ".count)) ?? 0
                 continue
             }
+            if line.hasPrefix("# mark ") {
+                marks.append(Mark(seconds: elapsed, label: String(line.dropFirst("# mark ".count))))
+                continue
+            }
             guard let comma = line.firstIndex(of: ","), !line.hasPrefix("#"),
                   let time = Float(line[line.index(after: comma)...]) else { continue }
             times.append(time)
+            elapsed += Double(time) / 1000
         }
-        return Contents(frameTimes: times, dropped: dropped)
+        return Contents(frameTimes: times, dropped: dropped, marks: marks)
     }
 }

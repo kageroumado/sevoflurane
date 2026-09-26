@@ -38,7 +38,7 @@ struct PerfCommand: AsyncParsableCommand {
         report draws the same numbers as an HTML page with the frame-time series. \
         sevo diag --help has the whole diagnostic-run guide.
         """,
-        subcommands: [List.self, Report.self, Compare.self, Label.self],
+        subcommands: [List.self, Report.self, Compare.self, Label.self, Mark.self],
         defaultSubcommand: List.self,
     )
 
@@ -80,11 +80,17 @@ struct PerfCommand: AsyncParsableCommand {
         @Option(name: .long, help: "With no runs named: this game's runs.") var game: Int?
         @Option(name: .long, help: """
         Seconds to leave out at the start of every run: loading, shader compilation, the menus \
-        before a benchmark pass.
+        before a benchmark pass. A comma list gives each run its own, in the order the runs are \
+        chosen, and its last value holds for the runs after it: --skip 240,85.
         """)
-        var skip: Double = 0
+        var skip = PerRunSeconds(values: [0])
         @Option(name: .long, help: "Seconds of each run to keep after --skip: the length of the pass. Default: the rest.")
         var duration: Double?
+        @Option(name: .customLong("from-mark"), help: """
+        Start each run at its first mark with this label (sevo perf mark), in place of --skip. \
+        A run without one is named and left out.
+        """)
+        var fromMark: String?
 
         func resolve() throws -> [PerfComparison.Run] {
             let available = PerfRuns.available(game: nil)
@@ -111,8 +117,16 @@ struct PerfCommand: AsyncParsableCommand {
                 }
             }
             guard !chosen.isEmpty else { throw ValidationError("no runs with a frame trace") }
-            return chosen.compactMap { entry in
+            return chosen.enumerated().compactMap { position, entry in
                 guard let contents = FrameTrace.read(entry.url) else { return nil }
+                var skip = PerfComparison.skip(skip.values, forRun: position)
+                if let fromMark {
+                    guard let mark = contents.marks.first(where: { $0.label == fromMark }) else {
+                        Sevo.printError("\(PerfRuns.moment(entry.record.t)) has no mark “\(fromMark)”: left out")
+                        return nil
+                    }
+                    skip = mark.seconds
+                }
                 let times = PerfComparison.trim(contents.frameTimes, skip: skip, duration: duration)
                 guard times.count >= 2 else { return nil }
                 let total = Self.seconds(contents.frameTimes)
@@ -143,7 +157,7 @@ struct PerfCommand: AsyncParsableCommand {
         func run() async throws {
             let runs = try selection.resolve()
             let html = PerfReport.html(
-                runs: runs, skip: selection.skip, duration: selection.duration,
+                runs: runs, skip: selection.skip.values, fromMark: selection.fromMark, duration: selection.duration,
             )
             let url = output.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
                 ?? RunLog.root.appendingPathComponent("reports")
@@ -171,7 +185,7 @@ struct PerfCommand: AsyncParsableCommand {
                 return
             }
             for line in PerfReport.textLines(groups) { print(line) }
-            if selection.skip == 0, selection.duration == nil {
+            if selection.skip.values.allSatisfy({ $0 == 0 }), selection.fromMark == nil, selection.duration == nil {
                 print("whole runs compared, loading and menus included; "
                     + "--skip and --duration keep the same stretch of each (sevo perf --help)")
             }
@@ -192,6 +206,50 @@ struct PerfCommand: AsyncParsableCommand {
             try PerfLabels.set(label, forTrace: entry.url.lastPathComponent)
             print(label.isEmpty ? "label removed" : "labeled “\(label)”")
         }
+    }
+}
+
+extension PerfCommand {
+    struct Mark: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Name this moment in every running game's trace, for compare --from-mark.",
+            discussion: """
+            A harness calls it where a benchmark pass starts, so runs line up on the pass \
+            itself rather than on a guessed --skip.
+            """,
+        )
+        @Argument(help: "The mark's label.") var label = "mark"
+
+        func run() async throws {
+            let query = label.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            guard let reply = await AppControl.appLinkPost("/perf/mark?label=\(query)", timeout: 10) else {
+                throw ValidationError("Sevoflurane is not running, so no trace is being written")
+            }
+            guard reply.status == 200 else {
+                throw ValidationError("the running Sevoflurane does not take marks (HTTP \(reply.status)); it predates them")
+            }
+            let marked = (Sevo.jsonObject(String(decoding: reply.body, as: UTF8.self))?["marked"] as? Int) ?? 0
+            print(marked == 0 ? "no run is being traced: nothing marked"
+                : "marked “\(label)” in \(marked) trace\(marked == 1 ? "" : "s")")
+        }
+    }
+}
+
+/// `--skip`'s seconds, one per chosen run or one for all.
+struct PerRunSeconds: ExpressibleByArgument {
+    var values: [Double]
+
+    init(values: [Double]) {
+        self.values = values
+    }
+
+    init?(argument: String) {
+        guard let values = PerfComparison.skips(parsing: argument) else { return nil }
+        self.values = values
+    }
+
+    var defaultValueDescription: String {
+        values.map { String(format: "%g", $0) }.joined(separator: ",")
     }
 }
 

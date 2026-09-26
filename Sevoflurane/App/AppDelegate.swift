@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let stallWatch = StallWatch()
     private var runMeter: Task<Void, Never>?
     private lazy var appLinkServer = AppLinkServer(
-        supervisor: supervisor, host: host, bridge: bridge,
+        supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
     )
     private var menuMirror: SteamMenuMirror?
     private var menuBarPopover: MenuBarPopover?

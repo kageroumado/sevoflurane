@@ -12,12 +12,15 @@ final class AppLinkServer {
     private let supervisor: ClientSupervisor
     private let host: SteamWebHost
     private let bridge: SteamBridge
+    /// The open runs' frame counters, which `sevo perf mark` writes into.
+    private let presentStats: PresentStats
     private var server: HTTPServer?
 
-    init(supervisor: ClientSupervisor, host: SteamWebHost, bridge: SteamBridge) {
+    init(supervisor: ClientSupervisor, host: SteamWebHost, bridge: SteamBridge, presentStats: PresentStats) {
         self.supervisor = supervisor
         self.host = host
         self.bridge = bridge
+        self.presentStats = presentStats
     }
 
     /// Takes the link port, exclusively: a second copy of the app answering
@@ -87,6 +90,11 @@ final class AppLinkServer {
             // `sevo daemon repair` asks this port rather than the control port,
             // which is exactly what is down when the helper will not launch.
             return await repairDaemon(force: Self.value(of: "force", in: request.query) == "1")
+        case ("POST", "/perf/mark"):
+            // `sevo perf mark`, straight to this port: the traces are written here.
+            let label = Self.value(of: "label", in: request.query).removingPercentEncoding ?? ""
+            let marked = presentStats.mark(label.isEmpty ? "mark" : label)
+            return Self.json(#"{"marked":\#(marked)}"#)
         default:
             return await pageVerb(request)
         }

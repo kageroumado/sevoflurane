@@ -220,7 +220,15 @@ final class MCPServer {
                     + "loading out.",
                 properties: appid.merging([
                     "last": ["type": "integer", "description": "How many of the game's newest runs (default 6)"],
-                    "skip": ["type": "number", "description": "Seconds to leave out at the start of each run"],
+                    "skip": [
+                        "type": ["number", "array"], "items": ["type": "number"],
+                        "description": "Seconds to leave out at the start of each run; an array gives each "
+                            + "run its own, oldest first, the last value holding for the rest",
+                    ],
+                    "from_mark": [
+                        "type": "string",
+                        "description": "Start each run at its first mark with this label (sevo perf mark), in place of skip",
+                    ],
                 ], uniquingKeysWith: { a, _ in a }),
                 readOnly: true,
             ),
@@ -383,7 +391,12 @@ final class MCPServer {
             var selection = try PerfCommand.Selection.parse([])
             selection.game = Self.integer(args["appid"])
             selection.last = Self.integer(args["last"]) ?? 6
-            selection.skip = (args["skip"] as? NSNumber)?.doubleValue ?? 0
+            if let seconds = args["skip"] as? [NSNumber], !seconds.isEmpty {
+                selection.skip = PerRunSeconds(values: seconds.map(\.doubleValue))
+            } else {
+                selection.skip = PerRunSeconds(values: [(args["skip"] as? NSNumber)?.doubleValue ?? 0])
+            }
+            selection.fromMark = args["from_mark"] as? String
             return try Sevo.json(PerfReport.model(PerfComparison.groups(selection.resolve()), series: false), pretty: true)
         case "perf_list":
             let runs = PerfRuns.available(game: Self.integer(args["appid"]))

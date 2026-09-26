@@ -80,6 +80,23 @@ final nonisolated class PresentStats: @unchecked Sendable {
         return run?.frameRate
     }
 
+    /// Writes a mark into every armed run's trace, after reading the frames
+    /// presented so far, so the mark falls where it was asked for. Answers how
+    /// many traces took it.
+    @discardableResult
+    func mark(_ label: String) -> Int {
+        sample()
+        lock.lock()
+        defer { lock.unlock() }
+        var marked = 0
+        for run in armed.values {
+            guard let trace = run.trace else { continue }
+            trace.noteMark(label)
+            marked += 1
+        }
+        return marked
+    }
+
     /// What the counter says about an armed run right now, or nil when the
     /// run is not armed or has no page yet.
     func reading(forApp appID: Int) -> Reading? {
