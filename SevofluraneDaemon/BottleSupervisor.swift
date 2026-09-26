@@ -222,6 +222,9 @@ final class BottleSupervisor {
     /// The provisioning failure the log has already named, so a probe that
     /// meets it again says nothing new.
     var reportedProvisioningBlock: String?
+    /// The prefix outside Sevoflurane's bottles whose client the log has
+    /// already named as holding the CDP port.
+    var reportedOutsideClient: String?
     /// Callers of ``ladderFinished()`` waiting for the running ladder.
     var ladderWaiters: [CheckedContinuation<Void, Never>] = []
     struct EngineSwitch {
@@ -469,6 +472,14 @@ final class BottleSupervisor {
         lastProbe = client
         guard client == .up else {
             await handleClientDown(client, wineWindows: wineWindows)
+            refreshHealth()
+            return
+        }
+        // A client is adopted only once it is known to be the configured
+        // bottle's: CDP is one fixed port, and any bottle's client can hold it.
+        let sweepIdentity = !hasSeenClientUp
+            || (health == .healthy && !gameIsUp && probeCycleCount.isMultiple(of: 8))
+        guard await confirmClientIdentity(sweep: sweepIdentity) else {
             refreshHealth()
             return
         }

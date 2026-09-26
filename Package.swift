@@ -91,6 +91,7 @@ let package = Package(
                 "Sevoflurane/Support/AdoptedPrograms.swift",
                 "Sevoflurane/Support/BottleDependencies.swift",
                 "Sevoflurane/Support/BottleGraphics.swift",
+                "Sevoflurane/Support/BottleIdentity.swift",
                 "Sevoflurane/Support/BottleOwner.swift",
                 "Sevoflurane/Support/BottleReadiness.swift",
                 "Sevoflurane/Support/BridgePorts.swift",

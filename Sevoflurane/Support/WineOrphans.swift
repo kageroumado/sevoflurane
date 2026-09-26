@@ -108,7 +108,7 @@ nonisolated enum WineOrphans {
 
     // MARK: - Processes
 
-    private static func allProcessIDs() -> [pid_t] {
+    static func allProcessIDs() -> [pid_t] {
         let capacity = Int(proc_listallpids(nil, 0)) + 64
         guard capacity > 64 else { return [] }
         var pids = [pid_t](repeating: 0, count: capacity)

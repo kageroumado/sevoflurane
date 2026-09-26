@@ -96,6 +96,11 @@ nonisolated enum SteamBottle {
     /// The client executable, as the Windows side names it.
     static let exeWindowsPath = #"C:\Program Files (x86)\Steam\Steam.exe"#
 
+    /// The client executable on disk.
+    static var exe: URL {
+        steamRoot.appendingPathComponent("Steam.exe")
+    }
+
     /// CrossOver's CLI tools (wine, wineserver, cxbottle).
     static let crossoverBin = "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin"
 

@@ -123,9 +123,14 @@ enum StatusReport {
         // A bottle missing a required dependency still runs games, so this is
         // a note beside the client's state rather than a state of its own.
         let incomplete = BottleReadiness.incompleteSummary()
+        // The bottle the running client is in, which is the configured one
+        // only when nothing moved the preference under it.
+        let running = snapshot.clientState != .down || !snapshot.bottleProcesses.isEmpty
+        let clientBottle = running ? await BottleIdentity.clientBottleName() : nil
         let dict: [String: Any] = [
             "engine": engine,
             "bottle": SteamBottle.name,
+            "client_bottle": clientBottle ?? NSNull(),
             "steam_installed": steamOK,
             "bottle_incomplete": incomplete ?? NSNull(),
             "provisioning": snapshot.provision?.dictionary ?? NSNull(),
@@ -138,7 +143,8 @@ enum StatusReport {
             "dump_rate_10m": snapshot.dumpCount,
             "client_pinned": snapshot.pinned,
         ]
-        var line = "engine \(engine) · bottle \(SteamBottle.name) (\(steamOK ? "steam ok" : "no steam"))"
+        var line = "engine \(engine) · "
+            + BottleIdentity.statusText(clientBottle: clientBottle, configured: SteamBottle.name, steamInstalled: steamOK)
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
             + " · supervision \(supervision) · app \(appState.rawValue)"
         if let incomplete { line += " · bottle incomplete (\(incomplete))" }

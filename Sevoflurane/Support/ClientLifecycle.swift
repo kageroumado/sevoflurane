@@ -93,33 +93,38 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Whether this bottle's client process exists at all, told by command
-    /// line (`Steam.exe -silent` is this app's own launch line; the Mac
-    /// Steam client is `steam_osx` and cannot match) and scoped to the bottle
-    /// like ``bottleProcessIDs(matchingAnyOf:)``. It runs on the probe's
+    /// Whether a client process of these bottles exists at all, told by
+    /// command line (`Steam.exe -silent` is this app's own launch line; the
+    /// Mac Steam client is `steam_osx` and cannot match) and scoped like
+    /// ``bottleProcessIDs(matchingAnyOf:in:)``. It runs on the probe's
     /// failure path to separate "CDP is slow" from "nothing is running", and
     /// the client's working directory is inside the prefix, so the answer
     /// is one `pgrep` and a kernel call.
-    static func clientProcessAlive() async -> Bool {
+    static func clientProcessAlive(in targets: [BottleTarget] = BottleTarget.inScope) async -> Bool {
         let out = await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).output
-        return await !inBottle(processIDs(in: out)).isEmpty
+        return await !inBottle(processIDs(in: out), targets: targets).isEmpty
     }
 
     // MARK: - Processes
 
-    /// PIDs of the bottle's processes, matched by name and then scoped by open
-    /// files inside the bottle so other bottles' wine processes are untouched.
-    static func bottleProcessIDs(matching name: String? = nil) async -> [pid_t] {
-        await bottleProcessIDs(matchingAnyOf: name.map { [$0] } ?? processNames)
+    /// PIDs of the bottles' processes, matched by name and then scoped by
+    /// open files inside the bottles so other prefixes' wine processes are
+    /// untouched. The default reach is the booted and the configured bottle.
+    static func bottleProcessIDs(
+        matching name: String? = nil, in targets: [BottleTarget] = BottleTarget.inScope,
+    ) async -> [pid_t] {
+        await bottleProcessIDs(matchingAnyOf: name.map { [$0] } ?? processNames, in: targets)
     }
 
-    static func bottleProcessIDs(matchingAnyOf names: [String]) async -> [pid_t] {
+    static func bottleProcessIDs(
+        matchingAnyOf names: [String], in targets: [BottleTarget] = BottleTarget.inScope,
+    ) async -> [pid_t] {
         var candidates: Set<pid_t> = []
         for processName in names {
             let out = await Subprocess.run("/usr/bin/pgrep", ["-if", processName]).output
             candidates.formUnion(processIDs(in: out))
         }
-        return await inBottle(Array(candidates))
+        return await inBottle(Array(candidates), targets: targets)
     }
 
     /// One pid per line, as `pgrep` prints them.
@@ -129,18 +134,18 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// The pids among `candidates` that belong to this bottle.
+    /// The pids among `candidates` that belong to one of `targets`.
     ///
-    /// A process whose working directory lies in the prefix, or is the
-    /// prefix's wineserver directory, is decided without spawning anything.
-    /// The rest (a game working in a library folder outside the prefix, or a
-    /// process between directories) are read in one `lsof` over all of them:
-    /// the wineserver keeps the prefix itself open, and every other Wine
-    /// process has a file inside it.
-    private static func inBottle(_ candidates: [pid_t]) async -> [pid_t] {
-        guard !candidates.isEmpty else { return [] }
-        let roots = bottleRoots
-        let serverDirectory = WineOrphans.serverDirectory(forPrefix: SteamBottle.root.path)
+    /// A process whose working directory lies in a prefix, or is a prefix's
+    /// wineserver directory, is decided without spawning anything. The rest
+    /// (a game working in a library folder outside the prefix, or a process
+    /// between directories) are read in one `lsof` over all of them: the
+    /// wineserver keeps the prefix itself open, and every other Wine process
+    /// has a file inside it.
+    private static func inBottle(_ candidates: [pid_t], targets: [BottleTarget]) async -> [pid_t] {
+        guard !candidates.isEmpty, !targets.isEmpty else { return [] }
+        let roots = bottleRoots(targets)
+        let serverDirectories = Set(targets.compactMap { WineOrphans.serverDirectory(forPrefix: $0.path) })
         var scoped: [pid_t] = []
         var unsure: [pid_t] = []
         for pid in candidates {
@@ -148,7 +153,8 @@ nonisolated enum ClientLifecycle {
                 unsure.append(pid)
                 continue
             }
-            if directory == serverDirectory || isInBottle(openPaths: [directory], roots: roots) {
+            if serverDirectories.contains(BottleIdentity.canonicalServerDirectory(directory))
+                || isInBottle(openPaths: [directory], roots: roots) {
                 scoped.append(pid)
             } else {
                 unsure.append(pid)
@@ -166,11 +172,10 @@ nonisolated enum ClientLifecycle {
         return Set(scoped).sorted()
     }
 
-    /// The bottle's directory as a path and, where it differs, as the path
+    /// Each bottle's directory as a path and, where it differs, as the path
     /// with its links resolved, which is how the kernel reports open files.
-    private static var bottleRoots: [String] {
-        let root = SteamBottle.root
-        return Array(Set([root.path, root.resolvingSymlinksInPath().path]))
+    private static func bottleRoots(_ targets: [BottleTarget]) -> [String] {
+        Array(Set(targets.flatMap { [$0.prefix.path, $0.path] }))
     }
 
     /// Whether any of `paths` is `roots`' directory itself or lies inside it.
@@ -208,23 +213,25 @@ nonisolated enum ClientLifecycle {
 
     /// The escape hatch: immediate `SIGKILL`, no graceful ask and no wait —
     /// for when the graceful ladder is the thing that hung. Scoped by open
-    /// files to this bottle, so another engine's wine is never touched.
-    /// Answers how many processes it signaled.
+    /// files to the booted and the configured bottle, so another prefix's
+    /// wine is never touched. Answers the processes it signaled.
     @discardableResult
     static func forceQuit(_ scope: ForceScope) async -> [pid_t] {
+        let targets = BottleTarget.inScope
+        let reach = BottleTarget.scopeNote(targets, configured: .configured)
         switch scope {
         case .steam:
-            let pids = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+            let pids = await bottleProcessIDs(matchingAnyOf: steamProcessNames, in: targets)
             for pid in pids { kill(pid, SIGKILL) }
-            log("force-quit: SIGKILL'd \(pids.count) Steam process(es) \(pids)")
+            log("force-quit (\(reach)): SIGKILL'd \(pids.count) Steam process(es) \(pids)")
             return pids
         case .everything:
             // wineserver -k brings down every process in the prefix — games
             // and service hosts included; the sweep is for anything it missed.
-            await killWineserver()
-            let pids = await bottleProcessIDs(matchingAnyOf: processNames)
+            await killWineservers(targets)
+            let pids = await bottleProcessIDs(matchingAnyOf: processNames, in: targets)
             for pid in pids { kill(pid, SIGKILL) }
-            log("force-quit: wineserver -k + SIGKILL'd \(pids.count) survivor(s) \(pids)")
+            log("force-quit (\(reach)): wineserver -k + SIGKILL'd \(pids.count) survivor(s) \(pids)")
             return pids
         }
     }
@@ -266,26 +273,43 @@ nonisolated enum ClientLifecycle {
         min(limit, ContinuousClock.now.duration(to: deadline))
     }
 
-    /// Asks the client to exit. The CDP ask is bounded by `deadline`; the
-    /// spawn fallback carries its own subprocess timeout.
-    static func gracefulShutdown(until deadline: ContinuousClock.Instant) async {
-        // The quiet path first: StartShutdown in the client's own JS context.
-        // `steam.exe -shutdown` spawns a whole second client instance just to
-        // deliver the message — seconds of bottle work to say one word. The
-        // spawn is the fallback for a client whose CDP is gone, and it goes
-        // through the same suppressed environment as every other spawn.
-        if await shutdownOverCDP(until: deadline) { return }
-        let invocation = Engine.active.wineInvocation(
-            bottle: SteamBottle.name, wait: .none,
-            program: [SteamBottle.exeWindowsPath, "-shutdown"],
-        )
-        _ = await Subprocess.run(
-            invocation.executable.path,
-            invocation.arguments,
-            environment: invocation.environment,
-            capture: .none,
-            timeout: .seconds(30),
-        )
+    /// Asks the clients of `targets` to exit. The CDP ask is bounded by
+    /// `deadline`; the spawn fallback carries its own subprocess timeout.
+    static func gracefulShutdown(
+        _ targets: [BottleTarget], until deadline: ContinuousClock.Instant,
+    ) async {
+        // The quiet path first: StartShutdown in the client's own JS context,
+        // and only when the client answering the port is one of these: CDP is
+        // one fixed port, and a client of another bottle holding it would be
+        // the one asked. `steam.exe -shutdown` spawns a whole second client
+        // instance just to deliver the message — seconds of bottle work to
+        // say one word. The spawn is the fallback for a client whose CDP is
+        // gone or answers for another bottle, and it goes through the same
+        // suppressed environment as every other spawn.
+        var known: [String: String] = [:]
+        for target in targets {
+            if let directory = WineOrphans.serverDirectory(forPrefix: target.path) { known[directory] = target.path }
+        }
+        let owner = await BottleIdentity.clientPrefix(known: known)
+        var asked: String?
+        if let owner, targets.contains(where: { $0.path == owner }), await shutdownOverCDP(until: deadline) {
+            asked = owner
+        }
+        for target in targets where target.path != asked {
+            guard await clientProcessAlive(in: [target]) else { continue }
+            let invocation = target.engine.wineInvocation(
+                bottle: target.name, wait: .none,
+                program: [SteamBottle.exeWindowsPath, "-shutdown"],
+            )
+            log("asking the client in bottle \(target.name) to shut down with steam.exe -shutdown")
+            _ = await Subprocess.run(
+                invocation.executable.path,
+                invocation.arguments,
+                environment: invocation.environment,
+                capture: .none,
+                timeout: .seconds(30),
+            )
+        }
     }
 
     /// Asks the running client to exit via `SteamClient.User.StartShutdown`
@@ -316,15 +340,18 @@ nonisolated enum ClientLifecycle {
         return false
     }
 
-    static func killWineserver() async {
-        // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
-        _ = await Subprocess.run(
-            Engine.active.wineserverURL.path,
-            ["-k"],
-            environment: ["WINEPREFIX": SteamBottle.root.path, "PATH": "/usr/bin"],
-            capture: .none,
-            timeout: .seconds(15),
-        )
+    /// `wineserver -k` for each bottle, through the engine whose server holds it.
+    static func killWineservers(_ targets: [BottleTarget]) async {
+        for target in targets {
+            // CX_BOTTLE is not honored here; wineserver needs WINEPREFIX.
+            _ = await Subprocess.run(
+                target.engine.wineserverURL.path,
+                ["-k"],
+                environment: ["WINEPREFIX": target.prefix.path, "PATH": "/usr/bin"],
+                capture: .none,
+                timeout: .seconds(15),
+            )
+        }
     }
 
     /// Stops Steam's own processes and leaves Windows booted: a CDP shutdown
@@ -338,20 +365,25 @@ nonisolated enum ClientLifecycle {
     /// leaves nothing to wait for, so its leftovers go straight to the signals.
     static func stopClient(
         gracePolls: Int,
+        targets: [BottleTarget] = BottleTarget.inScope,
         phase: (String) -> Void = { _ in },
     ) async {
-        let existing = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
-        guard !existing.isEmpty else { return }
+        let reach = BottleTarget.scopeNote(targets, configured: .configured)
+        let existing = await bottleProcessIDs(matchingAnyOf: steamProcessNames, in: targets)
+        guard !existing.isEmpty else {
+            log("client-only stop: no Steam process in \(reach) — nothing to stop")
+            return
+        }
         stopRequestedAt = .now
-        log("stopping the client — Windows stays up (pids \(existing))")
+        log("stopping the client in \(reach) — Windows stays up (pids \(existing))")
         phase("stopping the client")
         let stopBegan = ContinuousClock.now
         let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
-        if await clientProcessAlive() {
-            await gracefulShutdown(until: cdpDeadline)
+        if await clientProcessAlive(in: targets) {
+            await gracefulShutdown(targets, until: cdpDeadline)
             for _ in 0 ..< gracePolls {
                 _ = await hideVisibleClientPopups()
-                if await bottleProcessIDs(matchingAnyOf: steamProcessNames).isEmpty {
+                if await bottleProcessIDs(matchingAnyOf: steamProcessNames, in: targets).isEmpty {
                     log("stop audit: client-only graceful exit in "
                         + "\(stopBegan.duration(to: .now).components.seconds)s")
                     return
@@ -360,14 +392,14 @@ nonisolated enum ClientLifecycle {
             }
         }
         phase("force-quitting Steam")
-        var survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+        var survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames, in: targets)
         log("stop audit: client-only stop forcing after "
             + "\(stopBegan.duration(to: .now).components.seconds)s (pids \(survivors))")
         for pid in survivors {
             kill(pid, SIGTERM)
         }
         try? await Task.sleep(for: .seconds(2))
-        survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames)
+        survivors = await bottleProcessIDs(matchingAnyOf: steamProcessNames, in: targets)
         for pid in survivors {
             kill(pid, SIGKILL)
         }
@@ -381,19 +413,25 @@ nonisolated enum ClientLifecycle {
         cdpCallCap + .seconds(gracePolls)
     }
 
-    /// Brings every bottle process down: the CDP shutdown ask while a client
-    /// is alive, then `wineserver -k`, then signals, each rung only for what
-    /// the previous one left alive. `gracePolls` is the graceful rung's
+    /// Brings every process of `targets` down: the CDP shutdown ask while a
+    /// client is alive, then `wineserver -k`, then signals, each rung only for
+    /// what the previous one left alive. `gracePolls` is the graceful rung's
     /// patience in one-second polls: a restart can afford 30 s, a quit cannot.
+    /// The default reach is the booted and the configured bottle.
     static func stopAll(
         gracePolls: Int,
+        targets: [BottleTarget] = BottleTarget.inScope,
         hidingPopups: Bool = false,
         phase: (String) -> Void = { _ in },
     ) async {
-        let existing = await bottleProcessIDs()
-        guard !existing.isEmpty else { return }
+        let reach = BottleTarget.scopeNote(targets, configured: .configured)
+        let existing = await bottleProcessIDs(in: targets)
+        guard !existing.isEmpty else {
+            log("stop: no process running in \(reach) — nothing to stop")
+            return
+        }
         stopRequestedAt = .now
-        log("bottle processes running (pids \(existing)) — shutting them down")
+        log("\(reach): processes running (pids \(existing)) — shutting them down")
         phase("stopping the client")
         // `steam.exe -shutdown` only means anything to a live client. When the
         // client has already crashed (the usual reason for a restart), asking
@@ -403,8 +441,8 @@ nonisolated enum ClientLifecycle {
         let stopBegan = ContinuousClock.now
         let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
         var clean = false
-        if await clientProcessAlive() {
-            await gracefulShutdown(until: cdpDeadline)
+        if await clientProcessAlive(in: targets) {
+            await gracefulShutdown(targets, until: cdpDeadline)
             // One-second polls: a healthy client exits in 2–6 s, and a quit
             // with nothing to upload should be over in ten — the poll count
             // is the whole grace budget in seconds.
@@ -417,7 +455,7 @@ nonisolated enum ClientLifecycle {
                     // the CDP budget is spent, the sweep does nothing.
                     _ = await hideVisibleClientPopups()
                 }
-                if await bottleProcessIDs().isEmpty { clean = true; break }
+                if await bottleProcessIDs(in: targets).isEmpty { clean = true; break }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -429,16 +467,16 @@ nonisolated enum ClientLifecycle {
         phase("force-killing wine")
         log("stop audit: graceful shutdown timed out after "
             + "\(stopBegan.duration(to: .now).components.seconds)s — wineserver -k")
-        await killWineserver()
+        await killWineservers(targets)
         try? await Task.sleep(for: .seconds(3))
-        var survivors = await bottleProcessIDs()
+        var survivors = await bottleProcessIDs(in: targets)
         if !survivors.isEmpty {
             log("signaling survivors (pids \(survivors))")
             for pid in survivors {
                 kill(pid, SIGTERM)
             }
             try? await Task.sleep(for: .seconds(3))
-            survivors = await bottleProcessIDs()
+            survivors = await bottleProcessIDs(in: targets)
             for pid in survivors {
                 kill(pid, SIGKILL)
             }
@@ -509,6 +547,8 @@ nonisolated enum ClientLifecycle {
             // Games inherit this environment; remember what it was so a
             // later selection change knows a restart is owed.
             BottleGraphics.recordBootedSelection()
+            // And the bottle, which every stop reaches until the next spawn.
+            BootedBottle.record(.configured)
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
             closeTrail(trail)

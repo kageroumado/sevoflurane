@@ -76,11 +76,9 @@ extension BottleSupervisor {
     }
 
     /// Moves the client onto another engine, and optionally another bottle.
-    /// The choice is held until the ladder has stopped the running client:
-    /// every stop rung — the graceful ask, `wineserver -k`, the scoped sweeps —
-    /// addresses `Engine.active` and `SteamBottle.name`, so choosing first
-    /// would aim them at the new prefix and leave the old client, its
-    /// wineserver and any game running.
+    /// The choice is held until the ladder has stopped the running client, so
+    /// the stop's graceful ask and `wineserver -k` go through the engine the
+    /// client runs on; the booted bottle is in the stop's reach either way.
     func switchEngine(to engine: Engine, bottle: String?) {
         pendingSwitch = EngineSwitch(engine: engine, bottle: bottle)
         restartNow(reason: "engine switched to \(engine.description)")
@@ -197,14 +195,18 @@ extension BottleSupervisor {
         log.log(.supervisor, "client stopped (sevo)")
     }
 
-    /// Whether a provisioning failure is holding the client down: the last
-    /// setup pass for this engine and bottle stopped at a stage that leaves
-    /// nothing to start, and nobody has retried it or asked for the client
-    /// anyway (Settings › Engine). The verdict names the reason, because a
-    /// client that never comes up is otherwise a mystery; the log says it
-    /// once per failure rather than once per probe.
+    /// Whether the bottle is not ready for a client: it has no `Steam.exe`
+    /// yet — a bottle setup is still building, which a client started now
+    /// would boot into under the installers — or the last setup pass for this
+    /// engine and bottle stopped at a stage that leaves nothing to start, and
+    /// nobody has retried it or asked for the client anyway (Settings ›
+    /// Engine). The verdict names the reason, because a client that never
+    /// comes up is otherwise a mystery; the log says it once per failure
+    /// rather than once per probe.
     func provisioningBlocksStart(reason: String) -> Bool {
-        guard let failure = BottleReadiness.clientStartBlock else {
+        let missingSteam = FileManager.default.fileExists(atPath: SteamBottle.exe.path)
+            ? nil : "bottle \(SteamBottle.name) has no Steam.exe yet"
+        guard let failure = missingSteam ?? BottleReadiness.clientStartBlock else {
             reportedProvisioningBlock = nil
             return false
         }
@@ -247,6 +249,10 @@ extension BottleSupervisor {
     /// asked to come down keeps running, which is the whole of what surviving
     /// an app crash means.
     ///
+    /// The stop reaches the bottle the client booted in, the configured one,
+    /// and every other Sevoflurane bottle with a wineserver running, and the
+    /// survivor check looks in all of them.
+    ///
     /// The daemon itself stays up and idle afterwards — it still answers
     /// `sevo status`, and the next ask starts a client again.
     func shutdownForQuit() async {
@@ -261,8 +267,11 @@ extension BottleSupervisor {
         // Steam…" on its way out, and a quit is the one moment nothing else
         // is left to hide it.
         await app.send(.dismissWindowsForQuit)
+        let booted = BootedBottle.target
+        let strays = await strayBottles(during: "quit", beside: booted)
+        let targets = BottleTarget.stopSet(booted: booted, configured: .configured, strays: strays)
         await app.duringClientStop {
-            await ClientLifecycle.stopAll(gracePolls: 8, hidingPopups: true)
+            await ClientLifecycle.stopAll(gracePolls: 8, targets: targets, hidingPopups: true)
         }
         // A ladder that was mid-flight sees the quit at its next guard and
         // launches nothing; once it has returned, one more pass takes down
@@ -270,16 +279,21 @@ extension BottleSupervisor {
         if isRestarting {
             await ladderFinished()
             await app.duringClientStop {
-                await ClientLifecycle.stopAll(gracePolls: 4, hidingPopups: true)
+                await ClientLifecycle.stopAll(gracePolls: 4, targets: targets, hidingPopups: true)
             }
         }
-        let survivors = await ClientLifecycle.bottleProcessIDs()
+        let survivors = await ClientLifecycle.bottleProcessIDs(in: targets)
+        let reach = BottleTarget.scopeNote(targets, configured: .configured)
         log.log(
             .supervisor,
             survivors.isEmpty
-                ? "quit: bottle is down"
-                : "quit: pids \(survivors) survived SIGKILL",
+                ? "quit: \(reach) down"
+                : "quit: pids \(survivors) in \(reach) survived SIGKILL",
         )
+        let left = await BottleIdentity.verify(configured: .configured)
+        for stray in left.strays {
+            log.log(.supervisor, "quit: bottle \(stray.name) still has a wineserver running")
+        }
         // A switch the quit overtook lands now, with the old bottle down,
         // so the next start boots the engine that was asked for.
         applyPendingSwitch()
