@@ -109,6 +109,7 @@ struct DiagnosticLevelTests {
 
         #expect(collect(Self.record(ending: .crash), at: .zero, in: root) != nil)
         #expect(collect(Self.record(ending: .watchdog), at: .zero, in: root) != nil)
+        #expect(collect(Self.record(ending: .crashAtExit), at: .zero, in: root) != nil)
     }
 
     @Test

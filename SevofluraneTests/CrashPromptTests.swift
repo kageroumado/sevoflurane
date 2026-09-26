@@ -52,7 +52,7 @@ struct CrashPromptTests {
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: 1))))
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: nil))))
         #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .watchdog, code: nil))))
-        for kind in [RunRecord.Exit.Kind.user, .stopped, .exitError, .steamTerminate, .appQuit, .unknown] {
+        for kind in [RunRecord.Exit.Kind.user, .crashAtExit, .stopped, .exitError, .steamTerminate, .appQuit, .unknown] {
             #expect(!CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: kind, code: 0))))
         }
         #expect(!CrashPromptPolicy.deserves(Self.record(exit: nil)))
@@ -140,6 +140,49 @@ struct CrashPromptTests {
         let (prompt, shown) = Self.prompt()
         #expect(prompt.offer(crashed))
         #expect(shown.records.count == 1)
+    }
+
+    /// The game's exception after the engine saw it close its windows is a
+    /// crash on the way out; before, it is a crash. Both orders, through the
+    /// recorder, as a launch writes them.
+    @Test(arguments: [(413_153, true, RunRecord.Exit.Kind.crashAtExit), (413_154, false, .crash)])
+    func `a crash after the game closed its windows is recorded as one on the way out`(
+        appID: Int, closedFirst: Bool, expected: RunRecord.Exit.Kind,
+    ) async throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("crash-prompt-tests-\(UUID().uuidString)")
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let wine = root.appendingPathComponent("wine.log")
+        try Data().write(to: wine)
+        let processLog = root.appendingPathComponent("gameprocess_log.txt")
+        let closed = Closed()
+        let previous = RunRecorder.didClose
+        defer { RunRecorder.didClose = previous }
+        RunRecorder.didClose = { closed.append($0) }
+
+        RunRecorder(runs: root, wineLog: wine, processLog: processLog).arm(appID: appID)
+        try Data("""
+        [2026-09-26 00:26:01] AppID \(appID) adding PID 1400 as a tracked process ""C:\\game.exe""
+        [2026-09-26 00:31:19] AppID \(appID) no longer tracking PID 1400, exit code -1073740791
+        
+        """.utf8).write(to: processLog)
+        let marker = "sevo:exit pid=27651 wpid=0288 windows closed"
+        let exception = "0288:0214:err:seh:NtRaiseException Unhandled exception code c0000409 flags 1 addr 0x6ffffdd96eb9"
+        let trail = ["sevo:run pid=27651 exe=game.exe appid=\(appID) engine=dormison-r18"]
+            + (closedFirst ? [marker, exception] : [exception, marker])
+        try Data((trail.joined(separator: "\n") + "\n").utf8).write(to: wine)
+        RunRecorder(runs: root, wineLog: wine, processLog: processLog).reattach()
+
+        var record: RunRecord?
+        for _ in 0 ..< 100 {
+            if let mine = closed.first(forApp: appID) { record = mine; break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        let ended = try #require(record)
+        #expect(ended.exit?.kind == expected)
+        #expect(ended.crash?.code == "0xc0000409")
+        #expect(CrashPromptPolicy.deserves(ended) == (expected == .crash))
     }
 
     @Test(arguments: [(413_151, true, RunRecord.Exit.Kind.stopped), (413_152, false, .exitError)])

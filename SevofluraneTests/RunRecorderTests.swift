@@ -150,6 +150,65 @@ struct RunRecorderTests {
         #expect(crash?.address == "0x140001234")
     }
 
+    /// Wukong's run 2 of 2026-09-26: the game (unix 27651, Wine 0288) closed
+    /// its window, then fast-failed in teardown.
+    private static let gameRun = "sevo:run pid=27651 exe=b1-Win64-Shipping.exe appid=2358720 engine=dormison-r18"
+    private static let windowsClosed = "sevo:exit pid=27651 wpid=0288 windows closed"
+    private static let gameCrash =
+        "0288:0214:err:seh:NtRaiseException Unhandled exception code c0000409 flags 1 addr 0x6ffffdd96eb9"
+
+    @Test
+    func `the game's exception after its windows closed is a crash on the way out`() {
+        let trail = [Self.windowsClosed, Self.gameCrash].joined(separator: "\n")
+        let ending = WineExceptionTrail.ending(in: trail, forProcesses: [27651])
+        #expect(ending.crash?.code == "0xc0000409")
+        #expect(ending.afterWindowsClosed)
+    }
+
+    @Test
+    func `the game's exception before its windows closed is a crash`() {
+        let trail = [Self.gameCrash, Self.windowsClosed].joined(separator: "\n")
+        let ending = WineExceptionTrail.ending(in: trail, forProcesses: [27651])
+        #expect(ending.crash?.code == "0xc0000409")
+        #expect(!ending.afterWindowsClosed)
+    }
+
+    @Test
+    func `a window closed and shown again leaves a later exception a crash`() {
+        let trail = [
+            Self.windowsClosed, "sevo:exit pid=27651 wpid=0288 windows reopened", Self.gameCrash,
+        ].joined(separator: "\n")
+        let ending = WineExceptionTrail.ending(in: trail, forProcesses: [27651])
+        #expect(ending.crash?.code == "0xc0000409")
+        #expect(!ending.afterWindowsClosed)
+        let closedAgain = [trail.replacingOccurrences(of: Self.gameCrash, with: Self.windowsClosed), Self.gameCrash]
+            .joined(separator: "\n")
+        #expect(WineExceptionTrail.ending(in: closedAgain, forProcesses: [27651]).afterWindowsClosed)
+    }
+
+    @Test
+    func `once the game is known by its marker, another process's exception is not its crash`() {
+        let trail = [
+            Self.windowsClosed,
+            "0450:0460:err:seh:NtRaiseException Unhandled exception code c0000005 flags 0 addr 0x1400",
+        ].joined(separator: "\n")
+        #expect(WineExceptionTrail.ending(in: trail, forProcesses: [27651]) == WineExceptionTrail.Ending())
+        // A marker from a process that is not the game's names nothing.
+        let other = WineExceptionTrail.ending(in: trail, forProcesses: [1])
+        #expect(other.crash?.code == "0xc0000005")
+        #expect(!other.afterWindowsClosed)
+    }
+
+    @Test
+    func `the game's processes are the ones the engine attributed to its app id`() {
+        let trail = [
+            Self.gameRun,
+            "sevo:run pid=27700 exe=CrashReportClient.exe appid=2358720 engine=dormison-r18",
+            "sevo:run pid=27800 exe=steamwebhelper.exe appid=none engine=dormison-r18",
+        ].joined(separator: "\n")
+        #expect(WineProvenance.processes(forApp: 2_358_720, in: trail) == [27651, 27700])
+    }
+
     @Test
     func `a trail with no exception yields none`() {
         #expect(WineExceptionTrail.lastException(in: "info:  MoltenVK version 1.2\n") == nil)

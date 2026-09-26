@@ -21,72 +21,6 @@
         }
       }
     },
-    "%@ (option %lld)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ (option %2$lld)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@（选项 %2$lld）"
-          }
-        }
-      }
-    },
-    "%@ showed no window" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 未显示任何窗口"
-          }
-        }
-      }
-    },
-    "Choose how to start it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请选择启动方式。"
-          }
-        }
-      }
-    },
-    "It tried to load %@, a Windows kernel driver, usually kernel-level anti-cheat, and kernel drivers cannot run on a Mac. If the program requires it, that is why it stopped." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "它尝试加载 Windows 内核驱动程序 %@（通常是内核级反作弊组件），而内核驱动程序无法在 Mac 上运行。如果该程序需要这个驱动程序，这就是它停止的原因。"
-          }
-        }
-      }
-    },
-    "Play" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始游戏"
-          }
-        }
-      }
-    },
-    "Play %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始游戏 %@"
-          }
-        }
-      }
-    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -248,6 +182,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@（未安装）"
+          }
+        }
+      }
+    },
+    "%@ (option %lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (option %2$lld)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@（选项 %2$lld）"
           }
         }
       }
@@ -461,6 +411,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已使用 %1$@，共 %2$@"
+          }
+        }
+      }
+    },
+    "%@ showed no window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 未显示任何窗口"
           }
         }
       }
@@ -1912,6 +1872,16 @@
         }
       }
     },
+    "Choose how to start it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择启动方式。"
+          }
+        }
+      }
+    },
     "Choose the File…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2352,6 +2322,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "崩溃，退出代码 %lld"
+          }
+        }
+      }
+    },
+    "crashed while exiting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出时崩溃"
+          }
+        }
+      }
+    },
+    "crashed while exiting — exit %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出时崩溃，退出代码 %lld"
           }
         }
       }
@@ -4588,6 +4580,16 @@
         }
       }
     },
+    "It tried to load %@, a Windows kernel driver, usually kernel-level anti-cheat, and kernel drivers cannot run on a Mac. If the program requires it, that is why it stopped." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它尝试加载 Windows 内核驱动程序 %@（通常是内核级反作弊组件），而内核驱动程序无法在 Mac 上运行。如果该程序需要这个驱动程序，这就是它停止的原因。"
+          }
+        }
+      }
+    },
     "Its dependencies and Windows settings are CrossOver's to change." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5884,6 +5886,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "PID"
+          }
+        }
+      }
+    },
+    "Play" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始游戏"
+          }
+        }
+      }
+    },
+    "Play %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始游戏 %@"
           }
         }
       }

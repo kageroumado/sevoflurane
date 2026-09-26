@@ -188,6 +188,11 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
             /// An unhandled exception in the Wine log during the run. A crash
             /// leaves one; being ended from outside does not.
             case crash
+            /// An unhandled exception while the game had no window left (the
+            /// last `sevo:exit … windows` line before it says `closed`): the
+            /// user had left it, and it fell over on the way out. Collected like a crash, never
+            /// offered as one, and a compatibility verdict leaves it out.
+            case crashAtExit = "crash-at-exit"
             /// The game was asked to stop, through Sevoflurane or `sevo`, and
             /// went. Steam ends a game with `TerminateProcess`, which reads as
             /// exit status 1 with no exception behind it.
@@ -306,6 +311,8 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case .user: String(localized: "exited normally")
         case .crash: exit.code.map { String(localized: "crashed — exit \($0)") }
             ?? String(localized: "crashed")
+        case .crashAtExit: exit.code.map { String(localized: "crashed while exiting — exit \($0)") }
+            ?? String(localized: "crashed while exiting")
         case .stopped: String(localized: "stopped on request")
         case .endedNotResponding: String(localized: "ended by the user while it was not responding")
         case .exitError: exit.code.map { String(localized: "exited with an error — exit \($0)") }
@@ -338,6 +345,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         return switch exit.kind {
         case .user: "exited normally"
         case .crash: "crashed — exit\(code)"
+        case .crashAtExit: "crashed while exiting — exit\(code)"
         case .stopped: "stopped on request"
         case .endedNotResponding: "ended by the user while it was not responding"
         case .exitError: "exited with an error — exit\(code)"

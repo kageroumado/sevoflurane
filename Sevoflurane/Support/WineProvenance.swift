@@ -28,6 +28,17 @@ nonisolated enum WineProvenance {
         return nil
     }
 
+    /// The unix pids of every process the engine attributed to the app id.
+    static func processes(forApp appID: Int, in text: String) -> Set<Int> {
+        var pids: Set<Int> = []
+        for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix("sevo:run") {
+            if let match = line.firstMatch(of: run), Int(match.output.3) == appID, let pid = Int(match.output.1) {
+                pids.insert(pid)
+            }
+        }
+        return pids
+    }
+
     // The executable's name can carry spaces (`exe=Aka Manto.exe`), so it runs
     // to the app id rather than to the next blank.
     private nonisolated(unsafe) static let run = /sevo:run pid=(\d+) exe=(.+?) appid=(\d+)/

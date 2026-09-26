@@ -132,7 +132,9 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         }
         stalls = record.stalls?.count ?? 0
         exit = record.exit?.kind.rawValue ?? RunRecord.Exit.Kind.unknown.rawValue
-        crashed = record.crash != nil
+        // A crash on the way out comes after the user left the game, so it
+        // says nothing about whether the game plays.
+        crashed = record.crash != nil && record.exit?.kind != .crashAtExit
         gameMode = record.gameMode
         hostLoad = Self.loadTier(record.host.load, thermal: record.host.thermal)
     }

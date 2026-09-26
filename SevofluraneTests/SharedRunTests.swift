@@ -25,6 +25,15 @@ struct SharedRunTests {
     }
 
     @Test
+    func `a crash on the way out is not shared as a crash`() throws {
+        var record = Self.fullRecord()
+        record.exit = RunRecord.Exit(kind: .crashAtExit, code: -1073740791)
+        let run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.exit == "crash-at-exit")
+        #expect(!run.crashed)
+    }
+
+    @Test
     func `a program Steam does not know sends its product name in place of an appid`() throws {
         var record = Self.fullRecord()
         record.appid = AdoptedPrograms.firstID + 3

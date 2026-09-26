@@ -62,13 +62,16 @@ nonisolated struct RunInProgress: Sendable {
         } else if record.runner != GameRunner.nwjs, record.rendererConfirmed != true {
             record.rendererConfirmed = false
         }
-        record.crash = WineExceptionTrail.lastException(in: wineTail)
+        let ending = WineExceptionTrail.ending(
+            in: wineTail, forProcesses: WineProvenance.processes(forApp: record.appid, in: lines),
+        )
+        record.crash = ending.crash
         let notes = WineExceptionTrail.notes(in: wineTail)
         record.notes = notes.isEmpty ? nil : notes
         let endedNotResponding = wineTail.contains("ended by the user while not responding")
         record.exit = RunRecord.Exit(
             kind: kind ?? Self.kind(
-                code: exit?.code, crashed: record.crash != nil, endedNotResponding: endedNotResponding,
+                code: exit?.code, ending: ending, endedNotResponding: endedNotResponding,
                 stopRequested: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
                 steamError: steamError, unrecorded: unrecorded,
             ),
@@ -82,10 +85,10 @@ nonisolated struct RunInProgress: Sendable {
 
     /// How a run ended, from what the client and Steam's log actually say.
     private static func kind(
-        code: Int?, crashed: Bool, endedNotResponding: Bool, stopRequested: Bool, steamError: String?,
-        unrecorded: RunRecord.Exit.Kind,
+        code: Int?, ending: WineExceptionTrail.Ending, endedNotResponding: Bool, stopRequested: Bool,
+        steamError: String?, unrecorded: RunRecord.Exit.Kind,
     ) -> RunRecord.Exit.Kind {
-        if crashed { return .crash }
+        if ending.crash != nil { return ending.afterWindowsClosed ? .crashAtExit : .crash }
         if endedNotResponding { return .endedNotResponding }
         if let code {
             if code == 0 { return .user }

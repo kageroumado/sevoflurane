@@ -149,7 +149,8 @@ nonisolated enum CrashCollector {
         beforeCompressing: (Report) -> Void = { _ in },
     ) -> Report? {
         let ended = record.exit?.kind
-        guard level.collectsEveryRun || ended == .crash || ended == .watchdog else { return nil }
+        guard level.collectsEveryRun || ended == .crash || ended == .crashAtExit || ended == .watchdog
+        else { return nil }
         // The level decides the dumps, so the caller never has to keep the two
         // in step by hand.
         var places = places
