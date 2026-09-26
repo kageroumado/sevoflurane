@@ -145,9 +145,27 @@ enum DaemonService {
     /// re-registering over an enabled record leaves that requirement in place,
     /// so the record has to be torn down first. Reached from the launch
     /// self-heal and from ``repair(force:)``.
+    ///
+    /// A rebuild gets two attempts, each registering a pause after the
+    /// unregister returns. Registering again at once can leave launchd
+    /// refusing to spawn the new job (`EX_CONFIG`, `needs LWCR update`) where
+    /// a second rebuild takes: the launch self-heal on a wiped test Mac and
+    /// `sevo daemon repair` after another build's helper was booted out both
+    /// failed once that way and then worked.
     private static func rebuild() async -> RepairResult {
         healAttempted = true
+        var result = await rebuildOnce()
+        for attempt in 2 ... Timing.rebuildAttempts {
+            guard case let .failed(reason) = result else { return result }
+            EventLog.enqueue(.app, "background helper rebuild \(attempt - 1) failed (\(reason)) — rebuilding again")
+            result = await rebuildOnce()
+        }
+        return result
+    }
+
+    private static func rebuildOnce() async -> RepairResult {
         await unregister()
+        try? await Task.sleep(for: Timing.settleAfterUnregister)
         do {
             try service.register()
         } catch {
@@ -308,5 +326,8 @@ enum DaemonService {
     private enum Timing {
         /// How long launchd gets to bring a freshly registered agent up.
         static let startupPolls = 15
+        static let rebuildAttempts = 2
+        /// Between tearing the record down and registering it again.
+        static let settleAfterUnregister = Duration.seconds(2)
     }
 }
