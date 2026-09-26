@@ -73,13 +73,16 @@ nonisolated struct StatsIdentity: Sendable {
         var evidence = Evidence()
         let service = DCAppAttestService.shared
         if service.isSupported {
+            var step = "generateKey"
             do {
                 let keyID = try await service.generateKey()
+                step = "attestKey"
                 let clientDataHash = Data(SHA256.hash(data: publicKeyDER + challenge))
                 evidence.attestation = try await service.attestKey(keyID, clientDataHash: clientDataHash)
                 evidence.appAttestKeyID = keyID
             } catch {
-                StatsUploader.log("App Attest declined: \(error.localizedDescription)")
+                let nsError = error as NSError
+                StatsUploader.log("App Attest declined at \(step): \(nsError.domain) \(nsError.code) \(nsError.userInfo)")
             }
         }
         if DCDevice.current.isSupported {
