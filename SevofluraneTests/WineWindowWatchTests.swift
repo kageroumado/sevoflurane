@@ -25,6 +25,20 @@ struct WineWindowWatchTests {
         #expect(!WineWindowWatch.isGameProgram("gameoverlayui.exe"))
     }
 
+    /// Steam runs these at boot and from Help ▸ System Information; each
+    /// loads the Mac driver, and one that ran during a launch was taken for
+    /// the game and recorded as a 166 s run (2026-09-26).
+    @Test
+    func `Steam's own probes are not`() {
+        for program in [
+            "steamsysinfo.exe", "hardwareupdater.exe", "steamsetup.exe",
+            "gldriverquery.exe", "gldriverquery64.exe",
+            "vulkandriverquery.exe", "vulkandriverquery64.exe",
+        ] {
+            #expect(!WineWindowWatch.isGameProgram(program), "\(program) is not a game")
+        }
+    }
+
     /// These run for the whole life of the bottle and each can flash a
     /// window: taken for a game's, they hold the display awake and spend a
     /// launch's activation right on nothing.

@@ -864,6 +864,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// up: a cold boot, with Steam's stores, takes a minute or two.
     private static let dockLaunchBudget = Duration.seconds(300)
 
+    /// The store a program's Dock tile launches through when its URL arrives
+    /// before the menu bar is installed — a tile that started this app opens
+    /// it first. Wired like the popover's store, so the status line, the
+    /// window watch and the run record open for that launch as for any other.
+    private lazy var dockQuickLaunch: QuickLaunchStore = {
+        let store = QuickLaunchStore()
+        store.launchHooks = QuickLaunchStore.LaunchHooks(reporting: host)
+        return store
+    }()
+
     /// A game's Dock tile, opened: its loader handed the open to
     /// `sevoflurane://play/<id>`. The game starts the way its menu bar row
     /// starts it; a Steam game waits for a client that can take the launch,
@@ -877,11 +887,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if AdoptedPrograms.isAdopted(id) {
             guard let entry = AdoptedPrograms.entry(id) else { return }
             EventLog.shared.log(.client, "Dock tile: starting \(entry.name)")
-            if let quickLaunch = menuBarPopover?.quickLaunch {
-                quickLaunch.launch(entry)
-            } else {
-                QuickLaunchStore().launch(entry)
-            }
+            (menuBarPopover?.quickLaunch ?? dockQuickLaunch).launch(entry)
             return
         }
         let name = host.libraryGames.first { $0.id == id }?.name
@@ -953,18 +959,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// answers the question the user is actually asking.
     func applicationShouldHandleReopen(
         _: NSApplication,
-        hasVisibleWindows _: Bool,
+        hasVisibleWindows appKitSeesWindows: Bool,
     ) -> Bool {
+        // AppKit's own count of visible windows is in the line because it is
+        // usually wrong here (parked pages and menus count) and its being
+        // wrong the other way is what would make a Dock click do nothing.
+        let seen = "AppKit counts \(appKitSeesWindows ? "visible windows" : "no visible window"), "
+            + "policy \(NSApp.activationPolicy() == .regular ? "regular" : "accessory")"
         // Steam's windows are held behind an unfinished setup, so the window
         // a reopen can actually bring up is the assistant's.
         if setupWindow.show() {
-            EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — setup is unfinished; showing it")
+            EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — setup is unfinished; showing it (\(seen))")
             return true
         }
         EventLog.shared.log(
             .window,
             "reopen request (Dock icon or Finder) — Steam's window is "
-                + "\(host.isSteamOnScreen ? "on screen; bringing it forward" : "hidden; showing it")",
+                + "\(host.isSteamOnScreen ? "on screen; bringing it forward" : "hidden; showing it") (\(seen))",
         )
         host.showSteam()
         return true

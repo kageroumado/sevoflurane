@@ -661,6 +661,12 @@ final class SteamWebHost {
             // time someone actually asks for the window rather than at
             // launch: a menu-bar app that puts a window on screen at login
             // is not a menu-bar app.
+            EventLog.shared.log(
+                .window,
+                "asked for Steam — its window exists"
+                    + "\(isSteamOnScreen ? " on screen" : " off screen")"
+                    + "\(hasRoutedDesktop ? "" : " on no route; routing it"); bringing it forward",
+            )
             if !hasRoutedDesktop {
                 routeDesktop()
             }
@@ -680,8 +686,18 @@ final class SteamWebHost {
         // held until the adoption it is waiting for.
         desktopShowIsPending = true
         if desktopWasClosed {
+            EventLog.shared.log(
+                .window,
+                "asked for Steam — its window was closed; reloading the page to rebuild it, "
+                    + "and showing the desktop window the reload adopts",
+            )
             reload()
         } else {
+            EventLog.shared.log(
+                .window,
+                "asked for Steam — no desktop window yet (status: \(status)); "
+                    + "routing and showing the one the booting UI creates",
+            )
             routeDesktop()
         }
     }

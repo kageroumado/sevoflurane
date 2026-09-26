@@ -2,6 +2,18 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// What a program's launch reports to, beat by beat: the Steam host, which
+/// carries the status line and opens the window watch and the run record
+/// (``SteamWebHost/beginProgramLaunch(appID:)``).
+@MainActor
+protocol ProgramLaunchReporting: AnyObject {
+    func beginProgramLaunch(appID: Int)
+    func programDidStart(appID: Int)
+    func endProgramLaunch(appID: Int)
+}
+
+extension SteamWebHost: ProgramLaunchReporting {}
+
 /// The adopted Windows programs as the menu bar reads them: the list, the
 /// icon for each row, and the four things a row can do.
 ///
@@ -42,14 +54,24 @@ final class QuickLaunchStore {
         return image
     }
 
-    /// The launch story's beats, told to the Steam host by the popover that
-    /// owns both (``SteamWebHost/beginProgramLaunch(appID:)``): the row's
-    /// status line, then the window watch and the run record once the helper
-    /// has spawned the program, or the status cleared when it spawned nothing.
+    /// The launch story's beats, told to the Steam host
+    /// (``SteamWebHost/beginProgramLaunch(appID:)``): the row's status line,
+    /// then the window watch and the run record once the helper has spawned
+    /// the program, or the status cleared when it spawned nothing.
     struct LaunchHooks {
         let pressed: @MainActor (Int) -> Void
         let started: @MainActor (Int) -> Void
         let ended: @MainActor (Int) -> Void
+
+        /// The beats told to `host`. Every store that starts a program is
+        /// wired this way — the popover's, and the one a Dock tile's launch
+        /// uses before the menu bar exists — so a launch from anywhere opens
+        /// the same status line, window watch and run record.
+        init(reporting host: some ProgramLaunchReporting) {
+            pressed = { host.beginProgramLaunch(appID: $0) }
+            started = { host.programDidStart(appID: $0) }
+            ended = { host.endProgramLaunch(appID: $0) }
+        }
     }
 
     @ObservationIgnored var launchHooks: LaunchHooks?

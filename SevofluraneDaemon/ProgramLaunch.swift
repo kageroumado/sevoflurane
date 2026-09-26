@@ -63,7 +63,7 @@ extension BottleSupervisor {
         }
         stageGraphics(for: name, renderer: explicit, appID: id)
         if SteamParent.wants(program) {
-            return await launchUnderSteamParent(program).map(ProgramLaunchRefusal.failed)
+            return await launchUnderSteamParent(program, id: id).map(ProgramLaunchRefusal.failed)
         }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
@@ -77,8 +77,10 @@ extension BottleSupervisor {
     /// The env files are written into the companion too, so the program's
     /// own settings and launcher bundle reach it there exactly as they would
     /// in the bottle. The working directory is the program's own folder,
-    /// which the parent passes on to it.
-    private func launchUnderSteamParent(_ program: AdoptedProgram) async -> String? {
+    /// which the parent passes on to it. The parent exits with the program's
+    /// own code, which is written to the Wine log for the run record
+    /// (``ProgramExit``): Steam's process log never names a program of ours.
+    private func launchUnderSteamParent(_ program: AdoptedProgram, id: Int) async -> String? {
         let name = program.url.lastPathComponent
         let engine = Engine.active
         if let refusal = await SteamParent.prepare(bottle: SteamBottle.name, engine: engine) {
@@ -92,6 +94,7 @@ extension BottleSupervisor {
             SteamParent.invocation(program),
             environment: environment,
             directory: program.url.deletingLastPathComponent(),
+            programExit: ProgramExit.Program(appID: id, exe: name),
         )
         note("started \(name) under a steam.exe parent in \(SteamBottle.name)'s companion prefix, where no Steam client runs")
         if let unlocker = FPSUnlocker.unlocker(for: program) {

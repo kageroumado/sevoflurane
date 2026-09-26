@@ -49,3 +49,38 @@ nonisolated enum WineProvenance {
     private nonisolated(unsafe) static let run = /sevo:run pid=(\d+) exe=(.+?) appid=(\d+)/
     private nonisolated(unsafe) static let gfx = /sevo:gfx pid=(\d+) renderer=(\S+)/
 }
+
+/// The exit of a program the helper started outside Steam, written to the
+/// Wine log by the helper when the program's launcher ends:
+/// `sevo:program-exit appid=<id> exe=<name> status=<code>`. Steam's process
+/// log has no line for such a program, so this is the only place its exit
+/// code exists. Written only where the launcher's status is the program's own
+/// — the `steam.exe` parent (SteamParent) exits with its child's code — since
+/// `start /unix` returns 0 the moment the program is spawned.
+nonisolated enum ProgramExit {
+    /// The program whose exit a launcher's status is.
+    struct Program: Sendable {
+        let appID: Int
+        /// The executable's file name, as the launch named it.
+        let exe: String
+    }
+
+    /// The line for `program`, whose launcher ended with `status`.
+    static func line(_ program: Program, status: Int32) -> String {
+        "sevo:program-exit appid=\(program.appID) exe=\(program.exe) status=\(status)"
+    }
+
+    /// The exit code the last such line in `text` gives for `appID`.
+    static func status(forApp appID: Int, in text: String) -> Int? {
+        var found: Int?
+        for line in text.split(whereSeparator: \.isNewline) where line.contains("sevo:program-exit") {
+            if let match = line.firstMatch(of: exit), Int(match.output.1) == appID {
+                found = Int(match.output.2)
+            }
+        }
+        return found
+    }
+
+    /// The executable's name can carry spaces, so it runs to the status.
+    private nonisolated(unsafe) static let exit = /sevo:program-exit appid=(\d+) exe=.+? status=(-?\d+)/
+}

@@ -55,7 +55,23 @@ enum ActivationPolicy {
     /// handed back once the launch has had its three minutes.
     static func claimRightForALaunch() {
         becomeRegular(forAWindowWithin: graceForALaunch)
-        Activation().claimRight()
+        guard Activation().claimRight() else { return }
+        // Read once the run loop has turned, which is when the activation
+        // lands. A press in the popover, a non-activating panel, does take
+        // the right (measured 2026-09-26); what loses it is the user
+        // activating another app in the minute before the game's window
+        // arrives, and then the window is declined with "this app inactive".
+        // This line is what tells the two apart in a report.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                let front = NSWorkspace.shared.frontmostApplication
+                EventLog.shared.log(
+                    .window,
+                    "launch pressed — activation right \(NSApp.isActive ? "taken; this app is active" : "refused; this app is still inactive")"
+                        + ", frontmost \(front?.localizedName ?? "nobody") (pid \(front?.processIdentifier ?? 0))",
+                )
+            }
+        }
     }
 
     /// Back to accessory when `closing` was the last window a person can

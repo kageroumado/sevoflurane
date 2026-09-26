@@ -129,12 +129,21 @@ nonisolated enum WineWindowWatch {
     /// window.
     static let gameInfrastructureOwners = clientOwners.union(bottleOwners).union(GameExecutables.windowsTools)
 
-    /// Steam's own processes in the bottle.
+    /// Steam's own processes in the bottle: the client, its helpers, and the
+    /// probes it runs at boot and from Help ▸ System Information. Each probe
+    /// loads the Mac driver and some order a window, so one that runs during
+    /// a launch reads as the game's own process unless it is named here
+    /// (`steamsysinfo.exe` was recorded as a 166 s run, 2026-09-26). The
+    /// same list the engine's dock shim keeps off the screen (dormison
+    /// `sevo_dock_shim.c`, `is_steam_infrastructure`).
     private static let clientOwners: Set<String> = [
         "steam.exe", "steamwebhelper.exe", "steamservice.exe",
         "steamerrorreporter.exe", "steamerrorreporter64.exe",
         "explorer.exe", "conhost.exe", "tabtip.exe",
         "gameoverlayui.exe", "gameoverlayui64.exe",
+        "steamsysinfo.exe", "hardwareupdater.exe", "steamsetup.exe",
+        "gldriverquery.exe", "gldriverquery64.exe",
+        "vulkandriverquery.exe", "vulkandriverquery64.exe",
     ]
 
     /// Wine's own services, and the programs Sevoflurane runs in the bottle

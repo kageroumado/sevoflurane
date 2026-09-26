@@ -140,15 +140,20 @@ final class GameLaunchWatch {
     /// window.
     private func noteArmedProcesses(_ entries: [WineChronicle.Entry]) {
         for entry in entries where entry.verb == .armed {
-            let exe = entry.executable.lowercased()
-            // A game's own crash handler and installers load the driver too,
-            // and a per-program env file for one of those would be a setting
-            // written against the wrong process.
-            guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe) else {
-                continue
-            }
+            guard let exe = Self.launchProcess(named: entry.executable) else { continue }
             onGameProcessArmed?(exe, entry.pid)
         }
+    }
+
+    /// The lowercased name of a bottle process that can be the launch's own,
+    /// or `nil` for one that never is: Steam's client and its probes, Wine's
+    /// services, and a game's crash handler or installer all load the driver
+    /// too, and a run record or a per-program env file named after one of
+    /// those is written against the wrong process.
+    nonisolated static func launchProcess(named executable: String) -> String? {
+        let exe = executable.lowercased()
+        guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe) else { return nil }
+        return exe
     }
 
     /// Spends the activation right the launch took on the window that just

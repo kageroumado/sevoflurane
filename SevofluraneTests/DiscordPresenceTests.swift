@@ -156,6 +156,20 @@ struct DiscordPresenceTests {
         try await Self.wait(for: 2, on: discord)
     }
 
+    /// The app keeps its Discord connection open for the life of the game,
+    /// so the fake sits mid-session on a client that never hangs up when its
+    /// test ends. A fake that waited for the peer there kept the test host
+    /// alive after the suite (2026-09-26, with Discord running beside it).
+    @Test
+    func `a client that never hangs up does not keep the fake serving`() throws {
+        let discord = try FakeDiscord(replyingWith: .ready)
+        let client = try #require(DiscordPresence.connectToDiscord(in: discord.directory))
+        defer { Darwin.close(client) }
+        // Long enough for the fake to accept the client and wait on it.
+        Thread.sleep(forTimeInterval: 0.3)
+        #expect(discord.stop())
+    }
+
     // MARK: - Helpers
 
     /// A directory short enough for `sun_path`, which holds 104 bytes.
@@ -197,6 +211,15 @@ private final class FakeDiscord: @unchecked Sendable {
     private let lock = NSLock()
     private var received: [(opcode: UInt32, payload: Data)] = []
     private var stopped = false
+    /// Signalled once the serving thread has returned.
+    private let served = DispatchSemaphore(value: 0)
+
+    /// How long one wait on the wire lasts before `stopped` is looked at
+    /// again. The sockets block otherwise, and the app keeps its Discord
+    /// connection open for the life of the game: a fake that waited in
+    /// `recv` for the peer to hang up waited for the rest of the test host's
+    /// life (2026-09-26, Discord running beside the suite).
+    private static let pollMilliseconds: Int32 = 100
 
     var frames: [(opcode: UInt32, payload: Data)] {
         lock.withLock { received }
@@ -232,16 +255,37 @@ private final class FakeDiscord: @unchecked Sendable {
         thread.start()
     }
 
-    func stop() {
+    /// Ends the serving thread and removes the socket. Returns once the
+    /// thread has returned, so nothing of the fake outlives its test; false
+    /// when it has not within two seconds.
+    @discardableResult
+    func stop() -> Bool {
         lock.withLock { stopped = true }
+        Darwin.shutdown(listener, SHUT_RDWR)
         Darwin.close(listener)
+        let ended = served.wait(timeout: .now() + 2) == .success
         try? FileManager.default.removeItem(at: directory)
+        return ended
+    }
+
+    /// Whether `descriptor` has something to read, waited for in
+    /// ``pollMilliseconds`` slices so a stop is seen between them. False once
+    /// stopped, and for a descriptor that is gone.
+    private func waitReadable(_ descriptor: Int32) -> Bool {
+        while !lock.withLock({ stopped }) {
+            var watched = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = Darwin.poll(&watched, 1, Self.pollMilliseconds)
+            if ready > 0 { return watched.revents & Int16(POLLNVAL) == 0 }
+            if ready < 0, errno != EINTR { return false }
+        }
+        return false
     }
 
     /// Serves one client at a time, for as many as connect: a game that
     /// replaces another opens a second session under its own application id.
     private func serve() {
-        while !lock.withLock({ stopped }) {
+        defer { served.signal() }
+        while waitReadable(listener) {
             let client = Darwin.accept(listener, nil, nil)
             guard client >= 0 else { return }
             session(client)
@@ -277,10 +321,13 @@ private final class FakeDiscord: @unchecked Sendable {
         }
     }
 
+    /// Exactly `count` bytes, or nil once the fake is stopped or the client
+    /// has hung up.
     private func read(_ client: Int32, exactly count: Int) -> Data? {
         var bytes = [UInt8](repeating: 0, count: count)
         var offset = 0
         while offset < count {
+            guard waitReadable(client) else { return nil }
             let got = bytes.withUnsafeMutableBytes { buffer in
                 Darwin.recv(client, buffer.baseAddress! + offset, count - offset, 0)
             }

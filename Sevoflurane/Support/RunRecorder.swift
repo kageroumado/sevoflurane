@@ -40,10 +40,16 @@ nonisolated struct RunInProgress: Sendable {
     ///   - unrecorded: What an ending Steam never wrote down is, on this
     ///     path. A quit takes the bottle down with the app, so Steam is gone
     ///     before it can record the exit it caused.
+    ///   - programExitGrace: How long to give the helper's exit line for a
+    ///     program of ours (``ProgramExit``) to reach the Wine log. The line
+    ///     is written when the program's launcher ends, a moment after the
+    ///     program's own process is gone — and that process going is what
+    ///     closed the run.
     func write(
         lasting seconds: Double?,
         kind: RunRecord.Exit.Kind?,
         unrecorded: RunRecord.Exit.Kind = .unknown,
+        programExitGrace: Duration = .zero,
     ) {
         var record = record
         record.durationSeconds = seconds
@@ -52,13 +58,23 @@ nonisolated struct RunInProgress: Sendable {
             record.fps?.gameplay = GameplayWindow.gameplay(of: contents)
         }
         let steamTail = RunRecorder.text(of: processLog, from: steamLogOffset)
-        let wineTail = RunRecorder.text(of: wineLog, from: wineLogOffset)
         record.runtime = SteamGameProcessLog.runtime(
             forApp: record.appid, in: steamTail, exe: record.exe,
         )
         let exit = SteamGameProcessLog.exit(
             forApp: record.appid, running: record.exe, in: steamTail,
         )
+        var wineTail = RunRecorder.text(of: wineLog, from: wineLogOffset)
+        var programStatus = ProgramExit.status(forApp: record.appid, in: wineTail)
+        if kind == nil, exit == nil, programStatus == nil, programExitGrace > .zero {
+            let deadline = ContinuousClock.now + programExitGrace
+            while programStatus == nil, ContinuousClock.now < deadline {
+                Thread.sleep(forTimeInterval: Self.programExitPoll)
+                wineTail = RunRecorder.text(of: wineLog, from: wineLogOffset)
+                programStatus = ProgramExit.status(forApp: record.appid, in: wineTail)
+            }
+        }
+        let code = exit?.code ?? programStatus
         let lines = provenance.isEmpty ? wineTail : provenance + "\n" + wineTail
         if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: lines) {
             record.renderer = answered
@@ -75,17 +91,21 @@ nonisolated struct RunInProgress: Sendable {
         let endedNotResponding = wineTail.contains("ended by the user while not responding")
         record.exit = RunRecord.Exit(
             kind: kind ?? Self.kind(
-                code: exit?.code, ending: ending, endedNotResponding: endedNotResponding,
+                code: code, ending: ending, endedNotResponding: endedNotResponding,
                 stopRequest: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
                 steamError: steamError, unrecorded: unrecorded,
             ),
-            code: exit?.code,
+            code: code,
         )
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
         RunRecorder.didClose(record)
         RunRecorder.didRecord?(record, wineTail)
     }
+
+    /// How often the Wine log is re-read while a program's exit line is
+    /// given its grace.
+    private static let programExitPoll: TimeInterval = 0.25
 
     /// How a run ended, from what the client and Steam's log actually say.
     private static func kind(
@@ -184,6 +204,11 @@ final nonisolated class RunRecorder {
     /// The driver's present counters, sampled for as long as a run is open;
     /// what fills the record's ``RunRecord/fps``.
     let presentStats: PresentStats
+    /// How long a closing program run waits for the helper's exit line
+    /// (``ProgramExit``) before it is written without one. Three seconds
+    /// covers the launcher's own teardown after the program's process is
+    /// gone; a test that needs no line passes zero.
+    private let programExitGrace: Duration
 
     /// A launch in progress and everything about the machine that was true
     /// when it started. `Sendable` so closing one can leave the main actor:
@@ -195,11 +220,13 @@ final nonisolated class RunRecorder {
         wineLog: URL = WineLog.fileURL,
         processLog: URL? = nil,
         presentStats: PresentStats = PresentStats(companions: [SteamBottle.companion]),
+        programExitGrace: Duration = .seconds(3),
     ) {
         self.runs = runs
         self.wineLog = wineLog
         self.processLogOverride = processLog
         self.presentStats = presentStats
+        self.programExitGrace = programExitGrace
     }
 
     /// Apps whose open run the client has confirmed running.
@@ -603,7 +630,13 @@ final nonisolated class RunRecorder {
         // new run's file with it.
         RunLog.disarm(appID: appID, in: runs)
         let lasted = durationKnown ? Self.seconds(since: run.started) : nil
-        Self.closings.async { run.write(lasting: lasted, kind: kind, unrecorded: unrecorded) }
+        // A program of ours closing now is one whose launcher is still
+        // ending; a run picked up from an earlier process has had its line
+        // written long ago, or never.
+        let grace = durationKnown && AdoptedPrograms.isAdopted(appID) ? programExitGrace : .zero
+        Self.closings.async {
+            run.write(lasting: lasted, kind: kind, unrecorded: unrecorded, programExitGrace: grace)
+        }
     }
 
     /// Closes every open run, for the quit path: the app is going away and

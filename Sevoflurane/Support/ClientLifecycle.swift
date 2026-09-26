@@ -861,9 +861,15 @@ nonisolated enum ClientLifecycle {
     /// `environment` replaces the invocation's own, for a program that runs
     /// in the bottle's companion prefix (``SteamParent``), and `directory`
     /// is the working directory its Windows side starts in.
+    /// - Parameter programExit: For a launcher whose status is the program's
+    ///   own — the `steam.exe` parent exits with its child's code — the
+    ///   program, so its exit is written to the Wine log for the run record
+    ///   to read (``ProgramExit``). Nil for `start /unix`, which returns 0
+    ///   the moment the program is spawned.
     @concurrent
     static func launchInBottle(
         _ program: [String], environment: [String: String]? = nil, directory: URL? = nil,
+        programExit: ProgramExit.Program? = nil,
     ) async {
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none, program: program,
@@ -879,12 +885,16 @@ nonisolated enum ClientLifecycle {
         }
         // The program's own name: a full path in a log line is the account's
         // name in a bug report, and nobody reads past it.
-        let name = program.first.map { ($0 as NSString).lastPathComponent } ?? "?"
+        let name = program.first.map(programName) ?? "?"
         let trail = WineLog.handle(labeled: name) ?? FileHandle.nullDevice
         process.standardOutput = trail
         process.standardError = trail
         process.terminationHandler = { finished in
-            log(exitLine(of: name, status: finished.terminationStatus, stopRequestedAt: stopRequestedAt))
+            let status = finished.terminationStatus
+            log(exitLine(of: name, status: status, stopRequestedAt: stopRequestedAt))
+            if let programExit {
+                trail.write(Data((ProgramExit.line(programExit, status: status) + "\n").utf8))
+            }
             try? trail.close()
         }
         do {
@@ -893,6 +903,13 @@ nonisolated enum ClientLifecycle {
             log("\(name) failed to start: \(error.localizedDescription)")
             closeTrail(trail)
         }
+    }
+
+    /// The file name at the end of a path as Windows or as Unix spells it:
+    /// `C:\windows\system32\steam.exe` and `/Applications/Game/game.exe` both
+    /// name their last component.
+    static func programName(of path: String) -> String {
+        path.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init) ?? path
     }
 
     /// Closes a log handle whose process never started, which leaves no
