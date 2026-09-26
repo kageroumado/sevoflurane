@@ -186,7 +186,7 @@ final class StorageStore {
         defer { isUninstalling = false }
         await environment.stopEverything(supervisor: supervisor)
         let ours = ["engines", "renderers", "shaders", "toolkits", "shadow", "logs"]
-        let bottleOnly = ["bottle", "client", "games", "caches"]
+        let bottleOnly = ["bottle", "client", "games", "caches", "companions"]
         for entry in entries where ours.contains(entry.id)
             || (includingBottle && bottleOnly.contains(entry.id)) {
             try? environment.trash(entry)

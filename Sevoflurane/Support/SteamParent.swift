@@ -82,8 +82,9 @@ nonisolated enum SteamParent {
         return environment
     }
 
-    /// Makes the companion prefix ready: created on first use, the parent
-    /// in place and current. Answers a refusal, or `nil` when it is ready.
+    /// Makes the companion prefix ready: its Windows on `engine`, created on
+    /// first use, a loader file for every renderer DLL, the parent in place
+    /// and current. Answers a refusal, or `nil` when it is ready.
     static func prepare(bottle: String, engine: Engine) async -> String? {
         guard case .managed = engine else {
             return "a program that needs a steam.exe parent runs on a Dormison engine, not \(engine)"
@@ -93,6 +94,14 @@ nonisolated enum SteamParent {
         }
         let prefix = prefix(for: bottle)
         let manager = FileManager.default
+        if let stale = serverEngine(of: prefix), stale != engine {
+            // A program the last launch started outlived an engine switch, and
+            // the bottle's teardown never reaches the companion. The new
+            // engine's processes cannot join that server, so it goes, with
+            // whatever still runs on it.
+            await ClientLifecycle.killWineservers([BottleTarget(prefix: prefix, engine: stale)])
+            await EventLog.shared.log(.client, "stopped \(bottle)'s companion prefix, still running on \(stale.description)")
+        }
         if !manager.fileExists(atPath: prefix.appendingPathComponent("system.reg").path) {
             try? manager.createDirectory(at: root, withIntermediateDirectories: true)
             let environment = environment(bottle: bottle, engine: engine)
@@ -100,15 +109,17 @@ nonisolated enum SteamParent {
                 engine.wineURL.path, ["wineboot", "-i"],
                 environment: environment, capture: .combined, timeout: .seconds(180),
             )
-            let server = engine.wineURL.deletingLastPathComponent().appendingPathComponent("wineserver")
             _ = await Subprocess.run(
-                server.path, ["-w"], environment: environment, timeout: .seconds(60),
+                engine.wineserverURL.path, ["-w"], environment: environment, timeout: .seconds(60),
             )
             guard manager.fileExists(atPath: prefix.appendingPathComponent("system.reg").path) else {
                 return "could not create the companion prefix (wineboot status \(boot.status.map(String.init) ?? "none"))"
             }
             await EventLog.shared.log(.setup, "created \(bottle)'s companion prefix for programs that need a steam.exe parent")
         }
+        // The bottle's staging fills only the bottle's system32, and Wine
+        // loads a renderer DLL only through a file there.
+        EngineRenderers.ensureLoaderFiles(engine: engine.root, prefix: prefix)
         let target = parentPath(in: prefix)
         if !manager.contentsEqual(atPath: parent.path, andPath: target.path) {
             try? manager.removeItem(at: target)
@@ -119,5 +130,15 @@ nonisolated enum SteamParent {
             }
         }
         return nil
+    }
+
+    /// The managed engine whose wineserver holds `prefix` now, or `nil` when
+    /// none runs there.
+    static func serverEngine(of prefix: URL) -> Engine? {
+        guard let directory = WineOrphans.serverDirectory(forPrefix: prefix.path) else { return nil }
+        return BottleIdentity.liveServers()
+            .first { $0.serverDirectory == directory }?
+            .engineVersion
+            .map { .managed(version: $0) }
     }
 }

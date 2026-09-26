@@ -408,6 +408,20 @@ nonisolated enum EngineRenderers {
         }
     }
 
+    /// Gives another prefix on `engine` the loader files ``stage(_:engine:bottle:toolkit:)``
+    /// gives the bottle, from the tree as the bottle's staging left it: the
+    /// companion prefix (``SteamParent``) runs on that same tree.
+    static func ensureLoaderFiles(engine: URL, prefix: URL) {
+        guard !isGPTkFlavor(engine) else { return }
+        for architecture in Architecture.all {
+            let canonical = architecture.tree(in: engine)
+            guard FileManager.default.fileExists(atPath: canonical.path) else { continue }
+            ensureLoaderFiles(
+                canonical: canonical, engine: engine, bottle: prefix, architecture: architecture,
+            )
+        }
+    }
+
     /// Guarantees every renderer DLL has a file in the bottle's system
     /// directory for `architecture` — `system32` for x86_64, `syswow64` for
     /// i386, which is what a 32-bit process sees as its own `system32`.

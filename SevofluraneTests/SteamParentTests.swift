@@ -72,9 +72,4 @@ struct SteamParentTests {
         let refusal = await SteamParent.prepare(bottle: "Steam", engine: .crossover)
         #expect(refusal?.contains("Dormison") == true)
     }
-
-    @Test
-    func `only DXMT's winemetal is kept in system32 without a tree copy`() {
-        #expect(EngineRenderers.loaderOnlyDLLs == ["winemetal.dll"])
-    }
 }

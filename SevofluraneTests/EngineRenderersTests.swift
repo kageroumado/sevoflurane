@@ -218,6 +218,29 @@ struct EngineRenderersTests {
         #expect(engine.read("bottle/drive_c/windows/system32/dxgi.dll") != nil)
     }
 
+    /// The companion prefix (``SteamParent``) runs on the tree the bottle
+    /// staged, and needs a file in its own system32 for each renderer DLL,
+    /// DXMT's winemetal among them for a game pinned to DXMT.
+    @Test
+    func `another prefix gets the loader files the bottle's staging left`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        try engine.installDXMT("0.80")
+        let toolkit = try engine.installToolkit("4.0 beta 2")
+        EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit)
+        try engine.manager.createDirectory(
+            at: engine.root.appendingPathComponent("companion/drive_c/windows/system32"),
+            withIntermediateDirectories: true,
+        )
+
+        EngineRenderers.ensureLoaderFiles(
+            engine: engine.root, prefix: engine.root.appendingPathComponent("companion"),
+        )
+
+        #expect(engine.read("companion/drive_c/windows/system32/dxgi.dll") == "pe dxgi 4.0 beta 2")
+        #expect(engine.read("companion/drive_c/windows/system32/winemetal.dll") == "pe winemetal dxmt")
+    }
+
     @Test
     func `the bridge a launch names is the tree's copy`() {
         let engine = URL(fileURLWithPath: "/engines/dormison-r2")
