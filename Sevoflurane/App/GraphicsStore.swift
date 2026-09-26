@@ -224,7 +224,7 @@ final class GraphicsStore {
             d3dMetalVersions = environment.installedToolkits()
             if choosing { try environment.chooseToolkit(version: entry.version) }
             activeD3DMetal = environment.activeToolkit()?.version
-            EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the engine")
+            EventLog.shared.log(.setup, "D3DMetal \(entry.version) added to the shared toolkit store")
             return nil
         } catch {
             return "\(error)"

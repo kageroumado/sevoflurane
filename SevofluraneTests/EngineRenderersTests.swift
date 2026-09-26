@@ -416,6 +416,32 @@ struct D3DMetalInstallTests {
 /// Toolkits an engine carries move into the one shared store.
 struct ToolkitStoreTests {
     @Test
+    func `each version is named once, with the number of engines that carried it`() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("toolkits-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = root.appendingPathComponent("store")
+        let engines = (15 ... 17).map { root.appendingPathComponent("dormison-r\($0)") }
+        for engine in engines {
+            for version in ["4.0 beta 2", "3.0"] {
+                try FileManager.default.createDirectory(
+                    at: engine.appendingPathComponent("d3dmetal/\(version)/lib/external/D3DMetal.framework"),
+                    withIntermediateDirectories: true,
+                )
+            }
+        }
+
+        let adoption = D3DMetalInstaller.adoptEngineToolkits(from: engines, into: store)
+        #expect(adoption == D3DMetalInstaller.Adoption(
+            moved: ["3.0", "4.0 beta 2"], movedFrom: 1, trashed: ["3.0", "4.0 beta 2"], trashedFrom: 2,
+        ))
+        #expect(adoption.logLines == [
+            "D3DMetal 3.0 and 4.0 beta 2 moved into the shared toolkit store from 1 engine",
+            "D3DMetal 3.0 and 4.0 beta 2: the shared toolkit store already had them, "
+                + "so 2 engines' own copies went to the Trash",
+        ])
+    }
+
+    @Test
     func `an engine's toolkit is moved into the store, and its copy of one the store has is trashed`() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("toolkits-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -427,7 +453,7 @@ struct ToolkitStoreTests {
         }
 
         let adoption = D3DMetalInstaller.adoptEngineToolkits(from: [engine], into: store)
-        #expect(adoption == D3DMetalInstaller.Adoption(moved: ["4.0 beta 2"], trashed: ["3.0"]))
+        #expect(adoption == D3DMetalInstaller.Adoption(moved: ["4.0 beta 2"], movedFrom: 1, trashed: ["3.0"], trashedFrom: 1))
         #expect(D3DMetalInstaller.installed(inEngine: store).map(\.version) == ["3.0", "4.0 beta 2"])
         #expect(D3DMetalInstaller.installed(inEngine: engine).isEmpty)
         let kept = store.appendingPathComponent("d3dmetal/3.0/lib/external/D3DMetal.framework/marker")

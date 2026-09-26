@@ -64,22 +64,42 @@ nonisolated enum D3DMetalInstaller {
     /// ``adoptEngineToolkits(from:into:)`` over every installed managed engine, logged.
     static func adoptInstalledEnginesToolkits() {
         let engines = SetupProbe.managedEngineVersions().map(Engine.managedRoot.appendingPathComponent)
-        let adoption = adoptEngineToolkits(from: engines)
-        if !adoption.moved.isEmpty {
-            SetupLog.log("D3DMetal \(adoption.moved.joined(separator: ", ")) moved into the shared toolkit store")
-        }
-        if !adoption.trashed.isEmpty {
-            SetupLog.log("D3DMetal \(adoption.trashed.joined(separator: ", ")): the shared toolkit store "
-                + "already had it, so the engine's own copy went to the Trash")
-        }
+        for line in adoptEngineToolkits(from: engines).logLines { SetupLog.log(line) }
     }
 
     /// What ``adoptEngineToolkits(from:into:)`` did with each engine's toolkits.
     struct Adoption: Equatable, Sendable {
-        /// Versions the store lacked, moved into it from an engine.
+        /// Versions the store lacked, moved into it from an engine, oldest first.
         var moved: [String] = []
-        /// Versions the store already had, whose engine copy went to the Trash.
+        /// How many engines a version was moved out of.
+        var movedFrom = 0
+        /// Versions the store already had, whose engine copies went to the Trash, oldest first.
         var trashed: [String] = []
+        /// How many engines' copies went to the Trash.
+        var trashedFrom = 0
+
+        /// One line for what moved and one for what went to the Trash, each
+        /// version named once however many engines carried it.
+        var logLines: [String] {
+            var lines: [String] = []
+            if !moved.isEmpty {
+                lines.append("D3DMetal \(Self.list(moved)) moved into the shared toolkit store from "
+                    + (movedFrom == 1 ? "1 engine" : "\(movedFrom) engines"))
+            }
+            if !trashed.isEmpty {
+                lines.append("D3DMetal \(Self.list(trashed)): the shared toolkit store already had "
+                    + (trashed.count == 1 ? "it" : "them") + ", so "
+                    + (trashedFrom == 1 ? "the engine's own copy" : "\(trashedFrom) engines' own copies")
+                    + " went to the Trash")
+            }
+            return lines
+        }
+
+        /// `3.0`, `3.0 and 4.0 beta 2`, `2.1, 3.0 and 4.0 beta 2`.
+        private static func list(_ versions: [String]) -> String {
+            guard let last = versions.last, versions.count > 1 else { return versions.first ?? "" }
+            return versions.dropLast().joined(separator: ", ") + " and " + last
+        }
     }
 
     /// Empties the toolkits engines carry in their own `d3dmetal/` into the store: engines
@@ -89,23 +109,32 @@ nonisolated enum D3DMetalInstaller {
     @discardableResult
     static func adoptEngineToolkits(from engines: [URL], into store: URL = store) -> Adoption {
         let manager = FileManager.default
-        var adoption = Adoption()
+        var moved: Set<String> = [], trashed: Set<String> = []
+        var movedFrom = 0, trashedFrom = 0
         for engine in engines {
+            var movedHere = false, trashedHere = false
             for toolkit in installed(inEngine: engine) {
                 let destination = store.appendingPathComponent("d3dmetal").appendingPathComponent(toolkit.version)
                 if manager.fileExists(atPath: destination.path) {
                     if (try? manager.trashItem(at: toolkit.root, resultingItemURL: nil)) != nil {
-                        adoption.trashed.append(toolkit.version)
+                        trashed.insert(toolkit.version)
+                        trashedHere = true
                     }
                     continue
                 }
                 try? manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if (try? manager.moveItem(at: toolkit.root, to: destination)) != nil {
-                    adoption.moved.append(toolkit.version)
+                    moved.insert(toolkit.version)
+                    movedHere = true
                 }
             }
+            if movedHere { movedFrom += 1 }
+            if trashedHere { trashedFrom += 1 }
         }
-        return adoption
+        func ordered(_ versions: Set<String>) -> [String] {
+            versions.sorted { $0.compare($1, options: .numeric) == .orderedAscending }
+        }
+        return Adoption(moved: ordered(moved), movedFrom: movedFrom, trashed: ordered(trashed), trashedFrom: trashedFrom)
     }
 
     // MARK: - What is installed
