@@ -156,9 +156,9 @@ nonisolated enum PerfReport {
     /// comparison that took in the menus says so.
     static func span(of run: PerfComparison.Run) -> String {
         guard let total = run.traceSeconds, let window = run.window else { return "trace length unknown" }
-        let whole = window.lowerBound < 0.5 && total - window.upperBound < 0.5
+        let whole = window.lowerBound < 0.5 && total - window.upperBound < 0.5 && run.leftOut == nil
         return "trace \(seconds(total)) · compared \(Int(window.lowerBound.rounded()))–\(seconds(window.upperBound))"
-            + (whole ? ", the whole run" : "")
+            + (whole ? ", the whole run" : "") + (run.leftOut.map { ", \($0)" } ?? "")
     }
 
     private static func seconds(_ value: Double) -> String {
@@ -189,12 +189,16 @@ nonisolated enum PerfReport {
 
     // MARK: - The page
 
-    static func html(runs: [PerfComparison.Run], skip: [Double], fromMark: String? = nil, duration: Double?) -> String {
+    static func html(
+        runs: [PerfComparison.Run], skip: [Double], fromMark: String? = nil, duration: Double?, gameplay: Bool = false,
+    ) -> String {
         let groups = PerfComparison.groups(runs)
         var page = model(groups)
         let games = Set(runs.map { $0.record.name ?? "app \($0.record.appid)" }).sorted()
         page["title"] = games.joined(separator: ", ")
-        var window = if let fromMark {
+        var window = if gameplay {
+            "gameplay only: loading, time away and pauses left out"
+        } else if let fromMark {
             "from each run's mark \u{201C}\(fromMark)\u{201D}"
         } else if Set(skip).count > 1 {
             "first \(skip.map { String(Int($0)) }.joined(separator: ", ")) s left out, run by run"

@@ -41,6 +41,16 @@ nonisolated enum MacHardware {
     /// The largest on-screen window a process owns, in pixels: its bounds in
     /// points times the scale of the display it sits on.
     static func largestWindow(ofPID pid: pid_t) -> RunRecord.Pixels? {
+        guard let largest = largestWindowBounds(ofPID: pid) else { return nil }
+        let scale = backingScale(at: CGPoint(x: largest.midX, y: largest.midY))
+        return RunRecord.Pixels(
+            width: Int((largest.width * scale).rounded()), height: Int((largest.height * scale).rounded()),
+        )
+    }
+
+    /// The largest on-screen window a process owns, in points, when it is at least
+    /// `minimumSide` on both sides.
+    static func largestWindowBounds(ofPID pid: pid_t, minimumSide: CGFloat = MacHardware.minimumSide) -> CGRect? {
         guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
             as? [[String: Any]] else { return nil }
         var largest: CGRect?
@@ -55,10 +65,7 @@ nonisolated enum MacHardware {
             }
         }
         guard let largest, largest.width >= minimumSide, largest.height >= minimumSide else { return nil }
-        let scale = backingScale(at: CGPoint(x: largest.midX, y: largest.midY))
-        return RunRecord.Pixels(
-            width: Int((largest.width * scale).rounded()), height: Int((largest.height * scale).rounded()),
-        )
+        return largest
     }
 
     /// Windows smaller than this on either side are splash screens and

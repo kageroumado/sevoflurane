@@ -126,6 +126,7 @@ let package = Package(
                 "Sevoflurane/Support/GameIcon.swift",
                 "Sevoflurane/Support/GameLogs.swift",
                 "Sevoflurane/Support/GameModeSignal.swift",
+                "Sevoflurane/Support/GameplayWindow.swift",
                 "Sevoflurane/Support/GameLaunchers.swift",
                 "Sevoflurane/Support/HostPressure.swift",
                 "Sevoflurane/Support/HostSnapshot.swift",

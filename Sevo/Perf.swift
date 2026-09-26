@@ -23,11 +23,15 @@ struct PerfCommand: AsyncParsableCommand {
           4. sevo perf compare --game <appid> --last <n> --skip 20
         
         A trace runs from the game's first frame to its last, menus and loading \
-        included. To compare one pass of a benchmark, keep the same stretch of every \
-        run: --skip leaves out the seconds before the pass starts and --duration keeps \
-        the seconds it lasts, so --skip 45 --duration 60 compares seconds 45 to 105 of \
-        each run. compare prints each run's trace length and the stretch it compared; \
-        a stretch as long as the trace means the idle time is in the numbers.
+        included. By default each run is measured over its gameplay only, the same \
+        window the run record and the community database use: from 10 s after the \
+        first frame, once no frame took over 100 ms for 5 s, leaving out every \
+        stretch the game was in the background, hidden, asleep or on a virtual \
+        display, and every frame over 250 ms. --whole measures the whole trace. To \
+        compare one pass of a benchmark, keep the same stretch of every run: --skip \
+        leaves out the seconds before the pass starts and --duration keeps the seconds \
+        it lasts, so --skip 45 --duration 60 compares seconds 45 to 105 of each run's \
+        whole trace. compare prints each run's trace length and the stretch it compared.
         
         compare prints the first configuration as the baseline, then each other one \
         with its mean ± standard deviation over its runs (average fps, 1 % low, p99 \
@@ -59,8 +63,10 @@ struct PerfCommand: AsyncParsableCommand {
                 return
             }
             for (index, entry) in runs.enumerated() {
-                let fps = entry.record.fps?.frameTimes
-                let rates = fps.map { "\($0.avg) fps · 1 % low \($0.low1) · p99 \($0.p99) ms" } ?? "no frames"
+                let gameplay = entry.record.fps?.gameplay?.frameTimes
+                let fps = gameplay ?? entry.record.fps?.frameTimes
+                let over = gameplay != nil ? " over gameplay" : " over the whole run"
+                let rates = fps.map { "\($0.avg) fps · 1 % low \($0.low1) · p99 \($0.p99) ms" + over } ?? "no frames"
                 let label = entry.label.map { " · “\($0)”" } ?? ""
                 print(String(format: "%3d  ", index + 1) + "\(PerfRuns.moment(entry.record.t))  "
                     + "\(entry.record.name ?? "app \(entry.record.appid)") · \(entry.record.outcome)\(label)")
@@ -86,6 +92,14 @@ struct PerfCommand: AsyncParsableCommand {
         var skip = PerRunSeconds(values: [0])
         @Option(name: .long, help: "Seconds of each run to keep after --skip: the length of the pass. Default: the rest.")
         var duration: Double?
+        @Flag(name: .long, help: "Measure each whole trace, loading, menus and time away included, not its gameplay.")
+        var whole = false
+
+        /// Whether runs are measured over their gameplay: nothing asked for a stretch of
+        /// the whole trace.
+        var gameplay: Bool {
+            !whole && fromMark == nil && duration == nil && skip.values.allSatisfy { $0 == 0 }
+        }
         @Option(name: .customLong("from-mark"), help: """
         Start each run at its first mark with this label (sevo perf mark), in place of --skip. \
         A run without one is named and left out.
@@ -127,9 +141,23 @@ struct PerfCommand: AsyncParsableCommand {
                     }
                     skip = mark.seconds
                 }
+                let total = Self.seconds(contents.frameTimes)
+                if gameplay {
+                    guard let window = GameplayWindow.compute(contents), window.frameTimes.count >= 2 else {
+                        Sevo.printError(
+                            "\(PerfRuns.moment(entry.record.t)) never settled into gameplay: left out (--whole keeps it)",
+                        )
+                        return nil
+                    }
+                    return PerfComparison.Run(
+                        record: entry.record, frameTimes: window.frameTimes, dropped: contents.dropped,
+                        trace: entry.url.lastPathComponent, label: entry.label,
+                        traceSeconds: total, window: window.from ... max(window.from, total),
+                        leftOut: PerfComparison.leftOut(window),
+                    )
+                }
                 let times = PerfComparison.trim(contents.frameTimes, skip: skip, duration: duration)
                 guard times.count >= 2 else { return nil }
-                let total = Self.seconds(contents.frameTimes)
                 let from = min(skip, total)
                 return PerfComparison.Run(
                     record: entry.record, frameTimes: times, dropped: contents.dropped,
@@ -158,6 +186,7 @@ struct PerfCommand: AsyncParsableCommand {
             let runs = try selection.resolve()
             let html = PerfReport.html(
                 runs: runs, skip: selection.skip.values, fromMark: selection.fromMark, duration: selection.duration,
+                gameplay: selection.gameplay,
             )
             let url = output.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
                 ?? RunLog.root.appendingPathComponent("reports")
@@ -185,7 +214,8 @@ struct PerfCommand: AsyncParsableCommand {
                 return
             }
             for line in PerfReport.textLines(groups) { print(line) }
-            if selection.skip.values.allSatisfy({ $0 == 0 }), selection.fromMark == nil, selection.duration == nil {
+            if selection.whole, selection.skip.values.allSatisfy({ $0 == 0 }), selection.fromMark == nil,
+               selection.duration == nil {
                 print("whole runs compared, loading and menus included; "
                     + "--skip and --duration keep the same stretch of each (sevo perf --help)")
             }

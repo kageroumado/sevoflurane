@@ -47,6 +47,10 @@ nonisolated struct RunInProgress: Sendable {
     ) {
         var record = record
         record.durationSeconds = seconds
+        if let trace = record.fps?.trace,
+           let contents = FrameTrace.read(FrameTrace.directory(in: runsRoot).appendingPathComponent(trace)) {
+            record.fps?.gameplay = GameplayWindow.gameplay(of: contents)
+        }
         let steamTail = RunRecorder.text(of: processLog, from: steamLogOffset)
         let wineTail = RunRecorder.text(of: wineLog, from: wineLogOffset)
         record.runtime = SteamGameProcessLog.runtime(
@@ -108,6 +112,13 @@ nonisolated struct RunInProgress: Sendable {
             steamLog: processLog.path,
         )
     }
+}
+
+/// What the app saw of a game's window at one look (``RunRecorder/sample(observing:)``).
+nonisolated struct GameObservation: Equatable, Sendable {
+    var focus: FrameTrace.Focus
+    /// The display under the game's window; nil while none of its windows is on screen.
+    var display: RunRecord.Display?
 }
 
 /// A record's own moment: UTC, seconds, so records from two machines sort
@@ -288,7 +299,12 @@ final nonisolated class RunRecorder {
     ///
     /// Memory only: a sample every two seconds is not worth a write to the
     /// armed file, whose job is to name the launch a killed app left running.
-    func sample() {
+    ///
+    /// - Parameter observe: What the window server shows of a game process's window right
+    ///   now. Its focus goes into the run's frame trace, where ``GameplayWindow`` leaves
+    ///   the stretches nobody was playing out of the frame rate; the display it was played
+    ///   on goes into the record.
+    func sample(observing observe: (pid_t) -> GameObservation? = { _ in nil }) {
         guard !open.isEmpty else { return }
         let gameMode = GameModeSignal.isActive()
         for (appID, run) in open {
@@ -296,6 +312,12 @@ final nonisolated class RunRecorder {
             // ended before the game did is still a fact about the run.
             open[appID]?.record.gameMode = gameMode || run.record.gameMode == true
             guard let pid = run.gamePID else { continue }
+            if let seen = observe(pid) {
+                presentStats.note(focus: seen.focus, display: seen.display, forApp: appID)
+                if let display = seen.display, seen.focus == .focused || run.record.display == nil {
+                    open[appID]?.record.display = display
+                }
+            }
             // The largest window seen: a game opens on a launcher or splash
             // window before the one it plays in.
             if let window = MacHardware.largestWindow(ofPID: pid),

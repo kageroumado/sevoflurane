@@ -195,6 +195,14 @@ final class ReportStore {
         }
         if let fps = run.fps {
             lines.append("fps: \(fps.avg) average, 1 % low \(fps.low1), \(fps.samples) samples")
+            if let gameplay = fps.gameplay {
+                let rates = gameplay.frameTimes.map { "\($0.avg) average, 1 % low \($0.low1), p99 \($0.p99) ms" }
+                    ?? "too short to measure"
+                lines.append("gameplay: \(gameplay.seconds) s from \(gameplay.from) s — \(rates)")
+            }
+        }
+        if let display = run.display {
+            lines.append("display: \(FrameTrace.line(for: display))")
         }
         if let crash = run.crash {
             lines.append(

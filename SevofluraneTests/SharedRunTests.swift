@@ -12,7 +12,7 @@ struct SharedRunTests {
         #expect(Set(object.keys) == [
             "v", "t", "app", "appid", "exe", "engine", "renderer", "runner", "arch", "runtime", "settings",
             "macos", "chip", "mac", "gpu_cores", "memory_gb", "resolution", "window_after_s", "duration_s",
-            "fps", "stalls", "exit", "crashed", "game_mode", "host_load",
+            "display", "gameplay_s", "fps", "stalls", "exit", "crashed", "game_mode", "host_load",
         ])
         let text = try String(decoding: JSONEncoder.stats.encode(run), as: UTF8.self)
         for private_ in ["Secret Game Title", "/Users/", "C:\\\\", "0xdeadbeef", "a renderer note"] {
@@ -22,6 +22,40 @@ struct SharedRunTests {
         #expect(run.exe == "Game-Win64-Shipping.exe")
         #expect(run.fps?.p99Milliseconds == 24.5)
         #expect(run.crashed)
+    }
+
+    @Test
+    func `the shared frame rate is the gameplay's, never the whole run's`() throws {
+        let run = try #require(SharedRun(record: Self.fullRecord(), appVersion: "1.14"))
+        #expect(run.fps?.avg == 61.5)
+        #expect(run.fps?.low1 == 48)
+        #expect(run.fps?.samples == 812)
+        #expect(run.gameplaySeconds == 812)
+        #expect(run.display == RunRecord.Display(refreshHz: 120, variable: true, virtual: false))
+        let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder.stats.encode(run)) as? [String: Any])
+        #expect(object["display"] as? [String: AnyHashable] == ["refresh_hz": 120, "variable": true, "virtual": false])
+    }
+
+    @Test
+    func `a run without a long enough gameplay window, or on a virtual display, sends no frame rate`() throws {
+        var record = Self.fullRecord()
+        record.fps?.gameplay?.seconds = 21
+        record.fps?.gameplay?.frameTimes = nil
+        var run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.fps == nil)
+        #expect(run.gameplaySeconds == 21)
+
+        record = Self.fullRecord()
+        record.fps?.gameplay = nil
+        run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.fps == nil)
+        #expect(run.gameplaySeconds == nil)
+
+        record = Self.fullRecord()
+        record.display?.virtual = true
+        run = try #require(SharedRun(record: record, appVersion: "1.14"))
+        #expect(run.fps == nil)
+        #expect(run.display?.virtual == true)
     }
 
     @Test
@@ -126,8 +160,16 @@ struct SharedRunTests {
                     p999: 40, max: 80, stdev: 2, hitches: 3,
                 ),
                 trace: "/Users/someone/Library/trace.csv",
+                gameplay: RunRecord.Gameplay(
+                    from: 31.5, seconds: 812, away: 40, gaps: 2,
+                    frameTimes: FrameStats.Summary(
+                        frames: 49938, seconds: 812, avg: 61.5, low1: 48, low01: 33, p50: 16.2, p95: 18, p99: 24.5,
+                        p999: 35, max: 60, stdev: 1.5, hitches: 2,
+                    ),
+                ),
             ),
             resolution: RunRecord.Resolution(window: RunRecord.Pixels(width: 3456, height: 2234)),
+            display: RunRecord.Display(refreshHz: 120, variable: true, virtual: false),
             stalls: [RunRecord.Stall(at: 30, duration: 4, unwedged: nil)],
             exit: RunRecord.Exit(kind: .crash, code: -1),
             crash: RunRecord.Crash(code: "0xc0000005", flags: nil, address: "0xdeadbeef", module: "C:\\\\game.exe"),

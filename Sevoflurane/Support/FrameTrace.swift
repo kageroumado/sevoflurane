@@ -9,6 +9,9 @@ import Foundation
 /// times come from (``PresentStats``); a gap the ring could not cover is a line of its own,
 /// `# dropped <n>`, so a reader knows the time axis skips there, and `# mark <label>` is a
 /// moment someone named while the run was up (`sevo perf mark`), between the frames around it.
+/// `# focus <state>` is where the app saw the game's window change state (``Focus``), and
+/// `# display <hz> Hz[ vrr][ virtual]` where the display under it changed; both are what
+/// ``GameplayWindow`` reads to leave out the stretches nobody was playing.
 nonisolated enum FrameTrace {
     static let directoryName = "traces"
 
@@ -55,6 +58,18 @@ nonisolated enum FrameTrace {
             flushIfLarge()
         }
 
+        /// The game's window changed state; written at once, like a mark.
+        func noteFocus(_ focus: Focus) {
+            pending += "# focus \(focus.rawValue)\n"
+            flush()
+        }
+
+        /// The game's window is on a different display from here on.
+        func noteDisplay(_ display: RunRecord.Display) {
+            pending += "# display \(FrameTrace.line(for: display))\n"
+            flush()
+        }
+
         func noteDropped(_ count: Int) {
             guard count > 0 else { return }
             pending += "# dropped \(count)\n"
@@ -85,6 +100,48 @@ nonisolated enum FrameTrace {
         }
 
         deinit { close() }
+    }
+
+    // MARK: - What the app saw of the window
+
+    /// Whether the game could be being played at a moment of the run, as the app's own
+    /// look at the window server says.
+    enum Focus: String, Equatable, Sendable {
+        /// The game's app is frontmost, its window is on screen and the display is awake.
+        case focused
+        /// Its window is on screen, but another app is frontmost: many games drop their
+        /// frame rate or stop presenting here.
+        case background
+        /// None of its windows is on screen: hidden, minimized, or on another Space.
+        case hidden
+        /// The display is asleep or the screen is locked.
+        case asleep
+    }
+
+    /// A change of ``Focus``, at the seconds of frames before it.
+    struct FocusChange: Equatable, Sendable {
+        var seconds: Double
+        var focus: Focus
+    }
+
+    /// A change of display, at the seconds of frames before it.
+    struct DisplayChange: Equatable, Sendable {
+        var seconds: Double
+        var display: RunRecord.Display
+    }
+
+    /// `120 Hz vrr`, `60 Hz virtual`.
+    static func line(for display: RunRecord.Display) -> String {
+        var line = String(format: "%g Hz", display.refreshHz)
+        if display.variable { line += " vrr" }
+        if display.virtual { line += " virtual" }
+        return line
+    }
+
+    static func display(fromLine line: Substring) -> RunRecord.Display? {
+        let words = line.split(separator: " ")
+        guard words.count >= 2, words[1] == "Hz", let hz = Double(words[0]) else { return nil }
+        return RunRecord.Display(refreshHz: hz, variable: words.contains("vrr"), virtual: words.contains("virtual"))
     }
 
     // MARK: - Keeping
@@ -119,6 +176,8 @@ nonisolated enum FrameTrace {
         var frameTimes: [Float]
         var dropped: Int
         var marks: [Mark] = []
+        var focus: [FocusChange] = []
+        var displays: [DisplayChange] = []
     }
 
     /// A named moment: the seconds of frames before it, and its label.
@@ -132,8 +191,22 @@ nonisolated enum FrameTrace {
         var times: [Float] = []
         var dropped = 0
         var marks: [Mark] = []
+        var focus: [FocusChange] = []
+        var displays: [DisplayChange] = []
         var elapsed = 0.0
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            if line.hasPrefix("# focus ") {
+                if let state = Focus(rawValue: String(line.dropFirst("# focus ".count))) {
+                    focus.append(FocusChange(seconds: elapsed, focus: state))
+                }
+                continue
+            }
+            if line.hasPrefix("# display ") {
+                if let display = display(fromLine: line.dropFirst("# display ".count)) {
+                    displays.append(DisplayChange(seconds: elapsed, display: display))
+                }
+                continue
+            }
             if line.hasPrefix("# dropped ") {
                 dropped += Int(line.dropFirst("# dropped ".count)) ?? 0
                 continue
@@ -147,6 +220,6 @@ nonisolated enum FrameTrace {
             times.append(time)
             elapsed += Double(time) / 1000
         }
-        return Contents(frameTimes: times, dropped: dropped, marks: marks)
+        return Contents(frameTimes: times, dropped: dropped, marks: marks, focus: focus, displays: displays)
     }
 }

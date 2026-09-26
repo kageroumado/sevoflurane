@@ -397,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var closedRuns = runRecorder.closedRuns
             while !Task.isCancelled {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
-                runRecorder.sample()
+                runRecorder.sample { GameScreen.observe(pid: $0) }
                 if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
                 if runRecorder.closedRuns != closedRuns {
                     closedRuns = runRecorder.closedRuns

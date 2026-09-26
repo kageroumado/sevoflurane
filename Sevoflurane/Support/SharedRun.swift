@@ -34,6 +34,13 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     var resolution: RunRecord.Resolution?
     var windowAfterSeconds: Double?
     var durationSeconds: Double?
+    /// The display the game was played on.
+    var display: RunRecord.Display?
+    /// Seconds of the run that were gameplay (``GameplayWindow``), absent for a run with no
+    /// frame trace. What ``fps`` is measured over.
+    var gameplaySeconds: Double?
+    /// The frame rate over the gameplay only, and only when it lasted
+    /// ``GameplayWindow/Rules/minimumSeconds`` on a display with hardware behind it.
     var fps: FrameRate?
     var stalls: Int
     var exit: String
@@ -87,6 +94,8 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         case resolution
         case windowAfterSeconds = "window_after_s"
         case durationSeconds = "duration_s"
+        case display
+        case gameplaySeconds = "gameplay_s"
         case fps, stalls, exit, crashed
         case gameMode = "game_mode"
         case hostLoad = "host_load"
@@ -95,6 +104,15 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     /// Runs shorter than this that never drew are launchers and cancelled
     /// sign-ins, which say nothing about the game.
     static let minimumUndrawnSeconds: Double = 20
+
+    /// A gameplay window's frame rate as shared: nil for one too short to carry one.
+    static func frameRate(of gameplay: RunRecord.Gameplay) -> FrameRate? {
+        guard let summary = gameplay.frameTimes else { return nil }
+        return FrameRate(
+            avg: summary.avg, low1: summary.low1, low01: summary.low01, p99Milliseconds: summary.p99,
+            hitches: summary.hitches, samples: Int(gameplay.seconds.rounded()),
+        )
+    }
 
     /// The run as shared, or `nil` for one that says nothing about the game.
     init?(record: RunRecord, appVersion: String) {
@@ -124,12 +142,10 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         resolution = record.resolution
         windowAfterSeconds = record.windowAfterSeconds
         durationSeconds = record.durationSeconds
-        fps = record.fps.map {
-            FrameRate(
-                avg: $0.avg, low1: $0.low1, low01: $0.frameTimes?.low01, p99Milliseconds: $0.frameTimes?.p99,
-                hitches: $0.frameTimes?.hitches, samples: $0.samples,
-            )
-        }
+        display = record.display
+        let gameplay = record.fps?.gameplay
+        gameplaySeconds = gameplay?.seconds
+        fps = record.display?.virtual == true ? nil : gameplay.flatMap(Self.frameRate(of:))
         stalls = record.stalls?.count ?? 0
         exit = record.exit?.kind.rawValue ?? RunRecord.Exit.Kind.unknown.rawValue
         // A crash on the way out comes after the user left the game, so it
@@ -149,8 +165,15 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
             tuning: "standard", upscaler: "off", msync: true, d3dmetal: "4.0 beta 2", runtime: "unreal",
             macos: "27.0.0", chip: nil, mac: MacHardware.model, gpuCores: MacHardware.gpuCores,
             memoryGB: MacHardware.memoryGB, windowAfterSeconds: 6.2, durationSeconds: 1843,
-            fps: RunRecord.FrameRate(avg: 58.4, low1: 41.0, samples: 1830),
+            fps: RunRecord.FrameRate(
+                avg: 57.9, low1: 40.2, samples: 1830,
+                gameplay: RunRecord.Gameplay(
+                    from: 48.2, seconds: 1712.6, away: 64, gaps: 3,
+                    frameTimes: FrameStats.summarize(Self.exampleFrameTimes),
+                ),
+            ),
             resolution: RunRecord.Resolution(window: RunRecord.Pixels(width: 3024, height: 1964)),
+            display: RunRecord.Display(refreshHz: 120, variable: true, virtual: false),
             exit: RunRecord.Exit(kind: .user, code: 0), gameMode: true,
             host: RunRecord.Host(thermal: "nominal", load: 1.2),
         )
@@ -158,6 +181,10 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         run.chip = MacHardware.chip
         return run
     }
+
+    /// Made-up frame times for ``example(appVersion:)``: about 58 fps with a slow frame a
+    /// second.
+    private static let exampleFrameTimes: [Float] = (0 ..< 1200).map { $0 % 60 == 0 ? 25 : 17 }
 
     /// The JSON exactly as it is sent.
     var json: String {

@@ -20,6 +20,9 @@ nonisolated enum PerfComparison {
         /// ``frameTimes`` covers after trimming (``trim(_:skip:duration:)``).
         var traceSeconds: Double?
         var window: ClosedRange<Double>?
+        /// What the gameplay window left out inside ``window``, for a run measured over its
+        /// gameplay (``leftOut(_:)``).
+        var leftOut: String?
 
         var summary: FrameStats.Summary? {
             FrameStats.summarize(frameTimes)
@@ -39,6 +42,14 @@ nonisolated enum PerfComparison {
             ("windows", record.windows),
             ("label", run.label ?? ""),
         ]
+    }
+
+    /// "12 s away, 3 gaps left out", or nil when the window kept every frame after its start.
+    static func leftOut(_ window: GameplayWindow.Result) -> String? {
+        var parts: [String] = []
+        if window.away >= 0.5 { parts.append("\(Int(window.away.rounded())) s away") }
+        if window.gaps > 0 { parts.append("\(window.gaps) gap\(window.gaps == 1 ? "" : "s")") }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ") + " left out"
     }
 
     struct Group: Sendable {

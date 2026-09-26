@@ -69,6 +69,9 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     /// The pixels the game drew into. Absent until one of its windows was
     /// seen on screen.
     var resolution: Resolution? = nil
+    /// The display the game's window was on while it was played. Absent until
+    /// the window was seen on screen.
+    var display: Display? = nil
     /// Present once the stall watchdog lands.
     var stalls: [Stall]? = nil
     var exit: Exit? = nil
@@ -110,6 +113,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         case durationSeconds = "duration_s"
         case fps
         case resolution
+        case display
         case stalls
         case exit
         case crash
@@ -131,13 +135,63 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
         var dropped: Int? = nil
         /// The trace file in `Runs/traces` (``FrameTrace``).
         var trace: String? = nil
+        /// The stretch of the trace that was gameplay (``GameplayWindow``), and its frames
+        /// summarized. Absent on an engine without the frame-time ring.
+        var gameplay: Gameplay? = nil
 
         enum CodingKeys: String, CodingKey {
             case avg
             case low1
             case samples
             case frameTimes = "frame_times"
-            case dropped, trace
+            case dropped, trace, gameplay
+        }
+    }
+
+    /// What ``GameplayWindow`` kept of a run's frames: where gameplay began, how long it
+    /// lasted, what it left out, and the kept frames summarized.
+    struct Gameplay: Codable, Equatable, Sendable {
+        /// Seconds after the trace's first frame that gameplay began.
+        var from: Double
+        /// Seconds of frames kept: the gameplay duration the frame rate is measured over.
+        var seconds: Double
+        /// Seconds after ``from`` left out because the game was in the background, hidden,
+        /// the display slept, or it was on a virtual display.
+        var away: Double
+        /// Frames after ``from`` slower than ``GameplayWindow/Rules/gapFrame``, left out as
+        /// pauses and loads.
+        var gaps: Int
+        /// The kept frames summarized; nil for a gameplay window shorter than
+        /// ``GameplayWindow/Rules/minimumSeconds``, which carries no frame rate.
+        var frameTimes: FrameStats.Summary?
+
+        enum CodingKeys: String, CodingKey {
+            case from = "from_s"
+            case seconds
+            case away = "away_s"
+            case gaps
+            case frameTimes = "frame_times"
+        }
+    }
+
+    /// A display as a frame rate needs it described: how often it refreshes, whether it
+    /// varies that, and whether any screen is behind it.
+    struct Display: Codable, Equatable, Sendable {
+        /// The current mode's refresh rate, Hz; the ceiling for a ProMotion or adaptive-sync
+        /// display.
+        var refreshHz: Double
+        /// ProMotion or adaptive sync: the display refreshes when a frame arrives, down to
+        /// its lowest rate.
+        var variable: Bool
+        /// No display hardware is behind it (a `CGVirtualDisplay`, a headless session, a
+        /// streamed screen). Nothing paces presents on one, so a frame rate measured there
+        /// says nothing about a player's.
+        var virtual: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case refreshHz = "refresh_hz"
+            case variable
+            case virtual
         }
     }
 

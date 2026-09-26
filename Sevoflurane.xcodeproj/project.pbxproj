@@ -109,6 +109,7 @@
 				App/Gallery/GalleryView.swift,
 				App/Gallery/GalleryWindow.swift,
 				App/GameLaunchWatch.swift,
+				App/GameScreen.swift,
 				App/GameWindow.swift,
 				App/GamesSettings.swift,
 				App/GeneralSettings.swift,

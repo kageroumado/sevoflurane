@@ -97,6 +97,31 @@ final nonisolated class PresentStats: @unchecked Sendable {
         return marked
     }
 
+    /// Writes what the app saw of an armed run's window into its trace, when it differs
+    /// from what the trace last said. Reads the frames presented so far first, so the
+    /// change falls after them.
+    func note(focus: FrameTrace.Focus, display: RunRecord.Display?, forApp appID: Int) {
+        lock.lock()
+        let changed = armed[appID].map { run in
+            run.focus != focus || (display != nil && run.display != display)
+        } ?? false
+        lock.unlock()
+        guard changed else { return }
+        sample()
+        lock.lock()
+        defer { lock.unlock() }
+        guard var run = armed[appID] else { return }
+        if run.focus != focus {
+            run.focus = focus
+            run.trace?.noteFocus(focus)
+        }
+        if let display, run.display != display {
+            run.display = display
+            run.trace?.noteDisplay(display)
+        }
+        armed[appID] = run
+    }
+
     /// What the counter says about an armed run right now, or nil when the
     /// run is not armed or has no page yet.
     func reading(forApp appID: Int) -> Reading? {
@@ -129,6 +154,14 @@ final nonisolated class PresentStats: @unchecked Sendable {
     /// rates, the totals the average comes from, and every frame time the ring gave.
     private struct Run {
         var trace: FrameTrace.Writer?
+        /// What the trace last said of the window, so it says each change once.
+        var focus: FrameTrace.Focus?
+        var display: RunRecord.Display?
+        /// Processes whose page this run has seen while they were alive. A page whose
+        /// process is gone when the run first sees it is a dead launch's leftover — a
+        /// killed process cannot unlink its own page — and its ring holds that launch's
+        /// last frames, which are not this run's.
+        private var seenAlive: Set<pid_t> = []
         private var frameTimes: [Float] = []
         private var droppedFrames = 0
         /// The process whose ring is being followed, the next ring index to read, and the
@@ -147,7 +180,11 @@ final nonisolated class PresentStats: @unchecked Sendable {
         /// page's: a launch is often several processes — a launcher, the
         /// game, a crash handler — and only one of them draws.
         mutating func absorb(_ pages: [PresentStats.Page], at now: TimeInterval) {
-            guard let page = pages.max(by: { $0.count < $1.count }) else {
+            for page in pages where page.alive {
+                seenAlive.insert(page.pid)
+            }
+            let current = pages.filter { seenAlive.contains($0.pid) }
+            guard let page = current.max(by: { $0.count < $1.count }) else {
                 reading = nil
                 return
             }
