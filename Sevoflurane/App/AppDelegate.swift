@@ -661,6 +661,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // A dry-run wizard "provisions" fixtures; nothing real may start.
                 guard !provisioner.isDryRun else { return }
                 self?.startRunning(holdingWindows: true)
+                // Supervision may be paused by the stop that preceded a bottle
+                // switch. The start resumes it and boots the client in the
+                // bottle setup just finished; the daemon holds it while the
+                // provisioning lease stands.
+                self?.supervisor.startAfterSetup()
+            },
+            stopClient: { [weak self] narrate in
+                await self?.supervisor.stopBeforeBottleSwitch(narrate: narrate)
             },
             onSkipSignIn: onSkipSignIn,
             makeGraphics: graphics,

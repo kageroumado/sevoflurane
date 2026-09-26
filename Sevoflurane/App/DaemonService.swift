@@ -265,9 +265,25 @@ enum DaemonService {
         await request(path, method: "POST", body: body, timeout: timeout)
     }
 
+    /// A POST whose answer is its HTTP status, for the verbs that refuse
+    /// with one (`/client/stop` answers 409 while a restart runs), or `nil`
+    /// when nothing answered.
+    static func postStatus(_ path: String, timeout: TimeInterval = 15) async -> Int? {
+        await exchange(path, method: "POST", body: nil, timeout: timeout)?.status
+    }
+
     private static func request(
         _ path: String, method: String, body: Data?, timeout: TimeInterval,
     ) async -> Data? {
+        guard let answer = await exchange(path, method: method, body: body, timeout: timeout),
+              (200 ..< 300).contains(answer.status)
+        else { return nil }
+        return answer.data
+    }
+
+    private static func exchange(
+        _ path: String, method: String, body: Data?, timeout: TimeInterval,
+    ) async -> (data: Data, status: Int)? {
         guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)\(path)") else {
             return nil
         }
@@ -276,11 +292,9 @@ enum DaemonService {
         request.httpBody = body
         request.timeoutInterval = timeout
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200 ..< 300).contains(http.statusCode) else {
-            return nil
-        }
-        return data
+              let http = response as? HTTPURLResponse
+        else { return nil }
+        return (data, http.statusCode)
     }
 
     private enum Timing {

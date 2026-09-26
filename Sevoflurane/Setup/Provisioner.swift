@@ -121,8 +121,49 @@ final class Provisioner {
     /// Names the bottle the remaining stages address. The wizard asks only
     /// where detection found more than one Steam; a dry run's answer stays
     /// inside the fixture.
-    func chooseBottle(named name: String) {
+    ///
+    /// A client running in another bottle is stopped first, through
+    /// `stopClient`, which is the daemon's stop and pauses its supervision:
+    /// every stop rung aims at the bottles the preference and the boot record
+    /// name, so the stop has to land while the preference still names the
+    /// bottle that client runs in. `stopClient` narrates through its argument
+    /// and answers why it could not stop, and then the choice stays where it
+    /// was and the pass fails with that reason. The caller starts the client
+    /// again once the new bottle is provisioned. Answers whether the choice
+    /// moved.
+    @discardableResult
+    func chooseBottle(
+        named name: String,
+        stoppingClient stopClient: (_ narrate: (String) -> Void) async -> String?,
+    ) async -> Bool {
+        if !environment.isSimulation, Self.choosingStopsClient(
+            chosen: prefixPath(of: name),
+            configured: prefixPath(of: environment.bottleName),
+            booted: BootedBottle.target?.prefix.standardizedFileURL.path,
+        ) {
+            activity = .working(InterfaceCopy.localized("Stopping Steam…"))
+            SetupLog.log("provision: stopping the client before moving to bottle \(name)")
+            if let refusal = await stopClient({ activity = .working(InterfaceCopy.localized($0)) }) {
+                activity = .failed(refusal)
+                SetupLog.log("provision: the bottle stays \(environment.bottleName) — \(refusal)")
+                return false
+            }
+        }
+        activity = .idle
         environment.chooseBottle(named: name)
+        return true
+    }
+
+    /// Whether choosing the bottle at `chosen` stops the client first: the
+    /// preference names another bottle, or the client last booted in one.
+    nonisolated static func choosingStopsClient(
+        chosen: String, configured: String, booted: String?,
+    ) -> Bool {
+        chosen != configured || booted.map { $0 != chosen } ?? false
+    }
+
+    private func prefixPath(of name: String) -> String {
+        environment.bottlesRoot.appendingPathComponent(name).standardizedFileURL.path
     }
 
     func refreshDetection() async {
@@ -140,7 +181,7 @@ final class Provisioner {
     /// and the headless update follows it, which is how a client whose own
     /// files are damaged is made whole. Rosetta, the engine and the prefix
     /// stay as they are, and so do the games and saves inside it.
-    func provisionSteam(rebuildingSteam: Bool = false) async {
+    private func provisionSteam(rebuildingSteam: Bool) async {
         guard detection != nil else { return }
         let interval = PerfProbe.setup.beginInterval("Provision")
         defer { PerfProbe.setup.endInterval("Provision", interval) }
@@ -148,6 +189,8 @@ final class Provisioner {
         do {
             try await installRosettaIfMissing()
             try await installEngineIfMissing()
+            // The engine stage can move the bottles root; the lease follows.
+            holdBottle()
             try await createBottleIfMissing(bottleName)
             try await installBootstrapper(inBottle: bottleName, force: rebuildingSteam)
             try await updateClient(inBottle: bottleName, force: rebuildingSteam)
@@ -450,12 +493,44 @@ final class Provisioner {
     }
 
     /// The wizard's whole sequence: install Steam, then apply the idempotent
-    /// bottle configuration the boot path also reasserts.
+    /// bottle configuration the boot path also reasserts. The bottle is held
+    /// (``ProvisioningLease``) from the first stage to the last registry
+    /// write, so the daemon starts no client in it meanwhile.
     func provisionAndConfigure(rebuildingSteam: Bool = false) async {
+        holdBottle()
+        defer { releaseBottle() }
         await provisionSteam(rebuildingSteam: rebuildingSteam)
         if case .done = activity {
             await configureBottle(named: environment.bottleName)
         }
+    }
+
+    /// The prefix this pass holds, and the task renewing the hold.
+    private var leasedPrefix: URL?
+    private var leaseRenewal: Task<Void, Never>?
+
+    /// Takes the lease on the bottle the stages address, or moves it there.
+    private func holdBottle() {
+        guard !environment.isSimulation else { return }
+        let prefix = environment.bottlesRoot.appendingPathComponent(environment.bottleName)
+        if let leasedPrefix, leasedPrefix != prefix { ProvisioningLease.release(leasedPrefix) }
+        leasedPrefix = prefix
+        ProvisioningLease.take(prefix)
+        guard leaseRenewal == nil else { return }
+        leaseRenewal = Task(name: "Renew the provisioning lease") { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: ProvisioningLease.renewal)
+                guard !Task.isCancelled, let prefix = self?.leasedPrefix else { return }
+                ProvisioningLease.take(prefix)
+            }
+        }
+    }
+
+    private func releaseBottle() {
+        leaseRenewal?.cancel()
+        leaseRenewal = nil
+        if let leasedPrefix { ProvisioningLease.release(leasedPrefix) }
+        leasedPrefix = nil
     }
 
     func setOpenAtLogin(_ enabled: Bool) {

@@ -157,7 +157,10 @@ extension BottleSupervisor {
         // The engine may have changed under this pass; the next one settles
         // what has to come down for it before anything is launched.
         guard restartAgain == nil else { return }
-        if applyPendingSwitch(), provisioningBlocksStart(reason: reason) { return }
+        applyPendingSwitch()
+        // Judged again at the launch: setup can have taken the bottle while
+        // the stop ran, and a held switch is judged by the bottle it moved to.
+        if provisioningBlocksStart(reason: reason) { return }
 
         setRestartPhase("launching the client")
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")

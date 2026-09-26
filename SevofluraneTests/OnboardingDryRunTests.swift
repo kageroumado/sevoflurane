@@ -167,8 +167,13 @@ struct OnboardingDryRunTests {
     func `choosing a bottle in a dry run stays inside the fixture`() async {
         let stored = SteamBottle.name
         let (provisioner, env) = makeProvisioner(.multipleBottles)
-        provisioner.chooseBottle(named: "Steam Beta")
+        var stops = 0
+        await provisioner.chooseBottle(named: "Steam Beta") { _ in
+            stops += 1
+            return nil
+        }
         await provisioner.refreshDetection()
+        #expect(stops == 0)
         #expect(env.bottleName == "Steam Beta")
         #expect(!provisioner.needsSetup)
         #expect(SteamBottle.name == stored)

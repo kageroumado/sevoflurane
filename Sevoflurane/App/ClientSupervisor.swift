@@ -320,6 +320,80 @@ final class ClientSupervisor {
         send("/client/start", called: "start")
     }
 
+    /// The stop before setup moves the choice to another bottle. A restart
+    /// under way refuses a stop, so this waits for it to finish, narrating
+    /// the wait, and asks again, for up to ``Timing/switchStopBudget``.
+    /// Answers `nil` once no client is left running under the old choice,
+    /// or why one still is, in which case the choice must not move.
+    func stopBeforeBottleSwitch(narrate: (String) -> Void) async -> String? {
+        let start = ContinuousClock.now
+        while true {
+            let answer = await Self.stopAnswer(DaemonService.postStatus("/client/stop", timeout: 120))
+            let waited = ContinuousClock.now - start
+            switch Self.switchStopStep(after: answer, waited: waited, budget: Timing.switchStopBudget) {
+            case .proceed:
+                return nil
+            case .refuse:
+                log.log(.supervisor, "setup: the client could not be stopped before the bottle switch (\(answer))")
+                return answer == .busy
+                    ? String(localized: "Steam is still restarting, so setup kept the bottle it had. Try again in a moment.")
+                    : String(localized: "Steam could not be stopped, so setup kept the bottle it had. Try again, or quit Steam from the menu bar first.")
+            case .waitForRestart:
+                narrate("Waiting for Steam to finish restarting…")
+                while ContinuousClock.now - start < Timing.switchStopBudget,
+                      await DaemonService.status()?["health"] as? String == "restarting" {
+                    try? await Task.sleep(for: .seconds(1))
+                }
+                narrate("Stopping Steam…")
+            }
+        }
+    }
+
+    /// How the daemon answered one `/client/stop`.
+    nonisolated enum StopAnswer: Equatable, Sendable {
+        case stopped
+        /// 409: a restart ladder is running.
+        case busy
+        /// Any other refusal, or a stop that timed out on a daemon that
+        /// still answers.
+        case failed
+        /// No daemon answers, so no client runs under it.
+        case unreachable
+    }
+
+    nonisolated enum SwitchStopStep: Equatable, Sendable {
+        case proceed
+        case waitForRestart
+        case refuse
+    }
+
+    /// What follows one answer to the stop before a bottle switch.
+    nonisolated static func switchStopStep(
+        after answer: StopAnswer, waited: Duration, budget: Duration,
+    ) -> SwitchStopStep {
+        switch answer {
+        case .stopped, .unreachable: .proceed
+        case .busy: waited < budget ? .waitForRestart : .refuse
+        case .failed: .refuse
+        }
+    }
+
+    private static func stopAnswer(_ status: Int?) async -> StopAnswer {
+        switch status {
+        case let status? where (200 ..< 300).contains(status): .stopped
+        case 409: .busy
+        case .some: .failed
+        case nil: await DaemonService.isAnswering() ? .failed : .unreachable
+        }
+    }
+
+    /// The start that ends setup. It outlasts an attach of any length,
+    /// because the stop before a bottle switch paused supervision and only a
+    /// start resumes it.
+    func startAfterSetup() {
+        send("/client/start", called: "start after setup", expires: false)
+    }
+
     /// Puts Steam's window on screen as soon as the client is healthy. A
     /// person who opened the app came for that window, and the daemon is the
     /// one that knows when the client gets there.
@@ -344,19 +418,6 @@ final class ClientSupervisor {
         log.log(.supervisor, "quit: asking the daemon to bring the bottle down")
         _ = await DaemonService.post("/quit", timeout: 120)
         _ = await DaemonService.post("/app/detach")
-    }
-
-    /// Whether a provisioning failure is holding the client down: the last
-    /// setup pass for this engine and bottle stopped at a stage that leaves
-    /// nothing to start. Says so in the log once per attempt, because a client
-    /// that never comes up is otherwise a mystery.
-    func provisioningBlocksStart(reason: String) -> Bool {
-        guard let failure = BottleReadiness.clientStartBlock else { return false }
-        log.log(
-            .supervisor,
-            "not starting the client (\(reason)): the bottle is unfinished — \(failure)",
-        )
-        return true
     }
 
     private func send(_ path: String, called verb: String, expires: Bool = true) {
@@ -387,6 +448,9 @@ final class ClientSupervisor {
     private enum Timing {
         /// Seconds of unanswered facts before the app says hello again.
         static let reattachAfterMissedFacts = 10
+        /// How long setup waits for a restart to finish before a bottle
+        /// switch gives up.
+        static let switchStopBudget: Duration = .seconds(60)
     }
 
     private nonisolated static func escaped(_ value: String) -> String {

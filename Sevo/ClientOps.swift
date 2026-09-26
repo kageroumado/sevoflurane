@@ -469,6 +469,11 @@ nonisolated enum ClientOps {
                 "no Steam client in bottle '\(SteamBottle.name)' — run Sevoflurane's setup wizard",
             )
         }
+        if let lease = ProvisioningLease.onConfiguredBottle {
+            throw Failure.unprovisioned(
+                "setup is still installing Steam in bottle '\(lease.name)' — start the client once it finishes",
+            )
+        }
     }
 }
 

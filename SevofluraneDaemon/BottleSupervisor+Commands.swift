@@ -195,18 +195,21 @@ extension BottleSupervisor {
         log.log(.supervisor, "client stopped (sevo)")
     }
 
-    /// Whether the bottle is not ready for a client: it has no `Steam.exe`
-    /// yet — a bottle setup is still building, which a client started now
-    /// would boot into under the installers — or the last setup pass for this
-    /// engine and bottle stopped at a stage that leaves nothing to start, and
-    /// nobody has retried it or asked for the client anyway (Settings ›
-    /// Engine). The verdict names the reason, because a client that never
-    /// comes up is otherwise a mystery; the log says it once per failure
-    /// rather than once per probe.
+    /// Whether the bottle is not ready for a client: setup holds it
+    /// (``ProvisioningLease``) — its installers and updater are running there,
+    /// and a client started now would boot under them — or it has no
+    /// `Steam.exe`, or the last setup pass for this engine and bottle stopped
+    /// at a stage that leaves nothing to start, and nobody has retried it or
+    /// asked for the client anyway (Settings › Engine). The verdict names the
+    /// reason, because a client that never comes up is otherwise a mystery;
+    /// the log says it once per failure rather than once per probe.
     func provisioningBlocksStart(reason: String) -> Bool {
+        let provisioning = ProvisioningLease.onConfiguredBottle.map {
+            "setup is still installing Steam in bottle \($0.name)"
+        }
         let missingSteam = FileManager.default.fileExists(atPath: SteamBottle.exe.path)
             ? nil : "bottle \(SteamBottle.name) has no Steam.exe yet"
-        guard let failure = missingSteam ?? BottleReadiness.clientStartBlock else {
+        guard let failure = provisioning ?? missingSteam ?? BottleReadiness.clientStartBlock else {
             reportedProvisioningBlock = nil
             return false
         }

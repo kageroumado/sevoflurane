@@ -18,6 +18,10 @@ struct SetupView: View {
     /// client behind the wizard — by the last page the window is already
     /// loaded and the finish button shows it instantly.
     var onProvisioned: () -> Void = {}
+    /// Stops the running client through the daemon, before the wizard moves
+    /// the choice to another bottle.
+    /// Narrates through its argument, and answers why it could not stop.
+    var stopClient: (_ narrate: (String) -> Void) async -> String? = { _ in nil }
     /// The finish that leaves Steam signed out: the app then runs Windows
     /// programs from Quick Launch, and Steam's sign-in waits until asked for.
     var onSkipSignIn: (() -> Void)?
@@ -64,6 +68,9 @@ struct SetupView: View {
     /// Whether this run found Steam already in its bottle when it began.
     @State private var adoptsSteam = false
     @State private var gptk = GPTkDownload()
+    /// The bottle a switch could not move to because Steam would not stop:
+    /// Try Again switches again rather than provisioning the old bottle.
+    @State private var unswitchedBottle: String?
 
     /// A real run always opens on the welcome. The gallery draws every step at
     /// once, and each tile starts on the one it is there to show.
@@ -73,6 +80,7 @@ struct SetupView: View {
         steamWindow: @escaping () -> SetupSteamWindow = { .library },
         onRepairHelper: (() -> Void)? = nil,
         onProvisioned: @escaping () -> Void = {},
+        stopClient: @escaping (_ narrate: (String) -> Void) async -> String? = { _ in nil },
         onSkipSignIn: (() -> Void)? = nil,
         makeGraphics: (() -> GraphicsStore)? = nil,
         onFinished: @escaping () -> Void,
@@ -81,6 +89,7 @@ struct SetupView: View {
         self.steamWindow = steamWindow
         self.onRepairHelper = onRepairHelper
         self.onProvisioned = onProvisioned
+        self.stopClient = stopClient
         self.onSkipSignIn = onSkipSignIn
         self.makeGraphics = makeGraphics
         self.onFinished = onFinished
@@ -184,7 +193,11 @@ struct SetupView: View {
                 }
             }
             Button("Try Again") {
-                Task { await provisioner.retry() }
+                if let unswitchedBottle {
+                    switchBottle(to: unswitchedBottle)
+                } else {
+                    Task { await provisioner.retry() }
+                }
             }
         case .sharing:
             Button("Not Now") { answerSharing(false) }
@@ -321,13 +334,27 @@ struct SetupView: View {
         EventLog.shared.log(
             .setup, bottleChoice == nil ? "setup: creating bottle \(name)" : "setup: adopting bottle \(name)",
         )
-        provisioner.chooseBottle(named: name)
         // Before the stage that reads it: provisioning starts on this press
         // and installs the catalog it names.
         if !provisioner.isDryRun {
             BottleDependencies.installsEverything = downloadEverything
         }
-        beginProvisioning()
+        adoptsSteam = bottleCandidates.contains { $0.name == name }
+        switchBottle(to: name)
+    }
+
+    /// The step narrates the stop, which a client in another bottle needs
+    /// before the choice moves.
+    private func switchBottle(to name: String) {
+        step = .steam
+        Task {
+            guard await provisioner.chooseBottle(named: name, stoppingClient: stopClient) else {
+                unswitchedBottle = name
+                return
+            }
+            unswitchedBottle = nil
+            startProvisioning()
+        }
     }
 
     private func beginProvisioning() {
@@ -335,6 +362,10 @@ struct SetupView: View {
         // this run has one by the end of it, and would read as adopted.
         adoptsSteam = isAdoptingSteam
         step = .steam
+        startProvisioning()
+    }
+
+    private func startProvisioning() {
         if provisioner.activity == .idle {
             Task { await provisioner.provisionAndConfigure() }
         }
