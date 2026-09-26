@@ -225,7 +225,15 @@ actor StatsUploader {
     private func send(_ runs: [SharedRun], as identity: StatsIdentity) async throws {
         let encoded = try runs.map { try JSONSerialization.jsonObject(with: JSONEncoder.stats.encode($0)) }
         let body = try envelope(["install": identity.installID, "runs": encoded])
-        try await request("POST", "runs", body: body, as: identity)
+        let reply = try await request("POST", "runs", body: body, as: identity)
+        // A batch is answered 202 even when the server refused some of its
+        // runs; those are dropped with the batch, since resending an invalid
+        // run gets the same answer, but the reasons are the only trace of them.
+        if let object = try? JSONSerialization.jsonObject(with: reply) as? [String: Any],
+           let rejected = object["rejected"] as? [[String: Any]], !rejected.isEmpty {
+            let reasons = rejected.compactMap { $0["why"] as? String }
+            Self.log("the server refused \(rejected.count) of \(runs.count) runs: \(reasons.joined(separator: "; "))")
+        }
     }
 
     /// The signed envelope's common fields: the version, the next sequence
