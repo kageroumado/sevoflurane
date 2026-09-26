@@ -409,9 +409,55 @@ struct EngineRendererStrayTests {
 
         #expect(engine.read("wine/lib/wine/x86_64-windows/dxgi.dll") == "stock dxgi")
     }
+
+    @Test
+    func `D3DMetal's NVIDIA stubs get a copy and a unix half under their export names`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        let toolkit = try engine.installToolkit("4.0 beta 2")
+        let payload = "d3dmetal/4.0 beta 2/lib/wine/x86_64-windows"
+        try engine.write("pe nvapi64 4.0 beta 2", to: "\(payload)/nvapi64.dll")
+        try engine.write("pe nvngx 4.0 beta 2", to: "\(payload)/nvngx-on-metalfx.dll")
+
+        let staged = EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit)
+
+        #expect(engine.read("wine/lib/wine/x86_64-windows/nvapi.dll") == "pe nvapi64 4.0 beta 2")
+        #expect(engine.read("wine/lib/wine/x86_64-windows/nvngx.dll") == "pe nvngx 4.0 beta 2")
+        for so in ["nvapi.so", "nvngx.so"] {
+            let link = engine.root.appendingPathComponent("wine/lib/wine/x86_64-unix/\(so)")
+            #expect(try engine.manager.destinationOfSymbolicLink(atPath: link.path) == "../../external/libd3dshared.dylib")
+        }
+        // The file a game's LoadLibrary("nvngx.dll") finds, resolved to the tree's copy.
+        #expect(engine.read("bottle/drive_c/windows/system32/nvngx.dll") == "pe nvngx 4.0 beta 2")
+        #expect(staged.contains("nvapi.dll") && staged.contains("nvngx.dll"))
+    }
+
+    @Test
+    func `the aliases leave with D3DMetal and are never kept as Wine's originals`() throws {
+        let engine = try FakeEngine()
+        defer { engine.remove() }
+        let toolkit = try engine.installToolkit("4.0 beta 2")
+        let payload = "d3dmetal/4.0 beta 2/lib/wine/x86_64-windows"
+        try engine.write("pe nvapi64", to: "\(payload)/nvapi64.dll")
+        try engine.write("pe nvngx apple", to: "\(payload)/nvngx-on-metalfx.dll")
+        try engine.installDXMT("0.80")
+        try engine.write("pe nvngx dxmt", to: "dxmt/nvngx.dll")
+        EngineRenderers.stage(.d3dmetal, engine: engine.root, bottle: engine.bottle, toolkit: toolkit)
+
+        EngineRenderers.stage(.dxmt, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+
+        #expect(engine.read("wine/lib/wine/x86_64-windows/nvapi.dll") == nil)
+        #expect(engine.read("wine/lib/wine/x86_64-windows/nvngx.dll") == "pe nvngx dxmt")
+        #expect(engine.read("wine/lib/wine/x86_64-windows-original/nvngx.dll") == nil)
+        #expect(engine.read("bottle/drive_c/windows/system32/nvapi.dll") == nil)
+
+        EngineRenderers.stage(.wined3d, engine: engine.root, bottle: engine.bottle, toolkit: nil)
+
+        #expect(engine.read("wine/lib/wine/x86_64-windows/nvngx.dll") == nil)
+        #expect(engine.read("bottle/drive_c/windows/system32/nvngx.dll") == nil)
+    }
 }
 
-/// Installing a toolkit from Apple's image, and which version a game then gets.
 struct D3DMetalInstallTests {
     private let manager = FileManager.default
 

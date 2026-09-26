@@ -81,6 +81,7 @@ nonisolated enum EngineRenderers {
             guard manager.fileExists(atPath: canonical.path) else { continue }
 
             disownPayloads(in: originals, matching: payloads)
+            removeExportAliases(from: canonical, matching: payloads)
             restoreOriginals(into: canonical, from: originals)
             removeStrays(from: canonical, keptIn: originals, matching: payloads)
 
@@ -94,6 +95,9 @@ nonisolated enum EngineRenderers {
             } ?? []
 
             staged += place(dlls, into: canonical, keepingOriginalsIn: originals, payloads: payloads)
+            if renderer == .d3dmetal, architecture.modules == Architecture.x86_64.modules {
+                staged += placeExportAliases(in: canonical, engine: engine)
+            }
             // Every architecture, whether this renderer has a payload for it
             // or not: an architecture that gets no DLLs is exactly the one
             // whose prefix still holds the last renderer's loader files, and
@@ -150,6 +154,59 @@ nonisolated enum EngineRenderers {
             staged.append(name)
         }
         return staged
+    }
+
+    /// Apple's NVIDIA stubs export under other names than they are filed:
+    /// `nvapi64.dll` names itself `nvapi.dll` and `nvngx-on-metalfx.dll`
+    /// names itself `nvngx.dll`, and Wine binds a builtin's unix half by the
+    /// export name (`find_builtin_dll`'s `exp_name`). Without a PE and a `.so`
+    /// under that name the stub loads with no unix half, its DllMain returns
+    /// 0, and the game's NvAPI never initializes, so NGX answers
+    /// FeatureNotSupported and DLSS stays off (Subnautica 2, 2026-09-26).
+    /// Apple's README renames the nvngx pair by hand; nvapi64 needs the same.
+    private static let exportAliases: [(file: String, export: String)] = [
+        ("nvapi64.dll", "nvapi.dll"),
+        ("nvngx-on-metalfx.dll", "nvngx.dll"),
+    ]
+
+    /// What every D3DMetal unix half is: a symlink to the bridge, relative to
+    /// `x86_64-unix`.
+    private static let bridgeLink = "../../external/libd3dshared.dylib"
+
+    /// Puts a copy of each stub the tree holds under its export name, with
+    /// the unix half Wine will look for beside it. Names what it placed.
+    private static func placeExportAliases(in canonical: URL, engine: URL) -> [String] {
+        let manager = FileManager.default
+        let unix = engine.appendingPathComponent("wine/lib/wine/x86_64-unix")
+        var staged: [String] = []
+        for alias in exportAliases {
+            let source = canonical.appendingPathComponent(alias.file)
+            guard manager.fileExists(atPath: source.path) else { continue }
+            let target = canonical.appendingPathComponent(alias.export)
+            try? manager.removeItem(at: target)
+            guard (try? manager.copyItem(at: source, to: target)) != nil else { continue }
+            let so = unix.appendingPathComponent(
+                URL(fileURLWithPath: alias.export).deletingPathExtension().lastPathComponent + ".so",
+            )
+            if (try? manager.destinationOfSymbolicLink(atPath: so.path)) != bridgeLink {
+                try? manager.removeItem(at: so)
+                try? manager.createSymbolicLink(atPath: so.path, withDestinationPath: bridgeLink)
+            }
+            staged.append(alias.export)
+        }
+        return staged
+    }
+
+    /// Clears the last staging's aliases. Wine ships nothing under these
+    /// names, so a file there is a previous alias, or another renderer's
+    /// payload, which the payload bookkeeping owns.
+    private static func removeExportAliases(from canonical: URL, matching payloads: [String: [URL]]) {
+        let manager = FileManager.default
+        for alias in exportAliases {
+            let file = canonical.appendingPathComponent(alias.export)
+            guard manager.fileExists(atPath: file.path), !isPayload(file, among: payloads) else { continue }
+            try? manager.removeItem(at: file)
+        }
     }
 
     // MARK: - One game's own renderer
@@ -453,7 +510,8 @@ nonisolated enum EngineRenderers {
         )
         guard manager.fileExists(atPath: system32.path) else { return }
         let payloads = payloadDLLs(engine: engine, architecture: architecture)
-        let names = Set(payloads.map(\.lastPathComponent))
+        var names = Set(payloads.map(\.lastPathComponent))
+        names.formUnion(exportAliases.map(\.export))
         for name in names {
             let target = system32.appendingPathComponent(name)
             let source = canonical.appendingPathComponent(name)
