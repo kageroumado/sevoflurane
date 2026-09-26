@@ -21,9 +21,16 @@ enum GameDisplayHold {
     /// game that really started, and the hold that follows is the symptom.
     private static var heldFor: String?
 
-    /// A game's window is up. Idempotent.
+    /// A game's window is up. Idempotent; a hold already taken for another
+    /// program is kept and names this one from now on.
     static func gameDidAppear(for program: String) {
-        guard assertion == IOPMAssertionID(kIOPMNullAssertionID) else { return }
+        guard assertion == IOPMAssertionID(kIOPMNullAssertionID) else {
+            if heldFor != program {
+                heldFor = program
+                EventLog.shared.log(.app, "display hold kept for \(program)")
+            }
+            return
+        }
         var id = IOPMAssertionID(kIOPMNullAssertionID)
         let status = IOPMAssertionCreateWithName(
             kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,

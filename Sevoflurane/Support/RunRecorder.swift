@@ -422,6 +422,10 @@ final nonisolated class RunRecorder {
         !open.isEmpty
     }
 
+    /// How many runs this recorder has closed, so a reader polling it sees
+    /// every closing, a run re-armed within one poll included.
+    private(set) var closedRuns = 0
+
     /// The macOS process each open run is running under, for the watchdog that
     /// samples them and for the monitor that lists them. A run whose
     /// executable never reached the Mac driver is not in it.
@@ -527,6 +531,7 @@ final nonisolated class RunRecorder {
         durationKnown: Bool = true,
     ) {
         guard var run = open.removeValue(forKey: appID) else { return }
+        closedRuns += 1
         confirmedRunning.remove(appID)
         nativeSeen.remove(appID)
         nativeUnseen[appID] = nil

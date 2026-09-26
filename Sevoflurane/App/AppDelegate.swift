@@ -386,20 +386,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// going, the stall watch ending a game — passes through the recorder.
     /// The daemon holds the display too, and lets it go when its probe cycle
     /// finds the game window gone; that cycle is a minute apart while a game
-    /// is up, so the last run closing wakes it.
+    /// is up, so every run closing wakes it, one followed at once by the next
+    /// game's launch included.
     private func startRunMeter() {
         runMeter?.cancel()
         runMeter = Task(name: "Sample the open runs' meters") { [runRecorder, weak self] in
             var ticks = 0
             var holdWatch = DisplayHoldWatch()
-            var wasRecording = false
+            var closedRuns = runRecorder.closedRuns
             while !Task.isCancelled {
                 try? await Task.sleep(for: RunRecorder.meterInterval)
                 runRecorder.sample()
-                let recording = runRecorder.isRecording
-                if !recording { GameDisplayHold.gameDidExit() }
-                if wasRecording, !recording { self?.supervisor.wake(.gameWindowChanged) }
-                wasRecording = recording
+                if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
+                if runRecorder.closedRuns != closedRuns {
+                    closedRuns = runRecorder.closedRuns
+                    self?.supervisor.wake(.gameWindowChanged)
+                }
                 ticks += 1
                 if ticks.isMultiple(of: Self.displayHoldCheckEvery) {
                     let holds = await Task.detached(name: "Read the display holds") { DisplayHolds.current() }.value

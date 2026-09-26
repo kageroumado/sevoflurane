@@ -436,7 +436,13 @@ final class BottleSupervisor {
 
     private func probe() async {
         samplePressure()
-        if isPaused || isRestarting || isQuitting { return }
+        if isPaused || isRestarting || isQuitting {
+            // The display hold follows the game, whatever the client is
+            // doing: a game that exits during a client restart releases it
+            // on this cycle.
+            if gameIsUp { _ = await observeWineWindows() }
+            return
+        }
         probeCycleCount += 1
         let cycle = PerfProbe.supervisor.beginInterval("ProbeCycle")
         await probeChain()

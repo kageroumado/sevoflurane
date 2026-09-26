@@ -27,6 +27,21 @@ struct RunReattachTests {
         root.appendingPathComponent("gameprocess_log.txt")
     }
 
+    @Test
+    func `every closing counts, a run re-armed at once included`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 413_160)
+        recorder.arm(appID: 413_160)
+        #expect(recorder.closedRuns == 1)
+        #expect(recorder.isRecording)
+        recorder.close(appID: 413_160)
+        recorder.close(appID: 413_160)
+        #expect(recorder.closedRuns == 2)
+        #expect(!recorder.isRecording)
+    }
+
     /// Steam's process log for one app, with or without the exit it recorded.
     @discardableResult
     private func writeProcessLog(in root: URL, appID: Int, exit code: Int?) throws -> URL {
@@ -174,7 +189,7 @@ struct RunReattachTests {
         sevo:run pid=4100 exe=HuniePop.exe appid=339800 engine=dormison-r16
         fixme:d3d:wined3d_guess_card nothing to see
         sevo:gfx pid=4100 renderer=wined3d-gl toolkit=none presenter=off upscaler=off msync=1
-
+        
         """.utf8).write(to: wine)
 
         let read = try #require(recorder.provenanceReads.first)
