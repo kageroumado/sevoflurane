@@ -90,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         GameLaunchers.log = { EventLog.enqueue(.client, $0) }
         GameExecutables.log = { EventLog.enqueue(.client, $0) }
         RunRecorder.log = { EventLog.enqueue(.client, $0) }
+        StatsUploader.log = { EventLog.enqueue(.app, "stats: \($0)") }
         Diagnostics.faceReport = { await Diagnostics.appFaceReport() }
         CrashPrompt.shared.install()
         RunRecorder.didRecord = { record, wineTail in

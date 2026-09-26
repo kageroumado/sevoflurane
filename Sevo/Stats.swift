@@ -14,9 +14,11 @@ struct StatsCommand: ParsableCommand {
         Mac's model, chip, GPU cores and memory tier. Requests are signed by a key in this Mac's \
         Secure Enclave; the install id is derived from that key and names nothing else.
         
-        Local state lives in ~/Library/Application Support/Sevoflurane/Stats.
+        Local state lives in ~/Library/Application Support/Sevoflurane/Stats. `sevo stats \
+        delete` takes back everything this Mac shared, as Settings › General › Community › \
+        Delete What I Shared does.
         """,
-        subcommands: [Status.self, Preview.self],
+        subcommands: [Status.self, Preview.self, Delete.self],
         defaultSubcommand: Status.self,
     )
 
@@ -30,11 +32,7 @@ struct StatsCommand: ParsableCommand {
         func run() throws {
             let state = StatsStore.readState()
             let queued = StatsStore.readQueue().count
-            let sharing = switch Preferences.sharesRunStats {
-            case true?: "on"
-            case false?: "off"
-            case nil: "not asked yet"
-            }
+            let sharing = StatsDeletionReport.sharingWord(Preferences.sharesRunStats)
             if asJSON {
                 var report: [String: Any] = ["sharing": sharing, "queued": queued, "sent": state.sentRuns]
                 report["install"] = state.registered
@@ -68,6 +66,34 @@ struct StatsCommand: ParsableCommand {
                 return
             }
             print(run.json)
+        }
+    }
+
+    struct Delete: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Delete every run this Mac shared from the community database. Cannot be undone.",
+            discussion: """
+            Sends the install's signed request to delete it, then drops this Mac's key, \
+            registration and unsent runs, as Settings › General › Community › Delete What I \
+            Shared does. The sharing setting is left as it is: while it is on, the next run \
+            shared registers a new, unrelated install. A refused or unsent request changes \
+            nothing here and exits 1.
+            """,
+        )
+
+        @Flag(name: .customLong("json")) var asJSON = false
+
+        func run() async throws {
+            let queued = StatsStore.readQueue().count
+            let outcome: Result<StatsUploader.DeleteOutcome, any Error>
+            do {
+                outcome = try await .success(StatsUploader.shared.deleteShared())
+            } catch {
+                outcome = .failure(error)
+            }
+            let report = StatsDeletionReport(outcome: outcome, sharing: Preferences.sharesRunStats, queued: queued)
+            print(asJSON ? Sevo.json(report.json) : report.text)
+            if !report.succeeded { throw SevoExit.failed }
         }
     }
 }

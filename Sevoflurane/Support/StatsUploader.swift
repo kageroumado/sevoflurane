@@ -60,9 +60,10 @@ actor StatsUploader {
     /// The last failure's class, so a run of the same failure is logged once.
     private var lastFailure: FailureClass?
 
-    nonisolated static func log(_ message: String) {
-        EventLog.enqueue(.app, "stats: \(message)")
-    }
+    /// Where the uploader's lines go: the app points this at ``EventLog``;
+    /// `sevo` reports outcomes itself. Set once at process start, same
+    /// contract as ``ClientLifecycle/log``.
+    nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
 
     /// A run closed. Queued when sharing is on and the run says something
     /// about the game; the send follows at once.
@@ -122,14 +123,36 @@ actor StatsUploader {
         }
     }
 
+    /// What ``deleteShared()`` came to, when the server did not refuse it.
+    enum DeleteOutcome: Equatable, Sendable {
+        /// The server deleted every run `install` sent.
+        case deleted(install: String)
+        /// The server never registered this Mac, so it holds nothing from it.
+        case notRegistered
+        /// The server registered `install`, but its key no longer opens on
+        /// this Mac (a backup restored onto another one), so nothing can sign
+        /// the request and the runs stay in the database.
+        case keyUnavailable(install: String)
+    }
+
     /// Asks the server to forget every run this install sent, then forgets
     /// the install here: the next run shared, if any, comes from a new key.
-    func deleteShared() async throws {
-        if let identity = StatsIdentity.load(), StatsStore.readState().registered != nil {
+    /// A refused or unsent request throws and leaves the install in place.
+    @discardableResult
+    func deleteShared() async throws -> DeleteOutcome {
+        let outcome: DeleteOutcome
+        switch (StatsIdentity.load(), StatsStore.readState().registered) {
+        case let (identity?, _?):
             let body = try envelope(["install": identity.installID])
             try await request("DELETE", "installs/\(identity.installID)", body: body, as: identity)
+            outcome = .deleted(install: identity.installID)
+        case let (nil, registered?):
+            outcome = .keyUnavailable(install: registered)
+        case (_, nil):
+            outcome = .notRegistered
         }
         resetIdentity()
+        return outcome
     }
 
     /// Drops the key, the registration and the queue.
