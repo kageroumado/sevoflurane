@@ -56,20 +56,24 @@ final class QuickLaunchStore {
                 )
                 return
             }
-            guard let driver = await KernelDriverFailure.watch(from: logOffset) else { return }
-            EventLog.shared.log(.client, "\(entry.name) needs the kernel driver \(driver), which Wine cannot load")
+            guard let driver = await KernelDriverFailure.watch(
+                from: logOffset, program: entry.program.url.lastPathComponent,
+            ) else { return }
+            EventLog.shared.log(
+                .client, "\(entry.name) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load",
+            )
             Self.explainKernelDriver(driver, program: entry.name)
         }
     }
 
-    /// A program whose kernel driver failed ends or waits with nothing on
-    /// screen, so the reason is said out loud once.
+    /// A program that drew nothing after its kernel driver failed has no
+    /// other way to say why, so the likely reason is said once.
     private static func explainKernelDriver(_ driver: String, program: String) {
         let alert = NSAlert()
-        alert.messageText = String(localized: "\(program) needs a Windows kernel driver")
+        alert.messageText = String(localized: "\(program) showed no window")
         alert.informativeText = String(localized: """
-        It tried to load \(driver), which is usually kernel-level anti-cheat. Windows kernel drivers \
-        cannot run on a Mac, so this program will not start under Sevoflurane.
+        It tried to load \(driver), a Windows kernel driver, usually kernel-level anti-cheat, and kernel \
+        drivers cannot run on a Mac. If the program requires it, that is why it stopped.
         """)
         alert.addButton(withTitle: String(localized: "OK"))
         alert.runModal()

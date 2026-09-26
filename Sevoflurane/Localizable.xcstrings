@@ -37,12 +37,32 @@
         }
       }
     },
+    "%@ showed no window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 未显示任何窗口"
+          }
+        }
+      }
+    },
     "Choose how to start it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择启动方式。"
+          }
+        }
+      }
+    },
+    "It tried to load %@, a Windows kernel driver, usually kernel-level anti-cheat, and kernel drivers cannot run on a Mac. If the program requires it, that is why it stopped." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它尝试加载 Windows 内核驱动程序 %@（通常是内核级反作弊组件），而内核驱动程序无法在 Mac 上运行。如果该程序需要这个驱动程序，这就是它停止的原因。"
           }
         }
       }
@@ -425,16 +445,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 管理此容器"
-          }
-        }
-      }
-    },
-    "%@ needs a Windows kernel driver" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 需要 Windows 内核驱动程序"
           }
         }
       }
@@ -4574,16 +4584,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装 %@。请选择要保留的程序。"
-          }
-        }
-      }
-    },
-    "It tried to load %@, which is usually kernel-level anti-cheat. Windows kernel drivers cannot run on a Mac, so this program will not start under Sevoflurane." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "程序尝试加载 %@，这通常是内核级反作弊组件。Windows 内核驱动程序无法在 Mac 上运行，因此此程序无法通过 Sevoflurane 启动。"
           }
         }
       }
