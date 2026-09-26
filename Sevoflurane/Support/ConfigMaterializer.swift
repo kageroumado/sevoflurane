@@ -15,6 +15,14 @@ import Synchronization
 nonisolated enum ConfigMaterializer {
     private static let header = "# written by Sevoflurane; edits are overwritten"
 
+    /// The engine a pass writes the files for: its name for a game's readout,
+    /// and the loader the launcher bundles carry. ``Engine/running`` in the
+    /// app and `sevo`, where ``Engine/active`` can lead the booted client by a
+    /// restart. The daemon boots the client, and its own `active` is always
+    /// the engine booting or booted, so the pass right before a boot writes
+    /// for the engine about to run; it answers that instead.
+    nonisolated(unsafe) static var engine: @Sendable () -> Engine = { Engine.running }
+
     /// Rewrites the bottle's env files from the store.
     ///
     /// Passes over one prefix run one at a time, and a call that arrives while
@@ -43,7 +51,8 @@ nonisolated enum ConfigMaterializer {
         let appsDir = dir.appendingPathComponent("apps")
         try? manager.createDirectory(at: appsDir, withIntermediateDirectories: true)
 
-        write(bottleLines(name), to: dir.appendingPathComponent("bottle.env"))
+        let engine = engine()
+        write(bottleLines(name, engine: engine), to: dir.appendingPathComponent("bottle.env"))
 
         var games: [GameFiles] = []
         var native: Set<Int> = []
@@ -59,7 +68,7 @@ nonisolated enum ConfigMaterializer {
             var game = GameFiles(appID: appID, settings: gameLines(appID, values), exes: exes)
             if let title = values.name, !values.runsNatively,
                let loader = GameLaunchers.materialize(
-                   appID: appID, title: title, engine: Engine.active,
+                   appID: appID, title: title, engine: engine,
                ) {
                 launchers.insert(appID)
                 game.loader = "SEVO_LOADER=\(loader.path)"
@@ -228,7 +237,7 @@ nonisolated enum ConfigMaterializer {
 
     /// The bottle level: the resolved value of every setting the engine takes
     /// from the environment.
-    static func bottleLines(_ name: String) -> [String] {
+    static func bottleLines(_ name: String, engine: Engine = Engine.running) -> [String] {
         var lines = [
             "SEVO_RESIZABLE_WINDOWS=\(GameConfig.windows(bottle: name).value.rawValue)",
             "SEVO_UPSCALER=\(GameConfig.upscaler(bottle: name).value)",
@@ -244,7 +253,7 @@ nonisolated enum ConfigMaterializer {
         lines += GameConfig.tuningParameters(bottle: name).environment.map { "\($0.key)=\($0.value)" }
         // What a running game's View menu needs: the engine's name for its
         // readout, and the `sevo` that stores a choice made there.
-        lines.append("SEVO_ENGINE_NAME=\(Engine.active.recordIdentifier)")
+        lines.append("SEVO_ENGINE_NAME=\(engine.recordIdentifier)")
         if let cli = bundledCLI { lines.append("SEVO_CLI=\(cli.path)") }
         let level = DiagnosticLevel.current
         lines.append("WINEDEBUG=\(level.channels())")

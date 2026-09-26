@@ -555,4 +555,23 @@ struct EngineReleaseAdoptionTests {
         #expect(Engine.releaseNumber("dormison-r16-tray") == nil)
         #expect(Engine.releaseNumber("crossover") == nil)
     }
+
+    @Test
+    func `an installed release moves a stored older release, and nothing else`() {
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-r16", installed: "dormison-r17") == "managed:dormison-r17")
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-r17", installed: "dormison-r17") == nil)
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-r16-tray", installed: "dormison-r17") == nil)
+        #expect(Engine.adoptedChoice(stored: "crossover", installed: "dormison-r17") == nil)
+        #expect(Engine.adoptedChoice(stored: nil, installed: "dormison-r17") == nil)
+    }
+
+    @Test
+    func `the running engine is the booted one, whatever the next restart will run`() {
+        let booted = Engine.managedRoot.appendingPathComponent("dormison-r16").path
+        let next = Engine.managed(version: "dormison-r17")
+        #expect(Engine.running(bootedRoot: booted, active: next) == .managed(version: "dormison-r16"))
+        #expect(Engine.running(bootedRoot: nil, active: next) == next)
+        let lines = ConfigMaterializer.bottleLines(SteamBottle.name, engine: .managed(version: "dormison-r16"))
+        #expect(lines.contains("SEVO_ENGINE_NAME=dormison-r16"))
+    }
 }

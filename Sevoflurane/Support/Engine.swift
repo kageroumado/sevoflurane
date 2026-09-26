@@ -108,17 +108,40 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// After the app installs a newer release engine: a stored choice that
     /// names an older release (`managed:dormison-r16`) moves to it, so the
-    /// client's next start runs what the app carries. A hand-picked build
-    /// (`dormison-r16-tray`), CrossOver, or a bare `managed` stays as it is.
-    /// Answers whether the choice moved.
+    /// client's next start runs what the app carries, and this process's
+    /// ``active`` moves with it. A hand-picked build (`dormison-r16-tray`),
+    /// CrossOver, or a bare `managed` stays as it is. Answers whether the
+    /// choice moved.
     @discardableResult
     static func adoptNewerRelease(_ version: String) -> Bool {
-        guard let stored = Preferences.shared.string(forKey: preferenceKey), stored.hasPrefix(managedPrefix),
+        guard let adopted = adoptedChoice(stored: Preferences.shared.string(forKey: preferenceKey), installed: version)
+        else { return false }
+        Preferences.shared.set(adopted, forKey: preferenceKey)
+        active = .managed(version: version)
+        return true
+    }
+
+    /// The stored choice after installing release `version`, or nil when the
+    /// stored one stays.
+    static func adoptedChoice(stored: String?, installed version: String) -> String? {
+        guard let stored, stored.hasPrefix(managedPrefix),
               let old = releaseNumber(String(stored.dropFirst(managedPrefix.count))),
               let new = releaseNumber(version), new > old
-        else { return false }
-        Preferences.shared.set(managedPrefix + version, forKey: preferenceKey)
-        return true
+        else { return nil }
+        return managedPrefix + version
+    }
+
+    /// The engine the bottle's processes run on: the one the client booted
+    /// from, which is the engine a game started now runs on. ``active`` can
+    /// already name the next restart's engine — an install adopted a newer
+    /// release, a switch waits for its restart — so it answers only when no
+    /// boot is on record.
+    static var running: Engine {
+        running(bootedRoot: BottleGraphics.bootedEngineRoot(), active: active)
+    }
+
+    static func running(bootedRoot: String?, active: Engine) -> Engine {
+        bootedRoot.flatMap(booted(fromRoot:)) ?? active
     }
 
     /// `17` for `dormison-r17`; `nil` for anything that is not a release name.

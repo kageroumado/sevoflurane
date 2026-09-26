@@ -28,6 +28,7 @@ final class Daemon {
         // Toolkits an engine carries join the shared store before anything is staged.
         D3DMetalInstaller.adoptInstalledEnginesToolkits()
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
+        ConfigMaterializer.engine = { Engine.active }
         // Both questions are the client's, and the only live connection to it
         // belongs to the app's bridge — so both travel the link rather than
         // opening a second DevTools session per ask.
