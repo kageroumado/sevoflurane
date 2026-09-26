@@ -1335,13 +1335,13 @@
         }
       }
     },
-    "App %lld" : {
+    "App %@" : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "App %lld"
+            "value" : "App %@"
           }
         }
       }

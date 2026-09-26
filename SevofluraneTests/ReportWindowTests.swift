@@ -43,8 +43,7 @@ struct ReportWindowTests {
 
         record.name = nil
         record.exit = nil
-        // The id is formatted as the catalog's `App %lld` formats it, grouping and all.
-        #expect(ReportStore.title(for: record).hasPrefix(String(localized: "App \(1_933_660)") + ": did not finish"))
+        #expect(ReportStore.title(for: record).hasPrefix("App 1933660: did not finish"))
     }
 
     @Test

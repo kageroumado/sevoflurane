@@ -273,7 +273,7 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
     }
 
     var displaySummary: String {
-        ([name.map { "\($0) (\(appid))" } ?? String(localized: "App \(appid)")]
+        ([name.map { "\($0) (\(appid))" } ?? String(localized: "App \(String(appid))")]
             + displayOutcomeParts).joined(separator: " · ")
     }
 

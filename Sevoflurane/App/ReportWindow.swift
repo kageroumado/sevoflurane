@@ -170,7 +170,7 @@ final class ReportStore {
     /// `Demons Roots: crashed in opengl32.dll+0xd7691 on r2/DXMT` — the game,
     /// where it died, and what it was running on.
     static func title(for run: RunRecord) -> String {
-        let game = run.name ?? String(localized: "App \(run.appid)")
+        let game = run.name ?? String(localized: "App \(String(run.appid))")
         let engine = "\(run.engine)/\(run.renderer)"
         guard let crash = run.crash else {
             let ending = run.exit.map { "ended \($0.kind.rawValue)" } ?? "did not finish"
@@ -255,7 +255,7 @@ struct ReportView: View {
     private var runList: some View {
         List(store.runs, selection: $store.selected) { run in
             VStack(alignment: .leading, spacing: 2) {
-                Text(run.name ?? String(localized: "App \(run.appid)"))
+                Text(run.name ?? String(localized: "App \(String(run.appid))"))
                     .font(.body)
                 Text(run.displayOutcome)
                     .font(.caption)
@@ -293,7 +293,7 @@ struct ReportView: View {
                 .padding(Theme.Space.lg)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle(run.name ?? String(localized: "App \(run.appid)"))
+            .navigationTitle(run.name ?? String(localized: "App \(String(run.appid))"))
         } else {
             ContentUnavailableView("Pick a run", systemImage: "list.bullet.rectangle")
         }
