@@ -66,7 +66,7 @@ final class QuickLaunchStore {
             EventLog.shared.log(
                 .client, "\(entry.name) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load",
             )
-            Self.explainKernelDriver(driver, program: entry.name)
+            ModalAlerts.present { Self.explainKernelDriver(driver, program: entry.name) }
         }
     }
 

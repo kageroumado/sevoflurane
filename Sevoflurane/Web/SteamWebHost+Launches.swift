@@ -120,7 +120,7 @@ extension SteamWebHost {
         launchOptionPending = appID
         let name = gameName(appID)
         // After this handler returns: a modal alert must not run inside a page message.
-        DispatchQueue.main.async { [weak self] in
+        ModalAlerts.present { [weak self] in
             let chosen = LaunchOptionPrompt.choose(from: options, for: name)
             guard let self else { return }
             launchOptionPending = nil

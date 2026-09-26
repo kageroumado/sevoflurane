@@ -462,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stallWatch.recorder = runRecorder
         stallWatch.onNotAnswering = { [stallWatch] process in
             // After the sample that found it: a modal alert must not run inside the pass.
-            DispatchQueue.main.async {
+            ModalAlerts.present {
                 if NotAnsweringPrompt.userEnds(process.name) { stallWatch.end(process) }
             }
         }
