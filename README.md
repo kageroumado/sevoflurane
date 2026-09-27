@@ -41,6 +41,8 @@ With Dormison, you can:
   the picture to the window with Lanczos, MetalFX, Anime4K or CuNNy. A
   running game's own View menu switches the upscaler and the final filter
   while you play.
+- Play DirectX games that offer DLSS with MetalFX standing in for it, on
+  D3DMetal: the game's own DLSS setting works as on an NVIDIA card.
 - Show a frame rate counter in a game's window (View › Show Frame Rate,
   ⌥⌘F), or see the source and target size, upscaler and filter over the
   picture (View › Show Picture Details, ⌥⌘I).
@@ -87,6 +89,13 @@ remove the program.
 Finder shows a Windows program's own icon once Sevoflurane has run at least
 once.
 
+HoYoverse games (Genshin Impact is the one tested) run in a companion
+Windows beside the Steam bottle, under a `steam.exe` parent, which is how
+they skip the kernel driver they otherwise insist on. Settings › Games ›
+Genshin Impact takes a frame-rate unlocker of your choosing and starts it
+beside the game; it edits the running game's memory, which HoYoverse's terms
+do not allow, so the choice is yours.
+
 ## Discord
 
 Discord shows what you play. Two switches in Settings › General control it, and
@@ -108,6 +117,21 @@ say when Mac testing is unavailable.
 
 Games or online modes that require Windows kernel anti-cheat cannot run
 through Wine. A game's offline mode may still work.
+
+## Community game database
+
+With Settings › General › Community › Share run statistics on, every run
+you finish is sent to [kagerou.glass/sevoflurane/games](https://kagerou.glass/sevoflurane/games):
+the game, engine, renderer, settings, macOS, chip, how long it ran, its frame
+rate and how it ended. Nothing that names you or your Mac goes with it: no
+title, no path, no account, and a launch time rounded to the hour. Each
+install signs its runs with a key made on your Mac; Settings can forget the
+install, and the database then deletes its runs.
+
+A game's page shows how it runs per engine and chip, and the reports people
+and the project left about it, each with the configuration it ran on. Games
+Steam does not sell, Genshin Impact among them, have pages too once they are
+adopted into the catalog.
 
 The Windows engine runs under Rosetta. Sevoflurane itself is native on
 Apple silicon.
