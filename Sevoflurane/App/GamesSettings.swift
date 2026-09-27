@@ -238,7 +238,7 @@ private struct FPSUnlockerSection: View {
         } footer: {
             Text("""
             Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: \
-            Sevoflurane starts it beside the game 30 seconds after launch, in the same Windows, and \
+            Sevoflurane starts it beside the game 30 seconds after the game's process appears, in the same Windows, and \
             points its fps_config.json at the game. It changes the running game's memory, which \
             HoYoverse's terms do not allow, so the choice is yours.
             """)

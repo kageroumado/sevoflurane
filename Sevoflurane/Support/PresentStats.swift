@@ -24,7 +24,9 @@ final nonisolated class PresentStats: @unchecked Sendable {
     /// from the totals, which are not sampled.
     static let samplesKept = 4 * 60 * 60
 
-    private let runDirectories: [URL]
+    /// Where the pages are, asked at every sample: the bottle and its
+    /// companion follow a bottle switch without an app restart.
+    private let runDirectories: () -> [URL]
     private let lock = NSLock()
     private var armed: [Int: Run] = [:]
     private var timer: DispatchSourceTimer?
@@ -35,13 +37,28 @@ final nonisolated class PresentStats: @unchecked Sendable {
     ///   - companions: the other prefixes games run in, whose pages are read
     ///     too: the bottle's companion, where HoYoverse's games run
     ///     (``SteamParent``).
-    init(prefix: URL = SteamBottle.root, companions: [URL] = []) {
-        self.runDirectories = ([prefix] + companions).map { $0.appendingPathComponent(".sevo/run") }
+    init(prefix: URL, companions: [URL] = []) {
+        let directories = ([prefix] + companions).map { $0.appendingPathComponent(".sevo/run") }
+        runDirectories = { directories }
+    }
+
+    /// The live bottle and its companion, whichever bottle is chosen when a
+    /// sample is taken.
+    init() {
+        runDirectories = { [SteamBottle.root, SteamBottle.companion].map { $0.appendingPathComponent(".sevo/run") } }
     }
 
     /// Counts `pid`'s page toward `appID`'s run whatever app id the page
     /// carries: a program Steam did not start has none (``RunRecorder``
     /// learns its process when it reaches the Mac driver).
+    /// Whether `appID`'s run has counted a frame yet: the process that drew
+    /// it is the game, whatever arrives later.
+    func hasCounted(forApp appID: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return armed[appID]?.hasCounted ?? false
+    }
+
     func claim(pid: pid_t, forApp appID: Int) {
         lock.lock()
         armed[appID]?.claimed.insert(pid)
@@ -146,7 +163,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
     /// Reads every page once and folds it into the armed runs. Called by the
     /// timer; a test calls it directly.
     func sample() {
-        let pages = runDirectories.flatMap(Self.pages(in:))
+        let pages = runDirectories().flatMap(Self.pages(in:))
         let now = Self.uptime
         lock.lock()
         for appID in Array(armed.keys) {
@@ -189,6 +206,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
         private var lastCount: UInt64?
         private var lastSampledAt: TimeInterval?
         private var countedFrames: UInt64 = 0
+        var hasCounted: Bool { countedFrames > 0 }
         private var countedSeconds: TimeInterval = 0
         private var rates: [Double] = []
         var reading: Reading?

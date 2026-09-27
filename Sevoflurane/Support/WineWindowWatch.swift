@@ -144,6 +144,11 @@ nonisolated enum WineWindowWatch {
         "steamsysinfo.exe", "hardwareupdater.exe", "steamsetup.exe",
         "gldriverquery.exe", "gldriverquery64.exe",
         "vulkandriverquery.exe", "vulkandriverquery64.exe",
+        "steamxboxutil.exe", "steamxboxutil64.exe",
+        "fossilize-replay.exe", "fossilize-replay64.exe",
+        "x64launcher.exe", "x86launcher.exe", "writeminidump.exe",
+        "steam_monitor.exe", "secure_desktop_capture.exe",
+        "streaming_client.exe", "drivers.exe",
     ]
 
     /// Wine's own services, and the programs Sevoflurane runs in the bottle

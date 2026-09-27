@@ -67,7 +67,7 @@ enum ActivationPolicy {
                 let front = NSWorkspace.shared.frontmostApplication
                 EventLog.shared.log(
                     .window,
-                    "launch pressed — activation right \(NSApp.isActive ? "taken; this app is active" : "refused; this app is still inactive")"
+                    "launch pressed — activation right \(NSApp.isActive ? "taken; this app is active" : "not taken within a turn; this app is not yet active")"
                         + ", frontmost \(front?.localizedName ?? "nobody") (pid \(front?.processIdentifier ?? 0))",
                 )
             }

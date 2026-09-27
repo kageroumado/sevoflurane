@@ -129,8 +129,9 @@ nonisolated enum D3DMetalPatches {
             let framework = framework(of: installed)
             guard sign(framework) else {
                 try? manager.removeItem(at: url)
-                try? manager.copyItem(at: keep, to: url)
-                return .failed("codesign refused the patched D3DMetal \(installed.version); the original is back")
+                let restored = (try? manager.copyItem(at: keep, to: url)) != nil
+                return .failed("codesign refused the patched D3DMetal \(installed.version); "
+                    + (restored ? "the original is back" : "the original could not be put back, so reinstall the toolkit"))
             }
             clearQuarantine(framework.deletingLastPathComponent().deletingLastPathComponent())
         } catch {
