@@ -22,7 +22,7 @@ enum DiagnosticsArchive {
         )
         let path = result.output.split(separator: "\n").last.map(String.init) ?? ""
         guard result.status == 0, path.hasSuffix(".zip") else {
-            return "Could not write the report: \(result.output.suffix(200))"
+            return String(localized: "Could not write the report: \(result.output.suffix(200))")
         }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         return nil
@@ -31,7 +31,7 @@ enum DiagnosticsArchive {
 
 /// The button that saves the zip, with its own progress and its own error.
 struct SaveDiagnosticsButton: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var error: String?
     @State private var isSaving = false
 

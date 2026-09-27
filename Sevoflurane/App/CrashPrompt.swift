@@ -369,6 +369,7 @@ private struct CrashPromptView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 28))
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.title)
                     .font(.system(size: 15, weight: .semibold))

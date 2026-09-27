@@ -15,6 +15,7 @@ struct DiagnosticsSettings: View {
     var showReports: (() -> Void)?
 
     @State private var level = DiagnosticLevel.current
+    @State private var reportCount = 0
     @State private var reportBytes = 0
 
     var body: some View {
@@ -74,7 +75,7 @@ struct DiagnosticsSettings: View {
     private var guideSection: some View {
         Section {
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                ForEach(Array(Self.guide.enumerated()), id: \.offset) { index, step in
+                ForEach(Self.guide.enumerated(), id: \.offset) { index, step in
                     HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
                         Text(verbatim: "\(index + 1).")
                             .monospacedDigit()
@@ -129,12 +130,9 @@ struct DiagnosticsSettings: View {
     }
 
     private var reportsDetail: String {
-        let count = CrashCollector.reports().count
-        guard count > 0 else { return "Every game you run gets one. Nothing collected yet." }
-        let size = ByteCountFormatter.string(
-            fromByteCount: Int64(reportBytes), countStyle: .file,
-        )
-        return String(localized: "\(count) reports, \(size).")
+        guard reportCount > 0 else { return String(localized: "Every game you run gets one. Nothing collected yet.") }
+        let size = Int64(reportBytes).formatted(.byteCount(style: .file))
+        return String(localized: "\(reportCount) reports, \(size).")
     }
 
     // MARK: - The caps
@@ -167,7 +165,9 @@ struct DiagnosticsSettings: View {
 
     private func refresh() {
         level = DiagnosticLevel.current
-        reportBytes = CrashCollector.reports().reduce(0) { $0 + $1.bytes }
+        let reports = CrashCollector.reports()
+        reportCount = reports.count
+        reportBytes = reports.reduce(0) { $0 + $1.bytes }
     }
 
     private func reveal() {
@@ -218,8 +218,7 @@ private struct SaveDiagnosticsRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Diagnostics archive")
-                Text(error ?? "Logs, system details and recent crashes in a ZIP on your Desktop, "
-                    + "with your name, paths and Steam ids taken out.")
+                Text(error ?? String(localized: "Logs, system details and recent crashes in a ZIP on your Desktop, with your name, paths and Steam ids taken out."))
                     .font(.caption)
                     .foregroundStyle(error == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                     .fixedSize(horizontal: false, vertical: true)

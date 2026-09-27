@@ -12,6 +12,7 @@ import SwiftUI
 @MainActor
 final class ProcessMonitorWindows {
     private var window: NSWindow?
+    private var closeObserver: (any NSObjectProtocol)?
     private let watch: StallWatch
 
     init(watch: StallWatch) {
@@ -34,11 +35,15 @@ final class ProcessMonitorWindows {
         window.minSize = NSSize(width: 640, height: 320)
         window.isRestorable = false
         self.window = window
-        NotificationCenter.default.addObserver(
+        closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main,
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.window = nil
+                if let observer = self?.closeObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.closeObserver = nil
+                }
                 ActivationPolicy.recedeIfLastWindow(closing: window)
             }
         }
@@ -90,13 +95,13 @@ final class ProcessMonitorActions {
             note = String(localized: "\(process.name) has no active game run in Sevoflurane.")
             return
         }
-        note = "Collecting…"
+        note = String(localized: "Collecting…")
         Task.detached(name: "Collect app \(appID)'s report") {
             let report = CrashCollector.collect(for: record)
             await MainActor.run {
                 self.note = report.map {
                     String(localized: "Wrote \($0.manifest.sources.count) sources to \($0.directory.lastPathComponent).")
-                } ?? "Could not write a report."
+                } ?? String(localized: "Could not write a report.")
             }
         }
     }
@@ -150,10 +155,7 @@ struct ProcessMonitorView: View {
     }
 
     private var footprint: String {
-        ByteCountFormatter.string(
-            fromByteCount: Int64(watch.processes.reduce(0) { $0 + $1.footprintBytes }),
-            countStyle: .memory,
-        )
+        Int64(watch.processes.reduce(0) { $0 + $1.footprintBytes }).formatted(.byteCount(style: .memory))
     }
 
     // MARK: - The table
@@ -170,10 +172,8 @@ struct ProcessMonitorView: View {
             }
             .width(60)
             TableColumn("Memory") { process in
-                Text(ByteCountFormatter.string(
-                    fromByteCount: Int64(process.footprintBytes), countStyle: .memory,
-                ))
-                .monospacedDigit()
+                Text(Int64(process.footprintBytes).formatted(.byteCount(style: .memory)))
+                    .monospacedDigit()
             }
             .width(90)
             TableColumn("Frames") { process in
@@ -183,9 +183,7 @@ struct ProcessMonitorView: View {
             TableColumn("State") { process in
                 if process.holdsOneCore {
                     StateChip(text: InterfaceCopy.localized("one core at 100 %"), tint: .orange)
-                        .help("This game has held exactly one core for over a minute. A game at rest on a menu "
-                            + "should use far less: it is usually a busy loop in the game, and sometimes a sign "
-                            + "that something it waits for never arrives.")
+                        .help("This game has held exactly one core for over a minute. A game at rest on a menu should use far less: it is usually a busy loop in the game, and sometimes a sign that something it waits for never arrives.")
                 } else {
                     StateChip(text: InterfaceCopy.localized(process.state.rawValue), tint: process.state.tint)
                 }
@@ -245,7 +243,7 @@ extension StallWatch.Role {
 }
 
 extension StallWatch.State {
-    /// The chip's colour: a stall is the one worth looking at.
+    /// The chip's color: a stall is the one worth looking at.
     var tint: Color {
         switch self {
         case .running: .green

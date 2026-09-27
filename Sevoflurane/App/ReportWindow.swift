@@ -17,6 +17,7 @@ import SwiftUI
 @MainActor
 final class ReportWindows {
     private var window: NSWindow?
+    private var closeObserver: (any NSObjectProtocol)?
     /// Opens Settings › Diagnostics on the steps for a useful report.
     var showGuide: (() -> Void)?
 
@@ -37,11 +38,15 @@ final class ReportWindows {
         window.minSize = NSSize(width: 680, height: 420)
         window.isRestorable = false
         self.window = window
-        NotificationCenter.default.addObserver(
+        closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main,
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.window = nil
+                if let observer = self?.closeObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.closeObserver = nil
+                }
                 ActivationPolicy.recedeIfLastWindow(closing: window)
             }
         }
@@ -493,7 +498,8 @@ private struct FindingsCard: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                ForEach(findings, id: \.self) { finding in
+                // By position: Wine's trail repeats the same exception line.
+                ForEach(findings.enumerated(), id: \.offset) { _, finding in
                     Text(finding)
                         .font(.caption.monospaced())
                         .textSelection(.enabled)

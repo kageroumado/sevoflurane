@@ -25,7 +25,7 @@ final class AboutWindows {
     func showAbout() {
         show(.about) {
             let window = NSWindow(contentViewController: NSHostingController(rootView: AboutView()))
-            window.title = "About Sevoflurane"
+            window.title = String(localized: "About Sevoflurane")
             window.styleMask = [.titled, .closable]
             window.titlebarSeparatorStyle = .none
             window.titleVisibility = .hidden
@@ -38,7 +38,7 @@ final class AboutWindows {
         show(.acknowledgements) {
             let view = LicenseTextView(text: Acknowledgements.text)
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "Acknowledgments"
+            window.title = String(localized: "Acknowledgments")
             window.styleMask = [.titled, .closable, .resizable]
             window.titlebarSeparatorStyle = .none
             window.setContentSize(NSSize(width: 640, height: 520))
@@ -51,7 +51,7 @@ final class AboutWindows {
         show(.license) {
             let view = LicenseTextView(text: Acknowledgements.ownLicense)
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "License"
+            window.title = String(localized: "License")
             window.styleMask = [.titled, .closable, .resizable]
             window.titlebarSeparatorStyle = .none
             window.setContentSize(NSSize(width: 640, height: 440))
@@ -94,7 +94,7 @@ struct AboutView: View {
         let info = Bundle.main.infoDictionary
         let marketing = info?["CFBundleShortVersionString"] as? String ?? "dev"
         let build = info?["CFBundleVersion"] as? String ?? "0"
-        return "Version \(marketing) (\(build))"
+        return String(localized: "Version \(marketing) (\(build))")
     }()
 
     var body: some View {
@@ -102,6 +102,7 @@ struct AboutView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 128, height: 128)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Sevoflurane")
                     .font(.system(size: 32, weight: .regular))
