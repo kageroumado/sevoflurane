@@ -17,11 +17,21 @@ fi
 releases="${SEVO_ENGINE_RELEASES:-${DORMISON_BUILD:-$HOME/Developer/build/dormison}/releases}"
 destination="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Engine"
 
-# The newest stable release (dormison-r<N>) that carries its signature, by version number.
+# The release the manifest names as stable, which is what a fresh install would download;
+# the highest number on disk can be an older series that manifest no longer names.
+# Without a manifest, the newest signed dormison-r<N> by version number.
 tarball=""
-for candidate in "$releases"/dormison-r<->.tar.xz(Nn); do
-    [[ -f "$candidate.sig" ]] && tarball="$candidate"
-done
+stable=""
+if [[ -f "$releases/engine.json" ]]; then
+    stable=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["channels"]["stable"]["version"])' "$releases/engine.json" 2>/dev/null || true)
+fi
+if [[ -n "$stable" ]]; then
+    [[ -f "$releases/$stable.tar.xz" && -f "$releases/$stable.tar.xz.sig" ]] && tarball="$releases/$stable.tar.xz"
+else
+    for candidate in "$releases"/dormison-r<->.tar.xz(Nn); do
+        [[ -f "$candidate.sig" ]] && tarball="$candidate"
+    done
+fi
 if [[ -z "$tarball" ]]; then
     echo "warning: no signed dormison-r<N>.tar.xz in $releases; the app will download its engine"
     exit 0
