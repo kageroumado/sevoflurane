@@ -354,11 +354,11 @@ struct EngineInstallerTests {
 
 /// Answers every request with a 404 page, the way a missing release asset is.
 private final class NotFoundProtocol: URLProtocol {
-    override class func canInit(with _: URLRequest) -> Bool {
+    override static func canInit(with _: URLRequest) -> Bool {
         true
     }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }
 
