@@ -14,7 +14,6 @@ struct GraphicsSettings: View {
     let shaders: ShaderStore
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
-    @State private var removingShaderPackage: ShaderPackages.Package?
     @State private var d3dMetalError: String?
     @State private var isAddingD3DMetal = false
     @State private var confirmingD3DMetalRemoval = false
@@ -83,106 +82,12 @@ struct GraphicsSettings: View {
                 if bootedRenderer == nil { Text(applyRendererCopy) }
             }
             rendererVersionsSection
-            shaderPackagesSection
+            ShaderPackagesSection(shaders: shaders, highlighted: highlighted)
         }
         .formStyle(.grouped)
         .onAppear {
             store.loadRendererReleases()
             shaders.load()
-        }
-    }
-
-    /// The packages the upscaler can run: what is in the store, with its
-    /// license and removal, and what the catalog can fetch.
-    private var shaderPackagesSection: some View {
-        Section {
-            ForEach(shaders.installed) { package in
-                installedShaderRow(package)
-            }
-            ForEach(shaders.downloadable) { entry in
-                downloadableShaderRow(entry)
-            }
-            if shaders.installed.isEmpty, shaders.downloadable.isEmpty {
-                Text(shaders.catalogLoaded
-                    ? "No packages installed. The download catalog is unreachable."
-                    : "Looking…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            ShaderFetchStatus(shaders: shaders)
-        } header: {
-            Text("Shader packages")
-        } footer: {
-            Text("Choose an upscaler in Engine or Games.")
-        }
-        .highlightable(.graphicsShaders, highlighted: highlighted)
-        .confirmationDialog(
-            "Remove \(removingShaderPackage?.title ?? "")?",
-            isPresented: Binding(
-                get: { removingShaderPackage != nil },
-                set: { if !$0 { removingShaderPackage = nil } },
-            ),
-            titleVisibility: .visible,
-            presenting: removingShaderPackage,
-        ) { package in
-            Button("Move to Trash", role: .destructive) { shaders.remove(package) }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("Games using this upscaler fall back to Lanczos.")
-        }
-    }
-
-    private func installedShaderRow(_ package: ShaderPackages.Package) -> some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(package.title)
-                    Text("\(package.manifest.version) · \(package.manifest.license)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(InterfaceCopy.localized(package.manifest.content))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: Theme.Space.sm)
-            if let source = package.manifest.source {
-                Link(destination: source) {
-                    Image(systemName: "arrow.up.right.square")
-                }
-                .help("Project website")
-            }
-            Button("Remove…") { removingShaderPackage = package }
-                .disabled(shaders.busy != nil)
-        }
-    }
-
-    private func downloadableShaderRow(_ entry: ShaderPackages.Available) -> some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(entry.title)
-                    Text("\(entry.version) · \(entry.license)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(InterfaceCopy.localized(entry.content))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: Theme.Space.sm)
-            if let source = entry.source {
-                Link(destination: source) {
-                    Image(systemName: "arrow.up.right.square")
-                }
-                .help("Project website")
-            }
-            Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download") {
-                Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
-            }
-            .disabled(shaders.busy != nil)
         }
     }
 
@@ -253,10 +158,12 @@ struct GraphicsSettings: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Label("More actions", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .help("More actions")
                 .disabled(isAddingD3DMetal)
                 .confirmationDialog(
                     "Remove D3DMetal \(removableD3DMetal ?? "")?",
@@ -358,6 +265,140 @@ struct GraphicsSettings: View {
     }
 }
 
+/// The packages the upscaler can run: what is in the store, with its license
+/// and removal, and what the catalog can fetch. Its own view, because a
+/// download's progress rewrites `shaders.busy` many times a second and only
+/// this section reads it.
+private struct ShaderPackagesSection: View {
+    let shaders: ShaderStore
+    let highlighted: SettingsAnchor?
+    @State private var removingShaderPackage: ShaderPackages.Package?
+
+    var body: some View {
+        let isBusy = shaders.busy != nil
+        Section {
+            ForEach(shaders.installed) { package in
+                InstalledShaderRow(package: package, isBusy: isBusy) {
+                    removingShaderPackage = package
+                }
+            }
+            ForEach(shaders.downloadable) { entry in
+                DownloadableShaderRow(entry: entry, isBusy: isBusy) {
+                    Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
+                }
+            }
+            if shaders.installed.isEmpty, shaders.downloadable.isEmpty {
+                Text(shaders.catalogLoaded
+                    ? "No packages installed. The download catalog is unreachable."
+                    : "Looking…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            ShaderFetchStatus(shaders: shaders)
+        } header: {
+            Text("Shader packages")
+        } footer: {
+            Text("Choose an upscaler in Engine or Games.")
+        }
+        .highlightable(.graphicsShaders, highlighted: highlighted)
+        .confirmationDialog(
+            "Remove \(removingShaderPackage?.title ?? "")?",
+            isPresented: Binding(
+                get: { removingShaderPackage != nil },
+                set: { if !$0 { removingShaderPackage = nil } },
+            ),
+            titleVisibility: .visible,
+            presenting: removingShaderPackage,
+        ) { package in
+            Button("Move to Trash", role: .destructive) { shaders.remove(package) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Games using this upscaler fall back to Lanczos.")
+        }
+    }
+}
+
+/// A package in the store: its version, license and content, and Remove.
+private struct InstalledShaderRow: View {
+    let package: ShaderPackages.Package
+    let isBusy: Bool
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
+            ShaderPackageSummary(
+                title: package.title,
+                version: package.manifest.version,
+                license: package.manifest.license,
+                content: package.manifest.content,
+            )
+            Spacer(minLength: Theme.Space.sm)
+            if let source = package.manifest.source {
+                ShaderProjectLink(source: source)
+            }
+            Button("Remove…", action: remove)
+                .disabled(isBusy)
+        }
+    }
+}
+
+/// A package the catalog can fetch, and Download with its size.
+private struct DownloadableShaderRow: View {
+    let entry: ShaderPackages.Available
+    let isBusy: Bool
+    let download: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
+            ShaderPackageSummary(
+                title: entry.title, version: entry.version, license: entry.license, content: entry.content,
+            )
+            Spacer(minLength: Theme.Space.sm)
+            if let source = entry.source {
+                ShaderProjectLink(source: source)
+            }
+            Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download", action: download)
+                .disabled(isBusy)
+        }
+    }
+}
+
+/// A package's title, version and license, over what it contains.
+private struct ShaderPackageSummary: View {
+    let title: String
+    let version: String
+    let license: String
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(title)
+                Text("\(version) · \(license)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(InterfaceCopy.localized(content))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// The package's project page, opened in the browser.
+private struct ShaderProjectLink: View {
+    let source: URL
+
+    var body: some View {
+        Link(destination: source) {
+            Label("Project website", systemImage: "arrow.up.right.square")
+                .labelStyle(.iconOnly)
+        }
+        .help("Project website")
+    }
+}
+
 /// One renderer: the version picker (the engine's own, then every added
 /// version), the fetch and folder menu, and Reset. Mirrors the D3DMetal
 /// picker above it.
@@ -407,10 +448,12 @@ private struct RendererVersionRow: View {
                         Button("Remove \(chosen)…", role: .destructive) { confirmingRemoval = true }
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Label("More actions", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .help("More actions")
                 .disabled(state.busy != nil)
                 .confirmationDialog(
                     "Remove \(component.label) \(state.chosen ?? "")?",
