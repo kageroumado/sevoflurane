@@ -77,32 +77,22 @@ nonisolated enum Doctor {
     }
 
     static func checks(from s: Snapshot) -> [Check] {
-        var checks: [Check] = []
-        let d = s.detection
+        provisioningChecks(from: s.detection)
+            + dependencyChecks(from: s)
+            + [clientCheck(from: s)]
+            + appChecks(from: s)
+            + hostChecks(from: s)
+    }
 
+    /// Rosetta, the engine, the bottles and the Steam client installed in one.
+    private static func provisioningChecks(from d: SetupDetection) -> [Check] {
+        var checks: [Check] = []
         checks.append(Check(
             id: "rosetta", ok: d.rosetta, label: "Rosetta 2",
             hint: "softwareupdate --install-rosetta", provisioning: true,
         ))
 
-        if let cx = d.crossover, d.usableCrossOver != nil || d.managedEngineVersions.isEmpty {
-            let state = cx.licensed ? "licensed" : cx.trialExpired ? "TRIAL EXPIRED" : "trial"
-            checks.append(Check(
-                id: "engine", ok: d.usableCrossOver != nil,
-                label: "CrossOver \(cx.version) (\(state))",
-                hint: "an expired trial cannot launch bottles — license CrossOver "
-                    + "or install Dormison: sevo engine install",
-                provisioning: true,
-            ))
-        } else {
-            checks.append(Check(
-                id: "engine", ok: !d.managedEngineVersions.isEmpty,
-                label: d.managedEngineVersions.isEmpty
-                    ? "engine" : d.managedEngineVersions.map(Engine.managedDisplayName).joined(separator: ", "),
-                hint: "no engine — install CrossOver, or run: sevo engine install",
-                provisioning: true,
-            ))
-        }
+        checks.append(engineCheck(from: d))
 
         // Two engines can each hold a bottle of one name; the folder tells them apart.
         let duplicated = Set(d.bottles.map(\.name).filter { name in d.bottles.count { $0.name == name } > 1 })
@@ -125,9 +115,31 @@ nonisolated enum Doctor {
             label: "Steam client in bottle '\(SteamBottle.name)'",
             hint: "run Sevoflurane's setup wizard to install it", provisioning: true,
         ))
+        return checks
+    }
 
-        checks.append(contentsOf: dependencyChecks(from: s))
+    /// CrossOver when it is usable or the only engine there is, else the built-in engines.
+    private static func engineCheck(from d: SetupDetection) -> Check {
+        if let cx = d.crossover, d.usableCrossOver != nil || d.managedEngineVersions.isEmpty {
+            let state = cx.licensed ? "licensed" : cx.trialExpired ? "TRIAL EXPIRED" : "trial"
+            return Check(
+                id: "engine", ok: d.usableCrossOver != nil,
+                label: "CrossOver \(cx.version) (\(state))",
+                hint: "an expired trial cannot launch bottles — license CrossOver "
+                    + "or install Dormison: sevo engine install",
+                provisioning: true,
+            )
+        }
+        return Check(
+            id: "engine", ok: !d.managedEngineVersions.isEmpty,
+            label: d.managedEngineVersions.isEmpty
+                ? "engine" : d.managedEngineVersions.map(Engine.managedDisplayName).joined(separator: ", "),
+            hint: "no engine — install CrossOver, or run: sevo engine install",
+            provisioning: true,
+        )
+    }
 
+    private static func clientCheck(from s: Snapshot) -> Check {
         let clientLabel: String
         let clientOK: Bool
         switch s.clientState {
@@ -148,11 +160,15 @@ nonisolated enum Doctor {
                 ? "client: stopped (ok when idle)"
                 : "client: processes alive (pids \(s.bottleProcesses)) but CDP down"
         }
-        checks.append(Check(
+        return Check(
             id: "client", ok: clientOK, label: clientLabel,
             hint: "sevo recover", provisioning: false,
-        ))
+        )
+    }
 
+    /// The supervision daemon, the app, its bridge and the client's services.
+    private static func appChecks(from s: Snapshot) -> [Check] {
+        var checks: [Check] = []
         let supervising = s.appStatus != nil
         let appHealth = s.appStatus?["health"] as? String ?? "?"
         checks.append(Check(
@@ -188,7 +204,12 @@ nonisolated enum Doctor {
                 hint: "the client's UI session is dead — sevo recover", provisioning: false,
             ))
         }
+        return checks
+    }
 
+    /// Discord, the CLI symlink, the crash-dump rate and the client update pin.
+    private static func hostChecks(from s: Snapshot) -> [Check] {
+        var checks: [Check] = []
         // Discord being closed is a state, not a fault: the check reports what
         // presence has to work with and never fails the run.
         checks.append(Check(
@@ -229,7 +250,6 @@ nonisolated enum Doctor {
                 provisioning: false,
             ))
         }
-
         return checks
     }
 
