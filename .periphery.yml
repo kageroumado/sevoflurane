@@ -1,0 +1,28 @@
+# Dead-code detection: `periphery scan` builds with the index store and
+# cross-references every declaration against its uses. Results are
+# candidates: AppKit selectors, JSON records and SwiftUI previews reach code
+# in ways an index can miss, so verify each before deleting it.
+project: Sevoflurane.xcodeproj
+schemes:
+  - Sevoflurane
+  - sevo
+retain_public: false
+retain_objc_accessible: true
+retain_codable_properties: true
+retain_swift_ui_previews: true
+retain_equatable_properties: true
+retain_hashable_properties: true
+# A property of these types is often written once and never read: holding it
+# is what keeps the listener, observation, task or window alive.
+retain_assign_only_property_types:
+  - HTTPServer
+  - WebSocketServer
+  - ControlServer
+  - SteamMenuMirror
+  - Provisioner
+  - NSWindow
+  - "[NSKeyValueObservation]"
+  - Task<Void, Never>
+# SMCReader mirrors the kernel's SMC struct field for field, padding included.
+report_exclude:
+  - Core/SMCReader.swift

@@ -10,11 +10,6 @@ protocol GraphicsEnvironment: AnyObject {
     /// Whether the effects are simulated.
     var isSimulation: Bool { get }
 
-    /// Where installed copies of Apple's toolkit are kept for this engine:
-    /// inside a managed engine, or the shared store CrossOver is pointed at
-    /// through the shadow tree.
-    var toolkitStore: URL { get }
-
     /// Whether the engine brings a D3DMetal of its own, which the user's copy
     /// then replaces rather than supplies.
     var engineHasOwnD3DMetal: Bool { get }
@@ -59,7 +54,7 @@ extension GraphicsEnvironment {
 /// toolkits on disk.
 @MainActor
 final class LiveGraphicsEnvironment: GraphicsEnvironment {
-    let toolkitStore: URL
+    private let toolkitStore: URL
     let engineHasOwnD3DMetal: Bool
 
     init() {

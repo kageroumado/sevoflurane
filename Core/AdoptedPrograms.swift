@@ -43,16 +43,6 @@ nonisolated enum ProgramKind {
     static let installer = "installer"
     /// Anything else that is worth keeping and starting again.
     static let program = "program"
-    static let all = [game, installer, program]
-
-    /// The word the interface uses for one.
-    static func label(_ kind: String) -> String {
-        switch kind {
-        case game: "Game"
-        case installer: "Installer"
-        default: "Program"
-        }
-    }
 }
 
 /// The adopted programs: their id range, their records, and the two writes

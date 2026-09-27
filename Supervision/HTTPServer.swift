@@ -82,14 +82,13 @@ final nonisolated class HTTPServer: Sendable {
     }
 
     private let port: UInt16
-    /// Whether a second process may listen on the same port.
-    ///
-    /// Reuse is the default because the bridge's asset and art servers are
-    /// harmless twins. It is wrong for anything that owns state: two listeners
-    /// on the control port means the kernel hands each request to whichever it
-    /// likes, and "one supervisor owns the bottle" becomes a coin toss.
-    private let isExclusive: Bool
 
+    /// - Parameter exclusive: Whether the port is held alone, refusing a second
+    ///   listener. Reuse is the default because the bridge's asset and art
+    ///   servers are harmless twins. It is wrong for anything that owns state:
+    ///   two listeners on the control port means the kernel hands each request
+    ///   to whichever it likes, and "one supervisor owns the bottle" becomes a
+    ///   coin toss.
     init(
         port: UInt16,
         gate: LoopbackGate,
@@ -99,7 +98,6 @@ final nonisolated class HTTPServer: Sendable {
         self.handler = handler
         self.gate = gate
         self.port = port
-        isExclusive = exclusive
         queue = DispatchQueue(label: "sevo.http.\(port)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(

@@ -99,11 +99,6 @@ nonisolated enum KnownFixes {
         var packageName: String {
             BottleDependencies.catalog.first { $0.id == dependency }?.name ?? dependency
         }
-
-        var reason: String {
-            "\(dll).dll comes with \(packageName); installing it and taking the native "
-                + "copy for this game is what the missing-DLL error asks for."
-        }
     }
 
     /// What to offer for a DLL a run said was missing — `0xc0000135`, a
@@ -166,11 +161,6 @@ nonisolated enum KnownFixes {
 
         var isEmpty: Bool {
             fixes.isEmpty
-        }
-
-        /// Every reason, for a report that lists them.
-        var reasons: [String] {
-            fixes.map(\.reason)
         }
 
         /// The entry that recommends a value for `key`, if one does.

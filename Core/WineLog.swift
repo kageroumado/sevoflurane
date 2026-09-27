@@ -53,12 +53,6 @@ nonisolated enum WineLog {
         setChannels(on ? levelOne : nil)
     }
 
-    /// `on (<channels>)` or `off (<channels>)` — off still names what the
-    /// log keeps, which is not nothing.
-    static var summary: String {
-        "\(isDiagnosing ? "on" : "off") (\(channels))"
-    }
-
     /// The same line for a launch under Debug mode, which folds its own
     /// channels in: `on` whenever the mode is on, and the channels a game
     /// actually carries.

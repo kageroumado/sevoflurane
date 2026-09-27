@@ -133,12 +133,6 @@ struct SetupRow<Accessory: View>: View {
     }
 }
 
-extension SetupRow where Accessory == EmptyView {
-    init(icon: String, title: String, caption: String? = nil) {
-        self.init(icon: icon, title: title, caption: caption) { EmptyView() }
-    }
-}
-
 /// A row that is one of several exclusive choices: the whole row is the
 /// button, and the mark at its trailing edge says which one is chosen.
 struct SetupChoiceRow: View {

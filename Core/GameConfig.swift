@@ -30,7 +30,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
 
     /// The picker's line for this case.
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .off: "Never"
         case .fixed: "Fixed-size windows"
         case .window: "Fixed-size windows and full-screen games"
@@ -42,7 +42,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// What the player gets, for a command line that has no picker to read
     /// the neighboring cases from.
     var summary: String {
-        let value: String = switch self {
+        let value = switch self {
         case .off: "every window stays as the game makes it; a full-screen game covers the screen"
         case .fixed: "a window the game locks to one size gets a resize handle and its picture scales; "
             + "a full-screen game stays full screen"
@@ -87,7 +87,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
     case metalfx
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .off: "Off"
         case .lanczos: "Final filter only"
         case .metalfx: "MetalFX Spatial"
@@ -97,7 +97,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
 
     /// One line on what the choice is for.
     var detail: String {
-        let value: String = switch self {
+        let value = switch self {
         case .off: "The window system scales the picture."
         case .lanczos: "No shader. The final filter does all the resizing."
         case .metalfx: "For 3D games rendered below your display's resolution."
@@ -114,7 +114,7 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
     case lanczos
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .nearest: "Nearest"
         case .bilinear: "Bilinear"
         case .lanczos: "Lanczos"
@@ -124,7 +124,7 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
 
     /// One line on what the filter does to the picture.
     var detail: String {
-        let value: String = switch self {
+        let value = switch self {
         case .nearest: "Copies pixels. Crisp at whole-number scales, uneven at the rest."
         case .bilinear: "Blends neighboring pixels. The softest of the three."
         case .lanczos: "Sharp resampling for fractional scales."
@@ -149,7 +149,7 @@ nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
     case custom
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .standard: "Standard"
         case .experimental: "Experimental"
         case .custom: "Custom"
@@ -227,7 +227,7 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     case linear
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .system: "macOS acceleration"
         case .linear: "Linear (no acceleration)"
         }
@@ -372,7 +372,7 @@ nonisolated enum SettingReach: Equatable, Sendable {
     case clientRestart
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .nextLaunch: "Next launch"
         case .clientRestart: "Steam restart"
         }
@@ -381,7 +381,7 @@ nonisolated enum SettingReach: Equatable, Sendable {
 
     /// The sentence behind the badge, and what a command line prints.
     var detail: String {
-        let value: String = switch self {
+        let value = switch self {
         case .nextLaunch:
             "reaches the game the next time it starts; Steam keeps running"
         case .clientRestart:
@@ -463,10 +463,6 @@ nonisolated enum GameConfig {
     static func global() -> ConfigValues {
         migrateIfNeeded()
         return read(globalURL)
-    }
-
-    static func setGlobal(_ values: ConfigValues) {
-        write(values, to: globalURL)
     }
 
     static func bottle(_ name: String) -> ConfigValues {

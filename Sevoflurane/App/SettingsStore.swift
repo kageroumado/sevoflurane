@@ -32,10 +32,6 @@ final class SettingsStore {
 
     var level: SettingLevel { scope.level }
 
-    func reload() {
-        values = environment.values(scope)
-    }
-
     // MARK: - Reading
 
     /// This level's own value; `nil` where it inherits.

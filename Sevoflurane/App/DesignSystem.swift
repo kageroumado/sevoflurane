@@ -13,32 +13,6 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// The primary action: solid accent that saturates on hover. The hover state
-/// lives in an inner view — `@State` on the ButtonStyle itself has no view
-/// storage behind it.
-struct ProminentFillStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        ProminentFill(configuration: configuration)
-    }
-
-    private struct ProminentFill: View {
-        let configuration: Configuration
-        @State private var isHovered = false
-
-        var body: some View {
-            configuration.label
-                .background(
-                    Color.accentColor.opacity(isHovered ? 1 : 0.9),
-                    in: Capsule(),
-                )
-                .opacity(configuration.isPressed ? 0.7 : 1)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
-                }
-        }
-    }
-}
-
 /// A notice card's symbol and the slot it sits in: the measure every
 /// kageroumado popover's status card uses, so a card reads the same from one
 /// menu-bar app to the next.

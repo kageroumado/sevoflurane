@@ -70,11 +70,9 @@
 
         private(set) var activeEngine: Engine
         private(set) var activeBottle: String
-        private let scenario: Scenario
         private var byEngine: [String: [SetupDetection.Bottle]]
 
         init(scenario: Scenario) {
-            self.scenario = scenario
             let crossover = Engine.crossover
             let builtIn = Engine.managed(version: Self.builtInVersion)
             switch scenario {

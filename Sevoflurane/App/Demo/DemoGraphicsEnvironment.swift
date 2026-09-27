@@ -35,7 +35,7 @@
         }
 
         let isSimulation = true
-        let toolkitStore = URL(fileURLWithPath: "/demo/engine")
+        private let toolkitStore = URL(fileURLWithPath: "/demo/engine")
 
         private let scenario: Scenario
         /// Per-action think time, so a progress state is on screen long enough

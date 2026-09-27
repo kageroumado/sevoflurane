@@ -104,11 +104,6 @@ nonisolated enum NWJSGames {
     /// directory its browsing data lands in.
     static let defaultPackageName = "nwjs"
 
-    /// The NW.js build of an installed game, by app id.
-    static func detect(appID: Int) -> NWJSInfo? {
-        SharedGames.installDirectory(appID: appID).flatMap(detect(inDirectory:))
-    }
-
     /// RPG Maker ships its own runtime beside the game data, and which one it
     /// is decides where saves live — MV keeps them under `www`, MZ beside the
     /// package.

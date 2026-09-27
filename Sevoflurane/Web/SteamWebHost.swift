@@ -89,19 +89,10 @@ final class SteamWebHost {
     /// `SteamWindow.show` answers those requests with nothing.
     private(set) var clientIsStopping = false
 
-    /// Runs a stop with the client marked as stopping. The mark is a scoped
-    /// token rather than a flag two subsystems poke, so it clears when the
-    /// stop ends, whether or not the client ever became healthy — every
-    /// signed-out boot is such a stop, and a mark left set refuses every
-    /// login window `show()` asks for.
-    func duringClientStop<T>(_ body: () async -> T) async -> T {
-        beginClientStop()
-        defer { endClientStop() }
-        return await body()
-    }
-
-    /// The same mark, opened and closed by the daemon across the link — a stop
-    /// runs in the daemon's process, so the scope cannot be a Swift one.
+    /// Marks the client as stopping, opened and closed by the daemon across the
+    /// link around each stop — the stop runs in the daemon's process. Every
+    /// signed-out boot is such a stop, and a mark left set refuses every login
+    /// window `show()` asks for.
     func beginClientStop() {
         clientIsStopping = true
     }
@@ -236,11 +227,6 @@ final class SteamWebHost {
       return JSON.stringify({ recent: recent.map(row), library: installed.map(row) });
     })()
     """
-
-    /// Launches a game exactly as Steam's tray menu does.
-    func launchGame(_ game: RecentGame) {
-        launchGame(appID: game.id)
-    }
 
     /// The same call by app id, for the daemon: it decides whether a launch
     /// needs the client restarted first, and the launch itself comes back here

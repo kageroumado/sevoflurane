@@ -134,11 +134,6 @@ final class GraphicsStore {
         EventLog.shared.log(.setup, "\(component.label) \(version) moved to the Trash")
     }
 
-    /// Where installed toolkits are kept for this engine.
-    var toolkitStore: URL {
-        environment.toolkitStore
-    }
-
     /// Whether this store's effects are simulated. The pane reads it to stand
     /// Apple's real download page down.
     var isSimulated: Bool {

@@ -22,11 +22,9 @@ final class Provisioner {
     }
 
     /// Where a run is in the fixed stage sequence, for the wizard's overall
-    /// progress bar. Stages that detection skips flash past; the count stays
-    /// honest because the sequence itself never changes.
+    /// progress bar. Stages that detection skips flash past.
     struct Stage: Equatable {
         let index: Int
-        static let count = 6
     }
 
     private(set) var detection: SetupDetection?
