@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="360" height="80" viewBox="0 0 360 80" role="img" aria-label="Download Sevoflurane for Mac">
-  <title>Download Sevoflurane for Mac</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="80" viewBox="0 0 360 80" role="img" aria-label="下载 Mac 版 Sevoflurane">
+  <title>下载 Mac 版 Sevoflurane</title>
   <defs>
     <linearGradient id="body" x2="0.8" y2="1">
       <stop stop-color="#302c1e"/><stop offset="0.48" stop-color="#1c190b"/><stop offset="1" stop-color="#0d0e05"/>
@@ -35,7 +35,7 @@
   <circle cx="34" cy="61" r="6.8" fill="#171910"/>
   <path d="m30 59 4 6 4-6Z" fill="none" stroke="#e0bc64" stroke-width="0.9" stroke-linejoin="round"/>
   <path d="M85 19v42" stroke="#cab16c" stroke-opacity="0.22"/>
-  <text x="101" y="34" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="19" font-weight="600" fill="#f3d686">Download for Mac</text>
-  <text x="101" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#c4c1ad">Apple silicon · macOS 26+</text>
+  <text x="101" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="19" font-weight="600" fill="#f3d686">下载 Mac 版</text>
+  <text x="101" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" fill="#c4c1ad">Apple 芯片 · macOS 26 或更新版本</text>
   <g fill="none" stroke="#d8bf78" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M326 28v15m-5-5 5 5 5-5m-12 8h14"/></g>
 </svg>

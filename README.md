@@ -6,18 +6,20 @@
 
 # Sevoflurane
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 **rx no. 013 ・ se·vo·flu·rane /ˌsiːvoʊˈflʊəreɪn/ ・ a volatile anesthetic for games ♡**
 
 [![kagerou.glass](https://img.shields.io/badge/kagerou.glass-e8b52e?style=for-the-badge&logo=safari&logoColor=1a150c)](https://kagerou.glass/sevoflurane/)
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#get-started)
 
-<a href="https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="320" height="68"></a>
+<a href="https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
 
 <table>
   <tr>
     <td align="center"><img src=".github/sevoflurane-library.png" alt="Steam's library in a native Mac window, showing a collection of six games" width="620"><br><sub><b>steam, rehoused</b> ・ the library in a Mac window</sub></td>
-    <td align="center"><img src=".github/sevoflurane-menu.png" alt="The menu bar popover: recent games, Open Steam, and the renderer switch" width="236"><br><sub><b>the menu bar</b> ・ recent games, one click to play</sub></td>
+    <td align="center"><img src=".github/sevoflurane-menu.png" alt="The menu bar popover: recent games, Open Steam, and the renderer switch" width="236"><br><sub><b>the menu bar</b> ・one click to play</sub></td>
   </tr>
 </table>
 
@@ -29,6 +31,19 @@ in Mac windows.**
 Browse your library, install games and chat with friends through Steam.
 Sevoflurane uses Wine to run the Windows Steam client and compatible games
 in the background.
+
+## Will my game run?
+
+The [community compatibility database](https://kagerou.glass/sevoflurane/games/)
+shows how games run on different Macs and renderers. It grows from actual play
+sessions recorded by Sevoflurane when players opt in to **Share run statistics**.
+Shared runs include the engine, renderer, hardware, resolution, gameplay frame
+rate and how the session ended; the database uses these to calculate its verdicts.
+
+To contribute, enable **Settings › General › Community › Share run statistics**
+and play. Games appear as players share their runs.
+
+<p align="center"><a href="https://kagerou.glass/sevoflurane/games/"><img src=".github/compatibility.svg" alt="Find your game — community compatibility database" width="360" height="80"></a></p>
 
 ## Highlights
 
@@ -298,7 +313,7 @@ are listed for anyone driving the engine directly.
 | `SEVO_COREAUDIO_DEVICE_BUFFER` | `1` writes buffer size and volume to the whole device, for comparison |
 | `SEVO_ENV_FILES` | `0` turns off the `.sevo` env files and the bundle loader together |
 | `SEVO_OWNER_PID`, `SEVO_SUPPRESS_WINDOWS`, `SEVO_LOADER`, `SEVO_LOADER_TREE` | the Dock shim: the process whose exit ends the bottle, hiding Steam's own windows, and the loader |
-| `SEVO_QUIET` | `1` keeps a process out of the Dock and off the screen (the Genshin frame-rate unlocker) |
+| `SEVO_QUIET` | `1` keeps a process out of the Dock and off the screen |
 | `SEVO_RUNNER`, `SEVO_NWJS`, `SEVO_NWJS_DIR` | the Dock shim's native NW.js runner |
 | `SEVO_STEAM_STUB`, `SEVO_STEAM_APPID`, `SEVO_STEAM_STUB_DIR`, `SEVO_STEAM_STUB_PORT`, `SEVO_STEAM_STUB_IDLE`, `SEVO_STEAM_API_DIR` | the Steamworks stub that gives native NW.js games achievements |
 | `SEVO_CLI` | the `sevo` the View menu calls |
@@ -417,11 +432,6 @@ runs on CrossOver.
   list and gallery views and in Quick Look, read from the file without running
   it. Available once Sevoflurane has run once.
 - Sevoflurane reports when a program needs a Windows kernel driver.
-- HoYoverse games (Genshin Impact is the one tested) run in a companion
-  Windows under a `steam.exe` parent, which lets them skip their kernel
-  driver. Settings › Games › Genshin Impact starts a frame-rate unlocker of
-  your choosing beside the game. It edits the running game's memory, which
-  HoYoverse's terms do not allow, so the choice is yours.
 
 ### Settings
 
