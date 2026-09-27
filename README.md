@@ -11,6 +11,9 @@ in the background.
 
 Requires macOS 26 or later on Apple silicon.
 
+This page introduces the app. [Docs/FEATURES.md](Docs/FEATURES.md) lists
+everything it does.
+
 ## Get started
 
 Build the app from source while the first public release is being prepared:
@@ -31,12 +34,14 @@ D3DMetal, the toolkit's graphics translator.
 
 Steam's library, friends list and chats open in Mac windows, with the macOS
 menu bar and notifications. Your library is also available from Sevoflurane's
-menu bar icon.
+menu bar icon: a game's menu there runs it once with another renderer, pins
+one for every launch, or opens its settings.
 
 With Dormison, you can:
 
 - Give games their own Dock name and icon, with Game Mode support when the
-  game is frontmost and fills the screen.
+  game is frontmost and fills the screen. Keep in Dock, or dragging a game
+  from the menu bar onto the Dock, keeps its tile there to start it.
 - Run full-screen or fixed-size games in resizable windows, and upscale
   the picture to the window with Lanczos, MetalFX, Anime4K or CuNNy. A
   running game's own View menu switches the upscaler and the final filter
@@ -86,8 +91,9 @@ the programs it added so you can keep the ones worth keeping. Settings ›
 Storage shows what each installer wrote and moves it to the Trash when you
 remove the program.
 
-Finder shows a Windows program's own icon once Sevoflurane has run at least
-once.
+Finder shows every `.exe` with the program's own icon, in its icon, list and
+gallery views and in Quick Look, once Sevoflurane has run once. The icon is
+read from the file; nothing runs.
 
 HoYoverse games (Genshin Impact is the one tested) run in a companion
 Windows beside the Steam bottle, under a `steam.exe` parent, which is how
@@ -128,13 +134,12 @@ title, no path, no account, and a launch time rounded to the hour. Each
 install signs its runs with a key made on your Mac; Settings can forget the
 install, and the database then deletes its runs.
 
-A game's page shows how it runs per engine and chip, and the reports people
-and the project left about it, each with the configuration it ran on. Games
-Steam does not sell, Genshin Impact among them, have pages too once they are
-adopted into the catalog.
-
-The Windows engine runs under Rosetta. Sevoflurane itself is native on
-Apple silicon.
+After a run, "How did it go?" in the Reports window (or `sevo report`) adds
+your verdict to it: Plays, Plays with fixes, Launches or Fails, and a note if
+you like. A game's page shows how it runs per engine and chip, and the reports
+people and the project left about it, each with the configuration it ran on.
+Games Steam does not sell, Genshin Impact among them, have pages too once they
+are adopted into the catalog.
 
 ## Graphics and game settings
 
@@ -170,6 +175,35 @@ renderer files while Steam stays open; engine and msync changes require a
 restart. Changes to the selected DXMT or DXVK version apply after Steam
 restarts.
 
+A game's settings can also carry a known fix: when Sevoflurane knows a game
+needs a particular setting, that row says so and applies it in one click.
+Settings › Engine › Game dependencies installs the Windows runtimes and fonts
+a game may ask for, one by one.
+
+## Storage
+
+Settings › Storage shows what Sevoflurane occupies beside the rest of the disk,
+with a size for every game, program and category, and moves what can be made
+again to the Trash. A game installed in another bottle, on any engine including
+CrossOver, links into this one without a second download: one copy on disk,
+separate saves.
+
+## When Steam misbehaves
+
+Settings › Recovery gathers every fix in one place: restart or force-quit
+Steam, cancel stuck menus, repair the background helper, repair the bottle,
+restart Windows, clear the shader cache, or rebuild Steam's environment while
+keeping games and saves. Its Common problems list goes from the error you see
+(a missing DLL, a black screen, boxes in place of text, a mod being ignored)
+to the setting that fixes it.
+
+## Updates
+
+Sevoflurane updates itself from its GitHub releases, once the Mac is idle and
+no game is running; the footer's Update chip installs one at once, and Auto
+Update in the ⋯ menu turns it off. A dot on the Settings button means a newer
+engine or renderer is available.
+
 ## Known limits
 
 - Games and online modes that need Windows kernel anti-cheat do not run.
@@ -202,6 +236,10 @@ reports. Your account name, home folder paths, the Mac's name and Steam ids are
 taken out of every file in it; look through it before sharing all the same.
 You can also run `sevo diag` from the terminal.
 
+When a game crashes, or hangs until the watchdog ends it, Sevoflurane offers
+to send that run's redacted report to the developers. It asks every time, and
+"Never ask again" turns the offer off.
+
 The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`. The Wine log always records errors and
 exceptions, so a game that exits on its own still leaves a trail. Settings ›
@@ -230,31 +268,39 @@ sevo doctor [--json]
 sevo setup [--engine E]
 sevo status [--json]
 sevo wait [--gone]
-sevo diag [--no-steam-logs]
+sevo diag save|on|off|status
 sevo runs
-sevo client start|stop|restart|update|pin|unpin
+sevo report RUN --verdict V [--note N]
+sevo perf list|report|compare|label|mark
+sevo stats status|preview|reports|delete
+sevo client start|stop|restart|force-quit|update|clear-shader-cache|pin|unpin|logs
 sevo recover [--deep]
 sevo daemon repair
-sevo app list|info|launch|terminate|install|verify|uninstall|compat|config
+sevo app list|info|launch|terminate|install|verify|uninstall|compat|config|repair-dll|detect
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
-sevo engine list|install [--file TARBALL]|use
-sevo update
+sevo engine list|install [--file TARBALL]|d3dmetal|use|channel|check-manifest
+sevo update check|use|install|remove
 sevo bottle list|config <key> [value]|deps [install ID]
 sevo shaders list|install|remove
 sevo storage [--games]
-sevo nwjs
+sevo nwjs list|add
 sevo downloads status [--json]|pause|resume|throttle KBPS
+sevo holds
+sevo orphans [--end]
 sevo run PROGRAM [ARGS]
 sevo debug on|off|status
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
+sevo benchmark
 sevo logs [--tail N] [-f] [--wine]
 ```
 
 `sevo recover --deep` adds web-cache removal and client repair.
-The report carries Steam's own bootstrap, connection, webhelper,
-game-process and console logs from the bottle; `sevo diag --no-steam-logs`
-leaves them out.
+`sevo diag save` writes the report, with Steam's own bootstrap, connection,
+webhelper, game-process and console logs from the bottle; `--no-steam-logs`
+leaves them out. `sevo perf compare` says whether a change of setting really
+moved a game's average frame rate and 1% low, and `sevo holds` names what keeps
+the display awake.
 
 Exit codes are 0 for success, 1 for an operation failure, 2 for an invalid
 invocation, 3 for an incomplete installation and 4 for an unreachable
@@ -263,10 +309,15 @@ its supervisor.
 
 ### MCP
 
-`sevo mcp` provides a stdio MCP server. Its tools cover diagnostics,
-client recovery, library queries, game installation and launch, downloads
-and logs. It also exposes `sevo://status`, `sevo://doctor`, `sevo://log`
-and `sevo://library` resources.
+`sevo mcp` provides a stdio MCP server. Its 27 tools cover diagnostics,
+client recovery, library queries, game installation and launch, Quick Launch
+programs, downloads, recent runs, frame-time comparison, diagnostic levels and
+logs. It also exposes `sevo://status`, `sevo://doctor`, `sevo://log` and
+`sevo://library` resources.
+
+Settings › General registers it with each assistant it finds, one switch per
+assistant: Claude Code (with a skill that teaches it a diagnostic run), Claude
+Desktop, Codex and Hermes. For any other, add it by hand:
 
 ```json
 { "mcpServers": { "sevoflurane": { "command": "sevo", "args": ["mcp"] } } }
@@ -287,7 +338,8 @@ overlay, then hosts them in macOS windows.
 
 Dormison supplies the Wine changes needed for D3DMetal, msync, 32-bit
 games under Rosetta, Steam startup and the Metal presenter. CrossOver
-and CrossOver Preview can also serve as engines.
+and CrossOver Preview can also serve as engines. The engine runs under
+Rosetta; Sevoflurane itself is native on Apple silicon.
 
 ### Source layout
 
