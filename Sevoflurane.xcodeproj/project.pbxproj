@@ -307,6 +307,7 @@
 				0BAA000000000000000E0005 /* Sources */,
 				0BAA000000000000000E0006 /* Frameworks */,
 				0BAA000000000000000E0007 /* Resources */,
+				0BAA000000000000000E0010 /* Claim no types in Debug */,
 			);
 			buildRules = (
 			);
@@ -425,6 +426,16 @@
 			shellPath = /bin/zsh;
 			shellScript = (
 				"\"$SRCROOT/Tools/name-helper.sh\"",
+				"",
+			);
+		};
+		0BAA000000000000000E0010 /* Claim no types in Debug */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Claim no types in Debug";
+			shellPath = /bin/zsh;
+			shellScript = (
+				"\"$SRCROOT/Tools/debug-thumbnail-types.sh\"",
 				"",
 			);
 		};

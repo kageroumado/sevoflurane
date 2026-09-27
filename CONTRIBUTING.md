@@ -34,6 +34,10 @@ helper label and ports (877x, where the shipping app uses 876x), and a CLI
 linked as `sevo-debug`. Its first launch walks the setup assistant into a
 bottle of its own. `Core/AppIdentity.swift` holds all of it, and
 `Tools/name-helper.sh` names the helper's launchd plist after the bundle id.
+Its Quick Look extension claims no file type (`Tools/debug-thumbnail-types.sh`),
+because every Debug build Xcode registers is another copy of one extension
+identifier, and Quick Look stalls on a duplicate; build with
+`SEVO_DEBUG_THUMBNAIL=1` to work on thumbnails, then `lsregister -u` that build.
 
 ## Simulating a Steam event
 
