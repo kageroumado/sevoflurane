@@ -479,6 +479,7 @@ are listed for anyone driving the engine directly.
 | `SEVO_COREAUDIO_DEVICE_BUFFER` | `1` writes buffer size and volume to the whole device, for comparison |
 | `SEVO_ENV_FILES` | `0` turns off the `.sevo` env files and the bundle loader together |
 | `SEVO_OWNER_PID`, `SEVO_SUPPRESS_WINDOWS`, `SEVO_LOADER`, `SEVO_LOADER_TREE` | the Dock shim: the process whose exit ends the bottle, hiding Steam's own windows, and the loader |
+| `SEVO_QUIET` | `1` keeps a process out of the Dock and off the screen (the Genshin frame-rate unlocker) |
 | `SEVO_RUNNER`, `SEVO_NWJS`, `SEVO_NWJS_DIR` | the Dock shim's native NW.js runner |
 | `SEVO_STEAM_STUB`, `SEVO_STEAM_APPID`, `SEVO_STEAM_STUB_DIR`, `SEVO_STEAM_STUB_PORT`, `SEVO_STEAM_STUB_IDLE`, `SEVO_STEAM_API_DIR` | the Steamworks stub that gives native NW.js games achievements |
 | `SEVO_CLI` | the `sevo` the View menu calls |
