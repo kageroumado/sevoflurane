@@ -84,7 +84,7 @@ in short.
 | Part | What it records | Where | Read it with |
 |---|---|---|---|
 | Run record | Engine, renderer, tuning, upscaler, first window, duration, exit, last exception, renderer notes, frame-rate summary | `~/Library/Application Support/Sevoflurane/Runs/<yyyy-MM>.jsonl` | `sevo runs [--json]` |
-| Frame trace | Every frame's time from the driver's present counter, one CSV per run (Dormison r16 and later) | `…/Sevoflurane/Runs/traces/`; labels in `labels.json` there | `sevo perf` |
+| Frame trace | Every frame's time from the driver's present counter, one CSV per run (Dormison) | `…/Sevoflurane/Runs/traces/`; labels in `labels.json` there | `sevo perf` |
 | Stall watch | Each process's CPU time every 2 s. After 15 s with no CPU and no present it releases, continues, then kills the game | the run record's exit, `killed after a stall` | `sevo runs` |
 | Collected report | Wine's exception trail, macOS `.ips` files, Unreal/Unity/NW.js logs, Steam's logs, `manifest.json` | `~/Library/Application Support/Sevoflurane/Reports/<run>/` | Finder, the Reports window |
 | Known failures | Failures this project has diagnosed, matched to a record | under each line of `sevo runs`; `known_failure` in `--json` | `sevo runs` |
@@ -132,7 +132,7 @@ data point there: 60 s past loading, one configuration, labeled.
   answering, and the person closed it.
 - **`fps: null`** in a record: the run never presented a frame through a
   Metal layer, so nothing counted its frames.
-- **`no runs with a frame trace yet`**: traces come from Dormison r16 and
-  later (`sevo engine` switches the engine).
+- **`no runs with a frame trace yet`**: traces come from Dormison
+  (`sevo engine` switches the engine).
 - **`Bad CPU type`** from every Wine process: Rosetta is missing. Run
   `softwareupdate --install-rosetta`.

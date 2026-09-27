@@ -14,7 +14,7 @@ assignees: kageroumado
 
 ## Settings
 
-- **Engine**: <!-- Settings › Engine, e.g. Dormison r3 or CrossOver 26.3 -->
+- **Engine**: <!-- Settings › Engine, e.g. Dormison r1 or CrossOver 26.3 -->
 - **Renderer**: <!-- Settings › Graphics, e.g. D3DMetal 4.0 beta 2, DXMT 0.80, DXVK -->
 - **Per-game settings**: <!-- Settings › Games: window mode, upscaler, mouse; or "defaults" -->
 - **Does it run under CrossOver's own Steam, or on Windows?** <!-- if you know -->

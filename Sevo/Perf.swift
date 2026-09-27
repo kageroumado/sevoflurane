@@ -59,7 +59,7 @@ struct PerfCommand: AsyncParsableCommand {
                 return
             }
             guard !runs.isEmpty else {
-                print("no runs with a frame trace yet — they come from Dormison r16 and later")
+                print("no runs with a frame trace yet — they come from Dormison")
                 return
             }
             for (index, entry) in runs.enumerated() {

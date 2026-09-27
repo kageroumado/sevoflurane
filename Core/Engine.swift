@@ -290,13 +290,13 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         return Int(tag.dropFirst())
     }
 
-    /// Whether winebus keeps its SDL backend. From r11 the SDL bus polls instead
+    /// Whether winebus keeps its SDL backend. Dormison's SDL bus polls instead
     /// of waking every millisecond, and it is the backend that delivers an Xbox
     /// Wireless Controller over Bluetooth to a game; the IOHID backend alone
-    /// never does. Older engines pay about 2.6 % CPU at idle for the SDL bus, so
-    /// they run without it.
+    /// never does. Other engines' SDL bus wakes every millisecond, about 2.6 %
+    /// CPU at idle, so they run without it.
     var keepsSDLBus: Bool {
-        (managedRelease ?? 0) >= 11
+        managedRelease != nil
     }
 
     /// "Dormison r3" for the engine directory `dormison-r3`.

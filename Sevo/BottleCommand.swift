@@ -40,11 +40,6 @@ enum ConfigSwitches {
         default: nil
         }
     }
-
-    /// What a switch costs beyond the next launch, where it costs anything.
-    static func caveat(_ key: String) -> String? {
-        key == "large-address-aware" ? "needs Dormison r14 or later" : nil
-    }
 }
 
 /// The values `sevo bottle config` and `sevo app config` accept for the keys
@@ -340,8 +335,7 @@ struct BottleCommand: AsyncParsableCommand {
             let path = ConfigSwitches.path(for: key)!
             let flag = try ConfigKeyParsing.flag(value, key: key)
             updateBottle { $0[keyPath: path] = flag }
-            print("\(key) \(Self.switchSummary(key))"
-                + (ConfigSwitches.caveat(key).map { " — \($0)" } ?? " — \(Self.gameReach)"))
+            print("\(key) \(Self.switchSummary(key)) — \(Self.gameReach)")
         case "retina":
             // The prefix's own HiDPI switch, written to the bottle's
             // `Mac Driver\\RetinaMode`; one answer for every process in it.

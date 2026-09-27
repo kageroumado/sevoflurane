@@ -21,7 +21,7 @@ assignees: kageroumado
 - **Sevoflurane**: <!-- Settings › About, e.g. 0.3.1 -->
 - **macOS**: <!-- e.g. 26.1 -->
 - **Mac**: <!-- e.g. MacBook Pro M3 Max, 36 GB -->
-- **Engine**: <!-- Settings › Engine, e.g. Dormison r3 or CrossOver 26.3 -->
+- **Engine**: <!-- Settings › Engine, e.g. Dormison r1 or CrossOver 26.3 -->
 
 ## Diagnostics
 

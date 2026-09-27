@@ -130,7 +130,7 @@ struct DiagCommand: AsyncParsableCommand {
                              exception, renderer notes, the frame-rate summary.
                              Application Support/Sevoflurane/Runs · sevo runs
               frame trace    every frame's time from the driver's present
-                             counter, one CSV per run (Dormison r16 and later).
+                             counter, one CSV per run (Dormison).
                              Runs/traces · sevo perf
               stall watch    each process's CPU time every 2 s; 15 s with no CPU
                              and no present releases, continues, then kills the

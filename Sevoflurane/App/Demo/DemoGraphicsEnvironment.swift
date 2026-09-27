@@ -72,7 +72,7 @@
         }
 
         var engineName: String {
-            scenario == .crossOver ? "CrossOver" : "Dormison r15"
+            scenario == .crossOver ? "CrossOver" : "Dormison r1"
         }
 
         /// A managed engine hosts what it was built for: DXMT and DXVK

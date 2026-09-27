@@ -293,8 +293,7 @@ extension AppCommand {
             print("dll \(Self.overrideLines(values).replacingOccurrences(of: "\n", with: " "))")
             for entry in ConfigSwitches.all {
                 let resolved = ConfigSwitches.resolved(entry.key, bottle: bottle, game: appid)
-                print("\(entry.key) \(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))"
-                    + (ConfigSwitches.caveat(entry.key).map { " — \($0)" } ?? ""))
+                print("\(entry.key) \(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))")
             }
             print("runner \(values.runner ?? GameRunner.wine)")
             if let info = values.nwjs {
@@ -308,7 +307,7 @@ extension AppCommand {
             print("exes \(exes.isEmpty ? "none yet — recorded at the first launch" : exes.joined(separator: " "))")
             var reach = Engine.active.supportsEnvFiles
                 ? "settings reach the game at its next launch"
-                : "needs an engine that reads the env files (Dormison r2 or later)"
+                : "needs an engine that reads the env files (Dormison)"
             if exes.isEmpty {
                 reach += "; its exe is not known yet, so a value lands one launch late"
             }
