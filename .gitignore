@@ -14,7 +14,7 @@ Icon?
 .Trashes
 
 ## Xcode
-build/
+build
 DerivedData/
 *.xcuserstate
 *.xcuserdatad/
@@ -33,7 +33,7 @@ xcuserdata/
 *.profdata
 
 ## Swift Package Manager
-.build/
+.build
 .swiftpm/
 Packages/
 
