@@ -2,6 +2,7 @@
   "sourceLanguage" : "en",
   "strings" : {
     "" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -63,7 +64,14 @@
       }
     },
     "“Plays with fixes” needs a note saying which fixes." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择“需修复后可玩”时，请在备注中说明需要哪些修复。"
+          }
+        }
+      }
     },
     "@kageroumado" : {
       "localizations" : {
@@ -239,6 +247,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要安装 %@"
+          }
+        }
+      }
+    },
+    "%@ available" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 可用"
           }
         }
       }
@@ -659,6 +677,16 @@
         }
       }
     },
+    "A bottle named “%@” already exists." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已存在名为“%@”的容器。"
+          }
+        }
+      }
+    },
     "A change applies the same way. Reset restores the engine's own version." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1037,6 +1065,16 @@
         }
       }
     },
+    "About Sevoflurane" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 Sevoflurane"
+          }
+        }
+      }
+    },
     "Acknowledgments" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1128,7 +1166,14 @@
       }
     },
     "Adding %@…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在添加 %@…"
+          }
+        }
+      }
     },
     "Address width" : {
       "extractionState" : "manual",
@@ -1710,6 +1755,16 @@
         }
       }
     },
+    "Built-in only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅内置"
+          }
+        }
+      }
+    },
     "Built-in, then native" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1817,7 +1872,14 @@
       }
     },
     "Choose" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择"
+          }
+        }
+      }
     },
     "Choose “Evaluation environment for Windows games” or the Game Porting Toolkit." : {
       "localizations" : {
@@ -1846,6 +1908,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择游戏"
+          }
+        }
+      }
+    },
+    "Choose a Windows Program" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 Windows 程序"
           }
         }
       }
@@ -1912,7 +1984,14 @@
       }
     },
     "Choose the FPS Unlocker" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择帧率解锁器"
+          }
+        }
+      }
     },
     "Choose the Game Porting Toolkit disk image you downloaded." : {
       "extractionState" : "manual",
@@ -2124,6 +2203,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已收集的报告"
+          }
+        }
+      }
+    },
+    "Collecting…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在收集…"
           }
         }
       }
@@ -2393,7 +2482,14 @@
       }
     },
     "CrossOver Preview %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CrossOver Preview %@"
+          }
+        }
+      }
     },
     "CrossOver ships the version it supports. Add a newer one from Apple to replace it." : {
       "localizations" : {
@@ -2514,6 +2610,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "默认引擎"
+          }
+        }
+      }
+    },
+    "Defaults for every game on Dormison. Settings › Games changes one game. A change applies at a game's next launch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dormison 上所有游戏的默认设置。在“设置 › 游戏”中可更改单个游戏。更改会在游戏下次启动时生效。"
+          }
+        }
+      }
+    },
+    "Defaults for every game on Dormison. Settings › Games changes one game. Restart Steam to apply a change." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dormison 上所有游戏的默认设置。在“设置 › 游戏”中可更改单个游戏。重新启动 Steam 后更改生效。"
           }
         }
       }
@@ -2819,6 +2935,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Downloading %1$@ %2$@…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载 %@ %@…"
           }
         }
       }
@@ -3194,6 +3316,12 @@
             "state" : "new",
             "value" : "Engine's value: %1$@. %2$@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引擎的值：%@。%@"
+          }
         }
       }
     },
@@ -3246,6 +3374,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你启动的每个游戏都会显示在这里。请参阅“设置 › 诊断”，了解如何记录有用的运行信息。"
+          }
+        }
+      }
+    },
+    "Every game you run gets one. Nothing collected yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你运行的每个游戏都会生成一份。尚未收集任何内容。"
           }
         }
       }
@@ -3447,7 +3585,14 @@
       }
     },
     "Fails" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法运行"
+          }
+        }
+      }
     },
     "Fake display-mode changes" : {
       "extractionState" : "manual",
@@ -3697,7 +3842,14 @@
       }
     },
     "FPS unlocker" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率解锁器"
+          }
+        }
+      }
     },
     "Frame rate" : {
       "localizations" : {
@@ -4018,7 +4170,14 @@
       }
     },
     "Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: Sevoflurane starts it beside the game 30 seconds after the game's process appears, in the same Windows, and points its fps_config.json at the game. It changes the running game's memory, which HoYoverse's terms do not allow, so the choice is yours." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原神将帧率限制在 60 fps。unlockfps_nc.exe 等解锁器可以提高上限：游戏进程出现 30 秒后，Sevoflurane 会在同一个 Windows 环境中启动它，并将其 fps_config.json 指向该游戏。它会修改运行中游戏的内存，这违反 HoYoverse 的条款，因此是否使用由你决定。"
+          }
+        }
+      }
     },
     "Get CrossOver" : {
       "localizations" : {
@@ -4077,6 +4236,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GitHub %@"
+          }
+        }
+      }
+    },
+    "Give the bottle a name." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请为容器命名。"
           }
         }
       }
@@ -4155,10 +4324,24 @@
       }
     },
     "How did it go?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行得怎么样？"
+          }
+        }
+      }
     },
     "How did it go? Sending also tells other Mac players, with the configuration below." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行得怎么样？发送后，其他 Mac 玩家也会看到你的反馈及以下配置。"
+          }
+        }
+      }
     },
     "How it differs from the level" : {
       "extractionState" : "manual",
@@ -4277,6 +4460,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "继承（%@）"
+          }
+        }
+      }
+    },
+    "Inherit takes the value from Settings › Engine. A change applies the next time the game starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“继承”会采用“设置 › 引擎”中的值。更改会在游戏下次启动时生效。"
           }
         }
       }
@@ -4706,7 +4899,14 @@
       }
     },
     "Keep in Dock" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在程序坞中保留"
+          }
+        }
+      }
     },
     "Keep the pointer in the window" : {
       "extractionState" : "manual",
@@ -4786,7 +4986,14 @@
       }
     },
     "Launches" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可启动"
+          }
+        }
+      }
     },
     "Launching" : {
       "localizations" : {
@@ -4794,6 +5001,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在启动"
+          }
+        }
+      }
+    },
+    "Leave these on Inherit unless a game needs one. The (i) says what each does and when to change it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除非游戏需要，否则请保持“继承”。(i) 会说明每项的作用以及何时需要更改。"
+          }
+        }
+      }
+    },
+    "Library, like dinput8" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "库名称，例如 dinput8"
           }
         }
       }
@@ -4876,6 +5103,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录 Steam"
+          }
+        }
+      }
+    },
+    "Logs library loads, renderer errors, and the engine's frame trail. Stops when the app quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录库加载、渲染器错误和引擎的帧轨迹。App 退出时停止。"
+          }
+        }
+      }
+    },
+    "Logs more of what Sevoflurane does. The engine's own logging needs Dormison. Stops when the app quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录更多 Sevoflurane 的操作。引擎自身的日志需要 Dormison。App 退出时停止。"
+          }
+        }
+      }
+    },
+    "Logs, system details and recent crashes in a ZIP on your Desktop, with your name, paths and Steam ids taken out." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将日志、系统详细信息和最近的崩溃报告打包为 ZIP 存放到桌面，并移除你的姓名、路径和 Steam ID。"
           }
         }
       }
@@ -5208,6 +5465,16 @@
         }
       }
     },
+    "Native only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅原生"
+          }
+        }
+      }
+    },
     "Native only · Built-in only" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5443,7 +5710,14 @@
       }
     },
     "None" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
+          }
+        }
+      }
     },
     "None added" : {
       "localizations" : {
@@ -5487,6 +5761,16 @@
         }
       }
     },
+    "not launched here yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未在此启动"
+          }
+        }
+      }
+    },
     "Not Now" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5519,7 +5803,14 @@
       }
     },
     "Note" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注"
+          }
+        }
+      }
     },
     "Nothing counted this run's frames. A game with no Metal layer has no counter, and the driver's counter reaches records from the engine that carries it." : {
       "extractionState" : "manual",
@@ -5538,6 +5829,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通知已关闭"
+          }
+        }
+      }
+    },
+    "Object spin" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对象自旋"
           }
         }
       }
@@ -5671,6 +5972,16 @@
         }
       }
     },
+    "Open" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开"
+          }
+        }
+      }
+    },
     "Open %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5728,6 +6039,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开事件日志"
+          }
+        }
+      }
+    },
+    "Open in Sevoflurane" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Sevoflurane 中打开"
           }
         }
       }
@@ -5846,7 +6167,14 @@
       }
     },
     "Optional. Plain text, no paths or e-mail addresses; it is public." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。仅限纯文本，不含路径或电子邮件地址；内容将公开。"
+          }
+        }
+      }
     },
     "other apps have the CPU at %@" : {
       "extractionState" : "manual",
@@ -5986,7 +6314,14 @@
       }
     },
     "Plays" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可玩"
+          }
+        }
+      }
     },
     "Plays the game" : {
       "localizations" : {
@@ -5999,7 +6334,14 @@
       }
     },
     "Plays with fixes" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需修复后可玩"
+          }
+        }
+      }
     },
     "processes" : {
       "extractionState" : "manual",
@@ -6367,6 +6709,16 @@
         }
       }
     },
+    "Remove %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %@"
+          }
+        }
+      }
+    },
     "Remove %@ %@?" : {
       "localizations" : {
         "en" : {
@@ -6419,6 +6771,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除 %@ 的覆盖设置"
+          }
+        }
+      }
+    },
+    "Remove the link to %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除指向 %@ 的链接"
           }
         }
       }
@@ -6640,7 +7002,14 @@
       }
     },
     "Reported: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已报告：%@"
+          }
+        }
+      }
     },
     "Reports" : {
       "localizations" : {
@@ -6964,6 +7333,16 @@
         }
       }
     },
+    "Save…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储…"
+          }
+        }
+      }
+    },
     "Saved/Logs and Saved/Crashes in the game's folder carry the callstack. The report zip carries both under games/." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6981,6 +7360,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在桌面将日志、系统信息和最近的崩溃报告存为 ZIP 文件。姓名、文件路径和 Steam ID 会被移除。"
+          }
+        }
+      }
+    },
+    "Saving…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在存储…"
           }
         }
       }
@@ -7473,7 +7862,14 @@
       }
     },
     "Start it with the game" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随游戏启动"
+          }
+        }
+      }
     },
     "Start Steam Anyway" : {
       "localizations" : {
@@ -7527,7 +7923,14 @@
       }
     },
     "Starting…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动…"
+          }
+        }
+      }
     },
     "Startup and automation" : {
       "extractionState" : "manual",
@@ -7624,7 +8027,14 @@
       }
     },
     "Steam could not be stopped, so setup kept the bottle it had. Try again, or quit Steam from the menu bar first." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法停止 Steam，因此设置保留了原有容器。请重试，或先从菜单栏退出 Steam。"
+          }
+        }
+      }
     },
     "Steam has a message" : {
       "localizations" : {
@@ -7711,7 +8121,14 @@
       }
     },
     "Steam is still restarting, so setup kept the bottle it had. Try again in a moment." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 仍在重新启动，因此设置保留了原有容器。请稍后重试。"
+          }
+        }
+      }
     },
     "Steam is stuck synchronizing. Restart Steam to play." : {
       "localizations" : {
@@ -8069,6 +8486,16 @@
         }
       }
     },
+    "Switching…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在切换…"
+          }
+        }
+      }
+    },
     "Synchronizing with Steam Cloud" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8080,7 +8507,14 @@
       }
     },
     "Tell other Mac players how this game ran on this configuration. The verdict, the note and the configuration below go to the public game database; the note is the only part you write." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "告诉其他 Mac 玩家这款游戏在此配置下的运行情况。评价、备注和以下配置会发送到公开的游戏数据库；只有备注由你填写。"
+          }
+        }
+      }
     },
     "Terminate" : {
       "localizations" : {
@@ -8168,7 +8602,14 @@
       }
     },
     "The database refused it: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数据库拒绝了此报告：%@"
+          }
+        }
+      }
     },
     "The engine also installs from a file: dormison-r<N>.tar.xz and its .sig, from the Dormison release." : {
       "extractionState" : "manual",
@@ -8335,16 +8776,44 @@
       }
     },
     "The note has characters that are not plain text." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注包含非纯文本字符。"
+          }
+        }
+      }
     },
     "The note is over %lld characters." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注超过 %lld 个字符。"
+          }
+        }
+      }
     },
     "The note names a file path. Reports are public, so paths stay out." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注中包含文件路径。报告是公开的，因此不能包含路径。"
+          }
+        }
+      }
     },
     "The note names an e-mail address. Reports are public, so addresses stay out." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注中包含电子邮件地址。报告是公开的，因此不能包含地址。"
+          }
+        }
+      }
     },
     "The pointer's usual curve: a fast flick travels farther than a slow sweep of the same length." : {
       "extractionState" : "manual",
@@ -8511,6 +8980,16 @@
         }
       }
     },
+    "This game has held exactly one core for over a minute. A game at rest on a menu should use far less: it is usually a busy loop in the game, and sometimes a sign that something it waits for never arrives." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此游戏已持续占满一个核心超过一分钟。停留在菜单中的游戏本应占用少得多：这通常是游戏中的忙等待循环，有时也表示它在等待的东西始终没有到达。"
+          }
+        }
+      }
+    },
     "This library is on a %@ network share. Updates and saves are slow and can fail there." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8518,6 +8997,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此游戏库位于 %@ 网络共享位置。更新和存档可能很慢，也可能失败。"
+          }
+        }
+      }
+    },
+    "This package is missing. Games fall back to Lanczos." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此组件包缺失。游戏会改用 Lanczos。"
           }
         }
       }
@@ -8618,7 +9107,14 @@
       }
     },
     "Turn on Share run statistics in Settings › General › Community to send a report about this run." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在“设置 › 通用 › 社区”中开启“共享运行统计数据”，以发送此次运行的报告。"
+          }
+        }
+      }
     },
     "Two steps, in order, between the game's picture and the window." : {
       "extractionState" : "manual",
@@ -8648,6 +9144,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "统一内存"
+          }
+        }
+      }
+    },
+    "Uninstall %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载 %@"
           }
         }
       }
@@ -8724,7 +9230,14 @@
       }
     },
     "Unlocker" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解锁器"
+          }
+        }
+      }
     },
     "Unreal quit with status 3, the ending of an uncaught C++ exception. It writes its own crash report first." : {
       "extractionState" : "manual",
@@ -8872,6 +9385,16 @@
         }
       }
     },
+    "Use a name without / or : in it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称中不能包含 / 或 :。"
+          }
+        }
+      }
+    },
     "Use a Steam already on this Mac, or start a new one." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8990,6 +9513,22 @@
         }
       }
     },
+    "Version %@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ (%2$@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@（%@）"
+          }
+        }
+      }
+    },
     "View › Show Frame Rate (⌥⌘F) switches it while a game runs." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9034,6 +9573,16 @@
         }
       }
     },
+    "Wait spin" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待自旋"
+          }
+        }
+      }
+    },
     "Wait spin and Object spin count loop iterations of about 0.4 ns each: 5200 is two microseconds, 0 is off. Wait spin covers a thread waiting on anything; Object spin covers a contended lock, event or semaphore. Back off stops the spinning on waits that keep missing." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9046,7 +9595,14 @@
       }
     },
     "Waiting for its window…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待其窗口…"
+          }
+        }
+      }
     },
     "waiting for sign-in" : {
       "extractionState" : "manual",
@@ -9081,7 +9637,14 @@
       }
     },
     "Waiting to be sent." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待发送。"
+          }
+        }
+      }
     },
     "Watching for the download in" : {
       "extractionState" : "stale",
@@ -9101,6 +9664,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "监视已暂停"
+          }
+        }
+      }
+    },
+    "Welcome to Sevoflurane" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎使用 Sevoflurane"
           }
         }
       }
