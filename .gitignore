@@ -44,7 +44,6 @@ __pycache__/
 ## Session artifacts
 *.log
 *.tmp
-*.refrax
 .env
 .env.local
 

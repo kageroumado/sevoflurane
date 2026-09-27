@@ -2,7 +2,7 @@ import CryptoKit
 import DeviceCheck
 import Foundation
 
-/// The key the community database knows this Mac by (`Docs/community-database.md`).
+/// The key the community database knows this Mac by.
 ///
 /// A P-256 key made inside the Secure Enclave at opt-in. What is stored is
 /// its ``SecureEnclave/P256/Signing/PrivateKey/dataRepresentation``: a blob

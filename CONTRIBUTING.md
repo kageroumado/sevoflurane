@@ -339,8 +339,8 @@ the end of a review. A model's PR is held to the rule below like anyone's.
 
 Nothing in a PR is taken as correct, faster or fixed because it should be.
 
-- A performance claim comes with numbers from `bispectral` or the frame rate
-  counter: before and after, same machine, same game, run more than once.
+- A performance claim comes with numbers from the frame rate counter or
+  `sevo perf`: before and after, same machine, same game, run more than once.
 - A behavior claim comes with the behavior observed: the game launched, the
   window resized, the log line that shows it, the run record.
 - A fix for a bug names how the bug was reproduced first.

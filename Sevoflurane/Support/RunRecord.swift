@@ -2,7 +2,7 @@ import Foundation
 
 /// One game launch: what it ran on, how long it lasted, and how it ended.
 ///
-/// The record is the spine of the diagnostics (`Docs/diagnostics-plan.md`):
+/// The record is the spine of the diagnostics:
 /// the summary a report window shows, the body of an issue, and the only
 /// thing that survives a game that dies in two seconds with nothing on
 /// screen. It names no one — see ``Redaction`` for what is kept out.
@@ -64,7 +64,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     /// Absent for a run that never drew.
     var windowAfterSeconds: Double? = nil
     var durationSeconds: Double? = nil
-    /// Present once the driver's present counter lands (`Docs/diagnostics-plan.md`).
+    /// Present once the driver's present counter lands.
     var fps: FrameRate? = nil
     /// The pixels the game drew into. Absent until one of its windows was
     /// seen on screen.

@@ -1,6 +1,6 @@
 import Foundation
 
-/// How much a run is asked to say about itself (`Docs/diagnostics-plan.md`).
+/// How much a run is asked to say about itself.
 ///
 /// Level zero is always on and costs nothing measurable: the run record, the
 /// app's own event trail, and Wine's errors. Level one is what someone

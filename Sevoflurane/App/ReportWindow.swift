@@ -2,7 +2,7 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The window a bug report is made from (`Docs/diagnostics-plan.md`).
+/// The window a bug report is made from.
 ///
 /// The last runs down one side, each one line: the game, what it ran on, how
 /// long it lasted, how it ended. Pick one and the other side says everything

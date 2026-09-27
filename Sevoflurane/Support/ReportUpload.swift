@@ -6,7 +6,7 @@ import Foundation
 /// app's version ride as headers. The answer is a status and nothing else:
 /// the endpoint stores bytes, and this code reads nothing back from it.
 nonisolated struct ReportUpload: Sendable {
-    /// Where reports go (`Docs/diagnostics-plan.md`): the droplet behind
+    /// Where reports go: the droplet behind
     /// Caddy, which writes the bytes to disk and answers 204.
     static let endpoint = URL(string: "https://reports.kagerou.glass/v1/sevoflurane")!
     /// The largest zip the endpoint accepts. Checked here first, so a report

@@ -141,7 +141,7 @@ nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
     case standard
     /// A waiting thread looks for its wake-up for two microseconds before it
     /// sleeps, and stops looking where that keeps failing. Hand-offs between
-    /// threads get up to ten times quicker (`bispectral/syncprof`); a game
+    /// threads get up to ten times quicker; a game
     /// that runs more busy threads than the Mac has cores pays for it in
     /// processor time.
     case experimental
@@ -307,9 +307,8 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// D3DMetal answers `ARCHITECTURE1.UMA` with 0, so every engine writes
     /// each upload into a staging buffer and then copies it into a second
     /// allocation that is the same physical memory. Skipping that copy is
-    /// worth 27-107% of a bandwidth-bound frame, measured in
-    /// `bispectral/gamebench --uma`; dormison's `winemac.drv` reports the
-    /// unified answer when this is on. Off by default because a game that
+    /// worth 27-107% of a bandwidth-bound frame; dormison's `winemac.drv`
+    /// reports the unified answer when this is on. Off by default because a game that
     /// believes it takes every unified path, and the texture layouts among
     /// them are the least tested.
     var unifiedMemory: Bool?

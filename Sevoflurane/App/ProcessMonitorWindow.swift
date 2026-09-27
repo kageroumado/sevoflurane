@@ -2,13 +2,13 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Every process this app owns, in one table (`Docs/diagnostics-plan.md`).
+/// Every process this app owns, in one table.
 ///
 /// It is the stall watchdog's own sampler with a window in front of it —
 /// ``StallWatch/processes`` is what the rows are, so what the watchdog decides
-/// and what a person sees can never disagree. Refrax's Lightboard is the
-/// shape: a stats bar over a list, each row saying what the thing is and what
-/// it is doing, and the actions that apply to one row on that row.
+/// and what a person sees can never disagree. It is a stats bar over a list,
+/// each row saying what the thing is and what it is doing, and the actions
+/// that apply to one row on that row.
 @MainActor
 final class ProcessMonitorWindows {
     private var window: NSWindow?

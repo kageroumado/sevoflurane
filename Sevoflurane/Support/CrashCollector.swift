@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything a run left behind, gathered into one directory it can be shared
-/// from (`Docs/diagnostics-plan.md`).
+/// from.
 ///
 /// Every game has its own dumping ground and none of them agrees with another:
 /// Wine's exception trail is in the app's own log, macOS writes `.ips` files

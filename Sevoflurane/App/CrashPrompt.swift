@@ -22,7 +22,7 @@ nonisolated enum CrashPromptPolicy {
     }
 }
 
-/// The offer after a crash (`Docs/diagnostics-plan.md`): one panel, once per
+/// The offer after a crash: one panel, once per
 /// run, naming what stopped and what this project knows about it, asking
 /// whether to send the report.
 ///

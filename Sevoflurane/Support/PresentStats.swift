@@ -10,10 +10,6 @@ import Foundation
 /// 96 bytes a second and needs no hook, no overlay and no cooperation from
 /// the game, which is the whole point: a title that ships with its own
 /// anti-tamper still gets an fps number and a stall signal.
-///
-/// What is measured: `Docs/diagnostics-plan.md` § "Frame rate and stalls
-/// without a hook in the game"; what it costs:
-/// `bispectral/present-stats/RESULTS.md`.
 final nonisolated class PresentStats: @unchecked Sendable {
     /// How often the pages are read. The per-second sample is also the
     /// histogram the 1 % low comes out of, so this is the resolution of both.
@@ -309,8 +305,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
         var appid: Int
         var exe: String
         /// Presents that reached the screen. The D3DMetal path coalesces
-        /// these, so `drawables` is the frame rate wherever it is non-zero
-        /// (`bispectral/present-stats/RESULTS.md`).
+        /// these, so `drawables` is the frame rate wherever it is non-zero.
         var frames: UInt64
         /// Frames the renderer produced, one per Metal drawable.
         var drawables: UInt64

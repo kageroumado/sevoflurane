@@ -70,9 +70,9 @@ nonisolated extension Preferences {
 // MARK: - Community database
 
 nonisolated extension Preferences {
-    /// Whether closed runs go to the community database
-    /// (`Docs/community-database.md`). `nil` until the user has been asked,
-    /// which is what makes the question appear once and never again.
+    /// Whether closed runs go to the community database.
+    /// `nil` until the user has been asked, which is what makes the question
+    /// appear once and never again.
     static var sharesRunStats: Bool? {
         get { shared.object(forKey: sharesRunStatsKey) as? Bool }
         set { shared.set(newValue, forKey: sharesRunStatsKey) }

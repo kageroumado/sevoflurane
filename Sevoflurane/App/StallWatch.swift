@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Watches every process this app owns, names what each of them is doing, and
-/// unwedges a game that has stopped doing anything (`Docs/diagnostics-plan.md`).
+/// unwedges a game that has stopped doing anything.
 ///
 /// The signal is deliberately cheap: a process's CPU time, read with
 /// `proc_pid_rusage` every ``Rules/sampleEvery``, and the driver's present

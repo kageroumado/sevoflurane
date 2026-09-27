@@ -179,7 +179,7 @@ struct GameplayWindowTests {
         ]
         #expect(GameScreen.matches(studio, vendor: 1552, model: 44602, serial: 4_250_532_600))
         #expect(!GameScreen.matches(studio, vendor: 1552, model: 44602, serial: 7))
-        // A CGVirtualDisplay names whatever its maker chose; rocuronium's is 0x3456/0x1235.
+        // A CGVirtualDisplay reports whatever vendor and product its maker chose.
         #expect(!GameScreen.matches(studio, vendor: 0x3456, model: 0x1235, serial: 2))
         // A monitor that reports no serial matches on vendor and product.
         #expect(GameScreen.matches(["LegacyManufacturerID": 4268, "ProductID": 41136], vendor: 4268, model: 41136, serial: 0))
