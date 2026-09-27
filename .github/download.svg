@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="68" viewBox="0 0 320 68" role="img" aria-label="Download Sevoflurane for Mac">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2e2514"/>
+      <stop offset="1" stop-color="#14100a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#e8b52e" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#e8b52e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6d77a"/>
+      <stop offset="0.5" stop-color="#d4a032"/>
+      <stop offset="1" stop-color="#8a6418"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1c24a" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#8a6418" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="318" height="66" rx="33" fill="url(#field)"/>
+  <rect x="1" y="1" width="318" height="66" rx="33" fill="url(#glow)"/>
+  <rect x="1" y="1" width="318" height="66" rx="33" fill="none" stroke="url(#rim)" stroke-width="1.5"/>
+  <circle cx="34" cy="34" r="22" fill="url(#brass)"/>
+  <circle cx="34" cy="34" r="17" fill="#17120b"/>
+  <path d="M26.5 29 L41.5 29 L34 41 Z" fill="none" stroke="#f1c24a" stroke-width="2.2" stroke-linejoin="round"/>
+  <text x="70" y="31" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="19" font-weight="600" fill="#f1c24a">Download for Mac</text>
+  <text x="70" y="50" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#bfae86">Apple silicon · macOS 26 or later</text>
+</svg>
