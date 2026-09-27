@@ -9,7 +9,9 @@ import AppKit
 ///
 /// The badged variant carries a corner dot — punched out with a cleared disc
 /// so it reads at menu-bar size — for health states that need the user
-/// (degraded, gave up) and for waiting conversations.
+/// (degraded, gave up) and for waiting conversations. A Debug build adds a
+/// hammer in the empty top-left corner, so its menu-bar item is told apart
+/// from the installed app's beside it.
 @MainActor
 enum MenuBarIcon {
     static func image(badged: Bool) -> NSImage {
@@ -54,6 +56,9 @@ enum MenuBarIcon {
             context.strokePath()
             context.restoreGState()
             if badged { drawBadge() }
+            #if DEBUG
+                drawDebugMark()
+            #endif
             return true
         }
         image.isTemplate = true
@@ -113,4 +118,17 @@ enum MenuBarIcon {
         NSColor.black.setFill()
         NSBezierPath(ovalIn: NSRect(x: 13.4, y: 13.4, width: 4.0, height: 4.0)).fill()
     }
+
+    #if DEBUG
+        /// Clear of the glyph without a halo: the dial's rim starts at x 6.4.
+        private static func drawDebugMark() {
+            let configuration = NSImage.SymbolConfiguration(pointSize: 5, weight: .bold)
+            guard let hammer = NSImage(systemSymbolName: "hammer.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration) else { return }
+            hammer.draw(
+                in: NSRect(origin: CGPoint(x: 0.2, y: 0.2), size: hammer.size),
+                from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil,
+            )
+        }
+    #endif
 }
