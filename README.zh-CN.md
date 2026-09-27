@@ -31,11 +31,11 @@
 
 ## 我的游戏能玩吗？
 
-[社区兼容性数据库](https://kagerou.glass/sevoflurane/games/)可以查看游戏在不同 Mac 和渲染器上的运行情况。数据来自玩家开启**共享运行统计数据**后，由 Sevoflurane 自动记录的实际游玩过程。每次共享包含引擎、渲染器、硬件、分辨率、游玩时的帧率和结束方式，数据库再根据这些记录判断运行情况。
+[社区兼容性数据库](https://kagerou.glass/sevoflurane/games/?lang=zh-CN)可以查看游戏在不同 Mac 和渲染器上的运行情况。数据来自玩家开启**共享运行统计数据**后，由 Sevoflurane 自动记录的实际游玩过程。每次共享包含引擎、渲染器、硬件、分辨率、游玩时的帧率和结束方式，数据库再根据这些记录判断运行情况。
 
 想贡献数据，在**设置 › 通用 › 社区 › 共享运行统计数据**中开启，然后照常玩就好。有人分享运行记录后，游戏就会出现在数据库里。
 
-<p align="center"><a href="https://kagerou.glass/sevoflurane/games/"><img src=".github/compatibility.zh-CN.svg" alt="看看你的游戏能不能玩 — 社区游戏兼容性数据库" width="360" height="80"></a></p>
+<p align="center"><a href="https://kagerou.glass/sevoflurane/games/?lang=zh-CN"><img src=".github/compatibility.zh-CN.svg" alt="看看你的游戏能不能玩 — 社区游戏兼容性数据库" width="360" height="80"></a></p>
 
 ## 主要功能
 
