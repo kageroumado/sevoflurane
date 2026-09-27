@@ -13,24 +13,25 @@ struct SettingSections: View {
     var recommendation = KnownFixes.Recommendation(fixes: [])
 
     var body: some View {
+        let level = store.level
         ForEach(SettingGroup.allCases, id: \.self) { group in
             Section {
-                ForEach(SettingCatalog.settings(in: group, at: store.level)) { setting in
+                ForEach(SettingCatalog.settings(in: group, at: level)) { setting in
                     SettingRow(
                         setting: setting, store: store, shaders: shaders,
                         recommended: setting.recommended(recommendation),
                     )
-                    .highlightable(setting.id.anchor(at: store.level), highlighted: highlighted)
+                    .highlightable(setting.id.anchor(at: level), highlighted: highlighted)
                 }
             } header: {
                 SettingGroupHeader(title: group.title, heading: group == .picture ? heading : nil)
             } footer: {
-                if let footer = Self.footer(of: group, at: store.level) { Text(footer) }
+                if let footer = Self.footer(of: group, at: level) { Text(footer) }
             }
         }
     }
 
-    private static func footer(of group: SettingGroup, at level: SettingLevel) -> String? {
+    private static func footer(of group: SettingGroup, at level: SettingLevel) -> LocalizedStringResource? {
         switch (group, level) {
         case (.picture, .game):
             "Inherit takes the value from Settings › Engine. A change applies the next time the game starts."
@@ -197,9 +198,13 @@ private struct RecommendedChip: View {
             Button("Use recommended", action: use)
                 .buttonStyle(.link)
                 .font(.caption)
+                .accessibilityHint(InterfaceCopy.localized(reason))
+            // Marks the tooltip for the pointer; the button's hint carries it
+            // to VoiceOver.
             Image(systemName: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
         .help(InterfaceCopy.localized(reason))
         .frame(maxWidth: .infinity, alignment: .leading)

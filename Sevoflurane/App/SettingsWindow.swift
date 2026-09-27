@@ -14,6 +14,8 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     private var window: NSWindow?
     /// The open window's close observer, removed when it fires.
     private var closeObserver: (any NSObjectProtocol)?
+    /// Retitles the open window as the pane changes; cancelled when it closes.
+    private var titleTask: Task<Void, Never>?
     private let navigation = SettingsNavigation()
     private let makeGraphics: () -> GraphicsStore
     private let makeStorage: () -> StorageStore
@@ -150,6 +152,8 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 self?.window = nil
+                self?.titleTask?.cancel()
+                self?.titleTask = nil
                 if let observer = self?.closeObserver {
                     NotificationCenter.default.removeObserver(observer)
                     self?.closeObserver = nil
@@ -165,12 +169,14 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     /// An AppKit window takes no title from the split view's
     /// `navigationTitle`, so the selection is observed here.
     private func titleByPane(_ window: NSWindow) {
-        withObservationTracking {
-            window.title = navigation.category.title
-        } onChange: { [weak self, weak window] in
-            DispatchQueue.main.async {
+        // Set before the window is ordered front; the stream's first value
+        // arrives a turn of the run loop later.
+        window.title = navigation.category.title
+        let titles = Observations { [navigation] in navigation.category.title }
+        titleTask = Task(name: "Title settings by pane") { [weak window] in
+            for await title in titles {
                 guard let window else { return }
-                self?.titleByPane(window)
+                window.title = title
             }
         }
     }

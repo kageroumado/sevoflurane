@@ -46,6 +46,8 @@ private struct GeneralStartupSection: View {
             Toggle("Open at login", isOn: $openAtLogin)
                 .toggleStyle(.switch)
                 .onChange(of: openAtLogin) { _, enabled in
+                    // Reading the machine's value in onAppear lands here too.
+                    guard enabled != provisioner.openAtLogin else { return }
                     provisioner.setOpenAtLogin(enabled)
                 }
                 .highlightable(.generalOpenAtLogin, highlighted: highlighted)
@@ -151,9 +153,9 @@ private struct GeneralAutomationSection: View {
         Section {
             CommandLineToolRow(installed: $cliInstalled, finished: refreshAgents)
                 .highlightable(.generalCli, highlighted: highlighted)
-                .onAppear {
+                .task {
                     cliInstalled = AgentIntegration.isCLIInstalled
-                    refreshAgents()
+                    await refreshAgents()
                 }
             if cliInstalled {
                 if agents.isEmpty {
@@ -177,15 +179,13 @@ private struct GeneralAutomationSection: View {
         }
     }
 
-    private func refreshAgents() {
-        let detected = AgentIntegration.detectedHarnesses
-        Task(name: "Read the assistants' configs") {
-            var rows: [AgentRow] = []
-            for harness in detected {
-                await rows.append(AgentRow(harness: harness, registered: AgentIntegration.isRegistered(harness)))
-            }
-            agents = rows
+    /// Reads the assistants' configs.
+    private func refreshAgents() async {
+        var rows: [AgentRow] = []
+        for harness in AgentIntegration.detectedHarnesses {
+            await rows.append(AgentRow(harness: harness, registered: AgentIntegration.isRegistered(harness)))
         }
+        agents = rows
     }
 }
 
@@ -194,7 +194,7 @@ private struct GeneralAutomationSection: View {
 private struct CommandLineToolRow: View {
     @Binding var installed: Bool
     /// Runs after an install or a removal, whatever its outcome.
-    let finished: () -> Void
+    let finished: () async -> Void
     @State private var busy = false
     @State private var error: String?
 
@@ -225,7 +225,7 @@ private struct CommandLineToolRow: View {
                         error = await AgentIntegration.installCLI()
                     }
                     installed = AgentIntegration.isCLIInstalled
-                    finished()
+                    await finished()
                     busy = false
                 }
             }
@@ -316,6 +316,8 @@ private struct GeneralSteamPagesSection: View {
                 Toggle("Mac compatibility strip", isOn: $compatibilityStrip)
                     .toggleStyle(.switch)
                     .onChange(of: compatibilityStrip) { _, enabled in
+                        // Reading the preference in onAppear lands here too.
+                        guard enabled != Preferences.compatibilityStrip else { return }
                         Preferences.compatibilityStrip = enabled
                         steam?.applyCompatibilityStrip()
                     }
@@ -551,5 +553,6 @@ private struct CopyButton: View {
         }
         .buttonStyle(.borderless)
         .help("Copy")
+        .accessibilityLabel("Copy")
     }
 }

@@ -30,14 +30,14 @@ enum BuiltinLibraries {
 struct DLLNameField: NSViewRepresentable {
     @Binding var name: String
     let names: [String]
-    var placeholder = "Library, like dinput8"
+    var placeholder: LocalizedStringResource = "Library, like dinput8"
 
     func makeNSView(context: Context) -> NSComboBox {
         let box = NSComboBox()
         box.completes = true
         box.usesDataSource = false
         box.numberOfVisibleItems = 12
-        box.placeholderString = placeholder
+        box.placeholderString = String(localized: placeholder)
         box.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         box.delegate = context.coordinator
         box.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -46,7 +46,7 @@ struct DLLNameField: NSViewRepresentable {
 
     func updateNSView(_ box: NSComboBox, context: Context) {
         context.coordinator.name = $name
-        if box.numberOfItems != names.count {
+        if box.objectValues as? [String] != names {
             box.removeAllItems()
             box.addItems(withObjectValues: names)
         }

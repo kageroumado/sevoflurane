@@ -49,7 +49,7 @@ struct RendererPicker: View {
             .accessibilityRepresentation {
                 Picker(selection: selection) {
                     ForEach(options, id: \.value) { option in
-                        Text(verbatim: option.value.label).tag(option.value)
+                        Text(option.value.label).tag(option.value)
                     }
                 } label: {
                     Text("Game renderer")

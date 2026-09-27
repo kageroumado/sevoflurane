@@ -21,6 +21,7 @@ struct AboutSettings: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 72, height: 72)
+                .accessibilityHidden(true)
             Text("Sevoflurane")
                 .font(.system(size: 18, weight: .semibold))
             Text("Version \(Self.version)")

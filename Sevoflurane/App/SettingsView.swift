@@ -34,7 +34,7 @@ struct SettingsView: View {
     let storage: StorageStore
     let engine: EngineStore
     let shaders: ShaderStore
-    var compatibility = CompatibilityStore()
+    let compatibility: CompatibilityStore
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
@@ -489,8 +489,7 @@ struct SearchableSetting: Identifiable, Equatable {
     }
 
     func matches(_ search: String) -> Bool {
-        let needle = search.lowercased()
-        return title.lowercased().contains(needle) || keywords.contains { $0.contains(needle) }
+        title.localizedStandardContains(search) || keywords.contains { $0.localizedStandardContains(search) }
     }
 }
 
@@ -621,13 +620,14 @@ struct SettingsSidebar: View {
     }
 
     /// Opens the setting's pane and flashes its row, long enough to find with
-    /// the eye and short enough not to stay behind as decoration.
+    /// the eye and short enough not to stay behind as decoration. A later
+    /// pick owns the light, so an earlier one's timer leaves it on.
     private func reveal(_ item: SearchableSetting, in category: SettingsCategory) {
         self.category = category
         highlighted = item.id
         Task(name: "Clear settings highlight") {
             try? await Task.sleep(for: .seconds(1.8))
-            highlighted = nil
+            if highlighted == item.id { highlighted = nil }
         }
     }
 }
@@ -691,7 +691,6 @@ private struct SettingsPane: View {
     }
 }
 
-/// Flashes a row the search sent the user to.
 /// A control with its caption under the whole row. A caption inside a
 /// picker's own label shares the row with the value, and a long value leaves
 /// it a column a few words wide.
@@ -714,6 +713,7 @@ struct CaptionedRow<Control: View>: View {
     }
 }
 
+/// Flashes a row the search sent the user to.
 private struct HighlightModifier: ViewModifier {
     let anchor: SettingsAnchor?
     let highlighted: SettingsAnchor?

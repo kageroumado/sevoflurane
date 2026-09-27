@@ -21,7 +21,7 @@ struct TuningParametersFields: View {
         .padding(.leading, Theme.Space.lg)
     }
 
-    private func spin(_ title: String, value: Binding<Int>) -> some View {
+    private func spin(_ title: LocalizedStringKey, value: Binding<Int>) -> some View {
         LabeledContent(title) {
             TextField(title, value: clamped(value), format: .number.grouping(.never))
                 .labelsHidden()
