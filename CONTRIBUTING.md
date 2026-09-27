@@ -1,8 +1,5 @@
 # Contributing to Sevoflurane
 
-Thanks for looking under the hood. A few things make this codebase easier to
-work on than it first appears — and a few rules keep it that way.
-
 ## Orientation
 
 - `Sevoflurane/` — the app's own code. `Web/` hosts Steam's UI and windows;
@@ -83,7 +80,7 @@ copy of the same UI and reacts to the same events.
 ## Fidelity rules
 
 The non-obvious bugs in this project are almost always a violation of one of
-these. All five are load-bearing.
+these. All five are required.
 
 1. **Mirror the real client's shape.** The shim must expose the same
    namespaces and methods the desktop client has — a catch-all Proxy makes
@@ -110,7 +107,7 @@ these. All five are load-bearing.
    app detects and recovers; it does not click Wine dialogs.
 3. **US English** in code, comments, and strings. DocC comments on public
    interfaces. Split long functions instead of adding section comments.
-4. **Logs are the product too.** User-visible failures must land in the
+4. **Log user-visible failures.** User-visible failures must land in the
    event log (`~/Library/Logs/Sevoflurane.log`) with enough context to act
    on.
 5. **A renderer's two halves are one release.** D3DMetal is a macOS library
@@ -142,7 +139,7 @@ sweep, crash-loop hygiene, and the control port `:8764` that `sevo` speaks to.
 Sevoflurane.app owns the page — the WKWebViews, Steam's popups, the bridge —
 and attaches to the daemon as a client.
 
-Two truths the split keeps at once:
+This separation determines what happens when the app exits:
 
 - **Quitting takes the bottle down.** The app's quit path asks the daemon
   once (`POST /quit`) and waits for it.
@@ -226,9 +223,8 @@ in `Core/`. Neither folder may import SwiftUI, WebKit or Propofol;
 
 ## Watching a game or the client from outside
 
-Two logs, and they answer different questions. The event log is the app
-narrating itself; the wine log is Wine and everything it started, which is
-where a game's death actually shows up.
+The event log records the app's activity; the wine log records Wine and
+everything it started, including game crashes.
 
 ```bash
 sevo logs --tail 50            # ~/Library/Logs/Sevoflurane.log — the app

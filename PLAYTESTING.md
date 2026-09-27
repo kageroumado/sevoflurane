@@ -20,7 +20,7 @@ templates ask for the subset that matters.
    sevo debug on      # sevo debug status; sevo debug off
    ```
 
-   It turns on everything this protocol used to ask for by hand: every library
+   It turns on detailed logging: every library
    a game loads, the renderer's own errors in a file of its own, the engine's
    frame trail, a window inventory whenever a window comes or goes, and a log
    written line by line, so the last line before a crash is on disk. The app
@@ -38,7 +38,7 @@ templates ask for the subset that matters.
 
 3. **Note the renderer in force.** Settings › Graphics. A fresh Dormison bottle
    defaults to DXMT; D3DMetal is a choice. Every finding about a game needs the
-   renderer that answered it, and a renderer switch from the menu bar restarts
+   renderer used, and a renderer switch from the menu bar restarts
    Steam, so write the time down.
 
 4. **Note the window mode.** Settings › Engine › Picture › *Resizable windows*.

@@ -14,7 +14,7 @@
 
 ## How it was tested
 
-<!-- The app drives a real Steam client in a real bottle. Say what you exercised, not only that it builds. -->
+<!-- The app drives a Steam client in a Wine bottle. Say what you exercised, not only that it builds. -->
 
 - **macOS / Mac**:
 - **Engine and renderer**: <!-- Dormison r3 + D3DMetal 4.0b2, CrossOver 26.3, ... -->

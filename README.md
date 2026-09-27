@@ -34,7 +34,7 @@ runs on CrossOver.
 
 ### Setup
 
-- A first-run assistant takes the Mac from nothing to a signed-in Steam.
+- A first-run assistant installs Steam and guides you through sign-in.
 - Pick Dormison (bundled or downloaded) or an installed CrossOver or
   CrossOver Preview, with each copy's trial or license state.
 - Adopt a Steam already on the Mac, or make a new named bottle. "Download
@@ -82,8 +82,8 @@ runs on CrossOver.
   Add Windows Game… opens a file picker.
 - A health card that names what's wrong with the client and offers the fix.
 - A card when macOS has not approved the background helper yet.
-- A notice naming the program that loads the Mac, only while load is above
-  ordinary.
+- A notice naming the program causing unusually high system load, shown only
+  while that load lasts.
 - A note when Steam holds a game at "Synchronizing" too long.
 - "Bottle incomplete" when required Windows components are missing.
 - Open Steam (⌘O), Friends (⌘F, with an unread count) and a status chip.
@@ -131,8 +131,7 @@ runs on CrossOver.
 - **Finder thumbnails**: every `.exe` shows its own icon in Finder's icon,
   list and gallery views and in Quick Look, read from the file without running
   it. Available once Sevoflurane has run once.
-- A program that needs a Windows kernel driver says so, instead of silently
-  showing nothing.
+- Sevoflurane reports when a program needs a Windows kernel driver.
 - HoYoverse games (Genshin Impact is the one tested) run in a companion
   Windows under a `steam.exe` parent, which lets them skip their kernel
   driver. Settings › Games › Genshin Impact starts a frame-rate unlocker of
@@ -230,8 +229,8 @@ and pins the fix to that game.
 - The Process Monitor: every process Sevoflurane owns, and a flag on a game
   pinning one core.
 - Size caps on every log and report, oldest removed first.
-- `sevo perf compare` says whether a change really moved average frame rate
-  and 1% low; `sevo holds` names what keeps the display awake.
+- `sevo perf compare` reports whether average frame rate
+  and 1% low changed measurably; `sevo holds` names what keeps the display awake.
 
 ### Updates
 
@@ -377,8 +376,8 @@ sevo logs [--tail N] [-f] [--wine]
 `sevo recover --deep` adds web-cache removal and client repair.
 `sevo diag save` writes the report, with Steam's own bootstrap, connection,
 webhelper, game-process and console logs from the bottle; `--no-steam-logs`
-leaves them out. `sevo perf compare` says whether a change of setting really
-moved a game's average frame rate and 1% low, and `sevo holds` names what keeps
+leaves them out. `sevo perf compare` reports whether a setting change measurably
+affected a game's average frame rate and 1% low, and `sevo holds` names what keeps
 the display awake.
 
 Exit codes are 0 for success, 1 for an operation failure, 2 for an invalid
