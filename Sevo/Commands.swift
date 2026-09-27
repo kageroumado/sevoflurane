@@ -1222,7 +1222,7 @@ struct BottleCommand: AsyncParsableCommand {
     }
 
     /// Reads or writes the graphics knobs the app's Settings › Graphics pane
-    /// drives, against the same store (`Sevoflurane/Support/BottleGraphics.swift`).
+    /// drives, against the same store (`Core/BottleGraphics.swift`).
     private func config() async throws {
         var selection = current()
         // Debug mode folds its own channels into what a game carries, so the

@@ -5,11 +5,17 @@ work on than it first appears — and a few rules keep it that way.
 
 ## Orientation
 
-- `Sevoflurane/` — the app. `Web/` hosts Steam's UI and windows; `Bridge/`
-  is the in-process page↔client bridge; `App/` is supervision, logging, and
-  the menu bar.
-- `Sevo/` — the `sevo` CLI and MCP server, the `sevo` target. It compiles the
-  app's own provisioning, CDP and lifecycle sources, so the two cannot drift.
+- `Sevoflurane/` — the app's own code. `Web/` hosts Steam's UI and windows;
+  `Bridge/` is the in-process page↔client bridge; `App/` is the app's
+  lifecycle, menu bar, windows and settings; `Setup/` is the first-run
+  assistant.
+- `Supervision/` — code the app and its background helper both compile: the
+  event log, the loopback HTTP server, the game window watch, activation.
+- `Core/` — code the app, the helper and `sevo` all compile: engines,
+  bottles, provisioning (`Core/Setup/`), game configuration, run records and
+  the CDP client, so the three cannot drift.
+- `SevofluraneDaemon/` — the background helper that supervises Steam.
+- `Sevo/` — the `sevo` CLI and MCP server.
 
 ## Building
 
@@ -142,7 +148,7 @@ two owners of one bottle is the bug this design exists to make unrepresentable.
 
 Two loopback HTTP listeners push to each other; nothing polls and nothing
 correlates, because the daemon only ever sends commands and the app only ever
-sends facts (`Support/SupervisorLink.swift`).
+sends facts (`Core/SupervisorLink.swift`).
 
 | direction | endpoint | payload |
 |---|---|---|
@@ -190,12 +196,19 @@ signature changes under it and macOS ends the process.
 
 ### Which target compiles what
 
-Three build products, one source tree. `SevofluraneTests/DaemonMembershipTests`
-asserts the daemon compiles everything `sevo` compiles, and nothing that
-imports SwiftUI, WebKit or Propofol. A new file under `Sevoflurane/` joins
-both the daemon and `sevo` unless the target's exception list names it, so a
-new view means one line in each list — and the test fails until the daemon's
-is there.
+Each target compiles whole folders, so where a file lives decides who
+compiles it:
+
+| Target | Folders |
+|---|---|
+| Sevoflurane (the app) | `Sevoflurane/`, `Supervision/`, `Core/`, `Shared/` |
+| SevofluraneDaemon (the helper) | `SevofluraneDaemon/`, `Supervision/`, `Core/`, `Shared/` |
+| sevo | `Sevo/`, `Core/`, `Shared/` |
+| SevofluraneThumbnail | `SevofluraneThumbnail/`, `Shared/` |
+
+Code the helper needs goes in `Supervision/`, and code `sevo` needs too goes
+in `Core/`. Neither folder may import SwiftUI, WebKit or Propofol;
+`SevofluraneTests/HelperSourcesTests` fails if one does.
 
 ## Watching a game or the client from outside
 

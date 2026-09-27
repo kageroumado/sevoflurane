@@ -291,12 +291,16 @@ and CrossOver Preview can also serve as engines.
 
 ### Source layout
 
-- `Sevoflurane/` — the app. `Web/` hosts Steam's interface and windows;
-  `Bridge/` connects pages to the client; `Setup/` handles installation;
-  `App/` contains supervision, logging and the menu bar; `Support/`
-  contains engine, bottle and game configuration code.
-- `Sevo/` — the CLI and MCP server (the `sevo` target), compiled with
-  shared lifecycle, CDP and provisioning sources from the app.
+- `Sevoflurane/` — the app's own code. `Web/` hosts Steam's interface and
+  windows; `Bridge/` connects pages to the client; `App/` contains the app's
+  lifecycle, menu bar, windows and settings; `Setup/` is the first-run
+  assistant.
+- `Supervision/` — code the app shares with its background helper: logging,
+  the loopback server, the game window watch.
+- `Core/` — code the app, the helper and `sevo` share: engines, bottles,
+  provisioning, game configuration, run records and the CDP client.
+- `SevofluraneDaemon/` — the background helper that supervises Steam.
+- `Sevo/` — the CLI and MCP server.
 - `Shared/` — code the app, the helper and the Quick Look extension all
   compile: reading a Windows executable's icons and version strings, and
   drawing an icon in the macOS shape.
