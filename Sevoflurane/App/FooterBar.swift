@@ -154,11 +154,10 @@ struct FooterBar: View {
         Toggle(isOn: Binding(get: { debug.isOn }, set: { debug.set($0) })) {
             Label("Debug Mode", systemImage: "ladybug")
         }
+        // Whole literals: joined with `+` they become a `String`, which `help` shows unlocalized.
         .help(Engine.active.supportsEnvFiles
-            ? "Logs library loads, renderer errors, and the engine's frame trail. "
-            + "Stops when the app quits."
-            : "Logs more of what Sevoflurane does. The engine's own logging needs Dormison. "
-            + "Stops when the app quits.")
+            ? Text("Logs library loads, renderer errors, and the engine's frame trail. Stops when the app quits.")
+            : Text("Logs more of what Sevoflurane does. The engine's own logging needs Dormison. Stops when the app quits."))
         if debug.isOn, isClientUp {
             Button("Restart Steam to Apply Debug Mode") {
                 supervisor.restartNow(reason: "debug mode")

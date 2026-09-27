@@ -22,6 +22,8 @@ struct MenuBarView: View {
     var setup: SetupWindow?
     var presentation = PopoverPresentation()
     @State private var confirmingQuit = false
+    /// What the bottle is missing, read off the main actor on each open.
+    @State private var bottleSummary: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
@@ -33,14 +35,14 @@ struct MenuBarView: View {
                 FooterBar(host: host, supervisor: supervisor, isSettingUp: true) { confirmingQuit = true }
             } else {
                 SupervisorNotice(host: host, supervisor: supervisor)
-                HostPressureNotice(pressure: supervisor.hostPressure)
+                HostPressureNotice(supervisor: supervisor)
                 GamesColumn(
                     host: host, supervisor: supervisor, graphics: graphics,
                     quickLaunch: quickLaunch, presentation: presentation,
                 )
                 NotificationPermissionCard(notifications: notifications)
                 SharingQuestionCard()
-                BottleIncompleteChip()
+                BottleIncompleteChip(summary: bottleSummary)
                     .font(.system(size: 10))
                     .padding(.horizontal, Theme.Space.sm)
                 SteamRow(host: host, supervisor: supervisor)
@@ -75,6 +77,12 @@ struct MenuBarView: View {
                 transaction.disablesAnimations = true
                 transaction.animation = nil
             }
+        }
+        // The test opens files inside the prefix, which is not something a
+        // view body may do. Held here because the chip is absent while the
+        // bottle is complete, and a modifier on an absent view never runs.
+        .task(id: presentation.isSettling) {
+            bottleSummary = await BottleIncompleteChip.read()
         }
         // Reopening lands on the popover, never on a stale question.
         .onDisappear { confirmingQuit = false }
@@ -355,11 +363,14 @@ private struct SupervisorNotice: View {
 /// What else weighs on this Mac, shown only while it is more than ordinary:
 /// a game that starts slowly or stutters under someone else's work is this
 /// card's to explain, before the person blames the game or this app.
+///
+/// Reads the pressure itself: it moves with every sample the daemon sends,
+/// and read by ``MenuBarView`` it would re-run the whole popover each time.
 private struct HostPressureNotice: View {
-    let pressure: HostPressure?
+    let supervisor: ClientSupervisor
 
     var body: some View {
-        if let pressure, let sentence = pressure.sentence {
+        if let pressure = supervisor.hostPressure, let sentence = pressure.sentence {
             NoticeCard(
                 symbol: "thermometer.gauge.open", tint: .orange, level: pressure.level,
                 title: "Your Mac is under heavy load",
@@ -539,16 +550,17 @@ private struct RecentGames: View {
                     .padding(.vertical, Theme.Space.sm)
             }
         } else {
+            let activeLaunch = host.activeLaunch
+            let heldInCloudSync = host.gamesHeldInCloudSync
             VStack(spacing: 1) {
                 ForEach(host.recentGames) { game in
                     GameRow(
                         game: game,
-                        launchDetail: host.activeLaunch
-                            .flatMap { $0.appID == game.id ? $0.detail : nil },
+                        launchDetail: activeLaunch.flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
-                        isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
+                        isHeldInCloudSync: heldInCloudSync.contains(game.id),
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
                     )
@@ -572,6 +584,8 @@ private struct LibraryIndexList: View {
     @State private var facts: [Int: GameRowFacts] = [:]
 
     var body: some View {
+        let activeLaunch = host.activeLaunch
+        let heldInCloudSync = host.gamesHeldInCloudSync
         // Lazy: a library of hundreds asks for art only for the rows scrolled to.
         LazyVStack(alignment: .leading, spacing: 1) {
             ForEach(LibraryIndex.sections(host.libraryGames)) { section in
@@ -579,12 +593,11 @@ private struct LibraryIndexList: View {
                 ForEach(section.games) { game in
                     GameRow(
                         game: game,
-                        launchDetail: host.activeLaunch
-                            .flatMap { $0.appID == game.id ? $0.detail : nil },
+                        launchDetail: activeLaunch.flatMap { $0.appID == game.id ? $0.detail : nil },
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
-                        isHeldInCloudSync: host.gamesHeldInCloudSync.contains(game.id),
+                        isHeldInCloudSync: heldInCloudSync.contains(game.id),
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
                     )
@@ -619,16 +632,13 @@ private struct GameRow: View {
     /// game-action event takes over from it, and it stands alone as an
     /// 8s fallback if no events arrive.
     @State private var isLaunching = false
+    private static let acknowledgmentLife = Duration.seconds(8)
 
     var body: some View {
         Button {
             guard !isLaunching else { return }
             launch()
             withAnimation(.easeInOut(duration: 0.15)) { isLaunching = true }
-            Task(name: "Clear the launch acknowledgment") {
-                try? await Task.sleep(for: .seconds(8))
-                withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
-            }
         } label: {
             HStack(spacing: Theme.Space.md) {
                 capsuleArt
@@ -665,6 +675,12 @@ private struct GameRow: View {
         }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .task(id: isLaunching) {
+            guard isLaunching else { return }
+            try? await Task.sleep(for: Self.acknowledgmentLife)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
         }
         .modifier(DockDrag(bundle: dockBundle))
         .contextMenu {
@@ -837,9 +853,7 @@ private struct ProgramRow: View {
         .accessibilityAction(named: "Game Settings") {
             GameSettingsItem.open(id: entry.id, name: entry.name)
         }
-        .background(
-            Theme.innerShape.fill(Color.primary.opacity(isHovered ? 0.07 : 0)),
-        )
+        .background(Color.primary.opacity(isHovered ? 0.07 : 0), in: Theme.innerShape)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
@@ -1209,23 +1223,23 @@ private struct OpenSteamButton: View {
 /// this is a note, not a gate — so it stays a chip rather than a card, and it
 /// is absent on a complete bottle.
 private struct BottleIncompleteChip: View {
-    /// Read once per appearance: the test opens files inside the prefix,
-    /// which is not something a view body may do.
-    @State private var summary: String?
+    let summary: String?
 
     var body: some View {
-        Group {
-            if let summary {
-                Button {
-                    NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
-                } label: {
-                    Label("Bottle incomplete", systemImage: "shippingbox")
-                        .foregroundStyle(.orange)
-                }
-                .buttonStyle(.plain)
-                .help("\(summary). Install them in Settings › Engine › Game dependencies.")
+        if let summary {
+            Button {
+                NSApp.sendAction(#selector(AppDelegate.showSettings(_:)), to: nil, from: nil)
+            } label: {
+                Label("Bottle incomplete", systemImage: "shippingbox")
+                    .foregroundStyle(.orange)
             }
+            .buttonStyle(.plain)
+            .help("\(summary). Install them in Settings › Engine › Game dependencies.")
         }
-        .onAppear { summary = BottleReadiness.incompleteSummary() }
+    }
+
+    @concurrent
+    nonisolated static func read() async -> String? {
+        BottleReadiness.incompleteSummary()
     }
 }
