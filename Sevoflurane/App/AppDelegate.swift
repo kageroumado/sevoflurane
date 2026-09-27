@@ -12,16 +12,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host, bridge: bridge)
     let notifications = SteamNotifications()
-    private let gameLaunchWatch = GameLaunchWatch()
-    private let runRecorder = RunRecorder()
-    private let stallWatch = StallWatch()
-    private var runMeter: Task<Void, Never>?
+    let gameLaunchWatch = GameLaunchWatch()
+    let runRecorder = RunRecorder()
+    let stallWatch = StallWatch()
+    var runMeter: Task<Void, Never>?
     private lazy var appLinkServer = AppLinkServer(
         supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
     )
     private var menuMirror: SteamMenuMirror?
     private(set) var menuBarPopover: MenuBarPopover?
-    private let setupWindow = SetupWindow()
+    let setupWindow = SetupWindow()
     private lazy var aboutWindows = AboutWindows()
     private lazy var reportWindows: ReportWindows = {
         let windows = ReportWindows()
@@ -309,252 +309,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - What a launch records
-
-    /// The moments a launch tells the app something: it began, one of its
-    /// processes reached the Mac driver, one of them put up a window, Steam
-    /// raised an error for it, and the game stopped running.
-    private func installLaunchHooks() {
-        host.onProgramLaunchPressed = { [weak self] appID in
-            guard let self else { return }
-            gameLaunchWatch.noteLaunchPressed()
-            runRecorder.noteLaunchPressed(appID: appID)
-        }
-        host.onGameLaunchStart = { [weak self] appID in
-            guard let self else { return }
-            // Arms the window watch for launches the bridge did not carry
-            // (the CLI's, a steam:// URL the client handled itself).
-            gameLaunchWatch.noteLaunchRequested(appID: appID)
-            // Every launch path passes through here, so this is where the app
-            // takes the activation right it will spend on the game's window.
-            // A minute later, when that window finally arrives, there is no
-            // event left for the window server to attribute the request to.
-            ActivationPolicy.claimRightForALaunch()
-            // The run record opens here rather than at the first window:
-            // a game that dies before it draws is the one worth recording.
-            runRecorder.arm(appID: appID)
-            // The game's exes, read from its install directory now, so its
-            // env files — and the bundle that names it in the Dock — exist
-            // before the process starts rather than after its first window.
-            Task.detached(name: "Record app \(appID)'s executables") {
-                if GameExecutables.recordFromInstall(appID: appID) {
-                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-                }
-            }
-        }
-        // A process of the launch loaded winemac.drv. This is the attribution
-        // that survives a game which dies before it draws.
-        gameLaunchWatch.onGameProcessArmed = { [weak self] exe, pid in
-            guard let self, let appID = host.activeLaunch?.appID else { return }
-            runRecorder.noteExecutable(exe, pid: pid, forApp: appID)
-            record(exe, forApp: appID, detectingRuntime: false)
-        }
-        gameLaunchWatch.onGameWindowUp = { [weak self] owner in
-            guard let self else { return }
-            // Read before the host is told: the window's arrival is what ends
-            // the launch, and ending it clears the record of which app it was.
-            let launchedAppID = host.activeLaunch?.appID
-            host.gameWindowDidAppear()
-            supervisor.wake(.gameWindowChanged)
-            // A game that has just run for the first time is also the first
-            // chance to read its files: what it is built on decides which
-            // runners it can be offered.
-            if let launchedAppID {
-                runRecorder.noteWindowUp(forApp: launchedAppID)
-                record(owner, forApp: launchedAppID, detectingRuntime: true)
-                publishToDiscord(appID: launchedAppID)
-            }
-        }
-        host.onGameActionError = { [weak self] appID, detail in
-            self?.runRecorder.noteSteamError(detail, forApp: appID)
-        }
-        // The client's own notification is the exit edge: a game Steam started
-        // is not a process this app can wait on.
-        host.onGameRunningChanged = { [weak self] appID, running in
-            guard !running else {
-                self?.runRecorder.noteRunning(appID: appID)
-                return
-            }
-            self?.runRecorder.noteStopped(appID: appID)
-            DiscordPresence.shared.gameStopped(appID)
-            Task.detached(name: "Clear the Discord activity") {
-                await DiscordPresence.shared.clear(forGame: appID)
-            }
-        }
-    }
-
-    /// Reads every open run's meters on a timer. Energy, retired instructions
-    /// and the Game Mode session exist only while the game's process does, so
-    /// they are sampled during the run rather than read at its close.
-    ///
-    /// The same tick lets the display sleep again once no run is open: every
-    /// way a run closes — Steam's exit edge, a native runner's processes
-    /// going, the stall watch ending a game — passes through the recorder.
-    /// The daemon holds the display too, and lets it go when its probe cycle
-    /// finds the game window gone; that cycle is a minute apart while a game
-    /// is up, so every run closing wakes it, one followed at once by the next
-    /// game's launch included.
-    private func startRunMeter() {
-        runMeter?.cancel()
-        runMeter = Task(name: "Sample the open runs' meters") { [runRecorder, weak self] in
-            var ticks = 0
-            var holdWatch = DisplayHoldWatch()
-            var closedRuns = runRecorder.closedRuns
-            while !Task.isCancelled {
-                try? await Task.sleep(for: RunRecorder.meterInterval)
-                runRecorder.sample { GameScreen.observe(pid: $0) }
-                if !runRecorder.isRecording { GameDisplayHold.gameDidExit() }
-                if runRecorder.closedRuns != closedRuns {
-                    closedRuns = runRecorder.closedRuns
-                    self?.supervisor.wake(.gameWindowChanged)
-                }
-                ticks += 1
-                if ticks.isMultiple(of: Self.displayHoldCheckEvery) {
-                    let holds = await Task.detached(name: "Read the display holds") { DisplayHolds.current() }.value
-                    for hold in holdWatch.check(holds, runOpen: runRecorder.isRecording) {
-                        EventLog.shared.log(
-                            .app, "display: held with no game running — \(DisplayHolds.describe(hold))",
-                        )
-                    }
-                }
-                if ticks.isMultiple(of: RunRecorder.nativeCheckEvery) {
-                    await Self.checkNativeRuns(runRecorder)
-                }
-                if ticks.isMultiple(of: RunRecorder.provenanceCheckEvery) {
-                    await Self.readProvenance(runRecorder)
-                }
-                guard runRecorder.isRecording,
-                      let every = DiagnosticLevel.current.hostSampleInterval else { continue }
-                let period = max(1, Int(every / RunRecorder.meterInterval))
-                if ticks.isMultiple(of: period) { Self.logHostState() }
-            }
-        }
-    }
-
-    /// Every how many meter ticks the display holds are read: once a minute.
-    private static let displayHoldCheckEvery = 30
-
-    /// The engine names the renderer that answered in the Wine log during the
-    /// run, and a long run's log outgrows what its close reads back, so the
-    /// line is gathered while the game plays. The reads run off the main actor.
-    private static func readProvenance(_ recorder: RunRecorder) async {
-        for read in recorder.provenanceReads {
-            let found = await Task.detached(name: "Read the engine's renderer lines") {
-                RunRecorder.provenance(in: read.log, from: read.offset)
-            }.value
-            recorder.noteProvenance(found.lines, readTo: found.end, for: read)
-        }
-    }
-
-    /// A game on the native NW.js runner is a macOS process Steam does not
-    /// track, and the client sends no lifetime edge for it: the run ends when
-    /// its processes are gone. `ps` runs off the main actor.
-    private static func checkNativeRuns(_ recorder: RunRecorder) async {
-        for appID in recorder.nativeRuns {
-            let alive = await Task.detached(name: "Look for the native game's processes") {
-                let running = NWJSRunner.runningProcesses(appID: appID)
-                return !running.browser.isEmpty || !running.helpers.isEmpty
-            }.value
-            recorder.noteNativeProcesses(alive: alive, forApp: appID)
-        }
-        // A Quick Launch program is the same case in a Wine process: Steam
-        // never started it, so nothing but its process says it has ended.
-        let programs = recorder.programRuns.compactMap { appID in
-            AdoptedPrograms.program(appID).map { (appID, $0.url.lastPathComponent) }
-        }
-        guard !programs.isEmpty else { return }
-        let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
-        for (appID, exe) in programs {
-            recorder.noteNativeProcesses(
-                alive: !WineProcessList.pids(named: exe, inPgrepLong: listing).isEmpty,
-                forApp: appID, gone: nil, neverSeenChecks: RunRecorder.programNeverSeenChecks,
-            )
-        }
-    }
-
-    /// Watches every process the app owns and unwedges a game that has stopped
-    /// doing anything. It is on at every level: a killed game is a session
-    /// lost either way, and the ladder is what turns a freeze into an ending
-    /// the record can name.
-    private func startStallWatch() {
-        stallWatch.recorder = runRecorder
-        stallWatch.onNotAnswering = { [stallWatch] process in
-            // After the sample that found it: a modal alert must not run inside the pass.
-            ModalAlerts.present {
-                if NotAnsweringPrompt.userEnds(process.name) { stallWatch.end(process) }
-            }
-        }
-        stallWatch.onGameProcessGone = { [bridge] appID in
-            Task(name: "End Steam's entry for \(appID)") {
-                if await !bridge.terminateApp(appID) {
-                    EventLog.enqueue(.client, "could not ask the client to end \(appID): the bridge is down")
-                }
-            }
-        }
-        stallWatch.start()
-    }
-
-    /// The machine while a game runs, at the level that asks for it. It goes
-    /// to the event log rather than into the run record: one line per ten
-    /// seconds is a trail, and the record holds the state at the start.
-    private nonisolated static func logHostState() {
-        let host = HostSnapshot.take()
-        EventLog.enqueue(
-            .app,
-            "host: thermal \(host.thermalState), load \(host.loadAverage1m), "
-                + "\(host.activeProcessors) processors, \(host.freeMemoryMB) MB free, "
-                + "\(host.compressedMemoryMB) MB compressed",
-        )
-    }
-
-    /// Tells Discord which game is on screen, under that game's own Discord
-    /// application: a game Discord's database names shows the way its native
-    /// build would, and one it does not name shows nothing.
-    ///
-    /// Detached, because the name comes off disk and the socket is the Discord
-    /// client's to answer at its own pace. A game that ships its own Discord
-    /// library publishes a richer activity through the in-bottle bridge, so the
-    /// app leaves that one alone. The ticket is taken here on the main actor,
-    /// so a stop that lands during the lookup voids the publish.
-    private func publishToDiscord(appID: Int) {
-        guard Preferences.discordPresence else { return }
-        let configured = GameConfig.game(appID).name
-        let ticket = DiscordPresence.shared.ticket(forGame: appID)
-        Task.detached(name: "Publish app \(appID) to Discord") {
-            guard let name = configured ?? SharedGames.installed(appID: appID)?.name else { return }
-            guard !DiscordPresence.publishesItsOwn(appID: appID) else { return }
-            let applications = DiscordApplications.shared
-            var resolved = await applications.applicationID(steamAppID: appID)
-            if resolved == nil { resolved = await applications.applicationID(named: name) }
-            guard let application = resolved else {
-                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so nothing is published")
-                return
-            }
-            let activity = DiscordPresence.Activity(
-                applicationID: application.id, name: application.name,
-            )
-            try? await DiscordPresence.shared.show(activity, forGame: appID, ticket: ticket)
-        }
-    }
-
-    /// Records the exe a launch of `appID` started, unless another game has
-    /// already claimed that exe — a window or a process another game owns is
-    /// that game's, whatever launch is in flight.
-    ///
-    /// Detached, because reading the game configs and a game's directory and
-    /// rewriting the env files is disk work and this is the main actor.
-    private func record(_ exe: String, forApp appID: Int, detectingRuntime: Bool) {
-        guard appID != 0 else { return }
-        Task.detached(name: "Record app \(appID)'s \(exe)") {
-            guard GameConfig.app(claiming: exe).map({ $0 == appID }) ?? true else { return }
-            let known = GameConfig.game(appID).exes?.contains(exe) ?? false
-            guard !known || detectingRuntime else { return }
-            GameConfig.noteExecutable(exe, forApp: appID)
-            if detectingRuntime { NWJSGames.record(appID: appID) }
-            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-        }
-    }
-
     /// The wizard's finish button. The runtime usually started when
     /// provisioning completed — the client booted behind the wizard, so the
     /// window the button promises already exists: sign-in if Steam is
@@ -838,155 +592,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    /// `steam://` links from browsers and other apps and `sevoflurane://play`
-    /// from a game's Dock tile (CFBundleURLTypes), and
-    /// Windows executables opened with Sevoflurane from Finder
-    /// (CFBundleDocumentTypes).
-    ///
-    /// A link brings Steam's window up first, so the routed page has
-    /// somewhere to land; an executable opens the adoption panel instead,
-    /// which is the whole of what this app shows for a program of its own.
-    func application(_: NSApplication, open urls: [URL]) {
-        let programs = urls.filter(\.isFileURL)
-        let links = urls.filter { $0.scheme?.lowercased() == "steam" }
-        for url in urls where url.scheme?.lowercased() == "sevoflurane" {
-            playFromDock(url)
-        }
-        // Steam is held behind an unfinished setup; the link has nowhere to
-        // land yet, and the assistant is what gets it somewhere.
-        if !links.isEmpty, setupWindow.show() {
-            EventLog.shared.log(.window, "steam:// link while setup is unfinished — showing setup")
-        } else if !links.isEmpty {
-            host.showSteam()
-            for url in links {
-                host.executeSteamURL(url)
-            }
-        }
-        for url in programs {
-            openWindowsProgram(url)
-        }
-    }
-
-    /// How long a Dock tile's launch waits for a client that is still coming
-    /// up: a cold boot, with Steam's stores, takes a minute or two.
-    private static let dockLaunchBudget = Duration.seconds(300)
-
     /// The store a program's Dock tile launches through when its URL arrives
     /// before the menu bar is installed — a tile that started this app opens
     /// it first. Wired like the popover's store, so the status line, the
     /// window watch and the run record open for that launch as for any other.
-    private lazy var dockQuickLaunch: QuickLaunchStore = {
+    lazy var dockQuickLaunch: QuickLaunchStore = {
         let store = QuickLaunchStore()
         store.launchHooks = QuickLaunchStore.LaunchHooks(reporting: host)
         return store
     }()
 
-    /// A game's Dock tile, opened: its loader handed the open to
-    /// `sevoflurane://play/<id>`. The game starts the way its menu bar row
-    /// starts it; a Steam game waits for a client that can take the launch,
-    /// which is the whole of the wait when the tile also started this app.
-    private func playFromDock(_ url: URL) {
-        guard url.host() == "play", let id = Int(url.lastPathComponent) else { return }
-        if setupWindow.show() {
-            EventLog.shared.log(.window, "Dock tile for \(id) while setup is unfinished — showing setup")
-            return
-        }
-        if AdoptedPrograms.isAdopted(id) {
-            guard let entry = AdoptedPrograms.entry(id) else { return }
-            EventLog.shared.log(.client, "Dock tile: starting \(entry.name)")
-            (menuBarPopover?.quickLaunch ?? dockQuickLaunch).launch(entry)
-            return
-        }
-        let name = host.libraryGames.first { $0.id == id }?.name
-            ?? GameConfig.game(id).name ?? String(id)
-        EventLog.shared.log(.client, "Dock tile: starting \(name)")
-        Task(name: "Launch \(name) from the Dock") {
-            let deadline = ContinuousClock.now + Self.dockLaunchBudget
-            while supervisor.health != .healthy {
-                guard ContinuousClock.now < deadline else {
-                    EventLog.shared.log(.client, "Dock tile: \(name) not started, the client never came up")
-                    return
-                }
-                try? await Task.sleep(for: .seconds(1))
-            }
-            ActivationPolicy.claimRightForALaunch()
-            await supervisor.launch(appID: id, name: name)
-        }
-    }
-
-    /// The Dock tile's menu: the recent games the popover opens with, each
-    /// started the way its row starts it.
-    func applicationDockMenu(_: NSApplication) -> NSMenu? {
-        guard isRuntimeStarted, !setupWindow.isUnfinished, !host.recentGames.isEmpty else { return nil }
-        let menu = NSMenu()
-        for game in host.recentGames {
-            let item = NSMenuItem(
-                title: game.name, action: #selector(playRecentGame(_:)), keyEquivalent: "",
-            )
-            item.target = self
-            item.tag = game.id
-            menu.addItem(item)
-        }
-        return menu
-    }
-
-    @objc
-    private func playRecentGame(_ item: NSMenuItem) {
-        guard let game = host.recentGames.first(where: { $0.id == item.tag }) else { return }
-        ActivationPolicy.claimRightForALaunch()
-        Task(name: "Launch \(game.name) from the Dock menu") { await supervisor.launch(game) }
-    }
-
     /// Windows programs handed to the app before it was ready to ask about
     /// them. Finder can open a document at launch, which arrives while the
     /// setup wizard may still own the screen.
-    private var pendingPrograms: [URL] = []
-
-    /// Shows the adoption panel, or holds the program until the app is past
-    /// setup and has a bottle to offer it.
-    private func openWindowsProgram(_ url: URL) {
-        guard isRuntimeStarted, !setupWindow.isUnfinished else {
-            pendingPrograms.append(url)
-            return
-        }
-        AdoptionPanel.shared.present(url)
-    }
-
-    /// Opens the panel for everything Finder handed over during launch.
-    private func openPendingPrograms() {
-        let waiting = pendingPrograms
-        pendingPrograms = []
-        for url in waiting {
-            AdoptionPanel.shared.present(url)
-        }
-    }
-
-    /// The context page lives in a window of its own, so AppKit counts a
-    /// visible window and its own reopen logic would never fire. `host`
-    /// answers the question the user is actually asking.
-    func applicationShouldHandleReopen(
-        _: NSApplication,
-        hasVisibleWindows appKitSeesWindows: Bool,
-    ) -> Bool {
-        // AppKit's own count of visible windows is in the line because it is
-        // usually wrong here (parked pages and menus count) and its being
-        // wrong the other way is what would make a Dock click do nothing.
-        let seen = "AppKit counts \(appKitSeesWindows ? "visible windows" : "no visible window"), "
-            + "policy \(NSApp.activationPolicy() == .regular ? "regular" : "accessory")"
-        // Steam's windows are held behind an unfinished setup, so the window
-        // a reopen can actually bring up is the assistant's.
-        if setupWindow.show() {
-            EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — setup is unfinished; showing it (\(seen))")
-            return true
-        }
-        EventLog.shared.log(
-            .window,
-            "reopen request (Dock icon or Finder) — Steam's window is "
-                + "\(host.isSteamOnScreen ? "on screen; bringing it forward" : "hidden; showing it") (\(seen))",
-        )
-        host.showSteam()
-        return true
-    }
+    var pendingPrograms: [URL] = []
 
     @objc
     func reloadSteamUI(_: Any?) {
