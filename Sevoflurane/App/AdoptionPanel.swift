@@ -9,7 +9,7 @@ import SwiftUI
 /// A floating panel rather than a window: the app is a menu-bar agent with no
 /// windows of its own, and this is one question with three answers.
 @MainActor
-final class AdoptionPanel: NSObject, NSWindowDelegate {
+final class AdoptionPanel {
     static let shared = AdoptionPanel()
 
     private var panel: NSPanel?
@@ -41,8 +41,7 @@ final class AdoptionPanel: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false,
         )
-        panel.delegate = self
-        panel.title = "Open in Sevoflurane"
+        panel.title = String(localized: "Open in Sevoflurane")
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.isReleasedWhenClosed = false
@@ -70,6 +69,9 @@ final class AdoptionModel {
 
     let url: URL
     let info: PEResources.Info?
+    /// The program's own icon, shaped the way macOS shapes an app's. Drawn
+    /// once: it is a PE resource read and a 256-pixel render.
+    let icon: NSImage?
     private(set) var verdict: ProgramDetection.Verdict
     private(set) var stage = Stage.choosing
     /// Whether the user overruled an installer verdict for this file.
@@ -82,20 +84,29 @@ final class AdoptionModel {
     /// Executables from an install the user has chosen to keep.
     var chosen: Set<URL> = []
 
+    /// Whether one executable from the install is ticked to keep.
+    subscript(keeps exe: URL) -> Bool {
+        get { chosen.contains(exe) }
+        set {
+            if newValue { chosen.insert(exe) } else { chosen.remove(exe) }
+        }
+    }
+
     /// Called when the panel has nothing left to ask.
     var onFinish: (() -> Void)?
 
     init(url: URL) {
         self.url = url
-        info = PEResources.read(url)
+        let info = PEResources.read(url)
+        self.info = info
+        icon = Self.shapedIcon(of: info)
         verdict = ProgramDetection.classify(url)
         name = AdoptedPrograms.suggestedName(for: url)
     }
 
     // MARK: - What the panel shows
 
-    /// The program's own icon, shaped the way macOS shapes an app's.
-    var icon: NSImage? {
+    private static func shapedIcon(of info: PEResources.Info?) -> NSImage? {
         guard let artwork = info?.largestIcon.flatMap(PEResources.image(of:)),
               let shaped = IconShaping.rendered(artwork, pixels: 256) else { return nil }
         return NSImage(cgImage: shaped, size: NSSize(width: 128, height: 128))
@@ -297,6 +308,7 @@ private struct AdoptionView: View {
                 }
             }
             .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 TextField("Name", text: $model.name)
                     .textFieldStyle(.plain)
@@ -362,7 +374,7 @@ private struct InstalledStep: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(executables, id: \.self) { exe in
-                            Toggle(isOn: binding(for: exe)) {
+                            Toggle(isOn: $model[keeps: exe]) {
                                 Text(exe.lastPathComponent).font(.system(size: 12))
                             }
                             .toggleStyle(.checkbox)
@@ -388,14 +400,5 @@ private struct InstalledStep: View {
         return executables.isEmpty
             ? String(localized: "It installed \(root.lastPathComponent). No program inside it can start.")
             : String(localized: "It installed \(root.lastPathComponent). Pick what to keep.")
-    }
-
-    private func binding(for exe: URL) -> Binding<Bool> {
-        Binding(
-            get: { model.chosen.contains(exe) },
-            set: { keep in
-                if keep { model.chosen.insert(exe) } else { model.chosen.remove(exe) }
-            },
-        )
     }
 }

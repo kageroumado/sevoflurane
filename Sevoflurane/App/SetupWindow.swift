@@ -32,7 +32,7 @@ final class SetupWindow {
         window.setContentSize(SetupMetrics.windowSize)
         window.contentMinSize = SetupMetrics.windowSize
         window.contentMaxSize = SetupMetrics.windowSize
-        window.title = "Welcome to Sevoflurane"
+        window.title = String(localized: "Welcome to Sevoflurane")
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden

@@ -257,7 +257,7 @@ struct SetupInstallStep: View {
             subtitle: subtitle,
         ) {
             SetupList {
-                ForEach(Array(Self.stages.enumerated()), id: \.offset) { offset, stage in
+                ForEach(Self.stages.enumerated(), id: \.offset) { offset, stage in
                     SetupRow(icon: stage.icon, title: stage.title, caption: caption(forStage: offset + 1)) {
                         mark(forStage: offset + 1)
                     }
@@ -291,7 +291,7 @@ struct SetupInstallStep: View {
         guard index == currentStage, case let .working(phase) = provisioner.activity else { return nil }
         let localizedPhase = InterfaceCopy.localized(phase)
         guard let fraction = provisioner.stageFraction else { return localizedPhase }
-        return "\(localizedPhase) \(Int(fraction * 100))%"
+        return "\(localizedPhase) \(fraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero)))"
     }
 
     @ViewBuilder

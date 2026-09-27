@@ -24,7 +24,7 @@
         /// window scrolls and what ``GalleryExport`` writes to disk.
         var tiles: some View {
             VStack(alignment: .leading, spacing: Theme.Space.xl) {
-                Text("Sevoflurane UI Gallery")
+                Text(verbatim: "Sevoflurane UI Gallery")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
 
                 section("Menu bar popover") {
@@ -130,7 +130,7 @@
                         tile(pane.label) {
                             RecoverySettings(
                                 provisioner: pane.provisioner,
-                                supervisor: ClientSupervisor(previewHealth: .healthy),
+                                supervisor: Fixtures.healthySupervisor,
                                 highlighted: nil,
                             )
                             .frame(width: 480, height: 820)
@@ -453,6 +453,8 @@
             }
 
         static let settings = provisioner(.idle)
+        /// The Recovery tiles' supervisor, held like every other fixture.
+        static let healthySupervisor = ClientSupervisor(previewHealth: .healthy)
         /// Fixed values in memory: the gallery draws the settings window, and
         /// drawing it must not rewrite the machine's bottle.
         static let graphics = GraphicsStore(

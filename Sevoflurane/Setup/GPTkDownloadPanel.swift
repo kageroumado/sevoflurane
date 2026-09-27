@@ -98,10 +98,7 @@ struct GPTkDownloadPanel: View {
         }
         .frame(maxWidth: .infinity)
         .padding(24)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.quaternary.opacity(0.4)),
-        )
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var instructions: some View {
@@ -109,6 +106,7 @@ struct GPTkDownloadPanel: View {
             Image(systemName: download.autoPhase == .manual
                 ? "hand.point.up.left" : "info.circle")
                 .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
+                .accessibilityHidden(true)
             Text(InterfaceCopy.localized(download.autoPhase == .manual
                 ? "Click Download on the release and the beta you want. Each installs here when its download ends."
                 : "Sign in with your Apple Account. The first time, Apple asks you to accept its free developer agreement. The newest release and beta then download and install here."))
@@ -129,10 +127,10 @@ struct GPTkDownloadPanel: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
+            .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.quaternary),
-            )
+                    .strokeBorder(.quaternary)
+            }
     }
 
     /// Covers the download table while versions are being chosen, so the
@@ -154,22 +152,20 @@ struct GPTkDownloadPanel: View {
                 HStack(spacing: 10) {
                     icon(for: item.phase)
                         .frame(width: 18)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title).font(.callout).lineLimit(1).truncationMode(.middle)
                         caption(for: item)
                     }
                     Spacer()
                     if case .downloading = item.phase {
-                        Text(percent(item.fraction))
+                        Text(item.fraction, format: .percent.precision(.fractionLength(0)))
                             .font(.callout.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(.quaternary.opacity(0.4)),
-                )
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }
@@ -198,10 +194,6 @@ struct GPTkDownloadPanel: View {
             Text(reason).font(.caption).foregroundStyle(.orange).lineLimit(2)
         }
     }
-
-    private func percent(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))%"
-    }
 }
 
 /// The `WKWebView` itself, kept alive by the controller so navigation and
@@ -221,7 +213,9 @@ private struct GPTkBrowserRoute: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Text("Sign in on Apple\u{2019}s page and download \u{201C}Evaluation environment for Windows games\u{201D}, the small file with D3DMetal in it. The Game Porting Toolkit works too. Sevoflurane installs it the moment it lands.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -245,11 +239,11 @@ private struct GPTkBrowserRoute: View {
                             .truncationMode(.middle)
                         Spacer(minLength: 0)
                         if watch.isRemovable(folder) {
-                            Button {
+                            Button("Stop watching this folder", systemImage: "xmark.circle.fill") {
                                 watch.remove(folder)
-                            } label: {
-                                Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
                             }
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.tertiary)
                             .buttonStyle(.plain)
                             .help("Stop watching this folder")
                         }
@@ -261,10 +255,7 @@ private struct GPTkBrowserRoute: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.quaternary.opacity(0.4)),
-            )
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 

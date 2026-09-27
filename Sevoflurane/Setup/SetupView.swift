@@ -280,12 +280,12 @@ struct SetupView: View {
     /// there — installing Steam into it is not ours to decide.
     private var newBottleObjection: String? {
         let name = newBottleName.trimmingCharacters(in: .whitespaces)
-        if name.isEmpty { return "Give the bottle a name." }
+        if name.isEmpty { return String(localized: "Give the bottle a name.") }
         if name.contains("/") || name.contains(":") {
-            return "Use a name without / or : in it."
+            return String(localized: "Use a name without / or : in it.")
         }
         if provisioner.ownBottles.contains(where: { $0.name == name }) {
-            return "A bottle named “\(name)” already exists."
+            return String(localized: "A bottle named “\(name)” already exists.")
         }
         return nil
     }

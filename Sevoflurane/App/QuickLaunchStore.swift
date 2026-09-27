@@ -185,8 +185,8 @@ final class QuickLaunchStore {
     func chooseProgram() {
         guard simulated == nil else { return }
         let panel = NSOpenPanel()
-        panel.title = "Choose a Windows Program"
-        panel.prompt = "Open"
+        panel.title = String(localized: "Choose a Windows Program")
+        panel.prompt = String(localized: "Open")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if let exe = UTType("com.microsoft.windows-executable") {

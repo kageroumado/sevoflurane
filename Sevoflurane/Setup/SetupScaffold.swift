@@ -86,7 +86,7 @@ struct SetupList<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             Group(subviews: content) { rows in
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                ForEach(rows.enumerated(), id: \.element.id) { index, row in
                     if index > 0 {
                         Divider()
                             .padding(.leading, SetupMetrics.rowIconWidth + Theme.Space.md)
@@ -153,6 +153,7 @@ struct SetupChoiceRow: View {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
