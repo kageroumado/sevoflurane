@@ -326,20 +326,25 @@ final nonisolated class RunRecorder {
     /// dock shim's chronicle. The executable's file, found in the game's
     /// install or given by the caller, says whether it is a 32- or 64-bit
     /// image; the chronicle's pid is what the run's meters are read from.
+    /// The run carries the name of the process it follows, so a launcher that
+    /// armed first gives its name up with its pid.
     func noteExecutable(
         _ exe: String, pid: pid_t? = nil, forApp appID: Int, at url: URL? = nil,
     ) {
         // A launcher's process gives way to the game's, but a process that
         // arrives once the game has drawn (Genshin's frame-rate unlocker,
         // a companion window) is a helper, and the game keeps its pid.
+        var takesOver = false
         if let pid, open[appID]?.gamePID == nil || !presentStats.hasCounted(forApp: appID) {
+            takesOver = open[appID]?.gamePID != pid
             open[appID]?.gamePID = pid
             // A Quick Launch program's pages carry no app id either: its own
             // process is how its frames are found.
             if AdoptedPrograms.program(appID) != nil { presentStats.claim(pid: pid, forApp: appID) }
         }
-        guard open[appID]?.record.exe == nil else { return }
+        guard open[appID]?.record.exe == nil || takesOver else { return }
         open[appID]?.record.exe = exe
+        open[appID]?.record.product = nil
         let file = url ?? Self.executableURL(named: exe, forApp: appID)
         open[appID]?.record.arch = file.flatMap(PEResources.machine(of:))?.bits
         if AdoptedPrograms.isAdopted(appID), let info = file.flatMap(PEResources.read) {

@@ -6,6 +6,7 @@ nonisolated extension GameConfig {
     /// launch is in flight.
     static func app(claiming exe: String) -> Int? {
         let lowered = exe.lowercased()
+        guard GameExecutables.isRecordable(lowered) else { return nil }
         return games().first { $0.value.exes?.contains(lowered) == true }?.key
     }
 }

@@ -186,6 +186,30 @@ struct RunMetersTests {
     }
 
     @Test
+    func `the run takes the name of the process that takes its pid over`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        recorder.arm(appID: 2_000_000_000)
+        // HoYoPlay's page armed first, then the game armed before it drew.
+        recorder.noteExecutable("hoyoplay.exe", pid: 111, forApp: 2_000_000_000)
+        recorder.noteExecutable("genshinimpact.exe", pid: 222, forApp: 2_000_000_000)
+        #expect(recorder.openRecord(forApp: 2_000_000_000)?.exe == "genshinimpact.exe")
+        // The same process arming again keeps the name it has.
+        recorder.noteExecutable("genshinimpact.exe", pid: 222, forApp: 2_000_000_000)
+        #expect(recorder.openRecord(forApp: 2_000_000_000)?.exe == "genshinimpact.exe")
+    }
+
+    @Test
+    func `wine's own programs are never taken for a launch's game`() {
+        for exe in ["iexplore.exe", "winebrowser.exe", "mshta.exe", "rundll32.exe", "regsvr32.exe"] {
+            #expect(GameLaunchWatch.launchProcess(named: exe) == nil, "\(exe)")
+            #expect(!GameExecutables.isRecordable(exe) || exe == "rundll32.exe", "\(exe)")
+        }
+        #expect(GameLaunchWatch.launchProcess(named: "GenshinImpact.exe") == "genshinimpact.exe")
+    }
+
+    @Test
     func `a launcher handing over to its game leaves two runs, and the second stays open`() async throws {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }

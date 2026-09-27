@@ -97,14 +97,20 @@ nonisolated enum GameExecutables {
         return found.sorted { $0.depth < $1.depth }.map(\.url)
     }
 
-    /// Windows' own tools, which a game's install script runs inside the
-    /// launch: DirectX's setup registers its DLLs through `regsvr32`, and a
-    /// redistributable runs `msiexec`. Taken for the game, one of them
-    /// becomes the run's process, its exit ends the launch in Steam halfway
-    /// through the script, and the next launch runs the script again.
+    /// Windows' own tools, which a game's install script or launcher runs
+    /// inside the launch: DirectX's setup registers its DLLs through
+    /// `regsvr32`, a redistributable runs `msiexec`, and HoYoPlay shows its
+    /// pages through `iexplore.exe`. Taken for the game, one of them becomes
+    /// the run's process and the name its settings are written under, its exit
+    /// ends the launch in Steam halfway through, and the next launch runs the
+    /// script again.
     static let windowsTools: Set<String> = [
         "regsvr32.exe", "msiexec.exe", "cmd.exe", "reg.exe", "regedit.exe", "dllhost.exe",
         "wscript.exe", "cscript.exe", "powershell.exe", "oalinst.exe", "dxwsetup.exe",
+        "iexplore.exe", "winebrowser.exe", "mshta.exe", "hh.exe", "dxdiag.exe", "winecfg.exe",
+        "control.exe", "taskmgr.exe", "uninstaller.exe", "wmic.exe", "tasklist.exe", "taskkill.exe",
+        "schtasks.exe", "sc.exe", "net.exe", "netsh.exe", "ipconfig.exe", "xcopy.exe",
+        "icacls.exe", "attrib.exe", "expand.exe", "wusa.exe", "notepad.exe", "wordpad.exe",
     ]
 
     /// Whether a running executable can be recorded as a game's own.
