@@ -443,8 +443,8 @@ private struct GeneralDiscordSection: View {
                         Preferences.discordBridge = enabled
                     }
                 Text(InterfaceCopy.localized(hasDiscordBridge
-                    ? "Games with their own Discord support show their status. Restart Steam to apply a change."
-                    : "Only the built-in engine includes the Discord relay. Select it in Engine settings."))
+                        ? "Games with their own Discord support show their status. Restart Steam to apply a change."
+                        : "Only the built-in engine includes the Discord relay. Select it in Engine settings."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

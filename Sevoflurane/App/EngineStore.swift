@@ -143,12 +143,17 @@ final class EngineStore {
     private var isLookingUpDefault = false
 
     /// Which channel the feed is read on. Changing it drops the release
-    /// already fetched and asks the feed again.
+    /// already fetched and asks the feed again. Computed so a change from
+    /// `sevo engine channel` is read too, which is why it reports its own
+    /// access and mutation to the registrar.
     var channel: EngineChannel {
-        get { Preferences.engineChannel }
+        get {
+            access(keyPath: \.channel)
+            return Preferences.engineChannel
+        }
         set {
             guard newValue != Preferences.engineChannel else { return }
-            Preferences.engineChannel = newValue
+            withMutation(keyPath: \.channel) { Preferences.engineChannel = newValue }
             stableRelease = nil
             refreshStableRelease()
         }

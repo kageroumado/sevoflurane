@@ -130,6 +130,7 @@
                         tile(pane.label) {
                             RecoverySettings(
                                 provisioner: pane.provisioner,
+                                compatibility: Fixtures.compatibility,
                                 supervisor: Fixtures.healthySupervisor,
                                 highlighted: nil,
                             )

@@ -97,7 +97,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     }
 
     var title: String {
-        let key: String = switch self {
+        let key = switch self {
         case .general: "General"
         case .graphics: "Graphics"
         case .engine: "Engine"

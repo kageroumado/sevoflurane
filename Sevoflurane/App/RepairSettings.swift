@@ -9,7 +9,7 @@ import SwiftUI
 /// and restart Steam, and the resets touch only regenerable caches.
 struct RecoverySettings: View {
     let provisioner: Provisioner
-    var compatibility = CompatibilityStore()
+    let compatibility: CompatibilityStore
     /// Absent in the gallery, where a pane must move nothing on a real bottle.
     var supervisor: ClientSupervisor?
     var steam: SteamActions?

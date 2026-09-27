@@ -108,8 +108,8 @@ struct GPTkDownloadPanel: View {
                 .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
                 .accessibilityHidden(true)
             Text(InterfaceCopy.localized(download.autoPhase == .manual
-                ? "Click Download on the release and the beta you want. Each installs here when its download ends."
-                : "Sign in with your Apple Account. The first time, Apple asks you to accept its free developer agreement. The newest release and beta then download and install here."))
+                    ? "Click Download on the release and the beta you want. Each installs here when its download ends."
+                    : "Sign in with your Apple Account. The first time, Apple asks you to accept its free developer agreement. The newest release and beta then download and install here."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

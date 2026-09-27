@@ -609,7 +609,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             await bridge.setGameLaunchHandler { [weak self] in
-                Task { @MainActor in self?.gameLaunchWatch.noteLaunchRequested() }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.gameLaunchWatch.noteLaunchRequested() }
+                }
             }
             // The bridge sees a client die before any probe does.
             await bridge.setClientConnectionLostHandler { [weak self] in
