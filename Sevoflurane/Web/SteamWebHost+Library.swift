@@ -56,3 +56,29 @@ nonisolated enum LibraryIndex {
         return String(first).uppercased()
     }
 }
+
+extension SteamWebHost {
+    nonisolated struct RecentGame: Identifiable, Decodable, Equatable, Sendable {
+        let id: Int
+        let name: String
+        /// What Steam's library shows under the name, by the client's own numbering.
+        var displayStatus: Int?
+        /// The name Steam's own library sorts by (`sort_as`): no leading
+        /// article, a romanized title for one written in another script.
+        var sortAs: String?
+
+        /// What the index files the game under.
+        var sortName: String {
+            guard let sortAs, !sortAs.isEmpty else { return name }
+            return sortAs
+        }
+
+        /// Synchronizing (8): Steam Cloud has the game's saves in hand.
+        var isInCloudSync: Bool { displayStatus == 8 }
+
+        /// Capsule art, served by the bridge (local cache, CDN fallback).
+        var artURL: URL {
+            URL(string: "http://127.0.0.1:\(BridgePorts.art)/art/\(id).jpg")!
+        }
+    }
+}

@@ -207,4 +207,71 @@ extension SteamWebHost {
       return "registered";
     })()
     """
+
+    /// Installs the scripts the context page needs standing: the notification
+    /// subscription, and the refusal of the chat window Steam opens for an
+    /// incoming message.
+    ///
+    /// Both reach for a global the bundle assigns partway through boot, and
+    /// Steam sends no "the UI is ready" signal, so each is retried until it
+    /// answers with one of the outcomes that means it is in place — the same
+    /// gap ``SteamMenuMirror`` retries across. The bottled client runs a
+    /// second copy of the friends UI, which opens a CEF chat window of its
+    /// own, so the refusal goes to that one too.
+    func installContextScripts() {
+        install(
+            Self.notificationScript,
+            describedAs: "Steam notifications",
+            settledAt: ["registered", "already registered"],
+        )
+        install(
+            Self.overlayScript,
+            describedAs: "Steam overlay activation",
+            settledAt: ["registered", "already registered"],
+        )
+        install(
+            SteamChatAutoOpen.refusalScript,
+            describedAs: "unasked chat windows",
+            settledAt: SteamChatAutoOpen.settled,
+        )
+        install(
+            SteamMessageSound.refusalScript,
+            describedAs: "Steam's own message sound",
+            settledAt: SteamMessageSound.settled,
+        )
+        installInClient(
+            SteamChatAutoOpen.refusalScript,
+            describedAs: "unasked chat windows",
+            settledAt: SteamChatAutoOpen.settled,
+        )
+        installInClient(
+            SteamMessageSound.refusalScript,
+            describedAs: "Steam's own message sound",
+            settledAt: SteamMessageSound.settled,
+        )
+    }
+
+    private func installInClient(
+        _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
+    ) {
+        Task(name: "Install \(what) in the client") {
+            let result = await ClientLifecycle.installInClientUI(script, settledAt: outcomes)
+            EventLog.shared.log(.client, "\(what) in the client: \(result)")
+        }
+    }
+
+    private func install(
+        _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
+    ) {
+        Task(name: "Install \(what)") {
+            for _ in 1 ... 10 {
+                if let result = await evaluateInContext(script), outcomes.contains(result) {
+                    EventLog.shared.log(.app, "\(what): \(result)")
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            EventLog.shared.log(.app, "\(what): Steam's own globals never appeared")
+        }
+    }
 }
