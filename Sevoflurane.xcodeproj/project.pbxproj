@@ -126,6 +126,7 @@
 				App/SharedRunPreview.swift,
 				App/RepairSettings.swift,
 				App/ReportWindow.swift,
+				App/RunReportForm.swift,
 				App/SettingsNavigation.swift,
 				App/SettingHelpViews.swift,
 				App/SettingRows.swift,

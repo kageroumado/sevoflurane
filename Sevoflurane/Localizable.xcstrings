@@ -62,6 +62,9 @@
         }
       }
     },
+    "“Plays with fixes” needs a note saying which fixes." : {
+
+    },
     "@kageroumado" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3443,6 +3446,9 @@
         }
       }
     },
+    "Fails" : {
+
+    },
     "Fake display-mode changes" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4148,6 +4154,12 @@
         }
       }
     },
+    "How did it go?" : {
+
+    },
+    "How did it go? Sending also tells other Mac players, with the configuration below." : {
+
+    },
     "How it differs from the level" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4772,6 +4784,9 @@
           }
         }
       }
+    },
+    "Launches" : {
+
     },
     "Launching" : {
       "localizations" : {
@@ -5503,6 +5518,9 @@
         }
       }
     },
+    "Note" : {
+
+    },
     "Nothing counted this run's frames. A game with no Metal layer has no counter, and the driver's counter reaches records from the engine that carries it." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5827,6 +5845,9 @@
         }
       }
     },
+    "Optional. Plain text, no paths or e-mail addresses; it is public." : {
+
+    },
     "other apps have the CPU at %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5964,6 +5985,9 @@
         }
       }
     },
+    "Plays" : {
+
+    },
     "Plays the game" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5973,6 +5997,9 @@
           }
         }
       }
+    },
+    "Plays with fixes" : {
+
     },
     "processes" : {
       "extractionState" : "manual",
@@ -6611,6 +6638,9 @@
           }
         }
       }
+    },
+    "Reported: %@" : {
+
     },
     "Reports" : {
       "localizations" : {
@@ -8049,6 +8079,9 @@
         }
       }
     },
+    "Tell other Mac players how this game ran on this configuration. The verdict, the note and the configuration below go to the public game database; the note is the only part you write." : {
+
+    },
     "Terminate" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8133,6 +8166,9 @@
           }
         }
       }
+    },
+    "The database refused it: %@" : {
+
     },
     "The engine also installs from a file: dormison-r<N>.tar.xz and its .sig, from the Dormison release." : {
       "extractionState" : "manual",
@@ -8297,6 +8333,18 @@
           }
         }
       }
+    },
+    "The note has characters that are not plain text." : {
+
+    },
+    "The note is over %lld characters." : {
+
+    },
+    "The note names a file path. Reports are public, so paths stay out." : {
+
+    },
+    "The note names an e-mail address. Reports are public, so addresses stay out." : {
+
     },
     "The pointer's usual curve: a fast flick travels farther than a slow sweep of the same length." : {
       "extractionState" : "manual",
@@ -8568,6 +8616,9 @@
           }
         }
       }
+    },
+    "Turn on Share run statistics in Settings › General › Community to send a report about this run." : {
+
     },
     "Two steps, in order, between the game's picture and the window." : {
       "extractionState" : "manual",
@@ -9028,6 +9079,9 @@
           }
         }
       }
+    },
+    "Waiting to be sent." : {
+
     },
     "Watching for the download in" : {
       "extractionState" : "stale",

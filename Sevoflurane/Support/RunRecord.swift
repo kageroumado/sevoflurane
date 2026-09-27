@@ -6,7 +6,7 @@ import Foundation
 /// the summary a report window shows, the body of an issue, and the only
 /// thing that survives a game that dies in two seconds with nothing on
 /// screen. It names no one — see ``Redaction`` for what is kept out.
-nonisolated struct RunRecord: Codable, Equatable, Sendable {
+nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     /// When the launch began, UTC, seconds.
     var t: String
     var appid: Int
@@ -322,6 +322,21 @@ nonisolated struct RunRecord: Codable, Equatable, Sendable {
                 pCoreShare: (usage.pCoreShare * 100).rounded() / 100,
             )
         }
+    }
+
+    /// The record's identity: the moment it began and the app, which no two
+    /// runs share. What a report's ledger entry and `sevo report` name a run by.
+    var id: String {
+        "\(appid)-\(t)"
+    }
+
+    /// The run `target` names among `records` (oldest first, as ``RunLog/recent(_:in:)``
+    /// answers): an appid picks its newest run, anything else is a run id.
+    static func matching(_ target: String, in records: [RunRecord]) -> RunRecord? {
+        if let appid = Int(target) {
+            return records.last { $0.appid == appid }
+        }
+        return records.first { $0.id == target }
     }
 
     /// The level-0 summary: one line naming the game, what it ran on, how

@@ -157,6 +157,7 @@ let package = Package(
                 "Sevoflurane/Support/RunRecord.swift",
                 "Sevoflurane/Support/RunRecorder.swift",
                 "Sevoflurane/Support/MacHardware.swift",
+                "Sevoflurane/Support/SharedReport.swift",
                 "Sevoflurane/Support/SharedRun.swift",
                 "Sevoflurane/Support/StatsDeletionReport.swift",
                 "Sevoflurane/Support/StatsIdentity.swift",

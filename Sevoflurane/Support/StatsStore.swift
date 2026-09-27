@@ -9,12 +9,34 @@ nonisolated enum StatsStore {
 
     static let identityURL = root.appendingPathComponent("identity.key")
     static let queueURL = root.appendingPathComponent("queue.jsonl")
+    static let reportQueueURL = root.appendingPathComponent("reports.jsonl")
+    static let reportedURL = root.appendingPathComponent("reported.json")
     static let stateURL = root.appendingPathComponent("state.json")
 
     /// A run waiting to be sent, and since when.
     struct Queued: Codable, Equatable, Sendable {
         var queued: Date
         var run: SharedRun
+    }
+
+    /// A report waiting to be sent, since when, and the run it is about as
+    /// the run log names it (``RunRecord/id``), which is how the ledger's
+    /// entry is found when the server answers.
+    struct QueuedReport: Codable, Equatable, Sendable {
+        var queued: Date
+        var runID: String
+        var report: SharedReport
+    }
+
+    /// A report's standing, one per run reported: queued, sent, or refused
+    /// with the server's reason. What the run's row reads to say the run was
+    /// reported, and what `sevo stats reports` lists.
+    struct Reported: Codable, Equatable, Sendable {
+        var runID: String
+        var verdict: SharedReport.Verdict
+        var queued: Date
+        var sent: Date?
+        var refused: String?
     }
 
     /// What the server knows of this install, and what it has been sent.
@@ -27,6 +49,9 @@ nonisolated enum StatsStore {
         /// The last sequence number used; every signed request takes the next.
         var seq: Int = 0
         var sentRuns: Int = 0
+        /// Optional so a state file written before reports existed still
+        /// decodes; a missing count is zero.
+        var sentReports: Int?
         var lastSent: Date?
         var lastError: String?
         /// Sends that failed in a row, and when the next may go. Kept on disk
@@ -53,8 +78,44 @@ nonisolated enum StatsStore {
     }
 
     static func writeQueue(_ queue: [Queued], to url: URL = queueURL) {
+        writeLines(queue, to: url)
+    }
+
+    static func readReportQueue(from url: URL = reportQueueURL) -> [QueuedReport] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").compactMap {
+            try? JSONDecoder.stats.decode(QueuedReport.self, from: Data($0.utf8))
+        }
+    }
+
+    static func writeReportQueue(_ queue: [QueuedReport], to url: URL = reportQueueURL) {
+        writeLines(queue, to: url)
+    }
+
+    /// Every run reported, oldest first.
+    static func readReported(from url: URL = reportedURL) -> [Reported] {
+        (try? Data(contentsOf: url)).flatMap { try? JSONDecoder.stats.decode([Reported].self, from: $0) } ?? []
+    }
+
+    static func writeReported(_ reported: [Reported], to url: URL = reportedURL) {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let lines = queue.compactMap { try? JSONEncoder.stats.encode($0) }
+        try? JSONEncoder.stats.encode(reported).write(to: url, options: .atomic)
+    }
+
+    /// Writes one run's standing, replacing what the run had.
+    static func noteReported(_ entry: Reported, in url: URL = reportedURL) {
+        var reported = readReported(from: url).filter { $0.runID != entry.runID }
+        reported.append(entry)
+        writeReported(reported, to: url)
+    }
+
+    static func reported(forRun runID: String, in url: URL = reportedURL) -> Reported? {
+        readReported(from: url).first { $0.runID == runID }
+    }
+
+    private static func writeLines(_ items: [some Encodable], to url: URL) {
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let lines = items.compactMap { try? JSONEncoder.stats.encode($0) }
             .map { String(decoding: $0, as: UTF8.self) + "\n" }
         try? Data(lines.joined().utf8).write(to: url, options: .atomic)
     }

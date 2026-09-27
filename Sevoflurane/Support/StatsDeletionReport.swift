@@ -50,6 +50,10 @@ nonisolated struct StatsDeletionReport: Equatable {
             case .noSecureEnclave:
                 error = "this Mac has no Secure Enclave"
                 failure = error
+            case let .registrationCapped(reason):
+                status = 429
+                error = reason
+                failure = "the database answered HTTP 429\(reason.map { ": \($0)" } ?? "")"
             case nil:
                 error = thrown.localizedDescription
                 failure = error

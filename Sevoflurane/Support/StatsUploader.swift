@@ -1,11 +1,13 @@
 import Foundation
 
-/// Sends closed runs to the community database, when the user said yes.
+/// Sends closed runs, and the reports people write about them, to the
+/// community database, when the user said yes.
 ///
-/// Runs wait in ``StatsStore/queueURL`` until a batch goes through; a run
-/// the server has not taken within ``queueLife`` is dropped, so a Mac that
-/// is never online does not grow a file forever. Every request is signed by
-/// the install's ``StatsIdentity``, and carries a sequence number the server
+/// Runs wait in ``StatsStore/queueURL`` and reports in
+/// ``StatsStore/reportQueueURL`` until a batch goes through; an item the
+/// server has not taken within ``queueLife`` is dropped, so a Mac that is
+/// never online does not grow a file forever. Every request is signed by the
+/// install's ``StatsIdentity``, and carries a sequence number the server
 /// requires to grow, so a captured request cannot be replayed.
 actor StatsUploader {
     static let shared = StatsUploader()
@@ -15,14 +17,31 @@ actor StatsUploader {
     static let installHeader = "Sevo-Install"
     static let signatureHeader = "Sevo-Signature"
     static let batchSize = 50
+    static let reportBatchSize = 10
     static let queueLife: TimeInterval = 7 * 24 * 3600
     /// Waits between failed sends: a minute, then longer, up to six hours.
     static let backoff: [Duration] = [.seconds(60), .seconds(300), .seconds(1800), .seconds(7200), .seconds(21600)]
+    /// The wait after the server refused to register another install from
+    /// this address today: its cap is per day, so a shorter retry gets the
+    /// same answer.
+    static let registrationCapWait: Duration = .seconds(24 * 3600)
+    /// The server's word on a 429 that is its per-minute write limit rather
+    /// than the daily registration cap; both come from `POST /v1/installs`.
+    static let perMinuteLimit = "too many requests"
 
     enum Failure: Error, Equatable {
         case noSecureEnclave
         case unreachable(String)
         case refused(status: Int, reason: String?)
+        /// `POST /v1/installs` answered 429: five new installs already
+        /// registered from this address today.
+        case registrationCapped(reason: String?)
+    }
+
+    /// One item of a batch the server refused, from its `202` body.
+    struct Rejection: Equatable, Sendable {
+        var index: Int
+        var why: String
     }
 
     /// How a send failed, as far as what to do next is concerned.
@@ -34,15 +53,29 @@ actor StatsUploader {
         case serverError
         case refused
         case noSecureEnclave
+        /// The address's daily registration cap: wait a day, then register again.
+        case registrationCapped
     }
 
     nonisolated static func failureClass(of error: any Error) -> FailureClass {
         switch error as? Failure {
         case .noSecureEnclave: .noSecureEnclave
         case .unreachable: .unreachable
+        case .registrationCapped: .registrationCapped
         case let .refused(status, _) where [404, 410, 501].contains(status): .serviceAbsent
         case let .refused(status, _) where status >= 500: .serverError
         case .refused, nil: .refused
+        }
+    }
+
+    /// The refused items of a batch, from the server's `202 {accepted, rejected[]}`.
+    nonisolated static func rejections(in reply: Data) -> [Rejection] {
+        guard let object = try? JSONSerialization.jsonObject(with: reply) as? [String: Any],
+              let rejected = object["rejected"] as? [[String: Any]]
+        else { return [] }
+        return rejected.compactMap { item in
+            guard let index = item["i"] as? Int else { return nil }
+            return Rejection(index: index, why: item["why"] as? String ?? "no reason given")
         }
     }
 
@@ -81,14 +114,31 @@ actor StatsUploader {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
     }
 
+    /// A person reported on a run. Queued when sharing is on; the send
+    /// follows at once. The run's standing in the ledger is the caller's to
+    /// write, so the caller's next read sees it.
+    nonisolated static func submit(_ report: SharedReport, forRun runID: String) {
+        guard Preferences.sharesRunStats == true else { return }
+        Task.detached(name: "Queue a community report") {
+            await shared.enqueue(report, forRun: runID)
+            await shared.flush()
+        }
+    }
+
     func enqueue(_ run: SharedRun) {
         var queue = StatsStore.readQueue()
         queue.append(StatsStore.Queued(queued: .now, run: run))
         StatsStore.writeQueue(queue)
     }
 
-    /// Sends what is queued, a batch at a time, registering first when the
-    /// server does not know this install yet.
+    func enqueue(_ report: SharedReport, forRun runID: String) {
+        var queue = StatsStore.readReportQueue()
+        queue.append(StatsStore.QueuedReport(queued: .now, runID: runID, report: report))
+        StatsStore.writeReportQueue(queue)
+    }
+
+    /// Sends what is queued, runs then reports, a batch at a time,
+    /// registering first when the server does not know this install yet.
     func flush() async {
         guard !isFlushing, !serviceAbsent, Preferences.sharesRunStats == true else { return }
         // A backoff that outlived the last launch, or that a closing run
@@ -100,26 +150,61 @@ actor StatsUploader {
         isFlushing = true
         defer { isFlushing = false }
         let cutoff = Date.now.addingTimeInterval(-Self.queueLife)
-        var queue = StatsStore.readQueue().filter { $0.queued > cutoff }
-        StatsStore.writeQueue(queue)
+        var runs = StatsStore.readQueue().filter { $0.queued > cutoff }
+        StatsStore.writeQueue(runs)
+        var reports = StatsStore.readReportQueue().filter { $0.queued > cutoff }
+        StatsStore.writeReportQueue(reports)
         do {
-            while !queue.isEmpty {
-                let batch = Array(queue.prefix(Self.batchSize))
-                let identity = try await registeredIdentity()
-                try await send(batch.map(\.run), as: identity)
-                queue.removeFirst(batch.count)
-                StatsStore.writeQueue(queue)
-                var state = StatsStore.readState()
-                state.sentRuns += batch.count
-                state.lastSent = .now
-                state.lastError = nil
-                state.failures = nil
-                state.nextTry = nil
-                StatsStore.writeState(state)
+            try await drain(&runs, batchSize: Self.batchSize, kind: "runs") { StatsStore.writeQueue($0) } send: { batch, identity in
+                try await self.send(batch.map(\.run), as: identity)
+            } tally: { state, accepted in
+                state.sentRuns += accepted
+            }
+            try await drain(&reports, batchSize: Self.reportBatchSize, kind: "reports") { StatsStore.writeReportQueue($0) } send: { batch, identity in
+                try await self.send(batch, as: identity)
+            } tally: { state, accepted in
+                state.sentReports = (state.sentReports ?? 0) + accepted
             }
             lastFailure = nil
         } catch {
             noteFailure(error)
+        }
+    }
+
+    /// Sends a queue a batch at a time, writing what is left after each and
+    /// counting what the server accepted. A batch the server calls too large
+    /// (413) goes again in halves, down to one item, which is dropped: an
+    /// item is capped at 4 KB by construction, so one the server still
+    /// refuses is not going to shrink.
+    private func drain<Item>(
+        _ queue: inout [Item], batchSize: Int, kind: String,
+        persist: ([Item]) -> Void,
+        send: ([Item], StatsIdentity) async throws -> Int,
+        tally: (inout StatsStore.State, Int) -> Void,
+    ) async throws {
+        var size = batchSize
+        while !queue.isEmpty {
+            let batch = Array(queue.prefix(size))
+            let identity = try await registeredIdentity()
+            var accepted = 0
+            do {
+                accepted = try await send(batch, identity)
+            } catch Failure.refused(status: 413, reason: _) where batch.count > 1 {
+                size = batch.count / 2
+                Self.log("the server called a batch of \(batch.count) \(kind) too large (413); sending smaller batches")
+                continue
+            } catch Failure.refused(status: 413, reason: _) {
+                Self.log("the server called one of the \(kind) too large (413); dropped")
+            }
+            queue.removeFirst(batch.count)
+            persist(queue)
+            var state = StatsStore.readState()
+            tally(&state, accepted)
+            state.lastSent = .now
+            state.lastError = nil
+            state.failures = nil
+            state.nextTry = nil
+            StatsStore.writeState(state)
         }
     }
 
@@ -157,7 +242,10 @@ actor StatsUploader {
 
     /// Drops the key, the registration and the queue.
     func resetIdentity() {
-        for url in [StatsStore.identityURL, StatsStore.queueURL, StatsStore.stateURL] {
+        for url in [
+            StatsStore.identityURL, StatsStore.queueURL, StatsStore.reportQueueURL, StatsStore.reportedURL,
+            StatsStore.stateURL,
+        ] {
             try? FileManager.default.removeItem(at: url)
         }
         Self.log("identity reset")
@@ -209,7 +297,12 @@ actor StatsUploader {
             fields["device_check"] = token.base64EncodedString()
         }
         let body = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
-        let answer = try await request("POST", "installs", body: body, as: identity)
+        let answer: Data
+        do {
+            answer = try await request("POST", "installs", body: body, as: identity)
+        } catch Failure.refused(status: 429, reason: let reason) where reason != Self.perMinuteLimit {
+            throw Failure.registrationCapped(reason: reason)
+        }
         guard let registered = try? JSONDecoder().decode(Registered.self, from: answer),
               registered.install == identity.installID
         else { throw Failure.refused(status: 201, reason: "registration answered another install") }
@@ -222,18 +315,45 @@ actor StatsUploader {
 
     // MARK: - Requests
 
-    private func send(_ runs: [SharedRun], as identity: StatsIdentity) async throws {
+    /// Sends one batch of runs and answers how many the server accepted. A
+    /// batch is answered 202 even when the server refused some of its runs;
+    /// those are dropped with the batch, since resending an invalid run gets
+    /// the same answer, but the reasons are the only trace of them.
+    private func send(_ runs: [SharedRun], as identity: StatsIdentity) async throws -> Int {
         let encoded = try runs.map { try JSONSerialization.jsonObject(with: JSONEncoder.stats.encode($0)) }
         let body = try envelope(["install": identity.installID, "runs": encoded])
         let reply = try await request("POST", "runs", body: body, as: identity)
-        // A batch is answered 202 even when the server refused some of its
-        // runs; those are dropped with the batch, since resending an invalid
-        // run gets the same answer, but the reasons are the only trace of them.
-        if let object = try? JSONSerialization.jsonObject(with: reply) as? [String: Any],
-           let rejected = object["rejected"] as? [[String: Any]], !rejected.isEmpty {
-            let reasons = rejected.compactMap { $0["why"] as? String }
-            Self.log("the server refused \(rejected.count) of \(runs.count) runs: \(reasons.joined(separator: "; "))")
+        let rejected = Self.rejections(in: reply)
+        if !rejected.isEmpty {
+            Self.log("the server refused \(rejected.count) of \(runs.count) runs: \(rejected.map(\.why).joined(separator: "; "))")
         }
+        return runs.count - rejected.count
+    }
+
+    /// Sends one batch of reports, writes each one's standing to the ledger,
+    /// and answers how many the server accepted. Refused reports are dropped
+    /// with the batch, as runs are; each reason is logged and kept beside the
+    /// run so its row can say so.
+    private func send(_ reports: [StatsStore.QueuedReport], as identity: StatsIdentity) async throws -> Int {
+        let encoded = try reports.map { try JSONSerialization.jsonObject(with: JSONEncoder.stats.encode($0.report)) }
+        let body = try envelope(["install": identity.installID, "reports": encoded])
+        let reply = try await request("POST", "reports", body: body, as: identity)
+        let rejected = Self.rejections(in: reply)
+        let refusals = Dictionary(rejected.map { ($0.index, $0.why) }, uniquingKeysWith: { first, _ in first })
+        var ledger = StatsStore.readReported()
+        for (index, queued) in reports.enumerated() {
+            let why = refusals[index]
+            if let why {
+                Self.log("the server refused the report on run \(queued.runID): \(why)")
+            }
+            ledger.removeAll { $0.runID == queued.runID }
+            ledger.append(StatsStore.Reported(
+                runID: queued.runID, verdict: queued.report.verdict, queued: queued.queued,
+                sent: why == nil ? .now : nil, refused: why,
+            ))
+        }
+        StatsStore.writeReported(ledger)
+        return reports.count - rejected.count
     }
 
     /// The signed envelope's common fields: the version, the next sequence
@@ -283,6 +403,7 @@ actor StatsUploader {
         case .noSecureEnclave: "this Mac has no Secure Enclave"
         case let .unreachable(reason): "unreachable: \(reason)"
         case let .refused(status, reason): "refused (\(status))\(reason.map { ": \($0)" } ?? "")"
+        case let .registrationCapped(reason): "registration refused (429)\(reason.map { ": \($0)" } ?? "")"
         case nil: error.localizedDescription
         }
         var state = StatsStore.readState()
@@ -307,6 +428,15 @@ actor StatsUploader {
                 + "and the next launch asks again")
             return
         }
+        if failure == .registrationCapped {
+            state.nextTry = Date.now.addingTimeInterval(TimeInterval(Self.registrationCapWait.components.seconds))
+            StatsStore.writeState(state)
+            if failure != lastFailure {
+                Self.log("this address registered five installs today; retrying tomorrow")
+            }
+            scheduleRetry(in: Self.registrationCapWait)
+            return
+        }
         let failures = state.failures ?? 0
         let wait = Self.wait(afterFailures: failures)
         state.failures = failures + 1
@@ -320,7 +450,7 @@ actor StatsUploader {
 
     private func scheduleRetry(in wait: Duration) {
         retry?.cancel()
-        retry = Task(name: "Retry sending shared runs") {
+        retry = Task(name: "Retry sending shared runs and reports") {
             try? await Task.sleep(for: wait)
             guard !Task.isCancelled else { return }
             self.retry = nil

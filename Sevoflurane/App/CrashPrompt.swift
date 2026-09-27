@@ -175,6 +175,9 @@ final class CrashPromptModel {
 
     let record: RunRecord
     let known: KnownFailures.Entry?
+    /// "How did it go?" beside the crash report, so the two are one gesture:
+    /// Send queues the community report too when a verdict was picked.
+    let report: RunReportModel
     var neverAskAgain = false
     private(set) var stage = Stage.asking
     private(set) var zip: URL?
@@ -191,14 +194,18 @@ final class CrashPromptModel {
     ///   - bundle: Builds the zip into a directory and answers its path. The
     ///     app's is the same builder as `sevo diag`.
     ///   - upload: Where and as whom it is sent.
+    ///   - report: The community report's model; the app's reads the sharing
+    ///     preference and queues through ``StatsUploader``.
     init(
         record: RunRecord,
         bundle: @escaping @Sendable (URL) async throws -> URL = { try await Diagnostics.bundle(to: $0, steamLogs: true) },
         upload: ReportUpload = .forThisApp(),
+        report: RunReportModel? = nil,
     ) {
         self.record = record
         self.bundle = bundle
         self.upload = upload
+        self.report = report ?? RunReportModel(record: record)
         known = KnownFailures.match(record)
     }
 
@@ -211,7 +218,8 @@ final class CrashPromptModel {
     /// The known failure's sentence and its fix, when this run matches one.
     var knownSentence: String? {
         known.map { [InterfaceCopy.localized($0.summary), $0.fix.map(InterfaceCopy.localized)]
-            .compactMap(\.self).joined(separator: " ") }
+            .compactMap(\.self).joined(separator: " ")
+        }
     }
 
     var keptSentence: String {
@@ -242,8 +250,13 @@ final class CrashPromptModel {
     }
 
     /// Sends once: a second press while the first is under way does nothing.
+    /// The community report, when a verdict was picked, is queued first, so
+    /// a zip that fails to build or to upload does not lose it.
     func send() {
         guard sending == nil else { return }
+        if report.send() {
+            EventLog.enqueue(.client, "community report queued — \(report.record.id) \(report.reported?.verdict.rawValue ?? "")")
+        }
         sending = Task(name: "Send the crash report") {
             defer { sending = nil }
             guard let zip = await prepared() else { return }
@@ -315,6 +328,7 @@ private struct CrashPromptView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                howDidItGo
                 Toggle("Never ask again", isOn: $model.neverAskAgain)
                     .font(.system(size: 11))
                 choices
@@ -364,6 +378,23 @@ private struct CrashPromptView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// The community report's fields, or the one line saying where sharing is turned on.
+    @ViewBuilder private var howDidItGo: some View {
+        if let reported = model.report.reported {
+            ReportedLine(reported: reported)
+        } else if model.report.sharing {
+            Text("How did it go? Sending also tells other Mac players, with the configuration below.")
+                .font(.system(size: 12, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            RunReportFields(model: model.report)
+        } else {
+            Text(RunReportCard.sharingOffHint)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

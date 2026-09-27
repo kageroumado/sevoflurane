@@ -66,6 +66,10 @@ final class ReportStore {
     private(set) var reportPath: URL?
     private(set) var writing = false
     private(set) var note: String?
+    /// "How did it go?" for the selected run.
+    private(set) var report: RunReportModel?
+    /// Every run's standing in the community database, by run id, for the list's rows.
+    private(set) var reported: [String: StatsStore.Reported] = [:]
 
     var run: RunRecord? {
         runs.first { $0.id == selected }
@@ -74,7 +78,14 @@ final class ReportStore {
     func refresh() {
         runs = RunLog.recent(Self.recentRuns).reversed()
         if selected == nil || run == nil { selected = runs.first?.id }
+        reloadReported()
         reload()
+    }
+
+    /// Rereads the ledger of reported runs, which a send from this window
+    /// or from `sevo report` changes.
+    func reloadReported() {
+        reported = Dictionary(StatsStore.readReported().map { ($0.runID, $0) }, uniquingKeysWith: { _, last in last })
     }
 
     /// Reads what the selected run's report holds. Called when the selection
@@ -83,8 +94,10 @@ final class ReportStore {
         guard let run else {
             findings = []
             reportPath = nil
+            report = nil
             return
         }
+        report = RunReportModel(record: run)
         reportPath = CrashCollector.report(for: run)
         findings = reportPath.map { path in
             path.pathExtension == "xz" ? [String(localized: "The report was compressed at level 2.")]
@@ -233,14 +246,6 @@ final class ReportStore {
     }
 }
 
-/// A run record's identity for the list: the moment it began and the app,
-/// which no two runs share.
-extension RunRecord: Identifiable {
-    var id: String {
-        "\(appid)-\(t)"
-    }
-}
-
 // MARK: - The view
 
 struct ReportView: View {
@@ -269,6 +274,11 @@ struct ReportView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let reported = store.reported[run.id] {
+                    Text("Reported: \(reported.verdict.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(reported.refused == nil ? Color.accentColor : .orange)
+                }
             }
             .padding(.vertical, 2)
             .tag(run.id)
@@ -294,6 +304,9 @@ struct ReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Space.lg) {
                     RunSummaryCard(run: run, known: store.known)
+                    if let report = store.report {
+                        RunReportCard(model: report) { store.reloadReported() }
+                    }
                     FrameRateCard(fps: run.fps)
                     FindingsCard(findings: store.findings, hasReport: store.reportPath != nil)
                     shareCard
