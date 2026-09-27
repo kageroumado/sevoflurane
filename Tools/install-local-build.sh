@@ -19,13 +19,15 @@ volume=$(hdiutil attach -nobrowse -readonly "$dmg" 2>/dev/null | awk -F'\t' '/Vo
 cp -R "$volume/Sevoflurane.app" /Applications/
 hdiutil detach "$volume" -quiet
 
-# The archive leaves a second copy of the thumbnail extension registered
-# under one identifier, and runningboardd then launches neither. By its
-# resolved path: DerivedData can be a symlink onto another volume, and
-# `lsregister -u` leaves the record in place when handed the linked path.
-for stale in "$HOME"/Library/Developer/Xcode/DerivedData/Sevoflurane-*/Build/Intermediates.noindex/ArchiveIntermediates/Sevoflurane/InstallationBuildProductsLocation/Applications/Sevoflurane.app(N); do
-    "$lsregister" -u "${stale:A}" 2>/dev/null || true
-done
+# Every other registered copy of the app goes, the archive's first: it leaves a
+# second copy of the thumbnail extension under the shipping identifier, and Quick
+# Look then picks one it cannot launch and fails every .exe preview. The copies
+# come from LaunchServices' own records, because the archive's folder is gone by
+# now and a record outlives its folder; `lsregister -u` takes the path either way.
+"$lsregister" -dump 2>/dev/null \
+    | sed -nE 's/^path: +(.*\/Sevoflurane[^/]*\.app) \(0x[0-9a-f]+\)$/\1/p' | sort -u \
+    | grep -vx "$app" \
+    | while IFS= read -r stale; do "$lsregister" -u "$stale" 2>/dev/null || true; done || true
 
 spctl -a -vv "$app" 2>&1 | head -2
 open "$app"
