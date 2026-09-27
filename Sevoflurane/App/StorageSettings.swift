@@ -102,6 +102,8 @@ struct StorageSettings: View {
                         ? "Remove the link. The files stay in their own bottle."
                         : "Uninstall through Steam. It asks first.")
                     .accessibilityLabel(linked ? "Remove the link to \(game.name)" : "Uninstall \(game.name)")
+                } else {
+                    Color.clear.frame(height: 0)
                 }
             }
             .frame(width: Self.actionColumnWidth)
@@ -252,6 +254,10 @@ struct StorageSettings: View {
                         .disabled(entry.bytes <= 0)
                         .help("Move \(name.lowercased()) to the Trash")
                         .accessibilityLabel("Move \(name.lowercased()) to the Trash")
+                } else {
+                    // Holds the column: a frame on a `Group` with nothing in
+                    // it takes no space, and the size would slide right.
+                    Color.clear.frame(height: 0)
                 }
             }
             .buttonStyle(.borderless)
