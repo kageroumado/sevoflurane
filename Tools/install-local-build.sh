@@ -20,9 +20,11 @@ cp -R "$volume/Sevoflurane.app" /Applications/
 hdiutil detach "$volume" -quiet
 
 # The archive leaves a second copy of the thumbnail extension registered
-# under one identifier, and runningboardd then launches neither.
+# under one identifier, and runningboardd then launches neither. By its
+# resolved path: DerivedData can be a symlink onto another volume, and
+# `lsregister -u` leaves the record in place when handed the linked path.
 for stale in "$HOME"/Library/Developer/Xcode/DerivedData/Sevoflurane-*/Build/Intermediates.noindex/ArchiveIntermediates/Sevoflurane/InstallationBuildProductsLocation/Applications/Sevoflurane.app(N); do
-    "$lsregister" -u "$stale" 2>/dev/null || true
+    "$lsregister" -u "${stale:A}" 2>/dev/null || true
 done
 
 spctl -a -vv "$app" 2>&1 | head -2
