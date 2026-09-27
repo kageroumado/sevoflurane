@@ -18,8 +18,8 @@ nonisolated enum IconShaping {
     /// How much of the platter the program's own artwork covers.
     static let artworkRatio = 0.8
 
-    /// The platter's gray. One look, light, because a Quick Look thumbnail
-    /// is cached once and shown in both appearances.
+    /// The platter's gray. One look, light, because a rendered icon is one
+    /// image shown in both appearances.
     private static let platter = (red: 0xE9 / 255.0, green: 0xE9 / 255.0, blue: 0xEB / 255.0)
 
     /// One corner of the outline: where it sits, which way the platter lies
@@ -92,9 +92,8 @@ nonisolated enum IconShaping {
     }
 
     /// Draws the platter and the artwork into a context whose coordinate
-    /// space is `rect`. The caller owns the context, which is what lets the
-    /// Quick Look extension draw straight into the one the request hands it.
-    static func draw(_ artwork: CGImage?, into context: CGContext, in rect: CGRect) {
+    /// space is `rect`.
+    private static func draw(_ artwork: CGImage?, into context: CGContext, in rect: CGRect) {
         context.saveGState()
         context.addPath(shape(in: rect))
         context.clip()
