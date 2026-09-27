@@ -1,13 +1,13 @@
 ---
 name: sevoflurane
-description: Run, debug and benchmark Windows games under Sevoflurane with its `sevo` CLI or MCP server. Use when launching or stopping a Steam game in Sevoflurane's bottle, when a game crashes, hangs, shows a black screen or runs slowly, when making a diagnostic run or a frame-rate comparison, when reading run records, frame traces or collected crash reports, or when writing a bug report for Sevoflurane.
+description: Run, debug and benchmark Windows games under Sevoflurane with its `sevo` CLI or MCP server. Use when launching or stopping a Steam game or an added Windows program in Sevoflurane's bottle, when a game crashes, hangs, shows a black screen or runs slowly, when changing a game's renderer, upscaler or DLL overrides, when Steam itself is stuck, when making a diagnostic run or a frame-rate comparison, when reading run records, frame traces or collected crash reports, when reporting how a game ran to the community database, or when writing a bug report for Sevoflurane.
 ---
 
 # Sevoflurane
 
 Sevoflurane runs Windows games on macOS. It keeps a Steam client in a Wine
-bottle, runs it on an engine (Dormison, its Wine build, or CrossOver), and
-records every game launch. `sevo` is its command line. It lives in the app at
+bottle, runs it on an engine (Dormison, its Wine build, or CrossOver), runs
+Windows programs added outside Steam (Quick Launch), and records every launch. `sevo` is its command line. It lives in the app at
 `Sevoflurane.app/Contents/Helpers/sevo`, and Settings › General links it to
 `/usr/local/bin/sevo`. `sevo mcp` serves the same verbs over MCP.
 
@@ -25,12 +25,20 @@ in short.
 | `sevo app launch <appid>` | Launches through Steam and waits for the game's window. |
 | `sevo app terminate <appid>` | Stops a game and waits for it to go. |
 | `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `fps-graph`, `dll`, and more. With no key it prints every setting and the level it comes from. |
+| `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
+| `sevo program list` / `launch <id>` / `add <path>` | Windows programs added outside Steam. Their ids start at 2000000000 and work with `sevo app config`. |
+| `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. |
+| `sevo engine list` / `use <name>` | Installed engines, and the one the next client restart boots. |
 | `sevo runs` | The last launches: what each ran on, how long, how it ended, and the recognized failure. |
 | `sevo perf list` / `compare` / `report` / `label` | Frame-time traces: list them, compare configurations, chart them, name them. |
+| `sevo report <run> --verdict <v>` | Tells the community database how a run went: `plays`, `plays-with-fixes`, `launches` or `fails`, with an optional `--note`. |
 | `sevo diag on` / `off` / `status` / `save` | The diagnostic level, and the zip for a bug report. |
 | `sevo logs [--wine] [-f]` | The event log, or Wine's own output. |
 | `sevo debug on` / `off` | Records everything until the app quits. Needs the app running. |
-| `sevo client restart` / `sevo recover` | Restarts Steam, or brings a stuck client back. |
+| `sevo client restart` / `sevo recover [--deep]` | Restarts Steam, or brings a stuck client back; `--deep` also clears its web cache and repairs it. |
+| `sevo daemon repair` | Re-registers the background helper when it will not start. |
+| `sevo storage [--games]` | What Sevoflurane, the bottle and each game occupy. |
+| `sevo holds` / `sevo orphans` | What keeps the display awake, and Wine processes whose server is gone. |
 
 ## Making a diagnostic run
 
@@ -102,7 +110,9 @@ closes: appid, executable name, engine, renderer, settings, resolution, frame
 rates, and the Mac's model, chip, GPU cores and memory tier. Requests are
 signed by a key in the Mac's Secure Enclave. `sevo stats` shows whether
 sharing is on, the install id and the queue; `sevo stats preview` prints
-exactly what the last run would send. A good diagnostic run is also a good
+exactly what the last run would send, `sevo stats reports` lists the verdicts
+sent, and `sevo stats delete` takes back everything this Mac shared.
+`sevo report` adds a verdict and note to a run. A good diagnostic run is also a good
 data point there: 60 s past loading, one configuration, labeled.
 
 ## Common failure signatures

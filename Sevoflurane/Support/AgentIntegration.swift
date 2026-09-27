@@ -188,7 +188,9 @@ enum AgentIntegration {
     static func unregister(_ harness: Harness) async -> String? {
         switch harness {
         case .claudeCode:
-            removeClaudeSkill()
+            #if !DEBUG
+                removeClaudeSkill()
+            #endif
             guard let claude = claudeBinary else { return nil }
             let result = await Subprocess.run(
                 claude, ["mcp", "remove", "--scope", "user", serverName],
@@ -252,14 +254,18 @@ enum AgentIntegration {
             capture: .combined, timeout: .seconds(30),
         )
         if result.status == 0 || result.output.contains("already exists") {
-            installClaudeSkill()
+            #if !DEBUG
+                installClaudeSkill()
+            #endif
             return nil
         }
         return String(result.output.suffix(120))
     }
 
     /// Where Claude Code reads the skill that teaches it `sevo`: the commands,
-    /// how a diagnostic run is made, and where its files land.
+    /// how a diagnostic run is made, and where its files land. The installed
+    /// app's alone: a Debug build, a second installation with its own `sevo`,
+    /// neither writes nor removes it.
     nonisolated static var claudeSkillDirectory: URL {
         UserHome.url.appendingPathComponent(".claude/skills/sevoflurane")
     }

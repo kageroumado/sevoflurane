@@ -1,7 +1,5 @@
 ## Working notes, kept beside the sources on a development machine
-## (FEATURES.md is the one published document among them)
-Docs/*
-!Docs/FEATURES.md
+Docs/
 HANDOFF.md
 DELETE-CANDIDATES.md
 Mockups/

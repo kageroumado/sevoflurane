@@ -10,7 +10,7 @@ import Synchronization
 struct SevoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sevo",
-        abstract: "Manage Sevoflurane's bottled Steam client.",
+        abstract: "Manage Sevoflurane: its Steam client, games and added Windows programs, engines, and diagnostics.",
         version: Sevo.version,
         subcommands: [
             DoctorCommand.self, StatusCommand.self, WaitCommand.self, SetupCommand.self,
