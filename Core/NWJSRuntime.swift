@@ -13,8 +13,8 @@ import Foundation
 /// where an old game goes instead: a five-year jump in Chromium, against a
 /// runtime that cannot run at all.
 nonisolated enum NWJSRuntime {
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Runtimes")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("Runtimes")
 
     /// The version directory, whether or not it exists.
     static func directory(version: String) -> URL {

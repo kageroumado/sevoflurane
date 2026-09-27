@@ -31,12 +31,12 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// Managed engines, one directory per version:
     /// `wine/` (WineHQ tree), `dxvk/`, `dxmt/`, `d3dmetal/`, the dock shim
     /// and the Steamworks stub.
-    static let managedRoot = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Engines")
+    static let managedRoot = AppIdentity.supportFolder
+        .appendingPathComponent("Engines")
 
     /// Where managed engines keep their bottles (plain `WINEPREFIX` trees).
-    static let managedBottlesRoot = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Bottles")
+    static let managedBottlesRoot = AppIdentity.supportFolder
+        .appendingPathComponent("Bottles")
 
     /// The engine every wine invocation routes through. Resolved from disk on
     /// first use (so the CLI needs no entry-point ceremony); the app reasserts

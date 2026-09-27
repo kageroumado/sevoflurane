@@ -233,6 +233,7 @@
 				0B33EFD830290E5E00182A68 /* Resources */,
 				0BAA000000000000000C0002 /* Embed engine */,
 				0BAA000000000000000D0003 /* CopyFiles */,
+				0BAA000000000000000D0010 /* Name the helper */,
 				0BAA000000000000000F0007 /* Embed sevo */,
 				0BAA000000000000000E000B /* Embed Foundation Extensions */,
 			);
@@ -414,6 +415,16 @@
 			shellPath = /bin/zsh;
 			shellScript = (
 				"\"$SRCROOT/Tools/embed-engine.sh\"",
+				"",
+			);
+		};
+		0BAA000000000000000D0010 /* Name the helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Name the helper";
+			shellPath = /bin/zsh;
+			shellScript = (
+				"\"$SRCROOT/Tools/name-helper.sh\"",
 				"",
 			);
 		};
@@ -638,6 +649,7 @@
 				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Sevoflurane/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sevoflurane Debug";
 				INFOPLIST_KEY_GCSupportsGameMode = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -648,7 +660,7 @@
 				);
 				LM_SKIP_METADATA_EXTRACTION = YES;
 				MARKETING_VERSION = 1.13;
-				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane;
+				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -793,7 +805,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.13;
-				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.thumbnail.debug;
+				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.debug.thumbnail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

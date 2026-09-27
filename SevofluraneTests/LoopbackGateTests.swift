@@ -14,10 +14,10 @@ struct LoopbackGateTests {
     func `the CLI's request to the control port is admitted`() {
         // URLSession and curl send Host and no Origin.
         #expect(LoopbackGate.control.admits(
-            method: "POST", path: "/bottle/run", headers: ["host": "127.0.0.1:8764"],
+            method: "POST", path: "/bottle/run", headers: ["host": "127.0.0.1:\(BridgePorts.control)"],
         ))
         #expect(LoopbackGate.control.admits(
-            method: "GET", path: "/status", headers: ["host": "localhost:8764", "user-agent": "curl/8.7.1"],
+            method: "GET", path: "/status", headers: ["host": "localhost:\(BridgePorts.control)", "user-agent": "curl/8.7.1"],
         ))
     }
 
@@ -25,11 +25,11 @@ struct LoopbackGateTests {
     func `a web page's simple POST to the control port is refused`() {
         let verdict = LoopbackGate.control.verdict(
             method: "POST", path: "/bottle/run",
-            headers: ["host": "127.0.0.1:8764", "origin": "https://evil.example"],
+            headers: ["host": "127.0.0.1:\(BridgePorts.control)", "origin": "https://evil.example"],
         )
         #expect(verdict == .refused("Origin https://evil.example"))
         #expect(!LoopbackGate.appLink.admits(
-            method: "POST", path: "/command", headers: ["host": "127.0.0.1:8766", "origin": "null"],
+            method: "POST", path: "/command", headers: ["host": "127.0.0.1:\(BridgePorts.appLink)", "origin": "null"],
         ))
     }
 
@@ -37,12 +37,12 @@ struct LoopbackGateTests {
     func `a rebound host name is refused`() {
         #expect(!LoopbackGate.steamUI.admits(
             method: "GET", path: "/__loopback/config/loginusers.vdf",
-            headers: ["host": "rebind.evil.example:8762"],
+            headers: ["host": "rebind.evil.example:\(BridgePorts.steamUI)"],
         ))
         #expect(!LoopbackGate.control.admits(method: "GET", path: "/status", headers: [:]))
         // The right name on another port is someone else's request.
         #expect(!LoopbackGate.control.admits(
-            method: "GET", path: "/status", headers: ["host": "127.0.0.1:8762"],
+            method: "GET", path: "/status", headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)"],
         ))
     }
 
@@ -50,46 +50,46 @@ struct LoopbackGateTests {
     func `the context page's own requests are admitted`() {
         #expect(LoopbackGate.steamUI.admits(
             method: "GET", path: "/__web",
-            headers: ["host": "127.0.0.1:8762", "origin": "http://127.0.0.1:8762"],
+            headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)", "origin": "http://127.0.0.1:\(BridgePorts.steamUI)"],
         ))
         #expect(LoopbackGate.steamUI.admits(
-            method: "GET", path: "/index.html", headers: ["host": "127.0.0.1:8762"],
+            method: "GET", path: "/index.html", headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)"],
         ))
     }
 
     @Test
     func `eval needs its header, whoever sends it`() {
         #expect(!LoopbackGate.steamUI.admits(
-            method: "POST", path: "/__eval", headers: ["host": "127.0.0.1:8762"],
+            method: "POST", path: "/__eval", headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)"],
         ))
         #expect(!LoopbackGate.steamUI.admits(
             method: "POST", path: "/__eval",
-            headers: ["host": "127.0.0.1:8762", "origin": "https://evil.example", evalHeader: "1"],
+            headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)", "origin": "https://evil.example", evalHeader: "1"],
         ))
         // BridgeEval and PageProbe: Host, the header, no Origin.
         #expect(LoopbackGate.steamUI.admits(
-            method: "POST", path: "/__eval", headers: ["host": "127.0.0.1:8762", evalHeader: "1"],
+            method: "POST", path: "/__eval", headers: ["host": "127.0.0.1:\(BridgePorts.steamUI)", evalHeader: "1"],
         ))
     }
 
     @Test
     func `a WebSocket handshake from a web page is refused`() {
-        let fields = [(name: "Host", value: "127.0.0.1:8761"), (name: "Origin", value: "https://evil.example")]
+        let fields = [(name: "Host", value: "127.0.0.1:\(BridgePorts.pageWS)"), (name: "Origin", value: "https://evil.example")]
         #expect(WebSocketServer.handshakeStatus(fields, gate: .pageWS) == .reject)
-        let relay = [(name: "Host", value: "127.0.0.1:8763"), (name: "Origin", value: "https://evil.example")]
+        let relay = [(name: "Host", value: "127.0.0.1:\(BridgePorts.relayWS)"), (name: "Origin", value: "https://evil.example")]
         #expect(WebSocketServer.handshakeStatus(relay, gate: .relayWS) == .reject)
     }
 
     @Test
     func `each socket admits its own peer and only that one`() {
-        let client = [(name: "Host", value: "127.0.0.1:8763"), (name: "Origin", value: "https://steamloopback.host")]
+        let client = [(name: "Host", value: "127.0.0.1:\(BridgePorts.relayWS)"), (name: "Origin", value: "https://steamloopback.host")]
         #expect(WebSocketServer.handshakeStatus(client, gate: .relayWS) == .accept)
-        let page = [(name: "Host", value: "127.0.0.1:8761"), (name: "Origin", value: "http://127.0.0.1:8762")]
+        let page = [(name: "Host", value: "127.0.0.1:\(BridgePorts.pageWS)"), (name: "Origin", value: "http://127.0.0.1:\(BridgePorts.steamUI)")]
         #expect(WebSocketServer.handshakeStatus(page, gate: .pageWS) == .accept)
         // The page may not take the relay's place, nor the client the page's.
-        let pageOnRelay = [(name: "Host", value: "127.0.0.1:8763"), (name: "Origin", value: "http://127.0.0.1:8762")]
+        let pageOnRelay = [(name: "Host", value: "127.0.0.1:\(BridgePorts.relayWS)"), (name: "Origin", value: "http://127.0.0.1:\(BridgePorts.steamUI)")]
         #expect(WebSocketServer.handshakeStatus(pageOnRelay, gate: .relayWS) == .reject)
-        let clientOnPage = [(name: "Host", value: "127.0.0.1:8761"), (name: "Origin", value: "https://steamloopback.host")]
+        let clientOnPage = [(name: "Host", value: "127.0.0.1:\(BridgePorts.pageWS)"), (name: "Origin", value: "https://steamloopback.host")]
         #expect(WebSocketServer.handshakeStatus(clientOnPage, gate: .pageWS) == .reject)
     }
 

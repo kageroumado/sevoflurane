@@ -58,7 +58,7 @@ nonisolated enum DisplayHolds {
 
     /// Sevoflurane's app, its helper and every engine.
     static let defaultOwnRoots = [
-        UserHome.url.appendingPathComponent("Library/Application Support/Sevoflurane").path,
+        AppIdentity.supportFolder.path,
         "/Applications/Sevoflurane.app",
         Bundle.main.bundlePath,
     ]

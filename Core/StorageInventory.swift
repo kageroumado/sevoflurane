@@ -96,8 +96,8 @@ nonisolated enum StorageInventory {
                 name: "Companion Windows",
                 detail: "A second Windows drive beside the bottle, without Steam, for HoYoverse\u{2019}s games.",
                 // `SteamParent.root`, which the CLI does not compile.
-                url: UserHome.url
-                    .appendingPathComponent("Library/Application Support/Sevoflurane/Companions"),
+                url: AppIdentity.supportFolder
+                    .appendingPathComponent("Companions"),
                 bytes: -1,
                 removal: .regenerated("Made again the next time one of those games starts; it asks you to sign in again."),
             ),
@@ -106,8 +106,7 @@ nonisolated enum StorageInventory {
 
     /// What Sevoflurane keeps for itself: engines, graphics layers, and logs.
     private static func supportEntries() -> [Entry] {
-        let support = UserHome.url
-            .appendingPathComponent("Library/Application Support/Sevoflurane")
+        let support = AppIdentity.supportFolder
         return [
             Entry(
                 id: "engines",
@@ -155,8 +154,7 @@ nonisolated enum StorageInventory {
                 detail: "The event log this app writes.",
                 // Named here rather than taken from `EventLog`, which lives in
                 // the app: `sevo` reports storage too, and shares this file.
-                url: UserHome.url
-                    .appending(path: "Library/Logs/Sevoflurane.log"),
+                url: AppIdentity.logFile(),
                 bytes: -1,
                 removal: .regenerated("A new one starts on the next launch."),
             ),

@@ -5,7 +5,7 @@ import Foundation
 nonisolated enum StatsStore {
     static let root = ProcessInfo.processInfo.environment["SEVO_STATS_DIR"]
         .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-        ?? UserHome.url.appendingPathComponent("Library/Application Support/Sevoflurane/Stats")
+        ?? AppIdentity.supportFolder.appendingPathComponent("Stats")
 
     static let identityURL = root.appendingPathComponent("identity.key")
     static let queueURL = root.appendingPathComponent("queue.jsonl")

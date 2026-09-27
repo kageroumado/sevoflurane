@@ -18,8 +18,8 @@ nonisolated enum NWJSRunner {
     /// One directory per game, holding the generated `package.json`. NW.js
     /// takes the directory as its argument and reads the package there, so
     /// the game's own package file is never touched.
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/NWJS")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("NWJS")
 
     static func wrapperDirectory(appID: Int) -> URL {
         root.appendingPathComponent(String(appID))

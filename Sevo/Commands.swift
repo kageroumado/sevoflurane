@@ -3368,7 +3368,7 @@ struct InstallCLICommand: AsyncParsableCommand {
     )
 
     func run() async throws {
-        let target = URL(fileURLWithPath: "/usr/local/bin/sevo")
+        let target = URL(fileURLWithPath: "/usr/local/bin/\(AppIdentity.commandName)")
         guard let source = Bundle.main.executableURL?.resolvingSymlinksInPath() else {
             throw SevoExit.failed
         }

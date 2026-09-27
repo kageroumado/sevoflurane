@@ -38,8 +38,8 @@ nonisolated enum SteamBottle {
 
     /// Where companion prefixes live (``SteamParent``): outside every
     /// bottles directory, since a companion is not a bottle.
-    static let companionsRoot = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Companions")
+    static let companionsRoot = AppIdentity.supportFolder
+        .appendingPathComponent("Companions")
 
     /// The Steam bottle's companion prefix, where the programs that need a
     /// `steam.exe` parent run and write their frame counters.

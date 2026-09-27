@@ -20,7 +20,7 @@ nonisolated enum SupervisionDaemon {
         case refused(String)
     }
 
-    static let label = "glass.kagerou.sevoflurane.daemon"
+    static let label = SupervisorLink.label
 
     /// Kicks the agent and waits for its control port. Idempotent.
     static func start(timeout: Int = 15) async -> Outcome {

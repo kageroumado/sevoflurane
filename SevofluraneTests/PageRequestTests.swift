@@ -26,14 +26,14 @@ struct PageRequestTests {
 
     @Test
     func `a message from the UI's top document is heard`() {
-        #expect(SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("http", "127.0.0.1", 8762)))
+        #expect(SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("http", "127.0.0.1", Int(BridgePorts.steamUI))))
     }
 
     @Test
     func `a message from an embedded frame or another origin is dropped`() {
-        #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: false, origin: ("http", "127.0.0.1", 8762)))
+        #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: false, origin: ("http", "127.0.0.1", Int(BridgePorts.steamUI))))
         #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("https", "store.steampowered.com", 443)))
-        #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("http", "127.0.0.1", 8764)))
+        #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("http", "127.0.0.1", Int(BridgePorts.control))))
         #expect(!SteamWebCoordinator.admitsMessage(isMainFrame: true, origin: ("", "", 0)))
     }
 

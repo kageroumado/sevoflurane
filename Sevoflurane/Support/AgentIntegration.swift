@@ -9,13 +9,13 @@ import Foundation
 /// command instead.
 @MainActor
 enum AgentIntegration {
-    nonisolated static let symlinkPath = "/usr/local/bin/sevo"
+    nonisolated static let symlinkPath = "/usr/local/bin/\(AppIdentity.commandName)"
 
     /// What a user pastes into any other agent's MCP configuration.
     nonisolated static let manualCommand = "\(symlinkPath) mcp"
 
     /// The name the server registers under everywhere.
-    nonisolated static let serverName = "sevo"
+    nonisolated static let serverName = AppIdentity.commandName
 
     static var bundledCLI: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
@@ -411,8 +411,8 @@ enum AgentIntegration {
         hermesDirectory.appendingPathComponent("config.yaml")
     }
 
-    private nonisolated static let hermesMarkerStart = "# >>> sevo (managed)"
-    private nonisolated static let hermesMarkerEnd = "# <<< sevo"
+    private nonisolated static let hermesMarkerStart = "# >>> \(serverName) (managed)"
+    private nonisolated static let hermesMarkerEnd = "# <<< \(serverName)"
 
     private static func registerHermes() -> String? {
         let existing = fileText(hermesConfig) ?? ""

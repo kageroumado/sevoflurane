@@ -22,8 +22,8 @@ struct AgentIntegrationTests {
     func `empty config gains a full mcp_servers block`() throws {
         let updated = try #require(AgentIntegration.addingHermesServer(to: ""))
         #expect(updated.contains("mcp_servers:"))
-        #expect(updated.contains("  sevo:"))
-        #expect(updated.contains("    command: \"/usr/local/bin/sevo\""))
+        #expect(updated.contains("  \(AgentIntegration.serverName):"))
+        #expect(updated.contains("    command: \"\(AgentIntegration.symlinkPath)\""))
         #expect(updated.contains("    args: [\"mcp\"]"))
         #expect(AgentIntegration.hermesHasServer(in: updated))
     }
@@ -59,8 +59,8 @@ struct AgentIntegrationTests {
         """
         let updated = try #require(AgentIntegration.addingHermesServer(to: config))
         #expect(updated.contains("filesystem:"))
-        #expect(updated.contains("    sevo:"))
-        #expect(updated.contains("      command: \"/usr/local/bin/sevo\""))
+        #expect(updated.contains("    \(AgentIntegration.serverName):"))
+        #expect(updated.contains("      command: \"\(AgentIntegration.symlinkPath)\""))
         #expect(AgentIntegration.hermesHasServer(in: updated))
     }
 
@@ -87,15 +87,15 @@ struct AgentIntegrationTests {
         // the user's next entry survives.
         let damaged = """
         mcp_servers:
-          # >>> sevo (managed)
-          sevo:
-            command: "/usr/local/bin/sevo"
+          # >>> \(AgentIntegration.serverName) (managed)
+          \(AgentIntegration.serverName):
+            command: "\(AgentIntegration.symlinkPath)"
             args: ["mcp"]
           theirs:
             command: "their-tool"
         """
         let cleaned = AgentIntegration.removingHermesServer(from: damaged)
-        #expect(!cleaned.contains("sevo:"))
+        #expect(!cleaned.contains("\(AgentIntegration.serverName):"))
         #expect(cleaned.contains("theirs:"))
         #expect(cleaned.contains("their-tool"))
     }
@@ -104,16 +104,16 @@ struct AgentIntegrationTests {
     func `hand-added server counts as registered`() {
         let config = """
         mcp_servers:
-          sevo:
-            command: "/usr/local/bin/sevo"
+          \(AgentIntegration.serverName):
+            command: "\(AgentIntegration.symlinkPath)"
             args: ["mcp"]
         """
         #expect(AgentIntegration.hermesHasServer(in: config))
         // Commented-out lines don't.
         let commented = """
         mcp_servers: {}
-        # sevo:
-        #   command: "/usr/local/bin/sevo"
+        # \(AgentIntegration.serverName):
+        #   command: "\(AgentIntegration.symlinkPath)"
         """
         #expect(!AgentIntegration.hermesHasServer(in: commented))
     }
@@ -122,9 +122,9 @@ struct AgentIntegrationTests {
 
     @Test
     func `codex table header is matched exactly`() {
-        #expect(AgentIntegration.codexHasServer(in: "[mcp_servers.sevo]\ncommand = \"x\""))
-        #expect(AgentIntegration.codexHasServer(in: "  [mcp_servers.sevo]"))
+        #expect(AgentIntegration.codexHasServer(in: "[mcp_servers.\(AgentIntegration.serverName)]\ncommand = \"x\""))
+        #expect(AgentIntegration.codexHasServer(in: "  [mcp_servers.\(AgentIntegration.serverName)]"))
         #expect(!AgentIntegration.codexHasServer(in: "[mcp_servers.sevoflurane]"))
-        #expect(!AgentIntegration.codexHasServer(in: "[mcp_servers.other]\n# [mcp_servers.sevo] gone"))
+        #expect(!AgentIntegration.codexHasServer(in: "[mcp_servers.other]\n# [mcp_servers.\(AgentIntegration.serverName)] gone"))
     }
 }

@@ -167,8 +167,8 @@ final class CrashPromptModel {
 
     /// Where the prompt writes its zip. Out of the way, unlike the Desktop
     /// `sevo diag` writes to: a sent report leaves nothing behind.
-    static let reportsDirectory = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Reports")
+    static let reportsDirectory = AppIdentity.supportFolder
+        .appendingPathComponent("Reports")
 
     static let offer = "Send the report to the Sevoflurane developers? It contains: the run summary, "
         + "Wine's exception record, the game's own crash log, with paths and account names removed."

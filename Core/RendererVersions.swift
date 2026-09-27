@@ -94,8 +94,8 @@ nonisolated enum RendererVersions {
         }
     }
 
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Renderers")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("Renderers")
 
     // MARK: - What is on disk
 

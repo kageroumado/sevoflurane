@@ -22,8 +22,8 @@ nonisolated enum GameIcon {
         if let program = AdoptedPrograms.program(appID) {
             return shapedICNS(forProgramAt: program.url, named: "\(appID)")
         }
-        let cached = UserHome.url.appendingPathComponent(
-            "Library/Caches/Sevoflurane/DockIcons/\(fileSafe(title)).app/Contents/Resources/icon.icns",
+        let cached = AppIdentity.cachesFolder.appendingPathComponent(
+            "DockIcons/\(fileSafe(title)).app/Contents/Resources/icon.icns",
         )
         if manager.fileExists(atPath: cached.path) { return cached }
         guard let raster = steamIcon(appID: appID) ?? packageIcon(appID: appID) else { return nil }
@@ -74,8 +74,8 @@ nonisolated enum GameIcon {
     }
 
     private static var iconCache: URL {
-        UserHome.url
-            .appendingPathComponent("Library/Caches/Sevoflurane/GameIcons")
+        AppIdentity.cachesFolder
+            .appendingPathComponent("GameIcons")
     }
 
     /// Steam's own icon for the app, from the client's art cache: a per-app

@@ -23,11 +23,11 @@ nonisolated enum Preferences {
     /// shipping bundle identifier and would otherwise read the installed
     /// app's settings.
     nonisolated(unsafe) static let app: UserDefaults =
-        UserHome.testDefaults(named: "glass.kagerou.sevoflurane") ?? .standard
+        UserHome.testDefaults(named: AppIdentity.identifierStem) ?? .standard
 
     /// Deliberately not the bundle identifier: `UserDefaults(suiteName:)`
     /// answers nil for the caller's own domain.
-    private static let suiteName = "glass.kagerou.sevoflurane.shared"
+    private static let suiteName = "\(AppIdentity.identifierStem).shared"
 
     /// The suite's name, or its file in the test home for a test run.
     private static var domain: String {

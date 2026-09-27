@@ -17,8 +17,8 @@ actor GameCompatService {
     /// tables change a few times a month; ProtonDB's summaries drift slowly.
     static let maxAge: TimeInterval = 7 * 24 * 3600
 
-    static let cacheRoot = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Compat")
+    static let cacheRoot = AppIdentity.supportFolder
+        .appendingPathComponent("Compat")
 
     private let session: URLSession
     private var antiCheatIndex: GameCompatSources.AntiCheatIndex?

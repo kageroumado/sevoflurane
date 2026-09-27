@@ -36,8 +36,7 @@ nonisolated enum WineChronicle {
         let executable: String
     }
 
-    static let url = UserHome.url
-        .appending(path: "Library/Logs/Sevoflurane-windows.log")
+    static let url = AppIdentity.logFile("windows")
 
     /// One line, or `nil` for anything that is not one.
     static func parse(_ line: some StringProtocol) -> Entry? {

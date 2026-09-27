@@ -14,7 +14,7 @@ import Foundation
 /// thing this split exists to remove.
 nonisolated enum SupervisorLink {
     /// Where the daemon's registration and its socket-adjacent state live.
-    static let label = "glass.kagerou.sevoflurane.daemon"
+    static let label = "\(AppIdentity.identifierStem).daemon"
     /// The `SMAppService.agent(plistName:)` name — the plist copied into the
     /// app bundle's `Contents/Library/LaunchAgents`.
     static let launchAgentPlistName = "SevofluraneDaemon.plist"

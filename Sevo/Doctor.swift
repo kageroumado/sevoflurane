@@ -202,7 +202,7 @@ nonisolated enum Doctor {
         // Only when the symlink exists at all: a machine that never installed
         // the CLI is healthy, not broken.
         if let destination = try? FileManager.default
-            .destinationOfSymbolicLink(atPath: "/usr/local/bin/sevo") {
+            .destinationOfSymbolicLink(atPath: "/usr/local/bin/\(AppIdentity.commandName)") {
             checks.append(Check(
                 id: "cli-link", ok: FileManager.default.fileExists(atPath: destination),
                 label: "sevo symlink → \(destination)",

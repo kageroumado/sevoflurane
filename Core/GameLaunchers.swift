@@ -22,8 +22,8 @@ nonisolated enum GameLaunchers {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
 
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Launchers")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("Launchers")
 
     /// Whether any game has a bundle right now — the cheap question to ask
     /// before the expensive one.
@@ -209,7 +209,7 @@ nonisolated enum GameLaunchers {
         var plist: [String: Any] = [
             "CFBundleName": title,
             "CFBundleDisplayName": title,
-            "CFBundleIdentifier": "glass.kagerou.sevoflurane.game.\(appID)",
+            "CFBundleIdentifier": "\(AppIdentity.identifierStem).game.\(appID)",
             "CFBundleExecutable": stem,
             "CFBundlePackageType": "APPL",
             "CFBundleInfoDictionaryVersion": "6.0",

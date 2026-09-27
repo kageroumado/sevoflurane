@@ -16,8 +16,8 @@ import Foundation
 /// attached to an issue.
 nonisolated enum CrashCollector {
     /// Where reports live, one directory per run.
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Reports")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("Reports")
 
     /// The whole directory's budget, spent oldest first.
     static let maximumBytes = 200_000_000

@@ -77,8 +77,8 @@ nonisolated enum ShaderPackages {
         }
     }
 
-    static let root = UserHome.url
-        .appendingPathComponent("Library/Application Support/Sevoflurane/Shaders")
+    static let root = AppIdentity.supportFolder
+        .appendingPathComponent("Shaders")
 
     /// The files a directory needs to be a package the driver can run.
     static let requiredFiles = ["package.json", "graph.json", "shaders.metallib"]

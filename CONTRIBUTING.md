@@ -25,6 +25,16 @@ run against Steam you need a bottle with Steam installed: the app's first-run
 assistant creates one on the engine it installs, and `sevo setup` does the
 same from the terminal.
 
+A Debug build is a second installation beside the shipping app, so it can run
+while the installed one does: "Sevoflurane Debug", bundle id
+`glass.kagerou.sevoflurane.debug`, a hammer on its menu-bar icon, its own
+folders (`~/Library/Application Support/Sevoflurane Debug`, `Caches/Sevoflurane
+Debug`, `Logs/Sevoflurane-Debug*.log`), its own settings suite, background
+helper label and ports (877x, where the shipping app uses 876x), and a CLI
+linked as `sevo-debug`. Its first launch walks the setup assistant into a
+bottle of its own. `Core/AppIdentity.swift` holds all of it, and
+`Tools/name-helper.sh` names the helper's launchd plist after the bundle id.
+
 ## Simulating a Steam event
 
 Most of what this app reacts to arrives from Steam and needs a friend on the
