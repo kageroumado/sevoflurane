@@ -92,7 +92,7 @@ nonisolated enum EngineChannel: String, CaseIterable, Sendable {
     case beta
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .stable: "Release"
         case .beta: "Beta"
         }

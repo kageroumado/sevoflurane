@@ -125,7 +125,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
     // MARK: - What it is called
 
     var title: String {
-        let value: String = switch self {
+        let value = switch self {
         case .zero: "Off"
         case .one: "Diagnostics"
         case .two: "Everything"
@@ -134,7 +134,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
     }
 
     var detail: String {
-        let value: String = switch self {
+        let value = switch self {
         case .zero:
             "Each game's run is recorded, and a crash collects its reports. "
                 + "Nothing measurable is spent."

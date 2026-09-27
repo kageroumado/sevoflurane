@@ -29,7 +29,7 @@ nonisolated enum SettingGroup: String, CaseIterable, Sendable {
     case performance
 
     var title: String {
-        let value: String = switch self {
+        let value = switch self {
         case .picture: "Picture"
         case .mouse: "Mouse"
         case .performance: "Performance and compatibility"

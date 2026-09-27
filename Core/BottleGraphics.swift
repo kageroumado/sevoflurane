@@ -16,7 +16,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     case wined3d
 
     var label: String {
-        let value: String = switch self {
+        let value = switch self {
         case .auto: "Automatic"
         case .d3dmetal: "D3DMetal"
         case .dxmt: "DXMT"
@@ -27,7 +27,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     }
 
     var detail: String {
-        let value: String = switch self {
+        let value = switch self {
         case .auto: "Uses CrossOver's game settings, then Wine's renderer."
         case .d3dmetal: "DirectX 11 and 12 through Apple's Game Porting Toolkit."
         case .dxmt: "DirectX 11, translated straight to Metal."
@@ -41,7 +41,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     /// Sourced from CodeWeavers' own toggle documentation and their ARM64
     /// guidance.
     var guidance: String {
-        let value: String = switch self {
+        let value = switch self {
         case .auto:
             "Uses CrossOver's per-game settings, then Wine's renderer."
         case .d3dmetal:
