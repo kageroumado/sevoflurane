@@ -14,7 +14,7 @@ nonisolated enum SevoExit {
 nonisolated enum Sevo {
     /// The version of the app this executable shipped in (`Sevoflurane.app/
     /// Contents/Helpers/sevo`), which is what a bug report should name; a copy
-    /// built with `swift build` says so.
+    /// run from outside an app bundle says so.
     static let version: String = {
         // Bundle.main rather than argv[0], which is the bare word `sevo` when the
         // shell found the symlink on PATH.

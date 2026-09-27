@@ -8,7 +8,7 @@ work on than it first appears — and a few rules keep it that way.
 - `Sevoflurane/` — the app. `Web/` hosts Steam's UI and windows; `Bridge/`
   is the in-process page↔client bridge; `App/` is supervision, logging, and
   the menu bar.
-- `Sevo/` — the `sevo` CLI and MCP server (`swift build`). It compiles the
+- `Sevo/` — the `sevo` CLI and MCP server, the `sevo` target. It compiles the
   app's own provisioning, CDP and lifecycle sources, so the two cannot drift.
 
 ## Building
@@ -191,11 +191,11 @@ signature changes under it and macOS ends the process.
 ### Which target compiles what
 
 Three build products, one source tree. `SevofluraneTests/DaemonMembershipTests`
-asserts the daemon compiles everything `Package.swift` gives `sevo`, and
-nothing that imports SwiftUI, WebKit or Propofol. A new file under
-`Sevoflurane/` joins the daemon target unless the project's exception list
-names it, so a new view means one line added there — and the test fails until
-it is.
+asserts the daemon compiles everything `sevo` compiles, and nothing that
+imports SwiftUI, WebKit or Propofol. A new file under `Sevoflurane/` joins
+both the daemon and `sevo` unless the target's exception list names it, so a
+new view means one line in each list — and the test fails until the daemon's
+is there.
 
 ## Watching a game or the client from outside
 

@@ -1,9 +1,9 @@
 import Foundation
 import Testing
 
-/// Three build products compile one source tree: the app from the Xcode
-/// project, `sevo` from `Package.swift`, and `SevofluraneDaemon` from the
-/// Xcode project again with an exception list saying what it leaves out.
+/// Three targets compile one source tree: the app, and `sevo` and
+/// `SevofluraneDaemon`, each of which takes the app's folder minus an
+/// exception list in the Xcode project.
 ///
 /// Two lists that have to agree are a list that drifts, so these are the
 /// assertions that make the disagreement fail a build rather than a playtest:
@@ -16,34 +16,15 @@ struct DaemonMembershipTests {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
 
-    /// The app sources `sevo` compiles, as `Package.swift` lists them.
-    private static let cliSources: Set<String> = {
-        let text = (try? String(
-            contentsOf: root.appending(path: "Package.swift"), encoding: .utf8,
-        )) ?? ""
-        guard let start = text.range(of: "sources: ["),
-              let end = text.range(of: "],\n            swiftSettings") else { return [] }
-        return Set(
-            text[start.upperBound ..< end.lowerBound]
-                .split(separator: "\n")
-                .compactMap { line in
-                    let quoted = line.split(separator: "\"")
-                    guard quoted.count > 1 else { return nil }
-                    let path = String(quoted[1])
-                    return path.hasPrefix("Sevoflurane/") ? path : nil
-                },
-        )
-    }()
-
-    /// What the daemon target leaves out of the app's synchronized group,
-    /// as paths relative to `Sevoflurane/`.
-    private static let daemonExceptions: Set<String> = {
+    /// What a target leaves out of the app's synchronized group, as paths
+    /// relative to `Sevoflurane/`.
+    private static func exceptions(for target: String) -> Set<String> {
         let text = (try? String(
             contentsOf: root.appending(path: "Sevoflurane.xcodeproj/project.pbxproj"),
             encoding: .utf8,
         )) ?? ""
         guard let start = text.range(
-            of: #"Exceptions for "Sevoflurane" folder in "SevofluraneDaemon" target */ = {"#,
+            of: "Exceptions for \"Sevoflurane\" folder in \"\(target)\" target */ = {",
         ),
             let listStart = text.range(of: "membershipExceptions = (", range: start.upperBound ..< text.endIndex),
             let listEnd = text.range(of: ");", range: listStart.upperBound ..< text.endIndex)
@@ -57,7 +38,10 @@ struct DaemonMembershipTests {
                 // bare-word characters, a `+` among them.
                 .map { $0.dropLast().trimmingCharacters(in: ["\""]) },
         )
-    }()
+    }
+
+    private static let daemonExceptions = exceptions(for: "SevofluraneDaemon")
+    private static let cliExceptions = exceptions(for: "sevo")
 
     /// Every file under `Sevoflurane/`, relative to it — the universe both
     /// lists partition.
@@ -74,20 +58,25 @@ struct DaemonMembershipTests {
         }
     }()
 
-    private func compiledByDaemon(_ relativePath: String) -> Bool {
-        !Self.daemonExceptions.contains { exception in
+    private static func compiled(_ relativePath: String, despite exceptions: Set<String>) -> Bool {
+        !exceptions.contains { exception in
             relativePath == exception || relativePath.hasPrefix(exception + "/")
         }
     }
 
+    private func compiledByDaemon(_ relativePath: String) -> Bool {
+        Self.compiled(relativePath, despite: Self.daemonExceptions)
+    }
+
     @Test
     func `the daemon compiles everything the CLI compiles`() {
-        #expect(!Self.cliSources.isEmpty)
-        for source in Self.cliSources.sorted() {
-            let relative = String(source.dropFirst("Sevoflurane/".count))
+        #expect(!Self.cliExceptions.isEmpty)
+        let cliSources = Self.appTreeFiles.filter { Self.compiled($0, despite: Self.cliExceptions) }
+        #expect(!cliSources.isEmpty)
+        for source in cliSources.sorted() {
             #expect(
-                compiledByDaemon(relative),
-                "the daemon excludes \(relative), which sevo compiles",
+                compiledByDaemon(source),
+                "the daemon excludes \(source), which sevo compiles",
             )
         }
     }

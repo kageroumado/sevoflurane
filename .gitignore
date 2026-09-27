@@ -32,11 +32,6 @@ xcuserdata/
 *.profraw
 *.profdata
 
-## Swift Package Manager
-.build
-.swiftpm/
-Packages/
-
 ## Python
 __pycache__/
 *.pyc

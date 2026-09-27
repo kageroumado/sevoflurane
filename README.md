@@ -216,8 +216,10 @@ and contribution instructions.
 
 ## Command line
 
-`swift build` produces `.build/debug/sevo`. Run
-`.build/debug/sevo install-cli` to link that executable into `/usr/local/bin`.
+The app ships `sevo` in `Sevoflurane.app/Contents/Helpers`; Settings ›
+General installs it on your `PATH`, as does
+`Sevoflurane.app/Contents/Helpers/sevo install-cli`. Building the `sevo`
+scheme on its own gives a copy to run from Xcode's build folder.
 
 Start with `sevo doctor` to check the installation or `sevo status` to
 inspect the running client. Use `--help` on a command for its arguments
@@ -293,7 +295,7 @@ and CrossOver Preview can also serve as engines.
   `Bridge/` connects pages to the client; `Setup/` handles installation;
   `App/` contains supervision, logging and the menu bar; `Support/`
   contains engine, bottle and game configuration code.
-- `Sevo/` and `Package.swift` — the CLI and MCP server, compiled with
+- `Sevo/` — the CLI and MCP server (the `sevo` target), compiled with
   shared lifecycle, CDP and provisioning sources from the app.
 - `Shared/` — code the app, the helper and the Quick Look extension all
   compile: reading a Windows executable's icons and version strings, and

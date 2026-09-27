@@ -19,7 +19,6 @@
 - **macOS / Mac**:
 - **Engine and renderer**: <!-- Dormison r3 + D3DMetal 4.0b2, CrossOver 26.3, ... -->
 - **Checks run**:
-  - [ ] `swift build` (the `sevo` CLI)
   - [ ] `xcodebuild -scheme Sevoflurane -destination 'platform=macOS' test`
 - **Behavior observed**: <!-- e.g. Steam booted, the friends window adopted, the game launched and its window followed the setting -->
 
