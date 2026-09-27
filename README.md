@@ -170,9 +170,6 @@ renderer files while Steam stays open; engine and msync changes require a
 restart. Changes to the selected DXMT or DXVK version apply after Steam
 restarts.
 
-See [Dormison's testing notes](https://github.com/kageroumado/dormison#directx-12-testing)
-for sample results and their limits.
-
 ## Known limits
 
 - Games and online modes that need Windows kernel anti-cheat do not run.
