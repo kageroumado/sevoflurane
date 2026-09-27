@@ -61,6 +61,21 @@ struct ProgramRunExitTests {
         #expect(ProgramExit.status(forApp: program, in: "fixme:d3d:something\n" + line) == -5)
     }
 
+    /// The loader's unix status keeps 8 bits of a Windows exit code, so
+    /// `STATUS_CONTROL_C_EXIT` (0xC000013A) read as 58; the parent's own
+    /// line carries the whole code and is preferred (review, 2026-09-27).
+    @Test
+    func `the parent's line carries the full code and outranks the launcher's status`() {
+        let trail = [
+            "sevo:steam-parent started pid=2102 Z:\\Games\\GenshinImpact.exe",
+            ProgramExit.line(genshin, status: 58),
+            "sevo:steam-parent exit pid=2102 appid=\(program) code=3221225786",
+        ].joined(separator: "\n")
+        #expect(ProgramExit.status(forApp: program, in: trail) == 3_221_225_786)
+        #expect(ProgramExit.status(forApp: program, in: ProgramExit.line(genshin, status: 58)) == 58)
+        #expect(ProgramExit.status(forApp: 2_000_000_009, in: trail) == nil)
+    }
+
     @Test
     func `the last line for the program is the one that counts`() {
         let trail = [

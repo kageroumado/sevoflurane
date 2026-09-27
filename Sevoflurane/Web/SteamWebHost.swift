@@ -372,6 +372,8 @@ final class SteamWebHost {
     struct GameLaunch: Equatable {
         let appID: Int
         var detail: String
+        /// Which press opened this line: only that press may end it.
+        var ticket = UUID()
         /// The client's id for this game action, which its `ShowLaunchOption`
         /// request is answered against.
         var actionID: Int?
@@ -462,22 +464,36 @@ final class SteamWebHost {
     /// A Quick Launch program was pressed. The client never hears of these,
     /// so the app tells their launch story itself, in the same three beats a
     /// Steam launch gets: the row's status line at once, …
-    func beginProgramLaunch(appID: Int) {
-        setLaunch(GameLaunch(appID: appID, detail: String(localized: "Starting…")), clearAfter: 180)
+    /// Answers the ticket the line was opened with, or nil when a launch of
+    /// this program is already under way: that launch owns the line, and a
+    /// press made meanwhile (the daemon answers it 409) changes nothing.
+    func beginProgramLaunch(appID: Int) -> UUID? {
+        if activeLaunch?.appID == appID { return nil }
+        let launch = GameLaunch(appID: appID, detail: String(localized: "Starting…"))
+        setLaunch(launch, clearAfter: 180)
+        onProgramLaunchPressed?(appID)
+        return launch.ticket
     }
+
+    /// A program's launch is with the helper: the watch and the recorder take
+    /// their marks now, before the process can write ahead of the reply.
+    var onProgramLaunchPressed: ((Int) -> Void)?
 
     /// … then, once the helper has spawned it, the window watch and the run
     /// record, which ``onGameLaunchStart`` opens for every launch, …
     func programDidStart(appID: Int) {
+        let ticket = activeLaunch?.appID == appID ? activeLaunch?.ticket : nil
         setLaunch(
-            GameLaunch(appID: appID, detail: String(localized: "Waiting for its window…")), clearAfter: 180,
+            GameLaunch(appID: appID, detail: String(localized: "Waiting for its window…"), ticket: ticket ?? UUID()),
+            clearAfter: 180,
         )
         onGameLaunchStart?(appID)
     }
 
-    /// … or, when the helper started nothing, the status line cleared again.
-    func endProgramLaunch(appID: Int) {
-        guard activeLaunch?.appID == appID else { return }
+    /// … or, when the helper started nothing, the status line cleared again
+    /// by the press that opened it, and by no other.
+    func endProgramLaunch(appID: Int, ticket: UUID?) {
+        guard let ticket, activeLaunch?.appID == appID, activeLaunch?.ticket == ticket else { return }
         launchClear?.cancel()
         activeLaunch = nil
     }

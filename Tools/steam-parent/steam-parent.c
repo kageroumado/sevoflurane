@@ -13,7 +13,10 @@
  *
  * One `sevo:steam-parent` line on stderr, which lands in the wine log, says
  * what the child was and how it ended: `started pid=<windows pid>` when it
- * starts, `exit pid=<windows pid> code=<exit code>` when it is gone, and
+ * starts, `exit pid=<windows pid> appid=<id> code=<exit code>` when it is
+ * gone (`appid` is SEVO_PROGRAM_APPID from the environment, the app's own id
+ * for the program, so the run record reads the full 32-bit code here and
+ * never the 8 bits the loader's unix status keeps), and
  * `CreateProcess failed with <error>` when it never started. The parent's
  * own exit status is the child's exit code (2 with no program named, 3 when
  * the child could not start).
@@ -49,7 +52,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR ignored, int s
 {
     STARTUPINFOW startup;
     PROCESS_INFORMATION process;
-    DWORD code = 1;
+    DWORD code = 1, appid_len;
+    char appid[32];
     WCHAR *child = after_first_argument(GetCommandLineW());
 
     (void)instance; (void)previous; (void)ignored; (void)show;
@@ -69,6 +73,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR ignored, int s
     WaitForSingleObject(process.hProcess, INFINITE);
     if (!GetExitCodeProcess(process.hProcess, &code)) code = 1;
     CloseHandle(process.hProcess);
-    say("exit pid=%lu code=%lu", process.dwProcessId, code);
+    appid_len = GetEnvironmentVariableA("SEVO_PROGRAM_APPID", appid, sizeof(appid));
+    if (appid_len == 0 || appid_len >= sizeof(appid)) lstrcpyA(appid, "none");
+    say("exit pid=%lu appid=%s code=%lu", process.dwProcessId, appid, code);
     return (int)code;
 }

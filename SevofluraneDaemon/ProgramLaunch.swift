@@ -33,6 +33,10 @@ enum ProgramLaunchRefusal: Error, Equatable {
 /// tree, which is what lets the owner check and the restart ladder account for
 /// it.
 extension BottleSupervisor {
+    /// How long a spawned program has to appear in `pgrep` before a new request
+    /// for it is taken as a new launch rather than the extra click.
+    static let spawnSettles: Duration = .seconds(60)
+
     /// Starts an adopted Windows program in the bottle.
     ///
     /// The env files are rewritten first, so the program's own window
@@ -55,6 +59,13 @@ extension BottleSupervisor {
             return .busy("\(name) is already starting")
         }
         defer { programsStarting.remove(id) }
+        if let spawnedAt = programsSpawnedAt[id] {
+            if ContinuousClock.now - spawnedAt < Self.spawnSettles, await !Self.isRunning(name) {
+                note("\(name) was started \(Int((ContinuousClock.now - spawnedAt).components.seconds)) s ago and has not appeared yet; this request starts nothing")
+                return .busy("\(name) is still starting")
+            }
+            programsSpawnedAt[id] = nil
+        }
         if SteamParent.wants(program), await Self.isRunning(name) {
             // A second copy beside a running one sees another steam.exe
             // child and takes the kernel-driver path: it would only die.
@@ -62,8 +73,13 @@ extension BottleSupervisor {
             return .busy("\(name) is already running")
         }
         stageGraphics(for: name, renderer: explicit, appID: id)
+        programsSpawnedAt[id] = .now
         if SteamParent.wants(program) {
-            return await launchUnderSteamParent(program, id: id).map(ProgramLaunchRefusal.failed)
+            if let refusal = await launchUnderSteamParent(program, id: id) {
+                programsSpawnedAt[id] = nil
+                return .failed(refusal)
+            }
+            return nil
         }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
@@ -90,9 +106,13 @@ extension BottleSupervisor {
         let companion = SteamParent.prefix(for: SteamBottle.name)
         let environment = SteamParent.environment(bottle: SteamBottle.name, engine: engine)
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: companion)
+        // The parent names the program's exit with this id in its
+        // `sevo:steam-parent exit` line, the full 32-bit code (ProgramExit).
+        var parentEnvironment = environment
+        parentEnvironment["SEVO_PROGRAM_APPID"] = String(id)
         await ClientLifecycle.launchInBottle(
             SteamParent.invocation(program),
-            environment: environment,
+            environment: parentEnvironment,
             directory: program.url.deletingLastPathComponent(),
             programExit: ProgramExit.Program(appID: id, exe: name),
         )

@@ -38,6 +38,11 @@ final class BottleSupervisor {
     /// its first run, and every request that arrives meanwhile would
     /// otherwise make the prefix and start the program again beside it.
     var programsStarting: Set<Int> = []
+    /// When each adopted program was last spawned. Until `pgrep` has seen it
+    /// or a minute has passed, a request for it is the extra click: the
+    /// process takes seconds to appear under Rosetta, and two launches in
+    /// that gap made two games and two frame-rate unlockers.
+    var programsSpawnedAt: [Int: ContinuousClock.Instant] = [:]
     /// Seconds into a boot before Wine's log is read for "cannot connect":
     /// a launcher that cannot reach its server says so within a few seconds.
     static let staleServerCheckAfter = 12

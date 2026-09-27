@@ -7,9 +7,12 @@ import UniformTypeIdentifiers
 /// (``SteamWebHost/beginProgramLaunch(appID:)``).
 @MainActor
 protocol ProgramLaunchReporting: AnyObject {
-    func beginProgramLaunch(appID: Int)
+    /// The ticket of the status line this press opened, or nil when a
+    /// launch of the program already owns it.
+    func beginProgramLaunch(appID: Int) -> UUID?
     func programDidStart(appID: Int)
-    func endProgramLaunch(appID: Int)
+    /// Ends the line only for the press that opened it.
+    func endProgramLaunch(appID: Int, ticket: UUID?)
 }
 
 extension SteamWebHost: ProgramLaunchReporting {}
@@ -59,9 +62,9 @@ final class QuickLaunchStore {
     /// then the window watch and the run record once the helper has spawned
     /// the program, or the status cleared when it spawned nothing.
     struct LaunchHooks {
-        let pressed: @MainActor (Int) -> Void
+        let pressed: @MainActor (Int) -> UUID?
         let started: @MainActor (Int) -> Void
-        let ended: @MainActor (Int) -> Void
+        let ended: @MainActor (Int, UUID?) -> Void
 
         /// The beats told to `host`. Every store that starts a program is
         /// wired this way — the popover's, and the one a Dock tile's launch
@@ -70,25 +73,25 @@ final class QuickLaunchStore {
         init(reporting host: some ProgramLaunchReporting) {
             pressed = { host.beginProgramLaunch(appID: $0) }
             started = { host.programDidStart(appID: $0) }
-            ended = { host.endProgramLaunch(appID: $0) }
+            ended = { host.endProgramLaunch(appID: $0, ticket: $1) }
         }
     }
 
     @ObservationIgnored var launchHooks: LaunchHooks?
 
-    /// The programs whose launch request is in flight. A second press on one
-    /// of them is the same wish again, not a second launch: five presses
-    /// during a first companion launch made five games, 2026-09-26.
+    /// The programs whose launch request is with the helper, from the press
+    /// to its reply. A second press on one of them is the same wish again,
+    /// not a second launch: five presses during a first companion launch
+    /// made five games, 2026-09-26.
     private(set) var launching: Set<Int> = []
 
     /// Starts a program through the daemon, which is the bottle's one parent.
     func launch(_ entry: AdoptedPrograms.Entry, renderer: Renderer? = nil) {
         guard simulated == nil, launching.insert(entry.id).inserted else { return }
         ActivationPolicy.claimRightForALaunch()
-        launchHooks?.pressed(entry.id)
+        let ticket = launchHooks?.pressed(entry.id) ?? nil
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
-            defer { launching.remove(entry.id) }
             let logOffset = KernelDriverFailure.size()
             // Long enough for a first launch that creates the companion
             // prefix of a program that needs a steam.exe parent (SteamParent).
@@ -99,9 +102,13 @@ final class QuickLaunchStore {
                     .client,
                     "could not start \(entry.name): the background helper did not answer",
                 )
-                launchHooks?.ended(entry.id)
+                launching.remove(entry.id)
+                launchHooks?.ended(entry.id, ticket)
                 return
             }
+            // The request is answered; what follows is the program's own
+            // story, and a press now is a new wish the helper judges.
+            launching.remove(entry.id)
             guard (200 ..< 300).contains(reply.status) else {
                 // 409 is the helper declining a program that is starting or
                 // running already, which its log line says; anything else is
@@ -109,7 +116,7 @@ final class QuickLaunchStore {
                 if reply.status != 409 {
                     EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
                 }
-                launchHooks?.ended(entry.id)
+                launchHooks?.ended(entry.id, ticket)
                 return
             }
             launchHooks?.started(entry.id)

@@ -70,17 +70,26 @@ nonisolated enum ProgramExit {
         "sevo:program-exit appid=\(program.appID) exe=\(program.exe) status=\(status)"
     }
 
-    /// The exit code the last such line in `text` gives for `appID`.
+    /// The exit code the last line about `appID` in `text` gives. The
+    /// `steam.exe` parent's own line carries the program's full 32-bit code
+    /// (`sevo:steam-parent exit … appid=<id> code=<n>`), so it is preferred;
+    /// the helper's line has the loader's unix status, which keeps only the
+    /// low 8 bits (`STATUS_CONTROL_C_EXIT`, 0xC000013A, would read as 58).
     static func status(forApp appID: Int, in text: String) -> Int? {
-        var found: Int?
-        for line in text.split(whereSeparator: \.isNewline) where line.contains("sevo:program-exit") {
-            if let match = line.firstMatch(of: exit), Int(match.output.1) == appID {
-                found = Int(match.output.2)
+        var parent: Int?, launcher: Int?
+        for line in text.split(whereSeparator: \.isNewline) {
+            if line.contains("sevo:steam-parent exit"),
+               let match = line.firstMatch(of: parentExit), Int(match.output.1) == appID {
+                parent = UInt32(match.output.2).map(Int.init)
+            } else if line.contains("sevo:program-exit"),
+                      let match = line.firstMatch(of: exit), Int(match.output.1) == appID {
+                launcher = Int(match.output.2)
             }
         }
-        return found
+        return parent ?? launcher
     }
 
     /// The executable's name can carry spaces, so it runs to the status.
     private nonisolated(unsafe) static let exit = /sevo:program-exit appid=(\d+) exe=.+? status=(-?\d+)/
+    private nonisolated(unsafe) static let parentExit = /sevo:steam-parent exit pid=\d+ appid=(\d+) code=(\d+)/
 }

@@ -219,7 +219,7 @@ final nonisolated class RunRecorder {
         runs: URL = RunLog.root,
         wineLog: URL = WineLog.fileURL,
         processLog: URL? = nil,
-        presentStats: PresentStats = PresentStats(companions: [SteamBottle.companion]),
+        presentStats: PresentStats = PresentStats(),
         programExitGrace: Duration = .seconds(3),
     ) {
         self.runs = runs
@@ -240,6 +240,23 @@ final nonisolated class RunRecorder {
     /// A launch of `appID` has begun. Re-arming an app that is already open
     /// closes the old run: the client has told us a new one started, so
     /// whatever the old one did, it is over and nobody said how.
+    /// A program was pressed and its launch is with the helper: the Wine
+    /// log's end now is where its run's trail begins, since the process can
+    /// write before the reply is handled.
+    func noteLaunchPressed(appID: Int) {
+        pressedOffsets[appID] = (Self.size(of: wineLog), .now)
+    }
+
+    /// The offset a press of `appID` took, if one was taken recently.
+    private func takePressedOffset(_ appID: Int) -> UInt64? {
+        defer { pressedOffsets[appID] = nil }
+        guard let pressed = pressedOffsets[appID], .now - pressed.at < Self.pressedOffsetLife else { return nil }
+        return pressed.offset
+    }
+
+    private var pressedOffsets: [Int: (offset: UInt64, at: ContinuousClock.Instant)] = [:]
+    private static let pressedOffsetLife: Duration = .seconds(300)
+
     func arm(appID: Int) {
         guard appID != 0 else { return }
         if open[appID] != nil {
@@ -286,7 +303,7 @@ final nonisolated class RunRecorder {
         open[appID] = OpenRun(
             started: .now,
             record: record,
-            wineLogOffset: Self.size(of: wineLog),
+            wineLogOffset: takePressedOffset(appID) ?? Self.size(of: wineLog),
             steamLogOffset: Self.size(of: steamLog),
             runsRoot: runs,
             wineLog: wineLog,
@@ -312,7 +329,10 @@ final nonisolated class RunRecorder {
     func noteExecutable(
         _ exe: String, pid: pid_t? = nil, forApp appID: Int, at url: URL? = nil,
     ) {
-        if let pid {
+        // A launcher's process gives way to the game's, but a process that
+        // arrives once the game has drawn (Genshin's frame-rate unlocker,
+        // a companion window) is a helper, and the game keeps its pid.
+        if let pid, open[appID]?.gamePID == nil || !presentStats.hasCounted(forApp: appID) {
             open[appID]?.gamePID = pid
             // A Quick Launch program's pages carry no app id either: its own
             // process is how its frames are found.

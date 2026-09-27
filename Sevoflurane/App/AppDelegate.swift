@@ -315,6 +315,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// processes reached the Mac driver, one of them put up a window, Steam
     /// raised an error for it, and the game stopped running.
     private func installLaunchHooks() {
+        host.onProgramLaunchPressed = { [weak self] appID in
+            guard let self else { return }
+            gameLaunchWatch.noteLaunchPressed()
+            runRecorder.noteLaunchPressed(appID: appID)
+        }
         host.onGameLaunchStart = { [weak self] appID in
             guard let self else { return }
             // Arms the window watch for launches the bridge did not carry

@@ -892,7 +892,10 @@ nonisolated enum ClientLifecycle {
         process.terminationHandler = { finished in
             let status = finished.terminationStatus
             log(exitLine(of: name, status: status, stopRequestedAt: stopRequestedAt))
-            if let programExit {
+            // A signal is the kill ladder's, or the system's; its number is
+            // no exit code of the program's. The parent's own line carries
+            // the program's code whenever the program itself ended.
+            if let programExit, finished.terminationReason == .exit {
                 trail.write(Data((ProgramExit.line(programExit, status: status) + "\n").utf8))
             }
             try? trail.close()

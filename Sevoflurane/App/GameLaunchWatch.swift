@@ -33,9 +33,22 @@ final class GameLaunchWatch {
     /// arm the same launch a moment apart, and a fresh tail for the second
     /// would skip what the shim wrote between them.
     private static let tailReuseWindow: Duration = .seconds(10)
+    /// How long a press's tail waits for the helper's reply: a first
+    /// companion launch takes about a quarter of a minute to answer.
+    private static let pressedTailLife: Duration = .seconds(300)
 
     private var watch: Task<Void, Never>?
     private var lastTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
+    /// The chronicle's end at the moment a program was pressed, for the watch
+    /// its launch arms once the helper has answered: the process can appear
+    /// before the reply is handled, and its lines would otherwise be behind
+    /// the tail.
+    private var pressedTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
+
+    /// A program was pressed; the helper has not answered yet.
+    func noteLaunchPressed() {
+        pressedTail = (WineChronicleTail(), .now)
+    }
     private let activation = Activation()
 
     /// A window of the launch's own game is up — the host clears the
@@ -67,7 +80,11 @@ final class GameLaunchWatch {
         // launch's story.
         let now = ContinuousClock.now
         let chronicle: WineChronicleTail
-        if let lastTail, now - lastTail.startedAt < Self.tailReuseWindow {
+        if let pressedTail, now - pressedTail.startedAt < Self.pressedTailLife {
+            chronicle = pressedTail.tail
+            self.pressedTail = nil
+            lastTail = (chronicle, now)
+        } else if let lastTail, now - lastTail.startedAt < Self.tailReuseWindow {
             chronicle = lastTail.tail
         } else {
             chronicle = WineChronicleTail()
@@ -152,8 +169,16 @@ final class GameLaunchWatch {
     /// those is written against the wrong process.
     nonisolated static func launchProcess(named executable: String) -> String? {
         let exe = executable.lowercased()
-        guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe) else { return nil }
+        guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe), !isHelper(exe) else { return nil }
         return exe
+    }
+
+    /// A program the app itself runs beside a game: the frame-rate unlocker
+    /// the user picked (``FPSUnlocker``). Its name is nobody's but the user's,
+    /// so no list knows it; its process and window are never the game's.
+    nonisolated static func isHelper(_ exe: String) -> Bool {
+        guard let unlocker = FPSUnlocker.executable?.lastPathComponent.lowercased() else { return false }
+        return exe.lowercased() == unlocker
     }
 
     /// Spends the activation right the launch took on the window that just
@@ -196,7 +221,7 @@ final class GameLaunchWatch {
 
         mutating func program(owner: String, pid: pid_t) -> WineWindowWatch.Program? {
             if let known = programs[pid] { return known }
-            let resolved = WineWindowWatch.resolve(owner: owner, pid: pid)
+            let resolved = GameLaunchWatch.isHelper(owner) ? nil : WineWindowWatch.resolve(owner: owner, pid: pid)
             programs[pid] = resolved
             return resolved
         }
