@@ -118,7 +118,7 @@ private struct GameListRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(name).lineLimit(1)
-            Text(exes.isEmpty ? "not launched here yet" : exes.joined(separator: ", "))
+            Text(exes.isEmpty ? String(localized: "not launched here yet") : exes.joined(separator: ", "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -300,7 +300,7 @@ private struct GameDLLOverridesSection: View {
 
 /// Wine's load orders in the spelling the registry holds, so the picker
 /// and `sevo app config <id> dll` name the same values.
-private let dllOverrideModes: [(mode: String, label: String)] = [
+private let dllOverrideModes: [(mode: String, label: LocalizedStringResource)] = [
     ("n,b", "Native, then built-in"),
     ("b,n", "Built-in, then native"),
     ("n", "Native only"),
@@ -320,7 +320,7 @@ private struct DLLOverrideRow: View {
         HStack {
             Text(dll).font(.body.monospaced())
             Spacer()
-            Picker("", selection: Binding(get: { mode }, set: { set($0) })) {
+            Picker("Load order", selection: Binding(get: { mode }, set: { set($0) })) {
                 ForEach(dllOverrideModes, id: \.mode) { choice in
                     Text(choice.label).tag(choice.mode)
                 }
@@ -333,6 +333,7 @@ private struct DLLOverrideRow: View {
                 Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
+            .help("Remove the override for \(dll)")
             .accessibilityLabel("Remove the override for \(dll)")
         }
     }

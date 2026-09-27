@@ -86,8 +86,8 @@ struct StorageCapacityBar: View {
 
     /// The bar read aloud: every segment with its size, then what is free.
     private var summary: String {
-        (segments.map { "\($0.name) \(StorageSettings.size($0.bytes))" }
-            + ["\(StorageSettings.size(available)) available"])
+        (segments.map { "\(InterfaceCopy.localized($0.name)) \(StorageSettings.size($0.bytes))" }
+            + [String(localized: "\(StorageSettings.size(available)) available")])
             .joined(separator: ", ")
     }
 

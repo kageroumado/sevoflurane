@@ -351,7 +351,7 @@ private struct EngineSwitchRow: View {
         if case let .working(phase) = provisioner.activity {
             return phase
         }
-        return store.switchPhase ?? "Switching…"
+        return store.switchPhase ?? String(localized: "Switching…")
     }
 }
 
@@ -582,6 +582,7 @@ private struct DLLOverrideRow: View {
             }
             .buttonStyle(.borderless)
             .help("Remove the \(override.dll) override")
+            .accessibilityLabel("Remove the \(override.dll) override")
         }
     }
 }
@@ -597,7 +598,7 @@ private struct NewDLLOverrideRow: View {
     var body: some View {
         HStack(spacing: Theme.Space.md) {
             DLLNameField(name: $newOverrideDLL, names: libraries)
-            Picker("", selection: $newOverrideMode) {
+            Picker("Load order", selection: $newOverrideMode) {
                 ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
                     Text(mode).tag(mode)
                 }

@@ -101,6 +101,7 @@ struct StorageSettings: View {
                     .help(linked
                         ? "Remove the link. The files stay in their own bottle."
                         : "Uninstall through Steam. It asks first.")
+                    .accessibilityLabel(linked ? "Remove the link to \(game.name)" : "Uninstall \(game.name)")
                 }
             }
             .frame(width: Self.actionColumnWidth)
@@ -143,6 +144,7 @@ struct StorageSettings: View {
             }
             .buttonStyle(.borderless)
             .frame(width: Self.actionColumnWidth)
+            .accessibilityLabel("Remove \(program.name)")
             .help(program.isInsideBottle
                 ? "Remove this program and move its installed files to the Trash."
                 : "Remove this program from the list. Its files remain in place.")
@@ -173,6 +175,7 @@ struct StorageSettings: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Undo the link")
+                        .accessibilityLabel("Undo the link")
                     }
                     .font(.callout)
                 }
@@ -215,13 +218,14 @@ struct StorageSettings: View {
     private func row(
         _ entry: StorageInventory.Entry, dot: Color?, isExpanded: Binding<Bool>? = nil,
     ) -> some View {
-        HStack(spacing: Theme.Space.md) {
+        let name = InterfaceCopy.localized(entry.name)
+        return HStack(spacing: Theme.Space.md) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Theme.Space.sm) {
                     StorageDot(color: dot)
-                    Text(entry.name)
+                    Text(name)
                 }
-                Text(entry.removal?.caution ?? entry.detail)
+                Text(InterfaceCopy.localized(entry.removal?.caution ?? entry.detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -242,11 +246,12 @@ struct StorageSettings: View {
                             .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
                     }
                     .help(isExpanded.wrappedValue ? "Hide the list" : "Show each one")
-                    .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(entry.name)" : "Show \(entry.name)")
+                    .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(name)" : "Show \(name)")
                 } else if entry.removal != nil {
                     Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
                         .disabled(entry.bytes <= 0)
-                        .help("Move \(entry.name.lowercased()) to the Trash")
+                        .help("Move \(name.lowercased()) to the Trash")
+                        .accessibilityLabel("Move \(name.lowercased()) to the Trash")
                 }
             }
             .buttonStyle(.borderless)
