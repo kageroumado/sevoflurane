@@ -336,6 +336,13 @@ final class SteamWebHost {
     @ObservationIgnored var overlayActive = false
     @ObservationIgnored var overlayGame: WineWindowWatch.GameWindow?
     @ObservationIgnored var overlayAppID = ""
+    /// The install wizard's latest state and how many updates it has had, so the
+    /// check that follows one can tell whether the wizard moved on since.
+    @ObservationIgnored var installWizardState = 0
+    @ObservationIgnored var installWizardUpdates = 0
+    /// An install whose wizard the page rebuild cancelled, reopened once the
+    /// rebuilt Steam window is on screen.
+    @ObservationIgnored var installWizardToReopen: String?
     /// The latest pass of the energy preference mirror, which the next one
     /// waits behind.
     @ObservationIgnored var energyUpdate: Task<Void, Never>?
@@ -500,8 +507,12 @@ final class SteamWebHost {
 
     func reload() {
         EventLog.shared.log(.page, "reloading the UI page (\(popups.count) popups detached)")
+        // A Steam window on screen comes back on screen: the reload rebuilds it,
+        // and the adoption shows it again.
+        let wasShowingDesktop = desktop?.nsWindow?.isVisible == true || desktopShowIsPending
         detachPopups(reason: .pageTeardown)
         desktop = nil
+        desktopShowIsPending = wasShowingDesktop
         status = "reloading"
         loggedRefusals = []
         context?.webView.load(URLRequest(url: Self.uiURL))
@@ -518,11 +529,7 @@ final class SteamWebHost {
     func applyStreamerMode() {
         guard context != nil else { return }
         EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — reloading the UI page")
-        let wasShowingDesktop = desktop?.nsWindow?.isVisible == true
         reload()
-        if wasShowingDesktop {
-            desktopShowIsPending = true
-        }
     }
 
     /// Whether a detach loop over every popup is running. The backstop under
@@ -756,6 +763,7 @@ final class SteamWebHost {
             desktopShowIsPending = false
             routeDesktop()
             window.show(activating: true)
+            reopenInstallWizardIfNeeded()
         }
     }
 

@@ -230,6 +230,11 @@ extension SteamWebHost {
             settledAt: ["registered", "already registered"],
         )
         install(
+            Self.installWizardScript,
+            describedAs: "Steam's install wizard",
+            settledAt: ["registered", "already registered"],
+        )
+        install(
             SteamChatAutoOpen.refusalScript,
             describedAs: "unasked chat windows",
             settledAt: SteamChatAutoOpen.settled,
