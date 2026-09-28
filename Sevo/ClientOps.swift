@@ -254,6 +254,18 @@ nonisolated enum ClientOps {
             )
     }
 
+    /// Whether `steam.exe` answers a question its main thread serves, within
+    /// five seconds. Services stay initialized while that thread is stuck.
+    private static func nativeAnswers() async -> Bool {
+        let reply = try? await SteamJS.eval("""
+        new Promise(function (resolve) {
+          SteamClient.Installs.GetInstallManagerInfo().then(function () { resolve("answered"); });
+          setTimeout(function () { resolve("silent"); }, 5000);
+        })
+        """)
+        return reply?.contains("answered") == true
+    }
+
     /// The wedge playbook: probe → reload/restart ladder. Recover fixes a
     /// *wedged* client; a client that simply isn't running is `client
     /// start`'s job — a stopped client is a state, not a fault.
@@ -266,14 +278,14 @@ nonisolated enum ClientOps {
             let services = try? await SteamJS.eval(
                 "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
             )
-            if services?.contains("true") == true {
+            if services?.contains("true") == true, await nativeAnswers() {
                 return Outcome(
                     verdict: .noEffect,
                     intent: "recover",
                     note: "client healthy (services initialized) — nothing to do",
                 )
             }
-            progress("CDP up but services dead — restarting the client")
+            progress("CDP up but services dead or steam.exe not answering — restarting the client")
         } else if !deep {
             progress("client wedged (CDP unreachable) — restarting")
         }

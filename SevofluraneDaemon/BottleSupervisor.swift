@@ -115,6 +115,12 @@ final class BottleSupervisor {
         /// How long a live client's DevTools server may stay mute before the
         /// client counts as down.
         static let muteClient = 30
+        /// How often a healthy client is asked a question its own main thread
+        /// answers (``PageProbe/nativeAnswers()``).
+        static let nativeProbeEvery: TimeInterval = 30
+        /// How many of those questions in a row go unanswered before the
+        /// client counts as stuck.
+        static let nativeSilencesToAct = 2
     }
 
     // MARK: - The Mac the client runs on
@@ -217,6 +223,10 @@ final class BottleSupervisor {
     /// Reloads given to the current page outage. Two that changed nothing
     /// mean the web view itself is what is wedged, and the third try rebuilds it.
     private var pageReloads = 0
+    /// When the client was last asked a question its main thread answers, and
+    /// how many in a row it left unanswered.
+    private var lastNativeProbe = Date.distantPast
+    private var nativeSilences = 0
     var isRestarting = false
     /// A restart asked for while the ladder is mid-flight, with its reason.
     /// The running ladder stops waiting on the client it is bringing up and
@@ -615,6 +625,37 @@ final class BottleSupervisor {
         }
     }
 
+    /// Whether a client that probes healthy has stopped answering on its main
+    /// thread: its services stay initialized and its page keeps answering while
+    /// that thread waits forever. A stuck client with no game running is
+    /// restarted; with a game running it is reported, since a restart takes
+    /// Steam away from the game.
+    private func clientMainThreadIsStuck() async -> Bool {
+        guard Date.now.timeIntervalSince(lastNativeProbe) >= Timing.nativeProbeEvery else {
+            return nativeSilences >= Timing.nativeSilencesToAct
+        }
+        lastNativeProbe = .now
+        guard let answered = await PageProbe.nativeAnswers() else { return false }
+        if answered {
+            nativeSilences = 0
+            return false
+        }
+        nativeSilences += 1
+        log.log(.client, "steam.exe left a main-thread question unanswered (\(nativeSilences) in a row)")
+        guard nativeSilences >= Timing.nativeSilencesToAct else { return false }
+        if await Self.isGameRunning() {
+            fault = .degraded("Steam stopped answering — restart the client when the game is done")
+            transition(
+                logging: .supervisor,
+                "steam.exe is stuck on its main thread with a game running — reporting, not restarting",
+            )
+            return true
+        }
+        nativeSilences = 0
+        await restartClient(reason: "steam.exe stopped answering on its main thread")
+        return true
+    }
+
     /// The page is up but not answering: a second failure in a row reloads the
     /// UI, and a page two reloads did not fix is rebuilt.
     private func recoverSilentPage(detail: String) async {
@@ -650,6 +691,7 @@ final class BottleSupervisor {
     /// counters reset, and a boot that just finished is audited and followed
     /// by whatever was waiting on it.
     private func noteEverythingUp(wineWindows: [WineWindowWatch.Window]) async {
+        if await clientMainThreadIsStuck() { return }
         endBoot()
         hasBeenHealthy = true
         pageServicesUp = true
