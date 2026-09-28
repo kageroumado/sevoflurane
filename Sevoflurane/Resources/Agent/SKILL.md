@@ -83,7 +83,7 @@ in short.
 
 | Part | What it records | Where | Read it with |
 |---|---|---|---|
-| Run record | Engine, renderer, tuning, upscaler, first window, duration, exit, last exception, renderer notes, frame-rate summary | `~/Library/Application Support/Sevoflurane/Runs/<yyyy-MM>.jsonl` | `sevo runs [--json]` |
+| Run record | Engine, renderer, tuning, upscaler, first window, duration, exit, last exception, renderer notes, frame-rate summary, busy threads while focused (`threads`; a game spinning one per processor is offered a `processors` cap) | `~/Library/Application Support/Sevoflurane/Runs/<yyyy-MM>.jsonl` | `sevo runs [--json]` |
 | Frame trace | Every frame's time from the driver's present counter, one CSV per run (Dormison) | `…/Sevoflurane/Runs/traces/`; labels in `labels.json` there | `sevo perf` |
 | Stall watch | Each process's CPU time every 2 s. After 15 s with no CPU and no present it releases, continues, then kills the game | the run record's exit, `killed after a stall` | `sevo runs` |
 | Collected report | Wine's exception trail, macOS `.ips` files, Unreal/Unity/NW.js logs, Steam's logs, `manifest.json` | `~/Library/Application Support/Sevoflurane/Reports/<run>/` | Finder, the Reports window |

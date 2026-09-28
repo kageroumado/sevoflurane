@@ -186,8 +186,10 @@ struct RunsCommand: AsyncParsableCommand {
         A record is written for every launch at every diagnostic level: the \
         engine, renderer, tuning and upscaler it ran on, when its first window \
         appeared, how long it ran, how it ended, the last exception in the Wine \
-        log, the renderer's notes, and the frame-rate summary (average, 1 % low, \
-        percentiles, hitches). --json adds known_failure where the app \
+        log, the renderer's notes, the frame-rate summary (average, 1 % low, \
+        percentiles, hitches), and how many of the game's threads kept a core \
+        busy while it had focus (threads; the line names it at 3 or more). \
+        --json adds known_failure where the app \
         recognizes the ending. A run with no window and a short duration is a \
         start-up failure; a collected report, when the run has one, is under \
         Application Support/Sevoflurane/Reports. sevo diag --help says how to \
@@ -209,7 +211,8 @@ struct RunsCommand: AsyncParsableCommand {
             return
         }
         for record in records {
-            print("\(Self.moment(record.t))  \(record.summary)")
+            let threads = record.threads?.summary.map { " · \($0)" } ?? ""
+            print("\(Self.moment(record.t))  \(record.summary)\(threads)")
             guard let failure = KnownFailures.match(record) else { continue }
             print("    \(failure.summary)")
             if let fix = failure.fix { print("    fix: \(fix)") }

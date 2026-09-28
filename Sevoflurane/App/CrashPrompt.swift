@@ -65,14 +65,22 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
         self.presenter = presenter
     }
 
-    /// Points the recorder's closing hook at this prompt. The hook fires on
-    /// the recorder's closing queue; the decision belongs on the main actor.
-    func install() {
+    /// Points the recorder's closing hook at this prompt, and past it at the
+    /// processor-limit offer. The hook fires on the recorder's closing queue;
+    /// the decision belongs on the main actor.
+    func install(spin: ThreadSpinPrompt = .shared) {
         RunRecorder.didClose = { [weak self] record in
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.offer(record) }
+                MainActor.assumeIsolated { self?.offerAfterClose(record, spin: spin) }
             }
         }
+    }
+
+    /// A closed run gets one panel: the crash prompt when the run earns it,
+    /// otherwise the processor-limit offer when that one does.
+    func offerAfterClose(_ record: RunRecord, spin: ThreadSpinPrompt) {
+        let crashShown = offer(record)
+        spin.offer(record, crashShown: crashShown)
     }
 
     /// Considers a closed run, and answers whether it opened the prompt.

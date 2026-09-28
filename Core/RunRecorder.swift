@@ -25,6 +25,11 @@ nonisolated struct RunInProgress: Sendable {
     /// Where ``provenance`` has read the Wine log to; nil until the first
     /// read, which starts at ``wineLogOffset``.
     var provenanceOffset: UInt64?
+    /// How many of the game's threads were busy at each sample taken while it
+    /// had focus (``ThreadActivity``); memory only, summarized at the close.
+    var busyThreadSamples: [Int] = []
+    /// How many processors the game was told of: the Mac's, or the game's cap.
+    var processors = ProcessInfo.processInfo.activeProcessorCount
     /// Where the record goes when the run is over, and the two logs its
     /// ending is read from.
     var runsRoot = RunLog.root
@@ -53,6 +58,7 @@ nonisolated struct RunInProgress: Sendable {
     ) {
         var record = record
         record.durationSeconds = seconds
+        record.threads = RunRecord.Threads(samples: busyThreadSamples, processors: processors)
         if let trace = record.fps?.trace,
            let contents = FrameTrace.read(FrameTrace.directory(in: runsRoot).appendingPathComponent(trace)) {
             record.fps?.gameplay = GameplayWindow.gameplay(of: contents)
@@ -330,6 +336,7 @@ final nonisolated class RunRecorder {
             record: record,
             wineLogOffset: takePressedOffset(appID) ?? Self.size(of: wineLog),
             steamLogOffset: Self.size(of: steamLog),
+            processors: Self.processorsSeen(forApp: appID),
             runsRoot: runs,
             wineLog: wineLog,
             processLog: steamLog,
@@ -390,11 +397,17 @@ final nonisolated class RunRecorder {
     /// Memory only: a sample every two seconds is not worth a write to the
     /// armed file, whose job is to name the launch a killed app left running.
     ///
-    /// - Parameter observe: What the window server shows of a game process's window right
-    ///   now. Its focus goes into the run's frame trace, where ``GameplayWindow`` leaves
-    ///   the stretches nobody was playing out of the frame rate; the display it was played
-    ///   on goes into the record.
-    func sample(observing observe: (pid_t) -> GameObservation? = { _ in nil }) {
+    /// - Parameters:
+    ///   - observe: What the window server shows of a game process's window right
+    ///     now. Its focus goes into the run's frame trace, where ``GameplayWindow`` leaves
+    ///     the stretches nobody was playing out of the frame rate; the display it was played
+    ///     on goes into the record.
+    ///   - busyThreads: How many of a process's threads keep a core busy
+    ///     (``ThreadActivity``), counted at each look that finds the game focused.
+    func sample(
+        observing observe: (pid_t) -> GameObservation? = { _ in nil },
+        busyThreads: (pid_t) -> Int? = { ThreadActivity.busyThreads(pid: $0) },
+    ) {
         guard !open.isEmpty else { return }
         let gameMode = GameModeSignal.isActive()
         for (appID, run) in open {
@@ -406,6 +419,9 @@ final nonisolated class RunRecorder {
                 presentStats.note(focus: seen.focus, display: seen.display, forApp: appID)
                 if let display = seen.display, seen.focus == .focused || run.record.display == nil {
                     open[appID]?.record.display = display
+                }
+                if seen.focus == .focused, let busy = busyThreads(pid) {
+                    open[appID]?.busyThreadSamples.append(busy)
                 }
             }
             // The largest window seen: a game opens on a launcher or splash
@@ -608,6 +624,14 @@ final nonisolated class RunRecorder {
         return "custom:\(GameConfig.tuningParameters(bottle: SteamBottle.name, game: appID).argument)"
     }
 
+    /// The processors a launch of `appID` is told of: its cap when it has one
+    /// below the Mac's count, otherwise the Mac's.
+    private static func processorsSeen(forApp appID: Int) -> Int {
+        let host = ProcessInfo.processInfo.activeProcessorCount
+        let cap = GameConfig.processors(bottle: SteamBottle.name, game: appID).value
+        return cap > 0 ? min(cap, host) : host
+    }
+
     private static func executableURL(named exe: String, forApp appID: Int) -> URL? {
         let wanted = exe.lowercased()
         if let program = GameConfig.game(appID).program,
@@ -727,6 +751,7 @@ final nonisolated class RunRecorder {
                 wineLogOffset: armed.wineLogOffset,
                 steamLogOffset: armed.steamLogOffset,
                 steamError: armed.steamError,
+                processors: Self.processorsSeen(forApp: appID),
                 runsRoot: runs,
                 wineLog: wineLog,
                 processLog: steamLog,

@@ -156,6 +156,23 @@ nonisolated extension Preferences {
         defaults.object(forKey: asksAfterCrashKey) as? Bool ?? true
     }
 
+    /// The games whose busy threads the app keeps quiet about: "Don't Ask for
+    /// This Game" on the processor-limit offer (``ThreadSpinDiagnosis``).
+    static let quietThreadSpinAppsKey = "quietThreadSpinApps"
+
+    /// Whether a run of `appID` that kept many threads busy opens the offer to
+    /// limit its processors.
+    static func asksAboutThreadSpin(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
+        !(defaults.array(forKey: quietThreadSpinAppsKey) as? [Int] ?? []).contains(appID)
+    }
+
+    /// Keeps the processor-limit offer from opening for `appID` again.
+    static func stopAskingAboutThreadSpin(forApp appID: Int, in defaults: UserDefaults = shared) {
+        let quiet = defaults.array(forKey: quietThreadSpinAppsKey) as? [Int] ?? []
+        guard !quiet.contains(appID) else { return }
+        defaults.set(quiet + [appID], forKey: quietThreadSpinAppsKey)
+    }
+
     /// The token a sent report carries so two reports from one installation
     /// can be told apart on the receiving end. Random the first time it is
     /// asked for, then kept; it names nothing about the machine or the account.

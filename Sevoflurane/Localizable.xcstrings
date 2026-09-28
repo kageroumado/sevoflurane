@@ -22,6 +22,17 @@
         }
       }
     },
+    "%@ kept %lld threads busy the whole time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 的 %2$lld 个线程一直处于忙碌状态"
+          }
+        }
+      }
+    },
     "8 · 6 · 4" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -44,6 +55,28 @@
         }
       }
     },
+    "Don't Ask for This Game" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此游戏不再询问"
+          }
+        }
+      }
+    },
+    "Games built this way start one worker per processor, and under Rosetta the workers never rest, which starves the picture. Telling the game it has %lld processors lets them sleep." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这类游戏会为每个处理器启动一个工作线程，而在 Rosetta 下这些线程从不休息，画面因此得不到算力。告诉游戏它只有 %lld 个处理器，工作线程就能休眠。"
+          }
+        }
+      }
+    },
     "How many processors a game is told the Mac has. Games built on Unity 5 start a worker thread for each one, and under Rosetta every worker keeps looking for work instead of sleeping, so a Mac with many cores spends them all on waiting." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -51,6 +84,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "告诉游戏这台 Mac 有多少个处理器。基于 Unity 5 的游戏为每个处理器启动一个工作线程，而在 Rosetta 下每个工作线程都在不停寻找任务而不休眠，因此核心越多的 Mac 越是把它们全部耗在等待上。"
+          }
+        }
+      }
+    },
+    "Limit to %lld Processors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制为 %lld 个处理器"
           }
         }
       }
@@ -106,6 +150,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
+          }
+        }
+      }
+    },
+    "The limit takes effect the next time the game starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制将在游戏下次启动时生效。"
           }
         }
       }

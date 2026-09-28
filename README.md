@@ -527,6 +527,8 @@ and pins the fix to that game.
   errors, a plain-language diagnosis for known failures, and buttons to save
   the ZIP or open a pre-filled GitHub issue.
 - After a crash or a watchdog kill, an offer to send the redacted report.
+- After a run that kept many threads spinning, an offer to limit the
+  processors the game sees, in one click.
 - The Process Monitor: every process Sevoflurane owns, and a flag on a game
   pinning one core.
 - Size caps on every log and report, oldest removed first.

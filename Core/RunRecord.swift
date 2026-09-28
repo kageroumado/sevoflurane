@@ -85,6 +85,10 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     /// (``ProcessUsage``), from the last sample taken while it was alive.
     /// Absent for a run whose process was never named.
     var energy: Energy? = nil
+    /// How many of the game's threads kept a core busy while it had focus
+    /// (``ThreadActivity``). Kept on this Mac: ``SharedRun`` carries no part of it.
+    /// Absent for a run with too few focused samples to say.
+    var threads: Threads? = nil
     var host: Host
 
     enum CodingKeys: String, CodingKey {
@@ -120,6 +124,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         case notes
         case gameMode = "game_mode"
         case energy
+        case threads
         case host
     }
 
@@ -325,6 +330,46 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
                 instructions: usage.instructions,
                 pCoreShare: (usage.pCoreShare * 100).rounded() / 100,
             )
+        }
+    }
+
+    /// The game's busy threads while it was played: the median of the samples
+    /// taken while it had focus, and how many processors it was told of.
+    struct Threads: Codable, Equatable, Sendable {
+        /// The median count of threads at or above ``ThreadActivity/busyThreshold``.
+        var busy: Int
+        /// The processors the game saw: the Mac's, or the game's cap.
+        var processors: Int
+        var samples: Int
+
+        /// Samples a record needs before it says anything: ten seconds of focus at
+        /// ``RunRecorder/meterInterval``.
+        static let minimumSamples = 5
+
+        /// The busy count at which ``summary`` names it.
+        static let summaryThreshold = 3
+
+        /// `samples` summarized, or nil when there are fewer than ``minimumSamples``.
+        init?(samples: [Int], processors: Int) {
+            guard samples.count >= Self.minimumSamples else { return nil }
+            let sorted = samples.sorted()
+            let middle = sorted.count / 2
+            busy = sorted.count.isMultiple(of: 2)
+                ? (sorted[middle - 1] + sorted[middle] + 1) / 2
+                : sorted[middle]
+            self.processors = processors
+            self.samples = samples.count
+        }
+
+        init(busy: Int, processors: Int, samples: Int) {
+            self.busy = busy
+            self.processors = processors
+            self.samples = samples
+        }
+
+        /// `15 busy threads`, for a count of at least ``summaryThreshold``.
+        var summary: String? {
+            busy >= Self.summaryThreshold ? "\(busy) busy threads" : nil
         }
     }
 
