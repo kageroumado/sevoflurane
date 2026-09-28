@@ -18,6 +18,7 @@ struct GeneralSettings: View {
             )
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
+            StreamerModeSection(steam: steam, highlighted: highlighted)
             GeneralCommunitySection(highlighted: highlighted)
             GeneralDiscordSection(highlighted: highlighted)
             GeneralUninstallSection(

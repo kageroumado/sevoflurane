@@ -507,6 +507,24 @@ final class SteamWebHost {
         context?.webView.load(URLRequest(url: Self.uiURL))
     }
 
+    /// Brings every Steam window in line with a changed ``StreamerMode``.
+    ///
+    /// The mask is part of the served page and of each web view's
+    /// configuration, so the page is reloaded: the served `index.html` is
+    /// built again with or without it, and Steam re-creates its popups and
+    /// their web views from the fresh page. A reload rather than a live undo,
+    /// because text the mask already rewrote has no record of what it was.
+    /// A desktop window on screen is shown again once the reload adopts it.
+    func applyStreamerMode() {
+        guard context != nil else { return }
+        EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — reloading the UI page")
+        let wasShowingDesktop = desktop?.nsWindow?.isVisible == true
+        reload()
+        if wasShowingDesktop {
+            desktopShowIsPending = true
+        }
+    }
+
     /// Whether a detach loop over every popup is running. The backstop under
     /// ``SteamWindow/DetachReason``: a detach that reaches
     /// ``windowDidClose(_:reason:)`` by some other route while the page under

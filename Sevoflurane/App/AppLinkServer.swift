@@ -95,6 +95,9 @@ final class AppLinkServer {
             let label = Self.value(of: "label", in: request.query).removingPercentEncoding ?? ""
             let marked = presentStats.mark(label.isEmpty ? "mark" : label)
             return Self.json(#"{"marked":\#(marked)}"#)
+        case ("POST", "/streamer/apply"):
+            // `sevo streamer`, straight to this port: the reload is the app's alone.
+            return applyStreamerMode(request)
         default:
             return await pageVerb(request)
         }
@@ -157,6 +160,18 @@ final class AppLinkServer {
         default:
             return .error(404, "Not Found")
         }
+    }
+
+    /// `sevo streamer`: the switch arrives with the request, so the reload
+    /// reads it whether or not the shared suite has caught up in this process.
+    private func applyStreamerMode(_ request: HTTPRequest) -> HTTPResponse {
+        switch Self.value(of: "on", in: request.query) {
+        case "1": StreamerMode.isOn = true
+        case "0": StreamerMode.isOn = false
+        default: break
+        }
+        host.applyStreamerMode()
+        return Self.json(#"{"on":\#(StreamerMode.isOn)}"#)
     }
 
     /// One command from the daemon's state machine.

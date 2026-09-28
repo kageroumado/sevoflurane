@@ -44,6 +44,16 @@
         }
       }
     },
+    "A monogram of the display name." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由显示名称首字母生成的图案。"
+          }
+        }
+      }
+    },
     "All" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -51,6 +61,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部"
+          }
+        }
+      }
+    },
+    "Avatar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "头像"
+          }
+        }
+      }
+    },
+    "Display name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示名称"
           }
         }
       }
@@ -66,6 +96,16 @@
         }
       }
     },
+    "Friends appear as AI models such as Claude, ChatGPT and Gemini." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好友显示为 Claude、ChatGPT、Gemini 等 AI 模型。"
+          }
+        }
+      }
+    },
     "Games built this way start one worker per processor, and under Rosetta the workers never rest, which starves the picture. Telling the game it has %lld processors lets them sleep." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -73,6 +113,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这类游戏会为每个处理器启动一个工作线程，而在 Rosetta 下这些线程从不休息，画面因此得不到算力。告诉游戏它只有 %lld 个处理器，工作线程就能休眠。"
+          }
+        }
+      }
+    },
+    "Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所有 Steam 窗口中隐藏你的 Steam 名称、头像、钱包余额和好友，便于录屏和直播。"
           }
         }
       }
@@ -121,6 +171,16 @@
         }
       }
     },
+    "Shown in place of your Steam avatar." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代替你的 Steam 头像显示。"
+          }
+        }
+      }
+    },
     "Some older games start one worker thread per processor and keep them all busy; fewer processors let them rest." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -128,6 +188,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一些旧游戏为每个处理器启动一个工作线程，并让它们全部保持忙碌；减少处理器数量能让它们歇下来。"
+          }
+        }
+      }
+    },
+    "Streamer Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主播模式"
+          }
+        }
+      }
+    },
+    "That file is not a picture Sevoflurane can read." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 无法读取该文件中的图片。"
           }
         }
       }
@@ -172,6 +252,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unity 5 为每个处理器启动一个工作线程，在 Rosetta 下它们全都在空转：在 16 核的 M4 Max 上，游戏占用 1357 % CPU，帧率 54 fps，每秒卡顿数次；告诉它只有 8 个处理器后，CPU 为 184 %，帧率 117 fps。"
+          }
+        }
+      }
+    },
+    "Use Monogram" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用首字母图案"
           }
         }
       }

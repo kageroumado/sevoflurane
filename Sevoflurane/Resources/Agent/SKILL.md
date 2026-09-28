@@ -35,6 +35,7 @@ in short.
 | `sevo diag on` / `off` / `status` / `save` | The diagnostic level, and the zip for a bug report. |
 | `sevo logs [--wine] [-f]` | The event log, or Wine's own output. |
 | `sevo debug on` / `off` | Records everything until the app quits. Needs the app running. |
+| `sevo streamer on` / `off` / `status` | Streamer Mode: Steam's windows show a chosen name and picture, no wallet balance, and friends as AI models. A running app reloads Steam's windows to apply it. |
 | `sevo client restart` / `sevo recover [--deep]` | Restarts Steam, or brings a stuck client back; `--deep` also clears its web cache and repairs it. |
 | `sevo daemon repair` | Re-registers the background helper when it will not start. |
 | `sevo storage [--games]` | What Sevoflurane, the bottle and each game occupy. |

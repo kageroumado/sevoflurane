@@ -66,6 +66,7 @@ extension SteamBridge {
         let injected = "<head>"
             + "<script>window.__sevoShape=\(shape);</script>"
             + "<script>\(shim)</script>"
+            + StreamerMask.headTag(for: .current)
         guard let range = html.range(of: "<head>") else {
             return .error(500, "index.html has no <head>")
         }

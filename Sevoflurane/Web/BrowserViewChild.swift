@@ -54,6 +54,11 @@ final class BrowserViewChild: NSObject {
         // Steam's web properties feature-detect the client from this token
         // (install buttons become steam:// links, which route back natively).
         configuration.applicationNameForUserAgent = "Valve Steam Client"
+        if let mask = StreamerMask.script(for: .current) {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: mask, injectionTime: .atDocumentEnd, forMainFrameOnly: false,
+            ))
+        }
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isHidden = true
         webView.allowsBackForwardNavigationGestures = true

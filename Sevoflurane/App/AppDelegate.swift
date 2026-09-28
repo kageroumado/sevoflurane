@@ -612,6 +612,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         host.reload()
     }
 
+    /// Flips Streamer Mode from the app menu, for the moment before a
+    /// recording starts.
+    @objc
+    func toggleStreamerMode(_: Any?) {
+        StreamerMode.isOn.toggle()
+        host.applyStreamerMode()
+    }
+
     /// The app's own settings — open at login, the graphics knobs, Repair.
     /// Steam's settings are its own, and keep ⌘, in the mirrored Steam menu.
     @objc
@@ -670,5 +678,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showLicense(_: Any?) {
         aboutWindows.showLicense()
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    /// Checks the Streamer Mode item while the mode is on. Every other item
+    /// this delegate answers for stays enabled.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleStreamerMode(_:)) {
+            menuItem.state = StreamerMode.isOn ? .on : .off
+        }
+        return true
     }
 }

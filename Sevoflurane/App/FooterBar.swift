@@ -23,6 +23,7 @@ struct FooterBar: View {
     /// takes Steam and a running game down with it.
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
+    @AppStorage(StreamerMode.isOnKey, store: Preferences.shared) private var streamerMode = false
 
     private static var versionString: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
@@ -123,6 +124,16 @@ struct FooterBar: View {
                         NSWorkspace.shared.open(EventLog.fileURL)
                     }
                     debugModeItem
+                    Toggle(isOn: Binding(
+                        get: { streamerMode },
+                        set: { isOn in
+                            StreamerMode.isOn = isOn
+                            host.applyStreamerMode()
+                        },
+                    )) {
+                        Label("Streamer Mode", systemImage: "eye.slash")
+                    }
+                    .help("Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming.")
                     Divider()
                     Toggle(isOn: Binding(
                         get: { autoUpdate },

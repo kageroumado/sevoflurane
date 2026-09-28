@@ -18,6 +18,8 @@ struct SteamActions {
     /// Draws or removes the Mac compatibility strip on the game page that is
     /// already open, so the switch shows its result where it is about.
     var applyCompatibilityStrip: () -> Void
+    /// Reloads Steam's pages so they carry the Streamer Mode mask, or lose it.
+    var applyStreamerMode: () -> Void
 }
 
 /// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
@@ -149,6 +151,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: [
                         "compatibility", "compat", "strip", "badge", "verified",
                         "playable", "anti-cheat", "anticheat", "game page", "library",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .generalStreamerMode,
+                    title: "Streamer Mode",
+                    keywords: [
+                        "streamer", "streaming", "recording", "record", "privacy", "hide", "name",
+                        "avatar", "picture", "wallet", "balance", "friends", "screen",
                     ],
                 ),
                 SearchableSetting(
@@ -504,6 +514,7 @@ enum SettingsAnchor: String, CaseIterable {
     case generalSteamSettings = "general.steamSettings"
     case generalCli = "general.cli"
     case generalCompatStrip = "general.compatStrip"
+    case generalStreamerMode = "general.streamerMode"
     case generalShareRuns = "general.shareRuns"
     case generalDiscordBridge = "general.discordBridge"
     case generalDiscordPresence = "general.discordPresence"

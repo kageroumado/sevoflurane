@@ -195,6 +195,7 @@ sevo holds
 sevo orphans [--end]
 sevo run PROGRAM [ARGS]
 sevo debug on|off|status
+sevo streamer on|off|status
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo benchmark
@@ -374,6 +375,9 @@ runs on CrossOver.
 - Game pages carry a Mac and anti-cheat strip from AppleGamingWiki,
   AreWeAntiCheatYet and ProtonDB, with links to each source. ProtonDB reports
   describe Linux; the details say when no Mac report exists.
+- Streamer Mode shows a chosen name and picture in place of your Steam
+  account, hides the wallet balance, and shows friends as AI models in every
+  Steam window, for recording and streaming.
 
 ### The menu bar
 
@@ -391,8 +395,8 @@ runs on CrossOver.
 - "Bottle incomplete" when required Windows components are missing.
 - Open Steam (⌘O), Friends (⌘F, with an unread count) and a status chip.
 - The ⋯ menu: Reload Steam UI, Restart Steam Client, Restart Windows,
-  Force-Quit Steam, Force-Quit Everything, Open Event Log, Debug Mode, Auto
-  Update.
+  Force-Quit Steam, Force-Quit Everything, Open Event Log, Debug Mode,
+  Streamer Mode, Auto Update.
 - A renderer switch in the footer, and a quit confirmation.
 
 ### Playing games
@@ -446,7 +450,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
 
 - **General**: open at login, auto-restart Steam, Steam's own settings,
   `steam://` links, the command-line tool, AI assistants, the compatibility
-  strip, community sharing, Discord, uninstall.
+  strip, Streamer Mode, community sharing, Discord, uninstall.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
   DXVK versions, shader packages.
 - **Engine**: engines, bottles and the release channel, msync, defaults for

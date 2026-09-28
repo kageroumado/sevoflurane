@@ -51,6 +51,13 @@ enum SevofluraneMainMenu {
             action: #selector(AppDelegate.showSettings(_:)),
             keyEquivalent: "",
         )
+        // Checked by `AppDelegate.validateMenuItem(_:)`, so it reads the
+        // switch however it was last flipped.
+        menu.addItem(
+            withTitle: InterfaceCopy.localized("Streamer Mode"),
+            action: #selector(AppDelegate.toggleStreamerMode(_:)),
+            keyEquivalent: "",
+        )
         menu.addItem(.separator())
 
         let services = NSMenu()
