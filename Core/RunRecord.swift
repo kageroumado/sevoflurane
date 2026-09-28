@@ -243,8 +243,10 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
             /// The client raised an error for the game action and no process
             /// exit followed: Steam ended the run itself.
             case steamTerminate = "steam-terminate"
-            /// An unhandled exception in the Wine log during the run. A crash
-            /// leaves one; being ended from outside does not.
+            /// An unhandled exception in the Wine log during the run
+            /// (`sevo:crash`, `err:seh`, or `wine: Unhandled …`), or an exit
+            /// status that is an error-severity NT status (`0xC…`). A crash
+            /// leaves one of these; being ended from outside leaves neither.
             case crash
             /// An unhandled exception while the game had no window left (the
             /// last `sevo:exit … windows` line before it says `closed`): the
@@ -278,7 +280,9 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    /// Wine's unhandled-exception record for the run (`err:seh`, always on).
+    /// The unhandled exception that ended the run: from the Wine log's
+    /// `sevo:crash`, `err:seh` or `wine: Unhandled …` line, or only the
+    /// status when the exit code was the one thing that named it.
     struct Crash: Codable, Equatable, Sendable {
         /// The NT status, `0xc0000005` and friends.
         var code: String

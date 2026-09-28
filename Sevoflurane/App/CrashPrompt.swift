@@ -5,14 +5,31 @@ import SwiftUI
 /// Which endings deserve a word with the user, and how one run is told from
 /// its neighbors. Pure, so the decision is testable without a window.
 nonisolated enum CrashPromptPolicy {
-    /// A crash, or the stall watchdog's kill. Everything else the user did
-    /// themselves, or already saw Steam do.
+    /// A crash, the stall watchdog's kill, or an error exit while the game
+    /// was starting. Everything else the user did themselves, or already saw
+    /// Steam do.
     static func deserves(_ record: RunRecord) -> Bool {
         switch record.exit?.kind {
         case .crash, .watchdog: true
+        case .exitError: quitWhileStarting(record)
         default: false
         }
     }
+
+    /// An error exit before the game was up: it lasted under ``startingSeconds``,
+    /// or under ``windowlessSeconds`` (or for as long as nobody measured) without
+    /// ever showing a window. A game's own crash handler often ends
+    /// it this way, with a plain status. An error exit after the game was
+    /// played is how plenty of games quit, and stays unremarked.
+    static func quitWhileStarting(_ record: RunRecord) -> Bool {
+        guard record.exit?.kind == .exitError else { return false }
+        if let duration = record.durationSeconds, duration < startingSeconds { return true }
+        return record.windowAfterSeconds == nil && (record.durationSeconds ?? 0) < windowlessSeconds
+    }
+
+    /// How long a game is still starting, for ``quitWhileStarting(_:)``.
+    static let startingSeconds: Double = 30
+    static let windowlessSeconds: Double = 120
 
     /// A run's identity: its start and its app. The same run can close twice
     /// (a reattach, then the client's own notification), and the second
@@ -212,7 +229,10 @@ final class CrashPromptModel {
     // MARK: - What the panel shows
 
     var title: String {
-        String(localized: "\(record.name ?? String(localized: "The game")) stopped unexpectedly.")
+        let name = record.name ?? String(localized: "The game")
+        return CrashPromptPolicy.quitWhileStarting(record)
+            ? String(localized: "\(name) quit with an error while starting.")
+            : String(localized: "\(name) stopped unexpectedly.")
     }
 
     /// The known failure's sentence and its fix, when this run matches one.

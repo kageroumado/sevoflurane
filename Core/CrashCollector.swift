@@ -149,8 +149,7 @@ nonisolated enum CrashCollector {
         beforeCompressing: (Report) -> Void = { _ in },
     ) -> Report? {
         let ended = record.exit?.kind
-        guard level.collectsEveryRun || ended == .crash || ended == .crashAtExit || ended == .watchdog
-        else { return nil }
+        guard level.collectsEveryRun || collectedEndings.contains(where: { $0 == ended }) else { return nil }
         // The level decides the dumps, so the caller never has to keep the two
         // in step by hand.
         var places = places
@@ -162,6 +161,11 @@ nonisolated enum CrashCollector {
         if level.compressesReports { compress(report.directory, in: places.reports) }
         return report
     }
+
+    /// The endings every level collects a report for. An error exit is one:
+    /// the game's own log says why it gave up, and its next launch writes
+    /// over that log.
+    static let collectedEndings: Set<RunRecord.Exit.Kind> = [.crash, .crashAtExit, .watchdog, .exitError]
 
     /// Puts `sevo doctor`'s JSON in a report, by running the CLI that rides
     /// inside the app bundle — the same report the terminal prints, so a
@@ -283,7 +287,7 @@ nonisolated enum CrashCollector {
     }
 
     private static let exceptionMarkers = [
-        ":seh:", "Unhandled exception", "wine: Call from", "Backtrace:", "Register dump:",
+        ":seh:", "sevo:crash", "Unhandled exception", "wine: Unhandled", "wine: Call from", "Backtrace:", "Register dump:",
         "stack overflow", "assertion failed",
     ]
 

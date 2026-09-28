@@ -113,6 +113,15 @@ struct DiagnosticLevelTests {
     }
 
     @Test
+    func `an error exit is collected at every level, for the game's own log`() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        #expect(collect(Self.record(ending: .exitError), at: .zero, in: root) != nil)
+        #expect(collect(Self.record(ending: .stopped), at: .zero, in: root) == nil)
+    }
+
+    @Test
     func `level two leaves a compressed report and no loose directory`() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }

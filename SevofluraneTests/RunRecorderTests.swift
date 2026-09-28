@@ -192,7 +192,9 @@ struct RunRecorderTests {
             Self.windowsClosed,
             "0450:0460:err:seh:NtRaiseException Unhandled exception code c0000005 flags 0 addr 0x1400",
         ].joined(separator: "\n")
-        #expect(WineExceptionTrail.ending(in: trail, forProcesses: [27651]) == WineExceptionTrail.Ending())
+        #expect(WineExceptionTrail.ending(in: trail, forProcesses: [27651]) == WineExceptionTrail.Ending(
+            windowsClosedAtEnd: true,
+        ))
         // A marker from a process that is not the game's names nothing.
         let other = WineExceptionTrail.ending(in: trail, forProcesses: [1])
         #expect(other.crash?.code == "0xc0000005")
@@ -207,6 +209,61 @@ struct RunRecorderTests {
             "sevo:run pid=27800 exe=steamwebhelper.exe appid=none engine=dormison-r18",
         ].joined(separator: "\n")
         #expect(WineProvenance.processes(forApp: 2_358_720, in: trail) == [27651, 27700])
+    }
+
+    @Test
+    func `the game's Wine pids are the wpid its sevo run lines end with`() {
+        let trail = [
+            "sevo:run pid=77176 exe=HigurashiEp01.exe appid=310360 engine=dormison-r1 swift=d5fec381986d7002 wpid=0124",
+            "sevo:run pid=77200 exe=UnityCrashHandler64.exe appid=none engine=dormison-r1 wpid=0200",
+            Self.gameRun,
+        ].joined(separator: "\n")
+        #expect(WineProvenance.winePIDs(forApp: 310_360, in: trail) == [0x124])
+        #expect(WineProvenance.winePIDs(forApp: 2_358_720, in: trail).isEmpty)
+    }
+
+    @Test
+    func `the game's sevo crash line wins over other processes' lines`() {
+        let game = "sevo:crash wpid=0124 code=C0000005 addr=00000001400014FE module=UnityPlayer.dll"
+        let other = "sevo:crash wpid=0200 code=c0000409 addr=6FFFFDD96EB9 module=?"
+        let seh = "0124:0130:err:seh:NtRaiseException Unhandled exception code c0000094 flags 0 addr 0x1400"
+        let trail = [game, other, seh].joined(separator: "\n")
+        let ending = WineExceptionTrail.ending(in: trail, forProcesses: [], winePIDs: [0x124])
+        #expect(ending.crash == RunRecord.Crash(code: "0xc0000005", address: "0x1400014fe", module: "UnityPlayer.dll"))
+        // With no Wine pid known, the last line is the game's.
+        let unknown = WineExceptionTrail.ending(in: trail, forProcesses: [])
+        #expect(unknown.crash == RunRecord.Crash(code: "0xc0000409", address: "0x6ffffdd96eb9"))
+    }
+
+    @Test
+    func `a sevo crash line after the game closed its windows is a crash on the way out`() {
+        let trail = [
+            Self.windowsClosed, "sevo:crash wpid=0288 code=c0000409 addr=00006FFFFDD96EB9 module=ntdll.dll",
+        ].joined(separator: "\n")
+        let ending = WineExceptionTrail.ending(in: trail, forProcesses: [27651])
+        #expect(ending.crash?.code == "0xc0000409")
+        #expect(ending.afterWindowsClosed)
+    }
+
+    @Test(arguments: [
+        (
+            "wine: Unhandled page fault on write access to 0000000000000000 at address 0x7B012C (thread 0124), "
+                + "starting debugger...",
+            "0xc0000005",
+        ),
+        ("wine: Unhandled stack overflow at address 0x140001000 (thread 0124), starting debugger...", "0xc00000fd"),
+        (
+            "wine: Unhandled illegal instruction at address 0x140001000 (thread 0124), starting debugger...",
+            "0xc000001d",
+        ),
+        (
+            "wine: Unhandled exception 0xE06D7363 in thread 124 at address 0x7B012C (thread 0124), "
+                + "starting debugger...",
+            "0xe06d7363",
+        ),
+    ])
+    func `wine's debugger line names the exception`(line: String, code: String) {
+        #expect(WineExceptionTrail.lastException(in: line)?.code == code)
     }
 
     @Test

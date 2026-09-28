@@ -436,6 +436,17 @@
         }
       }
     },
+    "%@ quit with an error while starting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 在启动时出错退出。"
+          }
+        }
+      }
+    },
     "%@ showed no window" : {
       "localizations" : {
         "zh-Hans" : {

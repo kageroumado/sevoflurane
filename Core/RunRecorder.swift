@@ -83,20 +83,20 @@ nonisolated struct RunInProgress: Sendable {
             record.rendererConfirmed = false
         }
         let ending = WineExceptionTrail.ending(
-            in: wineTail, forProcesses: WineProvenance.processes(forApp: record.appid, in: lines),
+            in: wineTail,
+            forProcesses: WineProvenance.processes(forApp: record.appid, in: lines),
+            winePIDs: WineProvenance.winePIDs(forApp: record.appid, in: lines),
         )
-        record.crash = ending.crash
         let notes = WineExceptionTrail.notes(in: wineTail)
         record.notes = notes.isEmpty ? nil : notes
         let endedNotResponding = wineTail.contains("ended by the user while not responding")
-        record.exit = RunRecord.Exit(
-            kind: kind ?? Self.kind(
-                code: code, ending: ending, endedNotResponding: endedNotResponding,
-                stopRequest: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
-                steamError: steamError, unrecorded: unrecorded,
-            ),
-            code: code,
+        let ended = kind ?? Self.kind(
+            code: code, ending: ending, endedNotResponding: endedNotResponding,
+            stopRequest: RunLog.takeStopRequest(forApp: record.appid, in: runsRoot),
+            steamError: steamError, unrecorded: unrecorded,
         )
+        record.crash = ending.crash ?? Self.statusCrash(code: code, ended: ended)
+        record.exit = RunRecord.Exit(kind: ended, code: code)
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
         RunRecorder.didClose(record)
@@ -116,10 +116,35 @@ nonisolated struct RunInProgress: Sendable {
         if endedNotResponding { return .endedNotResponding }
         if let code {
             if code == 0 { return .user }
-            return stopRequest.map(stoppedKind) ?? .exitError
+            if let stopRequest { return stoppedKind(stopRequest) }
+            if exceptionStatus(code) != nil { return ending.windowsClosedAtEnd ? .crashAtExit : .crash }
+            return .exitError
         }
         return steamError == nil ? unrecorded : .steamTerminate
     }
+
+    /// The exception a run's exit status names, for a crash no log line
+    /// described.
+    private static func statusCrash(code: Int?, ended: RunRecord.Exit.Kind) -> RunRecord.Crash? {
+        guard ended == .crash || ended == .crashAtExit, let status = code.flatMap(exceptionStatus) else { return nil }
+        return RunRecord.Crash(code: status)
+    }
+
+    /// The NT status an exit code is when it is an error-severity one
+    /// (`0xC…`, negative as Steam prints it): the status of the exception
+    /// that ended the process, which Windows hands on as its exit code.
+    /// `-1073741819` is `0xc0000005`. `STATUS_CONTROL_C_EXIT` is the console
+    /// closing, which is how a person ends a console program, and `-1` is a
+    /// program's own `exit(-1)`.
+    static func exceptionStatus(_ code: Int) -> String? {
+        guard (Int(Int32.min) ... Int(UInt32.max)).contains(code) else { return nil }
+        let bits = UInt32(truncatingIfNeeded: code)
+        guard bits >= 0xC000_0000, bits != controlCExit, bits != exitMinusOne else { return nil }
+        return String(format: "0x%08x", bits)
+    }
+
+    private static let controlCExit: UInt32 = 0xC000_013A
+    private static let exitMinusOne: UInt32 = 0xFFFF_FFFF
 
     /// The ending a stop asked for by `source` is.
     static func stoppedKind(_ source: RunLog.StopSource) -> RunRecord.Exit.Kind {
