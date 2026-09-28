@@ -24,7 +24,7 @@ in short.
 | `sevo app list` / `sevo app info <appid>` | The library, and one game's overview. |
 | `sevo app launch <appid>` | Launches through Steam and waits for the game's window. |
 | `sevo app terminate <appid>` | Stops a game and waits for it to go. |
-| `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `fps-graph`, `dll`, and more. With no key it prints every setting and the level it comes from. |
+| `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `fps-graph`, `dll`, `processors`, and more. With no key it prints every setting and the level it comes from. |
 | `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
 | `sevo program list` / `launch <id>` / `add <path>` | Windows programs added outside Steam. Their ids start at 2000000000 and work with `sevo app config`. |
 | `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. |

@@ -247,6 +247,10 @@ nonisolated enum ConfigMaterializer {
         if GameConfig.mouse(bottle: name).value == .linear {
             lines.append("SEVO_LINEAR_MOUSE=1")
         }
+        let processors = GameConfig.processors(bottle: name).value
+        if processors > 0 {
+            lines.append("SEVO_CPU_COUNT=\(processors)")
+        }
         lines += switches.map { key, resolve in
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
@@ -313,6 +317,12 @@ nonisolated enum ConfigMaterializer {
         // an absent key leaves its value standing.
         if let mouse = values.mouse {
             lines.append("SEVO_LINEAR_MOUSE=\(mouse == .linear ? "1" : "0")")
+        }
+        // Every processor is `SEVO_CPU_COUNT=0`, which the engine reads as no
+        // cap: written rather than omitted, so a game asking for all of them
+        // overrides a bottle that caps.
+        if let processors = values.processors {
+            lines.append("SEVO_CPU_COUNT=\(processors)")
         }
         let own = ownSwitches(values)
         lines += switches.compactMap { key, _ in

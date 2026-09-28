@@ -22,6 +22,105 @@
         }
       }
     },
+    "8 · 6 · 4" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "8 · 6 · 4"
+          }
+        }
+      }
+    },
+    "All" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
+    "How many processors a game is told the Mac has. Games built on Unity 5 start a worker thread for each one, and under Rosetta every worker keeps looking for work instead of sleeping, so a Mac with many cores spends them all on waiting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "告诉游戏这台 Mac 有多少个处理器。基于 Unity 5 的游戏为每个处理器启动一个工作线程，而在 Rosetta 下每个工作线程都在不停寻找任务而不休眠，因此核心越多的 Mac 越是把它们全部耗在等待上。"
+          }
+        }
+      }
+    },
+    "Measure with the frame rate counter and Activity Monitor." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用帧率计数器和“活动监视器”来衡量。"
+          }
+        }
+      }
+    },
+    "Processors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "处理器"
+          }
+        }
+      }
+    },
+    "Some older games start one worker thread per processor and keep them all busy; fewer processors let them rest." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一些旧游戏为每个处理器启动一个工作线程，并让它们全部保持忙碌；减少处理器数量能让它们歇下来。"
+          }
+        }
+      }
+    },
+    "The game sees every processor, as it would on Windows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏能看到全部处理器，与在 Windows 上相同。"
+          }
+        }
+      }
+    },
+    "The game sees that many and starts that many workers. A game that uses most of the processor time and still stutters runs smoother with fewer." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
+          }
+        }
+      }
+    },
+    "Unity 5 starts a worker per processor and keeps every one spinning under Rosetta: on a 16-core M4 Max the game used 1357 % CPU at 54 fps, stalling several times a second, and told of 8 processors, 184 % at 117 fps." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unity 5 为每个处理器启动一个工作线程，在 Rosetta 下它们全都在空转：在 16 核的 M4 Max 上，游戏占用 1357 % CPU，帧率 54 fps，每秒卡顿数次；告诉它只有 8 个处理器后，CPU 为 184 %，帧率 117 fps。"
+          }
+        }
+      }
+    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {

@@ -67,6 +67,13 @@ nonisolated enum KnownFixes {
                 + "this game looks for included.",
         ),
         KnownFix(
+            appID: 310_360, exePattern: nil, title: "Higurashi When They Cry Hou - Ch.1 Onikakushi",
+            values: ConfigValues(processors: 8),
+            reason: "Unity 5 starts a worker per processor and keeps every one spinning under "
+                + "Rosetta: on a 16-core M4 Max the game used 1357 % CPU at 54 fps, stalling "
+                + "several times a second, and told of 8 processors, 184 % at 117 fps.",
+        ),
+        KnownFix(
             appID: 1_933_660, exePattern: nil, title: "Demons Roots",
             values: ConfigValues(runner: GameRunner.nwjs),
             reason: "An RPG Maker MV game on NW.js: the native macOS runtime runs it "
@@ -192,6 +199,7 @@ nonisolated enum KnownFixes {
                 if let large = fix.values.largeAddressAware { merged.largeAddressAware = large }
                 if let avx = fix.values.avx { merged.avx = avx }
                 if let confine = fix.values.cursorConfine { merged.cursorConfine = confine }
+                if let processors = fix.values.processors { merged.processors = processors }
                 if let runner = fix.values.runner { merged.runner = runner }
             }
             return merged

@@ -199,6 +199,28 @@ nonisolated extension SettingCopy {
         ),
     )
 
+    static let processors = SettingCopy(
+        title: "Processors",
+        caption: "Some older games start one worker thread per processor and keep them all busy; "
+            + "fewer processors let them rest.",
+        help: SettingHelp(
+            title: "Processors",
+            summary: "How many processors a game is told the Mac has. Games built on Unity 5 start "
+                + "a worker thread for each one, and under Rosetta every worker keeps looking "
+                + "for work instead of sleeping, so a Mac with many cores spends them all on "
+                + "waiting.",
+            entries: [
+                .init(name: "All", text: "The game sees every processor, as it would on Windows."),
+                .init(
+                    name: "8 · 6 · 4",
+                    text: "The game sees that many and starts that many workers. A game that uses "
+                        + "most of the processor time and still stutters runs smoother with fewer.",
+                ),
+            ],
+            footnote: "Measure with the frame rate counter and Activity Monitor.",
+        ),
+    )
+
     static let unifiedMemory = SettingCopy(
         title: "Unified memory",
         caption: "Experimental. Tells games the GPU shares the Mac's memory, so textures are written once.",

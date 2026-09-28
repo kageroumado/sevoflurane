@@ -41,6 +41,14 @@ struct KnownFixesTests {
     }
 
     @Test
+    func `Higurashi Hou is recommended eight processors`() {
+        let recommendation = KnownFixes.recommended(for: 310_360)
+        #expect(recommendation.value(for: \.processors) == 8)
+        #expect(recommendation.applied(to: .empty).processors == 8)
+        #expect(SettingCatalog.setting(.processors).recommended(recommendation)?.value == .choice("8"))
+    }
+
+    @Test
     func `using every recommendation keeps what the fix does not name`() {
         var mine = ConfigValues.empty
         mine.windows = .all

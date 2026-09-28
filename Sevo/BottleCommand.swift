@@ -63,6 +63,26 @@ enum ConfigKeyParsing {
         return curve
     }
 
+    /// How many processors a game is told of: `all` for every one (stored as
+    /// `0`), a count, or the level-clearing value.
+    static func processors(_ value: String) throws -> Int? {
+        switch value {
+        case "inherit": return nil
+        case "all": return 0
+        default:
+            guard let count = Int(value), count > 0 else {
+                Sevo.printError("processors must be all, a count such as 8, or inherit")
+                throw SevoExit.badInvocation
+            }
+            return count
+        }
+    }
+
+    /// A processor count as the command line spells it.
+    static func processorsLabel(_ count: Int) -> String {
+        count > 0 ? String(count) : "all"
+    }
+
     /// A switch: on, off, or the level-clearing value.
     static func flag(_ value: String, key: String) throws -> Bool? {
         switch value {
@@ -151,9 +171,9 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config | deps [install <id>]") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | retina | emulate-modeset | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
+    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for processors: all, a count such as 8, or inherit; for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
@@ -243,6 +263,7 @@ struct BottleCommand: AsyncParsableCommand {
             print("mouse \(Self.mouseSummary)")
             print("retina \(Self.retinaSummary)")
             print("emulate-modeset \(Self.modesetSummary)")
+            print("processors \(Self.processorsSummary)")
             for entry in ConfigSwitches.all {
                 print("\(entry.key) \(Self.switchSummary(entry.key))")
             }
@@ -258,6 +279,7 @@ struct BottleCommand: AsyncParsableCommand {
             "mouse": GameConfig.mouse(bottle: SteamBottle.name).value.rawValue,
             "retina": GameConfig.retina(bottle: SteamBottle.name).value,
             "emulate-modeset": GameConfig.emulateModeset(bottle: SteamBottle.name).value,
+            "processors": GameConfig.processors(bottle: SteamBottle.name).value,
             "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {
                 ($0.key, ConfigSwitches.resolved(
                     $0.key, bottle: SteamBottle.name, game: nil,
@@ -279,6 +301,7 @@ struct BottleCommand: AsyncParsableCommand {
             print(Self.switchSummary(key))
         case "retina": print(Self.retinaSummary)
         case "emulate-modeset": print(Self.modesetSummary)
+        case "processors": print(Self.processorsSummary)
         case "windows": print(Self.windowsSummary)
         case "upscaler": print(Self.upscalerSummary)
         case "filter": print(Self.filterSummary)
@@ -336,6 +359,12 @@ struct BottleCommand: AsyncParsableCommand {
             let flag = try ConfigKeyParsing.flag(value, key: key)
             updateBottle { $0[keyPath: path] = flag }
             print("\(key) \(Self.switchSummary(key)) — \(Self.gameReach)")
+        case "processors":
+            // How many processors every game in the bottle is told of: `all`,
+            // a count, or `inherit` for the global default.
+            let processors = try ConfigKeyParsing.processors(value)
+            updateBottle { $0.processors = processors }
+            print("processors \(Self.processorsSummary) — \(Self.gameReach)")
         case "retina":
             // The prefix's own HiDPI switch, written to the bottle's
             // `Mac Driver\\RetinaMode`; one answer for every process in it.
@@ -411,7 +440,7 @@ struct BottleCommand: AsyncParsableCommand {
     }
 
     private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | "
-        + "retina | emulate-modeset | \(ConfigSwitches.names) | wine-debug)"
+        + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug)"
 
     /// One switch's resolved value and where it comes from.
     static func switchSummary(_ key: String) -> String {
@@ -431,6 +460,13 @@ struct BottleCommand: AsyncParsableCommand {
     static var modesetSummary: String {
         let resolved = GameConfig.emulateModeset(bottle: SteamBottle.name)
         return "\(resolved.value) (\(resolved.source))"
+    }
+
+    /// How many processors the bottle's games are told of, and where that
+    /// comes from.
+    static var processorsSummary: String {
+        let resolved = GameConfig.processors(bottle: SteamBottle.name)
+        return "\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))"
     }
 
     /// The bottle's window treatment, where it comes from, and what it

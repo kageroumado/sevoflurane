@@ -17,6 +17,7 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
     case mouse
     case cursorConfine
     case tuning
+    case processors
     case unifiedMemory
     case largeAddressAware
     case avx
@@ -247,6 +248,19 @@ nonisolated enum SettingCatalog {
             carrier: .environment(["SEVO_WAIT_SPIN", "SEVO_WAIT_SPIN_ADAPT", "SEVO_OBJECT_SPIN"]),
             control: { .tuning($0) },
         ),
+        Setting(
+            id: .processors, group: .performance, levels: [.bottle, .game], copy: .processors,
+            control: .choices(SettingCatalog.processorChoices), carrier: .environment(["SEVO_CPU_COUNT"]),
+            read: { $0.processors.map { .choice(String($0)) } },
+            write: { $0.processors = $1?.choice.flatMap { Int($0) } },
+            resolved: { .choice(String(GameConfig.processors(bottle: $0, game: $1).value)) },
+            reach: { _ in .env },
+            recommended: { table in
+                table.fix(setting: \.processors).flatMap { fix in
+                    fix.values.processors.map { (.choice(String($0)), fix.reason) }
+                }
+            },
+        ),
         .flag(
             .unifiedMemory, in: .performance, key: \.unifiedMemory, copy: .unifiedMemory,
             carrier: .environment(["SEVO_FORCE_UMA"]),
@@ -256,6 +270,15 @@ nonisolated enum SettingCatalog {
             carrier: .environment(["SEVO_LARGE_ADDRESS_AWARE"]),
         ),
         .flag(.avx, in: .performance, key: \.avx, copy: .avx, carrier: .environment(["ROSETTA_ADVERTISE_AVX"])),
+    ]
+
+    /// Every processor, then the caps a game that runs one busy thread per
+    /// processor is offered, by the count `SEVO_CPU_COUNT` takes.
+    static let processorChoices = [
+        SettingChoice(value: "0", label: "All"),
+        SettingChoice(value: "8", label: "8"),
+        SettingChoice(value: "6", label: "6"),
+        SettingChoice(value: "4", label: "4"),
     ]
 
     static func setting(_ id: SettingID) -> Setting {

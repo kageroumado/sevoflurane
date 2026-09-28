@@ -81,9 +81,10 @@ struct SettingCatalogTests {
         for setting in SettingCatalog.all where setting.levels.contains(.bottle) {
             switch setting.carrier {
             case let .environment(keys):
-                // The bottle writes the mouse line only for Linear: an absent
-                // line is the system curve, which is the default.
-                for key in keys where key != "SEVO_LINEAR_MOUSE" {
+                // The bottle writes the mouse line only for Linear and the
+                // processor line only for a cap: an absent line is the system
+                // curve and every processor, which are the defaults.
+                for key in keys where !["SEVO_LINEAR_MOUSE", "SEVO_CPU_COUNT"].contains(key) {
                     #expect(lines.contains { $0.hasPrefix("\(key)=") }, "\(setting.id) writes no \(key)")
                 }
             case let .registry(name):

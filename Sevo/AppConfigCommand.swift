@@ -14,8 +14,10 @@ extension AppCommand {
             Keys: renderer (\(Renderer.gameRungs) — the translation layer \
             this game renders through, over the bottle's), emulate-modeset \
             (on | off | inherit — fakes a display-mode switch and shows the \
-            result in a window), dll <name>=<mode> (n,b | b,n | n | b | \
-            empty for disabled; <name>= drops one, inherit drops the \
+            result in a window), processors (all | a count such as 8 | \
+            inherit — how many processors the game is told of; a Unity 5 \
+            game keeps a worker spinning on each), dll <name>=<mode> \
+            (n,b | b,n | n | b | empty for disabled; <name>= drops one, inherit drops the \
             table), the switches \(ConfigSwitches.names) (on | off | \
             inherit), recommended to print what the fix table knows about \
             this game, windows (the values below), upscaler (off | \
@@ -36,7 +38,7 @@ extension AppCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | dll | \(ConfigSwitches.names) | runner | recommended | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -81,6 +83,9 @@ extension AppCommand {
             case "emulate-modeset":
                 let resolved = GameConfig.emulateModeset(bottle: bottle, game: appid)
                 print("\(resolved.value) (\(resolved.source))")
+            case "processors":
+                let resolved = GameConfig.processors(bottle: bottle, game: appid)
+                print("\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))")
             case "dll":
                 print(Self.overrideLines(values))
             case "windows":
@@ -122,6 +127,9 @@ extension AppCommand {
                 let modeset = try ConfigKeyParsing.flag(value, key: "emulate-modeset")
                 updateGame(bottle: bottle) { $0.emulateModeset = modeset }
                 await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            case "processors":
+                let processors = try ConfigKeyParsing.processors(value)
+                updateGame(bottle: bottle) { $0.processors = processors }
             case "dll":
                 try setDLLOverride(value, bottle: bottle)
                 await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
@@ -154,7 +162,7 @@ extension AppCommand {
         /// goes with it.
         private static func unknownKey(_ key: String) -> ExitCode {
             Sevo.printError("unknown key '\(key)' (renderer | windows | upscaler | filter | "
-                + "mouse | emulate-modeset | dll | \(ConfigSwitches.names) | runner | "
+                + "mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | "
                 + "recommended | detect | exe)")
             return SevoExit.badInvocation
         }
@@ -290,6 +298,8 @@ extension AppCommand {
             print("mouse \(mouse.value.rawValue) (\(mouse.source))")
             let modeset = GameConfig.emulateModeset(bottle: bottle, game: appid)
             print("emulate-modeset \(modeset.value) (\(modeset.source))")
+            let processors = GameConfig.processors(bottle: bottle, game: appid)
+            print("processors \(ConfigKeyParsing.processorsLabel(processors.value)) (\(processors.source))")
             print("dll \(Self.overrideLines(values).replacingOccurrences(of: "\n", with: " "))")
             for entry in ConfigSwitches.all {
                 let resolved = ConfigSwitches.resolved(entry.key, bottle: bottle, game: appid)
@@ -322,6 +332,7 @@ extension AppCommand {
             let upscaler = GameConfig.upscaler(bottle: bottle, game: appid)
             let filter = GameConfig.filter(bottle: bottle, game: appid)
             let mouse = GameConfig.mouse(bottle: bottle, game: appid)
+            let processors = GameConfig.processors(bottle: bottle, game: appid)
             let values = GameConfig.game(appid)
             var payload: [String: Any] = [
                 "appid": appid,
@@ -343,6 +354,9 @@ extension AppCommand {
                 ],
                 "emulate-modeset": [
                     "value": modeset.value, "source": modeset.source.description,
+                ],
+                "processors": [
+                    "value": processors.value, "source": processors.source.description,
                 ],
                 "dll-overrides": values.dllOverrides ?? [:],
                 "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {

@@ -316,6 +316,14 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// while the game has the cursor clipped (`SEVO_CURSOR_CONFINE`), which is
     /// what keeps mouse-look from walking onto a second display.
     var cursorConfine: Bool?
+    /// How many processors the game is told the Mac has (`SEVO_CPU_COUNT`):
+    /// dormison caps `GetSystemInfo`, the affinity mask and
+    /// `GetLogicalProcessorInformation` to it. `0` is every processor.
+    ///
+    /// Unity 5's JobQueue starts one worker per processor and parks a worker
+    /// only when no other worker is looking for work, so under Rosetta every
+    /// one of them spins; a game told of fewer processors starts fewer.
+    var processors: Int?
     /// Game level only: which runtime the game runs on — the bottle's engine
     /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
@@ -347,7 +355,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
             || hud != nil || fps != nil || fpsGraph != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
-            || unifiedMemory != nil || tuning != nil
+            || unifiedMemory != nil || tuning != nil || processors != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
@@ -455,7 +463,7 @@ nonisolated enum GameConfig {
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
         hud: false, fps: false, fpsGraph: false, largeAddressAware: true, avx: true, unifiedMemory: false,
-        cursorConfine: false,
+        cursorConfine: false, processors: 0,
     )
 
     // MARK: - Levels
@@ -582,6 +590,13 @@ nonisolated enum GameConfig {
 
     static func cursorConfine(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.cursorConfine, bottle: bottle, game: appID)
+    }
+
+    /// How many processors a launch in this bottle is told of, `0` for every
+    /// one: for a specific game when its id is known, otherwise the bottle's
+    /// own value.
+    static func processors(bottle: String, game appID: Int? = nil) -> Resolved<Int> {
+        resolve(\.processors, bottle: bottle, game: appID)
     }
 
     /// The renderer a launch gets: the game's own choice when it has one,

@@ -310,6 +310,7 @@ are listed for anyone driving the engine directly.
 | `SEVO_GPU_VENDOR_ID`, `_DEVICE_ID`, `_NAME`, `_MEMORY_MB`, `_DRIVER_VERSION`, `_DRIVER_PROVIDER`, `_DRIVER_DATE` | the GPU identity, memory and driver a Windows program sees (NVIDIA metadata when the vendor is unknown) |
 | `SEVO_FORCE_UMA` | `1` reports the GPU's real unified-memory answer and the Mac's real memory |
 | `SEVO_LARGE_ADDRESS_AWARE` | `1` gives a 32-bit program the full 4 GB |
+| `SEVO_CPU_COUNT` | `<n>` tells a program the Mac has `n` processors (`GetSystemInfo`, the affinity mask, `GetLogicalProcessorInformation`); below 1, or the real count and above, leaves every processor |
 | `SEVO_OBJECT_SPIN`, `SEVO_ACK_SPIN`, `SEVO_WAIT_SPIN`, `SEVO_WAIT_SPIN_ADAPT`, `SEVO_YIELD`, `SEVO_ALERT_ALWAYS_WAKE` | optional spinning before a thread waits (off by default) |
 | `SEVO_SYNC_STATS` | a path to write per-process wait counters to |
 | `SEVO_COREAUDIO_DEVICE_BUFFER` | `1` writes buffer size and volume to the whole device, for comparison |
@@ -413,6 +414,8 @@ runs on CrossOver.
   NVIDIA card.
 - **(Dormison)** Raw mouse-look and cursor confinement for games that need
   them.
+- **(Dormison)** A processor cap per game, for Unity 5 games that keep a
+  spinning worker on every core: Higurashi Hou is recommended 8.
 - The display stays awake while a game is up, and can sleep once it is gone.
 - A game that stops answering its close button gets Keep Waiting or End Game.
 - NW.js games, including RPG Maker MV and MZ, run on a macOS runtime with

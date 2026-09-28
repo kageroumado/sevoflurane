@@ -93,6 +93,18 @@ struct ConfigMaterializerTests {
         await first.value
         #expect(passes.withLock { $0 } == 2)
     }
+
+    @Test
+    func `a game's processor cap reaches its file, and every processor overrides the bottle`() {
+        var values = ConfigValues.empty
+        #expect(!ConfigMaterializer.gameLines(1, values).contains { $0.hasPrefix("SEVO_CPU_COUNT=") })
+        values.processors = 8
+        #expect(ConfigMaterializer.gameLines(1, values).contains("SEVO_CPU_COUNT=8"))
+        // The bottle's file is read first, so a game asking for every
+        // processor under a bottle that caps needs its own line.
+        values.processors = 0
+        #expect(ConfigMaterializer.gameLines(1, values).contains("SEVO_CPU_COUNT=0"))
+    }
 }
 
 /// The last level of the settings hierarchy.
@@ -115,6 +127,7 @@ struct ConfigDefaultsTests {
         #expect(defaults.largeAddressAware != nil)
         #expect(defaults.avx != nil)
         #expect(defaults.cursorConfine != nil)
+        #expect(defaults.processors != nil)
     }
 }
 
