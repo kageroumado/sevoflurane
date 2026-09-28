@@ -140,8 +140,10 @@ reports. Your account name, home folder paths, the Mac's name and Steam ids are
 taken out of every file in it; look through it before sharing all the same.
 You can also run `sevo diag` from the terminal.
 
-When a game crashes, or hangs until the watchdog ends it, Sevoflurane asks
-whether to send that run's redacted report to the developers. "Never ask
+When a game crashes, hangs until the watchdog ends it, or quits with an
+error while starting, Sevoflurane asks whether to send that run's redacted
+report to the developers. A crash counts even when the game's own crash
+handler ends it quietly. "Never ask
 again" turns the question off.
 
 The main logs are `~/Library/Logs/Sevoflurane.log` and
@@ -404,8 +406,9 @@ runs on CrossOver.
   final filter, for games drawn through Metal, OpenGL (Wine's built-in
   renderer, which most Direct3D 9 visual novels use) and plain GDI.
 - **(Dormison)** A View menu in every game: switch upscaler and filter live,
-  Show Frame Rate (⌥⌘F), Show Frame Time Graph (⌥⌘G), Show Picture Details
-  (⌥⌘I).
+  Resizable Windows (⌥⌘R), Show Frame Rate (⌥⌘F), Show Frame Time Graph
+  (⌥⌘G), Show Picture Details (⌥⌘I). A short notice over the picture says
+  when the upscaler runs, and when a window is too small for it to.
 - DLSS through MetalFX on D3DMetal: a game's own DLSS setting works as on an
   NVIDIA card.
 - **(Dormison)** Raw mouse-look and cursor confinement for games that need
