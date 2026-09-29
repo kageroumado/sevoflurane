@@ -113,6 +113,8 @@ restarts.
 
 - Games and online modes that need Windows kernel anti-cheat do not run; a
   game's offline mode may still work.
+- Honkai: Star Rail installs and updates, but its protection closes it a few
+  seconds after it starts under Wine.
 - The Windows side runs under Rosetta, so it needs Rosetta installed and
   pays its translation cost. Setup installs Rosetta when it is missing.
 - DirectX 12 needs Apple's Game Porting Toolkit, which only Apple may
@@ -186,6 +188,7 @@ sevo recover [--deep]
 sevo daemon repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config|repair-dll|detect
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
+sevo hoyo list|status FOLDER|install GAME FOLDER|update FOLDER|verify FOLDER [--repair]
 sevo engine list|install [--file TARBALL]|d3dmetal|use|channel|check-manifest
 sevo update check|use|install|remove
 sevo bottle list|config <key> [value]|deps [install ID]
@@ -229,9 +232,9 @@ an engine folder inside Sevoflurane's `Engines` folder, nothing outside it.
 
 ### MCP
 
-`sevo mcp` provides a stdio MCP server. Its 27 tools cover diagnostics,
+`sevo mcp` provides a stdio MCP server. Its 31 tools cover diagnostics,
 client recovery, library queries, game installation and launch, Quick Launch
-programs, downloads, recent runs, frame-time comparison, diagnostic levels and
+programs, downloads, HoYoverse game updates, recent runs, frame-time comparison, diagnostic levels and
 logs. It also exposes `sevo://status`, `sevo://doctor`, `sevo://log` and
 `sevo://library` resources.
 
@@ -465,6 +468,11 @@ runs on CrossOver.
   list and gallery views and in Quick Look, read from the file without running
   it. Available once Sevoflurane has run once.
 - Sevoflurane reports when a program needs a Windows kernel driver.
+- **HoYoverse games without HoYoPlay**: Genshin Impact, Honkai: Star Rail and
+  Zenless Zone Zero install, update and verify from the servers HoYoPlay uses,
+  in Settings › HoYoverse or with `sevo hoyo`. An update downloads HoYoverse's
+  patches for the build you have; an interrupted download carries on where it
+  stopped. Genshin and Zenless join Quick Launch once installed.
 
 ### Settings
 
@@ -482,6 +490,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
 - **Games**: one game's picture, mouse, performance and DLL overrides, each
   inherited from Engine until changed. A **known fix** marks the setting a
   game needs, one click to apply.
+- **HoYoverse**: install, update and verify HoYoverse games (above).
 - **Storage**, **Recovery**, **Diagnostics**: below.
 - **About**: version, links, Acknowledgements for every third-party component
   and data source, and the license.

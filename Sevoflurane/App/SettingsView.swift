@@ -89,6 +89,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case graphics
     case engine
     case games
+    case hoyoverse
     case storage
     case recovery
     case diagnostics
@@ -104,6 +105,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .graphics: "Graphics"
         case .engine: "Engine"
         case .games: "Games"
+        case .hoyoverse: "HoYoverse"
         case .storage: "Storage"
         case .recovery: "Recovery"
         case .diagnostics: "Diagnostics"
@@ -118,6 +120,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .graphics: "cpu.fill"
         case .engine: "wrench.and.screwdriver.fill"
         case .games: "gamecontroller.fill"
+        case .hoyoverse: "arrow.down.circle.fill"
         case .storage: "internaldrive.fill"
         case .recovery: "cross.case.fill"
         case .diagnostics: "stethoscope"
@@ -322,6 +325,22 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                         "upscaler", "upscale", "lanczos", "metalfx", "shader",
                         "anime4k", "cunny", "resolution", "sharp", "per-game",
                     ],
+                ),
+            ]
+        case .hoyoverse:
+            [
+                SearchableSetting(
+                    id: .hoyoverseGames,
+                    title: "HoYoverse games",
+                    keywords: [
+                        "hoyoverse", "hoyoplay", "genshin", "star rail", "honkai", "zenless", "zzz",
+                        "update", "patch", "verify", "repair",
+                    ],
+                ),
+                SearchableSetting(
+                    id: .hoyoverseInstall,
+                    title: "Install a HoYoverse game",
+                    keywords: ["hoyoverse", "install", "download", "genshin", "star rail", "zenless", "voice"],
                 ),
             ]
         case .storage:
@@ -537,6 +556,8 @@ enum SettingsAnchor: String, CaseIterable {
     case engineRepair = "engine.repair"
     case gamesSettings = "games.settings"
     case gamesUpscaler = "games.upscaler"
+    case hoyoverseGames = "hoyoverse.games"
+    case hoyoverseInstall = "hoyoverse.install"
     case storageGames = "storage.games"
     case storageSharing = "storage.sharing"
     case recoveryRestartSteam = "recovery.restartSteam"
@@ -677,6 +698,8 @@ private struct SettingsPane: View {
                 )
             case .games:
                 GamesSettings(shaders: shaders, highlighted: highlighted, requestedGame: $requestedGame)
+            case .hoyoverse:
+                HoYoSettings(highlighted: highlighted)
             case .storage:
                 StorageSettings(store: storage, steam: steam, highlighted: highlighted)
             case .recovery:

@@ -269,8 +269,69 @@ extension MCPServer {
         case "downloads_resume":
             try await SteamOps.setDownloadsEnabled(true)
             return "downloads resumed"
+        case "hoyo_list", "hoyo_status", "hoyo_verify", "hoyo_update":
+            return try await Self.invokeHoYoTool(name, args: args)
         default:
             return nil
+        }
+    }
+
+    // MARK: - HoYoverse games
+
+    private static func invokeHoYoTool(_ name: String, args: [String: Any]) async throws -> String {
+        if name == "hoyo_list" {
+            var games: [[String: Any]] = []
+            for game in HoYoGame.allCases {
+                let branch = try? await HoYoAPI().branch(game)
+                games.append([
+                    "game": game.slug, "name": game.displayName, "latest": branch?.tag ?? NSNull(),
+                    "patches_from": branch?.diffTags ?? [], "quick_launch": game.launches,
+                ])
+            }
+            let installations = HoYoLibrary.installations().map { installation in
+                ["game": installation.game.slug, "folder": installation.folder.path, "version": installation.version ?? NSNull()]
+                    as [String: Any]
+            }
+            return Sevo.json(["games": games, "installations": installations], pretty: true)
+        }
+        guard let path = args["folder"] as? String,
+              let installation = HoYoInstallation(folder: URL(fileURLWithPath: path))
+        else {
+            throw ClientOps.Failure.message("folder must be a HoYoverse game's install folder, the one its .exe sits in")
+        }
+        do {
+            switch name {
+            case "hoyo_status":
+                let plan = try await SophonDownloader().plan(game: installation.game, folder: installation.folder)
+                let action = switch plan.kind {
+                case .upToDate: "up-to-date"
+                case .patch: "patch"
+                case .download: "download"
+                }
+                return Sevo.json([
+                    "game": plan.game.slug, "installed": plan.installed ?? NSNull(), "latest": plan.latest,
+                    "action": action, "voices": plan.voices, "download_bytes": plan.downloadSize,
+                ] as [String: Any], pretty: true)
+            case "hoyo_verify":
+                let problems = installation.verify(quick: args["quick"] as? Bool ?? false)
+                return Sevo.json([
+                    "version": installation.version ?? NSNull(),
+                    "problems": problems.map { ["path": $0.path, "kind": $0.kind.rawValue] },
+                ] as [String: Any], pretty: true)
+            default:
+                let outcome = try await SophonDownloader().update(installation)
+                HoYoLibrary.remember(installation.folder)
+                return switch outcome {
+                case let .upToDate(tag): "\(installation.game.displayName) \(tag) is up to date"
+                case let .patched(from, to, files, current, whole):
+                    "updated \(from) → \(to): \(files) files patched, \(current) already current, \(whole) downloaded whole"
+                case let .downloaded(to): "brought \(installation.game.displayName) to \(to)"
+                }
+            }
+        } catch let failure as ClientOps.Failure {
+            throw failure
+        } catch {
+            throw ClientOps.Failure.message("\(error)")
         }
     }
 

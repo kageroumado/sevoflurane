@@ -125,6 +125,13 @@
                     }
                 }
 
+                section("Settings — HoYoverse", minimum: 520) {
+                    tile("Up to date, a patch out, an update running") {
+                        HoYoSettings(highlighted: nil, store: Fixtures.hoyo)
+                            .frame(width: 520, height: 640)
+                    }
+                }
+
                 section("Settings — Recovery", minimum: 500) {
                     ForEach(Fixtures.repairs, id: \.label) { pane in
                         tile(pane.label) {
@@ -229,6 +236,32 @@
     /// The states the gallery draws. One place to add a case the design has
     /// to answer for.
     enum Fixtures {
+        /// Three installations: one current, one a patch behind, one updating.
+        static let hoyo: HoYoStore = {
+            func row(_ game: HoYoGame, _ path: String, _ version: String, _ kind: SophonDownloader.Plan.Kind, _ size: Int64) -> HoYoStore.Row {
+                let installation = HoYoInstallation(game: game, folder: URL(fileURLWithPath: path))
+                let latest = if case .patch = kind { game == .starRail ? "4.6.0" : "3.2.0" } else { version }
+                return HoYoStore.Row(
+                    installation: installation, version: version,
+                    plan: SophonDownloader.Plan(
+                        game: game, installed: version, latest: latest, kind: kind, voices: ["en-us"], downloadSize: size,
+                    ),
+                )
+            }
+            let zzz = "/Users/you/Games/Zenless Zone Zero"
+            return HoYoStore(
+                fixtureRows: [
+                    row(.genshin, "/Users/you/Games/Genshin Impact", "7.1.0", .upToDate, 0),
+                    row(.starRail, "/Users/you/Games/Honkai Star Rail", "4.5.0", .patch(from: "4.5.0"), 4_290_000_000),
+                    row(.zenless, zzz, "3.1.0", .patch(from: "3.1.0"), 5_100_000_000),
+                ],
+                jobs: [zzz: HoYoStore.Job(
+                    kind: .update,
+                    progress: SophonProgress(phase: .patching, bytesDone: 3_200_000_000, bytesTotal: 5_100_000_000, filesDone: 811, filesTotal: 1402),
+                )],
+            )
+        }()
+
         struct Popover {
             let label: String
             let host: SteamWebHost

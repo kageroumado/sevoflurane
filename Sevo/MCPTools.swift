@@ -206,7 +206,38 @@ extension MCPServer {
             ),
             tool("downloads_pause", "Disable all downloads."),
             tool("downloads_resume", "Re-enable downloads."),
+            tool(
+                "hoyo_list",
+                "HoYoverse games (genshin, starrail, zzz): each one's current build on HoYoPlay's "
+                    + "servers and the install folders Sevoflurane keeps.",
+                readOnly: true,
+            ),
+            tool(
+                "hoyo_status",
+                "What bringing a HoYoverse game folder to the current build takes: up to date, "
+                    + "a patch (with its size) or a download of what differs.",
+                properties: folderProperty, required: ["folder"], readOnly: true,
+            ),
+            tool(
+                "hoyo_verify",
+                "Check a HoYoverse game folder's files against its pkg_version lists. `quick` "
+                    + "checks sizes only; a full check reads every file (minutes for 100 GB).",
+                properties: folderProperty.merging([
+                    "quick": ["type": "boolean", "description": "Sizes only"],
+                ]) { first, _ in first },
+                required: ["folder"], readOnly: true,
+            ),
+            tool(
+                "hoyo_update",
+                "Bring a HoYoverse game folder to the current build from HoYoPlay's servers and "
+                    + "answer when done. A patch is a few GB; sevo hoyo update shows progress.",
+                properties: folderProperty, required: ["folder"],
+            ),
         ]
+    }
+
+    private static var folderProperty: [String: Any] {
+        ["folder": ["type": "string", "description": "The game's install folder, the one its .exe sits in"]]
     }
 
     /// Frame traces, run records, the diagnostic level and the event log.

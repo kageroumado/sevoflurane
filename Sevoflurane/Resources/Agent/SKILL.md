@@ -27,6 +27,7 @@ in short.
 | `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `fps-graph`, `dll`, `processors`, and more. With no key it prints every setting and the level it comes from. |
 | `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
 | `sevo program list` / `launch <id>` / `add <path>` | Windows programs added outside Steam. Their ids start at 2000000000 and work with `sevo app config`. |
+| `sevo hoyo status <folder>` / `update <folder>` / `verify <folder> [--repair]` / `install <game> <folder>` | Genshin Impact, Honkai: Star Rail and Zenless Zone Zero from HoYoPlay's servers, without HoYoPlay. MCP: `hoyo_list`, `hoyo_status`, `hoyo_verify`, `hoyo_update`. Star Rail updates but does not start under Wine. |
 | `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. The key `msync` switches msync+, Dormison's fork of CrossOver's msync. |
 | `sevo engine list` / `use <name>` | Installed engines, and the one the next client restart boots. |
 | `sevo engine channel [beta\|stable]` | The update channel app and engine updates both follow: `beta` (the default) or `stable`, the releases. While only betas are out, `stable` has nothing to install. |
