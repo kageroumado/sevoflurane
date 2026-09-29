@@ -205,7 +205,7 @@ struct EngineSignatureTests {
             #require(URL(string: "https://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz")),
         ))
         #expect(try EngineSignature.isAllowedAssetURL(
-            #require(URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json.sig")),
+            #require(URL(string: "https://github.com/kageroumado/dormison/releases/download/manifest/engine.json.sig")),
         ))
         #expect(try !EngineSignature.isAllowedAssetURL(
             #require(URL(string: "http://github.com/kageroumado/dormison/releases/download/r3/dormison-r3.tar.xz")),

@@ -94,7 +94,7 @@ nonisolated enum ShaderPackages {
             version: "1",
             source: URL(string: "https://github.com/funnyplanter/CuNNy"),
             origin: .download(
-                url: URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/shaders/cunny-nvl-1.tar.gz")!,
+                url: URL(string: "https://github.com/kageroumado/dormison/releases/download/shaders/cunny-nvl-1.tar.gz")!,
                 sha256: "e79a2e011f18c4fb1e2e01dff11ff8dced2c0e4f0fd73576d36bdfdfb6b1f026", size: 65585,
             ),
         ),
@@ -107,7 +107,7 @@ nonisolated enum ShaderPackages {
             version: "4.0.1",
             source: URL(string: "https://github.com/bloc97/Anime4K"),
             origin: .download(
-                url: URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/shaders/anime4k-c-4.0.1.tar.gz")!,
+                url: URL(string: "https://github.com/kageroumado/dormison/releases/download/shaders/anime4k-c-4.0.1.tar.gz")!,
                 sha256: "59da9be19e41dc0bc58f3d96b2d399a91cf01d8ec0e14c82f14c2f3ce1dfe3b0", size: 37337,
             ),
         ),

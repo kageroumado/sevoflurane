@@ -71,7 +71,7 @@ nonisolated struct EngineManifest: Decodable, Sendable {
         case shaders
     }
 
-    static let url = URL(string: "https://github.com/kageroumado/sevoflurane/releases/download/engine/engine.json")!
+    static let url = URL(string: "https://github.com/kageroumado/dormison/releases/download/manifest/engine.json")!
 
     /// Points the installer at another manifest — a `file://` one is how a
     /// clean machine is validated without publishing anything. Set once at

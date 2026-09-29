@@ -21,7 +21,6 @@ nonisolated enum EngineSignature {
     /// Release assets are accepted only from these repositories, over HTTPS.
     static let allowedAssetPathPrefixes = [
         "/kageroumado/dormison/releases/download/",
-        "/kageroumado/sevoflurane/releases/download/",
     ]
 
     static var pinnedKey: Curve25519.Signing.PublicKey {
