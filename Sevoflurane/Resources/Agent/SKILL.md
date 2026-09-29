@@ -27,8 +27,9 @@ in short.
 | `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `fps-graph`, `dll`, `processors`, and more. With no key it prints every setting and the level it comes from. |
 | `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
 | `sevo program list` / `launch <id>` / `add <path>` | Windows programs added outside Steam. Their ids start at 2000000000 and work with `sevo app config`. |
-| `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. |
+| `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. The key `msync` switches msync+, Dormison's fork of CrossOver's msync. |
 | `sevo engine list` / `use <name>` | Installed engines, and the one the next client restart boots. |
+| `sevo engine channel [beta\|stable]` | The update channel app and engine updates both follow: `beta` (the default) or `stable`, the releases. While only betas are out, `stable` has nothing to install. |
 | `sevo runs` | The last launches: what each ran on, how long, how it ended, and the recognized failure. |
 | `sevo perf list` / `compare` / `report` / `label` | Frame-time traces: list them, compare configurations, chart them, name them. |
 | `sevo report <run> --verdict <v>` | Tells the community database how a run went: `plays`, `plays-with-fixes`, `launches` or `fails`, with an optional `--note`. |

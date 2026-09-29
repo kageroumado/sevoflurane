@@ -259,7 +259,7 @@ the game a prefix it has never seen, so it runs first-time setup again. Game
 files are shared (`steamapps/common` is symlinked between bottles); config
 and saves are not. Steam Cloud carries saves across.
 
-Stop a wedged game with `sevo app terminate`. SIGKILLing it breaks msync's
+Stop a wedged game with `sevo app terminate`. SIGKILLing it breaks msync+'s
 Mach service for the prefix until the client restarts.
 
 ## Measuring boots, stops, and windows

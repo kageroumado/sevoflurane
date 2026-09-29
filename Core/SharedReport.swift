@@ -105,7 +105,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
 
     /// The run's configuration as small chips, in the order the game's page
     /// shows them: engine, renderer with its D3DMetal version, the runner when
-    /// it is NW.js, the upscaler when one was on, msync and experimental
+    /// it is NW.js, the upscaler when one was on, msync+ and experimental
     /// tuning when on, then macOS and the chip.
     static func chips(for record: RunRecord) -> [String] {
         var chips = [record.engine]
@@ -118,7 +118,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
         if let upscaler = record.upscaler, !upscaler.isEmpty, upscaler != UpscalerChoice.off.rawValue {
             chips.append(upscaler)
         }
-        if record.msync { chips.append("msync") }
+        if record.msync { chips.append("msync+") }
         if record.tuning == PerformanceTuning.experimental.rawValue { chips.append("experimental tuning") }
         chips.append("macOS \(record.macos)")
         if let chip = record.chip { chips.append(chip) }

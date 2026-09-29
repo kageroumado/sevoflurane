@@ -72,7 +72,7 @@ struct RunReportModelTests {
     @Test
     func `the chips are the record's configuration as the page shows it`() {
         let (model, _, _) = Self.model()
-        #expect(model.chips == ["dormison-r16", "d3dmetal 4.0 beta 2", "lanczos", "msync", "macOS 27.0.0", "Apple M4 Max"])
+        #expect(model.chips == ["dormison-r16", "d3dmetal 4.0 beta 2", "lanczos", "msync+", "macOS 27.0.0", "Apple M4 Max"])
     }
 
     @Test

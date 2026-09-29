@@ -31,7 +31,7 @@ struct EngineSettings: View {
             if store.stagedEngine.isCrossOver {
                 CrossOverNotice(engine: store.stagedEngine)
             }
-            MsyncSection(graphics: graphics, highlighted: highlighted)
+            MsyncSection(graphics: graphics, crossOver: store.stagedEngine.isCrossOver, highlighted: highlighted)
             if !store.stagedEngine.isCrossOver {
                 SettingSections(store: defaults, shaders: shaders, highlighted: highlighted)
             }
@@ -429,16 +429,18 @@ private struct CrossOverNotice: View {
 
 // MARK: - Synchronization
 
-/// The msync switch, a graphics selection like the renderer.
+/// The msync+ switch, a graphics selection like the renderer. Under CrossOver it
+/// switches CrossOver's own msync, and says so.
 private struct MsyncSection: View {
     let graphics: GraphicsStore
+    let crossOver: Bool
     let highlighted: SettingsAnchor?
 
     var body: some View {
         Section {
             Toggle(isOn: msyncBinding) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Enhanced synchronization (msync)")
+                    Text(crossOver ? "Enhanced synchronization (msync)" : "Enhanced synchronization (msync+)")
                     Text("Reduces synchronization overhead. Turn it off if a game freezes.")
                         .font(.callout)
                         .foregroundStyle(.secondary)

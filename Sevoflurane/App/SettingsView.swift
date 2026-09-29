@@ -233,9 +233,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
                 SearchableSetting(
                     id: .engineMsync,
-                    title: "Enhanced synchronization (msync)",
+                    title: "Enhanced synchronization (msync+)",
                     keywords: [
-                        "msync", "sync", "synchronization", "performance",
+                        "msync", "msync+", "sync", "synchronization", "performance",
                         "deadlock", "hang", "esync",
                     ],
                 ),

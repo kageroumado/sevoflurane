@@ -169,7 +169,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     static func example(appVersion: String) -> SharedRun {
         let record = RunRecord(
             t: "2026-09-25T14:12:06Z", appid: 1_962_700, exe: "Subnautica2-Win64-Shipping.exe",
-            engine: "dormison-r16", renderer: "d3dmetal", runner: "wine", arch: 64, windows: "fixed",
+            engine: "dormison-b1", renderer: "d3dmetal", runner: "wine", arch: 64, windows: "fixed",
             tuning: "standard", upscaler: "off", msync: true, d3dmetal: "4.0 beta 2", runtime: "unreal",
             macos: "27.0.0", chip: nil, mac: MacHardware.model, gpuCores: MacHardware.gpuCores,
             memoryGB: MacHardware.memoryGB, windowAfterSeconds: 6.2, durationSeconds: 1843,

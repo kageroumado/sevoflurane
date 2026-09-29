@@ -121,7 +121,7 @@ extension MCPServer {
         tool(
             "perf_compare",
             "Compare frame-time traces of a game's recent runs: runs are grouped by what they ran on "
-                + "(engine, renderer, upscaler, tuning, msync, D3DMetal, window treatment, label) and "
+                + "(engine, renderer, upscaler, tuning, msync+, D3DMetal, window treatment, label) and "
                 + "each group is tested against the first, with 95 % intervals for the average and "
                 + "the 1 % low. versus.*.method \"welch\" is Welch's t-test over runs (two or more per "
                 + "side); \"block-bootstrap\" means a side had one run and is weaker evidence. A "

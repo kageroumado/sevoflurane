@@ -14,7 +14,7 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#开始使用)
 
-<a href="https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg"><img src=".github/download.zh-CN.svg" alt="下载 Mac 版 Sevoflurane" width="360" height="80"></a>
+<a href="https://github.com/kageroumado/sevoflurane/releases"><img src=".github/download.zh-CN.svg" alt="下载 Mac 版 Sevoflurane" width="360" height="80"></a>
 
 <table>
   <tr>
@@ -48,7 +48,7 @@
 
 ## 开始使用
 
-1. **下载并打开。** 挂载[磁盘映像](https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg)，把 Sevoflurane 拖进“应用程序”，然后打开。
+1. **下载并打开。** Sevoflurane 目前处于 Beta 阶段，版本为 1.0 beta 1。从最新的[发布页](https://github.com/kageroumado/sevoflurane/releases)下载并挂载 `Sevoflurane.dmg`，把 Sevoflurane 拖进“应用程序”，然后打开。
 2. **安装引擎和依赖。** 选择 Dormison 或 CrossOver 作为引擎，新建一个容器（bottle），或接入已有的容器。
 3. **登录 Steam。** 和平时一样登录就好。
 4. **开始玩。** 随时可以换引擎，也可以为每款游戏单独设置。
@@ -71,7 +71,7 @@ Sevoflurane 需要搭载 Apple 芯片、运行 macOS 26 或更新版本的 Mac�
 
 引擎支持单款游戏配置文件时，窗口、画面缩放器和鼠标设置会在下次启动游戏时生效；其他引擎需要重启 Steam，才能继承这些设置。
 
-更换渲染器后，请从菜单栏启动游戏来应用更改。Steam 保持打开时，Sevoflurane 也能准备好渲染器文件；更换引擎或调整 msync 则需要重启。切换 DXMT 或 DXVK 版本后，也需要重启 Steam 才会生效。
+更换渲染器后，请从菜单栏启动游戏来应用更改。Steam 保持打开时，Sevoflurane 也能准备好渲染器文件；更换引擎或调整 msync+ 则需要重启。切换 DXMT 或 DXVK 版本后，也需要重启 Steam 才会生效。
 
 ## 已知限制
 
@@ -155,7 +155,7 @@ Windows 版 Steam 客户端在 Wine 容器中运行。容器就是一个存放 W
 
 Protobuf 通信使用由客户端上下文打开的独立套接字。Sevoflurane 根据用途把 Steam 窗口分为游戏库、聊天、菜单、叠加界面等，再放进 macOS 窗口。
 
-Dormison 提供 D3DMetal、msync、Rosetta 下的 32 位游戏、Steam 启动和 Metal 画面呈现器所需的 Wine 改动。也可以使用 CrossOver 或 CrossOver Preview 作为引擎。引擎通过 Rosetta 运行，Sevoflurane 本身则原生运行在 Apple 芯片上。
+Dormison 提供 D3DMetal、msync+（基于 CrossOver 的 msync 修改而来）、Rosetta 下的 32 位游戏、Steam 启动和 Metal 画面呈现器所需的 Wine 改动。也可以使用 CrossOver 或 CrossOver Preview 作为引擎。引擎通过 Rosetta 运行，Sevoflurane 本身则原生运行在 Apple 芯片上。
 
 ### 源码结构
 
@@ -301,7 +301,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 
 - **通用**：登录时打开、自动重启 Steam、Steam 自身设置、`steam://` 链接、命令行工具、AI 助手、兼容性信息栏、社区分享、Discord、卸载。
 - **图形**：默认渲染器、向游戏报告的 GPU 信息、DXMT 和 DXVK 版本、着色器包。
-- **引擎**：引擎、容器和发布渠道、msync、所有游戏的默认设置、游戏依赖、DLL 覆盖、Wine 配置、库加载日志、修复。
+- **引擎**：引擎、容器和更新渠道、msync+、所有游戏的默认设置、游戏依赖、DLL 覆盖、Wine 配置、库加载日志、修复。
 - **游戏**：单款游戏的画面、鼠标、性能和 DLL 覆盖设置，未单独修改的项目会继承引擎默认值。游戏需要某个设置时，会标出**已知修复方案**，点一下即可应用。
 - **存储空间**、**恢复**、**诊断**：见下文。
 - **关于**：版本、链接、各个第三方组件和数据源的致谢，以及许可证。
@@ -348,11 +348,12 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 
 - Mac 空闲且没有游戏运行时，App 会从 GitHub Releases 自动更新；也可以点击底部的更新标签立即更新。“自动更新”开关可以关闭这项功能。
 - 设置按钮上出现圆点，表示有更新的引擎或渲染器。
-- Dormison 提供稳定版和测试版渠道，发布包带有签名，安装前会验证。
+- App 和 Dormison 共用一个更新渠道：Beta 版或正式版，可在“设置 › 引擎”中或用 `sevo engine channel` 设置。默认为 Beta 版；在第一个正式版发布之前，正式版渠道没有内容。
+- Dormison 的 Beta 版和正式版都带有签名，安装前会验证。
 
 ### 引擎
 
-- **Dormison**（[github.com/kageroumado/dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)）：Wine 11.16 加 wine-staging，并加入 D3DMetal 支持、msync、Rosetta 下的 32 位游戏、Steam 启动修复、画面呈现器、程序坞集成、Discord 中继、通过 GStreamer 播放的 Media Foundation 视频、日文字体，以及 arm64 wineserver。
+- **Dormison**（[github.com/kageroumado/dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)）：Wine 11.16 加 wine-staging，并加入 D3DMetal 支持、msync+、Rosetta 下的 32 位游戏、Steam 启动修复、画面呈现器、程序坞集成、Discord 中继、通过 GStreamer 播放的 Media Foundation 视频、日文字体，以及 arm64 wineserver。
 - **CrossOver** 和 **CrossOver Preview**：使用各自附带的 D3DMetal 和按游戏选择的配置。
 - 如果某个已知版本的 D3DMetal 会导致游戏崩溃，会在本机副本上应用针对该构建、精确匹配字节的修复。原版保存在旁边；重新安装工具包即可恢复 Apple 的版本。
 - 在设置中或通过 `sevo engine use` 切换引擎，下次重启客户端时生效。

@@ -3590,13 +3590,13 @@
         }
       }
     },
-    "Enhanced sync" : {
+    "Enhanced sync (msync+)" : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "增强同步"
+            "value" : "增强同步（msync+）"
           }
         }
       }
@@ -3607,6 +3607,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "增强同步（msync）"
+          }
+        }
+      }
+    },
+    "Enhanced synchronization (msync+)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "增强同步（msync+）"
           }
         }
       }

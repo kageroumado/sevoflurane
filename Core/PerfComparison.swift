@@ -4,7 +4,7 @@ import Foundation
 /// first.
 ///
 /// A group is every run whose configuration is the same: engine, renderer, upscaler, tuning,
-/// msync, D3DMetal, window treatment, and the label a person gave the run
+/// msync+, D3DMetal, window treatment, and the label a person gave the run
 /// (``PerfLabels``). Repeating a configuration is what makes its difference from another
 /// one testable; ``FrameStats`` says how.
 nonisolated enum PerfComparison {
@@ -29,7 +29,9 @@ nonisolated enum PerfComparison {
         }
     }
 
-    /// The settings that decide a run's configuration, in the order a label names them.
+    /// The settings that decide a run's configuration, in the order a label names them. The
+    /// field names are the keys of `sevo perf report --json`'s `config`; ``label(for:)`` is how
+    /// a group's name says them.
     static func configuration(of run: Run) -> [(field: String, value: String)] {
         let record = run.record
         return [
@@ -89,9 +91,15 @@ nonisolated enum PerfComparison {
         if let label = run.label, !label.isEmpty { parts.append(label) }
         for field in fields where field != "label" {
             guard let value = values.first(where: { $0.field == field })?.value else { continue }
-            parts.append(field == "engine" || field == "renderer" ? value : "\(field) \(value)")
+            parts.append(field == "engine" || field == "renderer" ? value : "\(label(for: field)) \(value)")
         }
         return parts.isEmpty ? run.record.engine : parts.joined(separator: " · ")
+    }
+
+    /// A configuration field as a group's name says it: the sync switch is msync+, whatever
+    /// the key it is stored under.
+    static func label(for field: String) -> String {
+        field == "msync" ? "msync+" : field
     }
 
     /// How a group differs from the baseline in average frame rate and in 1 % low.

@@ -171,7 +171,7 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config | deps [install <id>]") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync | windows | upscaler | filter | mouse | retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync (msync+ on or off; msync+ works as the key too) | windows | upscaler | filter | mouse | retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
     var key: String?
     @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for processors: all, a count such as 8, or inherit; for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
@@ -238,7 +238,7 @@ struct BottleCommand: AsyncParsableCommand {
         // Debug mode folds its own channels into what a game carries, so the
         // effective set the operator sees has to account for its file.
         let debugMode = DebugMode.isWritten(prefix: SteamBottle.root)
-        guard let key else {
+        guard let key = key.map(Self.canonicalKey) else {
             printEveryKey(debugMode: debugMode)
             return
         }
@@ -256,7 +256,7 @@ struct BottleCommand: AsyncParsableCommand {
         let selection = current()
         guard asJSON else {
             print("renderer \(selection.renderer.rawValue)")
-            print("msync \(selection.msync)")
+            print("msync+ \(selection.msync)")
             print("windows \(Self.windowsSummary)")
             print("upscaler \(Self.upscalerSummary)")
             print("filter \(Self.filterSummary)")
@@ -425,7 +425,7 @@ struct BottleCommand: AsyncParsableCommand {
             throw SevoExit.failed
         }
         print(key == "msync"
-            ? "msync \(value) — takes effect at the client's next start: sevo client restart"
+            ? "msync+ \(value) — takes effect at the client's next start: sevo client restart"
             : "\(key) \(value) — takes effect at the next game launch")
     }
 
@@ -441,6 +441,13 @@ struct BottleCommand: AsyncParsableCommand {
 
     private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | "
         + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug)"
+
+    /// The key a setting is stored and scripted under. The listing labels the
+    /// sync switch `msync+`, its name everywhere a person reads it, so that
+    /// label works as the key too; `msync` stays the key JSON and scripts use.
+    static func canonicalKey(_ key: String) -> String {
+        key == "msync+" ? "msync" : key
+    }
 
     /// One switch's resolved value and where it comes from.
     static func switchSummary(_ key: String) -> String {

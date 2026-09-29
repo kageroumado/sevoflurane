@@ -17,7 +17,7 @@
 <!-- The app drives a Steam client in a Wine bottle. Say what you exercised, not only that it builds. -->
 
 - **macOS / Mac**:
-- **Engine and renderer**: <!-- Dormison r1 + D3DMetal 4.0b2, CrossOver 26.3, ... -->
+- **Engine and renderer**: <!-- Dormison b1 + D3DMetal 4.0b2, CrossOver 26.3, ... -->
 - **Checks run**:
   - [ ] `xcodebuild -scheme Sevoflurane -destination 'platform=macOS' test`
 - **Behavior observed**: <!-- e.g. Steam booted, the friends window adopted, the game launched and its window followed the setting -->

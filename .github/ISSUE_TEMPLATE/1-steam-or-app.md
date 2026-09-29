@@ -18,10 +18,10 @@ assignees: kageroumado
 
 ## Environment
 
-- **Sevoflurane**: <!-- Settings › About, e.g. 0.3.1 -->
+- **Sevoflurane**: <!-- Settings › About, e.g. 1.0 beta 1 -->
 - **macOS**: <!-- e.g. 26.1 -->
 - **Mac**: <!-- e.g. MacBook Pro M3 Max, 36 GB -->
-- **Engine**: <!-- Settings › Engine, e.g. Dormison r1 or CrossOver 26.3 -->
+- **Engine**: <!-- Settings › Engine, e.g. Dormison b1 or CrossOver 26.3 -->
 
 ## Diagnostics
 

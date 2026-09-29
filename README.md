@@ -14,7 +14,7 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#get-started)
 
-<a href="https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
+<a href="https://github.com/kageroumado/sevoflurane/releases"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
 
 <table>
   <tr>
@@ -68,7 +68,8 @@ and play. Games appear as players share their runs.
 
 ## Get started
 
-1. **Download and open.** Mount the [disk image](https://github.com/kageroumado/sevoflurane/releases/latest/download/Sevoflurane.dmg),
+1. **Download and open.** Sevoflurane is in beta, at 1.0 beta 1. Mount
+   `Sevoflurane.dmg` from the newest [release](https://github.com/kageroumado/sevoflurane/releases),
    drag Sevoflurane to Applications, then launch it.
 2. **Install the engine and dependencies.** Choose Dormison or CrossOver as
    the engine, then create a bottle or adopt one you already have.
@@ -103,7 +104,7 @@ engine supports per-game configuration files; other engines need a Steam
 restart for inherited settings.
 
 Launch from the menu bar to apply renderer changes. Sevoflurane can stage
-renderer files while Steam stays open; engine and msync changes require a
+renderer files while Steam stays open; engine and msync+ changes require a
 restart. Changes to the selected DXMT or DXVK version apply after Steam
 restarts.
 
@@ -243,8 +244,9 @@ Protobuf traffic uses a separate socket opened by the client's context.
 Sevoflurane assigns Steam windows roles such as library, chat, menu and
 overlay, then hosts them in macOS windows.
 
-Dormison supplies the Wine changes needed for D3DMetal, msync, 32-bit
-games under Rosetta, Steam startup and the Metal presenter. CrossOver
+Dormison supplies the Wine changes needed for D3DMetal, msync+ (its fork of
+CrossOver's msync), 32-bit games under Rosetta, Steam startup and the Metal
+presenter. CrossOver
 and CrossOver Preview can also serve as engines. The engine runs under
 Rosetta; Sevoflurane itself is native on Apple silicon.
 
@@ -453,7 +455,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
   strip, Streamer Mode, community sharing, Discord, uninstall.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
   DXVK versions, shader packages.
-- **Engine**: engines, bottles and the release channel, msync, defaults for
+- **Engine**: engines, bottles and the update channel, msync+, defaults for
   every game, game dependencies, DLL overrides, Wine configuration,
   library-load logging, repair.
 - **Games**: one game's picture, mouse, performance and DLL overrides, each
@@ -544,13 +546,15 @@ and pins the fix to that game.
 - The app updates itself from GitHub Releases once the Mac is idle and no game
   runs, or at once from the footer's Update chip. Auto Update turns it off.
 - A dot on the Settings button means a newer engine or renderer.
-- Dormison releases are signed and verified before they install, on a stable
-  or beta channel.
+- The app and Dormison follow one update channel, Beta or Release, set in
+  Settings › Engine or with `sevo engine channel`. Beta is the default; the
+  Release channel carries nothing until the first release.
+- Dormison betas and releases are signed and verified before they install.
 
 ### Engines
 
 - **Dormison** ([github.com/kageroumado/dormison](https://github.com/kageroumado/dormison)):
-  Wine 11.16 with wine-staging, plus D3DMetal support, msync, 32-bit games
+  Wine 11.16 with wine-staging, plus D3DMetal support, msync+, 32-bit games
   under Rosetta, Steam start-up fixes, the presenter, Dock integration, the
   Discord relay, Media Foundation video through GStreamer, Japanese fonts and
   an arm64 wineserver.

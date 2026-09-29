@@ -153,11 +153,13 @@ struct FrameStatsTests {
 
     // MARK: - Configurations
 
-    private func run(engine: String, upscaler: String? = nil, label: String? = nil, fps: Float) -> PerfComparison.Run {
+    private func run(
+        engine: String, upscaler: String? = nil, msync: Bool = true, label: String? = nil, fps: Float,
+    ) -> PerfComparison.Run {
         PerfComparison.Run(
             record: RunRecord(
                 t: "2026-09-23T10:00:00Z", appid: 1, engine: engine, renderer: "d3dmetal", runner: "wine",
-                windows: "fixed", upscaler: upscaler, msync: true, macos: "27.0.0",
+                windows: "fixed", upscaler: upscaler, msync: msync, macos: "27.0.0",
                 host: .init(thermal: "nominal", load: 1),
             ),
             frameTimes: Array(repeating: 1000 / fps, count: 600), dropped: 0, trace: "t.csv", label: label,
@@ -174,6 +176,16 @@ struct FrameStatsTests {
         #expect(groups.map(\.name) == [
             "dormison-r15 · upscaler off", "dormison-r16 · upscaler off", "dormison-r16 · upscaler metalfx",
         ])
+    }
+
+    /// The name says msync+, the switch's name; the JSON report keeps the key `msync`.
+    @Test
+    func `the sync switch is named msync+`() {
+        let groups = PerfComparison.groups([
+            run(engine: "dormison-b1", msync: true, fps: 60), run(engine: "dormison-b1", msync: false, fps: 58),
+        ])
+        #expect(groups.map(\.name) == ["msync+ on", "msync+ off"])
+        #expect(PerfComparison.configuration(of: groups[0].runs[0]).contains { $0.field == "msync" })
     }
 
     @Test

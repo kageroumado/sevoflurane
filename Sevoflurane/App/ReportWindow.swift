@@ -407,7 +407,7 @@ private struct RunSummaryCard: View {
         if let arch = run.arch { facts.append(("Address width", "\(arch)-bit")) }
         if let runtime = run.runtime { facts.append(("Built on", runtime)) }
         if let d3dmetal = run.d3dmetal { facts.append(("D3DMetal", d3dmetal)) }
-        facts.append(("Enhanced sync", run.msync ? "on" : "off"))
+        facts.append(("Enhanced sync (msync+)", run.msync ? "on" : "off"))
         if let gameMode = run.gameMode { facts.append(("Game Mode", gameMode ? "on" : "off")) }
         if let window = run.windowAfterSeconds {
             facts.append(("First window", "\(window) s"))

@@ -95,7 +95,7 @@ struct SharedReportTests {
     func `the configuration chips are the page's: engine, renderer with its toolkit, then what was on, macOS and the chip`() {
         var record = Self.fullRecord()
         #expect(SharedReport.chips(for: record) == [
-            "dormison-r16", "d3dmetal 4.0 beta 2", "lanczos", "msync", "macOS 27.0.0", "Apple M4 Max",
+            "dormison-r16", "d3dmetal 4.0 beta 2", "lanczos", "msync+", "macOS 27.0.0", "Apple M4 Max",
         ])
         record.renderer = "dxmt"
         record.upscaler = "off"

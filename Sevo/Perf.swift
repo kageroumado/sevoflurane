@@ -11,7 +11,7 @@ struct PerfCommand: AsyncParsableCommand {
         A run is named by its number in `sevo perf list` (1 is the newest), by its \
         start time as the list prints it, or by a trace file's path; a game's app id \
         names its last runs, as --game does. Runs that ran on \
-        the same engine, renderer, upscaler, tuning, msync, D3DMetal, window treatment \
+        the same engine, renderer, upscaler, tuning, msync+, D3DMetal, window treatment \
         and label are one configuration; repeat a configuration to make its \
         difference from another testable (Welch's t-test over the runs). With one run on a side the comparison \
         is a block bootstrap over that run's seconds, which is weaker evidence.
