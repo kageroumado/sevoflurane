@@ -197,6 +197,7 @@ sevo orphans [--end]
 sevo run PROGRAM [ARGS]
 sevo debug on|off|status
 sevo streamer on|off|status
+sevo sync sweep [--json]
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo benchmark
@@ -204,6 +205,9 @@ sevo logs [--tail N] [-f] [--wine]
 ```
 
 `sevo recover --deep` adds web-cache removal and client repair.
+`sevo sync sweep` asks msync+ to wake threads left asleep on an object that is
+available, such as steam.exe's main thread after a game exited while it set
+something the client waits on, and names the object and who shares it.
 `sevo diag save` writes the report, with Steam's own bootstrap, connection,
 webhelper, game-process and console logs from the bottle; `--no-steam-logs`
 leaves them out. `sevo perf compare` reports whether a setting change measurably
@@ -497,6 +501,9 @@ and pins the fix to that game.
   Steam hung, and logs why.
 - Wine processes whose server has died are ended automatically
   (`sevo orphans` lists them).
+- A Steam client stuck on its main thread gets an msync+ lost-wake sweep
+  before anything restarts it, and a thread a game's exit left asleep is
+  woken in place.
 - **Settings › Recovery**: restart or force-quit Steam, cancel stuck menus,
   repair the helper or the bottle, reinstall the shader compiler, restart
   Windows, clear the shader cache, rebuild Steam's environment (keeps games and

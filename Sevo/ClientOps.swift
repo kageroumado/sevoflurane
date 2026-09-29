@@ -266,6 +266,22 @@ nonisolated enum ClientOps {
         return reply?.contains("answered") == true
     }
 
+    /// A client with its services up that answers on its main thread, or answers once
+    /// msync+ has woken a thread a program's death left asleep; nil when it stays silent.
+    private static func answersOrWakes(progress: (String) -> Void) async -> Outcome? {
+        if await nativeAnswers() {
+            return Outcome(verdict: .noEffect, intent: "recover", note: "client healthy (services initialized) — nothing to do")
+        }
+        guard case let .swept(report) = await MsyncSweep.run(), report.lostWakes > 0 else { return nil }
+        report.lines.forEach(progress)
+        guard await nativeAnswers() else { return nil }
+        return Outcome(
+            verdict: .confirmed,
+            intent: "recover",
+            note: "msync+ woke \(report.lostWakes) thread(s) left asleep; steam.exe answers again — no restart",
+        )
+    }
+
     /// The wedge playbook: probe → reload/restart ladder. Recover fixes a
     /// *wedged* client; a client that simply isn't running is `client
     /// start`'s job — a stopped client is a state, not a fault.
@@ -278,12 +294,8 @@ nonisolated enum ClientOps {
             let services = try? await SteamJS.eval(
                 "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))",
             )
-            if services?.contains("true") == true, await nativeAnswers() {
-                return Outcome(
-                    verdict: .noEffect,
-                    intent: "recover",
-                    note: "client healthy (services initialized) — nothing to do",
-                )
+            if services?.contains("true") == true, let settled = await answersOrWakes(progress: progress) {
+                return settled
             }
             progress("CDP up but services dead or steam.exe not answering — restarting the client")
         } else if !deep {
