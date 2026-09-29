@@ -6,9 +6,11 @@ import Foundation
 /// process answers it.
 ///
 /// Verbs that need the page rather than the client are proxied to the app
-/// (``AppLink/proxy(_:)``) and answer 409 when no app is running. Local
-/// programs are trusted; web pages are not, and ``LoopbackGate/control``
-/// refuses any request that carries a browser's `Origin` or a foreign `Host`.
+/// (``AppLink/proxy(_:)``) and answer 409 when no app is running. Programs of
+/// this account are trusted; web pages and other accounts are not.
+/// ``LoopbackGate/control`` refuses any request that carries a browser's
+/// `Origin` or a foreign `Host`, and answers 401 to one without this
+/// account's ``ControlToken``, before any verb runs.
 @MainActor
 final class ControlServer {
     private let supervisor: BottleSupervisor
@@ -90,8 +92,10 @@ final class ControlServer {
 
     /// Asks the port itself what is on the other end, so the refusal names it.
     private static func whoHoldsTheControlPort() async -> String {
-        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)/status"),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)/status") else { return "something" }
+        var request = URLRequest(url: url)
+        ControlToken.authorize(&request)
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
               let status = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return "something" }
         guard status["daemon"] as? String == "running" else {

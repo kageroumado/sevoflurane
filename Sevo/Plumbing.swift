@@ -58,7 +58,8 @@ nonisolated enum Sevo {
 /// Talks to the supervision daemon's control endpoint (loopback :8764), which
 /// also proxies the app's own verbs. `nil` from `get` means supervision is not
 /// running — `sevo client start` brings it up, and `--no-app` drives
-/// ``ClientLifecycle`` directly for debugging.
+/// ``ClientLifecycle`` directly for debugging. Every request carries
+/// ``ControlToken``, which both ports require.
 nonisolated enum AppControl {
     static func get(_ path: String, timeout: TimeInterval = 3) async -> Data? {
         await request(path, method: "GET", timeout: timeout)
@@ -78,6 +79,7 @@ nonisolated enum AppControl {
         request.httpMethod = "POST"
         request.httpBody = body
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200 ..< 300).contains(http.statusCode) else { return nil }
@@ -93,6 +95,7 @@ nonisolated enum AppControl {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse else { return nil }
         return (http.statusCode, data)
@@ -107,6 +110,7 @@ nonisolated enum AppControl {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200 ..< 300).contains(http.statusCode) else {
@@ -128,6 +132,7 @@ nonisolated enum AppControl {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse else { return nil }
         return (http.statusCode, data)
@@ -144,6 +149,7 @@ nonisolated enum AppControl {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse else { return nil }
         return (http.statusCode, data)
@@ -161,6 +167,7 @@ nonisolated enum AppControl {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (_, response) = try? await URLSession.shared.data(for: request),
               response is HTTPURLResponse else { return false }
         return true
@@ -207,9 +214,9 @@ nonisolated enum BridgeEval {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("1", forHTTPHeaderField: BridgePorts.evalHeader)
         request.httpBody = Data(expression.utf8)
         request.timeoutInterval = 30
+        ControlToken.authorize(&request)
         guard let (data, _) = try? await URLSession.shared.data(for: request) else {
             throw Failure.unreachable
         }

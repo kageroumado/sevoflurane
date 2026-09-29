@@ -5,8 +5,9 @@ import Foundation
 /// The daemon owns the bottle and answers `sevo` on the control port; anything
 /// that needs the page, Steam's popups or a window inventory is passed through
 /// to here, and the daemon's own commands — reload, dismiss, open the library —
-/// arrive the same way. Loopback only, behind ``LoopbackGate/appLink``: local
-/// programs are admitted, web pages are not.
+/// arrive the same way. Loopback only, behind ``LoopbackGate/appLink``:
+/// programs of this account holding its ``ControlToken`` are admitted, web
+/// pages and other accounts are not.
 @MainActor
 final class AppLinkServer {
     private let supervisor: ClientSupervisor

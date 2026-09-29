@@ -161,8 +161,9 @@ final nonisolated class HTTPServer: Sendable {
     /// How long a listener may take to bind a loopback port.
     static let bindBudget: TimeInterval = 10
 
-    /// The handler behind the gate: a request the gate refuses is answered
-    /// 403 and never reaches it.
+    /// The handler behind the gate: a request the gate refuses never reaches
+    /// it, and is answered 403 for its `Host` or `Origin` and 401 for its
+    /// token.
     private static func gated(
         _ handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
         by gate: LoopbackGate,
@@ -174,6 +175,9 @@ final nonisolated class HTTPServer: Sendable {
             case let .refused(reason):
                 gate.noteRefusal(reason)
                 return .error(403, "Forbidden")
+            case let .unauthorized(reason):
+                gate.noteRefusal(reason)
+                return .error(401, "Unauthorized")
             }
         }
     }

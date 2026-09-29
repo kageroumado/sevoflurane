@@ -69,7 +69,8 @@ into the context page's `__steamNotification` handler, which is where the
 `:8764/windows` and `:8764/log/tail`, prints PASS/FAIL per scenario, and
 restarts nothing.
 
-The three endpoints behind it are the general tools: `GET :8764/windows`
+The three endpoints behind it are the general tools, each needing the
+token described under [Who may call the ports](#who-may-call-the-ports): `GET :8764/windows`
 lists every window the app owns with its role and whether it is visible,
 `GET :8764/log/tail?n=N` is the log without a file path, and
 `POST :8764/chat/open?accountid=N` makes the call a clicked notification
@@ -187,6 +188,27 @@ anyway: the bridge holds the one live `SharedJSContext` connection, and a boot
 asks the second question once a second for up to two minutes. A DevTools
 session per ask is how this project has wedged CEF twice.
 
+### Who may call the ports
+
+Every listener binds `127.0.0.1` and refuses a foreign `Host` or a browser
+`Origin` (`Supervision/LoopbackGate.swift`). Headers are the sender's to
+choose, so that holds back web pages and nothing else. `:8764`, `:8766` and
+`/__eval` on `:8762` also answer 401 to any request without the
+`X-Sevo-Token` header holding this account's token (`Core/ControlToken.swift`):
+32 random bytes in `~/Library/Application Support/Sevoflurane/Control/token`,
+mode 0600 in a 0700 directory, made by whichever process asks first. Another
+account on the Mac cannot read it. A program of the same account can, and is
+admitted, as it could run `sevo` anyway. A Debug installation keeps its own
+under `Sevoflurane Debug`.
+
+The sockets and pages Steam's UI uses (`:8761`, `:8763`, the `:8762` bundle,
+the `:8760` art) stay behind `Host` and `Origin` alone: WebKit and CEF send
+no header of ours.
+
+A script calling the ports reads the file and sends the header, never on a
+command line (`ps` shows arguments to every account): `curl -H @-` reads it
+from stdin, as `Tools/chat-scenarios.sh` does.
+
 ### Testing against a real bottle
 
 A build run from a worktree registers *its own* background helper, and the
@@ -286,8 +308,10 @@ Mach service for the prefix until the client restarts.
   `gameprocess_log.txt` (Windows pids of a launched game),
   `gameoverlay_renderer.txt` (one file, rewritten by every process that
   loads the overlay renderer — copy it at once).
-- **App status without the UI**: `curl 127.0.0.1:8764/status`,
-  `:8764/windows` (every window the app owns, role, visibility). CDP
+- **App status without the UI**: `sevo status --json`, or
+  `:8764/status` and `:8764/windows` (every window the app owns, role,
+  visibility) with the token, through the `sevocurl` function in
+  `PLAYTESTING.md`. CDP
   liveness: `curl 127.0.0.1:8765/json/version`.
 - **Killing steam.exe for a test**: any `ps | grep <pattern>` where the
   pattern also appears in your own shell line matches and kills your own

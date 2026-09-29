@@ -33,9 +33,4 @@ nonisolated enum BridgePorts {
     /// The app's half of the daemon link: page commands, and the page verbs
     /// the daemon proxies through from the control port.
     static let appLink: UInt16 = 8766 + UInt16(AppIdentity.portOffset)
-
-    /// The header every `POST /__eval` carries. A web page can send a custom
-    /// header cross-origin only after a CORS preflight the bridge never
-    /// answers, so its presence says the caller is a local program.
-    static let evalHeader = "X-Sevo-Eval"
 }

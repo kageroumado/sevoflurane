@@ -20,6 +20,8 @@
 set -u
 
 CONTROL=127.0.0.1:8764
+# The control port answers 401 without this account's token (Core/ControlToken.swift).
+TOKEN_FILE="$HOME/Library/Application Support/Sevoflurane/Control/token"
 SEVO=${SEVO:-sevo}
 PASSED=0
 FAILED=0
@@ -27,6 +29,10 @@ FAILED=0
 pass() { print -r -- "PASS  $1"; PASSED=$((PASSED + 1)) }
 fail() { print -r -- "FAIL  $1"; print -r -- "      $2"; FAILED=$((FAILED + 1)) }
 note() { print -r -- "      $1" }
+
+# One request to the control port. The token goes in on stdin, never on the
+# command line, where another account could read it with ps.
+control() { curl -s -H @- "$@" <<< "X-Sevo-Token: $(<"$TOKEN_FILE")" }
 
 # JavaScript in the app's own context page — the friends UI the user sees.
 # `sevo eval` prints the bridge's JSON value, so a string arrives in quotes;
@@ -37,14 +43,16 @@ client() { "$SEVO" cdp "$1" 2>&1 }
 
 log_since() {
     # The log lines written since the marker line count passed in $1.
-    curl -s "$CONTROL/log/tail?n=4000" | tail -n +"$1"
+    control "$CONTROL/log/tail?n=4000" | tail -n +"$1"
 }
-log_lines() { curl -s "$CONTROL/log/tail?n=4000" | wc -l | tr -d ' ' }
+log_lines() { control "$CONTROL/log/tail?n=4000" | wc -l | tr -d ' ' }
 
 visible_chat_count() {
-    python3 - <<'PY'
-import json, urllib.request
-rows = json.load(urllib.request.urlopen("http://127.0.0.1:8764/windows"))
+    TOKEN_FILE=$TOKEN_FILE python3 - <<'PY'
+import json, os, urllib.request
+token = open(os.environ["TOKEN_FILE"]).read().strip()
+request = urllib.request.Request("http://127.0.0.1:8764/windows", headers={"X-Sevo-Token": token})
+rows = json.load(urllib.request.urlopen(request))
 print(sum(1 for r in rows if r.get("role") == "chat" and r.get("visible")))
 PY
 }
@@ -54,7 +62,7 @@ PY
 print -r -- "chat scenarios — against the client on $CONTROL"
 print -r -- ""
 
-STATUS=$(curl -s --max-time 5 "$CONTROL/status")
+STATUS=$(control --max-time 5 "$CONTROL/status")
 if [[ -z $STATUS ]]; then
     print -r -- "FAIL  the app is not answering on $CONTROL — start Sevoflurane first"
     exit 1
@@ -151,7 +159,7 @@ elif [[ $(visible_chat_count) == 0 ]]; then
     fi
 else
     fail "a chat Steam shows for a message stays off screen" \
-         "$(curl -s $CONTROL/windows)"
+         "$(control "$CONTROL/windows")"
 fi
 
 # ------------------------------------------- 3. the message stays unread
@@ -227,7 +235,7 @@ fi
 # `/chat/open` is the call `SteamNotifications.handleClick` makes, so this is
 # the click path with the banner taken out of it.
 BEFORE=$(log_lines)
-curl -s -X POST "$CONTROL/chat/open?accountid=$ACCOUNT" > /dev/null
+control -X POST "$CONTROL/chat/open?accountid=$ACCOUNT" > /dev/null
 sleep 3
 if [[ $(visible_chat_count) -ge 1 ]]; then
     pass "a notification click opens the chat and shows it"

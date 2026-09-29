@@ -137,7 +137,7 @@ final nonisolated class WebSocketServer: Sendable {
         switch gate.verdict(method: "GET", path: "/", headers: headers) {
         case .admitted:
             return .accept
-        case let .refused(reason):
+        case let .refused(reason), let .unauthorized(reason):
             gate.noteRefusal(reason)
             return .reject
         }

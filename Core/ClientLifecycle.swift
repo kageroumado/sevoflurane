@@ -839,6 +839,7 @@ nonisolated enum ClientLifecycle {
         request.httpMethod = "POST"
         request.httpBody = Data(program.joined(separator: "\n").utf8)
         request.timeoutInterval = TimeInterval(seconds) + Self.daemonRunGrace
+        ControlToken.authorize(&request)
         return request
     }
 

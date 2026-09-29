@@ -173,6 +173,7 @@ final class AppLink {
         proxied.httpMethod = request.method
         proxied.httpBody = request.body.isEmpty ? nil : request.body
         proxied.timeoutInterval = isAttached ? Timing.proxy : Timing.detachedProxy
+        ControlToken.authorize(&proxied)
         guard let (data, response) = try? await URLSession.shared.data(for: proxied),
               let http = response as? HTTPURLResponse else {
             return isAttached
@@ -213,6 +214,7 @@ final class AppLink {
         request.httpMethod = "POST"
         request.httpBody = body
         request.timeoutInterval = Timing.command
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               (200 ..< 300).contains(http.statusCode) else {

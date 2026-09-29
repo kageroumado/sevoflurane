@@ -15,6 +15,8 @@ nonisolated enum PageProbe {
     /// WebSocket → page eval and back. The bridge always answers HTTP 200 with
     /// `ok: false` carrying the failure ("no page connected", eval timeout),
     /// so an HTTP-level failure specifically means the bridge itself is down.
+    /// A bridge that refuses the control token counts as down too: reloading
+    /// the page cannot fix a token neither process can read.
     ///
     /// The expression asks Steam's own app object whether its stores finished
     /// initializing. A bare eval is not enough: the page runs in the app's
@@ -24,12 +26,14 @@ nonisolated enum PageProbe {
     static func state() async -> State {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"
-        request.setValue("1", forHTTPHeaderField: BridgePorts.evalHeader)
         request.httpBody = Data(
             "String(!!(window.App&&App.GetServicesInitialized&&App.GetServicesInitialized()))".utf8,
         )
         request.timeoutInterval = 30
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else {
+        ControlToken.authorize(&request)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode != 401
+        else {
             return .bridgeDown
         }
         struct Reply: Decodable { let ok: Bool; let v: String? }
@@ -53,7 +57,6 @@ nonisolated enum PageProbe {
         let milliseconds = Int(nativeTimeout.components.seconds * 1000)
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"
-        request.setValue("1", forHTTPHeaderField: BridgePorts.evalHeader)
         request.httpBody = Data("""
         new Promise(function (resolve) {
           SteamClient.Installs.GetInstallManagerInfo().then(function () { resolve("answered"); });
@@ -61,6 +64,7 @@ nonisolated enum PageProbe {
         })
         """.utf8)
         request.timeoutInterval = 30
+        ControlToken.authorize(&request)
         guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
         struct Reply: Decodable { let ok: Bool; let v: String? }
         guard let reply = try? JSONDecoder().decode(Reply.self, from: data), reply.ok else { return nil }

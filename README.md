@@ -220,6 +220,11 @@ invocation, 3 for an incomplete installation and 4 for an unreachable
 client. When the app is running, client lifecycle commands go through
 its supervisor.
 
+`sevo`, the app and its helper talk over loopback ports that answer only your
+macOS account: each request carries a token kept in
+`~/Library/Application Support/Sevoflurane/Control/token`, readable by you
+alone. Another account on the same Mac cannot drive the bottle.
+
 ### MCP
 
 `sevo mcp` provides a stdio MCP server. Its 27 tools cover diagnostics,

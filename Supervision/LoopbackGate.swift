@@ -13,26 +13,57 @@ import Foundation
 /// - `Origin`, which every browser sends on cross-origin requests and on
 ///   every WebSocket handshake, is one of the port's own callers. The CLI, the
 ///   daemon, `URLSession` and `curl` send none, and are admitted.
-/// - `POST /__eval` carries ``BridgePorts/evalHeader``. A cross-origin page
-///   can set a custom header only after a CORS preflight, which these servers
-///   never answer.
+///
+/// Headers are the sender's to choose, so they hold back a browser and
+/// nothing else: any process of any account on this Mac can write the request
+/// the CLI writes. The ports that act for the user — the daemon's control
+/// endpoint, the app's link port and the page's `/__eval` — also require
+/// ``ControlToken``, which only this account can read. A web page cannot send
+/// it either: it is a custom header, and a cross-origin page can set one only
+/// after a CORS preflight, which these servers never answer.
+///
+/// The page's and the client's sockets, the page's bundle and the art stay
+/// behind `Host` and `Origin` alone. Their callers are WebKit and CEF, which
+/// send no header of ours, and a secret handed to a page these ports serve
+/// would be served to any local reader of the same ports.
 nonisolated struct LoopbackGate: Sendable {
     let port: UInt16
     /// The origins this port's legitimate browser callers send.
     let origins: Set<String>
+    /// Which of the port's requests must carry ``ControlToken``.
+    let tokenScope: TokenScope
+
+    enum TokenScope: Equatable {
+        case none
+        case everyRequest
+        /// Requests to this one path, whatever their method.
+        case path(String)
+    }
 
     enum Verdict: Equatable {
         case admitted
-        /// Refused, with the reason for the log.
+        /// Refused for its `Host` or `Origin`, with the reason for the log.
         case refused(String)
+        /// Refused for a missing or wrong ``ControlToken``, with the reason
+        /// for the log.
+        case unauthorized(String)
+    }
+
+    init(port: UInt16, origins: Set<String>, tokenScope: TokenScope = .none) {
+        self.port = port
+        self.origins = origins
+        self.tokenScope = tokenScope
     }
 
     /// The Steam UI page, as WebKit names its origin. Adopted `about:blank`
     /// popups inherit it from their opener.
     static let pageOrigin = "http://127.0.0.1:\(BridgePorts.steamUI)"
 
-    /// Steam's UI bundle, the page's own requests and nothing else.
-    static let steamUI = LoopbackGate(port: BridgePorts.steamUI, origins: [pageOrigin])
+    /// Steam's UI bundle, the page's own requests and nothing else, and
+    /// `/__eval` for a native caller holding the token.
+    static let steamUI = LoopbackGate(
+        port: BridgePorts.steamUI, origins: [pageOrigin], tokenScope: .path("/__eval"),
+    )
     /// The page's command socket, dialed by the shim inside the page.
     static let pageWS = LoopbackGate(port: BridgePorts.pageWS, origins: [pageOrigin])
     /// The transport relay, dialed by the client's `SharedJSContext`, which
@@ -43,26 +74,55 @@ nonisolated struct LoopbackGate: Sendable {
     /// Capsule art, read by the menu bar through `URLSession`.
     static let art = LoopbackGate(port: BridgePorts.art, origins: [])
     /// The daemon's control endpoint: `sevo`, the app, and the Tools scripts.
-    static let control = LoopbackGate(port: BridgePorts.control, origins: [])
+    static let control = LoopbackGate(port: BridgePorts.control, origins: [], tokenScope: .everyRequest)
     /// The app's half of the daemon link: the daemon and `sevo`.
-    static let appLink = LoopbackGate(port: BridgePorts.appLink, origins: [])
+    static let appLink = LoopbackGate(port: BridgePorts.appLink, origins: [], tokenScope: .everyRequest)
 
-    /// Judges one request. `headers` are keyed by lowercased name.
-    func verdict(method: String, path: String, headers: [String: String]) -> Verdict {
+    /// Judges one request before any handler sees it. `headers` are keyed by
+    /// lowercased name. `expectedToken` is read only for a request the port's
+    /// ``tokenScope`` covers, and a token that cannot be read admits nobody.
+    func verdict(
+        method _: String,
+        path: String,
+        headers: [String: String],
+        expectedToken: () throws -> String = ControlToken.current,
+    ) -> Verdict {
         guard let host = headers["host"] else { return .refused("no Host") }
         guard admitsHost(host) else { return .refused("Host \(host)") }
         if let origin = headers["origin"], !origins.contains(origin) {
             return .refused("Origin \(origin)")
         }
-        if method == "POST", path == "/__eval",
-           headers[BridgePorts.evalHeader.lowercased()] == nil {
-            return .refused("/__eval without \(BridgePorts.evalHeader)")
+        guard requiresToken(path) else { return .admitted }
+        let expected: String
+        do {
+            expected = try expectedToken()
+        } catch {
+            return .unauthorized("no usable token: \(error)")
+        }
+        guard let presented = headers[ControlToken.header.lowercased()] else {
+            return .unauthorized("no \(ControlToken.header)")
+        }
+        guard ControlToken.matches(presented, expected: expected) else {
+            return .unauthorized("wrong \(ControlToken.header)")
         }
         return .admitted
     }
 
-    func admits(method: String, path: String, headers: [String: String]) -> Bool {
-        verdict(method: method, path: path, headers: headers) == .admitted
+    func admits(
+        method: String,
+        path: String,
+        headers: [String: String],
+        expectedToken: () throws -> String = ControlToken.current,
+    ) -> Bool {
+        verdict(method: method, path: path, headers: headers, expectedToken: expectedToken) == .admitted
+    }
+
+    private func requiresToken(_ path: String) -> Bool {
+        switch tokenScope {
+        case .none: false
+        case .everyRequest: true
+        case let .path(guarded): path == guarded
+        }
     }
 
     private func admitsHost(_ host: String) -> Bool {

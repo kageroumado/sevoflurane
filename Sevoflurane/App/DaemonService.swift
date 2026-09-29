@@ -317,6 +317,7 @@ enum DaemonService {
         request.httpMethod = method
         request.httpBody = body
         request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse
         else { return nil }

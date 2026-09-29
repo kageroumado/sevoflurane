@@ -55,20 +55,28 @@ Write a timestamped line for every action and every verdict as you go. The logs
 carry times to the millisecond; a verdict without a time cannot be matched to
 them. `date '+%F %T'` in a terminal is enough.
 
-Useful probes while the app is up, none of which disturb it:
+Useful probes while the app is up, none of which disturb it. The control port
+`:8764` answers only requests carrying your account's token, kept in
+`~/Library/Application Support/Sevoflurane/Control/token`; define this once in
+the terminal and use it in place of `curl`. It hands the token to `curl` on
+stdin, because a command line is visible to every account on the Mac.
+
+```bash
+sevocurl() { curl -s -H @- "$@" <<< "X-Sevo-Token: $(<"$HOME/Library/Application Support/Sevoflurane/Control/token")"; }
+```
 
 | Question | Command |
 |---|---|
 | What state does the app think it is in? | `sevo status --json` |
-| Which windows exist, where, and are they visible? | `curl -s localhost:8764/windows` |
-| Which game window is up? | `curl -s localhost:8764/game/window` |
+| Which windows exist, where, and are they visible? | `sevocurl localhost:8764/windows` |
+| Which game window is up? | `sevocurl localhost:8764/game/window` |
 | What does Steam think is running? | `sevo cdp 'JSON.stringify(SteamUIStore.RunningApps.map(a=>a.appid))'` |
 | The last 50 app log lines | `sevo logs --tail 50` |
 | The Wine log, following | `sevo logs --wine -f` |
 | Is Debug mode on, and where does it apply? | `sevo debug status` |
-| Put Steam's window away, then bring it back | `curl -s -X POST localhost:8764/steam/close`, then `curl -s -X POST localhost:8764/steam/show` |
+| Put Steam's window away, then bring it back | `sevocurl -X POST localhost:8764/steam/close`, then `sevocurl -X POST localhost:8764/steam/show` |
 
-`curl localhost:8764/…` answers even when the app's window is frozen, because
+`sevocurl localhost:8764/…` answers even when the app's window is frozen, because
 the control server is its own listener. If the app stops responding, run
 `sample Sevoflurane 5 -file ~/Desktop/sevoflurane-hang.txt` before killing it;
 the sample is the only record of where the main thread was.
