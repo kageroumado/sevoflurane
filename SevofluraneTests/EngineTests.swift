@@ -101,6 +101,101 @@ struct EngineManifestTests {
         #expect(problems.contains { $0.contains("channels.stable.sha256") })
         #expect(problems.contains { $0.contains("channels.stable.sizeBytes") })
     }
+
+    /// A channel entry the way `publish-engine.sh` writes one.
+    private static func channel(_ version: String) -> String {
+        """
+        {
+          "version": "\(version)",
+          "minAppVersion": "1.0-beta.1",
+          "url": "https://github.com/kageroumado/dormison/releases/download/\(version)/\(version).tar.xz",
+          "sha256": "694477832c85da7bfa09793029eae182cd2aafd2bfe819c91888ec39be6e93be",
+          "sizeBytes": 229890008
+        }
+        """
+    }
+
+    private static func manifest(stable: String? = nil, beta: String? = nil) throws -> EngineManifest {
+        let channels = [("stable", stable), ("beta", beta)]
+            .compactMap { name, version in version.map { "\"\(name)\": \(channel($0))" } }
+            .joined(separator: ",")
+        return try EngineManifest.decode(Data(#"{"schema": 2, "channels": {\#(channels)}}"#.utf8))
+    }
+
+    /// Before anything is released the feed carries a beta alone, and that
+    /// is a feed the publish gate lets through.
+    @Test
+    func `a manifest with a beta and no release passes the publish gate`() throws {
+        let feed = try Self.manifest(beta: "dormison-b1")
+        #expect(feed.problems().isEmpty)
+        #expect(feed.stable == nil)
+        #expect(feed.beta?.version == "dormison-b1")
+    }
+
+    @Test
+    func `a manifest with no channel at all does not`() throws {
+        let problems = try Self.manifest().problems()
+        #expect(problems.contains { $0.contains("no channel") })
+    }
+
+    @Test
+    func `a channel the app does not read is named`() throws {
+        let feed = try EngineManifest.decode(Data(#"{"schema": 2, "channels": {"nightly": \#(Self.channel("dormison-b1"))}}"#.utf8))
+        #expect(feed.problems().contains { $0.contains("channels.nightly is not a channel the app reads") })
+    }
+
+    @Test
+    func `beta takes the beta, and release takes nothing while only betas are out`() throws {
+        let feed = try Self.manifest(beta: "dormison-b1")
+        #expect(feed.release(for: .beta)?.version == "dormison-b1")
+        #expect(feed.release(for: .stable) == nil)
+        #expect(try feed.requireRelease(for: .beta).version == "dormison-b1")
+        #expect(throws: EngineManifest.NoRelease(channel: .stable)) {
+            try feed.requireRelease(for: .stable)
+        }
+    }
+
+    /// The error a Mac on Release reads in the setup assistant and in
+    /// `sevo engine install`: what is wrong and the one move that fixes it.
+    @Test
+    func `an empty release channel says to switch to beta`() {
+        let message = EngineManifest.NoRelease(channel: .stable).description
+        #expect(message.contains("No release"))
+        #expect(message.contains("Beta"))
+        #expect(message.contains("sevo engine channel beta"))
+    }
+
+    @Test
+    func `beta takes the newer of the beta and the release`() throws {
+        let ahead = try Self.manifest(stable: "dormison-r1", beta: "dormison-b2")
+        #expect(ahead.release(for: .beta)?.version == "dormison-b2")
+        #expect(ahead.release(for: .stable)?.version == "dormison-r1")
+        let overtaken = try Self.manifest(stable: "dormison-r2", beta: "dormison-b2")
+        #expect(overtaken.release(for: .beta)?.version == "dormison-r2")
+        let releaseOnly = try Self.manifest(stable: "dormison-r2")
+        #expect(releaseOnly.release(for: .beta)?.version == "dormison-r2")
+    }
+}
+
+/// App and engine updates follow one channel, beta until someone picks Release.
+struct UpdateChannelTests {
+    @Test
+    func `a Mac that never chose is on beta`() {
+        #expect(Preferences.updateChannel(stored: nil) == .beta)
+        #expect(Preferences.updateChannel(stored: "nightly") == .beta)
+    }
+
+    @Test
+    func `a stored choice is kept`() {
+        #expect(Preferences.updateChannel(stored: "stable") == .stable)
+        #expect(Preferences.updateChannel(stored: "beta") == .beta)
+    }
+
+    @Test
+    func `the app takes prereleases on beta alone`() {
+        #expect(SilentUpdates.takesPrereleases(.beta))
+        #expect(!SilentUpdates.takesPrereleases(.stable))
+    }
 }
 
 struct EngineSignatureTests {
@@ -526,6 +621,13 @@ struct BundledEngineUpgradeTests {
     }
 
     @Test
+    func `a bundled beta upgrades the beta before it and not the release of its number`() {
+        let beta = URL(fileURLWithPath: "/Volumes/Sevoflurane/dormison-b2.tar.xz")
+        #expect(EngineInstaller.bundledUpgrade(bundled: beta, installed: ["dormison-b1"]) == beta)
+        #expect(EngineInstaller.bundledUpgrade(bundled: beta, installed: ["dormison-r2"]) == nil)
+    }
+
+    @Test
     func `before setup nothing is installed here`() {
         #expect(EngineInstaller.bundledUpgrade(bundled: bundled, installed: []) == nil)
         #expect(EngineInstaller.bundledUpgrade(bundled: nil, installed: ["dormison-r9"]) == nil)
@@ -550,10 +652,12 @@ struct UnchosenRendererTests {
 /// A newer release the app installs replaces a stored choice of an older release.
 struct EngineReleaseAdoptionTests {
     @Test
-    func `release numbers come from release names only`() {
-        #expect(Engine.releaseNumber("dormison-r17") == 17)
-        #expect(Engine.releaseNumber("dormison-r16-tray") == nil)
-        #expect(Engine.releaseNumber("crossover") == nil)
+    func `release names are releases and betas, not builds named after them`() {
+        #expect(Engine.isReleaseName("dormison-r17"))
+        #expect(Engine.isReleaseName("dormison-b1"))
+        #expect(!Engine.isReleaseName("dormison-r16-tray"))
+        #expect(!Engine.isReleaseName("dormison-b1-tray"))
+        #expect(!Engine.isReleaseName("crossover"))
     }
 
     @Test
@@ -563,6 +667,35 @@ struct EngineReleaseAdoptionTests {
         #expect(Engine.adoptedChoice(stored: "managed:dormison-r16-tray", installed: "dormison-r17") == nil)
         #expect(Engine.adoptedChoice(stored: "crossover", installed: "dormison-r17") == nil)
         #expect(Engine.adoptedChoice(stored: nil, installed: "dormison-r17") == nil)
+    }
+
+    @Test
+    func `a newer beta moves a stored beta, and a release moves its own beta`() {
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-b1", installed: "dormison-b2") == "managed:dormison-b2")
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-b2", installed: "dormison-r2") == "managed:dormison-r2")
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-r2", installed: "dormison-b2") == nil)
+        #expect(Engine.adoptedChoice(stored: "managed:dormison-b2", installed: "dormison-b1") == nil)
+    }
+
+    @Test
+    func `engines order the way they were published`() {
+        #expect(Engine.isOlderVersion("dormison-r9", than: "dormison-r10"))
+        #expect(Engine.isOlderVersion("dormison-b1", than: "dormison-b2"))
+        #expect(Engine.isOlderVersion("dormison-b9", than: "dormison-b10"))
+        #expect(Engine.isOlderVersion("dormison-b11", than: "dormison-r11"))
+        #expect(Engine.isOlderVersion("dormison-r10", than: "dormison-b11"))
+        #expect(!Engine.isOlderVersion("dormison-r11", than: "dormison-b11"))
+        #expect(!Engine.isOlderVersion("dormison-b1", than: "dormison-b1"))
+        #expect(Engine.isOlderVersion("dormison-b1", than: "dormison-b1-tray"))
+        #expect(Engine.isOlderVersion("dormison-b1-tray", than: "dormison-b2"))
+        #expect(Engine.isOlderVersion("wine11.9", than: "wine11.15"))
+    }
+
+    @Test
+    func `a sort puts betas between the releases around them`() {
+        let names = ["dormison-r10", "dormison-b11", "dormison-r2", "dormison-r11", "dormison-b2"]
+        #expect(names.sorted(by: Engine.isOlderVersion)
+            == ["dormison-b2", "dormison-r2", "dormison-r10", "dormison-b11", "dormison-r11"])
     }
 
     @Test

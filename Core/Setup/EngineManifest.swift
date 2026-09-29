@@ -79,14 +79,50 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     /// `sevo setup --manifest`, or `SEVO_ENGINE_MANIFEST` in the app.
     nonisolated(unsafe) static var overrideURL: URL?
 
+    /// The release channel's engine; nil while nothing has been released,
+    /// when the manifest carries a beta alone.
     var stable: Release? {
-        channels["stable"]
+        channels[UpdateChannel.stable.rawValue]
     }
 
-    /// The release a Mac on `channel` takes: the channel's own, or stable
-    /// when the channel is empty, which is how beta reads between betas.
-    func release(for channel: EngineChannel = Preferences.engineChannel) -> Release? {
-        channels[channel.rawValue] ?? stable
+    var beta: Release? {
+        channels[UpdateChannel.beta.rawValue]
+    }
+
+    /// The engine a Mac on `channel` takes. Release takes the release
+    /// channel's alone, and nothing while it is empty. Beta takes the newer
+    /// of the beta and the release, so a beta the release has overtaken is
+    /// passed over and a feed with no beta still answers.
+    func release(for channel: UpdateChannel = Preferences.updateChannel) -> Release? {
+        switch channel {
+        case .stable:
+            return stable
+        case .beta:
+            guard let beta else { return stable }
+            guard let stable else { return beta }
+            return Engine.isOlderVersion(beta.version, than: stable.version) ? stable : beta
+        }
+    }
+
+    /// ``release(for:)``, or the reason there is none a person can act on.
+    func requireRelease(for channel: UpdateChannel = Preferences.updateChannel) throws -> Release {
+        guard let release = release(for: channel) else { throw NoRelease(channel: channel) }
+        return release
+    }
+
+    /// The manifest names nothing for the channel this Mac is on.
+    struct NoRelease: Error, CustomStringConvertible, Equatable {
+        let channel: UpdateChannel
+
+        var description: String {
+            switch channel {
+            case .stable:
+                "No release of Dormison is out yet, only betas. Switch Update Channel to Beta in Settings › Engine, "
+                    + "or run `sevo engine channel beta`, to install the beta."
+            case .beta:
+                "The engine manifest names no beta and no release."
+            }
+        }
     }
 
     /// The release manifest, verified against ``EngineSignature``'s key
@@ -144,11 +180,16 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     /// app would hit installing from this manifest. Empty means publishable.
     func problems() -> [String] {
         var problems: [String] = []
-        if channels["stable"] == nil {
-            problems.append("no stable channel")
+        // A beta alone is a valid feed: the release channel stays empty until
+        // something is released, and a Mac on it is told to switch to beta.
+        if channels.isEmpty {
+            problems.append("no channel: the manifest names neither a release nor a beta")
         }
         for (name, release) in channels.sorted(by: { $0.key < $1.key }) {
             let label = "channels.\(name)"
+            if UpdateChannel(rawValue: name) == nil {
+                problems.append("\(label) is not a channel the app reads (stable | beta)")
+            }
             if !EngineSignature.isAllowedAssetURL(release.url) {
                 problems.append("\(label).url is not a kageroumado release asset: \(release.url.absoluteString)")
             }

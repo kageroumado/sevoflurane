@@ -77,7 +77,7 @@ private struct EngineSelectionSection: View {
             if bottleChoice == Self.newBottleTag {
                 NewBottleField(store: store, bottleChoice: $bottleChoice)
             }
-            EngineChannelRow(store: store)
+            UpdateChannelRow(store: store)
             EngineUpdateRow(store: store)
             EngineFileRow(store: store, provisioner: provisioner, bottleChoice: $bottleChoice)
             if store.hasChanges || store.isSwitching {
@@ -182,7 +182,8 @@ private struct NewBottleField: View {
 
 /// What the release feed has that this Mac does not, and the way back to
 /// it. Both buttons do the same thing — land on the version the feed
-/// calls stable — so the row says whichever of the two is true.
+/// names for this Mac's update channel — so the row says whichever of the
+/// two is true.
 private struct EngineUpdateRow: View {
     let store: EngineStore
 
@@ -217,29 +218,49 @@ private struct EngineUpdateRow: View {
     }
 }
 
-/// Which of the feed's channels this Mac takes engines from: releases, or
-/// the betas that precede them. A change reaches the next update check and
-/// the next install; the engine already running stays.
-private struct EngineChannelRow: View {
+/// Which channel this Mac takes Sevoflurane and Dormison updates from:
+/// releases, or the betas that precede them. A change reaches the app's next
+/// update check, the engine's next update check and the next install; the app
+/// and the engine already running stay.
+private struct UpdateChannelRow: View {
     let store: EngineStore
 
     var body: some View {
-        Picker(selection: Binding(get: { store.channel }, set: { store.channel = $0 })) {
-            ForEach(EngineChannel.allCases, id: \.self) { channel in
+        Picker(selection: Binding(
+            get: { store.channel },
+            set: { channel in
+                store.channel = channel
+                SilentUpdates.shared.followUpdateChannel()
+            },
+        )) {
+            ForEach(UpdateChannel.allCases, id: \.self) { channel in
                 Text(channel.label).tag(channel)
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Engine updates")
-                Text(store.channel == .beta
-                    ? "Betas arrive before releases and have been run on fewer Macs."
-                    : "Releases only.")
+                Text("Update Channel")
+                Text(caption)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        store.channel == .stable && store.channelIsEmpty
+                            ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary),
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .pickerStyle(.menu)
         .disabled(store.isSwitching)
+    }
+
+    private var caption: LocalizedStringKey {
+        switch store.channel {
+        case .beta:
+            "Betas of Sevoflurane and Dormison arrive before releases and have been run on fewer Macs."
+        case .stable where store.channelIsEmpty:
+            "No release is out yet. Switch to Beta to get updates."
+        case .stable:
+            "Releases of Sevoflurane and Dormison only."
+        }
     }
 }
 
@@ -272,7 +293,7 @@ private struct EngineFileRow: View {
             return phase
         }
         return engineFileError
-            ?? "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built. "
+            ?? "A dormison-b<N>.tar.xz you downloaded, or an engine folder you built. "
             + "Sevoflurane checks the .sig beside a tarball."
     }
 

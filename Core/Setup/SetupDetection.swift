@@ -194,11 +194,12 @@ nonisolated enum SetupProbe {
         "orig", "tmp", "partial", "broken", "trash",
     ]
 
-    /// Oldest first, by the number in the name: `dormison-r2` before
-    /// `dormison-r10`, which a plain string sort gets backwards.
+    /// Oldest first, in ``Engine/isOlderVersion(_:than:)`` order:
+    /// `dormison-r2` before `dormison-r10`, which a plain string sort gets
+    /// backwards, and `dormison-b11` between `dormison-r10` and `dormison-r11`.
     static func managedEngineVersions() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: managedEngines.path)) ?? [])
             .filter { !$0.hasPrefix(".") }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            .sorted(by: Engine.isOlderVersion)
     }
 }

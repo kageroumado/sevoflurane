@@ -81,14 +81,16 @@ nonisolated extension Preferences {
     static let sharesRunStatsKey = "sharesRunStats"
 }
 
-// MARK: - Engine channel
+// MARK: - Update channel
 
-/// Which of the manifest's channels this Mac takes engines from.
-nonisolated enum EngineChannel: String, CaseIterable, Sendable {
-    /// Releases: what everyone gets.
+/// Which channel this Mac takes updates from, for the app and its engine
+/// alike: GitHub releases and prereleases of Sevoflurane, and the engine
+/// manifest's channel of the same name.
+nonisolated enum UpdateChannel: String, CaseIterable, Sendable {
+    /// Releases: what everyone gets once there is one.
     case stable
     /// Prereleases: what is being tried before it becomes a release. A Mac on
-    /// beta falls back to stable when the manifest has no beta.
+    /// beta takes the release when it is the newer of the two.
     case beta
 
     var label: String {
@@ -101,10 +103,22 @@ nonisolated enum EngineChannel: String, CaseIterable, Sendable {
 }
 
 nonisolated extension Preferences {
-    static var engineChannel: EngineChannel {
-        get { shared.string(forKey: "engineChannel").flatMap(EngineChannel.init(rawValue:)) ?? .stable }
-        set { shared.set(newValue.rawValue, forKey: "engineChannel") }
+    /// Beta until the user picks Release: the release channel stays empty
+    /// until there are betas enough people have run.
+    static var updateChannel: UpdateChannel {
+        get { updateChannel(stored: shared.string(forKey: updateChannelKey)) }
+        set { shared.set(newValue.rawValue, forKey: updateChannelKey) }
     }
+
+    /// The channel a stored value names; beta for nothing stored or a value
+    /// this build does not know.
+    static func updateChannel(stored: String?) -> UpdateChannel {
+        stored.flatMap(UpdateChannel.init(rawValue:)) ?? .beta
+    }
+
+    /// Stays `engineChannel`: another key would drop the choice every Mac
+    /// has stored.
+    private static let updateChannelKey = "engineChannel"
 }
 
 // MARK: - Updates

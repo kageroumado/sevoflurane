@@ -221,7 +221,7 @@
                 progress("Installing…", nil)
                 await pause()
             } else {
-                log("would download the managed engine from the stable manifest channel")
+                log("would download the managed engine from the \(Preferences.updateChannel.rawValue) manifest channel")
                 version = "dry-run-engine"
                 for step in 1 ... 4 {
                     progress("Downloading the engine…", Double(step) / 4)

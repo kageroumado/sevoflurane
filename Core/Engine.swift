@@ -106,10 +106,10 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         active = engine
     }
 
-    /// After the app installs a newer release engine: a stored choice that
-    /// names an older release (`managed:dormison-r16`) moves to it, so the
+    /// After the app installs a newer release or beta engine: a stored choice
+    /// that names an older one (`managed:dormison-b1`) moves to it, so the
     /// client's next start runs what the app carries, and this process's
-    /// ``active`` moves with it. A hand-picked build (`dormison-r16-tray`),
+    /// ``active`` moves with it. A hand-picked build (`dormison-b1-tray`),
     /// CrossOver, or a bare `managed` stays as it is. Answers whether the
     /// choice moved.
     @discardableResult
@@ -121,12 +121,12 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         return true
     }
 
-    /// The stored choice after installing release `version`, or nil when the
-    /// stored one stays.
+    /// The stored choice after installing release or beta `version`, or nil
+    /// when the stored one stays.
     static func adoptedChoice(stored: String?, installed version: String) -> String? {
-        guard let stored, stored.hasPrefix(managedPrefix),
-              let old = releaseNumber(String(stored.dropFirst(managedPrefix.count))),
-              let new = releaseNumber(version), new > old
+        guard let stored, stored.hasPrefix(managedPrefix) else { return nil }
+        let old = String(stored.dropFirst(managedPrefix.count))
+        guard isReleaseName(old), isReleaseName(version), isOlderVersion(old, than: version)
         else { return nil }
         return managedPrefix + version
     }
@@ -144,10 +144,29 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         bootedRoot.flatMap(booted(fromRoot:)) ?? active
     }
 
-    /// `17` for `dormison-r17`; `nil` for anything that is not a release name.
-    static func releaseNumber(_ version: String) -> Int? {
-        guard let match = version.wholeMatch(of: /dormison-r(\d+)/) else { return nil }
-        return Int(match.1)
+    /// Whether `version` names a published engine: a release `dormison-r<N>`
+    /// or a beta `dormison-b<N>`, and not a build named after one
+    /// (`dormison-b1-tray`).
+    static func isReleaseName(_ version: String) -> Bool {
+        version.wholeMatch(of: /dormison-[rb]\d+/) != nil
+    }
+
+    /// Orders managed engine names the way they were published: `dormison-r9`
+    /// before `dormison-r10`, and a beta after the release before it and
+    /// before its own release, `dormison-r10` < `dormison-b11` <
+    /// `dormison-r11`. A build named after one sorts right after it, and any
+    /// other name compares its runs of digits as numbers.
+    static func isOlderVersion(_ lhs: String, than rhs: String) -> Bool {
+        orderingKey(lhs).localizedStandardCompare(orderingKey(rhs)) == .orderedAscending
+    }
+
+    /// `dormison-11.0` for the beta `dormison-b11` and `dormison-11.1` for the
+    /// release, so digit-aware comparison puts a beta before its release
+    /// whatever the letters would say; the rest of the name follows unchanged.
+    private static func orderingKey(_ version: String) -> String {
+        guard let match = version.prefixMatch(of: /dormison-([rb])(\d+)/) else { return version }
+        let stage = match.1 == "r" ? 1 : 0
+        return "dormison-\(match.2).\(stage)" + version[match.range.upperBound...]
     }
 
     /// The stored form of the choice. A managed engine is stored by its
@@ -299,7 +318,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         managedRelease != nil
     }
 
-    /// "Dormison r3" for the engine directory `dormison-r3`.
+    /// "Dormison b1" for the engine directory `dormison-b1`, "Dormison r3"
+    /// for `dormison-r3`.
     static func managedDisplayName(_ version: String) -> String {
         version.hasPrefix("dormison-")
             ? "Dormison \(version.dropFirst("dormison-".count))"

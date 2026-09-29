@@ -14,13 +14,13 @@ import Foundation
 /// (``bundledTarball(resources:beside:)``), or the tree `package-engine.sh`
 /// left behind for whoever built it.
 nonisolated enum EngineInstaller {
-    /// Fetches the release this Mac's channel names, or reports why the
-    /// machine can't use it.
-    static func stableRelease() async throws -> EngineManifest.Release {
-        guard let release = try await EngineManifest.fetch().release() else {
-            throw InstallError("engine manifest has no stable channel")
-        }
-        return release
+    /// Fetches the release this Mac's update channel names, or reports why
+    /// there is none: a Mac on Release while only betas are out is told to
+    /// switch (``EngineManifest/NoRelease``).
+    static func channelRelease(
+        for channel: UpdateChannel = Preferences.updateChannel,
+    ) async throws -> EngineManifest.Release {
+        try await EngineManifest.fetch().requireRelease(for: channel)
     }
 
     static func isInstalled(_ release: EngineManifest.Release) -> Bool {
@@ -80,7 +80,7 @@ nonisolated enum EngineInstaller {
     }
 
     /// Installs an engine already on this Mac and returns the version it
-    /// carried: `dormison-r<N>.tar.xz` as the release ships it, or the
+    /// carried: `dormison-b<N>.tar.xz` as the release ships it, or the
     /// directory `package-engine.sh` assembled, which is what is inside that
     /// tarball. Either way the version has to be new — an installed engine is
     /// never replaced.
@@ -176,7 +176,7 @@ nonisolated enum EngineInstaller {
         return try await unpack(tarball, expecting: nil, in: staging, into: root)
     }
 
-    /// The engine a tarball is named for: `dormison-r3.tar.xz` → `dormison-r3`.
+    /// The engine a tarball is named for: `dormison-b1.tar.xz` → `dormison-b1`.
     static func versionName(of tarball: URL) -> String {
         var name = tarball.lastPathComponent
         for suffix in [".tar.xz", ".txz", ".tar"] where name.hasSuffix(suffix) {
@@ -191,8 +191,8 @@ nonisolated enum EngineInstaller {
     /// `Contents/Resources/Engine/`, or beside the app bundle — the disk
     /// image's root while the app runs from it. Only a tarball with its
     /// `.sig` beside it counts: the folder beside the app is often Downloads
-    /// or /Applications, where any file can land. The newest release wins
-    /// when there are several.
+    /// or /Applications, where any file can land. The newest release or beta
+    /// wins when there are several.
     static func bundledTarball(
         resources: URL? = Bundle.main.resourceURL,
         beside bundle: URL = Bundle.main.bundleURL,
@@ -206,21 +206,16 @@ nonisolated enum EngineInstaller {
                 .map(place.appendingPathComponent)
                 .filter { manager.fileExists(atPath: EngineSignature.signatureURL(for: $0).path) }
         }
-        return candidates.max {
-            versionName(of: $0).localizedStandardCompare(versionName(of: $1)) == .orderedAscending
-        }
+        return candidates.max { Engine.isOlderVersion(versionName(of: $0), than: versionName(of: $1)) }
     }
 
     /// The engine this copy of the app carries, when it is newer than every managed engine
     /// installed: an app update that brings a newer engine hands it over. Nil before setup
     /// (setup installs the bundled one itself) and when the newest installed is as new.
     static func bundledUpgrade(bundled: URL? = bundledTarball(), installed: [String]) -> URL? {
-        guard let bundled, let newest = installed.max(by: {
-            $0.localizedStandardCompare($1) == .orderedAscending
-        }) else { return nil }
+        guard let bundled, let newest = installed.max(by: Engine.isOlderVersion) else { return nil }
         let version = versionName(of: bundled)
-        guard !installed.contains(version),
-              version.localizedStandardCompare(newest) == .orderedDescending else { return nil }
+        guard !installed.contains(version), Engine.isOlderVersion(newest, than: version) else { return nil }
         return bundled
     }
 

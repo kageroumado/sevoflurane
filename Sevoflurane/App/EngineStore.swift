@@ -33,11 +33,14 @@ final class EngineStore {
     private(set) var isSwitching = false
     private(set) var switchPhase: String?
     private(set) var switchError: String?
-    /// The release the feed calls stable: the engine a fresh install gets, so
-    /// the default the pane measures "newer" against and the one Reset
-    /// returns to. `nil` until the feed answers, and on a Mac that cannot
-    /// reach it.
-    private(set) var stableRelease: EngineManifest.Release?
+    /// The release the feed names for this Mac's update channel: the engine a
+    /// fresh install gets, so the default the pane measures "newer" against
+    /// and the one Reset returns to. `nil` until the feed answers, on a Mac
+    /// that cannot reach it, and while the channel is empty.
+    private(set) var defaultRelease: EngineManifest.Release?
+    /// The feed answered and names nothing for this Mac's channel: Release,
+    /// while only betas are out.
+    private(set) var channelIsEmpty = false
     /// The download's progress while the pane is fetching the default engine.
     private(set) var engineFetchFraction: Double?
     /// The failure the pane keeps showing: this session's switch error, or
@@ -81,30 +84,30 @@ final class EngineStore {
     /// engine at all is not told: the picker's own Dormison entry already
     /// offers to fetch one.
     var newerEngine: EngineManifest.Release? {
-        guard let stableRelease, !installedVersions.isEmpty,
-              UpdateSummary.isNewer(stableRelease.version, thanAll: installedVersions)
+        guard let defaultRelease, !installedVersions.isEmpty,
+              UpdateSummary.isNewerEngine(defaultRelease.version, thanAll: installedVersions)
         else { return nil }
-        return stableRelease
+        return defaultRelease
     }
 
     /// Whether the staged engine is something other than the default, so
     /// there is a default to go back to.
     var canResetToDefault: Bool {
-        guard let stableRelease else { return false }
-        return stagedEngine != .managed(version: stableRelease.version)
+        guard let defaultRelease else { return false }
+        return stagedEngine != .managed(version: defaultRelease.version)
     }
 
     /// The name to say for the default engine, for the pane's Reset.
     var defaultEngineLabel: String? {
-        stableRelease.map { Engine.managedDisplayName($0.version) }
+        defaultRelease.map { Engine.managedDisplayName($0.version) }
     }
 
     /// Stages the default engine, fetching it first when this Mac does not
     /// have it. Reset and installing the newer release are the same move:
-    /// both land on the version the feed calls stable. Switch still decides
-    /// when it runs.
+    /// both land on the version the feed names for this Mac's channel.
+    /// Switch still decides when it runs.
     func useDefaultEngine() {
-        guard let release = stableRelease, !isSwitching else { return }
+        guard let release = defaultRelease, !isSwitching else { return }
         isSwitching = true
         switchError = nil
         Task(name: "Install engine \(release.version)") { [weak self] in
@@ -142,36 +145,41 @@ final class EngineStore {
 
     private var isLookingUpDefault = false
 
-    /// Which channel the feed is read on. Changing it drops the release
-    /// already fetched and asks the feed again. Computed so a change from
-    /// `sevo engine channel` is read too, which is why it reports its own
-    /// access and mutation to the registrar.
-    var channel: EngineChannel {
+    /// Which channel the feed is read on, the one app updates follow too.
+    /// Changing it drops the release already fetched and asks the feed again.
+    /// Computed so a change from `sevo engine channel` is read too, which is
+    /// why it reports its own access and mutation to the registrar.
+    var channel: UpdateChannel {
         get {
             access(keyPath: \.channel)
-            return Preferences.engineChannel
+            return Preferences.updateChannel
         }
         set {
-            guard newValue != Preferences.engineChannel else { return }
-            withMutation(keyPath: \.channel) { Preferences.engineChannel = newValue }
-            stableRelease = nil
-            refreshStableRelease()
+            guard newValue != Preferences.updateChannel else { return }
+            withMutation(keyPath: \.channel) { Preferences.updateChannel = newValue }
+            defaultRelease = nil
+            channelIsEmpty = false
+            refreshDefaultRelease()
         }
     }
 
-    /// The feed is asked until it answers, and then left alone: it is a
-    /// signed fetch over the network, and the stable release does not move
-    /// while Settings is open. Off to the side of ``refresh()``, which a
-    /// switch awaits and which must not wait on a network that may be gone.
-    private func refreshStableRelease() {
-        guard !environment.isSimulation, stableRelease == nil, !isLookingUpDefault else {
+    /// The feed is asked until it answers, an empty channel included, and
+    /// then left alone: it is a signed fetch over the network, and the
+    /// channel's release does not move while Settings is open. Off to the side
+    /// of ``refresh()``, which a switch awaits and which must not wait on a
+    /// network that may be gone. The release is read for the channel set when
+    /// the answer lands, so a change made while the fetch runs still counts.
+    private func refreshDefaultRelease() {
+        guard !environment.isSimulation, defaultRelease == nil, !channelIsEmpty, !isLookingUpDefault else {
             return
         }
         isLookingUpDefault = true
         Task(name: "Look up the default engine") { [weak self] in
-            let release = try? await EngineManifest.fetch().release()
+            let manifest = try? await EngineManifest.fetch()
             guard let self else { return }
-            stableRelease = release
+            let release = manifest?.release(for: channel)
+            defaultRelease = release
+            channelIsEmpty = manifest != nil && release == nil
             isLookingUpDefault = false
         }
     }
@@ -185,7 +193,7 @@ final class EngineStore {
         }
         refreshBottles(resetChoice: false)
         refreshStandingFailure()
-        refreshStableRelease()
+        refreshDefaultRelease()
     }
 
     /// Whether a failed pass is holding the client down — the pane's cue to

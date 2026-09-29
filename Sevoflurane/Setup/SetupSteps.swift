@@ -319,7 +319,7 @@ struct SetupInstallStep: View {
                 + "and resumes where it stopped."
         }
         if provisioner.engineInstallPending {
-            return "The engine also installs from a file: dormison-r<N>.tar.xz and its "
+            return "The engine also installs from a file: dormison-b<N>.tar.xz and its "
                 + ".sig, from the Dormison release."
         }
         return "A second try keeps what already downloaded."

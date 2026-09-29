@@ -228,6 +228,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: [
                         "engine", "wine", "crossover", "preview", "bottle",
                         "prefix", "built-in", "builtin", "dormison", "switch",
+                        "update", "updates", "channel", "beta", "release",
                     ],
                 ),
                 SearchableSetting(

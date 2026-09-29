@@ -9,7 +9,7 @@ enum EngineFilePanel {
     /// `nil` when it was dismissed.
     static func choose() -> URL? {
         let panel = NSOpenPanel()
-        panel.message = "Choose the dormison-r<N>.tar.xz you downloaded, or an engine "
+        panel.message = "Choose the dormison-b<N>.tar.xz you downloaded, or an engine "
             + "folder you built. Sevoflurane checks the .sig beside a tarball "
             + "against the engine key."
         panel.prompt = "Install"

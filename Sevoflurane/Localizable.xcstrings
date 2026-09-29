@@ -160,6 +160,16 @@
         }
       }
     },
+    "No release is out yet. Switch to Beta to get updates." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无正式版发布。切换到 Beta 版即可获取更新。"
+          }
+        }
+      }
+    },
     "Processors" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -963,13 +973,13 @@
         }
       }
     },
-    "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built. Sevoflurane checks the .sig beside a tarball." : {
+    "A dormison-b<N>.tar.xz you downloaded, or an engine folder you built. Sevoflurane checks the .sig beside a tarball." : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可选择已下载的 dormison-r<N>.tar.xz，或自行构建的引擎文件夹。Sevoflurane 会验证压缩包旁的 .sig 文件。"
+            "value" : "可选择已下载的 dormison-b<N>.tar.xz，或自行构建的引擎文件夹。Sevoflurane 会验证压缩包旁的 .sig 文件。"
           }
         }
       }
@@ -1864,12 +1874,12 @@
         }
       }
     },
-    "Betas arrive before releases and have been run on fewer Macs." : {
+    "Betas of Sevoflurane and Dormison arrive before releases and have been run on fewer Macs." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beta 版早于正式版发布，在较少的 Mac 上经过测试。"
+            "value" : "Sevoflurane 和 Dormison 的 Beta 版早于正式版发布，在较少的 Mac 上经过测试。"
           }
         }
       }
@@ -3523,12 +3533,12 @@
         }
       }
     },
-    "Engine updates" : {
+    "Update Channel" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "引擎更新"
+            "value" : "更新渠道"
           }
         }
       }
@@ -6914,12 +6924,12 @@
         }
       }
     },
-    "Releases only." : {
+    "Releases of Sevoflurane and Dormison only." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "仅正式版。"
+            "value" : "仅接收 Sevoflurane 和 Dormison 的正式版。"
           }
         }
       }
@@ -8866,13 +8876,13 @@
         }
       }
     },
-    "The engine also installs from a file: dormison-r<N>.tar.xz and its .sig, from the Dormison release." : {
+    "The engine also installs from a file: dormison-b<N>.tar.xz and its .sig, from the Dormison release." : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "也可从 Dormison 发布页下载 dormison-r<N>.tar.xz 及其 .sig 文件来安装引擎。"
+            "value" : "也可从 Dormison 发布页下载 dormison-b<N>.tar.xz 及其 .sig 文件来安装引擎。"
           }
         }
       }

@@ -48,6 +48,24 @@ struct UpdateSummaryTests {
     }
 
     @Test
+    func `a newer beta is waiting on the beta channel, and nothing on an empty release channel`() throws {
+        let feed = try EngineManifest.decode(Data("""
+        {
+          "schema": 2,
+          "channels": {"beta": {
+            "version": "dormison-b2", "minAppVersion": "1.0-beta.1",
+            "url": "https://github.com/kageroumado/dormison/releases/download/b2/dormison-b2.tar.xz",
+            "sha256": "694477832c85da7bfa09793029eae182cd2aafd2bfe819c91888ec39be6e93be",
+            "sizeBytes": 1, "notes": null
+          }}
+        }
+        """.utf8))
+        #expect(UpdateSummary.newerEngine(in: feed, installed: ["dormison-b1"], channel: .beta) == "Dormison b2")
+        #expect(UpdateSummary.newerEngine(in: feed, installed: ["dormison-b1"], channel: .stable) == nil)
+        #expect(UpdateSummary.newerEngine(in: feed, installed: ["dormison-r2"], channel: .beta) == nil)
+    }
+
+    @Test
     func `the installed release itself is not waiting`() throws {
         let feed = try manifest(stable: "dormison-r11")
         #expect(UpdateSummary.newerEngine(in: feed, installed: ["dormison-r11"]) == nil)

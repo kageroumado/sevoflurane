@@ -44,10 +44,10 @@ final class UpdateSummary {
     /// Mac with none at all is not told: the engine picker already offers to
     /// fetch one.
     static func newerEngine(
-        in manifest: EngineManifest, installed: [String], channel: EngineChannel = Preferences.engineChannel,
+        in manifest: EngineManifest, installed: [String], channel: UpdateChannel = Preferences.updateChannel,
     ) -> String? {
         guard let release = manifest.release(for: channel), !installed.isEmpty,
-              isNewer(release.version, thanAll: installed)
+              isNewerEngine(release.version, thanAll: installed)
         else { return nil }
         return Engine.managedDisplayName(release.version)
     }
@@ -77,6 +77,13 @@ final class UpdateSummary {
     /// `0.10`, and `1.10.3-20230507-repack` as one run of numbers.
     static func isNewer(_ version: String, thanAll others: [String]) -> Bool {
         others.allSatisfy { $0.localizedStandardCompare(version) == .orderedAscending }
+    }
+
+    /// An engine name compares in publishing order
+    /// (``Engine/isOlderVersion(_:than:)``), where a beta precedes the release
+    /// of its number.
+    static func isNewerEngine(_ version: String, thanAll installed: [String]) -> Bool {
+        installed.allSatisfy { Engine.isOlderVersion($0, than: version) }
     }
 
     static func newest(of versions: [String]) -> String? {

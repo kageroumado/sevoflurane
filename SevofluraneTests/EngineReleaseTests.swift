@@ -8,6 +8,9 @@ struct EngineReleaseTests {
         #expect(Engine.managed(version: "dormison-r11").managedRelease == 11)
         #expect(Engine.managed(version: "dormison-r9").managedRelease == 9)
         #expect(Engine.managed(version: "dormison-r9-network-20260917").managedRelease == nil)
+        #expect(Engine.managed(version: "dormison-b1").managedRelease == 1)
+        #expect(Engine.managed(version: "dormison-b12").managedRelease == 12)
+        #expect(Engine.managed(version: "dormison-b1-tray").managedRelease == nil)
         #expect(Engine.managed(version: "custom").managedRelease == nil)
         #expect(Engine.crossover.managedRelease == nil)
     }
