@@ -96,7 +96,7 @@ struct GraphicsSettings: View {
     /// any release added later. The engine's own is one click away again.
     private var rendererVersionsSection: some View {
         Section {
-            if !store.engineHasOwnD3DMetal, !store.availableRenderers.contains(.d3dmetal) {
+            if !store.canHostD3DMetal {
                 dx12HostNotice
             }
             d3dMetalRow

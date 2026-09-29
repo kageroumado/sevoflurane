@@ -75,12 +75,10 @@
             scenario == .crossOver ? "CrossOver" : "Dormison b1"
         }
 
-        /// A managed engine hosts what it was built for: DXMT and DXVK
-        /// always, D3DMetal once a toolkit has been added.
+        /// A managed engine hosts what it was built for, D3DMetal included:
+        /// whether a toolkit is there to run is the store's question.
         func hostedRenderers() -> [Renderer] {
-            var hosted: [Renderer] = [.auto, .dxmt, .dxvk, .wined3d]
-            if scenario == .builtInWithToolkit { hosted.append(.d3dmetal) }
-            return hosted
+            [.auto, .d3dmetal, .dxmt, .dxvk, .wined3d]
         }
 
         func currentSelection() -> BottleGraphics.Selection {

@@ -398,7 +398,9 @@ runs on CrossOver.
 - Recent games with capsule art, a play button and live launch status.
 - Scroll past them for every installed game, indexed by letter.
 - A game's menu: Run with… (one launch), Always run with…, Game Settings…,
-  and Keep in Dock.
+  and Keep in Dock. The renderers offered are the ones the machine can run:
+  D3DMetal appears on Dormison once a toolkit is added, and a game already
+  pinned to it keeps its pin.
 - Quick Launch programs beside your games, with Show in Finder and Remove.
   Add Windows Game… opens a file picker.
 - A health card that names what's wrong with the client and offers the fix.

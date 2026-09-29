@@ -37,7 +37,10 @@ struct GamesColumn: View {
                         host: host, supervisor: supervisor, graphics: graphics,
                         pinEdits: pinEdits, onPinChanged: { pinEdits += 1 },
                     )
-                    QuickLaunchPrograms(quickLaunch: quickLaunch, activeLaunch: host.activeLaunch)
+                    QuickLaunchPrograms(
+                        quickLaunch: quickLaunch, activeLaunch: host.activeLaunch,
+                        renderers: graphics.menuRenderers,
+                    )
                     AddProgramRow(quickLaunch: quickLaunch)
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
@@ -158,6 +161,7 @@ private struct RecentGames: View {
     }
 
     @ViewBuilder private var content: some View {
+        let renderers = graphics.menuRenderers
         if host.recentGames.isEmpty {
             // A popover with nothing between the header and the button reads
             // as a failure; a library with no installed games is not one.
@@ -182,6 +186,7 @@ private struct RecentGames: View {
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
                         isHeldInCloudSync: heldInCloudSync.contains(game.id),
+                        renderers: renderers,
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
                     )
@@ -207,6 +212,7 @@ private struct LibraryIndexList: View {
     var body: some View {
         let activeLaunch = host.activeLaunch
         let heldInCloudSync = host.gamesHeldInCloudSync
+        let renderers = graphics.menuRenderers
         // Lazy: a library of hundreds asks for art only for the rows scrolled to.
         LazyVStack(alignment: .leading, spacing: 1) {
             ForEach(LibraryIndex.sections(host.libraryGames)) { section in
@@ -219,6 +225,7 @@ private struct LibraryIndexList: View {
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
                         isHeldInCloudSync: heldInCloudSync.contains(game.id),
+                        renderers: renderers,
                         supervisor: supervisor,
                         onPinChanged: onPinChanged,
                     )
@@ -246,6 +253,8 @@ private struct GameRow: View {
     let dockBundle: URL?
     /// The client has kept this game at Synchronizing for longer than a sync takes.
     let isHeldInCloudSync: Bool
+    /// The renderers the machine offers a game right now (``GraphicsStore/menuRenderers``).
+    let renderers: [Renderer]
     let supervisor: ClientSupervisor
     let onPinChanged: () -> Void
     @State private var isHovered = false
@@ -309,14 +318,16 @@ private struct GameRow: View {
             // restages the tree (or restarts, if the engine or sync must
             // change) before the game starts.
             Menu("Run with…") {
-                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                ForEach(renderers, id: \.self) { renderer in
                     Button(renderer.label) { runWith(renderer) }
                 }
             }
             Divider()
+            // The pin stays listed when the machine no longer offers it, so
+            // the menu shows what the game is set to rather than a blank.
             Picker("Always run with", selection: pinBinding) {
                 Text("Bottle default").tag(Renderer?.none)
-                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                ForEach(GraphicsStore.pinChoices(renderers, pinned: pinned), id: \.self) { renderer in
                     Text(renderer.label).tag(Renderer?.some(renderer))
                 }
             }
@@ -406,6 +417,8 @@ private struct QuickLaunchPrograms: View {
     /// The launch under way, which a program's row reads its status from as
     /// a game's does (``SteamWebHost/beginProgramLaunch(appID:)``).
     let activeLaunch: SteamWebHost.GameLaunch?
+    /// The renderers the machine offers a program right now (``GraphicsStore/menuRenderers``).
+    let renderers: [Renderer]
 
     var body: some View {
         ForEach(quickLaunch.programs) { entry in
@@ -415,6 +428,7 @@ private struct QuickLaunchPrograms: View {
                 quickLaunch: quickLaunch,
                 launchDetail: activeLaunch.flatMap { $0.appID == entry.id ? $0.detail : nil },
                 isLaunching: quickLaunch.launching.contains(entry.id),
+                renderers: renderers,
             )
         }
     }
@@ -433,6 +447,8 @@ private struct ProgramRow: View {
     /// Its launch request is with the helper, which a first HoYoverse launch
     /// keeps for a quarter of a minute while it makes the companion prefix.
     let isLaunching: Bool
+    /// The renderers the machine offers right now (``GraphicsStore/menuRenderers``).
+    let renderers: [Renderer]
     @State private var isHovered = false
     @State private var dockBundle: URL?
 
@@ -482,7 +498,7 @@ private struct ProgramRow: View {
         .task(id: entry.id) { dockBundle = await Self.readDockBundle(entry.id) }
         .contextMenu {
             Menu("Run with…") {
-                ForEach(Renderer.allCases.filter { $0 != .auto }, id: \.self) { renderer in
+                ForEach(renderers, id: \.self) { renderer in
                     Button(renderer.label) { quickLaunch.launch(entry, renderer: renderer) }
                 }
             }

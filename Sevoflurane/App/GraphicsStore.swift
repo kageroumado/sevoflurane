@@ -150,20 +150,54 @@ final class GraphicsStore {
     /// everything; managed engines pool what each declares in its
     /// `engine-info.json`, and choosing a renderer boots an installed engine
     /// that hosts it (D3DMetal needs the `__wine_unix_call` export that only
-    /// Sevoflurane's own engine carries).
+    /// Sevoflurane's own engine carries). D3DMetal is Apple's to download, so
+    /// a managed engine offers it only once a toolkit is there for a game to
+    /// load. The bottle's current renderer is always among them, so a surface
+    /// that lists these never shows a choice other than the one in force.
     var availableRenderers: [Renderer] {
         guard !engineHasOwnD3DMetal else { return Renderer.allCases }
-        return Renderer.allCases.filter(Set(environment.hostedRenderers()).contains)
+        let hosted = Set(environment.hostedRenderers())
+        let current = selection.renderer
+        return Renderer.allCases.filter { renderer in
+            renderer == current
+                || hosted.contains(renderer) && (renderer != .d3dmetal || activeD3DMetal != nil)
+        }
+    }
+
+    /// Whether an installed engine can run D3DMetal at all: CrossOver with its
+    /// own copy, or a managed engine that declares it. Whether a toolkit is
+    /// there to run is a separate question, which ``availableRenderers`` asks.
+    var canHostD3DMetal: Bool {
+        engineHasOwnD3DMetal || environment.hostedRenderers().contains(.d3dmetal)
+    }
+
+    /// What a game's context menus offer to run with or to pin:
+    /// ``availableRenderers`` less Automatic, which defers to CrossOver's
+    /// per-game database and is chosen for the whole bottle in Settings.
+    var menuRenderers: [Renderer] {
+        availableRenderers.filter { $0 != .auto }
+    }
+
+    /// `offered` with `pinned` in its place among them, so a game pinned to a
+    /// renderer the machine does not offer right now still shows its pin.
+    nonisolated static func pinChoices(_ offered: [Renderer], pinned: Renderer?) -> [Renderer] {
+        Renderer.allCases.filter { offered.contains($0) || $0 == pinned }
     }
 
     var engineName: String {
         environment.engineName
     }
 
-    /// Reads the selection again, for a surface that outlives the change —
-    /// the popover stays built while Settings rewrites the bottle.
+    /// Reads the selection and the toolkits again, for a surface that
+    /// outlives the change — the popover stays built while Settings rewrites
+    /// the bottle or adds a D3DMetal.
     func refresh() {
-        selection = environment.currentSelection()
+        let selection = environment.currentSelection()
+        if selection != self.selection { self.selection = selection }
+        let versions = environment.installedToolkits()
+        if versions != d3dMetalVersions { d3dMetalVersions = versions }
+        let active = environment.activeToolkit()?.version
+        if active != activeD3DMetal { activeD3DMetal = active }
     }
 
     func update(_ selection: BottleGraphics.Selection) {
