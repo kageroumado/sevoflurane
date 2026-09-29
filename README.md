@@ -14,7 +14,7 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#get-started)
 
-<a href="https://github.com/kageroumado/sevoflurane/releases"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
+<a href="https://github.com/kageroumado/sevoflurane/releases/download/v1.0.0-beta.1/Sevoflurane-1.0.0-beta.1.dmg"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
 
 <table>
   <tr>
@@ -68,8 +68,9 @@ and play. Games appear as players share their runs.
 
 ## Get started
 
-1. **Download and open.** Sevoflurane is in beta, at 1.0 beta 1. Mount
-   `Sevoflurane.dmg` from the newest [release](https://github.com/kageroumado/sevoflurane/releases),
+1. **Download and open.** Sevoflurane is in beta, at 1.0 beta 1. Mount the
+   [disk image](https://github.com/kageroumado/sevoflurane/releases/download/v1.0.0-beta.1/Sevoflurane-1.0.0-beta.1.dmg)
+   (every version is on the [releases page](https://github.com/kageroumado/sevoflurane/releases)),
    drag Sevoflurane to Applications, then launch it.
 2. **Install the engine and dependencies.** Choose Dormison or CrossOver as
    the engine, then create a bottle or adopt one you already have.
