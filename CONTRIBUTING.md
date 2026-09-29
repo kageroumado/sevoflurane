@@ -281,8 +281,11 @@ the game a prefix it has never seen, so it runs first-time setup again. Game
 files are shared (`steamapps/common` is symlinked between bottles); config
 and saves are not. Steam Cloud carries saves across.
 
-Stop a wedged game with `sevo app terminate`. SIGKILLing it breaks msync+'s
-Mach service for the prefix until the client restarts.
+Stop a wedged game with `sevo app terminate`: it ends the game's processes
+whole (SIGTERM, five seconds, SIGKILL) before asking Steam, because Steam's
+own `TerminateProcess` has Wine end the process thread by thread, and a thread
+that dies owning a libdispatch workloop takes the process down as a crash —
+the "quit unexpectedly" dialog for the game's bundle (`Core/GameEnding.swift`).
 
 ## Measuring boots, stops, and windows
 

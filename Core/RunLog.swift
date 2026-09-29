@@ -47,8 +47,8 @@ nonisolated enum RunLog {
     }
 
     /// Leaves word that this app is about to be stopped on purpose, and by whom, for
-    /// the recorder that will see its process exit with status 1. A file, because
-    /// the request can come from `sevo` and the recorder lives in the app.
+    /// the recorder that will see its process exit without an exception. A file,
+    /// because the request can come from `sevo` and the recorder lives in the app.
     static func noteStopRequest(forApp appID: Int, by source: StopSource, in root: URL = root) {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try? Data(source.rawValue.utf8).write(to: stopRequestURL(forApp: appID, in: root))

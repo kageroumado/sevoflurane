@@ -438,6 +438,9 @@ runs on CrossOver.
   spinning worker on every core: Higurashi Hou is recommended 8.
 - The display stays awake while a game is up, and can sleep once it is gone.
 - A game that stops answering its close button gets Keep Waiting or End Game.
+- Stopping a game from Steam's Stop button or `sevo app terminate` ends its
+  processes whole before Steam is told, so a stop you asked for leaves no
+  "quit unexpectedly" dialog or crash report behind.
 - NW.js games, including RPG Maker MV and MZ, run on a macOS runtime with
   Steam playtime and achievements.
 - Discord shows "Playing <game>" under the game's own Discord entry. Games

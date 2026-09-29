@@ -113,16 +113,18 @@ nonisolated struct RunInProgress: Sendable {
     /// given its grace.
     private static let programExitPoll: TimeInterval = 0.25
 
-    /// How a run ended, from what the client and Steam's log actually say.
-    private static func kind(
+    /// How a run ended, from what the client and Steam's log actually say. A
+    /// stop on record outranks the exit status: the stop ends the process
+    /// whole, which reads as 0, and Steam's own `TerminateProcess` reads as 1.
+    static func kind(
         code: Int?, ending: WineExceptionTrail.Ending, endedNotResponding: Bool, stopRequest: RunLog.StopSource?,
         steamError: String?, unrecorded: RunRecord.Exit.Kind,
     ) -> RunRecord.Exit.Kind {
         if ending.crash != nil { return ending.afterWindowsClosed ? .crashAtExit : .crash }
         if endedNotResponding { return .endedNotResponding }
         if let code {
-            if code == 0 { return .user }
             if let stopRequest { return stoppedKind(stopRequest) }
+            if code == 0 { return .user }
             if exceptionStatus(code) != nil { return ending.windowsClosedAtEnd ? .crashAtExit : .crash }
             return .exitError
         }

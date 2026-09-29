@@ -243,7 +243,8 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         /// How a run ended, decided from what the client and Steam's own log
         /// say — never from a window disappearing.
         enum Kind: String, Codable, Sendable {
-            /// The game's process exited with status 0.
+            /// The game's process exited with status 0 and nobody had asked
+            /// it to stop.
             case user
             /// The client raised an error for the game action and no process
             /// exit followed: Steam ended the run itself.
@@ -259,9 +260,10 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
             /// offered as one, and a compatibility verdict leaves it out.
             case crashAtExit = "crash-at-exit"
             /// A person asked the game to stop, through Steam's Stop button or
-            /// Sevoflurane's menu, and it went. Steam ends a game with
-            /// `TerminateProcess`, which reads as exit status 1 with no exception
-            /// behind it.
+            /// Sevoflurane's menu, and it went. The stop ends the game's
+            /// processes whole (``GameEnding``), which Steam reads as exit
+            /// status 0; a game Steam had to end itself with `TerminateProcess`
+            /// reads as status 1. Neither has an exception behind it.
             case stopped
             /// `sevo` asked the game to stop (`sevo app terminate`, an agent), and it
             /// went: the run lasted as long as a script wanted it to, so its length

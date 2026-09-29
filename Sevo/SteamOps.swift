@@ -306,35 +306,9 @@ nonisolated enum GameStop {
         }
     }
 
-    /// The game's own processes in this bottle, named from its executables:
-    /// every plausible exe in a Steam game's install directory, the one file
-    /// an adopted program is. An app whose files cannot be placed has no name
-    /// to match, and then only Steam's record speaks.
-    static func processes(ofApp appid: Int) async -> [pid_t] {
-        let names = executableNames(ofApp: appid)
-        guard !names.isEmpty else { return [] }
-        // `pgrep` matches a pattern anywhere in the command line, so the
-        // bottle-scoped candidates are kept only where the program itself —
-        // argv[0]'s last path component — carries one of the names exactly.
-        let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
-        let exact = Set(names.flatMap { WineProcessList.pids(named: $0, inPgrepLong: listing) })
-        guard !exact.isEmpty else { return [] }
-        let patterns = names.map { NSRegularExpression.escapedPattern(for: $0) }
-        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns).filter(exact.contains)
-    }
-
-    static func executableNames(ofApp appid: Int) -> [String] {
-        if AdoptedPrograms.isAdopted(appid) {
-            return AdoptedPrograms.program(appid)
-                .map { [$0.url.lastPathComponent.lowercased()] } ?? []
-        }
-        guard let directory = SharedGames.installDirectory(appID: appid) else { return [] }
-        return GameExecutables.executables(in: directory)
-    }
-
     static func sighting(ofApp appid: Int) async -> Sighting {
         let listed = await (try? SteamOps.runningApps())?.contains(appid) ?? false
-        return await Sighting(steamListsIt: listed, processes: processes(ofApp: appid))
+        return await Sighting(steamListsIt: listed, processes: GameEnding.processes(ofApp: appid))
     }
 
     /// Polls until the game is gone or the seconds run out.

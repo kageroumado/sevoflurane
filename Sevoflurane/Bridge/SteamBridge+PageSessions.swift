@@ -192,6 +192,13 @@ extension SteamBridge {
             // Every stop asked for in the page — the library's Stop button, the
             // menu bar — passes here. The run that ends next a person ended.
             RunLog.noteStopRequest(forApp: appID, by: .player)
+            // The game's own processes end before the call reaches Steam,
+            // whole, so its TerminateProcess finds nothing to tear down thread
+            // by thread and no crash report is filed for the stop
+            // (``GameEnding``). Bounded: a process that will not go is killed.
+            if let ended = await GameEnding.end(appID: appID).summary {
+                log(.client, "stop \(appID): \(ended)")
+            }
         }
         let call = PerfProbe.bridge.beginInterval(
             "SteamClientCall",

@@ -385,7 +385,7 @@ struct AppCommand: AsyncParsableCommand {
     struct Terminate: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "terminate",
-            abstract: "Apps.TerminateApp, then wait for the game to actually go.",
+            abstract: "End the game's processes, then Apps.TerminateApp, then wait for it to actually go.",
         )
         @Argument var appid: Int
         @Option(
@@ -397,6 +397,14 @@ struct AppCommand: AsyncParsableCommand {
 
         func run() async throws {
             try await handlingFailures {
+                // The word goes down first: the recorder reads it when the
+                // exit that follows is seen. The game's own processes end
+                // before Steam is asked, whole, so the ask finds nothing to
+                // tear down thread by thread (``GameEnding``).
+                RunLog.noteStopRequest(forApp: appid, by: .tool)
+                if let ended = await GameEnding.end(appID: appid).summary {
+                    narrate(ended, asJSON: asJSON)
+                }
                 try await SteamOps.terminate(appid)
                 // A game on the native runner left the bottle at its first
                 // instruction, so the client's terminate only drops its
