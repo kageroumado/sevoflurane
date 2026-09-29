@@ -457,6 +457,10 @@ runs on CrossOver.
   installer wrote.
 - Quick Launch programs play like Steam games: per-game settings, Dock tile,
   run records and reports.
+- **Genshin Impact at 120 fps**: the engine carries a frame-rate unlocker
+  (genshin-fps-unlock's stub, MIT, two megabytes) and starts it beside the
+  game 30 seconds after launch. Settings › Games switches it off, picks the
+  rate, or uses an unlocker of your own instead.
 - **Finder thumbnails**: every `.exe` shows its own icon in Finder's icon,
   list and gallery views and in Quick Look, read from the file without running
   it. Available once Sevoflurane has run once.

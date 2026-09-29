@@ -325,6 +325,18 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         return FileManager.default.fileExists(atPath: bridge.path) ? bridge : nil
     }
 
+    /// The engine's own frame-rate unlocker for Genshin Impact, with its stub
+    /// DLL beside it (Dormison's `build-macos/fps-unlock`).
+    static let fpsUnlockerName = "sevo-fpsunlock.exe"
+
+    /// The engine's own frame-rate unlocker, or `nil` for CrossOver and for an
+    /// engine built before it.
+    var fpsUnlocker: URL? {
+        guard case .managed = self else { return nil }
+        let unlocker = root.appendingPathComponent(Self.fpsUnlockerName)
+        return FileManager.default.fileExists(atPath: unlocker.path) ? unlocker : nil
+    }
+
     /// Whether the stored choice asks for the built-in engine, installed or
     /// not — provisioning reads this to know an install is wanted even with
     /// a usable CrossOver on the machine.

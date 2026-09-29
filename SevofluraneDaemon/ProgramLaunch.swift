@@ -117,7 +117,7 @@ extension BottleSupervisor {
             programExit: ProgramExit.Program(appID: id, exe: name),
         )
         note("started \(name) under a steam.exe parent in \(SteamBottle.name)'s companion prefix, where no Steam client runs")
-        if let unlocker = FPSUnlocker.unlocker(for: program) {
+        if let unlocker = FPSUnlocker.unlocker(for: program, engine: engine) {
             Task(name: "Start the frame-rate unlocker beside \(name)") {
                 await startUnlocker(unlocker, beside: program, environment: environment)
             }
@@ -133,10 +133,11 @@ extension BottleSupervisor {
     /// starts up makes it quit during its init (found with the launcher it
     /// was measured with, 2026-08-05).
     private func startUnlocker(
-        _ unlocker: URL, beside program: AdoptedProgram, environment: [String: String],
+        _ unlocker: FPSUnlocker.Unlocker, beside program: AdoptedProgram, environment: [String: String],
     ) async {
         let game = program.url.lastPathComponent
-        let own = unlocker.lastPathComponent
+        let executable = unlocker.executable
+        let own = executable.lastPathComponent
         let clock = ContinuousClock()
         let deadline = clock.now + FPSUnlocker.appearDeadline
         while await !Self.isRunning(game) {
@@ -153,7 +154,12 @@ extension BottleSupervisor {
             return
         }
         let target = FPSUnlocker.target
-        if !FPSUnlocker.configure(unlocker, game: program, target: target) {
+        // The engine's own takes the frame rate and how long to wait for the
+        // game on its command line; the user's reads its fps_config.json.
+        var arguments = [SteamParent.windowsPath(executable.path)]
+        if unlocker.isSevoflurane {
+            arguments += [String(target), String(Int(FPSUnlocker.appearDeadline.components.seconds))]
+        } else if !FPSUnlocker.configure(executable, game: program, target: target) {
             note("\(own) has no fps_config.json yet; it starts with its own frame rate")
         }
         // Its window must never reach the screen: shown the moment it
@@ -165,9 +171,9 @@ extension BottleSupervisor {
         var quiet = environment
         quiet["SEVO_QUIET"] = "1"
         await ClientLifecycle.launchInBottle(
-            [SteamParent.windowsPath(unlocker.path)],
+            arguments,
             environment: quiet,
-            directory: unlocker.deletingLastPathComponent(),
+            directory: executable.deletingLastPathComponent(),
         )
         note("started \(own) beside \(game), aiming for \(target) fps")
         // The unlocker quits with the game by itself; this is for the one

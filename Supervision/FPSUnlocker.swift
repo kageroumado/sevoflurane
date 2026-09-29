@@ -3,11 +3,11 @@ import Foundation
 /// A frame-rate unlocker for Genshin Impact, started beside the game in the
 /// companion prefix it runs in (``SteamParent``).
 ///
-/// Genshin caps itself at 60 fps on PC; the unlockers the community uses
+/// Genshin caps itself at 60 fps on PC; the unlockers the community use
 /// (`unlockfps_nc.exe`, genshin-fps-unlock, MIT) find the running game and
-/// raise the cap in its memory. Sevoflurane carries none of them: the user
-/// picks the executable in Settings › Games, and from then on every Genshin
-/// launch starts it, until it is switched off there.
+/// raise the cap in its memory. The engine carries one of its own
+/// (``ownName``), so every Genshin launch gets it until Settings › Games
+/// switches it off; an executable chosen there is used instead.
 ///
 /// It has to run in the game's own prefix, on the game's engine and with the
 /// same environment: a Wine process only sees the processes of its own
@@ -63,12 +63,32 @@ nonisolated enum FPSUnlocker {
     private static let enabledKey = "fpsUnlockerEnabled"
     private static let targetKey = "fpsUnlockerTarget"
 
-    /// Whether a launch of `program` gets the unlocker, and which one.
-    static func unlocker(for program: AdoptedProgram) -> URL? {
-        guard isEnabled, games.contains(program.url.lastPathComponent.lowercased()),
-              let executable, FileManager.default.fileExists(atPath: executable.path)
-        else { return nil }
-        return executable
+    /// The engine's own unlocker (``Engine/fpsUnlocker``): genshin-fps-unlock's
+    /// stub, loaded into the game by a program that takes the frame rate as
+    /// its argument.
+    static let ownName = Engine.fpsUnlockerName
+
+    /// The unlocker a launch gets: the executable and whether it is the
+    /// engine's own, which is told its target on the command line, or the
+    /// user's, which reads its `fps_config.json`.
+    struct Unlocker: Equatable, Sendable {
+        let executable: URL
+        let isSevoflurane: Bool
+    }
+
+    /// Whether a launch of `program` gets the unlocker, and which one: the
+    /// executable the user chose when it is there, else the engine's own.
+    static func unlocker(for program: AdoptedProgram, engine: Engine) -> Unlocker? {
+        guard isEnabled, games.contains(program.url.lastPathComponent.lowercased()) else { return nil }
+        return choose(user: executable, own: engine.fpsUnlocker)
+    }
+
+    /// The user's unlocker when its file exists, else the engine's own.
+    static func choose(user: URL?, own: URL?) -> Unlocker? {
+        if let user, FileManager.default.fileExists(atPath: user.path) {
+            return Unlocker(executable: user, isSevoflurane: false)
+        }
+        return own.map { Unlocker(executable: $0, isSevoflurane: true) }
     }
 
     // MARK: - Its own configuration

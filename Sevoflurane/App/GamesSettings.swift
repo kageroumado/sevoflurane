@@ -211,14 +211,14 @@ private struct FPSUnlockerSection: View {
         Section {
             LabeledContent("Unlocker") {
                 HStack(spacing: 6) {
-                    Text(verbatim: executable?.lastPathComponent ?? String(localized: "None"))
-                        .foregroundStyle(executable == nil ? .secondary : .primary)
+                    Text(verbatim: executable?.lastPathComponent ?? ownLabel)
+                        .foregroundStyle(executable == nil && !hasOwn ? .secondary : .primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help(executable?.path ?? "")
                     Button("Choose…", action: choose)
                     if executable != nil {
-                        Button("Remove") {
+                        Button(hasOwn ? "Use Sevoflurane's" : "Remove") {
                             executable = nil
                             FPSUnlocker.executable = nil
                         }
@@ -226,23 +226,30 @@ private struct FPSUnlockerSection: View {
                 }
             }
             Toggle("Start it with the game", isOn: $isEnabled)
-                .disabled(executable == nil)
+                .disabled(executable == nil && !hasOwn)
                 .onChange(of: isEnabled) { _, on in FPSUnlocker.isEnabled = on }
             Picker("Frame rate", selection: $target) {
                 ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
             }
-            .disabled(executable == nil)
+            .disabled(executable == nil && !hasOwn)
             .onChange(of: target) { _, fps in FPSUnlocker.target = fps }
         } header: {
             Text("FPS unlocker")
         } footer: {
             Text("""
-            Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: \
-            Sevoflurane starts it beside the game 30 seconds after the game's process appears, in the same Windows, and \
-            points its fps_config.json at the game. It changes the running game's memory, which \
-            HoYoverse's terms do not allow, so the choice is yours.
+            Genshin holds itself to 60 fps. Sevoflurane's engine carries an unlocker (genshin-fps-unlock's, MIT) \
+            and starts it beside the game 30 seconds after the game's process appears; choose another, such as \
+            unlockfps_nc.exe, to use that one instead. An unlocker changes the running game's memory, which \
+            HoYoverse's terms do not allow, so the switch is yours.
             """)
         }
+    }
+
+    /// Whether the active engine carries its own unlocker.
+    private var hasOwn: Bool { Engine.active.fpsUnlocker != nil }
+
+    private var ownLabel: String {
+        hasOwn ? String(localized: "Sevoflurane's own") : String(localized: "None")
     }
 
     /// The offered rates, and the stored one if it is not among them.

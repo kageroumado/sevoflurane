@@ -59,6 +59,20 @@ struct FPSUnlockerTests {
     }
 
     @Test
+    func `the user's executable is used when it exists, else the engine's own`() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fps-unlocker-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let user = directory.appendingPathComponent("unlockfps_nc.exe")
+        let own = directory.appendingPathComponent(FPSUnlocker.ownName)
+        #expect(FPSUnlocker.choose(user: user, own: own) == .init(executable: own, isSevoflurane: true))
+        try Data().write(to: user)
+        #expect(FPSUnlocker.choose(user: user, own: own) == .init(executable: user, isSevoflurane: false))
+        #expect(FPSUnlocker.choose(user: user, own: nil) == .init(executable: user, isSevoflurane: false))
+        #expect(FPSUnlocker.choose(user: nil, own: nil) == nil)
+    }
+
+    @Test
     func `a file without the byte-order mark reads too`() {
         #expect(FPSUnlocker.parse(Data(#"{"FPSTarget": 90}"#.utf8))?["FPSTarget"] as? Int == 90)
     }

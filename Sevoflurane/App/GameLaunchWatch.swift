@@ -173,12 +173,14 @@ final class GameLaunchWatch {
         return exe
     }
 
-    /// A program the app itself runs beside a game: the frame-rate unlocker
-    /// the user picked (``FPSUnlocker``). Its name is nobody's but the user's,
-    /// so no list knows it; its process and window are never the game's.
+    /// A program the app itself runs beside a game: the frame-rate unlocker,
+    /// the engine's own or the one the user picked (``FPSUnlocker``). Its
+    /// process and window are never the game's.
     nonisolated static func isHelper(_ exe: String) -> Bool {
+        let name = exe.lowercased()
+        if name == FPSUnlocker.ownName { return true }
         guard let unlocker = FPSUnlocker.executable?.lastPathComponent.lowercased() else { return false }
-        return exe.lowercased() == unlocker
+        return name == unlocker
     }
 
     /// Spends the activation right the launch took on the window that just
