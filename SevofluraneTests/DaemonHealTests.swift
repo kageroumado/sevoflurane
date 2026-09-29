@@ -134,18 +134,4 @@ struct DaemonHealTests {
         #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: budget, saidHelloAgain: true) == .timedOut)
         #expect(DaemonHeal.repairAttach(daemonSeesApp: false, elapsed: budget, saidHelloAgain: false) == .timedOut)
     }
-
-    @Test
-    func `version ordering compares component by component`() {
-        #expect(DaemonHeal.isOlder("1.5", than: "1.6"))
-        #expect(DaemonHeal.isOlder("1.6", than: "1.6.1"))
-        #expect(!DaemonHeal.isOlder("1.6", than: "1.6.0"))
-        #expect(!DaemonHeal.isOlder("1.6.0", than: "1.6"))
-        #expect(!DaemonHeal.isOlder("1.10", than: "1.9"))
-        #expect(DaemonHeal.isOlder("1.9", than: "1.10"))
-        // A non-numeric or empty version counts as zero, so it never reads as
-        // newer than a numbered release.
-        #expect(DaemonHeal.isOlder("dev", than: "1.6"))
-        #expect(DaemonHeal.isOlder("0", than: "1.6"))
-    }
 }

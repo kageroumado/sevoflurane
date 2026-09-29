@@ -106,7 +106,7 @@ struct StatsCommand: ParsableCommand {
                 print("no runs recorded yet")
                 return
             }
-            guard let run = SharedRun(record: record, appVersion: String(Sevo.version.prefix { $0 != " " })) else {
+            guard let run = SharedRun(record: record, appVersion: Sevo.marketingVersion ?? "development") else {
                 print("the last run (\(record.appid)) would not be sent: it never drew and lasted under 20 seconds")
                 return
             }

@@ -26,7 +26,7 @@ struct FooterBar: View {
     @AppStorage(StreamerMode.isOnKey, store: Preferences.shared) private var streamerMode = false
 
     private static var versionString: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
+        AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "0.0")
     }
 
     var body: some View {
@@ -235,7 +235,7 @@ private struct UpdateChip: View {
 
     @ViewBuilder
     private func idleChip(_ updates: SilentUpdates) -> some View {
-        if let justUpdated = updates.justUpdatedVersion {
+        if let justUpdated = updates.justUpdatedVersion.map(AppVersion.display) {
             Button { updates.acknowledgeUpdate() } label: {
                 Label(justUpdated, systemImage: "checkmark")
                     .foregroundStyle(Theme.onAccent)
@@ -243,7 +243,7 @@ private struct UpdateChip: View {
             .buttonStyle(.footerChipProminent)
             .help("Updated to version \(justUpdated)")
             .accessibilityLabel("Updated to version \(justUpdated)")
-        } else if let available = updates.availableVersion ?? updates.pendingVersion {
+        } else if let available = (updates.availableVersion ?? updates.pendingVersion).map(AppVersion.display) {
             Button { Task { await updates.updateNow() } } label: {
                 Label(available, systemImage: "arrow.down.circle.fill")
                     .foregroundStyle(Theme.onAccent)

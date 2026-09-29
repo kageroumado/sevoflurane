@@ -13,19 +13,29 @@ nonisolated enum SevoExit {
 
 nonisolated enum Sevo {
     /// The version of the app this executable shipped in (`Sevoflurane.app/
-    /// Contents/Helpers/sevo`), which is what a bug report should name; a copy
-    /// run from outside an app bundle says so.
+    /// Contents/Helpers/sevo`) as a person reads it, "1.0 beta 1 (1)", which
+    /// is what a bug report should name; a copy run from outside an app
+    /// bundle says so.
     static let version: String = {
+        guard let info = appInfo(), let marketing = info["CFBundleShortVersionString"] as? String
+        else { return "development build" }
+        let version = AppVersion.display(marketing)
+        return (info["CFBundleVersion"] as? String).map { "\(version) (\($0))" } ?? version
+    }()
+
+    /// The app's marketing version as the bundle carries it (`1.0.0-beta.1`),
+    /// for what a machine reads; nil outside an app bundle.
+    static let marketingVersion: String? = appInfo()?["CFBundleShortVersionString"] as? String
+
+    /// The Info.plist of the app bundle this executable rides in.
+    private static func appInfo() -> NSDictionary? {
         // Bundle.main rather than argv[0], which is the bare word `sevo` when the
         // shell found the symlink on PATH.
         let executable = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]))
             .resolvingSymlinksInPath()
         let contents = executable.deletingLastPathComponent().deletingLastPathComponent()
-        guard let info = NSDictionary(contentsOf: contents.appending(path: "Info.plist")),
-              let version = info["CFBundleShortVersionString"] as? String
-        else { return "development build" }
-        return (info["CFBundleVersion"] as? String).map { "\(version) (\($0))" } ?? version
-    }()
+        return NSDictionary(contentsOf: contents.appending(path: "Info.plist"))
+    }
 
     /// The app's event log — one trail whether the app or the CLI drove.
     static let logFile = AppIdentity.logFile()

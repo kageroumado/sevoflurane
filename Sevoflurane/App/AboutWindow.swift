@@ -92,7 +92,7 @@ final class AboutWindows {
 struct AboutView: View {
     private static let version: String = {
         let info = Bundle.main.infoDictionary
-        let marketing = info?["CFBundleShortVersionString"] as? String ?? "dev"
+        let marketing = AppVersion.displayed(from: info, fallback: "dev")
         let build = info?["CFBundleVersion"] as? String ?? "0"
         return String(localized: "Version \(marketing) (\(build))")
     }()

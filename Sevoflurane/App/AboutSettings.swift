@@ -66,7 +66,6 @@ struct AboutSettings: View {
     }
 
     private static var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "dev"
+        AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "dev")
     }
 }

@@ -101,7 +101,7 @@ nonisolated enum DaemonHeal {
     static func decide(_ inputs: Inputs) -> Action {
         if inputs.isAnswering {
             if let daemonVersion = inputs.daemonVersion,
-               isOlder(daemonVersion, than: inputs.appVersion) {
+               AppVersion.isOlder(daemonVersion, than: inputs.appVersion) {
                 return .restartStale
             }
             // A daemon that reports no build predates the report, which makes
@@ -115,23 +115,5 @@ nonisolated enum DaemonHeal {
         // not a rebuild — there is no poisoned record to tear down.
         guard inputs.isRegistered else { return .none }
         return inputs.healAlreadyAttempted ? .surfaceFailure : .rebuild
-    }
-
-    /// Orders two dotted versions by numeric component, missing trailing
-    /// components read as zero so "1.6" equals "1.6.0". A component that is not
-    /// a number counts as zero, which keeps a "dev" or empty version from ever
-    /// reading as newer than a numbered release.
-    static func isOlder(_ lhs: String, than rhs: String) -> Bool {
-        let left = components(lhs), right = components(rhs)
-        for index in 0 ..< max(left.count, right.count) {
-            let l = index < left.count ? left[index] : 0
-            let r = index < right.count ? right[index] : 0
-            if l != r { return l < r }
-        }
-        return false
-    }
-
-    private static func components(_ version: String) -> [Int] {
-        version.split(separator: ".").map { Int($0) ?? 0 }
     }
 }
