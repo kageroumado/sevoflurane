@@ -33,16 +33,6 @@ final class ControlServer {
         "/debug/off",
     ]
 
-    /// Verbs that mean "there should be a client": a daemon that has not been
-    /// asked launches nothing.
-    private static let asksForAClient: Set<String> = [
-        "/client/start",
-        "/client/restart",
-        "/client/forcequit",
-        "/game/launch",
-        "/library/show-when-healthy",
-    ]
-
     init(
         supervisor: BottleSupervisor,
         app: AppLink,
@@ -144,75 +134,85 @@ final class ControlServer {
         }
     }
 
-    /// Everything that moves the client or the bottle. One owner, one door.
+    /// Everything that moves the client or the bottle. One owner, one door:
+    /// ``ClientVerb/admit(method:path:wantClient:)`` names the verb before the
+    /// supervisor hears of the request, so a request it refuses changes
+    /// nothing.
     private func clientVerb(_ request: HTTPRequest) async -> HTTPResponse {
-        if Self.asksForAClient.contains(request.path) {
-            supervisor.wantClient(because: "\(request.path) was asked for")
+        switch ClientVerb.admit(method: request.method, path: request.path, wantClient: { reason in
+            supervisor.wantClient(because: reason)
+        }) {
+        case let .verb(verb):
+            await perform(verb, request)
+        case let .refused(response):
+            response
         }
-        switch (request.method, request.path) {
-        case ("POST", "/client/restart"):
-            let reason = Self.value(of: "reason", in: request.query)
-            if Self.value(of: "windows", in: request.query) == "1" {
-                supervisor.restartWindowsNow()
-            } else {
-                supervisor.restartNow(reason: reason.isEmpty ? "sevo client restart" : reason)
-            }
-            return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
-        case ("POST", "/library/show-when-healthy"):
+    }
+
+    private func perform(_ verb: ClientVerb, _ request: HTTPRequest) async -> HTTPResponse {
+        switch verb {
+        case .restart:
+            return restart(query: request.query)
+        case .showLibraryWhenHealthy:
             supervisor.showLibraryWhenHealthy()
             return Self.json(#"{"ok":true}"#)
-        case ("POST", "/supervisor/wake"):
+        case .wake:
             // The app sees some deaths first — the bridge's transport closes
             // four seconds before the launcher exits — so it says so rather
             // than leaving the cycle to notice at its next tick.
             supervisor.wake(.control("Sevoflurane saw something change"))
             return Self.json(#"{"ok":true}"#)
-        case ("POST", "/client/start"):
+        case .start:
             supervisor.startForControl()
             return Self.json(#"{"ok":true,"note":"start begun; poll /status"}"#)
-        case ("POST", "/client/stop"):
-            guard !supervisor.isBusyRestarting else {
-                return .error(409, "restart in progress")
-            }
-            await supervisor.stopForControl()
-            return Self.json(#"{"ok":true,"note":"client stopped; auto-restart paused"}"#)
-        case ("POST", "/client/forcequit"):
+        case .stop:
+            return await stop()
+        case .forceQuit:
             let scope: ClientLifecycle.ForceScope =
                 ["all", "everything"].contains(Self.value(of: "scope", in: request.query))
                     ? .everything : .steam
             supervisor.forceQuit(scope)
             return Self.json(#"{"ok":true,"note":"force-quit begun; poll /status"}"#)
-        case ("POST", "/quit"):
+        case .quit:
             // The quit contract: the app asks once, on its way out, and the
             // bottle comes down with it. A crash sends nothing, which is why
             // a crash leaves the game running.
             await onQuit()
             return Self.json(#"{"ok":true,"note":"bottle down"}"#)
-        case ("POST", "/bottle/clear-shader-cache"):
+        case .clearShaderCache:
             supervisor.clearShaderCache()
             return Self.json(#"{"ok":true,"note":"clearing shader cache; restarting — poll /status"}"#)
-        case ("POST", "/game/launch"):
+        case .launchGame:
             return await launchGame(query: request.query)
-        case ("POST", "/bottle/run"):
+        case .runInBottle:
             return await runInBottle(request)
-        case ("POST", "/bottle/launch"):
+        case .launchInBottle:
             return await launchInBottle(request)
-        default:
-            return await programVerb(request)
+        case .launchProgram:
+            return await launchProgram(query: request.query)
+        case .runProgram:
+            return await runProgram(request)
         }
     }
 
-    /// The adopted Windows programs, which need no Steam client and so live
-    /// past the verbs that ask for one.
-    private func programVerb(_ request: HTTPRequest) async -> HTTPResponse {
-        switch (request.method, request.path) {
-        case ("POST", "/program/launch"):
-            await launchProgram(query: request.query)
-        case ("POST", "/program/run"):
-            await runProgram(request)
-        default:
-            .error(404, "Not Found")
+    /// `?windows=1` restarts Windows inside the bottle; otherwise the client,
+    /// logged with `?reason=`.
+    private func restart(query: String) -> HTTPResponse {
+        let reason = Self.value(of: "reason", in: query)
+        if Self.value(of: "windows", in: query) == "1" {
+            supervisor.restartWindowsNow()
+        } else {
+            supervisor.restartNow(reason: reason.isEmpty ? "sevo client restart" : reason)
         }
+        return Self.json(#"{"ok":true,"note":"restart begun; poll /status"}"#)
+    }
+
+    private func stop() async -> HTTPResponse {
+        guard !supervisor.isBusyRestarting else {
+            return .error(409, "restart in progress")
+        }
+        await supervisor.stopForControl()
+        return Self.json(#"{"ok":true,"note":"client stopped; auto-restart paused"}"#)
     }
 
     /// Starts a game, restarting the client first when the game is pinned to
