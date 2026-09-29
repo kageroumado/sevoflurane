@@ -159,10 +159,12 @@ struct EngineCommand: AsyncParsableCommand {
             Sevo.printError("engine use: name the engine to switch to (sevo engine list)")
             throw SevoExit.badInvocation
         }
-        let engine: Engine = switch target {
-        case "crossover": .crossover
-        case "crossover-preview": .crossoverPreview
-        default: .managed(version: target)
+        let engine: Engine
+        do {
+            engine = try Engine.named(target)
+        } catch {
+            Sevo.printError("engine use: \(error)")
+            throw SevoExit.badInvocation
         }
         guard engine.existsOnDisk else {
             Sevo.printError("engine \(target) is not installed — sevo engine list")
@@ -184,7 +186,7 @@ struct EngineCommand: AsyncParsableCommand {
         var version = into
         if version == nil, case let .managed(active) = Engine.active { version = active }
         let engine = D3DMetalInstaller.store
-        let tree = version.map(Engine.managedRoot.appendingPathComponent)
+        let tree = version.flatMap { Engine.managedDirectory($0) }
         let label = version ?? "CrossOver"
         if let use {
             if use == "own" {

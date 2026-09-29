@@ -137,7 +137,7 @@ sevo logs [--tail N] [-f] [--wine]
 
 退出码：0 表示成功，1 表示操作失败，2 表示调用方式无效，3 表示安装不完整，4 表示无法连接客户端。App 运行时，客户端的启动、退出和重启等命令会经过它的监管程序。
 
-`sevo`、App 和它的辅助程序通过本机回环端口通信，这些端口只响应你的 macOS 账户：每个请求都带有保存在 `~/Library/Application Support/Sevoflurane/Control/token` 中的令牌，只有你能读取。同一台 Mac 上的其他账户无法操控容器。
+`sevo`、App 和它的辅助程序通过本机回环端口通信，这些端口只响应你的 macOS 账户：每个请求都带有保存在 `~/Library/Application Support/Sevoflurane/Control/token` 中的令牌，只有你能读取。同一台 Mac 上的其他账户无法操控容器。`sevo engine use` 和 MCP 的 `engine_use` 工具只接受 CrossOver，或 Sevoflurane 的 `Engines` 文件夹里某个引擎文件夹的名称，不接受文件夹以外的路径。
 
 ### MCP
 

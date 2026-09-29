@@ -320,10 +320,11 @@ final class ControlServer {
         guard !version.isEmpty else {
             return .error(400, "pass ?version=<engine> (sevo engine list)")
         }
-        let engine: Engine = switch version {
-        case "crossover": .crossover
-        case "crossover-preview": .crossoverPreview
-        default: .managed(version: version)
+        let engine: Engine
+        do {
+            engine = try Engine.named(version)
+        } catch {
+            return .error(400, error.description)
         }
         guard engine.existsOnDisk else {
             return .error(404, "engine \(version) is not installed")

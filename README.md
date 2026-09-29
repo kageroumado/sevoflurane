@@ -224,6 +224,8 @@ its supervisor.
 macOS account: each request carries a token kept in
 `~/Library/Application Support/Sevoflurane/Control/token`, readable by you
 alone. Another account on the same Mac cannot drive the bottle.
+`sevo engine use` and the MCP `engine_use` tool take CrossOver or the name of
+an engine folder inside Sevoflurane's `Engines` folder, nothing outside it.
 
 ### MCP
 

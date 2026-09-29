@@ -156,10 +156,11 @@ extension MCPServer {
         guard let version = args["version"] as? String, !version.isEmpty else {
             throw ClientOps.Failure.message("version (string) is required")
         }
-        let engine: Engine = switch version {
-        case "crossover": .crossover
-        case "crossover-preview": .crossoverPreview
-        default: .managed(version: version)
+        let engine: Engine
+        do {
+            engine = try Engine.named(version)
+        } catch {
+            throw ClientOps.Failure.message(error.description)
         }
         guard engine.existsOnDisk else {
             throw ClientOps.Failure.message(

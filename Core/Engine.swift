@@ -189,8 +189,9 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// stored or the chosen engine isn't on disk (managed chosen but never
     /// installed, a deleted app) — those fall to policy. A named managed
     /// engine wins as long as its directory exists; a bare `managed`, or a
-    /// name whose directory is gone (an engine update replaced it), follows
-    /// the renderer, so the engine that can host the chosen renderer boots.
+    /// name whose directory is gone (an engine update replaced it) or that
+    /// names no folder of ``managedRoot``, follows the renderer, so the
+    /// engine that can host the chosen renderer boots.
     static func preferred() -> Engine? {
         guard let stored = Preferences.shared.string(forKey: preferenceKey) else { return nil }
         switch stored {
@@ -199,11 +200,65 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         case "managed": return managedEngine(hosting: BottleGraphics.managedSelection().renderer)
         default:
             guard stored.hasPrefix(managedPrefix) else { return nil }
-            let named = Engine.managed(version: String(stored.dropFirst(managedPrefix.count)))
-            return named.existsOnDisk
-                ? named
-                : managedEngine(hosting: BottleGraphics.managedSelection().renderer)
+            if let named = try? Engine.named(String(stored.dropFirst(managedPrefix.count))),
+               named.existsOnDisk {
+                return named
+            }
+            return managedEngine(hosting: BottleGraphics.managedSelection().renderer)
         }
+    }
+
+    // MARK: - Naming an engine
+
+    /// Why a name selects no engine.
+    struct NameRefusal: Error, Equatable, CustomStringConvertible {
+        let name: String
+
+        var description: String {
+            "\"\(name)\" is not an engine name: a managed engine is one folder inside "
+                + "\(Engine.managedRoot.path), named without /, NUL, . or .."
+        }
+    }
+
+    /// The engine a caller outside this process names: `sevo engine use`, the
+    /// MCP tool, the control port's `/engine/use` and the stored choice.
+    /// CrossOver goes by its short id, a managed engine by its folder name.
+    /// Whether that engine is installed is ``existsOnDisk``'s question.
+    static func named(_ name: String) throws(NameRefusal) -> Engine {
+        switch name {
+        case "crossover": return .crossover
+        case "crossover-preview": return .crossoverPreview
+        default:
+            guard isManagedName(name) else { throw NameRefusal(name: name) }
+            return .managed(version: name)
+        }
+    }
+
+    /// Whether `name` can be a folder directly inside ``managedRoot``: one
+    /// non-empty path component, not `.` or `..`, with no `/` and no NUL.
+    static func isManagedName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\0")
+    }
+
+    /// `name`'s folder inside `root`, every symbolic link resolved; nil when
+    /// the name is not one path component, the folder does not exist, or it
+    /// resolves anywhere but directly inside the resolved `root`.
+    static func managedDirectory(_ name: String, in root: URL = managedRoot) -> URL? {
+        guard isManagedName(name),
+              let resolvedRoot = resolvedPath(root.path),
+              let resolved = resolvedPath(root.appendingPathComponent(name).path),
+              (resolved as NSString).deletingLastPathComponent == resolvedRoot
+        else { return nil }
+        return URL(fileURLWithPath: resolved, isDirectory: true)
+    }
+
+    /// `realpath(3)`: Foundation's own resolution maps `/private/var` to
+    /// `/var`, which would move a path out of a root it resolved the other
+    /// way.
+    private static func resolvedPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     /// The installed managed engine that can host `renderer` — the newest
@@ -279,14 +334,16 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
 
     /// Whether the engine's own binaries are still where the choice left
     /// them — a stored choice pointing at a deleted app must lose to policy.
+    /// A managed engine exists only as a folder of ``managedRoot``
+    /// (``managedDirectory(_:in:)``), whatever its name spells.
     var existsOnDisk: Bool {
         switch self {
         case .crossover, .crossoverPreview:
             crossoverBin.map { FileManager.default.fileExists(atPath: $0) } ?? false
-        case .managed:
-            FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("wine/bin").path,
-            )
+        case let .managed(version):
+            Self.managedDirectory(version).map {
+                FileManager.default.fileExists(atPath: $0.appendingPathComponent("wine/bin").path)
+            } ?? false
         }
     }
 
@@ -342,7 +399,8 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// engine that actually ran it. `nil` when the path matches no engine.
     static func booted(fromRoot path: String) -> Engine? {
         if path.hasPrefix(managedRoot.path + "/") {
-            return .managed(version: URL(fileURLWithPath: path).lastPathComponent)
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            return isManagedName(name) ? .managed(version: name) : nil
         }
         for engine: Engine in [.crossover, .crossoverPreview] where engine.root.path == path {
             return engine
