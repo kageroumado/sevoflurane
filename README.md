@@ -265,6 +265,37 @@ presenter. CrossOver
 and CrossOver Preview can also serve as engines. The engine runs under
 Rosetta; Sevoflurane itself is native on Apple silicon.
 
+### msync+
+
+msync is CrossOver's synchronization backend. Windows events, mutexes and
+semaphores live in shared memory, threads wait on them with `__ulock` and
+reach wineserver through a Mach port, so most waits never leave the process.
+msync+ is Dormison's fork of the msync in CrossOver 26.3; CrossOver engines
+run CrossOver's own. `sevo bottle config msync` turns either on or off. The
+fork differs in these ways:
+
+- **WaitAll is whole.** wineserver freezes the set of objects a thread waits
+  on and grants all of them at once, so the thread gets a set that was
+  complete at one instant, consumed once. A query never sees the set half
+  taken. WaitAll also reports an abandoned mutex.
+- **NT's answers.** `NtReleaseMutant` returns the previous count, as Windows
+  does.
+- **Index reuse.** Freed object indexes go back on a stack and are handed
+  out again.
+- **No orphans.** A process exits when its wineserver dies.
+- **Wakes survive a death.** Setting an object takes two steps: mark it
+  available, then wake its sleepers. A thread killed between the two leaves
+  them asleep on an object that reads available, which can leave Steam's
+  main thread stuck after a game quits. wineserver wakes every object a
+  dead process held a handle to, when its last thread leaves and again when
+  its death is confirmed, and does the same for a thread terminated in a
+  process that lives on.
+- **A sweep for the rest.** `sevo sync sweep` sends wineserver `SIGUSR2`,
+  and it wakes threads asleep on any object that stayed available and
+  unchanged for 100 ms. It logs each object, its holders and any recent
+  death that shared it. `sevo recover` and the supervisor sweep before they
+  restart a silent Steam client.
+
 ### Source layout
 
 - `Sevoflurane/` — the app's own code. `Web/` hosts Steam's interface and

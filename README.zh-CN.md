@@ -159,6 +159,17 @@ Protobuf 通信使用由客户端上下文打开的独立套接字。Sevoflurane
 
 Dormison 提供 D3DMetal、msync+（基于 CrossOver 的 msync 修改而来）、Rosetta 下的 32 位游戏、Steam 启动和 Metal 画面呈现器所需的 Wine 改动。也可以使用 CrossOver 或 CrossOver Preview 作为引擎。引擎通过 Rosetta 运行，Sevoflurane 本身则原生运行在 Apple 芯片上。
 
+### msync+
+
+msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量存放在共享内存中，线程通过 `__ulock` 等待，并经由 Mach 端口与 wineserver 通信，因此大多数等待都不必离开进程。msync+ 是 Dormison 基于 CrossOver 26.3 的 msync 修改而来的分支。CrossOver 引擎使用 CrossOver 自带的 msync。两者都可以用 `sevo bottle config msync` 开关。与原版相比，msync+ 有以下不同：
+
+- **WaitAll 整体授予。** wineserver 会冻结线程所等待的整组对象，并一次性全部授予。线程拿到的是同一时刻完整的一组对象，且只消耗一次；查询也不会看到被拿走一半的状态。WaitAll 还会报告被遗弃的互斥体。
+- **与 NT 一致的返回值。** `NtReleaseMutant` 像 Windows 一样返回之前的计数。
+- **索引复用。** 释放的对象索引放回栈中，之后再次分配。
+- **不留孤儿进程。** wineserver 退出时，进程随之退出。
+- **进程死亡不丢唤醒。** 设置一个对象分两步：先标记为可用，再唤醒等待它的线程。若线程恰好在两步之间被终止，等待者会一直睡在一个看起来可用的对象上，这可能让游戏退出后 Steam 的主线程卡住。wineserver 会在进程最后一个线程离开时、以及确认其死亡时，唤醒该进程持有句柄的每个对象；进程仍在运行、只有某个线程被终止时也同样处理。
+- **兜底扫描。** `sevo sync sweep` 向 wineserver 发送 `SIGUSR2`，它会唤醒睡在任何保持可用且 100 毫秒内未变化的对象上的线程，并记录每个对象、它的持有者，以及最近共享过它的已死亡进程。`sevo recover` 和后台监管程序在重启无响应的 Steam 客户端之前都会先扫描一次。
+
 ### 源码结构
 
 - `Sevoflurane/` — App 本身的代码。`Web/` 承载 Steam 界面和窗口；`Bridge/` 连接页面与客户端；`App/` 包含 App 生命周期、菜单栏、窗口和设置；`Setup/` 是首次运行向导。
