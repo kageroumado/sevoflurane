@@ -54,12 +54,6 @@ supervisor, and no client, and never registers or restarts the background
 helper. The guard is in the app, not behind `#if DEBUG`, because the
 configuration a test action builds is the scheme's to choose.
 
-The `Test` workflow runs the complete bundle on GitHub's arm64
-[`xcode-27` macOS 27 image](https://github.blog/changelog/2026-09-10-xcode-27-runner-image-now-runs-on-macos-27/).
-It checks out the public Propofol package beside the app at a pinned revision and
-uses ad-hoc signing, so a contributor needs no signing certificate or repository secret.
-Each run saves its `.xcresult` bundle as the `macos-test-results` artifact.
-
 **Against a running client**, `Tools/chat-scenarios.sh` synthesizes an
 arriving message through Steam's own objects — no second account. It calls
 `UIStore.ShowAndOrActivateChat(context, chat, false)`, which is exactly what
