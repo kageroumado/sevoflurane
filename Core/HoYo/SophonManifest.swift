@@ -49,7 +49,7 @@ nonisolated struct SophonManifest: Sendable {
                 }
             }
             if type == 64 { continue }
-            files.append(File(path: path, size: size, md5: md5, chunks: chunks))
+            try files.append(File(path: ProtobufReader.contained(path), size: size, md5: md5, chunks: chunks))
         }
         self.files = files
     }
@@ -154,7 +154,7 @@ nonisolated struct SophonPatchManifest: Sendable {
             default: break
             }
         }
-        return File(path: path, size: size, md5: md5, diffs: diffs)
+        return try File(path: ProtobufReader.contained(path), size: size, md5: md5, diffs: diffs)
     }
 
     private static func diff(_ data: Data) throws -> Diff {
@@ -171,8 +171,8 @@ nonisolated struct SophonPatchManifest: Sendable {
             default: break
             }
         }
-        return Diff(
-            blob: blob, offset: offset, length: length, original: original,
+        return try Diff(
+            blob: blob, offset: offset, length: length, original: original.map(ProtobufReader.contained),
             originalSize: originalSize, originalMD5: originalMD5,
         )
     }
@@ -193,7 +193,7 @@ nonisolated struct SophonPatchManifest: Sendable {
                     default: break
                     }
                 }
-                deleted.append(Deleted(path: path, size: size, md5: md5))
+                try deleted.append(Deleted(path: ProtobufReader.contained(path), size: size, md5: md5))
             }
         }
         return (tag, deleted)
@@ -215,6 +215,19 @@ nonisolated enum ProtobufReader {
 
     struct Malformed: Error, CustomStringConvertible {
         let description: String
+    }
+
+    /// A manifest's file path, when it names a file inside the game folder.
+    ///
+    /// Every path is appended to that folder and then written, patched or
+    /// deleted, so an empty one would name the folder itself and an absolute or
+    /// `..` one a file outside it.
+    static func contained(_ path: String) throws -> String {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard !path.isEmpty, !path.hasPrefix("/"), !components.contains("..") else {
+            throw Malformed(description: "file path \"\(path)\" is outside the game folder")
+        }
+        return path
     }
 
     /// The top-level fields of one message, in order.

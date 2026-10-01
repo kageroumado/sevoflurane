@@ -148,6 +148,33 @@ struct SophonCodecTests {
         #expect(manifest.deletions["4.5.0"] == [.init(path: "gone.block", size: 3, md5: "gonemd5")])
     }
 
+    @Test(arguments: ["", "/etc/hosts", "../escape.block", "StarRail_Data/../../escape.block"])
+    func `a manifest path outside the game folder is refused`(path: String) {
+        let file = Proto.message([Proto.field(1, path), Proto.field(4, 10)])
+        #expect(throws: ProtobufReader.Malformed.self) {
+            try SophonManifest(decoding: Proto.message([Proto.field(1, file)]))
+        }
+        let deletions = Proto.message([
+            Proto.field(1, "4.5.0"),
+            Proto.field(2, Proto.message([Proto.field(1, Proto.message([Proto.field(1, path)]))])),
+        ])
+        #expect(throws: ProtobufReader.Malformed.self) {
+            try SophonPatchManifest(decoding: Proto.message([Proto.field(2, deletions)]))
+        }
+        let patched = Proto.message([
+            Proto.field(1, "b.block"),
+            Proto.field(4, Proto.message([
+                Proto.field(1, "4.5.0"),
+                Proto.field(2, Proto.message([Proto.field(1, "blob_1"), Proto.field(8, path)])),
+            ])),
+        ])
+        if !path.isEmpty {
+            #expect(throws: ProtobufReader.Malformed.self) {
+                try SophonPatchManifest(decoding: Proto.message([Proto.field(1, patched)]))
+            }
+        }
+    }
+
     @Test
     func `a truncated manifest is refused`() {
         let file = Proto.message([Proto.field(1, "a.block"), Proto.field(4, 10)])
