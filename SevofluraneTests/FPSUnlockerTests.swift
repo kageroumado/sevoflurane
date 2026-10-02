@@ -73,6 +73,28 @@ struct FPSUnlockerTests {
     }
 
     @Test
+    func `nothing starts beside Genshin until the user switches it on`() throws {
+        let enabledKey = "fpsUnlockerEnabled"
+        let storedEnabled = Preferences.shared.object(forKey: enabledKey)
+        let storedExecutable = FPSUnlocker.executable
+        defer {
+            Preferences.shared.set(storedEnabled, forKey: enabledKey)
+            FPSUnlocker.executable = storedExecutable
+        }
+        let user = try Self.unlocker(config: "{}")
+        try Data().write(to: user)
+        FPSUnlocker.executable = user
+        let genshin = Self.program("/GI/GenshinImpact.exe")
+
+        Preferences.shared.removeObject(forKey: enabledKey)
+        #expect(!FPSUnlocker.isEnabled)
+        #expect(FPSUnlocker.unlocker(for: genshin, engine: .crossover) == nil)
+
+        FPSUnlocker.isEnabled = true
+        #expect(FPSUnlocker.unlocker(for: genshin, engine: .crossover) == .init(executable: user, isSevoflurane: false))
+    }
+
+    @Test
     func `a file without the byte-order mark reads too`() {
         #expect(FPSUnlocker.parse(Data(#"{"FPSTarget": 90}"#.utf8))?["FPSTarget"] as? Int == 90)
     }

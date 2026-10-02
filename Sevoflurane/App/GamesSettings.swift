@@ -237,8 +237,8 @@ private struct FPSUnlockerSection: View {
             Text("FPS unlocker")
         } footer: {
             Text("""
-            Genshin holds itself to 60 fps. Sevoflurane's engine carries an unlocker (genshin-fps-unlock's, MIT) \
-            and starts it beside the game 30 seconds after the game's process appears; choose another, such as \
+            Genshin holds itself to 60 fps. Sevoflurane's engine carries an unlocker (genshin-fps-unlock's, MIT); \
+            switched on, it starts beside the game 30 seconds after the game's process appears. Choose another, such as \
             unlockfps_nc.exe, to use that one instead. An unlocker changes the running game's memory, which \
             HoYoverse's terms do not allow, so the switch is yours.
             """)

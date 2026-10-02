@@ -6,8 +6,8 @@ import Foundation
 /// Genshin caps itself at 60 fps on PC; the unlockers the community use
 /// (`unlockfps_nc.exe`, genshin-fps-unlock, MIT) find the running game and
 /// raise the cap in its memory. The engine carries one of its own
-/// (``ownName``), so every Genshin launch gets it until Settings › Games
-/// switches it off; an executable chosen there is used instead.
+/// (``ownName``), started with Genshin once Settings › Games switches it on;
+/// an executable chosen there is used instead.
 ///
 /// It has to run in the game's own prefix, on the game's engine and with the
 /// same environment: a Wine process only sees the processes of its own
@@ -44,10 +44,11 @@ nonisolated enum FPSUnlocker {
         set { Preferences.shared.set(newValue?.path, forKey: pathKey) }
     }
 
-    /// Whether it starts with the game. On by default, so choosing the
-    /// executable is all it takes.
+    /// Whether it starts with the game. Off until the user switches it on or
+    /// chooses an executable: it changes the game's memory, which HoYoverse's
+    /// terms do not allow.
     static var isEnabled: Bool {
-        get { Preferences.shared.object(forKey: enabledKey) as? Bool ?? true }
+        get { Preferences.shared.object(forKey: enabledKey) as? Bool ?? false }
         set { Preferences.shared.set(newValue, forKey: enabledKey) }
     }
 
