@@ -65,6 +65,7 @@ actor GameCompatService {
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("proton/\(appID).json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("pcgw/\(appID).json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("community/\(appID).json"))
+            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("pcgw-mac/\(appID).json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("awacy.json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("applegamingwiki.json"))
         }
@@ -80,6 +81,10 @@ actor GameCompatService {
         let protonSummary = await proton
         let communitySummary = await community
         let hasMacBuild = SteamAppInfo.platforms(appID: appID).contains("macos")
+        // The architecture only changes the macOS cell, so it is asked for
+        // only when that cell would show without it.
+        let architectures = GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild) == nil
+            ? nil : await loadMacArchitectures(appID: appID)
         return GameCompatRecord(
             appID: appID,
             name: name,
@@ -88,11 +93,14 @@ actor GameCompatService {
             proton: protonSummary,
             community: communitySummary,
             hasMacBuild: hasMacBuild,
+            macArchitectures: architectures,
             deckCategory: deckCategory,
             mac: GameCompatVerdict.mac(
                 antiCheat: antiCheat, wiki: wiki, proton: protonSummary, community: communitySummary,
             ),
-            nativeBadge: GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild),
+            nativeBadge: GameCompatVerdict.native(
+                wiki: wiki, hasMacBuild: hasMacBuild, architectures: architectures,
+            ),
             antiCheatBadge: GameCompatVerdict.antiCheat(antiCheat),
             fetchedAt: .now,
         )
@@ -154,6 +162,25 @@ actor GameCompatService {
             acceptingMissesAs: Data("{}".utf8),
         ) else { return nil }
         return GameCompatSources.community(data: data)
+    }
+
+    /// The macOS build's architectures from the game's PCGamingWiki page.
+    /// Only the three fields are kept on disk; a page is tens of kilobytes.
+    private func loadMacArchitectures(appID: Int) async -> GameCompatRecord.MacArchitectures? {
+        let path = Self.cacheRoot.appendingPathComponent("pcgw-mac/\(appID).json")
+        if let data = Self.cached(at: path, maxAge: Self.maxAge) {
+            return try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: data)
+        }
+        guard let title = await loadPCGamingWikiTitle(appID: appID),
+              let url = GameCompatSources.pcGamingWikiTextURL(title: title),
+              let (data, response) = try? await session.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let text = GameCompatSources.pcGamingWikiText(data: data)
+        else { return nil }
+        var architectures = GameCompatSources.macArchitectures(wikitext: text)
+        architectures?.pageURL = GameCompatSources.pcGamingWikiPageURL(title: title)
+        if let encoded = try? JSONEncoder().encode(architectures) { Self.store(encoded, at: path) }
+        return architectures
     }
 
     private func loadPCGamingWikiTitle(appID: Int) async -> String? {

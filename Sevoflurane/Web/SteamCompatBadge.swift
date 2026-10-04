@@ -114,8 +114,11 @@ enum SteamCompatBadge {
         var ac = record.antiCheatBadge || {};
         var c = record.community;
         rows.push(row(mac.state, "<b>Windows version:</b> " + esc(mac.reason), record.wiki && link(record.wiki.pageURL, "AppleGamingWiki")));
+        var arch = record.macArchitectures;
         if (record.nativeBadge) {
           rows.push(row(record.nativeBadge.state, "<b>macOS version:</b> " + esc(record.nativeBadge.reason)));
+        } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
+          rows.push(row("unsupported", "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
         }
         rows.push(row(ac.state, "<b>Anti-cheat:</b> " + esc(ac.reason), record.antiCheat && link(record.antiCheat.sourceURL, "AreWeAntiCheatYet")));
         if (record.antiCheat && record.antiCheat.notes) {

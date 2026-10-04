@@ -53,6 +53,8 @@ struct AppCommand: AsyncParsableCommand {
             print("  Mac:        \(record.mac.label) — \(record.mac.reason)")
             if let native = record.nativeBadge {
                 print("  macOS version: \(native.label) — \(native.reason)")
+            } else if record.macArchitectures?.is32BitOnly == true {
+                print("  macOS version: 32-bit only — no Apple silicon Mac runs it (PCGamingWiki)")
             }
             print("  Anti-cheat: \(record.antiCheatBadge.label) — \(record.antiCheatBadge.reason)")
             if let wiki = record.wiki {

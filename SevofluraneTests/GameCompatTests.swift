@@ -184,6 +184,20 @@ struct GameCompatTests {
         #expect(GameCompatVerdict.native(wiki: wiki(wine: "perfect"), hasMacBuild: false) == nil)
     }
 
+    @Test
+    func `a 32-bit-only macOS build gets no badge, whatever it was rated`() {
+        let portal2 = GameCompatRecord.MacArchitectures(intel32: true, intel64: false, arm: nil)
+        #expect(portal2.is32BitOnly)
+        #expect(GameCompatVerdict.native(wiki: nil, hasMacBuild: true, architectures: portal2) == nil)
+        #expect(GameCompatVerdict.native(wiki: wiki(native: "perfect"), hasMacBuild: true, architectures: portal2) == nil)
+        // A universal or 64-bit build keeps its badge.
+        let universal = GameCompatRecord.MacArchitectures(intel32: true, intel64: true, arm: nil)
+        #expect(!universal.is32BitOnly)
+        #expect(GameCompatVerdict.native(wiki: nil, hasMacBuild: true, architectures: universal)?.label == "Available")
+        let unknown = GameCompatRecord.MacArchitectures(intel32: nil, intel64: nil, arm: true)
+        #expect(!unknown.is32BitOnly)
+    }
+
     // MARK: - The anti-cheat badge
 
     @Test
@@ -251,6 +265,28 @@ struct GameCompatTests {
     }
 
     @Test
+    func `PCGamingWiki's API template gives the macOS architectures`() throws {
+        let text = """
+        {{Infobox game}}
+        {{API
+        |windows 32-bit exe     = true
+        |mac os x powerpc app   = unknown
+        |macos intel 32-bit app = true
+        |macos intel 64-bit app = false
+        |macos app notes        = <ref name="x"/>
+        |macos arm app          = unknown
+        }}
+        """
+        let architectures = try #require(GameCompatSources.macArchitectures(wikitext: text))
+        #expect(architectures.intel32 == true)
+        #expect(architectures.intel64 == false)
+        #expect(architectures.arm == nil)
+        #expect(GameCompatSources.macArchitectures(wikitext: "{{API\n|macos intel 32-bit app = \n}}") == nil)
+        let answer = Data(#"{"parse":{"title":"Portal 2","pageid":1,"wikitext":"{{API}}"}}"#.utf8)
+        #expect(GameCompatSources.pcGamingWikiText(data: answer) == "{{API}}")
+    }
+
+    @Test
     func `a wiki page titled with a number is kept`() throws {
         let json = #"[{"Page":5,"native":"na","rosetta 2":"na","crossover":"perfect","wine":"perfect","parallels":"na"}]"#
         let index = try GameCompatSources.WikiIndex(data: Data(json.utf8))
@@ -293,7 +329,7 @@ struct GameCompatTests {
     func `the record round-trips as the JSON the page reads`() throws {
         let record = GameCompatRecord(
             appID: 1, name: "X", antiCheat: nil, wiki: wiki(native: "perfect", crossover: "perfect"), proton: proton("gold"),
-            community: community("playable"), hasMacBuild: true,
+            community: community("playable"), hasMacBuild: true, macArchitectures: nil,
             deckCategory: 3,
             mac: GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect"), proton: nil),
             nativeBadge: GameCompatVerdict.native(wiki: wiki(native: "perfect"), hasMacBuild: true),

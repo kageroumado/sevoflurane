@@ -65,6 +65,25 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     /// client's app cache).
     let hasMacBuild: Bool
 
+    /// Which processors the macOS build is compiled for, from PCGamingWiki's
+    /// `API` template: Steam's own cache leaves the architecture blank for
+    /// most Mac builds. `nil` for a value the wiki leaves unknown.
+    struct MacArchitectures: Codable, Sendable, Equatable {
+        let intel32: Bool?
+        let intel64: Bool?
+        let arm: Bool?
+        /// The PCGamingWiki page the fields were read from.
+        var pageURL: URL?
+
+        /// A build no Apple silicon Mac can run: Rosetta 2 translates 64-bit
+        /// Intel code only, and macOS dropped 32-bit apps in 10.15.
+        var is32BitOnly: Bool {
+            intel32 == true && intel64 != true && arm != true
+        }
+    }
+
+    let macArchitectures: MacArchitectures?
+
     /// Steam's own program, read off the app overview in the client.
     /// 0 unknown, 1 unsupported, 2 playable, 3 verified.
     let deckCategory: Int?
@@ -225,8 +244,13 @@ nonisolated enum GameCompatVerdict {
     /// The badge for the game's own macOS build, drawn beside the Windows
     /// verdict and independent of it. The wiki's native column speaks for
     /// the build, Rosetta 2's when native is unrated; a build Steam lists
-    /// that nobody has rated reads as available.
-    static func native(wiki: GameCompatRecord.WikiTiers?, hasMacBuild: Bool) -> GameCompatBadge? {
+    /// that nobody has rated reads as available. A 32-bit-only build gets no
+    /// badge at all, whatever anyone rated it: no Apple silicon Mac runs it.
+    static func native(
+        wiki: GameCompatRecord.WikiTiers?, hasMacBuild: Bool,
+        architectures: GameCompatRecord.MacArchitectures? = nil,
+    ) -> GameCompatBadge? {
+        if architectures?.is32BitOnly == true { return nil }
         let rated: (String, String)? = if let tier = wiki?.native, rank(tier) != nil {
             ("", tier)
         } else if let tier = wiki?.rosetta2, rank(tier) != nil {
@@ -476,6 +500,56 @@ nonisolated enum GameCompatSources {
             verdict: summary.verdict, runs: summary.runs, installs: summary.installs,
             engine: summary.engine, medianFPS: summary.fps?.median_avg, pageURL: summary.url,
         )
+    }
+
+    static func pcGamingWikiPageURL(title: String) -> URL? {
+        let slug = title.replacingOccurrences(of: " ", with: "_")
+        return URL(string: "https://www.pcgamingwiki.com/wiki/" + (slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slug))
+    }
+
+    static func pcGamingWikiTextURL(title: String) -> URL? {
+        var components = URLComponents(string: "https://www.pcgamingwiki.com/w/api.php")!
+        components.queryItems = [
+            URLQueryItem(name: "action", value: "parse"), URLQueryItem(name: "page", value: title),
+            URLQueryItem(name: "prop", value: "wikitext"), URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "formatversion", value: "2"),
+        ]
+        return components.url
+    }
+
+    /// The macOS architectures in a PCGamingWiki page's `{{API` template:
+    /// `|macos intel 32-bit app = true`, `|macos intel 64-bit app = false`,
+    /// `|macos arm app = unknown`. `nil` when the page has no template or
+    /// says nothing about any of the three.
+    static func macArchitectures(wikitext: String) -> GameCompatRecord.MacArchitectures? {
+        func field(_ name: String) -> Bool? {
+            let pattern = #"(?m)^\|[ \t]*"# + NSRegularExpression.escapedPattern(for: name) + #"[ \t]*=[ \t]*(\w*)"#
+            guard let match = wikitext.range(of: pattern, options: .regularExpression) else { return nil }
+            let value = wikitext[match].split(separator: "=").last?.trimmingCharacters(in: .whitespaces).lowercased()
+            return switch value {
+            case "true": true
+            case "false": false
+            default: nil
+            }
+        }
+        let architectures = GameCompatRecord.MacArchitectures(
+            intel32: field("macos intel 32-bit app"), intel64: field("macos intel 64-bit app"),
+            arm: field("macos arm app"), pageURL: nil,
+        )
+        return architectures.intel32 == nil && architectures.intel64 == nil && architectures.arm == nil
+            ? nil : architectures
+    }
+
+    /// The wikitext out of PCGamingWiki's `action=parse` answer.
+    static func pcGamingWikiText(data: Data) -> String? {
+        struct Parse: Decodable {
+            struct Page: Decodable {
+                let wikitext: String
+            }
+
+            let parse: Page
+        }
+        return (try? JSONDecoder().decode(Parse.self, from: data))?.parse.wikitext
     }
 
     /// PCGamingWiki's page title for a Steam app id, the bridge to a wiki
