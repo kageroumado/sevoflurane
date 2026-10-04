@@ -14,7 +14,7 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#开始使用)
 
-<a href="https://github.com/kageroumado/sevoflurane/releases/download/v1.0.0-beta.2/Sevoflurane-1.0.0-beta.2.dmg"><img src=".github/download.zh-CN.svg" alt="下载 Mac 版 Sevoflurane" width="360" height="80"></a>
+<a href="https://kagerou.glass/get/sevoflurane?from=readme"><img src=".github/download.zh-CN.svg" alt="下载 Mac 版 Sevoflurane" width="360" height="80"></a>
 
 <table>
   <tr>
@@ -48,7 +48,7 @@
 
 ## 开始使用
 
-1. **下载并打开。** Sevoflurane 目前处于 Beta 阶段，版本为 1.0 beta 2。下载并挂载[磁盘映像](https://github.com/kageroumado/sevoflurane/releases/download/v1.0.0-beta.2/Sevoflurane-1.0.0-beta.2.dmg)（所有版本都在[发布页](https://github.com/kageroumado/sevoflurane/releases)），把 Sevoflurane 拖进“应用程序”，然后打开。
+1. **下载并打开。** Sevoflurane 目前处于 Beta 阶段，版本为 1.0 beta 2。下载并挂载[磁盘映像](https://kagerou.glass/get/sevoflurane?from=readme)（所有版本都在[发布页](https://github.com/kageroumado/sevoflurane/releases)），把 Sevoflurane 拖进“应用程序”，然后打开。
 2. **安装引擎和依赖。** 选择 Dormison 或 CrossOver 作为引擎，新建一个容器（bottle），或接入已有的容器。
 3. **登录 Steam。** 和平时一样登录就好。
 4. **开始玩。** 随时可以换引擎，也可以为每款游戏单独设置。
