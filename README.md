@@ -68,7 +68,7 @@ and play. Games appear as players share their runs.
 
 ## Get started
 
-1. **Download and open.** Sevoflurane is in beta, at 1.0 beta 1. Mount the
+1. **Download and open.** Sevoflurane is in beta, at 1.0 beta 2. Mount the
    [disk image](https://github.com/kageroumado/sevoflurane/releases/download/v1.0.0-beta.2/Sevoflurane-1.0.0-beta.2.dmg)
    (every version is on the [releases page](https://github.com/kageroumado/sevoflurane/releases)),
    drag Sevoflurane to Applications, then launch it.
