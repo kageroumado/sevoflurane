@@ -22,260 +22,6 @@
         }
       }
     },
-    "%@ kept %lld threads busy the whole time" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ 的 %2$lld 个线程一直处于忙碌状态"
-          }
-        }
-      }
-    },
-    "8 · 6 · 4" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "8 · 6 · 4"
-          }
-        }
-      }
-    },
-    "A monogram of the display name." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由显示名称首字母生成的图案。"
-          }
-        }
-      }
-    },
-    "All" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部"
-          }
-        }
-      }
-    },
-    "Avatar" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "头像"
-          }
-        }
-      }
-    },
-    "Display name" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示名称"
-          }
-        }
-      }
-    },
-    "Don't Ask for This Game" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此游戏不再询问"
-          }
-        }
-      }
-    },
-    "Friends appear as AI models such as Claude, ChatGPT and Gemini." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "好友显示为 Claude、ChatGPT、Gemini 等 AI 模型。"
-          }
-        }
-      }
-    },
-    "Games built this way start one worker per processor, and under Rosetta the workers never rest, which starves the picture. Telling the game it has %lld processors lets them sleep." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这类游戏会为每个处理器启动一个工作线程，而在 Rosetta 下这些线程从不休息，画面因此得不到算力。告诉游戏它只有 %lld 个处理器，工作线程就能休眠。"
-          }
-        }
-      }
-    },
-    "Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在所有 Steam 窗口中隐藏你的 Steam 名称、头像、钱包余额和好友，便于录屏和直播。"
-          }
-        }
-      }
-    },
-    "How many processors a game is told the Mac has. Games built on Unity 5 start a worker thread for each one, and under Rosetta every worker keeps looking for work instead of sleeping, so a Mac with many cores spends them all on waiting." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "告诉游戏这台 Mac 有多少个处理器。基于 Unity 5 的游戏为每个处理器启动一个工作线程，而在 Rosetta 下每个工作线程都在不停寻找任务而不休眠，因此核心越多的 Mac 越是把它们全部耗在等待上。"
-          }
-        }
-      }
-    },
-    "Limit to %lld Processors" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "限制为 %lld 个处理器"
-          }
-        }
-      }
-    },
-    "Measure with the frame rate counter and Activity Monitor." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用帧率计数器和“活动监视器”来衡量。"
-          }
-        }
-      }
-    },
-    "No release is out yet. Switch to Beta to get updates." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚无正式版发布。切换到 Beta 版即可获取更新。"
-          }
-        }
-      }
-    },
-    "Processors" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "处理器"
-          }
-        }
-      }
-    },
-    "Shown in place of your Steam avatar." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "代替你的 Steam 头像显示。"
-          }
-        }
-      }
-    },
-    "Some older games start one worker thread per processor and keep them all busy; fewer processors let them rest." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一些旧游戏为每个处理器启动一个工作线程，并让它们全部保持忙碌；减少处理器数量能让它们歇下来。"
-          }
-        }
-      }
-    },
-    "Streamer Mode" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主播模式"
-          }
-        }
-      }
-    },
-    "That file is not a picture Sevoflurane can read." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sevoflurane 无法读取该文件中的图片。"
-          }
-        }
-      }
-    },
-    "The game sees every processor, as it would on Windows." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏能看到全部处理器，与在 Windows 上相同。"
-          }
-        }
-      }
-    },
-    "The game sees that many and starts that many workers. A game that uses most of the processor time and still stutters runs smoother with fewer." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
-          }
-        }
-      }
-    },
-    "The limit takes effect the next time the game starts." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "限制将在游戏下次启动时生效。"
-          }
-        }
-      }
-    },
-    "Unity 5 starts a worker per processor and keeps every one spinning under Rosetta: on a 16-core M4 Max the game used 1357 % CPU at 54 fps, stalling several times a second, and told of 8 processors, 184 % at 117 fps." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unity 5 为每个处理器启动一个工作线程，在 Rosetta 下它们全都在空转：在 16 核的 M4 Max 上，游戏占用 1357 % CPU，帧率 54 fps，每秒卡顿数次；告诉它只有 8 个处理器后，CPU 为 184 %，帧率 117 fps。"
-          }
-        }
-      }
-    },
-    "Use Monogram" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用首字母图案"
-          }
-        }
-      }
-    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -343,6 +89,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@"
+          }
+        }
+      }
+    },
+    "%@ — %@ is out, a patch of up to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@ is out, a patch of up to %3$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ — %2$@ 已发布，补丁最多 %3$@"
+          }
+        }
+      }
+    },
+    "%@ — %@ is out; too old to patch, the changed files are downloaded (up to %@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@ is out; too old to patch, the changed files are downloaded (up to %3$@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ — %2$@ 已发布；当前版本过旧，无法打补丁，将下载有变动的文件（最多 %3$@）"
+          }
+        }
+      }
+    },
+    "%@ — checking for updates…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 正在检查更新…"
+          }
+        }
+      }
+    },
+    "%@ — could not reach HoYoPlay's servers: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — could not reach HoYoPlay's servers: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ — 无法连接 HoYoPlay 的服务器：%2$@"
+          }
+        }
+      }
+    },
+    "%@ — up to date" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — 已是最新版本"
           }
         }
       }
@@ -654,12 +468,33 @@
         }
       }
     },
+    "%@ is up to date." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已是最新版本。"
+          }
+        }
+      }
+    },
     "%@ is what a fresh installation runs." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "全新安装默认使用 %@。"
+          }
+        }
+      }
+    },
+    "%@ kept %lld threads busy the whole time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 的 %2$lld 个线程一直处于忙碌状态"
           }
         }
       }
@@ -818,6 +653,16 @@
         }
       }
     },
+    "%lld files are missing or damaged." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文件缺失或损坏。"
+          }
+        }
+      }
+    },
     "%lld games" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -894,6 +739,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为 32 位游戏提供 4 GB 内存"
+          }
+        }
+      }
+    },
+    "8 · 6 · 4" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "8 · 6 · 4"
           }
         }
       }
@@ -1024,6 +880,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏按自己选择的尺寸绘制画面。可调整大小的窗口通过画面缩放器将画面适配到窗口，而游戏仍以为自己使用的是原尺寸。"
+          }
+        }
+      }
+    },
+    "A game is around 100 GB and each voice-over another 12 to 15 GB. An install that stops, or is stopped, carries on from where it was when you install into the same folder again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每款游戏约 100 GB，每种语音包另需 12 至 15 GB。安装中断或被停止后，再次安装到同一文件夹时会从中断处继续。"
           }
         }
       }
@@ -1164,6 +1030,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装模组、修补程序或加载器，但游戏没有使用它。"
+          }
+        }
+      }
+    },
+    "A monogram of the display name." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由显示名称首字母生成的图案。"
           }
         }
       }
@@ -1390,6 +1266,16 @@
         }
       }
     },
+    "Add Existing Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加现有文件夹…"
+          }
+        }
+      }
+    },
     "Add from a Disk Image…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1521,6 +1407,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AI 助手 (MCP)"
+          }
+        }
+      }
+    },
+    "All" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
           }
         }
       }
@@ -1820,6 +1717,16 @@
         }
       }
     },
+    "Avatar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "头像"
+          }
+        }
+      }
+    },
     "Average" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2103,6 +2010,16 @@
         }
       }
     },
+    "Checking files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查文件"
+          }
+        }
+      }
+    },
     "checking the client…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2177,6 +2094,16 @@
         }
       }
     },
+    "Choose a Game's Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择游戏文件夹"
+          }
+        }
+      }
+    },
     "Choose a Windows Program" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2238,6 +2165,16 @@
         }
       }
     },
+    "Choose the folder that holds GenshinImpact.exe, StarRail.exe or ZenlessZoneZero.exe." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择包含 GenshinImpact.exe、StarRail.exe 或 ZenlessZoneZero.exe 的文件夹。"
+          }
+        }
+      }
+    },
     "Choose the folder your browser saves downloads into." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2265,6 +2202,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择已下载的 Game Porting Toolkit 磁盘映像。"
+          }
+        }
+      }
+    },
+    "Choose Where to Install" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择安装位置"
           }
         }
       }
@@ -3112,12 +3059,33 @@
         }
       }
     },
+    "Display name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示名称"
+          }
+        }
+      }
+    },
     "DLL overrides" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "DLL 覆盖设置"
+          }
+        }
+      }
+    },
+    "Don't Ask for This Game" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此游戏不再询问"
           }
         }
       }
@@ -3190,6 +3158,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载全部"
+          }
+        }
+      }
+    },
+    "Downloading" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载"
           }
         }
       }
@@ -3533,16 +3511,6 @@
         }
       }
     },
-    "Update Channel" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新渠道"
-          }
-        }
-      }
-    },
     "Engine's own" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3628,6 +3596,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用专门的着色器放大画面：Anime4K 和 CuNNy 适用于手绘风格画面，按 2 倍等整数倍放大；MetalFX Spatial 适用于 3D 游戏。关闭后，macOS 会柔和地拉伸画面。最终滤镜仅适用于未使用着色器的画面。"
+          }
+        }
+      }
+    },
+    "Every file checks out." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有文件均完好。"
           }
         }
       }
@@ -3922,6 +3900,16 @@
         }
       }
     },
+    "Finishing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在完成"
+          }
+        }
+      }
+    },
     "First window" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4006,6 +3994,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修复 Direct3D 游戏编译着色器时出现的错误、黑屏和崩溃。"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
@@ -4209,8 +4207,28 @@
         }
       }
     },
+    "Friends appear as AI models such as Claude, ChatGPT and Gemini." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好友显示为 Claude、ChatGPT、Gemini 等 AI 模型。"
+          }
+        }
+      }
+    },
     "game" : {
       "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏"
+          }
+        }
+      }
+    },
+    "Game" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4347,6 +4365,17 @@
         }
       }
     },
+    "Games built this way start one worker per processor, and under Rosetta the workers never rest, which starves the picture. Telling the game it has %lld processors lets them sleep." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这类游戏会为每个处理器启动一个工作线程，而在 Rosetta 下这些线程从不休息，画面因此得不到算力。告诉游戏它只有 %lld 个处理器，工作线程就能休眠。"
+          }
+        }
+      }
+    },
     "Games in Discord's database show as what you play." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4445,11 +4474,22 @@
       }
     },
     "Genshin holds itself to 60 fps. An unlocker such as unlockfps_nc.exe raises the cap: Sevoflurane starts it beside the game 30 seconds after the game's process appears, in the same Windows, and points its fps_config.json at the game. It changes the running game's memory, which HoYoverse's terms do not allow, so the choice is yours." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "原神将帧率限制在 60 fps。unlockfps_nc.exe 等解锁器可以提高上限：游戏进程出现 30 秒后，Sevoflurane 会在同一个 Windows 环境中启动它，并将其 fps_config.json 指向该游戏。它会修改运行中游戏的内存，这违反 HoYoverse 的条款，因此是否使用由你决定。"
+          }
+        }
+      }
+    },
+    "Genshin holds itself to 60 fps. Sevoflurane's engine carries an unlocker (genshin-fps-unlock's, MIT); switched on, it starts beside the game 30 seconds after the game's process appears. Choose another, such as unlockfps_nc.exe, to use that one instead. An unlocker changes the running game's memory, which HoYoverse's terms do not allow, so the switch is yours." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原神将帧率限制在 60 fps。Sevoflurane 的引擎自带一个解锁器（来自 genshin-fps-unlock，MIT 许可）；开启后，它会在游戏进程出现 30 秒后随游戏一起启动。也可以选择其他解锁器（例如 unlockfps_nc.exe）来代替它。解锁器会修改运行中游戏的内存，这违反 HoYoverse 的条款，因此是否开启由你决定。"
           }
         }
       }
@@ -4587,6 +4627,16 @@
         }
       }
     },
+    "Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所有 Steam 窗口中隐藏你的 Steam 名称、头像、钱包余额和好友，便于录屏和直播。"
+          }
+        }
+      }
+    },
     "High-resolution mode" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4636,6 +4686,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏线程休眠前查找任务的时长。"
+          }
+        }
+      }
+    },
+    "How many processors a game is told the Mac has. Games built on Unity 5 start a worker thread for each one, and under Rosetta every worker keeps looking for work instead of sleeping, so a Mac with many cores spends them all on waiting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "告诉游戏这台 Mac 有多少个处理器。基于 Unity 5 的游戏为每个处理器启动一个工作线程，而在 Rosetta 下每个工作线程都在不停寻找任务而不休眠，因此核心越多的 Mac 越是把它们全部耗在等待上。"
           }
         }
       }
@@ -4780,6 +4841,16 @@
         }
       }
     },
+    "Install a game" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装游戏"
+          }
+        }
+      }
+    },
     "Install a package if a game reports a missing DLL or displays blank text." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4894,6 +4965,22 @@
         }
       }
     },
+    "Installed %@ %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Installed %1$@ %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 %1$@ %2$@。"
+          }
+        }
+      }
+    },
     "Installed at /usr/local/bin/sevo." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4911,6 +4998,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装。如果诊断仍报告缺失，请重新安装。"
+          }
+        }
+      }
+    },
+    "Installing %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装 %@"
           }
         }
       }
@@ -5321,6 +5418,17 @@
         }
       }
     },
+    "Limit to %lld Processors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制为 %lld 个处理器"
+          }
+        }
+      }
+    },
     "Linear (no acceleration)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5523,6 +5631,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建有用的报告…"
+          }
+        }
+      }
+    },
+    "Measure with the frame rate counter and Activity Monitor." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用帧率计数器和“活动监视器”来衡量。"
           }
         }
       }
@@ -5900,6 +6019,26 @@
         }
       }
     },
+    "No HoYoverse game in this folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹中没有 HoYoverse 游戏"
+          }
+        }
+      }
+    },
+    "No HoYoverse games yet. Install one below, or add the folder of one you already have." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有 HoYoverse 游戏。可以在下方安装，或添加已有游戏的文件夹。"
+          }
+        }
+      }
+    },
     "No menu was tracking." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5927,6 +6066,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未安装组件包。无法获取可下载组件列表。"
+          }
+        }
+      }
+    },
+    "No release is out yet. Switch to Beta to get updates." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无正式版发布。切换到 Beta 版即可获取更新。"
           }
         }
       }
@@ -6505,6 +6654,16 @@
         }
       }
     },
+    "Patching" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在打补丁"
+          }
+        }
+      }
+    },
     "Performance and compatibility" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6641,6 +6800,17 @@
         }
       }
     },
+    "Processors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "处理器"
+          }
+        }
+      }
+    },
     "Program" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6740,6 +6910,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏下次启动时生效；Steam 保持运行"
+          }
+        }
+      }
+    },
+    "Reading the build" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取版本"
           }
         }
       }
@@ -7240,6 +7420,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修复 Windows 组件"
+          }
+        }
+      }
+    },
+    "Repaired %lld files." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已修复 %lld 个文件。"
           }
         }
       }
@@ -7827,6 +8017,16 @@
         }
       }
     },
+    "Sevoflurane's own" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 自带"
+          }
+        }
+      }
+    },
     "Sevoflurane's own engine: DirectX 12 through Apple's toolkit, and game upscaling." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8011,6 +8211,16 @@
         }
       }
     },
+    "Shown in place of your Steam avatar." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代替你的 Steam 头像显示。"
+          }
+        }
+      }
+    },
     "Shows Japanese, Chinese, and Korean text. Source Han Sans, all four regions." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8088,6 +8298,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳过登录"
+          }
+        }
+      }
+    },
+    "Some older games start one worker thread per processor and keep them all busy; fewer processors let them rest." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一些旧游戏为每个处理器启动一个工作线程，并让它们全部保持忙碌；减少处理器数量能让它们歇下来。"
           }
         }
       }
@@ -8643,6 +8864,26 @@
         }
       }
     },
+    "Stop" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        }
+      }
+    },
+    "Stop Listing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不再列出"
+          }
+        }
+      }
+    },
     "Stop watching this folder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8697,6 +8938,16 @@
         }
       }
     },
+    "Stopped. Running it again keeps what was downloaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止。再次运行会保留已下载的内容。"
+          }
+        }
+      }
+    },
     "Stops every Windows process in the bottle, Wine's server included, and starts again. For when restarting Steam has not helped." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8736,6 +8987,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "存储限制"
+          }
+        }
+      }
+    },
+    "Streamer Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主播模式"
           }
         }
       }
@@ -8797,6 +9058,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "终止"
+          }
+        }
+      }
+    },
+    "That file is not a picture Sevoflurane can read." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 无法读取该文件中的图片。"
           }
         }
       }
@@ -8907,6 +9178,16 @@
         }
       }
     },
+    "The folder the game's .exe is in." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏 .exe 所在的文件夹。"
+          }
+        }
+      }
+    },
     "The fonts and legacy runtimes games ask for." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8947,6 +9228,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "告知游戏实际的内存架构（Direct3D 12 称为 UMA），让每个纹理只写入一次。持续载入大型场景的游戏受益最大。"
+          }
+        }
+      }
+    },
+    "The game sees every processor, as it would on Windows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏能看到全部处理器，与在 Windows 上相同。"
+          }
+        }
+      }
+    },
+    "The game sees that many and starts that many workers. A game that uses most of the processor time and still stutters runs smoother with fewer." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
           }
         }
       }
@@ -9002,6 +9305,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "完全不加载此库。"
+          }
+        }
+      }
+    },
+    "The limit takes effect the next time the game starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限制将在游戏下次启动时生效。"
           }
         }
       }
@@ -9493,6 +9807,27 @@
         }
       }
     },
+    "Unity 5 starts a worker per processor and keeps every one spinning under Rosetta: on a 16-core M4 Max the game used 1357 % CPU at 54 fps, stalling several times a second, and told of 8 processors, 184 % at 117 fps." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unity 5 为每个处理器启动一个工作线程，在 Rosetta 下它们全都在空转：在 16 核的 M4 Max 上，游戏占用 1357 % CPU，帧率 54 fps，每秒卡顿数次；告诉它只有 8 个处理器后，CPU 为 184 %，帧率 117 fps。"
+          }
+        }
+      }
+    },
+    "unknown build" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知版本"
+          }
+        }
+      }
+    },
     "unknown dependency %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9535,6 +9870,16 @@
         }
       }
     },
+    "Update Channel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新渠道"
+          }
+        }
+      }
+    },
     "Update failed" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9566,12 +9911,64 @@
         }
       }
     },
+    "Updated %@ to %@: %lld files patched, %lld downloaded whole." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Updated %1$@ to %2$@: %3$lld files patched, %4$lld downloaded whole."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将 %1$@ 更新到 %2$@：%3$lld 个文件已打补丁，%4$lld 个文件完整下载。"
+          }
+        }
+      }
+    },
+    "Updated %@ to %@: %lld files patched." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Updated %1$@ to %2$@: %3$lld files patched."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将 %1$@ 更新到 %2$@：%3$lld 个文件已打补丁。"
+          }
+        }
+      }
+    },
+    "Updated to %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新到 %@。"
+          }
+        }
+      }
+    },
     "Updated to version %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "已更新至版本 %@"
+          }
+        }
+      }
+    },
+    "Updates come from the servers HoYoPlay uses, as patches when the game's build is recent enough and as the changed files otherwise. Honkai: Star Rail is kept up to date but does not start under Wine, so it is not added to Quick Launch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新来自 HoYoPlay 使用的服务器：游戏版本较新时以补丁形式下载，否则下载有变动的文件。崩坏：星穹铁道会保持更新，但无法在 Wine 下启动，因此不会添加到快速启动。"
           }
         }
       }
@@ -9681,6 +10078,16 @@
         }
       }
     },
+    "Use Monogram" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用首字母图案"
+          }
+        }
+      }
+    },
     "Use My Browser" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9697,6 +10104,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用推荐设置"
+          }
+        }
+      }
+    },
+    "Use Sevoflurane's" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Sevoflurane 自带的"
           }
         }
       }
@@ -9741,6 +10158,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "vc_redist.%@.exe 安装失败（%@）"
+          }
+        }
+      }
+    },
+    "Verify Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证文件"
           }
         }
       }
@@ -9844,6 +10271,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Visual C++ 运行库（2015–2022）"
+          }
+        }
+      }
+    },
+    "Voice-over" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音包"
           }
         }
       }
