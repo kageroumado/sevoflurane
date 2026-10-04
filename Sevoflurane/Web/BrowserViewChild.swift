@@ -59,6 +59,15 @@ final class BrowserViewChild: NSObject {
                 source: mask, injectionTime: .atDocumentEnd, forMainFrameOnly: false,
             ))
         }
+        // The Mac compatibility strip on store game pages. It asks for its
+        // record on every page, so the Settings switch reaches pages loaded
+        // after it changed.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: SteamCompatBadge.storeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true,
+        ))
+        configuration.userContentController.addScriptMessageHandler(
+            StoreCompatHandler(), contentWorld: .page, name: SteamCompatBadge.storeHandler,
+        )
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isHidden = true
         webView.allowsBackForwardNavigationGestures = true
@@ -115,6 +124,12 @@ final class BrowserViewChild: NSObject {
             "BrowserViewLoad", loadInterval,
             "view=\(self.id, privacy: .public),outcome=\(outcome, privacy: .public)",
         )
+    }
+
+    /// Runs `script` when this view shows a Steam store page.
+    func evaluateOnStore(_ script: String) {
+        guard loadedHost == "store.steampowered.com" else { return }
+        webView.evaluateJavaScript(script)
     }
 
     func load(_ urlString: String) {
@@ -256,5 +271,28 @@ extension BrowserViewChild: WKUIDelegate {
             NSWorkspace.shared.open(url)
         }
         return nil
+    }
+}
+
+/// Answers the store page's Mac compatibility strip: the record for a game
+/// (``GameCompatService``), the same one the library page draws, or
+/// `{"off": true}` while Settings has the strip off. A message carrying
+/// `open` is a source link, opened in the default browser.
+private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithReply {
+    func userContentController(
+        _: WKUserContentController, didReceive message: WKScriptMessage,
+    ) async -> (Any?, String?) {
+        guard message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.host == "store.steampowered.com",
+              let body = message.body as? [String: Any] else { return (nil, "refused") }
+        if let link = body["open"] as? String {
+            if let url = URL(string: link), url.scheme == "https" { NSWorkspace.shared.open(url) }
+            return (nil, nil)
+        }
+        guard Preferences.compatibilityStrip else { return (#"{"off":true}"#, nil) }
+        guard let appID = (body["appid"] as? NSNumber)?.intValue, appID > 0 else { return (nil, "no appid") }
+        let name = body["name"] as? String ?? ""
+        let data = await GameCompatService.shared.recordJSON(appID: appID, name: name, deckCategory: nil)
+        return (String(decoding: data, as: UTF8.self), nil)
     }
 }

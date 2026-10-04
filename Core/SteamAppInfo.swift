@@ -37,6 +37,16 @@ nonisolated enum SteamAppInfo {
         return descriptions
     }
 
+    /// The platforms Steam sells the game for (`common/oslist`: `windows`,
+    /// `macos`, `linux`). Empty when the file or the app is missing.
+    static func platforms(appID: Int, in url: URL = fileURL) -> Set<String> {
+        guard let data = try? Data(contentsOf: url, options: .alwaysMapped),
+              let app = keyValues(appID: appID, in: data),
+              case let .table(common)? = app["common"], case let .string(list)? = common["oslist"]
+        else { return [] }
+        return Set(list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+    }
+
     /// A binary KeyValues value.
     enum Value: Equatable {
         case table([String: Value])

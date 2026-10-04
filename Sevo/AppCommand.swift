@@ -51,6 +51,9 @@ struct AppCommand: AsyncParsableCommand {
             }
             print("\(record.name.isEmpty ? String(appid) : record.name) (\(appid))")
             print("  Mac:        \(record.mac.label) — \(record.mac.reason)")
+            if let native = record.nativeBadge {
+                print("  macOS version: \(native.label) — \(native.reason)")
+            }
             print("  Anti-cheat: \(record.antiCheatBadge.label) — \(record.antiCheatBadge.reason)")
             if let wiki = record.wiki {
                 let columns: [(String, String?)] = [
@@ -59,6 +62,10 @@ struct AppCommand: AsyncParsableCommand {
                 ]
                 let tiers: [String] = columns.compactMap { name, tier in tier.map { "\(name) \($0)" } }
                 print("  AppleGamingWiki: \(tiers.joined(separator: " · ")) — \(wiki.pageURL)")
+            }
+            if let community = record.community {
+                let fps = community.medianFPS.map { ", \(Int($0.rounded())) fps median" } ?? ""
+                print("  Sevoflurane: \(community.verdict) (\(community.runs) runs on \(GameCompatVerdict.macs(community.installs))\(fps)) — \(community.pageURL)")
             }
             if let proton = record.proton {
                 print("  ProtonDB:   \(proton.tier) (\(proton.total) reports, \(proton.confidence)) — \(proton.sourceURL)")

@@ -722,6 +722,13 @@ final class SteamWindow: NSObject {
         }
     }
 
+    /// Runs `script` in this window's embedded store pages.
+    func evaluateOnStorePages(_ script: String) {
+        for view in browserViews.values {
+            view.evaluateOnStore(script)
+        }
+    }
+
     var browserViewStatuses: [BrowserViewChild.Status] {
         browserViews.values.map(\.status).sorted { $0.id < $1.id }
     }

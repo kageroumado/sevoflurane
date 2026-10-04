@@ -420,9 +420,11 @@ runs on CrossOver.
   them).
 - Low Power Mode and Reduce Motion switch on Steam's matching settings, and
   yours come back afterwards.
-- Game pages carry a Mac and anti-cheat strip from AppleGamingWiki,
-  AreWeAntiCheatYet and ProtonDB, with links to each source. ProtonDB reports
-  describe Linux; the details say when no Mac report exists.
+- Library and store pages carry a Mac compatibility strip: a verdict on the
+  Windows build from Sevoflurane players' own runs where there are enough,
+  then AppleGamingWiki's Wine and CrossOver ratings, then ProtonDB; the
+  game's macOS version when it has one; and its anti-cheat from
+  AreWeAntiCheatYet. Details link to each source.
 - Streamer Mode shows a chosen name and picture in place of your Steam
   account, hides the wallet balance, and shows friends as AI models in every
   Steam window, for recording and streaming.

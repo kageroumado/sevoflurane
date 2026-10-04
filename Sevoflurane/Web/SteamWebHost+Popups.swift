@@ -106,15 +106,15 @@ extension SteamWebHost {
         ActivationPolicy.recedeIfLastWindow(closing: window.nsWindow)
     }
 
-    /// Draws the Mac compatibility strip on game pages, or takes it off, to
-    /// match the stored choice. Called at adoption and whenever Settings
-    /// changes it, so a switch is visible on the page already open.
+    /// Draws the Mac compatibility strip on game pages and store pages, or
+    /// takes it off, to match the stored choice. Called at adoption and
+    /// whenever Settings changes it, so a switch is visible on the page
+    /// already open.
     func applyCompatibilityStrip() {
-        guard let webView = desktop?.webView else { return }
-        webView.evaluateJavaScript(
-            Preferences.compatibilityStrip
-                ? SteamCompatBadge.script
-                : SteamCompatBadge.removalScript,
-        )
+        let on = Preferences.compatibilityStrip
+        desktop?.webView.evaluateJavaScript(on ? SteamCompatBadge.script : SteamCompatBadge.removalScript)
+        for window in [desktop].compactMap(\.self) + popups.values {
+            window.evaluateOnStorePages(on ? SteamCompatBadge.storeScript : SteamCompatBadge.removalScript)
+        }
     }
 }

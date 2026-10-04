@@ -269,7 +269,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - Steam 询问“要如何启动这个游戏”时，会显示 macOS 提示框，选项名称沿用 Steam 原文。
 - 网页上的 `steam://` 链接可以用 Sevoflurane 打开（在“设置 › 通用”中设为由它接管）。
 - 开启低电量模式或减弱动态效果时，Steam 中对应的设置也会开启；关闭后恢复你原来的设置。
-- 游戏页面会显示 Mac 兼容性和反作弊信息，来源为 AppleGamingWiki、AreWeAntiCheatYet 和 ProtonDB，并附上各自的链接。ProtonDB 报告描述的是 Linux 运行情况；没有 Mac 报告时，详情中会说明。
+- 游戏的库页面和商店页面会显示 Mac 兼容性条：Windows 版本的评级优先采用 Sevoflurane 玩家自己的运行记录（数据足够时），其次是 AppleGamingWiki 的 Wine 和 CrossOver 评级，再次是 ProtonDB；如果游戏有 macOS 版本，也会单独显示；反作弊信息来自 AreWeAntiCheatYet。详情中附有各个来源的链接。
 
 ### 菜单栏
 

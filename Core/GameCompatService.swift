@@ -5,8 +5,10 @@ import Foundation
 /// first look and no source is asked twice in a week.
 ///
 /// Two of the sources are whole tables fetched once (AreWeAntiCheatYet's
-/// `games.json`, AppleGamingWiki's compatibility table); two are per-app
-/// lookups (ProtonDB's summary, PCGamingWiki's app-id-to-title bridge). A
+/// `games.json`, AppleGamingWiki's compatibility table); three are per-app
+/// lookups (ProtonDB's summary, PCGamingWiki's app-id-to-title bridge,
+/// Sevoflurane's own community summary). The client's app cache adds
+/// whether a macOS build exists. A
 /// source that cannot be reached reads as absent, never as an error: the
 /// badge for a game nobody has data on is "Unknown", and the page must never
 /// show a spinner that waits on a wiki.
@@ -16,6 +18,7 @@ actor GameCompatService {
     /// How long a cached answer stands before it is asked for again. The
     /// tables change a few times a month; ProtonDB's summaries drift slowly.
     static let maxAge: TimeInterval = 7 * 24 * 3600
+    static let communityMaxAge: TimeInterval = 24 * 3600
 
     static let cacheRoot = AppIdentity.supportFolder
         .appendingPathComponent("Compat")
@@ -61,26 +64,35 @@ actor GameCompatService {
             wikiIndex = nil
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("proton/\(appID).json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("pcgw/\(appID).json"))
+            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("community/\(appID).json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("awacy.json"))
             try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("applegamingwiki.json"))
         }
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
         async let proton = loadProton(appID: appID)
+        async let community = loadCommunity(appID: appID)
         let antiCheat = await antiCheatTable?.lookup(appID: appID, name: name)
         var wiki = await wikiTable?.lookup(title: name)
         if wiki == nil, let table = await wikiTable, let title = await loadPCGamingWikiTitle(appID: appID) {
             wiki = table.lookup(title: title)
         }
         let protonSummary = await proton
+        let communitySummary = await community
+        let hasMacBuild = SteamAppInfo.platforms(appID: appID).contains("macos")
         return GameCompatRecord(
             appID: appID,
             name: name,
             antiCheat: antiCheat,
             wiki: wiki,
             proton: protonSummary,
+            community: communitySummary,
+            hasMacBuild: hasMacBuild,
             deckCategory: deckCategory,
-            mac: GameCompatVerdict.mac(antiCheat: antiCheat, wiki: wiki, proton: protonSummary),
+            mac: GameCompatVerdict.mac(
+                antiCheat: antiCheat, wiki: wiki, proton: protonSummary, community: communitySummary,
+            ),
+            nativeBadge: GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild),
             antiCheatBadge: GameCompatVerdict.antiCheat(antiCheat),
             fetchedAt: .now,
         )
@@ -132,6 +144,18 @@ actor GameCompatService {
         return GameCompatSources.protonSummary(appID: appID, data: data)
     }
 
+    /// Sevoflurane's own summary for the app. Runs arrive daily, so this
+    /// answer is kept a day where the community tables are kept a week.
+    private func loadCommunity(appID: Int) async -> GameCompatRecord.Community? {
+        guard let data = await cachedOrFetched(
+            file: "community/\(appID).json",
+            from: StatsUploader.baseURL.appendingPathComponent("games/\(appID)"),
+            maxAge: Self.communityMaxAge,
+            acceptingMissesAs: Data("{}".utf8),
+        ) else { return nil }
+        return GameCompatSources.community(data: data)
+    }
+
     private func loadPCGamingWikiTitle(appID: Int) async -> String? {
         guard let data = await cachedOrFetched(
             file: "pcgw/\(appID).json", from: GameCompatSources.pcGamingWikiLookupURL(appID: appID),
@@ -145,10 +169,10 @@ actor GameCompatService {
     /// fetch, written back on success. A stale file stands in when the
     /// network fails, so an offline machine keeps its last answers.
     private func cachedOrFetched(
-        file: String, from url: URL, acceptingMissesAs miss: Data? = nil,
+        file: String, from url: URL, maxAge: TimeInterval = GameCompatService.maxAge, acceptingMissesAs miss: Data? = nil,
     ) async -> Data? {
         let path = Self.cacheRoot.appendingPathComponent(file)
-        if let data = Self.cached(at: path, maxAge: Self.maxAge) { return data }
+        if let data = Self.cached(at: path, maxAge: maxAge) { return data }
         do {
             let (data, response) = try await session.data(from: url)
             let http = response as? HTTPURLResponse

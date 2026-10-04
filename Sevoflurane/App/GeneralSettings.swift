@@ -322,7 +322,7 @@ private struct GeneralSteamPagesSection: View {
                         Preferences.compatibilityStrip = enabled
                         steam?.applyCompatibilityStrip()
                     }
-                Text("A game's page says how it runs on a Mac and what its anti-cheat does, in the slot Steam's own Deck strip leaves empty here.")
+                Text("A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. Sevoflurane's own players' runs come first where there are enough.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

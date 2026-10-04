@@ -960,7 +960,18 @@
         }
       }
     },
+    "A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. Sevoflurane's own players' runs come first where there are enough." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏的库页面和商店页面会显示它在 Mac 上的运行情况、是否有 macOS 版本，以及其反作弊的情况。在数据足够时，优先采用 Sevoflurane 玩家自己的运行记录。"
+          }
+        }
+      }
+    },
     "A game's page says how it runs on a Mac and what its anti-cheat does, in the slot Steam's own Deck strip leaves empty here." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

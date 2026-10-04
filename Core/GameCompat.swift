@@ -46,11 +46,33 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
 
     let proton: ProtonSummary?
 
+    /// Sevoflurane's own community database: runs players shared from this
+    /// app, summarized by kagerou.glass. Its verdict is in the wiki's words
+    /// and stays `unknown` until enough runs back it.
+    struct Community: Codable, Sendable, Equatable {
+        let verdict: String
+        let runs: Int
+        let installs: Int
+        let engine: String?
+        /// The median frame rate across installs, when runs measured one.
+        let medianFPS: Double?
+        let pageURL: URL
+    }
+
+    let community: Community?
+
+    /// Whether Steam lists a macOS build of the game (`common/oslist` in the
+    /// client's app cache).
+    let hasMacBuild: Bool
+
     /// Steam's own program, read off the app overview in the client.
     /// 0 unknown, 1 unsupported, 2 playable, 3 verified.
     let deckCategory: Int?
 
     let mac: GameCompatBadge
+    /// The game's own macOS build, judged apart from the Windows build the
+    /// bottle runs; `nil` when the game has none anyone knows of.
+    let nativeBadge: GameCompatBadge?
     let antiCheatBadge: GameCompatBadge
     let fetchedAt: Date
 }
@@ -131,70 +153,103 @@ nonisolated enum GameCompatVerdict {
         }
     }
 
-    /// The Mac badge. Ordered so a structural failure always outranks a soft
-    /// positive: anti-cheat first, then the wiki's Windows-build tiers, then
-    /// the Linux prior, which can only ever say "playable, untested here".
+    /// The Mac badge for the Windows build the bottle runs. Sevoflurane's own
+    /// runs come first, being this engine on real Macs; then a structural
+    /// anti-cheat failure; then the wiki's Wine-family columns; then the
+    /// Linux prior, which can only ever say "untested here".
     static func mac(
         antiCheat: GameCompatRecord.AntiCheat?,
         wiki: GameCompatRecord.WikiTiers?,
         proton: GameCompatRecord.ProtonSummary?,
+        community: GameCompatRecord.Community? = nil,
     ) -> GameCompatBadge {
         let blocker = antiCheatBlocker(antiCheat)
-        let runsNatively: Set = ["perfect", "playable"]
-        let hasNative = runsNatively.contains(wiki?.native ?? "") || runsNatively.contains(wiki?.rosetta2 ?? "")
-        let nativeNote = hasNative ? " It also has a native Mac version." : ""
+        let caveat = blocker == nil ? "" : " Online play stays blocked. See Anti-cheat."
+        if let community, rank(community.verdict) != nil {
+            let source = "Sevoflurane players rate it \(describe(community.verdict)) across "
+                + "\(community.runs.formatted()) runs on \(macs(community.installs))."
+            return badge(tier: community.verdict, blocker: blocker, reason: source, caveat: caveat)
+        }
         if let wiki, let evidence = wikiEvidence(wiki) {
-            switch evidence.tier {
-            case "unplayable", "menu":
-                return GameCompatBadge(
-                    state: .unsupported, label: "Unsupported",
-                    reason: "AppleGamingWiki rates \(evidence.method) \(describe(evidence.tier)).\(nativeNote)",
-                )
-            case "perfect" where blocker == nil:
-                return GameCompatBadge(
-                    state: .verified, label: "Verified",
-                    reason: "AppleGamingWiki rates \(evidence.method) perfect.\(nativeNote)",
-                )
-            default:
-                // Real Mac evidence outranks the anti-cheat veto, but never
-                // past Playable: the game starts, its protected modes do not.
-                let caveat = blocker == nil ? "" : " Online play stays blocked. See Anti-cheat."
-                return GameCompatBadge(
-                    state: .playable, label: "Playable",
-                    reason: "AppleGamingWiki rates \(evidence.method) \(describe(evidence.tier)).\(caveat)\(nativeNote)",
-                )
+            if evidence.capped {
+                return GameCompatBadge(state: .playable, label: "Playable", reason: evidence.reason + caveat)
             }
+            return badge(tier: evidence.tier, blocker: blocker, reason: evidence.reason, caveat: caveat)
         }
         if let blocker {
             return GameCompatBadge(
                 state: .unsupported, label: "Unsupported",
-                reason: "\(blocker) has no macOS module. The game will not start here.\(nativeNote)",
+                reason: "\(blocker) has no macOS module. The game will not start here.",
             )
         }
         if let proton, proton.confidence != "inadequate", proton.tier != "pending" {
-            let count = proton.total.formatted()
+            let source = "ProtonDB rates it \(proton.tier) across \(proton.total.formatted()) reports."
             switch proton.tier {
             case "platinum", "gold":
                 return GameCompatBadge(
                     state: .playable, label: "Playable",
-                    reason: "Untested on a Mac. Runs well under Proton on Linux. ProtonDB rates it \(proton.tier) across \(count) reports.\(nativeNote)",
+                    reason: "Untested on a Mac. Runs well under Proton on Linux. \(source)",
+                )
+            case "silver", "bronze":
+                return GameCompatBadge(
+                    state: .playable, label: "Playable",
+                    reason: "Untested on a Mac. Runs with issues under Proton on Linux. \(source)",
                 )
             case "borked":
                 return GameCompatBadge(
-                    state: .unknown, label: "Unknown",
-                    reason: "Untested on a Mac. Broken under Proton on Linux. ProtonDB rates it borked across \(count) reports.\(nativeNote)",
+                    state: .unsupported, label: "Unsupported",
+                    reason: "Untested on a Mac. Broken under Proton on Linux. \(source)",
                 )
             default:
-                return GameCompatBadge(
-                    state: .unknown, label: "Unknown",
-                    reason: "Untested on a Mac. Mixed results under Proton on Linux. ProtonDB rates it \(proton.tier) across \(count) reports.\(nativeNote)",
-                )
+                break
             }
         }
-        return GameCompatBadge(
-            state: .unknown, label: "Unknown",
-            reason: "No Mac reports yet.\(nativeNote)",
-        )
+        return GameCompatBadge(state: .unknown, label: "Unknown", reason: "No Mac reports yet.")
+    }
+
+    /// The badge one tier earns: a crash is unsupported, perfect is verified
+    /// unless anti-cheat blocks a mode, and anything that runs is playable.
+    /// Real Mac evidence outranks the anti-cheat veto, but never past
+    /// Playable: the game starts, its protected modes do not.
+    private static func badge(tier: String, blocker: String?, reason: String, caveat: String) -> GameCompatBadge {
+        switch tier {
+        case "unplayable", "menu":
+            GameCompatBadge(state: .unsupported, label: "Unsupported", reason: reason)
+        case "perfect" where blocker == nil:
+            GameCompatBadge(state: .verified, label: "Verified", reason: reason)
+        default:
+            GameCompatBadge(state: .playable, label: "Playable", reason: reason + caveat)
+        }
+    }
+
+    /// The badge for the game's own macOS build, drawn beside the Windows
+    /// verdict and independent of it. The wiki's native column speaks for
+    /// the build, Rosetta 2's when native is unrated; a build Steam lists
+    /// that nobody has rated reads as available.
+    static func native(wiki: GameCompatRecord.WikiTiers?, hasMacBuild: Bool) -> GameCompatBadge? {
+        let rated: (String, String)? = if let tier = wiki?.native, rank(tier) != nil {
+            ("", tier)
+        } else if let tier = wiki?.rosetta2, rank(tier) != nil {
+            (" under Rosetta 2", tier)
+        } else {
+            nil
+        }
+        guard let (how, tier) = rated else {
+            guard hasMacBuild else { return nil }
+            return GameCompatBadge(
+                state: .unknown, label: "Available",
+                reason: "Steam lists a macOS version. Steam for Mac runs it directly, outside the bottle.",
+            )
+        }
+        let reason = "AppleGamingWiki rates the macOS version \(describe(tier))\(how)."
+        return switch tier {
+        case "unplayable", "menu":
+            GameCompatBadge(state: .unsupported, label: "Broken", reason: reason)
+        case "perfect":
+            GameCompatBadge(state: .verified, label: "Perfect", reason: reason)
+        default:
+            GameCompatBadge(state: .playable, label: "Playable", reason: reason)
+        }
     }
 
     /// The anti-cheat that stops the game outright, named for the reason
@@ -208,20 +263,37 @@ nonisolated enum GameCompatVerdict {
         return nil
     }
 
-    /// The wiki's verdict on the Windows build, CrossOver's column first
-    /// because it is the better populated: 483 perfect ratings to Wine's 171.
-    /// A column that says nothing (`na`, `unknown`, absent) yields to the other.
-    static func wikiEvidence(_ wiki: GameCompatRecord.WikiTiers) -> (method: String, tier: String)? {
-        let rated: Set = ["perfect", "playable", "runs", "menu", "unplayable"]
-        let crossover = wiki.crossover.flatMap { rated.contains($0) ? $0 : nil }
-        let wine = wiki.wine.flatMap { rated.contains($0) ? $0 : nil }
-        // A hard failure in either column outranks a pass in the other.
-        for (method, tier) in [("CrossOver", crossover), ("Wine", wine)] {
-            if let tier, tier == "unplayable" || tier == "menu" { return (method, tier) }
+    /// The wiki's verdict on the Windows build from its two Wine-family
+    /// columns. One rated column, or two that agree, give their tier. Two
+    /// that disagree give the better one capped at Playable when it is a
+    /// pass: a pass under one Wine on a Mac shows the build can run, and the
+    /// other column's failure is the reason to withhold Verified.
+    static func wikiEvidence(_ wiki: GameCompatRecord.WikiTiers) -> (tier: String, capped: Bool, reason: String)? {
+        let crossover = wiki.crossover.flatMap { rank($0) != nil ? $0 : nil }
+        let wine = wiki.wine.flatMap { rank($0) != nil ? $0 : nil }
+        switch (wine, crossover) {
+        case let (wine?, crossover?) where wine != crossover:
+            let better = rank(wine)! > rank(crossover)! ? wine : crossover
+            let reason = "AppleGamingWiki rates Wine \(describe(wine)) and CrossOver \(describe(crossover))."
+            return (better, rank(better)! >= rank("runs")!, reason)
+        case let (wine?, crossover):
+            let both = crossover == nil ? "Wine" : "Wine and CrossOver"
+            return (wine, false, "AppleGamingWiki rates \(both) \(describe(wine)).")
+        case let (nil, crossover?):
+            return (crossover, false, "AppleGamingWiki rates CrossOver \(describe(crossover)).")
+        case (nil, nil):
+            return nil
         }
-        if let crossover { return ("CrossOver", crossover) }
-        if let wine { return ("Wine", wine) }
-        return nil
+    }
+
+    /// The wiki's rated tiers, worst to best; `na`, `unknown` and anything
+    /// else rank as no rating.
+    static func rank(_ tier: String) -> Int? {
+        ["unplayable", "menu", "runs", "playable", "perfect"].firstIndex(of: tier)
+    }
+
+    static func macs(_ count: Int) -> String {
+        count == 1 ? "1 Mac" : "\(count.formatted()) Macs"
     }
 
     /// The wiki's tier words as they read in a sentence.
@@ -332,7 +404,10 @@ nonisolated enum GameCompatSources {
             }
             var byTitle: [String: GameCompatRecord.WikiTiers] = [:]
             for row in rows {
-                guard let page = row["Page"] as? String, !page.isEmpty else { continue }
+                // A page titled with a number (`5`) arrives as a JSON number.
+                guard let raw = row["Page"], !(raw is NSNull) else { continue }
+                let page = "\(raw)"
+                guard !page.isEmpty else { continue }
                 let slug = page.replacingOccurrences(of: " ", with: "_")
                 let encoded = slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slug
                 guard let pageURL = URL(string: wikiPageBase + encoded) else { continue }
@@ -377,6 +452,29 @@ nonisolated enum GameCompatSources {
             confidence: summary.confidence,
             total: summary.total,
             sourceURL: protonPageURL(appID: appID),
+        )
+    }
+
+    /// One game's summary from Sevoflurane's community database
+    /// (`GET /v1/games/<appid>`). A game with no runs answers 404, cached as
+    /// `{}`, which reads as absent like anything else off the shape.
+    static func community(data: Data) -> GameCompatRecord.Community? {
+        struct Summary: Decodable {
+            struct FPS: Decodable {
+                let median_avg: Double
+            }
+
+            let verdict: String
+            let runs: Int
+            let installs: Int
+            let engine: String?
+            let fps: FPS?
+            let url: URL
+        }
+        guard let summary = try? JSONDecoder().decode(Summary.self, from: data) else { return nil }
+        return GameCompatRecord.Community(
+            verdict: summary.verdict, runs: summary.runs, installs: summary.installs,
+            engine: summary.engine, medianFPS: summary.fps?.median_avg, pageURL: summary.url,
         )
     }
 

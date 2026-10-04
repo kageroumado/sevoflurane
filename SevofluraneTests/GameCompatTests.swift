@@ -29,6 +29,13 @@ struct GameCompatTests {
         )
     }
 
+    private func community(_ verdict: String, runs: Int = 12, installs: Int = 4) -> GameCompatRecord.Community {
+        GameCompatRecord.Community(
+            verdict: verdict, runs: runs, installs: installs, engine: "dormison-b1", medianFPS: 58,
+            pageURL: URL(string: "https://kagerou.glass/sevoflurane/games/1-x")!,
+        )
+    }
+
     // MARK: - The Mac badge
 
     @Test
@@ -52,44 +59,129 @@ struct GameCompatTests {
     }
 
     @Test
-    func `a wiki crash outranks a pass in the other column`() {
-        let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "unplayable", wine: "perfect"), proton: nil)
+    func `columns that disagree give the better tier capped at playable and name both`() {
+        // The Sims 4: CrossOver crashes at boot, Wine is perfect.
+        let sims = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "unplayable", wine: "perfect"), proton: nil)
+        #expect(sims.state == .playable)
+        #expect(sims.reason.contains("Wine perfect"))
+        #expect(sims.reason.contains("CrossOver as crashing at boot"))
+        // Red Dead Redemption 2: the other way round.
+        let rdr2 = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "unplayable"), proton: nil)
+        #expect(rdr2.state == .playable)
+        // Two passes that disagree withhold Verified too.
+        let split = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "playable", wine: "perfect"), proton: nil)
+        #expect(split.state == .playable)
+    }
+
+    @Test
+    func `two failures that disagree stay unsupported`() {
+        let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "menu", wine: "unplayable"), proton: nil)
         #expect(badge.state == .unsupported)
-        #expect(badge.reason.contains("CrossOver"))
+        #expect(badge.reason.contains("crashing at the menu"))
     }
 
     @Test
-    func `CrossOver perfect is verified`() {
-        let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect"), proton: proton("borked"))
+    func `columns that agree give their tier`() {
+        let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "perfect"), proton: nil)
         #expect(badge.state == .verified)
+        #expect(badge.reason.contains("Wine and CrossOver perfect"))
     }
 
     @Test
-    func `Wine answers when CrossOver says nothing`() {
-        let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "unknown", wine: "playable"), proton: nil)
+    func `one rated column answers alone`() {
+        let crossover = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect"), proton: proton("borked"))
+        #expect(crossover.state == .verified)
+        #expect(crossover.reason.contains("CrossOver"))
+        let wine = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "unknown", wine: "playable"), proton: nil)
+        #expect(wine.state == .playable)
+        #expect(wine.reason.contains("Wine"))
+    }
+
+    @Test
+    func `Sevoflurane's own runs outrank every other source`() {
+        let perfect = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(crossover: "unplayable", wine: "unplayable"), proton: proton("borked"),
+            community: community("perfect"),
+        )
+        #expect(perfect.state == .verified)
+        #expect(perfect.reason.contains("Sevoflurane players"))
+        #expect(perfect.reason.contains("12 runs on 4 Macs"))
+        let crashes = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(wine: "perfect"), proton: nil, community: community("unplayable"),
+        )
+        #expect(crashes.state == .unsupported)
+        let glitches = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: nil, community: community("runs"))
+        #expect(glitches.state == .playable)
+    }
+
+    @Test
+    func `the community's own runs still leave anti-cheat its caveat`() {
+        let badge = GameCompatVerdict.mac(
+            antiCheat: antiCheat(["Easy Anti-Cheat"]), wiki: nil, proton: nil, community: community("perfect"),
+        )
         #expect(badge.state == .playable)
-        #expect(badge.reason.contains("Wine"))
+        #expect(badge.reason.contains("Online play"))
     }
 
     @Test
-    func `ProtonDB alone never yields verified`() {
-        let gold = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton("platinum"))
-        #expect(gold.state == .playable)
-        #expect(gold.reason.contains("Untested"))
+    func `a community summary without enough runs yields to the wiki`() {
+        let badge = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(wine: "perfect"), proton: nil, community: community("unknown", runs: 2, installs: 1),
+        )
+        #expect(badge.state == .verified)
+        #expect(badge.reason.contains("AppleGamingWiki"))
+    }
+
+    @Test
+    func `every ProtonDB tier counts and none yields verified`() {
+        for tier in ["platinum", "gold", "silver", "bronze"] {
+            let badge = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton(tier))
+            #expect(badge.state == .playable)
+            #expect(badge.reason.contains("Untested on a Mac"))
+        }
+        #expect(GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton("silver")).reason.contains("with issues"))
         let borked = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton("borked"))
-        #expect(borked.state == .unknown)
+        #expect(borked.state == .unsupported)
+        #expect(borked.reason.contains("Untested on a Mac"))
         let weak = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton("gold", confidence: "inadequate"))
         #expect(weak.state == .unknown)
         #expect(weak.reason == "No Mac reports yet.")
+        let pending = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: proton("pending"))
+        #expect(pending.state == .unknown)
     }
 
     @Test
-    func `a native build is named but is not a bottle verdict`() {
+    func `a native build leaves the Windows verdict alone`() {
         let badge = GameCompatVerdict.mac(
             antiCheat: nil, wiki: wiki(native: "perfect", rosetta2: "perfect", crossover: "unknown"), proton: nil,
         )
         #expect(badge.state == .unknown)
-        #expect(badge.reason.contains("native Mac version"))
+        #expect(!badge.reason.contains("native"))
+    }
+
+    // MARK: - The native badge
+
+    @Test
+    func `the native badge reads the wiki's native column, then Rosetta 2's`() {
+        let perfect = GameCompatVerdict.native(wiki: wiki(native: "perfect", wine: "unplayable"), hasMacBuild: true)
+        #expect(perfect?.state == .verified)
+        #expect(perfect?.label == "Perfect")
+        let rosetta = GameCompatVerdict.native(wiki: wiki(native: "na", rosetta2: "playable"), hasMacBuild: false)
+        #expect(rosetta?.state == .playable)
+        #expect(rosetta?.reason.contains("Rosetta 2") == true)
+        // A 32-bit Mac build that stopped running on current macOS.
+        let dead = GameCompatVerdict.native(wiki: wiki(native: "unplayable"), hasMacBuild: true)
+        #expect(dead?.state == .unsupported)
+        #expect(dead?.label == "Broken")
+    }
+
+    @Test
+    func `a macOS build nobody rated reads as available, and no build as none`() {
+        let listed = GameCompatVerdict.native(wiki: wiki(native: "unknown"), hasMacBuild: true)
+        #expect(listed?.state == .unknown)
+        #expect(listed?.label == "Available")
+        #expect(GameCompatVerdict.native(wiki: nil, hasMacBuild: false) == nil)
+        #expect(GameCompatVerdict.native(wiki: wiki(wine: "perfect"), hasMacBuild: false) == nil)
     }
 
     // MARK: - The anti-cheat badge
@@ -159,6 +251,28 @@ struct GameCompatTests {
     }
 
     @Test
+    func `a wiki page titled with a number is kept`() throws {
+        let json = #"[{"Page":5,"native":"na","rosetta 2":"na","crossover":"perfect","wine":"perfect","parallels":"na"}]"#
+        let index = try GameCompatSources.WikiIndex(data: Data(json.utf8))
+        #expect(index.lookup(title: "5")?.crossover == "perfect")
+    }
+
+    @Test
+    func `the community summary parses, and a game with no runs reads as absent`() throws {
+        let json = """
+        {"appid":1962700,"engine":"dormison-r1","runs":3,"installs":1,"verdict":"unknown","total_runs":3,
+         "fps":{"median_avg":57.6,"median_low1":41,"runs":3,"installs":1},
+         "url":"https://kagerou.glass/sevoflurane/games/1962700-subnautica-2","game":{"appid":1962700}}
+        """
+        let summary = try #require(GameCompatSources.community(data: Data(json.utf8)))
+        #expect(summary.verdict == "unknown")
+        #expect(summary.runs == 3)
+        #expect(summary.medianFPS == 57.6)
+        #expect(summary.pageURL.absoluteString == "https://kagerou.glass/sevoflurane/games/1962700-subnautica-2")
+        #expect(GameCompatSources.community(data: Data("{}".utf8)) == nil)
+    }
+
+    @Test
     func `ProtonDB and PCGamingWiki answers parse, and a 404 page reads as absent`() {
         let summary = GameCompatSources.protonSummary(
             appID: 1_091_500,
@@ -178,9 +292,11 @@ struct GameCompatTests {
     @Test
     func `the record round-trips as the JSON the page reads`() throws {
         let record = GameCompatRecord(
-            appID: 1, name: "X", antiCheat: nil, wiki: wiki(crossover: "perfect"), proton: proton("gold"),
+            appID: 1, name: "X", antiCheat: nil, wiki: wiki(native: "perfect", crossover: "perfect"), proton: proton("gold"),
+            community: community("playable"), hasMacBuild: true,
             deckCategory: 3,
             mac: GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "perfect"), proton: nil),
+            nativeBadge: GameCompatVerdict.native(wiki: wiki(native: "perfect"), hasMacBuild: true),
             antiCheatBadge: GameCompatVerdict.antiCheat(nil), fetchedAt: Date(timeIntervalSince1970: 0),
         )
         let encoder = JSONEncoder()
@@ -189,6 +305,8 @@ struct GameCompatTests {
         let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let mac = try #require(object["mac"] as? [String: Any])
         #expect(mac["state"] as? String == "verified")
+        #expect((object["nativeBadge"] as? [String: Any])?["label"] as? String == "Perfect")
+        #expect((object["community"] as? [String: Any])?["verdict"] as? String == "playable")
         #expect((object["wiki"] as? [String: Any])?["pageURL"] as? String == "https://www.applegamingwiki.com/wiki/X")
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -212,6 +330,18 @@ struct CompatibilityStripSwitchTests {
         #expect(!Preferences.compatibilityStrip)
         Preferences.compatibilityStrip = true
         #expect(Preferences.compatibilityStrip)
+    }
+
+    @Test
+    func `the store strip honors the switch and stays on the store`() {
+        #expect(SteamCompatBadge.storeScript.contains("record.off"))
+        #expect(SteamCompatBadge.storeScript.contains(#"location.hostname !== "store.steampowered.com""#))
+        #expect(SteamCompatBadge.storeScript.contains("messageHandlers.\(SteamCompatBadge.storeHandler)"))
+        // Both pages draw the same cells from the same record.
+        for script in [SteamCompatBadge.script, SteamCompatBadge.storeScript] {
+            #expect(script.contains(#"cell("Native on macOS", native)"#))
+            #expect(script.contains("Sevoflurane players:"))
+        }
     }
 
     @Test
