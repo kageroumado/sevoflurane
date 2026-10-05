@@ -1,3 +1,4 @@
+import Digoxin
 import Propofol
 import SwiftUI
 
@@ -20,6 +21,7 @@ struct GeneralSettings: View {
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             StreamerModeSection(steam: steam, highlighted: highlighted)
             GeneralCommunitySection(highlighted: highlighted)
+            GeneralUsageSection()
             GeneralDiscordSection(highlighted: highlighted)
             GeneralUninstallSection(
                 provisioner: provisioner, store: store, supervisor: supervisor,
@@ -416,6 +418,78 @@ private struct GeneralCommunitySection: View {
             }
             reload()
         }
+    }
+}
+
+// MARK: - Usage count
+
+/// Whether this Mac is counted among Sevoflurane's users, what that sends,
+/// and whether Sevoflurane's own crashes are reported.
+private struct GeneralUsageSection: View {
+    @State private var tier = ConsentTier.off
+    @State private var status: DigoxinStatus = .off
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Picker("Count this Mac", selection: $tier) {
+                    Text("Off").tag(ConsentTier.off)
+                    Text("Counting").tag(ConsentTier.counting)
+                    Text("Counting and crash reports").tag(ConsentTier.crashReports)
+                }
+                .onChange(of: tier) { _, tier in
+                    // Reading the preference in onAppear lands here too.
+                    guard Preferences.usageCounting != tier else { return }
+                    UsageCounting.choose(tier)
+                    Task { await refreshStatus() }
+                }
+                Text("Counts how many people use Sevoflurane. On each day you use it, one anonymous check-in is sent:")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "\u{2022} Sevoflurane and macOS versions\n"
+                        + "\u{2022} processor, chip family and memory size\n"
+                        + "\u{2022} language and the date\n"
+                        + "\u{2022} how many of the last 7 days you used it",
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Text("It never includes which games or programs you run, and nothing in it names you or your account.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Crash reports adds a report when Sevoflurane itself crashes, with your name, your Mac\u{2019}s name and folder paths removed. A game\u{2019}s crash is sent only from the crash prompt. Turning this off deletes everything this Mac sent.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let line = statusLine {
+                    Text(line)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Usage count")
+        }
+        .task {
+            tier = Preferences.usageCounting ?? .off
+            await refreshStatus()
+        }
+    }
+
+    private var statusLine: String? {
+        switch status {
+        case .deletionPending: String(localized: "Deleting what this Mac sent\u{2026}")
+        case .secureEnclaveUnavailable: String(localized: "This Mac has no Secure Enclave, so nothing is sent.")
+        case let .failing(reason): String(localized: "Not sent yet: \(reason)")
+        case .off, .waiting, .registered: nil
+        }
+    }
+
+    private func refreshStatus() async {
+        status = await UsageCounting.client.status
     }
 }
 

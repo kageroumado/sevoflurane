@@ -1,4 +1,5 @@
 import AppKit
+import Digoxin
 import Propofol
 import SwiftUI
 import UserNotifications
@@ -42,6 +43,7 @@ struct MenuBarView: View {
                 )
                 NotificationPermissionCard(notifications: notifications)
                 SharingQuestionCard()
+                UsageQuestionCard()
                 BottleIncompleteChip(summary: bottleSummary)
                     .font(.system(size: 10))
                     .padding(.horizontal, Theme.Space.sm)
@@ -441,6 +443,38 @@ private struct SharingQuestionCard: View {
         if shares {
             Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
         }
+        withAnimation { isAsking = false }
+    }
+}
+
+/// Digoxin's question: whether this Mac is counted among Sevoflurane's
+/// users. Asked once, after the community database's question has its
+/// answer; Settings › General holds the choice from then on.
+private struct UsageQuestionCard: View {
+    @State private var isAsking = Preferences.usageCounting == nil
+        && !(Preferences.sharesRunStats == nil && RunLog.hasRecords())
+
+    var body: some View {
+        if isAsking {
+            NoticeCard(
+                symbol: "person.2",
+                title: "Count yourself in",
+                detail: "One anonymous check-in a day counts how many people use Sevoflurane. It never includes which games or programs you run. Settings \u{203A} General lists what is sent, and adds crash reports if you want them.",
+            ) {
+                HStack(spacing: Theme.Space.sm) {
+                    Button("Count Me In") { answer(.counting) }
+                        .buttonStyle(.glassProminent)
+                        .foregroundStyle(Theme.onAccent)
+                    Button("Not Now") { answer(.off) }
+                        .buttonStyle(.glass)
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
+
+    private func answer(_ tier: ConsentTier) {
+        UsageCounting.choose(tier)
         withAnimation { isAsking = false }
     }
 }
