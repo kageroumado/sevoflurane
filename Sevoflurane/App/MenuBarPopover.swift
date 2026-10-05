@@ -39,6 +39,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     /// bar's session keeps such a click from the button, and it reaches this
     /// app only as a mouse event elsewhere in the system.
     private var itemClickMonitor: Any?
+    /// Runs on every open: the popover is where a menu-bar app is used.
+    var onOpen: () -> Void = {}
 
     init(
         host: SteamWebHost,
@@ -102,6 +104,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         // for the rest of the session. Asking on every open costs one page
         // evaluation and always reflects the library as it stands.
         presentation.opened()
+        onOpen()
         host.refreshRecentGames()
         quickLaunch.refresh()
         graphics.refresh()

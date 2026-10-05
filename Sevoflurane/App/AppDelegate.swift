@@ -166,7 +166,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
             supervisor.showLibraryWhenHealthy()
         }
+        countsUse = true
+        UsageCounting.start()
         startServices()
+    }
+
+    /// Set once a real launch is under way: a test host, the gallery and the
+    /// demo are not someone using the app.
+    private(set) var countsUse = false
+
+    func applicationDidBecomeActive(_: Notification) {
+        if countsUse { UsageCounting.noteUse() }
     }
 
     /// Points the engine manifest at the URL a developer named, from the
@@ -207,6 +217,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host: host, supervisor: supervisor, notifications: notifications,
             setup: setupWindow,
         )
+        menuBarPopover?.onOpen = { [weak self] in
+            if self?.countsUse == true { UsageCounting.noteUse() }
+        }
     }
 
     #if DEBUG

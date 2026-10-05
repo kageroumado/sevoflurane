@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0B487987304107D0001CB276 /* Propofol in Frameworks */ = {isa = PBXBuildFile; productRef = 7B0000000000000000000002 /* Propofol */; };
+		7C0000000000000000000003 /* Digoxin in Frameworks */ = {isa = PBXBuildFile; productRef = 7C0000000000000000000002 /* Digoxin */; };
 		0B487988304107D0001CB276 /* TiptoeGitHub in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000002 /* TiptoeGitHub */; };
 		0BAA000000000000000D0002 /* SevofluraneDaemon in CopyFiles */ = {isa = PBXBuildFile; fileRef = 0BAA000000000000000D0001 /* SevofluraneDaemon */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		0BAA000000000000000E000C /* SevofluraneThumbnail.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0BAA000000000000000E0001 /* SevofluraneThumbnail.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -172,6 +173,7 @@
 				0BAA00000000000000100005 /* SophonCodecs in Frameworks */,
 				0B487988304107D0001CB276 /* TiptoeGitHub in Frameworks */,
 				0B487987304107D0001CB276 /* Propofol in Frameworks */,
+				7C0000000000000000000003 /* Digoxin in Frameworks */,
 			);
 		};
 		0B33EFE430290E6100182A68 /* Frameworks */ = {
@@ -261,6 +263,7 @@
 				0BAA00000000000000100002 /* SophonCodecs */,
 				7B0000000000000000000002 /* Propofol */,
 				7A0000000000000000000002 /* TiptoeGitHub */,
+				7C0000000000000000000002 /* Digoxin */,
 			);
 			productName = Sevoflurane;
 			productReference = 0B33EFDA30290E5E00182A68 /* Sevoflurane.app */;
@@ -387,6 +390,7 @@
 				7A0000000000000000000001 /* XCRemoteSwiftPackageReference "Tiptoe" */,
 				7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */,
 				0BAA000000000000000F000E /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
+				7C0000000000000000000001 /* XCRemoteSwiftPackageReference "digoxin" */,
 			);
 			preferredProjectObjectVersion = 100;
 			productRefGroup = 0B33EFDB30290E5E00182A68 /* Products */;
@@ -986,6 +990,14 @@
 				minimumVersion = 0.2.1;
 			};
 		};
+		7C0000000000000000000001 /* XCRemoteSwiftPackageReference "digoxin" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kageroumado/digoxin.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1018,6 +1030,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0BAA00000000000000100001 /* XCLocalSwiftPackageReference "Packages/SophonCodecs" */;
 			productName = SophonCodecs;
+		};
+		7C0000000000000000000002 /* Digoxin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7C0000000000000000000001 /* XCRemoteSwiftPackageReference "digoxin" */;
+			productName = Digoxin;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
