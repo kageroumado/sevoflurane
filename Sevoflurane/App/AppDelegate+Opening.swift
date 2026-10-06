@@ -74,6 +74,8 @@ extension AppDelegate {
     /// reads it.
     func applicationDockMenu(_: NSApplication) -> NSMenu? {
         guard isRuntimeStarted, !setupWindow.isUnfinished else { return nil }
+        // The next opening reads a list a game played since then has moved.
+        host.refreshRecentGames()
         let entries = DockMenu.entries(
             recentGames: host.recentGames,
             statuses: host.menuMirror?.friendsStatuses ?? [],

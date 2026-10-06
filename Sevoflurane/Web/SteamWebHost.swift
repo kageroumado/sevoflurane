@@ -164,16 +164,34 @@ final class SteamWebHost {
     /// and every one of them for the index. One evaluation answers both, so
     /// the two lists never describe different moments of the library.
     func refreshRecentGames() {
-        Task(name: "Refresh recent games") {
-            guard let raw = await evaluateInContext(Self.installedGamesScript),
-                  let data = raw.data(using: .utf8),
-                  let answer = try? JSONDecoder().decode(InstalledGames.self, from: data)
-            else { return }
-            noteCloudSyncs(in: answer.library, at: .now)
-            if answer.recent != recentGames { recentGames = answer.recent }
-            let library = LibraryIndex.sorted(answer.library)
-            if library != libraryGames { libraryGames = library }
+        Task(name: "Refresh recent games") { _ = await readInstalledGames() }
+    }
+
+    /// ``refreshRecentGames()`` for the moment the desktop window arrives,
+    /// when Steam's app store is often still filling: it asks again every two
+    /// seconds for up to a minute until the library has games, so the Dock
+    /// menu has its recent games without the popover having been opened.
+    func refreshRecentGamesWhenLoaded() {
+        Task(name: "Refresh recent games once the library loads") {
+            for _ in 0 ..< 30 {
+                if await readInstalledGames() { return }
+                try? await Task.sleep(for: .seconds(2))
+            }
         }
+    }
+
+    /// Reads the installed games into ``recentGames`` and ``libraryGames``;
+    /// whether the library had any.
+    private func readInstalledGames() async -> Bool {
+        guard let raw = await evaluateInContext(Self.installedGamesScript),
+              let data = raw.data(using: .utf8),
+              let answer = try? JSONDecoder().decode(InstalledGames.self, from: data)
+        else { return false }
+        noteCloudSyncs(in: answer.library, at: .now)
+        if answer.recent != recentGames { recentGames = answer.recent }
+        let library = LibraryIndex.sorted(answer.library)
+        if library != libraryGames { libraryGames = library }
+        return !answer.library.isEmpty
     }
 
     /// What ``installedGamesScript`` answers.
@@ -765,7 +783,7 @@ final class SteamWebHost {
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")
         }
         installContextScripts()
-        refreshRecentGames()
+        refreshRecentGamesWhenLoaded()
         // The user asked for the window before it existed; this is it.
         if desktopShowIsPending {
             desktopShowIsPending = false
