@@ -265,8 +265,8 @@ struct GraphicsSettings: View {
     }
 }
 
-/// The packages the upscaler can run: what is in the store, with its license
-/// and removal, and what the catalog can fetch. Its own view, because a
+/// The upscaler packages: what is in the store, with its license and
+/// removal, and what the catalog can fetch. Its own view, because a
 /// download's progress rewrites `shaders.busy` many times a second and only
 /// this section reads it.
 private struct ShaderPackagesSection: View {
@@ -296,9 +296,16 @@ private struct ShaderPackagesSection: View {
             }
             ShaderFetchStatus(shaders: shaders)
         } header: {
-            Text("Shader packages")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Upscalers")
+                Text("Extra upscalers for games drawn at low resolution: pixel art, anime, visual novels. MetalFX and the final filter are built in.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } footer: {
-            Text("Choose an upscaler in Engine or Games.")
+            Text("Choose one for every game in Engine \u{203A} Upscaler, or for one game in Games. While a game runs, View \u{203A} Upscaler in its menu bar switches it live.")
         }
         .highlightable(.graphicsShaders, highlighted: highlighted)
         .confirmationDialog(
@@ -330,6 +337,7 @@ private struct InstalledShaderRow: View {
                 title: package.title,
                 version: package.manifest.version,
                 license: package.manifest.license,
+                description: package.manifest.description,
                 content: package.manifest.content,
             )
             Spacer(minLength: Theme.Space.sm)
@@ -351,7 +359,8 @@ private struct DownloadableShaderRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Space.md) {
             ShaderPackageSummary(
-                title: entry.title, version: entry.version, license: entry.license, content: entry.content,
+                title: entry.title, version: entry.version, license: entry.license,
+                description: entry.description, content: entry.content,
             )
             Spacer(minLength: Theme.Space.sm)
             if let source = entry.source {
@@ -363,12 +372,18 @@ private struct DownloadableShaderRow: View {
     }
 }
 
-/// A package's title, version and license, over what it contains.
+/// A package's title, version and license, over what it does: its
+/// description, or what it contains when the description is empty.
 private struct ShaderPackageSummary: View {
     let title: String
     let version: String
     let license: String
+    let description: String
     let content: String
+
+    private var summary: String {
+        description.trimmingCharacters(in: .whitespaces).isEmpty ? content : description
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -378,7 +393,7 @@ private struct ShaderPackageSummary: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(InterfaceCopy.localized(content))
+            Text(InterfaceCopy.localized(summary))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

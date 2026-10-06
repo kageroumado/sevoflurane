@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where the upscaler pickers and Settings › Graphics › Shader packages read
+/// Where the upscaler pickers and Settings › Graphics › Upscalers read
 /// and write.
 ///
 /// What is in the store is read at init and after every change; the catalog

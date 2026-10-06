@@ -216,10 +216,10 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                 ),
                 SearchableSetting(
                     id: .graphicsShaders,
-                    title: "Shader packages",
+                    title: "Upscalers",
                     keywords: [
-                        "shader", "package", "upscaler", "anime4k", "cunny",
-                        "download", "license",
+                        "upscaler", "upscale", "shader", "package", "anime4k", "cunny",
+                        "neural", "pixel art", "anime", "visual novel", "download", "license",
                     ],
                 ),
             ]

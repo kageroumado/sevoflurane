@@ -517,7 +517,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
   `steam://` links, the command-line tool, AI assistants, the compatibility
   strip, Streamer Mode, community sharing, Discord, uninstall.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
-  DXVK versions, shader packages.
+  DXVK versions, upscalers (CuNNy, Anime4K) to download.
 - **Engine**: engines, bottles and the update channel, msync+, defaults for
   every game, game dependencies, DLL overrides, Wine configuration,
   library-load logging, repair.

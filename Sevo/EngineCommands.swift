@@ -476,7 +476,7 @@ struct UpdateCommand: AsyncParsableCommand {
 }
 
 /// The shader packages the presenter's upscaler can run. The CLI face of
-/// Settings › Graphics › Shader packages.
+/// Settings › Graphics › Upscalers.
 struct ShadersCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "shaders",
