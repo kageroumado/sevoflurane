@@ -65,6 +65,19 @@ nonisolated extension Preferences {
         get { bool(forKey: "compatibilityStrip", default: true) }
         set { shared.set(newValue, forKey: "compatibilityStrip") }
     }
+
+    /// Whether the stylesheets in the Styles folder style Steam's windows.
+    static var userStyles: Bool {
+        get { bool(forKey: "userStyles", default: false) }
+        set { shared.set(newValue, forKey: "userStyles") }
+    }
+
+    /// Whether the Styles folder also styles the store and community pages,
+    /// while ``userStyles`` is on.
+    static var userStylesOnWebPages: Bool {
+        get { bool(forKey: "userStylesOnWebPages", default: false) }
+        set { shared.set(newValue, forKey: "userStylesOnWebPages") }
+    }
 }
 
 // MARK: - Community database

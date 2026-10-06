@@ -17,4 +17,12 @@ nonisolated enum JSLiteral {
         }
         return text
     }
+
+    /// ``string(_:)`` that is also safe inside an HTML `<script>` or
+    /// `<style>` element: every `<` is written as an escape, so no
+    /// `</script>`, `</style>` or `<!--` in the value can end or reshape the
+    /// element around it.
+    static func inlineString(_ value: String) -> String {
+        string(value).replacingOccurrences(of: "<", with: "\\u003C")
+    }
 }

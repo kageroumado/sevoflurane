@@ -109,6 +109,7 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 restartClient: { [weak supervisor] in supervisor?.restartNow() },
                 cancelStuckMenus: { [weak host] in host?.menuMirror?.cancelTracking() ?? [] },
                 applyCompatibilityStrip: { [weak host] in host?.applyCompatibilityStrip() },
+                applyUserStyles: { [weak host] in host?.applyUserStyles() },
                 applyStreamerMode: { [weak host] in host?.applyStreamerMode() },
             )
         }

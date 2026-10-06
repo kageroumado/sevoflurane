@@ -729,6 +729,14 @@ final class SteamWindow: NSObject {
         }
     }
 
+    /// Puts `stylesheet` on this window's embedded web pages, or takes the
+    /// custom style off them for `nil`.
+    func styleWebPages(with stylesheet: String?) {
+        for view in browserViews.values {
+            view.setUserStylesheet(stylesheet)
+        }
+    }
+
     var browserViewStatuses: [BrowserViewChild.Status] {
         browserViews.values.map(\.status).sorted { $0.id < $1.id }
     }

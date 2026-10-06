@@ -24,20 +24,12 @@ nonisolated enum StreamerMask {
     /// The script for these settings, or `nil` while the mode is off.
     static func script(for settings: StreamerMode.Settings) -> String? {
         guard settings.isOn else { return nil }
-        let known = settings.knownNames.map(literal).joined(separator: ",")
+        let known = settings.knownNames.map(JSLiteral.inlineString).joined(separator: ",")
         return "(()=>{if(window.__sevoMask)return;window.__sevoMask=1;\n"
-            + "const ME_NAME=\(literal(settings.displayName)),ME=\(literal(settings.avatarDataURI)),"
+            + "const ME_NAME=\(JSLiteral.inlineString(settings.displayName)),ME=\(JSLiteral.inlineString(settings.avatarDataURI)),"
             + "KNOWN=[\(known)];\n"
             + body
             + "})();\n"
-    }
-
-    /// A JavaScript string literal that is also safe inside an HTML `<script>`
-    /// element: every `<` is written as an escape, so no `</script>` or `<!--`
-    /// in a name can end or reshape the element. JSON's escaping (``JSLiteral``)
-    /// covers quotes, backslashes and line breaks.
-    static func literal(_ value: String) -> String {
-        JSLiteral.string(value).replacingOccurrences(of: "<", with: "\\u003C")
     }
 
     /// Everything after the settings. Each friend is named from `ROSTER` in

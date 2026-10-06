@@ -412,6 +412,10 @@ final class SteamWebHost {
     @ObservationIgnored var contextWindow: NSWindow?
     @ObservationIgnored var popups: [ObjectIdentifier: SteamWindow] = [:]
     @ObservationIgnored var coordinator: SteamWebCoordinator?
+    /// Watches the Styles folder while the custom style is on.
+    @ObservationIgnored var userStylesWatch: FolderWatch?
+    /// The custom stylesheet as last read; empty while the style is off.
+    @ObservationIgnored var userStylesheet = ""
 
     // MARK: - Boot
 
@@ -422,6 +426,7 @@ final class SteamWebHost {
         guard context == nil else { return }
         installMenuDismissalGuard()
         installEnergyPreferenceMirror()
+        applyUserStyles()
         createContextPage()
     }
 
@@ -735,6 +740,9 @@ final class SteamWebHost {
             window.webView.evaluateJavaScript(SteamDesktopChrome.popupScript)
         } else if window.role.hasPopupChrome {
             window.webView.evaluateJavaScript(SteamDesktopChrome.popupChromeScript)
+        }
+        if Preferences.userStyles {
+            window.webView.evaluateJavaScript(SteamUserCSS.script(css: userStylesheet))
         }
         guard window.role == .desktop else { return }
         desktop = window

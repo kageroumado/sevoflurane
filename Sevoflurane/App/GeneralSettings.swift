@@ -19,6 +19,7 @@ struct GeneralSettings: View {
             )
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
+            GeneralCustomStyleSection(steam: steam, highlighted: highlighted)
             StreamerModeSection(steam: steam, highlighted: highlighted)
             GeneralCommunitySection(highlighted: highlighted)
             GeneralUsageSection()
@@ -332,6 +333,72 @@ private struct GeneralSteamPagesSection: View {
             .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
         } header: {
             Text("Steam pages")
+        }
+    }
+}
+
+// MARK: - Custom style
+
+/// The user's own stylesheets for Steam, from the Styles folder, and the
+/// selectors in Steam's UI that hold across its updates.
+private struct GeneralCustomStyleSection: View {
+    let steam: SteamActions?
+    let highlighted: SettingsAnchor?
+    @State private var isOn = false
+    @State private var onWebPages = false
+    @State private var folderFailure: String?
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Style Steam with CSS", isOn: $isOn)
+                    .toggleStyle(.switch)
+                    .onChange(of: isOn) { _, enabled in
+                        // Reading the preference in onAppear lands here too.
+                        guard enabled != Preferences.userStyles else { return }
+                        Preferences.userStyles = enabled
+                        steam?.applyUserStyles()
+                    }
+                Text("Every CSS file in the Styles folder styles Steam\u{2019}s windows, in name order. Saving a file restyles them right away.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .highlightable(.generalCustomStyle, highlighted: highlighted)
+            Toggle("Also style store and community pages", isOn: $onWebPages)
+                .toggleStyle(.switch)
+                .disabled(!isOn)
+                .onChange(of: onWebPages) { _, enabled in
+                    guard enabled != Preferences.userStylesOnWebPages else { return }
+                    Preferences.userStylesOnWebPages = enabled
+                    steam?.applyUserStyles()
+                }
+            HStack {
+                if let folderFailure {
+                    Text(folderFailure)
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                }
+                Spacer()
+                Button("Open Styles Folder") { openFolder() }
+            }
+        } header: {
+            Text("Custom style")
+        } footer: {
+            Text("Most of Steam\u{2019}s class names change with each Steam update. .DesktopUI, .TitleBar, the .Dialog classes, the .SVGIcon_ icons and ARIA roles stay the same; README.css in the folder lists them.")
+        }
+        .onAppear {
+            isOn = Preferences.userStyles
+            onWebPages = Preferences.userStylesOnWebPages
+        }
+    }
+
+    private func openFolder() {
+        do {
+            try UserStyles.prepareFolder()
+            folderFailure = nil
+            NSWorkspace.shared.open(UserStyles.folder)
+        } catch {
+            folderFailure = error.localizedDescription
         }
     }
 }

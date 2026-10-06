@@ -40,7 +40,7 @@ struct StreamerMaskTests {
     @Test
     func `a hostile name survives as the same string in JavaScript`() throws {
         let context = try #require(JSContext())
-        let value = context.evaluateScript("(\(StreamerMask.literal(Self.hostileName)))")
+        let value = context.evaluateScript("(\(JSLiteral.inlineString(Self.hostileName)))")
         #expect(context.exception == nil)
         #expect(value?.toString() == Self.hostileName)
     }

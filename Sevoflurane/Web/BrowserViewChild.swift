@@ -54,17 +54,25 @@ final class BrowserViewChild: NSObject {
         // Steam's web properties feature-detect the client from this token
         // (install buttons become steam:// links, which route back natively).
         configuration.applicationNameForUserAgent = "Valve Steam Client"
+        var scripts: [WKUserScript] = []
         if let mask = StreamerMask.script(for: .current) {
-            configuration.userContentController.addUserScript(WKUserScript(
+            scripts.append(WKUserScript(
                 source: mask, injectionTime: .atDocumentEnd, forMainFrameOnly: false,
             ))
         }
         // The Mac compatibility strip on store game pages. It asks for its
         // record on every page, so the Settings switch reaches pages loaded
         // after it changed.
-        configuration.userContentController.addUserScript(WKUserScript(
+        scripts.append(WKUserScript(
             source: SteamCompatBadge.storeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true,
         ))
+        baseScripts = scripts
+        for script in scripts {
+            configuration.userContentController.addUserScript(script)
+        }
+        if let stylesheet = host.webPageStylesheet {
+            configuration.userContentController.addUserScript(Self.userStyleScript(stylesheet))
+        }
         configuration.userContentController.addScriptMessageHandler(
             StoreCompatHandler(), contentWorld: .page, name: SteamCompatBadge.storeHandler,
         )
@@ -103,6 +111,31 @@ final class BrowserViewChild: NSObject {
     }
 
     private var observations: [NSKeyValueObservation] = []
+
+    /// The user scripts every page gets; the custom style's is added and
+    /// removed beside them.
+    private let baseScripts: [WKUserScript]
+
+    /// Puts `stylesheet` on the open page and every page loaded after it, or
+    /// takes the custom style off them for `nil`.
+    func setUserStylesheet(_ stylesheet: String?) {
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        for script in baseScripts {
+            controller.addUserScript(script)
+        }
+        if let stylesheet {
+            controller.addUserScript(Self.userStyleScript(stylesheet))
+        }
+        webView.evaluateJavaScript(stylesheet.map { SteamUserCSS.script(css: $0) } ?? SteamUserCSS.removalScript)
+    }
+
+    /// At document start, so the style is in place before the first paint.
+    private static func userStyleScript(_ stylesheet: String) -> WKUserScript {
+        WKUserScript(
+            source: SteamUserCSS.script(css: stylesheet), injectionTime: .atDocumentStart, forMainFrameOnly: true,
+        )
+    }
 
     /// The open `BrowserViewLoad` interval: provisional start to finish or
     /// failure of the top-level load. A navigation that replaces one in
