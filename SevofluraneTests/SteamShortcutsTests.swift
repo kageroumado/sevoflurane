@@ -227,6 +227,35 @@ struct SteamShortcutsTests {
     }
 
     @Test
+    func `a shortcut carrying a store launch's program keeps it until the launch settles`() {
+        let fresh = SteamShortcuts.Listed(
+            appid: Self.shortcut, exe: #""C:\Games\Nightsong\Nightsong.exe""#, startDir: #""C:\Games\Nightsong\""#,
+            launchOptions: "-AUTH_PASSWORD=one-time",
+        )
+        let program = SteamShortcuts.Program(id: 1, target: Self.nightsongTarget, wanted: true, shortcutID: Self.shortcut)
+        let during = SteamShortcuts.plan([program], listed: [fresh], owned: [Self.shortcut], launching: [Self.shortcut])
+        #expect(during == SteamShortcuts.Plan(kept: [1: Self.shortcut]))
+        let after = SteamShortcuts.plan([program], listed: [fresh], owned: [Self.shortcut])
+        #expect(after.retargeted == [1])
+    }
+
+    @Test
+    func `a store launch settles once, and a late timeout leaves a newer launch alone`() {
+        var launches = SteamShortcuts.Launches()
+        let first = launches.begin(programID: 1, shortcut: Self.shortcut)
+        #expect(launches.shortcuts == [Self.shortcut])
+        #expect(launches.settle(1) == Self.shortcut)
+        #expect(launches.settle(1) == nil)
+        #expect(launches.shortcuts.isEmpty)
+
+        let second = launches.begin(programID: 1, shortcut: Self.shortcut)
+        #expect(launches.settle(1, generation: first) == nil)
+        #expect(launches.shortcuts == [Self.shortcut])
+        #expect(launches.settle(1, generation: second) == Self.shortcut)
+        #expect(launches.settle(2) == nil)
+    }
+
+    @Test
     func `a program's target names its store's working folder`() {
         var program = AdoptedProgram(
             path: SteamBottle.root.appending(path: "drive_c/GOG Games/Nightsong/bin/Nightsong.exe").path,
