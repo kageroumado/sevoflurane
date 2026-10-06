@@ -1,5 +1,5 @@
 {
-  "originHash" : "68d40119cb57f81b7a88a6981aeb8c5b38c6957a6952b455054ded11215bb7ca",
+  "originHash" : "063852e7d24e528a5810f35a30d512369b72edfca599a9dd8f07ab6d5c0eb31b",
   "pins" : [
     {
       "identity" : "appupdater",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kageroumado/digoxin.git",
       "state" : {
-        "revision" : "94fbce24d0259b36b3d344dea23d5969c76b44e2",
-        "version" : "0.1.0"
+        "revision" : "586a21315812951232f1673fc227475c6f4a4c9d",
+        "version" : "0.2.0"
       }
     },
     {
