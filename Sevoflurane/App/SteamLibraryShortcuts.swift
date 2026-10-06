@@ -5,7 +5,8 @@ import Foundation
 /// makes the changes with the client's own calls.
 ///
 /// A pass runs when the client becomes healthy, when a program is added or
-/// removed, and when its "Show in Steam's library" switch changes. With the
+/// removed, when a store title is adopted again, and when its "Show in
+/// Steam's library" switch changes. With the
 /// client down a pass changes nothing and the next healthy client catches up,
 /// so a program added or removed meanwhile, by the app or by `sevo`, reaches
 /// Steam then.
@@ -87,6 +88,15 @@ final class SteamLibraryShortcuts {
         for (id, shortcut) in plan.kept {
             AdoptedPrograms.update(id) { $0.steamShortcutID = shortcut }
         }
+        for id in plan.retargeted {
+            guard let entry = byID[id], let shortcut = plan.kept[id] else { continue }
+            let target = SteamShortcuts.target(entry.program)
+            if await bridge.evaluateInClient(SteamShortcuts.retargetScript(shortcut, target)) == nil {
+                EventLog.shared.log(.client, "could not point \(entry.name)'s shortcut in Steam's library at \(target.exe)")
+            } else {
+                EventLog.shared.log(.client, "pointed \(entry.name)'s shortcut in Steam's library at \(target.exe)")
+            }
+        }
         var owned = Set(plan.kept.values).union(plan.removed)
         for id in plan.added {
             guard let entry = byID[id] else { continue }
@@ -100,10 +110,7 @@ final class SteamLibraryShortcuts {
 
     /// Makes one program's shortcut and records its app id.
     private func add(_ entry: AdoptedPrograms.Entry, bridge: SteamBridge) async -> Int? {
-        let script = SteamShortcuts.addScript(
-            name: entry.name, exe: SteamBottle.windowsPath(for: entry.program.url),
-            launchOptions: SteamShortcuts.launchOptions(entry.program.arguments),
-        )
+        let script = SteamShortcuts.addScript(name: entry.name, target: SteamShortcuts.target(entry.program))
         guard let answer = await bridge.evaluateInClient(script), let shortcut = Int(answer) else {
             EventLog.shared.log(.client, "could not add \(entry.name) to Steam's library: the client made no shortcut")
             return nil
@@ -118,7 +125,7 @@ final class SteamLibraryShortcuts {
     private static func weighed(_ entry: AdoptedPrograms.Entry) -> SteamShortcuts.Program {
         SteamShortcuts.Program(
             id: entry.id,
-            exe: SteamShortcuts.exeKey(SteamBottle.windowsPath(for: entry.program.url)),
+            target: SteamShortcuts.target(entry.program),
             wanted: entry.program.inSteamLibrary == true && canList(entry.program),
             shortcutID: entry.program.steamShortcutID,
         )

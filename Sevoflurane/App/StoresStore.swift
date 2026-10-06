@@ -333,7 +333,8 @@ final class StoresStore {
         jobs[store]?.job.task?.cancel()
     }
 
-    /// Records an installed title as a Quick Launch game, with what starts it.
+    /// Records an installed title as a Quick Launch game, with what starts
+    /// it, and brings its shortcut in Steam's library in step.
     private nonisolated static func adopt(_ install: StoreInstall) async throws {
         let folder = try StorePaths.gameFolder(install.path)
         let plan: StoreLaunchPlan? = switch install.store {
@@ -344,6 +345,7 @@ final class StoresStore {
         try await MainActor.run {
             try StoreLibrary.adopt(install, plan: plan, bottle: SteamBottle.name)
             ConfigMaterializer.materializeInBackground(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            SteamLibraryShortcuts.shared.sync()
         }
     }
 
