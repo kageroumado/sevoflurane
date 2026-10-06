@@ -40,10 +40,13 @@ final class QuickLaunchStore {
 
     /// Re-reads the store. Cheap: one directory listing and a JSON file per
     /// program.
+    /// A change found here came from outside the app (`sevo program`, the
+    /// MCP server), so Steam's library is brought in step with it too.
     func refresh() {
         let next = simulated ?? AdoptedPrograms.all()
         guard next != programs else { return }
         programs = next
+        if simulated == nil { SteamLibraryShortcuts.shared.sync() }
     }
 
     /// The program's own artwork, shaped like a macOS icon.
