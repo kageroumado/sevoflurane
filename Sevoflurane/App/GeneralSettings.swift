@@ -325,7 +325,7 @@ private struct GeneralSteamPagesSection: View {
                         Preferences.compatibilityStrip = enabled
                         steam?.applyCompatibilityStrip()
                     }
-                Text("A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, and its Mac button keeps only the games that play. Sevoflurane's own players' runs come first where there are enough.")
+                Text("A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, its Mac button keeps only the games that play, and Install warns before a game known to fail. Sevoflurane's own players' runs come first where there are enough.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

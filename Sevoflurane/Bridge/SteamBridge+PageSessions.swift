@@ -197,6 +197,17 @@ extension SteamBridge {
         if path == "SteamClient.Apps.SetAppLaunchOptions" {
             request = await adoptingLaunchCommand(in: request)
         }
+        // One game at a time: a wizard opened for a whole collection is a
+        // choice already made about many games, and one warning per game
+        // would stand between the user and all of them.
+        if path == "SteamClient.Installs.OpenInstallWizard", let installGate,
+           let appIDs = (request["args"] as? [Any])?.first as? [Any], appIDs.count == 1,
+           let appID = (appIDs[0] as? NSNumber)?.intValue,
+           await !installGate(appID) {
+            log(.client, "install \(appID): canceled at the compatibility warning")
+            ws.send(text: Self.resultReply(rid: rid, outcome: ["ok": true, "v": NSNull()]))
+            return
+        }
         if path == "SteamClient.Apps.TerminateApp",
            let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {
             // Every stop asked for in the page — the library's Stop button, the

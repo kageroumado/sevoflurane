@@ -380,6 +380,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     MainActor.assumeIsolated { self?.gameLaunchWatch.noteLaunchRequested() }
                 }
             }
+            await bridge.setInstallGate { [weak self] appID in
+                guard let host = await self?.host else { return true }
+                return await host.confirmInstall(appID: appID)
+            }
             // The bridge sees a client die before any probe does.
             await bridge.setClientConnectionLostHandler { [weak self] in
                 DispatchQueue.main.async {

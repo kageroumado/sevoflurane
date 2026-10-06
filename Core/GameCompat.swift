@@ -128,6 +128,18 @@ nonisolated struct GameCompatSummary: Codable, Sendable, Equatable {
     }
 }
 
+/// Why installing a game deserves a second thought, from the same verdicts
+/// the strip shows.
+nonisolated enum GameCompatInstallRisk: Equatable, Sendable {
+    /// Anti-cheat that cannot run here: a kernel engine, or one AreWeAntiCheatYet
+    /// lists as Denied or Broken. Carries the anti-cheat badge's reason and
+    /// whether the game itself is known to start.
+    case antiCheat(reason: String, gameStarts: Bool)
+    /// The Mac verdict is Unsupported: a crash in Sevoflurane players' runs or
+    /// on the wiki, or broken under Proton with nothing better known.
+    case unsupported(reason: String)
+}
+
 /// The rules that turn the sources into the two badges.
 nonisolated enum GameCompatVerdict {
     /// Anti-cheat that lives in a kernel driver, so no translation layer can
@@ -309,6 +321,17 @@ nonisolated enum GameCompatVerdict {
             state: mac(antiCheat: antiCheat, wiki: wiki, proton: proton, community: community).state,
             native: native?.state == .verified || native?.state == .playable,
         )
+    }
+
+    /// What installing the Windows build risks, or `nil` when nothing known
+    /// stands in its way. Anti-cheat speaks first, being the failure no
+    /// setting fixes.
+    static func installRisk(_ record: GameCompatRecord) -> GameCompatInstallRisk? {
+        if record.antiCheatBadge.state == .unsupported {
+            return .antiCheat(reason: record.antiCheatBadge.reason, gameStarts: record.mac.state != .unsupported)
+        }
+        if record.mac.state == .unsupported { return .unsupported(reason: record.mac.reason) }
+        return nil
     }
 
     /// The anti-cheat that stops the game outright, named for the reason

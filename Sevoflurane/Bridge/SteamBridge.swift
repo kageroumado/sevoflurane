@@ -98,6 +98,16 @@ actor SteamBridge {
         onGameLaunch = handler
     }
 
+    /// Asked before the page opens Steam's install wizard for one game
+    /// (`SteamClient.Installs.OpenInstallWizard`, the library's Install
+    /// button): whether the install goes ahead. The app answers by warning
+    /// about a game known to fail here (``InstallWarning``).
+    var installGate: (@Sendable (Int) async -> Bool)?
+
+    func setInstallGate(_ gate: @escaping @Sendable (Int) async -> Bool) {
+        installGate = gate
+    }
+
     /// Told when the client's transport goes away — the earliest sign of a
     /// dying client, seconds before the launcher exits.
     private var onClientConnectionLost: (@Sendable () -> Void)?

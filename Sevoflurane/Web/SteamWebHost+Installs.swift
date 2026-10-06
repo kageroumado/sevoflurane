@@ -42,6 +42,33 @@ extension SteamWebHost {
         }
     }
 
+    /// Whether an install the page asked for goes ahead: at once for a game
+    /// nothing known stands against, after ``InstallWarning`` for one that
+    /// anti-cheat or an Unsupported verdict does. The warning follows the
+    /// Mac compatibility switch, as the strip and the library's badges do.
+    func confirmInstall(appID: Int) async -> Bool {
+        guard Preferences.compatibilityStrip else { return true }
+        let name = await evaluateInContext(
+            "(function () { try { var o = appStore.GetAppOverviewByAppID(\(appID)); return (o && o.display_name) || ''; } catch (e) { return ''; } })()",
+        ).flatMap { $0.isEmpty ? nil : $0 } ?? gameName(appID)
+        let record = try? await withDeadline(InstallWarning.patience) {
+            await GameCompatService.shared.record(appID: appID, name: name, deckCategory: nil)
+        }
+        guard let record, let risk = GameCompatVerdict.installRisk(record) else { return true }
+        let nativePlays = record.nativeBadge.map { $0.state == .verified || $0.state == .playable } ?? false
+        let install = await withCheckedContinuation { continuation in
+            ModalAlerts.present {
+                continuation.resume(returning: InstallWarning.ask(risk, name: name, nativePlays: nativePlays))
+            }
+        }
+        EventLog.shared.log(
+            .client,
+            "install \(appID): warned (\(record.mac.label), anti-cheat \(record.antiCheatBadge.label)); "
+                + (install ? "installing anyway" : "canceled"),
+        )
+        return install
+    }
+
     /// Subscribes the context page to Steam's install wizard. Each update carries
     /// the install manager's state (`eInstallState`, 0 when the wizard is closed)
     /// and the app it is installing, and comes back through the popup message
