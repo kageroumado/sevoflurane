@@ -65,7 +65,7 @@ nonisolated enum ConfigMaterializer {
             // A tool recorded as a game's before the filter knew it would start
             // through the game's bundle, with its settings, from any launch.
             let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
-            var game = GameFiles(appID: appID, settings: gameLines(appID, values), exes: exes)
+            var game = GameFiles(appID: appID, settings: gameLines(appID, values, bottle: name), exes: exes)
             if let title = values.name, !values.runsNatively,
                let loader = GameLaunchers.materialize(
                    appID: appID, title: title, engine: engine,
@@ -255,6 +255,9 @@ nonisolated enum ConfigMaterializer {
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
         lines.append("SEVO_OVERLAY_LEVEL=\(GameConfig.overlayDetail(bottle: name).value.rawValue)")
+        lines.append(frameGraphLine(
+            GameConfig.overlayDetail(bottle: name).value, counterShown: GameConfig.fps(bottle: name).value,
+        ))
         lines.append("SEVO_FPS_LIMIT=\(GameConfig.frameRateLimit(bottle: name).value.framesPerSecond)")
         lines += GameConfig.tuningParameters(bottle: name).environment.map { "\($0.key)=\($0.value)" }
         // What a running game's View menu needs: the engine's name for its
@@ -300,8 +303,9 @@ nonisolated enum ConfigMaterializer {
     /// through to the bottle's file, which the engine reads first. What the
     /// game sets is written even when it equals the bottle's value: the
     /// bottle's file can change under it, and the game's own choice holds.
+    /// `bottle` answers for the half of a paired line the game leaves to it.
     static func gameLines(
-        _ appID: Int, _ values: ConfigValues, engine: URL = Engine.active.root,
+        _ appID: Int, _ values: ConfigValues, bottle: String = SteamBottle.name, engine: URL = Engine.active.root,
     ) -> [String] {
         var lines = ["# app \(appID)" + (values.name.map { " \($0)" } ?? "")]
         if let renderer = values.renderer {
@@ -335,6 +339,12 @@ nonisolated enum ConfigMaterializer {
         if let detail = values.overlayDetail {
             lines.append("SEVO_OVERLAY_LEVEL=\(detail.rawValue)")
         }
+        if values.overlayDetail != nil || values.fps != nil {
+            lines.append(frameGraphLine(
+                values.overlayDetail ?? GameConfig.overlayDetail(bottle: bottle).value,
+                counterShown: values.fps ?? GameConfig.fps(bottle: bottle).value,
+            ))
+        }
         // No limit is `SEVO_FPS_LIMIT=0`, written so a game asking for none
         // overrides a bottle that limits.
         if let limit = values.frameRateLimit {
@@ -346,6 +356,13 @@ nonisolated enum ConfigMaterializer {
         }
         lines += UserEnvironment.lines(values.environment)
         return lines
+    }
+
+    /// The variable an engine older than `SEVO_OVERLAY_LEVEL` reads for level
+    /// 2, which also shows the counter; so it is on only where the counter
+    /// already is. An engine that reads the level takes it from that line.
+    static func frameGraphLine(_ detail: OverlayDetail, counterShown: Bool) -> String {
+        "SEVO_FPS_GRAPH=\(detail.showsFrameGraph && counterShown ? "1" : "0")"
     }
 
     /// What gives one game a renderer of its own: the payload's own directory

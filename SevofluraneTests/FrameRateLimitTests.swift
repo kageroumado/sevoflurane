@@ -72,4 +72,40 @@ struct FrameRateLimitTests {
         values.setFrameGraph(nil, counterShown: true)
         #expect(values.overlayDetail == nil)
     }
+
+    @Test
+    func `older engines get the graph exactly where the counter shows level 2 or 3`() {
+        #expect(ConfigMaterializer.frameGraphLine(.frameTime, counterShown: true) == "SEVO_FPS_GRAPH=1")
+        #expect(ConfigMaterializer.frameGraphLine(.system, counterShown: true) == "SEVO_FPS_GRAPH=1")
+        #expect(ConfigMaterializer.frameGraphLine(.frameRate, counterShown: true) == "SEVO_FPS_GRAPH=0")
+        // The graph line shows the counter in an older engine, so a hidden one stays hidden.
+        #expect(ConfigMaterializer.frameGraphLine(.system, counterShown: false) == "SEVO_FPS_GRAPH=0")
+
+        var values = ConfigValues.empty
+        #expect(!ConfigMaterializer.gameLines(1, values).contains { $0.hasPrefix("SEVO_FPS_GRAPH=") })
+        values.overlayDetail = .frameTime
+        values.fps = true
+        #expect(ConfigMaterializer.gameLines(1, values).contains("SEVO_FPS_GRAPH=1"))
+        values.fps = false
+        #expect(ConfigMaterializer.gameLines(1, values).contains("SEVO_FPS_GRAPH=0"))
+        #expect(ConfigMaterializer.bottleLines(SteamBottle.name).contains { $0.hasPrefix("SEVO_FPS_GRAPH=") })
+    }
+
+    @Test
+    func `a stored graph switch becomes the frame time card it drew`() throws {
+        let on = try #require(GameConfig.migratedFrameGraph(Data(#"{"fpsGraph":true,"hud":true}"#.utf8)))
+        #expect(on.overlayDetail == .frameTime)
+        #expect(on.fps == true)
+        #expect(on.hud == true)
+
+        let off = try #require(GameConfig.migratedFrameGraph(Data(#"{"fpsGraph":false,"fps":true}"#.utf8)))
+        #expect(off.overlayDetail == nil)
+        #expect(off.fps == true)
+
+        // A level that already names its detail keeps it.
+        let named = try #require(GameConfig.migratedFrameGraph(Data(#"{"fpsGraph":true,"overlayDetail":"3"}"#.utf8)))
+        #expect(named.overlayDetail == .system)
+
+        #expect(GameConfig.migratedFrameGraph(Data(#"{"fps":true}"#.utf8)) == nil)
+    }
 }

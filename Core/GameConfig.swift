@@ -922,6 +922,38 @@ nonisolated enum GameConfig {
     private static func migrateIfNeeded() {
         migrateWindowSwitches()
         migrateRendererPins()
+        _ = frameGraphMigration
+    }
+
+    /// Every level's file, the frame time graph switch stored in it becoming
+    /// the overlay detail it stands for; once a process, since a rewritten
+    /// file no longer carries the key.
+    private static let frameGraphMigration: Void = {
+        let manager = FileManager.default
+        var urls = [globalURL]
+        for directory in [bottlesRoot, gamesRoot] {
+            let entries = (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            urls += entries.filter { $0.pathExtension == "json" }
+        }
+        for url in urls {
+            guard let data = try? Data(contentsOf: url),
+                  let values = migratedFrameGraph(data) else { continue }
+            write(values, to: url)
+        }
+    }()
+
+    /// A level stored with `fpsGraph`, as it reads once that switch is the
+    /// overlay detail: on is the frame-time card with the counter shown,
+    /// which is what the graph switch drew. `nil` for a file without the key.
+    static func migratedFrameGraph(_ data: Data) -> ConfigValues? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let graph = object["fpsGraph"] as? Bool,
+              var values = try? JSONDecoder().decode(ConfigValues.self, from: data) else { return nil }
+        if graph, values.overlayDetail == nil {
+            values.overlayDetail = .frameTime
+            values.fps = true
+        }
+        return values
     }
 
     /// The two window switches that lived in the shared defaults become the
