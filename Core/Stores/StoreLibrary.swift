@@ -63,6 +63,9 @@ nonisolated enum StoreLibrary {
             plan = GOG.launchPlan(link.id, folder: URL(fileURLWithPath: installFolder(of: program, gog: link.id)))
         }
         guard let plan else { return (program, note) }
+        guard StorePaths.accepts(plan) else {
+            return (program, "\(link.id) named \(plan.executable) to start, outside its install folder, so the recorded program starts instead")
+        }
         var refreshed = program
         refreshed.path = URL(fileURLWithPath: plan.executable).standardizedFileURL.path
         refreshed.arguments = plan.arguments

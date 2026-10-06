@@ -118,6 +118,7 @@ struct StoreOutputTests {
          "environment":{},"pre_launch_command":"","pre_launch_wait":false}
         """
         let plan = Legendary.launchPlan(inJSON: text)
+        #expect(plan?.folder == "/Games/Owl")
         #expect(plan?.executable == "/Games/Owl/Binaries/Win64/Owl.exe")
         #expect(plan?.workingDirectory == "/Games/Owl/Binaries/Win64")
         #expect(plan?.arguments == [
@@ -182,6 +183,7 @@ struct StoreOutputTests {
         let folder = URL(fileURLWithPath: "/Games/Unreal Gold")
         let plan = GOG.launchPlan(inInfo: text, folder: folder)
         #expect(plan == StoreLaunchPlan(
+            folder: "/Games/Unreal Gold",
             executable: "/Games/Unreal Gold/System/Unreal.exe",
             workingDirectory: "/Games/Unreal Gold/System",
             arguments: ["-nohomedir", "-ini=My Config.ini"],

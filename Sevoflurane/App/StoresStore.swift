@@ -241,6 +241,11 @@ final class StoresStore {
 
     func install(_ title: StoreTitle, into base: URL) {
         run(.install, title.store, title.id, title.title) { onLine in
+            guard StorePaths.acceptsRoot(base) else {
+                throw StoreFailure("\(base.path) holds more than games; choose a folder of its own to install into")
+            }
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+            try StorePaths.rememberRoot(base)
             switch title.store {
             case .epic:
                 try await Legendary.install(title.id, base: base, onLine: onLine)
@@ -250,8 +255,13 @@ final class StoresStore {
                 try await Self.adopt(install)
             case .gog:
                 let build = try await GOG.build(title.id)
+                // gogdl joins GOG's folder name to the base as it stands, so
+                // a name that is more than one folder is never handed to it.
+                guard let name = build.folder, StorePaths.isComponent(name) else {
+                    throw StoreFailure("GOG names no usable folder for \(title.title)")
+                }
                 try await GOG.download(title.id, base: base, onLine: onLine)
-                let folder = base.appending(path: build.folder ?? title.title)
+                let folder = base.appending(path: name)
                 let install = StoreInstall(
                     store: .gog, id: title.id, title: title.title, path: folder.path,
                     version: build.id, versionName: build.name, size: build.size,
@@ -273,7 +283,7 @@ final class StoresStore {
                 }
             case .gog:
                 let build = try await GOG.build(install.id)
-                let base = URL(fileURLWithPath: install.path).deletingLastPathComponent()
+                let base = try Self.gogBase(install)
                 try await GOG.download(install.id, verb: "update", base: base, onLine: onLine)
                 var updated = install
                 updated.version = build.id
@@ -293,7 +303,7 @@ final class StoresStore {
             case .epic:
                 try await Legendary.repair(install.id, onLine: onLine)
             case .gog:
-                let base = URL(fileURLWithPath: install.path).deletingLastPathComponent()
+                let base = try Self.gogBase(install)
                 try await GOG.download(install.id, verb: "repair", base: base, onLine: onLine)
             }
             return String(localized: "Every file checks out.")
@@ -304,14 +314,15 @@ final class StoresStore {
     /// Trash and its Quick Launch entry is removed.
     func uninstall(_ install: StoreInstall) {
         run(.uninstall, install.store, install.id, install.title) { _ in
+            let folder = URL(fileURLWithPath: install.path)
+            guard StorePaths.root(containing: folder) != nil else {
+                throw StoreFailure("\(install.path) is outside the folders store games are installed in, so it was left in place")
+            }
             switch install.store {
             case .epic: try await Legendary.forget(install.id)
             case .gog: try GOG.forget(install.id)
             }
-            let folder = URL(fileURLWithPath: install.path)
-            if FileManager.default.fileExists(atPath: folder.path) {
-                try FileManager.default.trashItem(at: folder, resultingItemURL: nil)
-            }
+            try StorePaths.trash(folder)
             StoreLibrary.release(install.store, id: install.id)
             return String(localized: "Moved \(install.title) to the Trash.")
         }
@@ -328,10 +339,24 @@ final class StoresStore {
         case .gog: GOG.launchPlan(install.id, folder: URL(fileURLWithPath: install.path))
         }
         guard let plan else { throw StoreFailure("\(install.title) names no program to start") }
+        guard StorePaths.accepts(plan) else {
+            throw StoreFailure("\(install.title) names \(plan.executable) to start, outside its install folder")
+        }
         await MainActor.run {
             StoreLibrary.adopt(install, plan: plan, bottle: SteamBottle.name)
             ConfigMaterializer.materializeInBackground(bottle: SteamBottle.name, prefix: SteamBottle.root)
         }
+    }
+
+    /// The folder a GOG install's own folder sits in, which gogdl is pointed
+    /// at again to update or check it, once the install is placed inside a
+    /// managed root.
+    private nonisolated static func gogBase(_ install: StoreInstall) throws -> URL {
+        let folder = URL(fileURLWithPath: install.path)
+        guard StorePaths.root(containing: folder) != nil else {
+            throw StoreFailure("\(install.path) is outside the folders store games are installed in")
+        }
+        return StorePaths.resolved(folder).deletingLastPathComponent()
     }
 
     /// Gives every installed title without a Quick Launch entry one: those

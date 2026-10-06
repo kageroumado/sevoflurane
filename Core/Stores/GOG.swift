@@ -210,6 +210,7 @@ nonisolated enum GOG {
     /// left for the caller.
     static func forget(_ id: String) throws {
         try save(installed().filter { $0.id != id })
+        guard StorePaths.isComponent(id) else { return }
         try? FileManager.default.removeItem(at: StoreTool.gogdl.configFolder.appending(path: "heroic_gogdl/manifests/\(id)"))
     }
 
@@ -254,7 +255,7 @@ nonisolated enum GOG {
             .map { folder.appending(path: macPath($0)).standardizedFileURL.path }
             ?? URL(fileURLWithPath: executable).deletingLastPathComponent().path
         return StoreLaunchPlan(
-            executable: executable, workingDirectory: directory,
+            folder: folder.standardizedFileURL.path, executable: executable, workingDirectory: directory,
             arguments: StoreOutput.splitArguments(task.arguments ?? ""),
         )
     }

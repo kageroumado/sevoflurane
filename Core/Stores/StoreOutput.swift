@@ -30,6 +30,9 @@ nonisolated struct StoreInstall: Codable, Equatable, Sendable, Identifiable {
 /// What starts an installed title: its executable, the folder it starts in
 /// and its arguments, sign-in arguments included.
 nonisolated struct StoreLaunchPlan: Equatable, Sendable {
+    /// The game's own folder, which the executable and the working folder
+    /// must lie in (``StorePaths/accepts(_:roots:protected:)``).
+    let folder: String
     let executable: String
     let workingDirectory: String
     let arguments: [String]

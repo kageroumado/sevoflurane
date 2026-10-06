@@ -63,12 +63,16 @@ nonisolated enum Legendary {
         return diskSize(inInfo: result.stdout)
     }
 
-    /// Downloads a title into a folder of its own under `base`, or brings an
-    /// installed one current.
+    /// Downloads a title into a folder of its own under `base`, named after
+    /// its app name rather than the folder Epic's metadata gives, which
+    /// legendary would join to `base` as it stands.
     static func install(_ id: String, base: URL, onLine: @escaping @Sendable (String) -> Void) async throws {
+        guard let folder = StorePaths.folderName(id, fallback: id) else {
+            throw StoreFailure("\(id) cannot name a folder")
+        }
         let arguments = [
             "-y", "install", id, "--platform", "Windows", "--base-path", base.path,
-            "--skip-sdl", "--skip-dlcs",
+            "--game-folder", folder, "--skip-sdl", "--skip-dlcs",
         ]
         let result = try await StoreProcess.run(.legendary, arguments, onLine: onLine)
         guard result.succeeded else { throw StoreFailure(result.failure) }
@@ -260,6 +264,7 @@ nonisolated enum Legendary {
             return key + SteamBottle.windowsPath(for: URL(fileURLWithPath: String(argument.dropFirst(key.count))))
         }
         return StoreLaunchPlan(
+            folder: URL(fileURLWithPath: parameters.gameDirectory).standardizedFileURL.path,
             executable: executable, workingDirectory: directory,
             arguments: own.map(unquoted) + epic,
         )
