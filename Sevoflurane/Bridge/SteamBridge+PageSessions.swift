@@ -171,6 +171,11 @@ extension SteamBridge {
         }
         let handle = Self.handle(session.serial, rid)
         let handleJS = Self.jsonText(handle) ?? "\"?\""
+        if await Self.handsOffToSteamForMac(path: path, request: request) {
+            // The page's call settles as the client's would.
+            ws.send(text: Self.resultReply(rid: rid, outcome: ["ok": true, "v": NSNull()]))
+            return
+        }
         if path == "SteamClient.Apps.RunGame" {
             // The one choke point every launch funnels through — menu bar,
             // the library's Play button, steam://run. Reconcile the renderer
@@ -233,6 +238,14 @@ extension SteamBridge {
             registrations.removeValue(forKey: handle)
         }
         ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
+    }
+
+    /// Whether a call is a `RunGame` for a game set to its macOS build, which
+    /// Steam for Mac then has instead of the client (``MacBuildHandoff``).
+    private static func handsOffToSteamForMac(path: String, request: [String: Any]) async -> Bool {
+        guard path == "SteamClient.Apps.RunGame",
+              let appID = (request["args"] as? [Any])?.first.flatMap({ Int("\($0)") }) else { return false }
+        return await MacBuildHandoff.takeRunGame(appID: appID)
     }
 
     /// Whether `path` names a member of `SteamClient` by dotted identifiers

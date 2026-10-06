@@ -348,6 +348,11 @@ final class SteamWindow: NSObject {
                url.scheme == "http" || url.scheme == "https" {
                 NSWorkspace.shared.open(url)
             }
+        case "__playMacBuild":
+            // The compat strip's "Play in Steam for Mac".
+            if let appID = Int(string(args, 0)) {
+                MacBuildHandoff.playMacBuild(appID: appID)
+            }
         case "__steamNotification":
             // The context page's toast subscription
             // (SteamWebHost.notificationScript), one decoded notification.

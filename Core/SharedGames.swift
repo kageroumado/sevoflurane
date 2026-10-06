@@ -215,24 +215,26 @@ nonisolated enum SharedGames {
         }
     }
 
-    /// The fields worth having out of an ACF: a flat `"key" "value"` format,
-    /// so a full VDF parser would be ceremony.
     private static func read(
         manifest url: URL,
     ) -> (appID: Int, name: String, installdir: String, bytes: Int64)? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        func value(_ key: String) -> String? {
-            guard let range = text.range(of: "\"\(key)\"") else { return nil }
-            let rest = text[range.upperBound...]
-            guard let open = rest.firstIndex(of: "\""),
-                  let close = rest[rest.index(after: open)...].firstIndex(of: "\"")
-            else { return nil }
-            return String(rest[rest.index(after: open) ..< close])
-        }
+        func value(_ key: String) -> String? { manifestValue(key, in: text) }
         guard let id = value("appid").flatMap(Int.init),
               let name = value("name"),
               let installdir = value("installdir") else { return nil }
         return (id, name, installdir, value("SizeOnDisk").flatMap(Int64.init) ?? 0)
+    }
+
+    /// The first value of `key` in an ACF manifest: a flat `"key" "value"`
+    /// format at the top, so a full VDF parser would be ceremony.
+    static func manifestValue(_ key: String, in text: String) -> String? {
+        guard let range = text.range(of: "\"\(key)\"") else { return nil }
+        let rest = text[range.upperBound...]
+        guard let open = rest.firstIndex(of: "\""),
+              let close = rest[rest.index(after: open)...].firstIndex(of: "\"")
+        else { return nil }
+        return String(rest[rest.index(after: open) ..< close])
     }
 
     private struct LinkError: LocalizedError {

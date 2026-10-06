@@ -28,7 +28,9 @@ extension AppCommand {
             holding the cursor for mouse-look the mouse's own displacement, \
             unshaped by the pointer acceleration curve), runner (wine | \
             nwjs — nwjs runs an NW.js game in native macOS NW.js and \
-            downloads the runtime the first time), detect to look at the \
+            downloads the runtime the first time), build (windows | mac — \
+            mac hands Play to Steam for Mac, for a game sold for macOS), \
+            detect to look at the \
             game's files again, exe <name> to name an executable the game \
             runs under before its first launch has recorded one. Omit the \
             key to print every setting with the level it comes from.
@@ -38,7 +40,7 @@ extension AppCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | recommended | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | build | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -106,6 +108,8 @@ extension AppCommand {
                 print("\(resolved.value.rawValue) \(parameters.argument) (\(resolved.source))")
             case "runner":
                 print(values.runner ?? GameRunner.wine)
+            case "build":
+                print((values.build ?? .windows).rawValue)
             case "exe":
                 print((values.exes ?? []).joined(separator: "\n"))
             default:
@@ -150,6 +154,12 @@ extension AppCommand {
             case "runner":
                 try await setRunner(value)
                 ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
+            case "build":
+                guard value == "inherit" || GameBuild(rawValue: value) != nil else {
+                    Sevo.printError("build must be windows or mac")
+                    throw SevoExit.badInvocation
+                }
+                updateGame(bottle: bottle) { $0.build = GameBuild(rawValue: value) == .mac ? .mac : nil }
             case "exe":
                 GameConfig.noteExecutable(value, forApp: appid)
                 ConfigMaterializer.materialize(bottle: bottle, prefix: SteamBottle.root)
@@ -162,7 +172,7 @@ extension AppCommand {
         /// goes with it.
         private static func unknownKey(_ key: String) -> ExitCode {
             Sevo.printError("unknown key '\(key)' (renderer | windows | upscaler | filter | "
-                + "mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | "
+                + "mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | build | "
                 + "recommended | detect | exe)")
             return SevoExit.badInvocation
         }

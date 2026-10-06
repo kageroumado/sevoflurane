@@ -108,7 +108,7 @@ enum SteamCompatBadge {
         return tier && tier !== "na" && tier !== "unknown" ? tier : null;
       }
     
-      function panelHTML(record) {
+      function panelHTML(record, appid) {
         var rows = [];
         var mac = record.mac || {};
         var ac = record.antiCheatBadge || {};
@@ -116,7 +116,9 @@ enum SteamCompatBadge {
         rows.push(row(mac.state, "<b>Windows version:</b> " + esc(mac.reason), record.wiki && link(record.wiki.pageURL, "AppleGamingWiki")));
         var arch = record.macArchitectures;
         if (record.nativeBadge) {
-          rows.push(row(record.nativeBadge.state, "<b>macOS version:</b> " + esc(record.nativeBadge.reason)));
+          var play = record.nativeBadge.state !== "unsupported"
+            ? '<a class="sevo-compat-link sevo-compat-play" data-appid="' + esc(appid) + '">Play in Steam for Mac</a>' : "";
+          rows.push(row(record.nativeBadge.state, "<b>macOS version:</b> " + esc(record.nativeBadge.reason), play));
         } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
           rows.push(row("unsupported", "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
         }
@@ -175,7 +177,7 @@ enum SteamCompatBadge {
           + SEP + cell("Anti-Cheat", ac)
           + '<div class="sevo-compat-details" role="button" tabindex="0">' + (open[appid] ? "Hide" : "Details") + "</div>";
         if (record) {
-          panel.innerHTML = panelHTML(record);
+          panel.innerHTML = panelHTML(record, appid);
           panel.hidden = !open[appid];
         } else {
           panel.hidden = true;
@@ -196,6 +198,12 @@ enum SteamCompatBadge {
     
       function onClick(event) {
         var target = event.target;
+        var play = target.closest && target.closest(".sevo-compat-play");
+        if (play) {
+          event.preventDefault();
+          playMac(play.getAttribute("data-appid"));
+          return;
+        }
         var anchor = target.closest && target.closest(".sevo-compat-link");
         if (anchor) {
           event.preventDefault();
@@ -307,6 +315,12 @@ enum SteamCompatBadge {
         } catch (e) {}
       }
     
+      function playMac(appid) {
+        try {
+          window.webkit.messageHandlers.sevoWindow.postMessage({ fn: "__playMacBuild", args: [appid] });
+        } catch (e) {}
+      }
+    
       function load(appid, strip, panel) {
         if (records[appid]) { render(strip, panel, appid, records[appid]); return; }
         var o = overview(appid);
@@ -400,6 +414,11 @@ enum SteamCompatBadge {
       function openExternal(url) {
         var h = handler();
         if (h) h.postMessage({ open: url });
+      }
+    
+      function playMac(appid) {
+        var h = handler();
+        if (h) h.postMessage({ playMac: Number(appid) });
       }
     
       function currentAppID() {

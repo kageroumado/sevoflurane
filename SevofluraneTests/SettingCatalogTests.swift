@@ -22,9 +22,19 @@ struct SettingCatalogTests {
         #expect(Set(SettingCatalog.all.map(\.id)) == Set(SettingID.allCases))
         #expect(SettingCatalog.all.count == SettingID.allCases.count)
         for group in SettingGroup.allCases {
-            #expect(!SettingCatalog.settings(in: group, at: .bottle).isEmpty)
+            // The build is a game's alone: it chooses between two programs.
+            if group != .build { #expect(!SettingCatalog.settings(in: group, at: .bottle).isEmpty) }
             #expect(!SettingCatalog.settings(in: group, at: .game).isEmpty)
         }
+    }
+
+    @Test
+    func `a row offered for some games is left out for the rest`() {
+        // The test home has no Steam app cache, so no game lists a macOS build.
+        #expect(SettingCatalog.settings(in: .build, at: .game, game: 1_145_350).isEmpty)
+        #expect(SettingCatalog.settings(in: .build, at: .game).map(\.id) == [.build])
+        #expect(SettingCatalog.settings(in: .picture, at: .game, game: 1_145_350).count
+            == SettingCatalog.settings(in: .picture, at: .game).count)
     }
 
     @Test
@@ -51,6 +61,14 @@ struct SettingCatalogTests {
             let entries = ConfigRegistry.gameEntries(values)
             let value = setting.read(values)
             switch setting.carrier {
+            case .play:
+                // The app reads it at Play, where it changes where Play goes.
+                #expect(
+                    MacBuildRoute.decide(appID: 1, build: values.build, hasSteamForMac: true, installedThere: true)
+                        != .windows,
+                    "\(setting.id) changes where no Play goes",
+                )
+                continue
             case .rendererPayload:
                 // Either the env file carries it, or the row says the client will.
                 #expect(
@@ -68,7 +86,7 @@ struct SettingCatalogTests {
                 }
             case let .registry(name):
                 #expect(entries.contains { $0.name == name }, "\(setting.id) writes no \(name)")
-            case .rendererPayload:
+            case .rendererPayload, .play:
                 break
             }
         }
@@ -89,7 +107,7 @@ struct SettingCatalogTests {
                 }
             case let .registry(name):
                 #expect(entries.contains { $0.name == name }, "\(setting.id) writes no \(name)")
-            case .rendererPayload:
+            case .rendererPayload, .play:
                 break
             }
         }

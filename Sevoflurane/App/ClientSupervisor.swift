@@ -300,7 +300,15 @@ final class ClientSupervisor {
         await launch(appID: game.id, name: game.name, renderer: explicit)
     }
 
+    /// A game set to its macOS build goes to Steam for Mac instead
+    /// (``MacBuildHandoff``); one started on a chosen renderer is a Windows
+    /// launch whatever it is set to.
     func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
+        if explicit != nil {
+            MacBuildHandoff.allowWindowsLaunch(appID: appID)
+        } else if MacBuildHandoff.take(appID: appID, name: name) {
+            return
+        }
         var path = "/game/launch?appid=\(appID)&name=\(Self.escaped(name))"
         if let explicit { path += "&renderer=\(explicit.rawValue)" }
         guard await DaemonService.post(path, timeout: 300) != nil else {

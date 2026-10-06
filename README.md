@@ -479,6 +479,10 @@ runs on CrossOver.
   "quit unexpectedly" dialog or crash report behind.
 - NW.js games, including RPG Maker MV and MZ, run on a macOS runtime with
   Steam playtime and achievements.
+- A game Steam sells for macOS can play its Mac version instead: Play hands
+  it to Valve's Steam for Mac, which opens its install page where the game
+  is not installed yet. Set per game in Settings › Games or the game's menu
+  in the menu bar; the compat strip's Details play it once.
 - Discord shows "Playing <game>" under the game's own Discord entry. Games
   with their own Discord support publish their own status through a relay in
   the bottle **(Dormison)**. Two switches in Settings › General.

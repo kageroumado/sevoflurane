@@ -329,6 +329,10 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
     /// version, naming a runner this one does not know, still reads.
     var runner: String?
+    /// Game level only: whether Play starts the Windows build in the bottle
+    /// (the default) or the game's own macOS build through Steam for Mac
+    /// (``MacBuildRoute``). Read by the app at every Play.
+    var build: GameBuild?
     /// Game level only: what ``NWJSGames`` found about the game's own NW.js
     /// build, recorded whether or not the native runner is switched on.
     var nwjs: NWJSInfo?
@@ -355,7 +359,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false
             || hud != nil || fps != nil || fpsGraph != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
-            || unifiedMemory != nil || tuning != nil || processors != nil
+            || unifiedMemory != nil || tuning != nil || processors != nil || build != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.

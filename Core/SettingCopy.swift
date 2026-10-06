@@ -146,6 +146,27 @@ nonisolated extension SettingCopy {
         caption: "During mouse-look the pointer stays off your other displays.",
     )
 
+    static let build = SettingCopy(
+        title: "Play",
+        caption: "The macOS version starts in Steam for Mac, with the game installed there.",
+        help: SettingHelp(
+            title: "Windows or macOS version",
+            summary: "Steam sells this game for macOS too. Play can start either version.",
+            entries: [
+                .init(
+                    name: GameBuild.windows.label,
+                    text: "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it.",
+                ),
+                .init(
+                    name: GameBuild.mac.label,
+                    text: "The game's own macOS version, started by Valve's Steam for Mac, which needs the game "
+                        + "installed there. Play opens its install page when the game is not, and the settings "
+                        + "on this page stay with the Windows version.",
+                ),
+            ],
+        ),
+    )
+
     static let retina = SettingCopy(
         title: "High-resolution mode",
         caption: "Games see the display's real pixel count. Older games draw tiny text and menus.",

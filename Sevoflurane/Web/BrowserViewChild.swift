@@ -310,7 +310,8 @@ extension BrowserViewChild: WKUIDelegate {
 /// Answers the store page's Mac compatibility strip: the record for a game
 /// (``GameCompatService``), the same one the library page draws, or
 /// `{"off": true}` while Settings has the strip off. A message carrying
-/// `open` is a source link, opened in the default browser.
+/// `open` is a source link, opened in the default browser; one carrying
+/// `playMac` starts the game's macOS build in Steam for Mac.
 private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithReply {
     func userContentController(
         _: WKUserContentController, didReceive message: WKScriptMessage,
@@ -320,6 +321,10 @@ private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithRepl
               let body = message.body as? [String: Any] else { return (nil, "refused") }
         if let link = body["open"] as? String {
             if let url = URL(string: link), url.scheme == "https" { NSWorkspace.shared.open(url) }
+            return (nil, nil)
+        }
+        if let appID = (body["playMac"] as? NSNumber)?.intValue, appID > 0 {
+            MacBuildHandoff.playMacBuild(appID: appID)
             return (nil, nil)
         }
         guard Preferences.compatibilityStrip else { return (#"{"off":true}"#, nil) }

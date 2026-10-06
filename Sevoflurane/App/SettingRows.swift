@@ -8,15 +8,33 @@ struct SettingSections: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
     /// The game the sections belong to, over the first of them.
-    var heading: String?
+    let heading: String?
     /// What the fix table says about that game.
-    var recommendation = KnownFixes.Recommendation(fixes: [])
+    let recommendation: KnownFixes.Recommendation
+    /// The groups with a row at this level, each with its rows, read once:
+    /// whether a row is offered for a game can take a read of Steam's app
+    /// cache.
+    private let groups: [(group: SettingGroup, settings: [Setting])]
+
+    init(
+        store: SettingsStore, shaders: ShaderStore, highlighted: SettingsAnchor?, heading: String? = nil,
+        recommendation: KnownFixes.Recommendation = KnownFixes.Recommendation(fixes: []),
+    ) {
+        self.store = store
+        self.shaders = shaders
+        self.highlighted = highlighted
+        self.heading = heading
+        self.recommendation = recommendation
+        groups = SettingGroup.allCases
+            .map { ($0, SettingCatalog.settings(in: $0, at: store.level, game: store.scope.game)) }
+            .filter { !$0.settings.isEmpty }
+    }
 
     var body: some View {
         let level = store.level
-        ForEach(SettingGroup.allCases, id: \.self) { group in
+        ForEach(groups, id: \.group) { group, settings in
             Section {
-                ForEach(SettingCatalog.settings(in: group, at: level)) { setting in
+                ForEach(settings) { setting in
                     SettingRow(
                         setting: setting, store: store, shaders: shaders,
                         recommended: setting.recommended(recommendation),
@@ -24,7 +42,7 @@ struct SettingSections: View {
                     .highlightable(setting.id.anchor(at: level), highlighted: highlighted)
                 }
             } header: {
-                SettingGroupHeader(title: group.title, heading: group == .picture ? heading : nil)
+                SettingGroupHeader(title: group.title, heading: group == groups.first?.group ? heading : nil)
             } footer: {
                 if let footer = Self.footer(of: group, at: level) { Text(footer) }
             }
@@ -106,7 +124,8 @@ struct SettingRow: View {
     /// inherits, then what the setting — or the value in force — is.
     private var caption: String {
         let what = setting.detail?(store.effective(setting)) ?? setting.copy.caption
-        guard store.level == .game, store.own(setting) == nil, setting.control != .toggle else { return what }
+        guard store.level == .game, store.own(setting) == nil, setting.control != .toggle, setting.inherits
+        else { return what }
         let inherited = String(localized: "Engine's value: \(setting.label(of: store.inherited(setting))).")
         return what.isEmpty ? inherited : "\(inherited) \(what)"
     }
@@ -147,10 +166,11 @@ private struct SettingControlView: View {
                 Text("Off").tag(Self.offTag)
             }
         case let (.choices(choices), level), let (.tuning(choices), level):
-            Picker(setting.title, selection: level == .game ? tag : store.choiceBinding(setting)) {
+            let inherits = level == .game && setting.inherits
+            Picker(setting.title, selection: inherits ? tag : store.choiceBinding(setting)) {
                 // A choice's label is too long to share the closed picker
                 // with "Inherit"; the row's line says what it stands for.
-                if level == .game { Text("Inherit").tag(Self.inheritTag) }
+                if inherits { Text("Inherit").tag(Self.inheritTag) }
                 ForEach(choices) { choice in
                     Text(choice.label).tag(choice.value)
                 }

@@ -5,6 +5,7 @@ import Foundation
 // needs to know about it. A pane draws the catalog; it names no key.
 
 nonisolated enum SettingID: String, CaseIterable, Sendable {
+    case build
     case renderer
     case windows
     case upscaler
@@ -25,12 +26,14 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
 
 /// The groups a pane shows, in order.
 nonisolated enum SettingGroup: String, CaseIterable, Sendable {
+    case build
     case picture
     case mouse
     case performance
 
     var title: String {
         let value = switch self {
+        case .build: "Version"
         case .picture: "Picture"
         case .mouse: "Mouse"
         case .performance: "Performance and compatibility"
@@ -94,6 +97,9 @@ nonisolated enum SettingCarrier: Equatable, Sendable {
     /// engine can hand one game a renderer, and otherwise the client, which
     /// restarts on that renderer around the game's launch.
     case rendererPayload
+    /// The app, which reads the value at every Play and starts the game
+    /// through Steam for Mac where it says so (``MacBuildRoute``).
+    case play
 }
 
 nonisolated struct Setting: Identifiable, Sendable {
@@ -115,6 +121,11 @@ nonisolated struct Setting: Identifiable, Sendable {
     /// The line under the row where it follows the value in force; the
     /// copy's own caption stands elsewhere.
     var detail: (@Sendable (SettingValue) -> String?)?
+    /// Whether the row is offered for a game; every game gets it when `nil`.
+    var offered: (@Sendable (_ game: Int) -> Bool)?
+    /// Whether a game can leave the value to the level above. A setting
+    /// with no level above shows its default instead of Inherit.
+    var inherits = true
 
     var title: String { copy.title }
 
@@ -184,6 +195,20 @@ nonisolated extension Setting {
 nonisolated enum SettingCatalog {
     /// Every setting, in the order a pane shows them.
     static let all: [Setting] = [
+        // Offered where Steam sells a macOS build. The bottle has no say: the
+        // choice is between two programs, made per game.
+        Setting(
+            id: .build, group: .build, levels: [.game], copy: .build,
+            control: .choices(GameBuild.allCases.map { SettingChoice(value: $0.rawValue, label: $0.label) }),
+            carrier: .play,
+            read: { $0.build.map { .choice($0.rawValue) } },
+            write: { $0.build = $1?.choice.flatMap(GameBuild.init(rawValue:)) },
+            resolved: { _, _ in .choice(GameBuild.windows.rawValue) },
+            reach: { _ in .nextLaunch },
+            recommended: { _ in nil },
+            offered: { SteamAppInfo.platforms(appID: $0).contains("macos") },
+            inherits: false,
+        ),
         // Automatic is the bottle's business — it consults CrossOver's own
         // per-game database — so a game names a layer or inherits. The bottle's
         // own renderer is Settings › Graphics', which is what a game inherits.
@@ -285,7 +310,13 @@ nonisolated enum SettingCatalog {
         all.first { $0.id == id }!
     }
 
-    static func settings(in group: SettingGroup, at level: SettingLevel) -> [Setting] {
-        all.filter { $0.group == group && $0.levels.contains(level) }
+    /// The rows a group shows at a level; for a game, the ones offered for
+    /// it.
+    static func settings(in group: SettingGroup, at level: SettingLevel, game: Int? = nil) -> [Setting] {
+        all.filter { setting in
+            guard setting.group == group, setting.levels.contains(level) else { return false }
+            guard let game, let offered = setting.offered else { return true }
+            return offered(game)
+        }
     }
 }

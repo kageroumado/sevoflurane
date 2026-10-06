@@ -87,6 +87,8 @@ private nonisolated struct GameRowFacts: Equatable, Sendable {
     let pinned: Renderer?
     let restartFor: Renderer?
     let dockBundle: URL?
+    /// What Play starts, for a game Steam sells a macOS build of.
+    let macBuild: GameBuild?
 }
 
 /// Reads the rows' facts from the game configs off the main actor rather
@@ -133,6 +135,8 @@ private struct GameRowFactsReader: ViewModifier {
                 pinned: GameConfig.game(id).renderer,
                 restartFor: BottleGraphics.rendererNeedingRestart(forApp: id),
                 dockBundle: GameLaunchers.dockableBundle(appID: id),
+                macBuild: SteamAppInfo.platforms(appID: id).contains("macos")
+                    ? GameConfig.game(id).build ?? .windows : nil,
             ))
         })
     }
@@ -185,6 +189,7 @@ private struct RecentGames: View {
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
+                        macBuild: facts[game.id]?.macBuild,
                         isHeldInCloudSync: heldInCloudSync.contains(game.id),
                         renderers: renderers,
                         supervisor: supervisor,
@@ -224,6 +229,7 @@ private struct LibraryIndexList: View {
                         pinned: facts[game.id]?.pinned,
                         restartFor: facts[game.id]?.restartFor,
                         dockBundle: facts[game.id]?.dockBundle,
+                        macBuild: facts[game.id]?.macBuild,
                         isHeldInCloudSync: heldInCloudSync.contains(game.id),
                         renderers: renderers,
                         supervisor: supervisor,
@@ -251,6 +257,8 @@ private struct GameRow: View {
     let restartFor: Renderer?
     /// The game's own bundle, once a launch has built one.
     let dockBundle: URL?
+    /// What Play starts, for a game Steam sells a macOS build of.
+    let macBuild: GameBuild?
     /// The client has kept this game at Synchronizing for longer than a sync takes.
     let isHeldInCloudSync: Bool
     /// The renderers the machine offers a game right now (``GraphicsStore/menuRenderers``).
@@ -331,6 +339,13 @@ private struct GameRow: View {
                     Text(renderer.label).tag(Renderer?.some(renderer))
                 }
             }
+            if macBuild != nil {
+                Picker("Play", selection: buildBinding) {
+                    ForEach(GameBuild.allCases, id: \.self) { build in
+                        Text(build.label).tag(build)
+                    }
+                }
+            }
             Divider()
             KeepInDockItem(bundle: dockBundle)
             GameSettingsItem(id: game.id, name: game.name)
@@ -348,6 +363,9 @@ private struct GameRow: View {
             return isHeldInCloudSync
                 ? (Text("Steam is stuck synchronizing. Restart Steam to play."), true)
                 : (Text("Synchronizing with Steam Cloud"), false)
+        }
+        if macBuild == .mac {
+            return (Text("Plays in Steam for Mac"), false)
         }
         if let restartFor {
             // Pinned to a renderer the running client did not boot with: the
@@ -384,6 +402,19 @@ private struct GameRow: View {
             if $0.name == nil { $0.name = game.name }
         }
         onPinChanged()
+    }
+
+    /// Which build Play starts; Windows is the default, which no file holds.
+    private var buildBinding: Binding<GameBuild> {
+        Binding(get: { macBuild ?? .windows }, set: { build in
+            GameConfig.update(
+                game: game.id, bottle: SteamBottle.name, prefix: SteamBottle.root, inBackground: true,
+            ) {
+                $0.build = build == .mac ? .mac : nil
+                if $0.name == nil { $0.name = game.name }
+            }
+            onPinChanged()
+        })
     }
 
     /// What the pin menu reads and writes.
