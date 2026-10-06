@@ -9,7 +9,7 @@ struct ConfigSwitchTests {
         let lines = ConfigMaterializer.bottleLines(SteamBottle.name)
         for key in [
             "MTL_HUD_ENABLED", "SEVO_LARGE_ADDRESS_AWARE",
-            "ROSETTA_ADVERTISE_AVX", "SEVO_CURSOR_CONFINE", "SEVO_FORCE_UMA",
+            "ROSETTA_ADVERTISE_AVX", "SEVO_CURSOR_CONFINE", "SEVO_FORCE_UMA", "SEVO_MENU_BAR",
         ] {
             let line = lines.first { $0.hasPrefix("\(key)=") }
             #expect(["\(key)=0", "\(key)=1"].contains(line ?? ""))
@@ -38,6 +38,7 @@ struct ConfigSwitchTests {
             { (v: inout ConfigValues) in v.avx = true },
             { (v: inout ConfigValues) in v.cursorConfine = true },
             { (v: inout ConfigValues) in v.unifiedMemory = true },
+            { (v: inout ConfigValues) in v.nativeMenuBar = true },
         ] {
             var values = ConfigValues.empty
             change(&values)
@@ -51,6 +52,7 @@ struct ConfigSwitchTests {
         #expect(GameConfig.defaults.largeAddressAware == true)
         #expect(GameConfig.defaults.hud == false)
         #expect(GameConfig.defaults.cursorConfine == false)
+        #expect(GameConfig.defaults.nativeMenuBar == false)
         // Unified memory is the experiment, so nothing has it until it is asked for.
         #expect(GameConfig.defaults.unifiedMemory == false)
         // The bottle has advertised AVX to every game since the translation

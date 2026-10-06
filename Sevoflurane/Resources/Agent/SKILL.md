@@ -24,7 +24,7 @@ in short.
 | `sevo app list` / `sevo app info <appid>` | The library, and one game's overview. |
 | `sevo app launch <appid>` | Launches through Steam and waits for the game's window. |
 | `sevo app terminate <appid>` | Stops a game — its processes first, then Steam's record — and waits for it to go. |
-| `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `overlay` (1-3: frame rate, frame time card, plus CPU/GPU/power/temperature), `fps-limit` (off or 30-120), `fps-graph`, `dll`, `env NAME=value` (a variable the game starts with), `processors`, and more. With no key it prints every setting and the level it comes from. |
+| `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `overlay` (1-3: frame rate, frame time card, plus CPU/GPU/power/temperature), `fps-limit` (off or 30-120), `fps-graph`, `menu-bar` (a program's menus in the macOS menu bar), `dll`, `env NAME=value` (a variable the game starts with), `processors`, and more. With no key it prints every setting and the level it comes from. |
 | `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
 | `sevo program list` / `launch <id>` / `add <path>` | Windows programs added outside Steam. Their ids start at 2000000000 and work with `sevo app config`. |
 | `sevo hoyo status <folder>` / `update <folder>` / `verify <folder> [--repair]` / `install <game> <folder>` | Genshin Impact, Honkai: Star Rail and Zenless Zone Zero from HoYoPlay's servers, without HoYoPlay. MCP: `hoyo_list`, `hoyo_status`, `hoyo_verify`, `hoyo_update`. Star Rail updates but does not start under Wine. |

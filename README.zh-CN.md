@@ -211,6 +211,7 @@ msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量�
 | `OverlayLevel` | `1` | 计数器显示的内容：`1` 只显示数字，`2` 显示帧时间卡片，`3` 在卡片中加上 CPU、GPU、功耗和温度 |
 | `FrameRateLimit` | `0` | 游戏每秒最多显示的帧数，适用于所有呈现路径；`0` 表示不限制 |
 | `OpenGLPresenter` | 开启 | 设为 `N` 后，所有 OpenGL 绘制表面都绕过画面呈现器 |
+| `NativeMenuBar` | 关闭 | 程序的 Win32 菜单显示在 macOS 菜单栏中，窗口内的菜单条被裁掉 |
 | `LinearMouse` | 关闭 | 视角转动使用原始鼠标移动输入 |
 | `CursorConfine` | 关闭 | 通过窗口服务器把光标限制在游戏指定的区域内 |
 | `PresentationLog`, `PresenterLog`, `PresenterDebug` | 关闭 | 画面呈现流程和呈现器日志 |
@@ -219,7 +220,7 @@ msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量�
 
 | 变量 | 作用 |
 |---|---|
-| `SEVO_RESIZABLE_WINDOWS`, `SEVO_PRESENTER`, `SEVO_UPSCALER`, `SEVO_FINAL_FILTER`, `SEVO_FPS`, `SEVO_FPS_GRAPH`, `SEVO_OVERLAY_LEVEL`, `SEVO_FPS_LIMIT`, `SEVO_GL_PRESENTER`, `SEVO_LINEAR_MOUSE`, `SEVO_CURSOR_CONFINE` | 上述注册表项在整个容器中的默认值 |
+| `SEVO_RESIZABLE_WINDOWS`, `SEVO_PRESENTER`, `SEVO_UPSCALER`, `SEVO_FINAL_FILTER`, `SEVO_FPS`, `SEVO_FPS_GRAPH`, `SEVO_OVERLAY_LEVEL`, `SEVO_FPS_LIMIT`, `SEVO_GL_PRESENTER`, `SEVO_LINEAR_MOUSE`, `SEVO_CURSOR_CONFINE`, `SEVO_MENU_BAR` | 上述注册表项在整个容器中的默认值 |
 | `SEVO_PRESENTATION_LOG`, `SEVO_PRESENTER_LOG`, `SEVO_PRESENTER_DEBUG`, `SEVO_GFX_LOG` | 画面呈现流程、呈现器和 D3DMetal present 钩子的日志 |
 | `SEVO_SHADER_DIR` | 画面呈现器加载着色器包的目录 |
 | `SEVO_GPU_VENDOR_ID`, `_DEVICE_ID`, `_NAME`, `_MEMORY_MB`, `_DRIVER_VERSION`, `_DRIVER_PROVIDER`, `_DRIVER_DATE` | Windows 程序看到的 GPU 型号、显存和驱动信息（厂商未知时使用 NVIDIA 元数据） |
@@ -295,6 +296,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - **（Dormison）** 全屏游戏和锁定窗口大小的游戏，也能以自身分辨率运行在可调整大小的窗口中。
 - **（Dormison）** 通过 Metal、OpenGL（Wine 内建渲染器，大多数 Direct3D 9 视觉小说使用这条路径）和普通 GDI 绘制的游戏，可以使用 Lanczos、MetalFX、Anime4K 或 CuNNy 进行超分与缩放，再应用最终滤镜。
 - **（Dormison）** 每款游戏都有 View（显示）菜单，可以实时切换画面缩放器和滤镜，以及选择 Show Frame Rate（显示帧率，⌥⌘F）、Overlay Detail（叠加层详情：⌥⌘G 选择帧时间卡片，也可加上 CPU、GPU、功耗和温度）、Frame Rate Limit（帧率上限）、Show Picture Details（显示画面详情，⌥⌘I）。
+- **（Dormison）** 菜单移至菜单栏：程序自己的 Win32 菜单移到 macOS 菜单栏中，Ctrl 快捷键可用 ⌘ 触发，窗口内的菜单条被裁掉。默认关闭，可按游戏或容器开启。
 - D3DMetal 通过 MetalFX 提供 DLSS：游戏里的 DLSS 选项可以像在 NVIDIA 显卡上一样使用。
 - **（Dormison）** 为有需要的游戏提供原始鼠标视角输入和光标范围限制。
 - 游戏运行时让显示器保持唤醒，退出后允许显示器休眠。

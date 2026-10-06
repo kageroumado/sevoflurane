@@ -353,6 +353,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// The most frames a second the engine lets the game show
     /// (`SEVO_FPS_LIMIT`).
     var frameRateLimit: FrameRateLimit?
+    /// Whether a program's own Win32 menus show in the macOS menu bar, with
+    /// the strip in its window cropped away (`SEVO_MENU_BAR`).
+    var nativeMenuBar: Bool?
     /// Whether a 32-bit game gets the whole 4 GB of address space rather than
     /// the low 2 GB.
     ///
@@ -422,7 +425,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false || environment?.isEmpty == false
-            || hud != nil || fps != nil || overlayDetail != nil || frameRateLimit != nil
+            || hud != nil || fps != nil || overlayDetail != nil || frameRateLimit != nil || nativeMenuBar != nil
             || largeAddressAware != nil || avx != nil || cursorConfine != nil
             || unifiedMemory != nil || tuning != nil || processors != nil || build != nil
     }
@@ -547,7 +550,7 @@ nonisolated enum GameConfig {
         // were written, and a growing number of titles read the CPUID answer
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
-        hud: false, fps: false, overlayDetail: .frameRate, frameRateLimit: .off, largeAddressAware: true, avx: true, unifiedMemory: false,
+        hud: false, fps: false, overlayDetail: .frameRate, frameRateLimit: .off, nativeMenuBar: false, largeAddressAware: true, avx: true, unifiedMemory: false,
         cursorConfine: false, processors: 0,
     )
 
@@ -671,6 +674,10 @@ nonisolated enum GameConfig {
     /// when its id is known, otherwise the bottle's own value.
     static func frameRateLimit(bottle: String, game appID: Int? = nil) -> Resolved<FrameRateLimit> {
         resolve(\.frameRateLimit, bottle: bottle, game: appID)
+    }
+
+    static func nativeMenuBar(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
+        resolve(\.nativeMenuBar, bottle: bottle, game: appID)
     }
 
     static func largeAddressAware(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {

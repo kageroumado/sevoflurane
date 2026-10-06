@@ -12,6 +12,7 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
     case filter
     case retina
     case emulateModeset
+    case nativeMenuBar
     case fps
     case overlayDetail
     case frameRateLimit
@@ -257,6 +258,10 @@ nonisolated enum SettingCatalog {
         .flag(
             .emulateModeset, in: .picture, key: \.emulateModeset, copy: .modeset,
             carrier: .registry("EmulateModeset"), reach: { _ in .registry },
+        ),
+        .flag(
+            .nativeMenuBar, in: .picture, key: \.nativeMenuBar, copy: .nativeMenuBar,
+            carrier: .environment(["SEVO_MENU_BAR"]),
         ),
         .flag(.fps, in: .picture, key: \.fps, copy: .fps, carrier: .environment(["SEVO_FPS"])),
         .choice(

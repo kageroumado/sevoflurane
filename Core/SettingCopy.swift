@@ -113,6 +113,20 @@ nonisolated extension SettingCopy {
         ),
     )
 
+    static let nativeMenuBar = SettingCopy(
+        title: "Menus in the menu bar",
+        caption: "A program's own menus, such as Game and Help, move into the macOS menu bar, "
+            + "and the strip in its window is hidden.",
+        help: SettingHelp(
+            title: "Menus in the menu bar",
+            summary: "Windows programs draw a row of menus at the top of their window. With this "
+                + "on, Dormison shows those menus in the macOS menu bar, where a shortcut such as Ctrl+N "
+                + "works as ⌘N, and crops the row out of the window. A program with a View "
+                + "menu of its own keeps it, and Sevoflurane's View menu is named Picture.",
+            footnote: "New in this release, so it starts off. Applies from the program's next launch.",
+        ),
+    )
+
     static let fps = SettingCopy(
         title: "Frame rate counter",
         caption: "The frame rate at the top right of the game's window.",

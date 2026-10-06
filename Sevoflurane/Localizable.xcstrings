@@ -33,6 +33,17 @@
         }
       }
     },
+    "A program's own menus, such as Game and Help, move into the macOS menu bar, and the strip in its window is hidden." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "程序自己的菜单（如“游戏”和“帮助”）会移到 macOS 菜单栏中，窗口内的菜单条随之隐藏。"
+          }
+        }
+      }
+    },
     "Counts the frames the engine put on screen, whichever renderer drew them. Overlay detail sets how much it shows." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -95,6 +106,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帧率计数器显示多少内容。开启“帧率计数器”后才会出现。"
+          }
+        }
+      }
+    },
+    "Menus in the menu bar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单移至菜单栏"
+          }
+        }
+      }
+    },
+    "New in this release, so it starts off. Applies from the program's next launch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此功能为本版本新增，默认关闭。从程序下次启动时生效。"
           }
         }
       }
@@ -183,6 +216,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帧率计数器开启时显示的内容。"
+          }
+        }
+      }
+    },
+    "Windows programs draw a row of menus at the top of their window. With this on, Dormison shows those menus in the macOS menu bar, where a shortcut such as Ctrl+N works as ⌘N, and crops the row out of the window. A program with a View menu of its own keeps it, and Sevoflurane's View menu is named Picture." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 程序会在窗口顶部绘制一行菜单。开启后，Dormison 会把这些菜单显示在 macOS 菜单栏中，Ctrl+N 之类的快捷键可用 ⌘N 触发，并把这一行从窗口中裁掉。自带“显示”菜单的程序会保留它，Sevoflurane 的“显示”菜单则改名为“画面”。"
           }
         }
       }

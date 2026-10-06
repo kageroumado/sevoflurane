@@ -276,6 +276,7 @@ nonisolated enum ConfigMaterializer {
     private static let switches: [(key: String, resolve: @Sendable (String, Int?) -> Bool)] = [
         ("MTL_HUD_ENABLED", { GameConfig.hud(bottle: $0, game: $1).value }),
         ("SEVO_FPS", { GameConfig.fps(bottle: $0, game: $1).value }),
+        ("SEVO_MENU_BAR", { GameConfig.nativeMenuBar(bottle: $0, game: $1).value }),
         ("SEVO_LARGE_ADDRESS_AWARE", { GameConfig.largeAddressAware(bottle: $0, game: $1).value }),
         ("ROSETTA_ADVERTISE_AVX", { GameConfig.avx(bottle: $0, game: $1).value }),
         ("SEVO_CURSOR_CONFINE", { GameConfig.cursorConfine(bottle: $0, game: $1).value }),
@@ -287,6 +288,7 @@ nonisolated enum ConfigMaterializer {
         var own: [String: Bool] = [:]
         own["MTL_HUD_ENABLED"] = values.hud
         own["SEVO_FPS"] = values.fps
+        own["SEVO_MENU_BAR"] = values.nativeMenuBar
         own["SEVO_LARGE_ADDRESS_AWARE"] = values.largeAddressAware
         own["ROSETTA_ADVERTISE_AVX"] = values.avx
         own["SEVO_CURSOR_CONFINE"] = values.cursorConfine

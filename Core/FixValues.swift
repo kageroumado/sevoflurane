@@ -27,6 +27,7 @@ nonisolated enum FixValues {
         out.fps = values.fps
         out.overlayDetail = values.overlayDetail
         out.frameRateLimit = values.frameRateLimit
+        out.nativeMenuBar = values.nativeMenuBar
         out.largeAddressAware = values.largeAddressAware
         out.avx = values.avx
         out.unifiedMemory = values.unifiedMemory

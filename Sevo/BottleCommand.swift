@@ -14,6 +14,7 @@ enum ConfigSwitches {
         Entry(key: "hud", path: \.hud),
         Entry(key: "fps", path: \.fps),
         Entry(key: "cursor-confine", path: \.cursorConfine),
+        Entry(key: "menu-bar", path: \.nativeMenuBar),
         Entry(key: "avx", path: \.avx),
         Entry(key: "large-address-aware", path: \.largeAddressAware),
     ]
@@ -37,6 +38,7 @@ enum ConfigSwitches {
         case "hud": GameConfig.hud(bottle: bottle, game: appID)
         case "fps": GameConfig.fps(bottle: bottle, game: appID)
         case "cursor-confine": GameConfig.cursorConfine(bottle: bottle, game: appID)
+        case "menu-bar": GameConfig.nativeMenuBar(bottle: bottle, game: appID)
         case "avx": GameConfig.avx(bottle: bottle, game: appID)
         case "large-address-aware": GameConfig.largeAddressAware(bottle: bottle, game: appID)
         default: nil
