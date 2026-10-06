@@ -184,13 +184,52 @@ nonisolated enum GOG {
 
     // MARK: - Installing
 
-    /// Downloads a title into a folder of its own under `base`, or brings
-    /// the one there current; `update` and `repair` are the same command.
-    static func download(
-        _ id: String, verb: String = "download", base: URL, onLine: @escaping @Sendable (String) -> Void,
+    /// One gogdl transfer and the folder it is pointed at. gogdl 1.3.0
+    /// joins GOG's folder name to `--path` for `download` alone; `update`
+    /// and `repair` work in `--path` itself, so those take the game folder.
+    enum Transfer: Equatable, Sendable {
+        /// A first download, into a folder of its own under `base`.
+        case download(base: URL)
+        /// Brings the game in `folder` to the current build.
+        case update(folder: URL)
+        /// Checks every file in `folder` and downloads the missing and
+        /// damaged ones.
+        case repair(folder: URL)
+
+        var verb: String {
+            switch self {
+            case .download: "download"
+            case .update: "update"
+            case .repair: "repair"
+            }
+        }
+
+        /// The folder handed to `--path`.
+        var path: URL {
+            switch self {
+            case let .download(base): base
+            case let .update(folder), let .repair(folder): folder
+            }
+        }
+    }
+
+    /// Runs gogdl with a command's arguments, handing over each line it logs.
+    typealias Client = @Sendable (
+        _ arguments: [String], _ onLine: @escaping @Sendable (String) -> Void,
+    ) async throws -> StoreProcess.Result
+
+    static let gogdl: Client = { arguments, onLine in
+        try await StoreProcess.run(.gogdl, arguments, onLine: onLine)
+    }
+
+    static func arguments(_ id: String, _ transfer: Transfer) -> [String] {
+        [transfer.verb, id, "--platform", "windows", "--path", transfer.path.path, "--lang", language, "--skip-dlcs"]
+    }
+
+    static func transfer(
+        _ id: String, _ transfer: Transfer, client: Client = gogdl, onLine: @escaping @Sendable (String) -> Void,
     ) async throws {
-        let arguments = [verb, id, "--platform", "windows", "--path", base.path, "--lang", language, "--skip-dlcs"]
-        let result = try await StoreProcess.run(.gogdl, arguments, onLine: onLine)
+        let result = try await client(arguments(id, transfer), onLine)
         guard result.succeeded else { throw StoreFailure(result.failure) }
     }
 

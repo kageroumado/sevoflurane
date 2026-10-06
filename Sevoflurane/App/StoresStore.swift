@@ -264,7 +264,7 @@ final class StoresStore {
             case .gog:
                 let build = try await GOG.build(title.id)
                 let name = try Self.gogFolderName(build, title.title)
-                try await GOG.download(title.id, base: base, onLine: onLine)
+                try await GOG.transfer(title.id, .download(base: base), onLine: onLine)
                 let folder = try StorePaths.gameFolder(base.appending(path: name).path)
                 let install = StoreInstall(
                     store: .gog, id: title.id, title: title.title, path: folder.path,
@@ -288,8 +288,7 @@ final class StoresStore {
                 }
             case .gog:
                 let build = try await GOG.build(install.id)
-                let base = try Self.gogBase(folder, build, install.title)
-                try await GOG.download(install.id, verb: "update", base: base, onLine: onLine)
+                try await GOG.transfer(install.id, .update(folder: folder), onLine: onLine)
                 var updated = install
                 updated.version = build.id
                 updated.versionName = build.name
@@ -309,9 +308,7 @@ final class StoresStore {
             case .epic:
                 try await Legendary.repair(install.id, onLine: onLine)
             case .gog:
-                let build = try await GOG.build(install.id)
-                let base = try Self.gogBase(folder, build, install.title)
-                try await GOG.download(install.id, verb: "repair", base: base, onLine: onLine)
+                try await GOG.transfer(install.id, .repair(folder: folder), onLine: onLine)
             }
             return String(localized: "Every file checks out.")
         }
@@ -357,16 +354,6 @@ final class StoresStore {
             throw StoreFailure("GOG names no usable folder for \(title)")
         }
         return name
-    }
-
-    /// The base gogdl is pointed at to update or check a GOG install: the
-    /// folder its checked game folder sits in, when GOG still names that
-    /// game folder, so gogdl writes into the folder that passed the check.
-    private nonisolated static func gogBase(_ folder: URL, _ build: GOG.Build, _ title: String) throws -> URL {
-        guard try gogFolderName(build, title) == folder.lastPathComponent else {
-            throw StoreFailure("GOG now names another folder for \(title); install it again to move it")
-        }
-        return folder.deletingLastPathComponent()
     }
 
     /// Gives every installed title without a Quick Launch entry one: those
