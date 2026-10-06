@@ -63,6 +63,26 @@
         }
       }
     },
+    "“%@” may fail on a Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”可能无法在 Mac 上运行"
+          }
+        }
+      }
+    },
+    "“%@” uses anti-cheat that blocks it on a Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”使用的反作弊会阻止它在 Mac 上运行"
+          }
+        }
+      }
+    },
     "“Plays with fixes” needs a note saying which fixes." : {
       "localizations" : {
         "zh-Hans" : {
@@ -457,6 +477,16 @@
         }
       }
     },
+    "%@ is out" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已移出"
+          }
+        }
+      }
+    },
     "%@ is required and not installed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -464,6 +494,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要安装 %@"
+          }
+        }
+      }
+    },
+    "%@ is set to its macOS version, which plays through Valve's Steam for Mac. Settings › Games sets it back to the Windows version." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已设为使用其 macOS 版本，将通过 Valve 的 Steam for Mac 运行。可在“设置 › 游戏”中改回 Windows 版本。"
           }
         }
       }
@@ -525,6 +565,16 @@
         }
       }
     },
+    "%@ on disk" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "占用 %@"
+          }
+        }
+      }
+    },
     "%@ quit with an error while starting." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -542,6 +592,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 未显示任何窗口"
+          }
+        }
+      }
+    },
+    "%@ source %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ source %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 源代码 %2$@"
           }
         }
       }
@@ -840,6 +906,16 @@
         }
       }
     },
+    "A download stopped. Its reason is below." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有一项下载已停止，原因见下方。"
+          }
+        }
+      }
+    },
     "A few old games assume addresses stay under 2 GB and crash above it: turn it off for that game." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -961,11 +1037,22 @@
       }
     },
     "A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. Sevoflurane's own players' runs come first where there are enough." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏的库页面和商店页面会显示它在 Mac 上的运行情况、是否有 macOS 版本，以及其反作弊的情况。在数据足够时，优先采用 Sevoflurane 玩家自己的运行记录。"
+          }
+        }
+      }
+    },
+    "A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, its Mac button keeps only the games that play, and Install warns before a game known to fail. Sevoflurane's own players' runs come first where there are enough." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏的库页面和商店页面会显示它在 Mac 上的运行情况、是否有 macOS 版本，以及其反作弊的情况。游戏库会为每个游戏加上标记，Mac 按钮只保留可以运行的游戏，安装已知无法运行的游戏前会给出提醒。在数据足够时，优先采用 Sevoflurane 玩家自己的运行记录。"
           }
         }
       }
@@ -1494,6 +1581,16 @@
         }
       }
     },
+    "Also style store and community pages" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时为商店和社区页面应用样式"
+          }
+        }
+      }
+    },
     "Also, a full-screen game plays in a window you can move and resize, and still draws as if it filled the screen. Pick this to play a full-screen game in a window." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1608,6 +1705,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏占用指针时生效，例如使用第一人称视角时。菜单和桌面仍使用 Mac 指针。"
+          }
+        }
+      }
+    },
+    "Apply known fixes automatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动应用已知修复"
           }
         }
       }
@@ -1798,6 +1905,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sevoflurane 和 Dormison 的 Beta 版早于正式版发布，在较少的 Mac 上经过测试。"
+          }
+        }
+      }
+    },
+    "Big Picture" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大屏幕模式"
           }
         }
       }
@@ -2136,6 +2253,7 @@
       }
     },
     "Choose an upscaler in Engine or Games." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2162,6 +2280,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请选择启动方式。"
+          }
+        }
+      }
+    },
+    "Choose one for every game in Engine › Upscaler, or for one game in Games. While a game runs, View › Upscaler in its menu bar switches it live." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在“引擎 › 画面缩放器”中为所有游戏选择，或在“游戏”中为单个游戏选择。游戏运行时，可从其菜单栏的“显示 › 画面缩放器”即时切换。"
           }
         }
       }
@@ -2288,6 +2416,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除着色器缓存？"
+          }
+        }
+      }
+    },
+    "Click Download on “%@”, outlined below. It installs here when its download ends." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请点按下方框出的“%@”的“Download”。下载完成后会在此处安装。"
+          }
+        }
+      }
+    },
+    "Click Download on “Evaluation environment for Windows games 4.0 beta 2” or newer. It installs here when its download ends." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请点按“Evaluation environment for Windows games 4.0 beta 2”或更新版本的“Download”。下载完成后会在此处安装。"
           }
         }
       }
@@ -2607,6 +2755,66 @@
         }
       }
     },
+    "Count Me In" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "算我一个"
+          }
+        }
+      }
+    },
+    "Count this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计这台 Mac"
+          }
+        }
+      }
+    },
+    "Count yourself in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入统计"
+          }
+        }
+      }
+    },
+    "Counting" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计"
+          }
+        }
+      }
+    },
+    "Counting and crash reports" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计与崩溃报告"
+          }
+        }
+      }
+    },
+    "Counts how many people use Sevoflurane. On each day you use it, one anonymous check-in is sent:" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计使用 Sevoflurane 的人数。你每使用一天，就会发送一次匿名签到："
+          }
+        }
+      }
+    },
     "Counts the frames the engine put on screen, whichever renderer drew them." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2624,6 +2832,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CPU"
+          }
+        }
+      }
+    },
+    "Crash reports adds a report when Sevoflurane itself crashes, with your name, your Mac’s name and folder paths removed. A game’s crash is sent only from the crash prompt. Turning this off deletes everything this Mac sent." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“崩溃报告”会在 Sevoflurane 自身崩溃时附上一份报告，其中已移除你的姓名、Mac 名称和文件夹路径。游戏崩溃只会通过崩溃提示发送。关闭此项会删除这台 Mac 发送过的所有内容。"
           }
         }
       }
@@ -2756,6 +2974,16 @@
         }
       }
     },
+    "Custom style" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定样式"
+          }
+        }
+      }
+    },
     "Customize its window, upscaler, and mouse settings." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2772,6 +3000,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "D3DMetal"
+          }
+        }
+      }
+    },
+    "D3DMetal %@ installed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装 D3DMetal %@"
           }
         }
       }
@@ -2883,6 +3121,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除我共享的内容…"
+          }
+        }
+      }
+    },
+    "Deleting what this Mac sent…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在删除这台 Mac 发送过的内容…"
           }
         }
       }
@@ -3090,6 +3338,16 @@
         }
       }
     },
+    "DLL overrides: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DLL 覆盖：%@"
+          }
+        }
+      }
+    },
     "Don't Ask for This Game" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3216,6 +3474,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载 d3dcompiler_47"
+          }
+        }
+      }
+    },
+    "Downloading D3DMetal %@, nothing to click" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载 D3DMetal %@，无需任何操作"
           }
         }
       }
@@ -3414,6 +3682,16 @@
         }
       }
     },
+    "empty removes it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空即移除"
+          }
+        }
+      }
+    },
     "End Game" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3607,6 +3885,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用专门的着色器放大画面：Anime4K 和 CuNNy 适用于手绘风格画面，按 2 倍等整数倍放大；MetalFX Spatial 适用于 3D 游戏。关闭后，macOS 会柔和地拉伸画面。最终滤镜仅适用于未使用着色器的画面。"
+          }
+        }
+      }
+    },
+    "Environment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "环境变量"
+          }
+        }
+      }
+    },
+    "Every CSS file in the Styles folder styles Steam’s windows, in name order. Saving a file restyles them right away." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Styles 文件夹中的每个 CSS 文件都会按名称顺序应用到 Steam 的窗口。保存文件后会立即重新应用样式。"
           }
         }
       }
@@ -3827,6 +4125,16 @@
         }
       }
     },
+    "Extra upscalers for games drawn at low resolution: pixel art, anime, visual novels. MetalFX and the final filter are built in." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为低分辨率绘制的游戏提供额外的画面缩放器：像素画、动画风格、视觉小说。MetalFX 和最终滤镜为内建功能。"
+          }
+        }
+      }
+    },
     "extracting" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3865,6 +4173,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模拟显示模式切换"
+          }
+        }
+      }
+    },
+    "Filter" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选"
+          }
+        }
+      }
+    },
+    "Filter by name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按名称筛选"
           }
         }
       }
@@ -4051,12 +4379,32 @@
         }
       }
     },
+    "For every game, from its next launch. Settings › Games adds a game's own." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于所有游戏，从下次启动开始生效。可在“设置 › 游戏”中为单个游戏添加。"
+          }
+        }
+      }
+    },
     "For other problems, save a diagnostics archive in Settings › Diagnostics." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "对于其他问题，请在“设置 › 诊断”中保存诊断归档。"
+          }
+        }
+      }
+    },
+    "For this game alone, from its next launch, over Settings › Engine's. Steam's launch options can set these too: KEY=VALUE %command%." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅对这款游戏生效，从下次启动开始，优先于“设置 › 引擎”中的值。Steam 的启动选项也可以设置这些变量：KEY=VALUE %command%。"
           }
         }
       }
@@ -4535,6 +4883,16 @@
         }
       }
     },
+    "Get Steam for Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取 Steam for Mac"
+          }
+        }
+      }
+    },
     "Getting Steam ready" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4572,6 +4930,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请为容器命名。"
+          }
+        }
+      }
+    },
+    "GOG user %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GOG 用户 %@"
           }
         }
       }
@@ -4872,6 +5240,16 @@
         }
       }
     },
+    "Install Anyway" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然安装"
+          }
+        }
+      }
+    },
     "Install buttons and invitations on the web open here." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4901,6 +5279,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请前往“设置”>“引擎”>“游戏依赖项”安装核心字体。对于使用日语、中文或韩语的游戏，还需安装相应字体。"
+          }
+        }
+      }
+    },
+    "Install in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装到"
           }
         }
       }
@@ -4998,6 +5386,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装在 /usr/local/bin/sevo。"
+          }
+        }
+      }
+    },
+    "Installed. %@ is in Quick Launch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装。%@ 已加入快速启动。"
           }
         }
       }
@@ -5206,6 +5604,16 @@
         }
       }
     },
+    "It never includes which games or programs you run, and nothing in it names you or your account." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中绝不包含你运行的游戏或程序，也没有任何能识别你或你账号的信息。"
+          }
+        }
+      }
+    },
     "It tried to load %@, a Windows kernel driver, usually kernel-level anti-cheat, and kernel drivers cannot run on a Mac. If the program requires it, that is why it stopped." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5223,6 +5631,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此容器的依赖项和 Windows 设置由 CrossOver 管理。"
+          }
+        }
+      }
+    },
+    "Its folder goes to the Trash and it leaves Quick Launch. Saves the game keeps in its own folder go with it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其文件夹会移到废纸篓，并从快速启动中移除。游戏保存在自身文件夹中的存档也会一并移除。"
+          }
+        }
+      }
+    },
+    "Its macOS version plays, and Steam for Mac runs that one directly." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它的 macOS 版本可以运行，可由 Steam for Mac 直接运行。"
           }
         }
       }
@@ -5398,6 +5826,16 @@
         }
       }
     },
+    "Library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "库"
+          }
+        }
+      }
+    },
     "Library, like dinput8" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5467,6 +5905,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已关联。重新启动 Steam 后即可看到。"
+          }
+        }
+      }
+    },
+    "Listed as a non-Steam game, it starts from Steam's library and Big Picture, with Steam Input and the overlay, and keeps the settings, Dock tile and run records it has here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作为非 Steam 游戏列出后，可从 Steam 库和大屏幕模式中启动，并支持 Steam 输入和游戏内界面，同时保留它在此处的设置、程序坞图标和运行记录。"
           }
         }
       }
@@ -5786,6 +6234,16 @@
         }
       }
     },
+    "Most of Steam’s class names change with each Steam update. .DesktopUI, .TitleBar, the .Dialog classes, the .SVGIcon_ icons and ARIA roles stay the same; README.css in the folder lists them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 的大多数类名会随每次 Steam 更新而变化。.DesktopUI、.TitleBar、.Dialog 类、.SVGIcon_ 图标和 ARIA 角色保持不变；文件夹中的 README.css 列出了它们。"
+          }
+        }
+      }
+    },
     "Mouse" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5824,6 +6282,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移到废纸篓"
+          }
+        }
+      }
+    },
+    "Moved %@ to the Trash." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将 %@ 移到废纸篓。"
           }
         }
       }
@@ -6258,6 +6726,16 @@
         }
       }
     },
+    "Nothing installed from %@ yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未从 %@ 安装任何内容。"
+          }
+        }
+      }
+    },
     "Notifications are off" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6337,6 +6815,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "P 核占比"
+          }
+        }
+      }
+    },
+    "One anonymous check-in a day counts how many people use Sevoflurane. It never includes which games or programs you run. Settings › General lists what is sent, and adds crash reports if you want them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每天一次匿名签到，用于统计使用 Sevoflurane 的人数，绝不包含你运行的游戏或程序。可在“设置 › 通用”中查看发送的内容，并按需开启崩溃报告。"
           }
         }
       }
@@ -6534,6 +7022,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开 Steam 设置…"
+          }
+        }
+      }
+    },
+    "Open Styles Folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Styles 文件夹"
           }
         }
       }
@@ -6758,12 +7256,32 @@
         }
       }
     },
+    "Play the Windows Version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行 Windows 版本"
+          }
+        }
+      }
+    },
     "Plays" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "可玩"
+          }
+        }
+      }
+    },
+    "Plays in Steam for Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Steam for Mac 中运行"
           }
         }
       }
@@ -6935,6 +7453,16 @@
         }
       }
     },
+    "Reading your account…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取你的账号…"
+          }
+        }
+      }
+    },
     "Ready to play" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7068,6 +7596,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "减少同步开销。如果游戏卡住，请关闭此选项。"
+          }
+        }
+      }
+    },
+    "Refresh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新"
           }
         }
       }
@@ -7311,6 +7849,16 @@
         }
       }
     },
+    "Removing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在移除"
+          }
+        }
+      }
+    },
     "Renderer" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7441,6 +7989,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已修复 %lld 个文件。"
+          }
+        }
+      }
+    },
+    "Replace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换"
           }
         }
       }
@@ -7902,6 +8460,46 @@
         }
       }
     },
+    "Set at the game's first launch, where it had no value of its own. Undo puts back what it had." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在游戏首次启动时设置，仅用于游戏本身未设置的项。“撤销”会恢复原有的值。"
+          }
+        }
+      }
+    },
+    "Set by the fix list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由修复列表设置"
+          }
+        }
+      }
+    },
+    "Set by the fix list: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由修复列表设置：%@"
+          }
+        }
+      }
+    },
+    "Set Friends Status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置好友状态"
+          }
+        }
+      }
+    },
     "Set Record back to Off when you are done." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8017,6 +8615,22 @@
         }
       }
     },
+    "Sevoflurane reaches the store through %@ %@ from the Heroic Games Launcher project, licensed under the %@. It is downloaded from that project's release the first time you sign in, checked against a fixed digest, and runs as a program of its own." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sevoflurane reaches the store through %1$@ %2$@ from the Heroic Games Launcher project, licensed under the %3$@. It is downloaded from that project's release the first time you sign in, checked against a fixed digest, and runs as a program of its own."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 通过 Heroic Games Launcher 项目的 %1$@ %2$@ 访问该商店，该工具采用 %3$@ 许可。首次登录时会从该项目的发布页下载，核对固定的摘要，并作为独立程序运行。"
+          }
+        }
+      }
+    },
     "Sevoflurane waits in the menu bar." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8050,6 +8664,7 @@
       }
     },
     "Shader packages" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8162,6 +8777,16 @@
         }
       }
     },
+    "Show Apple’s Page" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 Apple 的页面"
+          }
+        }
+      }
+    },
     "Show each one" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8188,6 +8813,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在访达中显示"
+          }
+        }
+      }
+    },
+    "Show in Steam's library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Steam 库中显示"
+          }
+        }
+      }
+    },
+    "Show in Steam's Library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Steam 库中显示"
           }
         }
       }
@@ -8254,11 +8899,42 @@
       }
     },
     "Sign in on Apple’s page and download “Evaluation environment for Windows games”, the small file with D3DMetal in it. The Game Porting Toolkit works too. Sevoflurane installs it the moment it lands." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在 Apple 网页上登录，下载包含 D3DMetal 的“Evaluation environment for Windows games”。也可下载 Game Porting Toolkit。文件下载完成后，Sevoflurane 会立即安装。"
+          }
+        }
+      }
+    },
+    "Sign in on Apple’s page with any Apple Account and download “Evaluation environment for Windows games 4.0 beta 2” or newer, the small file with D3DMetal in it. Sevoflurane installs it the moment it lands." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在 Apple 的页面上使用任意 Apple 账户登录，下载“Evaluation environment for Windows games 4.0 beta 2”或更新版本，也就是包含 D3DMetal 的那个小文件。下载完成后 Sevoflurane 会立即安装。"
+          }
+        }
+      }
+    },
+    "Sign in to %@. The sheet closes by itself once you are in." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 %@。登录后此面板会自动关闭。"
+          }
+        }
+      }
+    },
+    "Sign in to install your %@ games." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录以安装你的 %@ 游戏。"
           }
         }
       }
@@ -8279,6 +8955,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录 Steam 以查看游戏库。"
+          }
+        }
+      }
+    },
+    "Sign in with any Apple Account, and accept Apple’s free developer agreement if it asks. The paid Developer Program isn’t needed. Sevoflurane picks the right download and installs it here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用任意 Apple 账户登录，如有提示，请接受 Apple 的免费开发者协议。无需付费加入开发者计划。Sevoflurane 会选择正确的下载项并在此处安装。"
+          }
+        }
+      }
+    },
+    "Sign In…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录…"
+          }
+        }
+      }
+    },
+    "Sign Out" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出登录"
+          }
+        }
+      }
+    },
+    "Signed in as %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已登录为 %@"
+          }
+        }
+      }
+    },
+    "Signing in did not work: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录失败：%@"
           }
         }
       }
@@ -8539,6 +9265,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法停止 Steam，因此设置保留了原有容器。请重试，或先从菜单栏退出 Steam。"
+          }
+        }
+      }
+    },
+    "Steam for Mac is not installed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装 Steam for Mac"
           }
         }
       }
@@ -8949,6 +9685,16 @@
         }
       }
     },
+    "Stopped. Installing again carries on from what was downloaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止。再次安装会从已下载的部分继续。"
+          }
+        }
+      }
+    },
     "Stopped. Running it again keeps what was downloaded." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9002,12 +9748,32 @@
         }
       }
     },
+    "Store" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "商店"
+          }
+        }
+      }
+    },
     "Streamer Mode" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "主播模式"
+          }
+        }
+      }
+    },
+    "Style Steam with CSS" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 CSS 设置 Steam 样式"
           }
         }
       }
@@ -9053,6 +9819,16 @@
         }
       }
     },
+    "Takes the place of the %@ setting." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取代“%@”设置。"
+          }
+        }
+      }
+    },
     "Tell other Mac players how this game ran on this configuration. The verdict, the note and the configuration below go to the public game database; the note is the only part you write." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9079,6 +9855,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sevoflurane 无法读取该文件中的图片。"
+          }
+        }
+      }
+    },
+    "The %@ games your account owns that run on Windows. Each one installs into a folder of its own and joins Quick Launch, with its own settings, Dock icon and run history." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的账号拥有的可在 Windows 上运行的 %@ 游戏。每个游戏都会安装到独立的文件夹并加入快速启动，拥有各自的设置、程序坞图标和运行记录。"
           }
         }
       }
@@ -9189,6 +9975,16 @@
         }
       }
     },
+    "The first time a game starts, settings the fix list names for it are set where the game has none of its own. Settings › Games shows each one with an undo." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏首次启动时，修复列表为其指定的设置会应用到游戏本身未设置的项。“设置 › 游戏”会逐项显示，并可撤销。"
+          }
+        }
+      }
+    },
     "The folder the game's .exe is in." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9239,6 +10035,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "告知游戏实际的内存架构（Direct3D 12 称为 UMA），让每个纹理只写入一次。持续载入大型场景的游戏受益最大。"
+          }
+        }
+      }
+    },
+    "The game may start; the modes the anti-cheat guards stay closed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏或许可以启动，但受反作弊保护的模式仍无法进入。"
           }
         }
       }
@@ -9411,6 +10217,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "备注中包含电子邮件地址。报告是公开的，因此不能包含地址。"
+          }
+        }
+      }
+    },
+    "The paid program isn’t needed. The free account is enough." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需付费计划，免费账户即可。"
           }
         }
       }
@@ -9601,6 +10417,16 @@
         }
       }
     },
+    "This Mac has no Secure Enclave, so nothing is sent." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 没有安全隔区，因此不会发送任何内容。"
+          }
+        }
+      }
+    },
     "This package is missing. Games fall back to Lanczos." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9727,6 +10553,16 @@
         }
       }
     },
+    "Undo" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销"
+          }
+        }
+      }
+    },
     "Undo the link" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9748,12 +10584,32 @@
         }
       }
     },
+    "Uninstall" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载"
+          }
+        }
+      }
+    },
     "Uninstall %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "卸载 %@"
+          }
+        }
+      }
+    },
+    "Uninstall %@?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要卸载 %@ 吗？"
           }
         }
       }
@@ -9974,6 +10830,16 @@
         }
       }
     },
+    "Updated." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已更新。"
+          }
+        }
+      }
+    },
     "Updates come from the servers HoYoPlay uses, as patches when the game's build is recent enough and as the changed files otherwise. Honkai: Star Rail is kept up to date but does not start under Wine, so it is not added to Quick Launch." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10044,6 +10910,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "单个游戏的画面缩放器"
+          }
+        }
+      }
+    },
+    "Upscalers" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面缩放器"
+          }
+        }
+      }
+    },
+    "Usage count" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用统计"
           }
         }
       }
@@ -10158,6 +11044,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "先使用 CrossOver 的单游戏设置，再使用 Wine 的渲染器。"
+          }
+        }
+      }
+    },
+    "Value" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值"
           }
         }
       }
@@ -10747,6 +11643,259 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac 当前负载较高"
+          }
+        }
+      }
+    },
+    "Optional and free. Any Apple Account works; no paid developer membership." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选且免费。任何 Apple 账户都可以，无需付费的开发者会员资格。"
+          }
+        }
+      }
+    },
+    "Windows (Sevoflurane)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows（Sevoflurane）"
+          }
+        }
+      }
+    },
+    "macOS (Steam for Mac)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS（Steam for Mac）"
+          }
+        }
+      }
+    },
+    "The macOS version starts in Steam for Mac, with the game installed there." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 版本会在 Steam for Mac 中启动，需要在那里安装该游戏。"
+          }
+        }
+      }
+    },
+    "Windows or macOS version" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 或 macOS 版本"
+          }
+        }
+      }
+    },
+    "Steam sells this game for macOS too. Play can start either version." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 也提供此游戏的 macOS 版本。“开始游戏”可以启动其中任一版本。"
+          }
+        }
+      }
+    },
+    "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版本，在 Sevoflurane 的 Steam 中运行。此页面上的所有设置都作用于它。"
+          }
+        }
+      }
+    },
+    "The game's own macOS version, started by Valve's Steam for Mac, which needs the game installed there. Play opens its install page when the game is not, and the settings on this page stay with the Windows version." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏自带的 macOS 版本，由 Valve 的 Steam for Mac 启动，需要在那里安装该游戏。若尚未安装，“开始游戏”会打开其安装页面；此页面上的设置只作用于 Windows 版本。"
+          }
+        }
+      }
+    },
+    "Variables the game starts with, by name: the DXVK_HUD=1 or WINEDLLOVERRIDES=… a fix for a game often names." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏启动时使用的环境变量，按名称设置：例如游戏修复方案中常见的 DXVK_HUD=1 或 WINEDLLOVERRIDES=…。"
+          }
+        }
+      }
+    },
+    "Steam's launch options" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 的启动选项"
+          }
+        }
+      }
+    },
+    "A line such as DXVK_HUD=1 %command% -windowed, the form Proton fixes are shared in, works too. Sevoflurane moves the variables ahead of %command% here, and Steam keeps %command% -windowed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也可以使用 DXVK_HUD=1 %command% -windowed 这样的写法，也就是 Proton 修复方案常用的格式。Sevoflurane 会把 %command% 前面的变量移到这里，Steam 则保留 %command% -windowed。"
+          }
+        }
+      }
+    },
+    "Over a setting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "覆盖设置"
+          }
+        }
+      }
+    },
+    "A variable a setting above also writes takes that setting's place, and its row says which." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "若某个变量也由上方的某项设置写入，则以该变量为准，其所在行会注明取代了哪项设置。"
+          }
+        }
+      }
+    },
+    "An empty value" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空值"
+          }
+        }
+      }
+    },
+    "Removes the variable, for a game that misreads one." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除该变量，适用于会误读它的游戏。"
+          }
+        }
+      }
+    },
+    "Settings › Engine holds the variables every game gets; a game's own win. A change applies the next time the game starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“设置 › 引擎”中的变量适用于所有游戏；游戏自身的变量优先。更改会在游戏下次启动时生效。"
+          }
+        }
+      }
+    },
+    "A name is letters, digits and underscores, and starts with a letter or an underscore." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称只能包含字母、数字和下划线，并以字母或下划线开头。"
+          }
+        }
+      }
+    },
+    "Sevoflurane needs this one for the bottle itself." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 需要此变量来运行容器本身。"
+          }
+        }
+      }
+    },
+    "A value is one line." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值只能有一行。"
+          }
+        }
+      }
+    },
+    "The value is too long." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值太长。"
+          }
+        }
+      }
+    },
+    "Epic & GOG" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Epic 与 GOG"
+          }
+        }
+      }
+    },
+    "Extra upscalers downloaded for Dormison." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 Dormison 下载的额外画面缩放器。"
+          }
+        }
+      }
+    },
+    "GOG's library could not be read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取 GOG 游戏库"
           }
         }
       }
