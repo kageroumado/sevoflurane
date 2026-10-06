@@ -22,215 +22,6 @@
         }
       }
     },
-    "A card with every frame of the last five seconds drawn at the time it took, so a hitch shows as a spike the average hides, and the 1 % low: the frame rate of the slowest one in a hundred frames of the last ten seconds." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一张卡片：按每帧耗时绘制最近五秒的帧，卡顿会显示为尖峰，即使平均值没有变化；并显示 1% 最低帧率，即最近十秒中最慢的 1% 帧所对应的帧率。"
-          }
-        }
-      }
-    },
-    "A program's own menus, such as Game and Help, move into the macOS menu bar, and the strip in its window is hidden." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "程序自己的菜单（如“游戏”和“帮助”）会移到 macOS 菜单栏中，窗口内的菜单条随之隐藏。"
-          }
-        }
-      }
-    },
-    "Counts the frames the engine put on screen, whichever renderer drew them. Overlay detail sets how much it shows." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "统计引擎显示的帧数，与所用渲染器无关。“叠加层详情”决定它显示多少内容。"
-          }
-        }
-      }
-    },
-    "Dormison holds each frame until its turn, so the game draws no more frames than the limit and the Mac does less work for the same picture. It paces every renderer, Metal and OpenGL alike, with the upscaler on or off. A limit the game reaches steadily also plays more evenly than a rate that swings." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dormison 会让每一帧等到轮到它时再显示，因此游戏绘制的帧数不会超过上限，Mac 用更少的工作得到同样的画面。它对所有渲染器都有效，无论是 Metal 还是 OpenGL，也无论画面缩放器是否开启。游戏能稳定达到的上限，玩起来也比忽高忽低的帧率更平稳。"
-          }
-        }
-      }
-    },
-    "Everything (CPU, GPU, power, temperature)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部（CPU、GPU、功耗、温度）"
-          }
-        }
-      }
-    },
-    "Frame rate and frame time" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帧率和帧时间"
-          }
-        }
-      }
-    },
-    "Frame rate limit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帧率上限"
-          }
-        }
-      }
-    },
-    "How much the frame rate counter shows. It appears when Frame rate counter is on." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帧率计数器显示多少内容。开启“帧率计数器”后才会出现。"
-          }
-        }
-      }
-    },
-    "Menus in the menu bar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜单移至菜单栏"
-          }
-        }
-      }
-    },
-    "New in this release, so it starts off. Applies from the program's next launch." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此功能为本版本新增，默认关闭。从程序下次启动时生效。"
-          }
-        }
-      }
-    },
-    "One number." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一个数字。"
-          }
-        }
-      }
-    },
-    "Overlay detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "叠加层详情"
-          }
-        }
-      }
-    },
-    "Saves battery and fan noise. Works on Dormison." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "节省电量，降低风扇噪音。适用于 Dormison。"
-          }
-        }
-      }
-    },
-    "The card with a row for the game's CPU use, the GPU's load, the Mac's power draw and its temperature." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在卡片中再加一行，显示游戏的 CPU 占用、GPU 负载、Mac 的功耗和温度。"
-          }
-        }
-      }
-    },
-    "The frame rate at the top right of the game's window." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在游戏窗口右上角显示帧率。"
-          }
-        }
-      }
-    },
-    "View › Frame Rate Limit switches it while a game runs, and the frame rate counter shows the limit beside the rate." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏运行时，可从“显示 › 帧率上限”切换，帧率计数器会在帧率旁显示上限。"
-          }
-        }
-      }
-    },
-    "View › Overlay Detail switches it while a game runs, and ⌥⌘G picks the frame time card. sevo perf report charts a whole run after it ends." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏运行时，可从“显示 › 叠加层详情”切换，⌥⌘G 可直接选择帧时间卡片。运行结束后，sevo perf report 可绘制整次运行的图表。"
-          }
-        }
-      }
-    },
-    "What the frame rate counter shows while it is on." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帧率计数器开启时显示的内容。"
-          }
-        }
-      }
-    },
-    "Windows programs draw a row of menus at the top of their window. With this on, Dormison shows those menus in the macOS menu bar, where a shortcut such as Ctrl+N works as ⌘N, and crops the row out of the window. A program with a View menu of its own keeps it, and Sevoflurane's View menu is named Picture." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows 程序会在窗口顶部绘制一行菜单。开启后，Dormison 会把这些菜单显示在 macOS 菜单栏中，Ctrl+N 之类的快捷键可用 ⌘N 触发，并把这一行从窗口中裁掉。自带“显示”菜单的程序会保留它，Sevoflurane 的“显示”菜单则改名为“画面”。"
-          }
-        }
-      }
-    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -686,16 +477,6 @@
         }
       }
     },
-    "%@ is out" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 已移出"
-          }
-        }
-      }
-    },
     "%@ is required and not installed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -774,16 +555,6 @@
         }
       }
     },
-    "%@ on disk" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "占用 %@"
-          }
-        }
-      }
-    },
     "%@ quit with an error while starting." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -801,22 +572,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 未显示任何窗口"
-          }
-        }
-      }
-    },
-    "%@ source %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ source %2$@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ 源代码 %2$@"
           }
         }
       }
@@ -1083,6 +838,17 @@
         }
       }
     },
+    "A card with every frame of the last five seconds drawn at the time it took, so a hitch shows as a spike the average hides, and the 1 % low: the frame rate of the slowest one in a hundred frames of the last ten seconds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一张卡片：按每帧耗时绘制最近五秒的帧，卡顿会显示为尖峰，即使平均值没有变化；并显示 1% 最低帧率，即最近十秒中最慢的 1% 帧所对应的帧率。"
+          }
+        }
+      }
+    },
     "A change applies the same way. Reset restores the engine's own version." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1309,6 +1075,17 @@
         }
       }
     },
+    "A line such as DXVK_HUD=1 %command% -windowed, the form Proton fixes are shared in, works too. Sevoflurane moves the variables ahead of %command% here, and Steam keeps %command% -windowed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也可以使用 DXVK_HUD=1 %command% -windowed 这样的写法，也就是 Proton 修复方案常用的格式。Sevoflurane 会把 %command% 前面的变量移到这里，Steam 则保留 %command% -windowed。"
+          }
+        }
+      }
+    },
     "A link shares another bottle's copy of a game. One copy on disk, no second download. Steam verifies it on first launch. Each bottle keeps its own saves." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1351,6 +1128,17 @@
         }
       }
     },
+    "A name is letters, digits and underscores, and starts with a letter or an underscore." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称只能包含字母、数字和下划线，并以字母或下划线开头。"
+          }
+        }
+      }
+    },
     "A new bottle gets the fonts and legacy runtimes too, not the required ones alone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1368,6 +1156,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有比已安装版本更新的 Dormison。"
+          }
+        }
+      }
+    },
+    "A program's own menus, such as Game and Help, move into the macOS menu bar, and the strip in its window is hidden." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "程序自己的菜单（如“游戏”和“帮助”）会移到 macOS 菜单栏中，窗口内的菜单条随之隐藏。"
           }
         }
       }
@@ -1433,6 +1232,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "线程先自旋约两微秒；如果持续未等到任务，就停止自旋。任务交接速度最高可提高十倍；如果忙碌线程多于 Mac 的核心数，则会增加处理器开销。"
+          }
+        }
+      }
+    },
+    "A value is one line." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值只能有一行。"
+          }
+        }
+      }
+    },
+    "A variable a setting above also writes takes that setting's place, and its row says which." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "若某个变量也由上方的某项设置写入，则以该变量为准，其所在行会注明取代了哪项设置。"
           }
         }
       }
@@ -1828,6 +1649,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建新容器并安装 Steam。"
+          }
+        }
+      }
+    },
+    "An empty value" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空值"
           }
         }
       }
@@ -3024,6 +2856,17 @@
         }
       }
     },
+    "Counts the frames the engine put on screen, whichever renderer drew them. Overlay detail sets how much it shows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计引擎显示的帧数，与所用渲染器无关。“叠加层详情”决定它显示多少内容。"
+          }
+        }
+      }
+    },
     "CPU" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3584,6 +3427,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dormison"
+          }
+        }
+      }
+    },
+    "Dormison holds each frame until its turn, so the game draws no more frames than the limit and the Mac does less work for the same picture. It paces every renderer, Metal and OpenGL alike, with the upscaler on or off. A limit the game reaches steadily also plays more evenly than a rate that swings." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dormison 会让每一帧等到轮到它时再显示，因此游戏绘制的帧数不会超过上限，Mac 用更少的工作得到同样的画面。它对所有渲染器都有效，无论是 Metal 还是 OpenGL，也无论画面缩放器是否开启。游戏能稳定达到的上限，玩起来也比忽高忽低的帧率更平稳。"
           }
         }
       }
@@ -4235,6 +4089,17 @@
         }
       }
     },
+    "Everything (CPU, GPU, power, temperature)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部（CPU、GPU、功耗、温度）"
+          }
+        }
+      }
+    },
     "Everything keeps a readable size, and the upscaler sharpens the result." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4312,6 +4177,17 @@
         }
       }
     },
+    "Extra upscalers downloaded for Dormison." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 Dormison 下载的额外画面缩放器。"
+          }
+        }
+      }
+    },
     "Extra upscalers for games drawn at low resolution: pixel art, anime, visual novels. MetalFX and the final filter are built in." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4360,26 +4236,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模拟显示模式切换"
-          }
-        }
-      }
-    },
-    "Filter" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "筛选"
-          }
-        }
-      }
-    },
-    "Filter by name" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按名称筛选"
           }
         }
       }
@@ -4680,6 +4536,17 @@
         }
       }
     },
+    "Frame rate and frame time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率和帧时间"
+          }
+        }
+      }
+    },
     "Frame rate counter" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4687,6 +4554,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帧率计数器"
+          }
+        }
+      }
+    },
+    "Frame rate limit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率上限"
           }
         }
       }
@@ -5110,16 +4988,6 @@
         }
       }
     },
-    "GOG user %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GOG 用户 %@"
-          }
-        }
-      }
-    },
     "GPU reported to games" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5263,6 +5131,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行记录的详细程度"
+          }
+        }
+      }
+    },
+    "How much the frame rate counter shows. It appears when Frame rate counter is on." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率计数器显示多少内容。开启“帧率计数器”后才会出现。"
           }
         }
       }
@@ -5459,16 +5338,6 @@
         }
       }
     },
-    "Install in" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "安装到"
-          }
-        }
-      }
-    },
     "Install into Bottle" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5562,16 +5431,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装在 /usr/local/bin/sevo。"
-          }
-        }
-      }
-    },
-    "Installed. %@ is in Quick Launch." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已安装。%@ 已加入快速启动。"
           }
         }
       }
@@ -5807,16 +5666,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此容器的依赖项和 Windows 设置由 CrossOver 管理。"
-          }
-        }
-      }
-    },
-    "Its folder goes to the Trash and it leaves Quick Launch. Saves the game keeps in its own folder go with it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "其文件夹会移到废纸篓，并从快速启动中移除。游戏保存在自身文件夹中的存档也会一并移除。"
           }
         }
       }
@@ -6218,6 +6067,17 @@
         }
       }
     },
+    "macOS (Steam for Mac)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS（Steam for Mac）"
+          }
+        }
+      }
+    },
     "macOS acceleration" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6330,6 +6190,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内存不足"
+          }
+        }
+      }
+    },
+    "Menus in the menu bar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单移至菜单栏"
           }
         }
       }
@@ -6462,16 +6333,6 @@
         }
       }
     },
-    "Moved %@ to the Trash." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已将 %@ 移到废纸篓。"
-          }
-        }
-      }
-    },
     "moved or deleted" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6595,6 +6456,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建容器…"
+          }
+        }
+      }
+    },
+    "New in this release, so it starts off. Applies from the program's next launch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此功能为本版本新增，默认关闭。从程序下次启动时生效。"
           }
         }
       }
@@ -6902,16 +6774,6 @@
         }
       }
     },
-    "Nothing installed from %@ yet." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未从 %@ 安装任何内容。"
-          }
-        }
-      }
-    },
     "Notifications are off" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7012,6 +6874,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "单个核心占用 100%"
+          }
+        }
+      }
+    },
+    "One number." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个数字。"
           }
         }
       }
@@ -7242,6 +7115,17 @@
         }
       }
     },
+    "Optional and free. Any Apple Account works; no paid developer membership." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选且免费。任何 Apple 账户都可以，无需付费的开发者会员资格。"
+          }
+        }
+      }
+    },
     "Optional upscaling" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7313,6 +7197,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他 Sevoflurane 数据"
+          }
+        }
+      }
+    },
+    "Over a setting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "覆盖设置"
+          }
+        }
+      }
+    },
+    "Overlay detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "叠加层详情"
           }
         }
       }
@@ -7618,16 +7524,6 @@
         }
       }
     },
-    "Reading your account…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在读取你的账号…"
-          }
-        }
-      }
-    },
     "Ready to play" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7761,16 +7657,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "减少同步开销。如果游戏卡住，请关闭此选项。"
-          }
-        }
-      }
-    },
-    "Refresh" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新"
           }
         }
       }
@@ -8014,12 +7900,13 @@
         }
       }
     },
-    "Removing" : {
+    "Removes the variable, for a game that misreads one." : {
+      "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在移除"
+            "value" : "移除该变量，适用于会误读它的游戏。"
           }
         }
       }
@@ -8553,6 +8440,17 @@
         }
       }
     },
+    "Saves battery and fan noise. Works on Dormison." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节省电量，降低风扇噪音。适用于 Dormison。"
+          }
+        }
+      }
+    },
     "Saves logs, system details, and recent crash reports in a ZIP file on your Desktop. Your name, file paths, and Steam IDs are removed." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8727,6 +8625,17 @@
         }
       }
     },
+    "Settings › Engine holds the variables every game gets; a game's own win. A change applies the next time the game starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“设置 › 引擎”中的变量适用于所有游戏；游戏自身的变量优先。更改会在游戏下次启动时生效。"
+          }
+        }
+      }
+    },
     "Settings for one game" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8780,18 +8689,13 @@
         }
       }
     },
-    "Sevoflurane reaches the store through %@ %@ from the Heroic Games Launcher project, licensed under the %@. It is downloaded from that project's release the first time you sign in, checked against a fixed digest, and runs as a program of its own." : {
+    "Sevoflurane needs this one for the bottle itself." : {
+      "extractionState" : "manual",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Sevoflurane reaches the store through %1$@ %2$@ from the Heroic Games Launcher project, licensed under the %3$@. It is downloaded from that project's release the first time you sign in, checked against a fixed digest, and runs as a program of its own."
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sevoflurane 通过 Heroic Games Launcher 项目的 %1$@ %2$@ 访问该商店，该工具采用 %3$@ 许可。首次登录时会从该项目的发布页下载，核对固定的摘要，并作为独立程序运行。"
+            "value" : "Sevoflurane 需要此变量来运行容器本身。"
           }
         }
       }
@@ -9084,26 +8988,6 @@
         }
       }
     },
-    "Sign in to %@. The sheet closes by itself once you are in." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录 %@。登录后此面板会自动关闭。"
-          }
-        }
-      }
-    },
-    "Sign in to install your %@ games." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录以安装你的 %@ 游戏。"
-          }
-        }
-      }
-    },
     "Sign In to Steam" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9130,46 +9014,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用任意 Apple 账户登录，如有提示，请接受 Apple 的免费开发者协议。无需付费加入开发者计划。Sevoflurane 会选择正确的下载项并在此处安装。"
-          }
-        }
-      }
-    },
-    "Sign In…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录…"
-          }
-        }
-      }
-    },
-    "Sign Out" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "退出登录"
-          }
-        }
-      }
-    },
-    "Signed in as %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已登录为 %@"
-          }
-        }
-      }
-    },
-    "Signing in did not work: %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录失败：%@"
           }
         }
       }
@@ -9609,6 +9453,17 @@
         }
       }
     },
+    "Steam sells this game for macOS too. Play can start either version." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 也提供此游戏的 macOS 版本。“开始游戏”可以启动其中任一版本。"
+          }
+        }
+      }
+    },
     "Steam settings" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9733,6 +9588,17 @@
         }
       }
     },
+    "Steam's launch options" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 的启动选项"
+          }
+        }
+      }
+    },
     "Steam's menus freeze and the app looks stuck." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9846,16 +9712,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已按要求停止"
-          }
-        }
-      }
-    },
-    "Stopped. Installing again carries on from what was downloaded." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已停止。再次安装会从已下载的部分继续。"
           }
         }
       }
@@ -10024,16 +9880,6 @@
         }
       }
     },
-    "The %@ games your account owns that run on Windows. Each one installs into a folder of its own and joins Quick Launch, with its own settings, Dock icon and run history." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的账号拥有的可在 Windows 上运行的 %@ 游戏。每个游戏都会安装到独立的文件夹并加入快速启动，拥有各自的设置、程序坞图标和运行记录。"
-          }
-        }
-      }
-    },
     "The background helper had given up on Steam. Steam is restarting." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10063,6 +9909,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "后台辅助程序正在运行。"
+          }
+        }
+      }
+    },
+    "The card with a row for the game's CPU use, the GPU's load, the Mac's power draw and its temperature." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在卡片中再加一行，显示游戏的 CPU 占用、GPU 负载、Mac 的功耗和温度。"
           }
         }
       }
@@ -10160,6 +10017,17 @@
         }
       }
     },
+    "The frame rate at the top right of the game's window." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在游戏窗口右上角显示帧率。"
+          }
+        }
+      }
+    },
     "The game" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10221,6 +10089,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
+          }
+        }
+      }
+    },
+    "The game's own macOS version, started by Valve's Steam for Mac, which needs the game installed there. Play opens its install page when the game is not, and the settings on this page stay with the Windows version." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏自带的 macOS 版本，由 Valve 的 Steam for Mac 启动，需要在那里安装该游戏。若尚未安装，“开始游戏”会打开其安装页面；此页面上的设置只作用于 Windows 版本。"
           }
         }
       }
@@ -10309,6 +10188,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac 温度过高%@，macOS 正在降低运行速度"
+          }
+        }
+      }
+    },
+    "The macOS version starts in Steam for Mac, with the game installed there." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 版本会在 Steam for Mac 中启动，需要在那里安装该游戏。"
           }
         }
       }
@@ -10473,6 +10363,17 @@
         }
       }
     },
+    "The value is too long." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值太长。"
+          }
+        }
+      }
+    },
     "The window system scales the picture." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10480,6 +10381,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "窗口系统会缩放画面。"
+          }
+        }
+      }
+    },
+    "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版本，在 Sevoflurane 的 Steam 中运行。此页面上的所有设置都作用于它。"
           }
         }
       }
@@ -10738,32 +10650,12 @@
         }
       }
     },
-    "Uninstall" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "卸载"
-          }
-        }
-      }
-    },
     "Uninstall %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "卸载 %@"
-          }
-        }
-      }
-    },
-    "Uninstall %@?" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要卸载 %@ 吗？"
           }
         }
       }
@@ -10980,16 +10872,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已更新至版本 %@"
-          }
-        }
-      }
-    },
-    "Updated." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已更新。"
           }
         }
       }
@@ -11212,6 +11094,17 @@
         }
       }
     },
+    "Variables the game starts with, by name: the DXVK_HUD=1 or WINEDLLOVERRIDES=… a fix for a game often names." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏启动时使用的环境变量，按名称设置：例如游戏修复方案中常见的 DXVK_HUD=1 或 WINEDLLOVERRIDES=…。"
+          }
+        }
+      }
+    },
     "vc_redist.%@.exe failed (%@)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11288,6 +11181,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本 %@（%@）"
+          }
+        }
+      }
+    },
+    "View › Frame Rate Limit switches it while a game runs, and the frame rate counter shows the limit beside the rate." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏运行时，可从“显示 › 帧率上限”切换，帧率计数器会在帧率旁显示上限。"
+          }
+        }
+      }
+    },
+    "View › Overlay Detail switches it while a game runs, and ⌥⌘G picks the frame time card. sevo perf report charts a whole run after it ends." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏运行时，可从“显示 › 叠加层详情”切换，⌥⌘G 可直接选择帧时间卡片。运行结束后，sevo perf report 可绘制整次运行的图表。"
           }
         }
       }
@@ -11484,6 +11399,17 @@
         }
       }
     },
+    "What the frame rate counter shows while it is on." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率计数器开启时显示的内容。"
+          }
+        }
+      }
+    },
     "When the problem occurs, save a diagnostics archive below." : {
       "localizations" : {
         "zh-Hans" : {
@@ -11515,12 +11441,45 @@
         }
       }
     },
+    "Windows (Sevoflurane)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows（Sevoflurane）"
+          }
+        }
+      }
+    },
     "Windows games on macOS" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 macOS 上运行 Windows 游戏"
+          }
+        }
+      }
+    },
+    "Windows or macOS version" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 或 macOS 版本"
+          }
+        }
+      }
+    },
+    "Windows programs draw a row of menus at the top of their window. With this on, Dormison shows those menus in the macOS menu bar, where a shortcut such as Ctrl+N works as ⌘N, and crops the row out of the window. A program with a View menu of its own keeps it, and Sevoflurane's View menu is named Picture." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 程序会在窗口顶部绘制一行菜单。开启后，Dormison 会把这些菜单显示在 macOS 菜单栏中，Ctrl+N 之类的快捷键可用 ⌘N 触发，并把这一行从窗口中裁掉。自带“显示”菜单的程序会保留它，Sevoflurane 的“显示”菜单则改名为“画面”。"
           }
         }
       }
@@ -11786,259 +11745,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac 当前负载较高"
-          }
-        }
-      }
-    },
-    "Optional and free. Any Apple Account works; no paid developer membership." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选且免费。任何 Apple 账户都可以，无需付费的开发者会员资格。"
-          }
-        }
-      }
-    },
-    "Windows (Sevoflurane)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows（Sevoflurane）"
-          }
-        }
-      }
-    },
-    "macOS (Steam for Mac)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "macOS（Steam for Mac）"
-          }
-        }
-      }
-    },
-    "The macOS version starts in Steam for Mac, with the game installed there." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "macOS 版本会在 Steam for Mac 中启动，需要在那里安装该游戏。"
-          }
-        }
-      }
-    },
-    "Windows or macOS version" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows 或 macOS 版本"
-          }
-        }
-      }
-    },
-    "Steam sells this game for macOS too. Play can start either version." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Steam 也提供此游戏的 macOS 版本。“开始游戏”可以启动其中任一版本。"
-          }
-        }
-      }
-    },
-    "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows 版本，在 Sevoflurane 的 Steam 中运行。此页面上的所有设置都作用于它。"
-          }
-        }
-      }
-    },
-    "The game's own macOS version, started by Valve's Steam for Mac, which needs the game installed there. Play opens its install page when the game is not, and the settings on this page stay with the Windows version." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏自带的 macOS 版本，由 Valve 的 Steam for Mac 启动，需要在那里安装该游戏。若尚未安装，“开始游戏”会打开其安装页面；此页面上的设置只作用于 Windows 版本。"
-          }
-        }
-      }
-    },
-    "Variables the game starts with, by name: the DXVK_HUD=1 or WINEDLLOVERRIDES=… a fix for a game often names." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏启动时使用的环境变量，按名称设置：例如游戏修复方案中常见的 DXVK_HUD=1 或 WINEDLLOVERRIDES=…。"
-          }
-        }
-      }
-    },
-    "Steam's launch options" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Steam 的启动选项"
-          }
-        }
-      }
-    },
-    "A line such as DXVK_HUD=1 %command% -windowed, the form Proton fixes are shared in, works too. Sevoflurane moves the variables ahead of %command% here, and Steam keeps %command% -windowed." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "也可以使用 DXVK_HUD=1 %command% -windowed 这样的写法，也就是 Proton 修复方案常用的格式。Sevoflurane 会把 %command% 前面的变量移到这里，Steam 则保留 %command% -windowed。"
-          }
-        }
-      }
-    },
-    "Over a setting" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "覆盖设置"
-          }
-        }
-      }
-    },
-    "A variable a setting above also writes takes that setting's place, and its row says which." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "若某个变量也由上方的某项设置写入，则以该变量为准，其所在行会注明取代了哪项设置。"
-          }
-        }
-      }
-    },
-    "An empty value" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "空值"
-          }
-        }
-      }
-    },
-    "Removes the variable, for a game that misreads one." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除该变量，适用于会误读它的游戏。"
-          }
-        }
-      }
-    },
-    "Settings › Engine holds the variables every game gets; a game's own win. A change applies the next time the game starts." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“设置 › 引擎”中的变量适用于所有游戏；游戏自身的变量优先。更改会在游戏下次启动时生效。"
-          }
-        }
-      }
-    },
-    "A name is letters, digits and underscores, and starts with a letter or an underscore." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "名称只能包含字母、数字和下划线，并以字母或下划线开头。"
-          }
-        }
-      }
-    },
-    "Sevoflurane needs this one for the bottle itself." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sevoflurane 需要此变量来运行容器本身。"
-          }
-        }
-      }
-    },
-    "A value is one line." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "值只能有一行。"
-          }
-        }
-      }
-    },
-    "The value is too long." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "值太长。"
-          }
-        }
-      }
-    },
-    "Epic & GOG" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Epic 与 GOG"
-          }
-        }
-      }
-    },
-    "Extra upscalers downloaded for Dormison." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为 Dormison 下载的额外画面缩放器。"
-          }
-        }
-      }
-    },
-    "GOG's library could not be read" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法读取 GOG 游戏库"
           }
         }
       }

@@ -177,7 +177,6 @@ extension SteamBridge {
             ws.send(text: Self.resultReply(rid: rid, outcome: ["ok": true, "v": NSNull()]))
             return
         }
-        var storeLaunch: Int?
         if path == "SteamClient.Apps.RunGame" {
             // The one choke point every launch funnels through — menu bar,
             // the library's Play button, steam://run. Reconcile the renderer
@@ -197,7 +196,6 @@ extension SteamBridge {
                 }
                 BottleGraphics.recordBootedSelection()
             }
-            storeLaunch = await retargetStoreShortcut(beforeRunning: request, cdp: cdp)
             await adoptLaunchCommand(beforeRunning: request, cdp: cdp)
             onGameLaunch?()
         }
@@ -244,12 +242,10 @@ extension SteamBridge {
         do {
             raw = try await withDeadline(Self.forwardBudget) { try await cdp.evaluate(expr) }
         } catch {
-            if let storeLaunch { await settleStoreLaunch(storeLaunch) }
             await abandonRegistration(handle, hadCallbacks: !callbacks.isEmpty, cdp: cdp)
             throw error
         }
         let outcome = raw.flatMap(Self.jsonObject) ?? ["ok": false, "e": "no result"]
-        if let storeLaunch, outcome["ok"] as? Bool != true { await settleStoreLaunch(storeLaunch) }
         if outcome["reg"] as? Bool == true {
             if registrations[handle] != nil, pages[id] != nil {
                 registrations[handle]?.state = .active

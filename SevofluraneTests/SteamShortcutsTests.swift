@@ -227,68 +227,23 @@ struct SteamShortcutsTests {
     }
 
     @Test
-    func `a shortcut carrying a store launch's program keeps it until the launch settles`() {
-        let fresh = SteamShortcuts.Listed(
-            appid: Self.shortcut, exe: #""C:\Games\Nightsong\Nightsong.exe""#, startDir: #""C:\Games\Nightsong\""#,
-            launchOptions: "-AUTH_PASSWORD=one-time",
-        )
-        let program = SteamShortcuts.Program(id: 1, target: Self.nightsongTarget, wanted: true, shortcutID: Self.shortcut)
-        let during = SteamShortcuts.plan([program], listed: [fresh], owned: [Self.shortcut], launching: [Self.shortcut])
-        #expect(during == SteamShortcuts.Plan(kept: [1: Self.shortcut]))
-        let after = SteamShortcuts.plan([program], listed: [fresh], owned: [Self.shortcut])
-        #expect(after.retargeted == [1])
-    }
-
-    @Test
-    func `a store launch settles once, and a late timeout leaves a newer launch alone`() {
-        var launches = SteamShortcuts.Launches()
-        let first = launches.begin(programID: 1, shortcut: Self.shortcut)
-        #expect(launches.shortcuts == [Self.shortcut])
-        #expect(launches.settle(1) == Self.shortcut)
-        #expect(launches.settle(1) == nil)
-        #expect(launches.shortcuts.isEmpty)
-
-        let second = launches.begin(programID: 1, shortcut: Self.shortcut)
-        #expect(launches.settle(1, generation: first) == nil)
-        #expect(launches.shortcuts == [Self.shortcut])
-        #expect(launches.settle(1, generation: second) == Self.shortcut)
-        #expect(launches.settle(2) == nil)
-    }
-
-    @Test
-    func `a program's target names its store's working folder`() {
+    func `a program's target starts in its executable's folder`() {
         var program = AdoptedProgram(
-            path: SteamBottle.root.appending(path: "drive_c/GOG Games/Nightsong/bin/Nightsong.exe").path,
+            path: SteamBottle.root.appending(path: "drive_c/Games/Nightsong/bin/Nightsong.exe").path,
             bottle: "Steam", kind: ProgramKind.game, addedAt: .now,
         )
         program.arguments = ["-lang", "en"]
-        program.workingDirectory = SteamBottle.root.appending(path: "drive_c/GOG Games/Nightsong").path
         let target = SteamShortcuts.target(program)
-        #expect(target.exe == #"C:\GOG Games\Nightsong\bin\Nightsong.exe"#)
-        #expect(target.startDir == #"C:\GOG Games\Nightsong"#)
+        #expect(target.exe == #"C:\Games\Nightsong\bin\Nightsong.exe"#)
+        #expect(target.startDir == #"C:\Games\Nightsong\bin"#)
         #expect(target.launchOptions == "-lang en")
-        #expect(target.quotedStartDir == #""C:\GOG Games\Nightsong\""#)
-
-        program.workingDirectory = nil
-        #expect(SteamShortcuts.target(program).startDir == #"C:\GOG Games\Nightsong\bin"#)
+        #expect(target.quotedStartDir == #""C:\Games\Nightsong\bin\""#)
     }
 
     @Test
     func `Steam's quoted start folder and the bottle's path compare equal`() {
         #expect(SteamShortcuts.folderKey(#""C:\Games\Nightsong\""#) == SteamShortcuts.folderKey(#"c:\games\nightsong"#))
         #expect(SteamShortcuts.folderKey(#""C:\""#) == #"c:\"#)
-    }
-
-    @Test
-    func `a launch from Steam names the store title behind its shortcut`() {
-        let store = Self.entry(
-            id: AdoptedPrograms.firstID, shortcut: Self.shortcut, store: StoreLink(store: .epic, id: "Fennec"),
-        )
-        let plain = Self.entry(id: AdoptedPrograms.firstID + 1, shortcut: 3_000_000_001)
-        let launch = SteamShortcuts.gameID(shortcutID: Self.shortcut)
-        #expect(SteamShortcuts.storeProgram(launching: launch, in: [plain, store])?.id == AdoptedPrograms.firstID)
-        #expect(SteamShortcuts.storeProgram(launching: SteamShortcuts.gameID(shortcutID: 3_000_000_001), in: [plain, store]) == nil)
-        #expect(SteamShortcuts.storeProgram(launching: "1245620", in: [plain, store]) == nil)
     }
 
     @Test
@@ -320,7 +275,7 @@ struct SteamShortcutsTests {
     func `the retarget script sets the target, start folder and options of one shortcut`() {
         let target = SteamShortcuts.Target(
             exe: #"C:\Games\Fennec\Fennec.exe"#, startDir: #"C:\Games\Fennec"#,
-            launchOptions: "-AUTH_TYPE=exchangecode -epicusername=\"someone\"",
+            launchOptions: "-windowed -profile=\"Save One\"",
         )
         let script = SteamShortcuts.retargetScript(Self.shortcut, target)
         #expect(script.contains("var appid = 3123456789;"))
@@ -346,10 +301,9 @@ struct SteamShortcutsTests {
         #expect(program.steamShortcutID == nil)
     }
 
-    private static func entry(id: Int, shortcut: Int?, store: StoreLink? = nil) -> AdoptedPrograms.Entry {
+    private static func entry(id: Int, shortcut: Int?) -> AdoptedPrograms.Entry {
         var program = AdoptedProgram(path: "/x.exe", bottle: "Steam", kind: ProgramKind.game, addedAt: .now)
         program.steamShortcutID = shortcut
-        program.store = store
         program.inSteamLibrary = shortcut != nil
         return AdoptedPrograms.Entry(id: id, name: "X", program: program)
     }

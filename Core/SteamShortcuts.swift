@@ -64,13 +64,6 @@ nonisolated enum SteamShortcuts {
         return aliases
     }
 
-    /// The store title whose shortcut a `RunGame` call starts, which needs
-    /// this launch's program from its store before Steam starts it.
-    static func storeProgram(launching gameID: String, in entries: [AdoptedPrograms.Entry]) -> AdoptedPrograms.Entry? {
-        guard let shortcut = shortcutID(in: gameID) else { return nil }
-        return entries.first { $0.program.steamShortcutID == shortcut && $0.program.store != nil }
-    }
-
     // MARK: - Matching
 
     /// An executable path as the comparison sees it. Steam keeps a
@@ -150,10 +143,10 @@ nonisolated enum SteamShortcuts {
         }
     }
 
-    /// A program's target: its executable, the folder its store names or
-    /// else the executable's own, and its arguments.
+    /// A program's target: its executable, the executable's own folder to
+    /// start in, and its arguments.
     static func target(_ program: AdoptedProgram) -> Target {
-        let folder = program.workingDirectory.map { URL(fileURLWithPath: $0) } ?? program.url.deletingLastPathComponent()
+        let folder = program.url.deletingLastPathComponent()
         return Target(
             exe: SteamBottle.windowsPath(for: program.url),
             startDir: SteamBottle.windowsPath(for: folder),
@@ -167,39 +160,6 @@ nonisolated enum SteamShortcuts {
             && folderKey(listed.startDir) == folderKey(target.startDir)
             && listed.launchOptions.trimmingCharacters(in: .whitespaces)
             == target.launchOptions.trimmingCharacters(in: .whitespaces)
-    }
-
-    /// The store launches Steam is starting from a shortcut that carries this
-    /// launch's program, Epic's one-time sign-in among its launch options.
-    /// The shortcut gets the program as recorded back once Steam has started
-    /// the game or given up, and a sync pass leaves it alone until then.
-    struct Launches: Sendable {
-        private var inFlight: [Int: (shortcut: Int, generation: Int)] = [:]
-        private var generation = 0
-
-        /// The shortcuts with a launch in flight.
-        var shortcuts: Set<Int> {
-            Set(inFlight.values.map(\.shortcut))
-        }
-
-        /// Marks a program's shortcut as carrying a launch's program, and
-        /// answers the launch's generation for ``settle(_:generation:)``.
-        mutating func begin(programID: Int, shortcut: Int) -> Int {
-            generation += 1
-            inFlight[programID] = (shortcut, generation)
-            return generation
-        }
-
-        /// Ends a program's launch and answers its shortcut, which gets the
-        /// recorded program back; nil when no launch of it is in flight, or
-        /// when `generation` names an earlier one.
-        mutating func settle(_ programID: Int, generation: Int? = nil) -> Int? {
-            guard let launch = inFlight[programID], generation == nil || generation == launch.generation else {
-                return nil
-            }
-            inFlight[programID] = nil
-            return launch.shortcut
-        }
     }
 
     // MARK: - The plan
@@ -254,13 +214,10 @@ nonisolated enum SteamShortcuts {
     /// program wants any more is removed; the rest of the list is the user's
     /// and stays as it is.
     ///
-    /// - Parameters:
-    ///   - fresh: Shortcuts made moments ago, which Steam's list can lag
-    ///     behind: they are kept whether listed or not.
-    ///   - launching: Shortcuts carrying a store launch's program
-    ///     (``Launches``), which keep it until the launch settles.
+    /// - Parameter fresh: Shortcuts made moments ago, which Steam's list can
+    ///   lag behind: they are kept whether listed or not.
     static func plan(
-        _ programs: [Program], listed: [Listed], owned: Set<Int>, fresh: Set<Int> = [], launching: Set<Int> = [],
+        _ programs: [Program], listed: [Listed], owned: Set<Int>, fresh: Set<Int> = [],
     ) -> Plan {
         let programs = programs.sorted { $0.id < $1.id }
         let listedIDs = Set(listed.map(\.appid))
@@ -292,8 +249,7 @@ nonisolated enum SteamShortcuts {
         }
         plan.removed = unwanted.filter { listedIDs.contains($0) && !taken.contains($0) }.sorted()
         plan.retargeted = programs.filter { program in
-            guard let shortcut = plan.kept[program.id], !launching.contains(shortcut),
-                  let shown = byID[shortcut] else { return false }
+            guard let shortcut = plan.kept[program.id], let shown = byID[shortcut] else { return false }
             return !starts(shown, program.target)
         }.map(\.id)
         return plan

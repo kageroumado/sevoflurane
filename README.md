@@ -522,12 +522,6 @@ runs on CrossOver.
   in Settings › HoYoverse or with `sevo hoyo`. An update downloads HoYoverse's
   patches for the build you have; an interrupted download carries on where it
   stopped. Genshin and Zenless join Quick Launch once installed.
-- **Epic Games and GOG libraries**: sign in to either store in Settings ›
-  Epic & GOG, then install, update, verify and uninstall its Windows games.
-  Each installed game joins Quick Launch with its own settings and Dock icon,
-  and an Epic game gets a fresh sign-in at every launch. Sevoflurane goes
-  through legendary and gogdl (GPLv3, Heroic Games Launcher), downloaded on
-  first sign-in and run as their own programs.
 
 ### Settings
 
@@ -551,7 +545,6 @@ it. Every row has a one-line summary and an (i) for the full explanation.
   it set say "Set by the fix list" with their undo. Engine › Apply known fixes
   automatically turns it off.
 - **HoYoverse**: install, update and verify HoYoverse games (above).
-- **Epic & GOG**: sign in, and install and keep current each store's games (above).
 - **Storage**, **Recovery**, **Diagnostics**: below.
 - **About**: version, links, Acknowledgements for every third-party component
   and data source, and the license.

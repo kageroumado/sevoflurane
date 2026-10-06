@@ -44,7 +44,7 @@ extension BottleSupervisor {
     /// reads them, and the spawn goes through the same engine invocation as
     /// everything else. Answers a refusal, or `nil` when the program started.
     func launchProgram(id: Int, renderer explicit: Renderer? = nil) async -> ProgramLaunchRefusal? {
-        guard var program = AdoptedPrograms.program(id) else {
+        guard let program = AdoptedPrograms.program(id) else {
             return .missing("no adopted program with id \(id)")
         }
         guard program.exists else {
@@ -71,11 +71,6 @@ extension BottleSupervisor {
             // child and takes the kernel-driver path: it would only die.
             note("\(name) is already running; this request starts nothing")
             return .busy("\(name) is already running")
-        }
-        if program.store != nil {
-            let refreshed = await StoreLibrary.refreshed(program)
-            program = refreshed.program
-            if let storeNote = refreshed.note { note(storeNote) }
         }
         await prepareLaunch(appID: id)
         stageGraphics(for: name, renderer: explicit, appID: id)
@@ -119,7 +114,7 @@ extension BottleSupervisor {
         await ClientLifecycle.launchInBottle(
             SteamParent.invocation(program),
             environment: parentEnvironment,
-            directory: program.workingDirectory.map { URL(fileURLWithPath: $0) } ?? program.url.deletingLastPathComponent(),
+            directory: program.url.deletingLastPathComponent(),
             programExit: ProgramExit.Program(appID: id, exe: name),
         )
         note("started \(name) under a steam.exe parent in \(SteamBottle.name)'s companion prefix, where no Steam client runs")

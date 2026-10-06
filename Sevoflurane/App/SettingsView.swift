@@ -93,7 +93,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case engine
     case games
     case hoyoverse
-    case stores
     case storage
     case recovery
     case diagnostics
@@ -110,7 +109,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .engine: "Engine"
         case .games: "Games"
         case .hoyoverse: "HoYoverse"
-        case .stores: "Epic & GOG"
         case .storage: "Storage"
         case .recovery: "Recovery"
         case .diagnostics: "Diagnostics"
@@ -126,7 +124,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .engine: "wrench.and.screwdriver.fill"
         case .games: "gamecontroller.fill"
         case .hoyoverse: "arrow.down.circle.fill"
-        case .stores: "bag.fill"
         case .storage: "internaldrive.fill"
         case .recovery: "cross.case.fill"
         case .diagnostics: "stethoscope"
@@ -365,19 +362,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: ["hoyoverse", "install", "download", "genshin", "star rail", "zenless", "voice"],
                 ),
             ]
-        case .stores:
-            [
-                SearchableSetting(
-                    id: .storesAccount,
-                    title: "Sign in to Epic Games or GOG",
-                    keywords: ["epic", "epic games", "gog", "store", "sign in", "account", "legendary", "gogdl", "heroic"],
-                ),
-                SearchableSetting(
-                    id: .storesLibrary,
-                    title: "Epic and GOG libraries",
-                    keywords: ["epic", "gog", "library", "install", "update", "verify", "uninstall", "games"],
-                ),
-            ]
         case .storage:
             [
                 SearchableSetting(
@@ -595,8 +579,6 @@ enum SettingsAnchor: String, CaseIterable {
     case gamesUpscaler = "games.upscaler"
     case hoyoverseGames = "hoyoverse.games"
     case hoyoverseInstall = "hoyoverse.install"
-    case storesAccount = "stores.account"
-    case storesLibrary = "stores.library"
     case storageGames = "storage.games"
     case storageSharing = "storage.sharing"
     case recoveryRestartSteam = "recovery.restartSteam"
@@ -739,8 +721,6 @@ private struct SettingsPane: View {
                 GamesSettings(shaders: shaders, highlighted: highlighted, requestedGame: $requestedGame)
             case .hoyoverse:
                 HoYoSettings(highlighted: highlighted)
-            case .stores:
-                StoresSettings(highlighted: highlighted)
             case .storage:
                 StorageSettings(store: storage, steam: steam, highlighted: highlighted)
             case .recovery:

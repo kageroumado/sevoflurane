@@ -5,8 +5,7 @@ import Foundation
 /// makes the changes with the client's own calls.
 ///
 /// A pass runs when the client becomes healthy, when a program is added or
-/// removed, when a store title is adopted again, and when its "Show in
-/// Steam's library" switch changes. With the
+/// removed, and when its "Show in Steam's library" switch changes. With the
 /// client down a pass changes nothing and the next healthy client catches up,
 /// so a program added or removed meanwhile, by the app or by `sevo`, reaches
 /// Steam then.
@@ -26,10 +25,6 @@ final class SteamLibraryShortcuts {
     /// moment behind the call that made one.
     private var made: [Int: ContinuousClock.Instant] = [:]
     private static let freshFor: Duration = .seconds(60)
-    private var launches = SteamShortcuts.Launches()
-    /// How long a store launch's program may stay in its shortcut when Steam
-    /// reports neither the game running nor the launch ending.
-    private static let launchSettlesWithin: Duration = .seconds(300)
 
     /// Whether a program can be listed at all: it lives in the bottle the
     /// Steam client runs in, it is played rather than installed from, and it
@@ -73,7 +68,6 @@ final class SteamLibraryShortcuts {
         made = made.filter { now - $0.value < Self.freshFor }
         let plan = SteamShortcuts.plan(
             entries.map(Self.weighed), listed: listed, owned: SteamShortcuts.owned(), fresh: Set(made.keys),
-            launching: launches.shortcuts,
         )
         let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
         if !plan.removed.isEmpty {
@@ -111,33 +105,6 @@ final class SteamLibraryShortcuts {
         }
         SteamShortcuts.setOwned(owned)
         onAliases?(SteamShortcuts.aliases(AdoptedPrograms.all()))
-    }
-
-    // MARK: - Store launches
-
-    /// Marks a program's shortcut as about to carry a store launch's program,
-    /// before the bridge writes it there, so no pass points it back meanwhile.
-    func beginStoreLaunch(programID: Int, shortcut: Int) {
-        let generation = launches.begin(programID: programID, shortcut: shortcut)
-        Task(name: "Give a store shortcut its program back if the launch never settles") {
-            try? await Task.sleep(for: Self.launchSettlesWithin)
-            settleStoreLaunch(programID: programID, generation: generation)
-        }
-    }
-
-    /// Gives a program's shortcut the program as recorded back once Steam
-    /// has started the game, finished its launch or failed it, so Epic's
-    /// one-time sign-in stays in Steam's shortcut no longer than the launch.
-    func settleStoreLaunch(programID: Int, generation: Int? = nil) {
-        guard let shortcut = launches.settle(programID, generation: generation),
-              let bridge, let entry = AdoptedPrograms.all().first(where: { $0.id == programID }) else { return }
-        let target = SteamShortcuts.target(entry.program)
-        Task(name: "Give \(entry.name)'s shortcut its recorded program back") {
-            if await bridge.evaluateInClient(SteamShortcuts.retargetScript(shortcut, target)) == nil {
-                EventLog.shared.log(.client, "could not give \(entry.name)'s shortcut in Steam's library its recorded program back; the next pass does")
-                sync()
-            }
-        }
     }
 
     /// Makes one program's shortcut and records its app id.

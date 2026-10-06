@@ -29,9 +29,6 @@ extension SteamWebHost {
             // because which app is launching is what every window and every
             // process the launch starts is attributed to.
             EventLog.shared.log(.client, "launch flow finished — waiting for the game window")
-            if let id = self.appID(fromSteam: appID) ?? activeLaunch?.appID {
-                SteamLibraryShortcuts.shared.settleStoreLaunch(programID: id)
-            }
             if var launch = activeLaunch {
                 launch.detail = "Waiting for the game window…"
                 setLaunch(launch, clearAfter: 180)
@@ -48,14 +45,12 @@ extension SteamWebHost {
                 "launch \(id): Steam reported an error\(task.isEmpty ? "" : " — \(task)")",
             )
             if id != 0 {
-                SteamLibraryShortcuts.shared.settleStoreLaunch(programID: id)
                 launchOptionAnswers[id] = nil
                 onGameActionError?(id, task)
             }
         case "life":
             guard let id = self.appID(fromSteam: appID), id != 0 else { return }
             let running = task == "1"
-            if running { SteamLibraryShortcuts.shared.settleStoreLaunch(programID: id) }
             EventLog.shared.log(.client, "app \(id) \(running ? "is running" : "stopped running")")
             onGameRunningChanged?(id, running)
         default:

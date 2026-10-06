@@ -31,12 +31,6 @@ nonisolated struct AdoptedProgram: Codable, Equatable, Sendable {
     /// The app id Steam gave the program's shortcut, which Steam's launch
     /// and lifetime events name it by.
     var steamShortcutID: Int?
-    /// The folder the program starts in, as a macOS path, when its store
-    /// names one other than the executable's own.
-    var workingDirectory: String?
-    /// The store title it was installed as, which a launch asks for fresh
-    /// sign-in arguments.
-    var store: StoreLink?
 
     var url: URL {
         URL(fileURLWithPath: path)
@@ -192,11 +186,9 @@ nonisolated enum AdoptedPrograms {
     ///
     /// `start /unix` takes a macOS path and sets the working directory to the
     /// program's own folder, which is what a game that loads its data by
-    /// relative path needs; `/d` names another folder where the program's
-    /// record has one. Each argument stays its own token: a path with spaces
-    /// quoted into one would reach the program as one word.
+    /// relative path needs. Each argument stays its own token: a path with
+    /// spaces quoted into one would reach the program as one word.
     static func invocation(_ program: AdoptedProgram) -> [String] {
-        let directory = program.workingDirectory.map { ["/d", SteamBottle.windowsPath(for: URL(fileURLWithPath: $0))] } ?? []
-        return ["start"] + directory + ["/unix", program.path] + program.arguments
+        ["start", "/unix", program.path] + program.arguments
     }
 }
