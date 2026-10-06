@@ -54,7 +54,7 @@ struct StorePathsTests {
         let climbing = layout.root.appending(path: "../Documents")
         #expect(StorePaths.root(containing: climbing, roots: [layout.root], protected: []) == nil)
         #expect(throws: StoreFailure.self) {
-            try StorePaths.trash(climbing, roots: [layout.root], protected: [])
+            try StorePaths.trash(climbing.path, roots: [layout.root], protected: [])
         }
         #expect(FileManager.default.fileExists(atPath: layout.outside.path))
     }
@@ -64,10 +64,10 @@ struct StorePathsTests {
         let layout = try Layout()
         defer { layout.remove() }
         #expect(throws: StoreFailure.self) {
-            try StorePaths.trash(layout.outside, roots: [layout.root], protected: [])
+            try StorePaths.trash(layout.outside.path, roots: [layout.root], protected: [])
         }
         #expect(throws: StoreFailure.self) {
-            try StorePaths.trash(URL(fileURLWithPath: "/"), roots: [layout.root], protected: [])
+            try StorePaths.trash("/", roots: [layout.root], protected: [])
         }
         #expect(FileManager.default.fileExists(atPath: layout.outside.path))
     }
@@ -80,7 +80,7 @@ struct StorePathsTests {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: layout.outside)
         #expect(StorePaths.root(containing: link, roots: [layout.root], protected: []) == nil)
         #expect(throws: StoreFailure.self) {
-            try StorePaths.trash(link, roots: [layout.root], protected: [])
+            try StorePaths.trash(link.path, roots: [layout.root], protected: [])
         }
         #expect(FileManager.default.fileExists(atPath: layout.outside.path))
     }
@@ -101,16 +101,34 @@ struct StorePathsTests {
         let layout = try Layout()
         defer { layout.remove() }
         let game = layout.game.path
+        let folder = try StorePaths.gameFolder(game, roots: [layout.root], protected: [])
         let inside = StoreLaunchPlan(folder: game, executable: game + "/Bin/Owl.exe", workingDirectory: game, arguments: [])
-        #expect(StorePaths.accepts(inside, roots: [layout.root], protected: []))
+        #expect(throws: Never.self) { try StorePaths.check(inside, in: folder) }
         let escaping = StoreLaunchPlan(
             folder: game, executable: game + "/../../Documents/evil.exe", workingDirectory: game, arguments: [],
         )
-        #expect(!StorePaths.accepts(escaping, roots: [layout.root], protected: []))
+        #expect(throws: StoreFailure.self) { try StorePaths.check(escaping, in: folder) }
         let elsewhere = StoreLaunchPlan(
             folder: layout.outside.path, executable: layout.outside.path + "/a.exe",
             workingDirectory: layout.outside.path, arguments: [],
         )
-        #expect(!StorePaths.accepts(elsewhere, roots: [layout.root], protected: []))
+        #expect(throws: StoreFailure.self) { try StorePaths.check(elsewhere, in: folder) }
+        let wandering = StoreLaunchPlan(
+            folder: game, executable: game + "/Owl.exe", workingDirectory: layout.outside.path, arguments: [],
+        )
+        #expect(throws: StoreFailure.self) { try StorePaths.check(wandering, in: folder) }
+    }
+
+    @Test
+    func `a symlinked executable leading out of the game folder is refused`() throws {
+        let layout = try Layout()
+        defer { layout.remove() }
+        let link = layout.game.appending(path: "Owl.exe")
+        let evil = layout.outside.appending(path: "evil.exe")
+        try Data().write(to: evil)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: evil)
+        let folder = try StorePaths.gameFolder(layout.game.path, roots: [layout.root], protected: [])
+        let plan = StoreLaunchPlan(folder: layout.game.path, executable: link.path, workingDirectory: layout.game.path, arguments: [])
+        #expect(throws: StoreFailure.self) { try StorePaths.check(plan, in: folder) }
     }
 }

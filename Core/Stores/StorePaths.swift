@@ -89,23 +89,40 @@ nonisolated enum StorePaths {
         return roots.first { isStrictlyInside(target, $0) && acceptsRoot($0, protected: protected) }
     }
 
-    /// Whether a launch plan stays inside its game's folder, and that folder
-    /// inside a managed root.
-    static func accepts(_ plan: StoreLaunchPlan, roots: [URL] = managedRoots(), protected: [URL] = protectedFolders) -> Bool {
-        let folder = URL(fileURLWithPath: plan.folder)
-        guard root(containing: folder, roots: roots, protected: protected) != nil,
-              isStrictlyInside(URL(fileURLWithPath: plan.executable), folder) else { return false }
-        let directory = URL(fileURLWithPath: plan.workingDirectory)
-        return resolved(directory).path == resolved(folder).path || isStrictlyInside(directory, folder)
+    /// The one check every path from a store or a client passes before
+    /// Sevoflurane writes to, starts from or trashes it: the folder, symlinks
+    /// resolved, lies strictly inside a managed root and is no protected
+    /// folder. Answers the resolved folder.
+    static func gameFolder(
+        _ path: String, roots: [URL] = managedRoots(), protected: [URL] = protectedFolders,
+    ) throws -> URL {
+        let folder = URL(fileURLWithPath: path)
+        guard root(containing: folder, roots: roots, protected: protected) != nil else {
+            throw StoreFailure("\(path) is outside the folders store games are installed in, so it was left alone")
+        }
+        return resolved(folder)
     }
 
-    /// Moves a game's folder to the Trash after ``root(containing:roots:protected:)``
-    /// has placed it, refusing anything else.
-    static func trash(_ folder: URL, roots: [URL] = managedRoots(), protected: [URL] = protectedFolders) throws {
-        guard root(containing: folder, roots: roots, protected: protected) != nil else {
-            throw StoreFailure("\(folder.path) is outside the folders store games are installed in, so it was left in place")
+    /// Checks a launch plan against its game's folder, which has passed
+    /// ``gameFolder(_:roots:protected:)``: the plan's own folder, its
+    /// executable and its working folder all resolve inside it.
+    static func check(_ plan: StoreLaunchPlan, in folder: URL) throws {
+        let executable = URL(fileURLWithPath: plan.executable)
+        guard isWithin(URL(fileURLWithPath: plan.folder), folder), isStrictlyInside(executable, folder),
+              isWithin(URL(fileURLWithPath: plan.workingDirectory), folder) else {
+            throw StoreFailure("\(plan.executable) is outside its game's folder \(folder.path), so it is not started")
         }
-        let target = resolved(folder)
+    }
+
+    /// Whether `path` is `folder` or lies inside it, both resolved.
+    private static func isWithin(_ path: URL, _ folder: URL) -> Bool {
+        resolved(path).path == resolved(folder).path || isStrictlyInside(path, folder)
+    }
+
+    /// Moves a game's folder to the Trash once it passes
+    /// ``gameFolder(_:roots:protected:)``, refusing anything else.
+    static func trash(_ path: String, roots: [URL] = managedRoots(), protected: [URL] = protectedFolders) throws {
+        let target = try gameFolder(path, roots: roots, protected: protected)
         guard FileManager.default.fileExists(atPath: target.path) else { return }
         try FileManager.default.trashItem(at: target, resultingItemURL: nil)
     }

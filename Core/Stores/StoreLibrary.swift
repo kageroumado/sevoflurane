@@ -11,9 +11,11 @@ nonisolated enum StoreLibrary {
     }
 
     /// Records an installed title as a game, or points its existing record
-    /// at what `plan` says starts it now. Answers the program's id.
+    /// at what `plan` says starts it now, once the install's folder and the
+    /// plan pass ``StorePaths``. Answers the program's id.
     @discardableResult
-    static func adopt(_ install: StoreInstall, plan: StoreLaunchPlan, bottle: String) -> Int {
+    static func adopt(_ install: StoreInstall, plan: StoreLaunchPlan, bottle: String) throws -> Int {
+        try StorePaths.check(plan, in: StorePaths.gameFolder(install.path))
         let link = StoreLink(store: install.store, id: install.id)
         let exe = URL(fileURLWithPath: plan.executable)
         if let existing = program(for: install.store, id: install.id) {
@@ -63,8 +65,10 @@ nonisolated enum StoreLibrary {
             plan = GOG.launchPlan(link.id, folder: URL(fileURLWithPath: installFolder(of: program, gog: link.id)))
         }
         guard let plan else { return (program, note) }
-        guard StorePaths.accepts(plan) else {
-            return (program, "\(link.id) named \(plan.executable) to start, outside its install folder, so the recorded program starts instead")
+        do {
+            try StorePaths.check(plan, in: StorePaths.gameFolder(plan.folder))
+        } catch {
+            return (program, "\(error); the recorded program starts instead")
         }
         var refreshed = program
         refreshed.path = URL(fileURLWithPath: plan.executable).standardizedFileURL.path
