@@ -15,6 +15,8 @@ extension BottleSupervisor {
     func launch(
         appID: Int, name: String, renderer explicit: Renderer? = nil, option: Int? = nil,
     ) async -> Bool {
+        // Ahead of the renderer below: a first launch's fixes can pick it.
+        await prepareLaunch(appID: appID)
         // The renderer this launch has to move the bottle onto — an explicit
         // "Run with X" wins over the game's own choice, and neither persists
         // past the launch beyond the bottle default it sets.

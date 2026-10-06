@@ -122,6 +122,13 @@ final class AppLink {
         return await post(path) != nil
     }
 
+    /// Tells the app a launch prepared here gave a game its first-launch
+    /// fixes, so it posts the notification whose Undo puts them back.
+    func announceFixesApplied(appID: Int) async {
+        guard isAttached else { return }
+        _ = await post("/fixes/applied?appid=\(appID)")
+    }
+
     /// Mirrors the daemon's verdict into the app, so the menu bar moves with
     /// the state machine rather than a poll behind it.
     func push(_ snapshot: SupervisorSnapshot) async {

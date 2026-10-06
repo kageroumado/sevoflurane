@@ -16,6 +16,9 @@ final class AppLinkServer {
     /// The open runs' frame counters, which `sevo perf mark` writes into.
     private let presentStats: PresentStats
     private var server: HTTPServer?
+    /// The helper applied a first launch's fixes to this app id; the
+    /// notification with Undo is this app's to post.
+    var onFixesApplied: ((Int) -> Void)?
 
     init(supervisor: ClientSupervisor, host: SteamWebHost, bridge: SteamBridge, presentStats: PresentStats) {
         self.supervisor = supervisor
@@ -63,6 +66,12 @@ final class AppLinkServer {
             } else {
                 host.launchGame(appID: appID)
             }
+            return Self.json(#"{"ok":true}"#)
+        case ("POST", "/fixes/applied"):
+            guard let appID = Int(Self.value(of: "appid", in: request.query)) else {
+                return .error(400, "pass ?appid=<app id>")
+            }
+            onFixesApplied?(appID)
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/state"):
             guard let snapshot = try? JSONDecoder()

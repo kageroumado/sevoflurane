@@ -1,29 +1,32 @@
 import AppKit
 
 extension AppDelegate {
-    /// Applies the fix list to a game's first launch under Sevoflurane before
-    /// its env files are written, and otherwise writes them for the
-    /// executables just recorded. Runs on the launch's detached task.
-    nonisolated static func prepareLaunch(appID: Int, recordedExecutables: Bool) async {
-        guard let fixes = FixLedger.applyAtFirstLaunch(appID: appID) else {
-            if recordedExecutables {
-                ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-            }
-            return
-        }
-        let name = GameConfig.game(appID).name ?? SharedGames.installed(appID: appID)?.name ?? "App \(appID)"
+    /// Readies a launch the app is about to hand to Steam
+    /// (``LaunchPreparation``) and says what a first launch's fixes set.
+    nonisolated static func prepareLaunch(appID: Int) async {
+        let fixes = await LaunchPreparation.prepare(appID: appID) { EventLog.enqueue(.client, $0) }
+        guard let fixes else { return }
+        await announce(fixes, forApp: appID)
+    }
+
+    /// Says what the fix list set at a first launch the helper prepared:
+    /// the helper wrote the log line, and the notification is this app's.
+    func announceFixesApplied(appID: Int) {
+        guard let fixes = FixLedger.record(for: appID) else { return }
+        notifications.postFixesApplied(appID: appID, name: Self.name(ofApp: appID), settings: fixes.settingNames)
+    }
+
+    private nonisolated static func announce(_ fixes: AppliedFixes, forApp appID: Int) async {
+        let name = name(ofApp: appID)
+        EventLog.enqueue(.app, fixes.logLine(appID: appID, name: name))
         await MainActor.run {
-            (NSApp.delegate as? AppDelegate)?.announce(fixes, forApp: appID, named: name)
+            (NSApp.delegate as? AppDelegate)?.notifications
+                .postFixesApplied(appID: appID, name: name, settings: fixes.settingNames)
         }
     }
 
-    /// Says what the fix list set: a line in the event log, and a
-    /// notification whose Undo puts the game's own settings back.
-    private func announce(_ fixes: AppliedFixes, forApp appID: Int, named name: String) {
-        let titles = fixes.fixes.map(\.title).joined(separator: ", ")
-        let changes = GameConfig.changes(from: fixes.previous, to: fixes.applied).joined(separator: ", ")
-        EventLog.shared.log(.app, "fixes: \(name) (\(appID)) first launch took \(titles): \(changes)")
-        notifications.postFixesApplied(appID: appID, name: name, settings: fixes.settingNames)
+    private nonisolated static func name(ofApp appID: Int) -> String {
+        GameConfig.game(appID).name ?? SharedGames.installed(appID: appID)?.name ?? "App \(appID)"
     }
 }
 

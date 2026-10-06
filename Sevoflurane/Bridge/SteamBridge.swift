@@ -98,6 +98,16 @@ actor SteamBridge {
         onGameLaunch = handler
     }
 
+    /// Awaited before a `RunGame` call reaches the client, with the game id
+    /// the call names: the app readies the launch there
+    /// (``LaunchPreparation``), so the game's first process reads the
+    /// settings its first launch is given.
+    var launchPreparation: (@Sendable (String) async -> Void)?
+
+    func setLaunchPreparation(_ prepare: @escaping @Sendable (String) async -> Void) {
+        launchPreparation = prepare
+    }
+
     /// Asked before the page opens Steam's install wizard for one game
     /// (`SteamClient.Installs.OpenInstallWizard`, the library's Install
     /// button): whether the install goes ahead. The app answers by warning

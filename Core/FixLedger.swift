@@ -30,6 +30,13 @@ nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
         keys(in: own).contains(key)
     }
 
+    /// The event log's line for a first launch that took these fixes.
+    func logLine(appID: Int, name: String) -> String {
+        let titles = fixes.map(\.title).joined(separator: ", ")
+        let changes = GameConfig.changes(from: previous, to: applied).joined(separator: ", ")
+        return "fixes: \(name) (\(appID)) first launch took \(titles): \(changes)"
+    }
+
     /// The reasons of the fixes behind it, one paragraph each.
     var reasons: String {
         fixes.map { InterfaceCopy.localized($0.reason) }.joined(separator: "\n\n")
@@ -162,19 +169,34 @@ nonisolated enum FixLedger {
 
     /// Applies the fix list to a game launching for the first time, writing
     /// its values and the engine's env files; `nil` when this launch is not
-    /// a first one or no fix sets anything the game lacks. The record is
-    /// written before the values, so a game is never fixed twice.
-    static func applyAtFirstLaunch(appID: Int) -> AppliedFixes? {
-        guard isFirstLaunch(
+    /// a first one, no fix sets anything the game lacks, or `commit` refuses
+    /// the write (``LaunchPreparation/Gate``). The record is written before
+    /// the values, so a game is never fixed twice.
+    static func applyAtFirstLaunch(appID: Int, committing commit: () -> Bool = { true }) -> AppliedFixes? {
+        let own = GameConfig.game(appID)
+        return apply(
+            appID: appID,
             enabled: Preferences.appliesKnownFixes,
             hasRunRecord: RunLog.hasRecord(forApp: appID),
-            wasDecided: record(for: appID) != nil,
-        ) else { return nil }
-        let own = GameConfig.game(appID)
-        let fixes = KnownFixes.recommended(for: appID, exes: own.exes ?? []).fixes
-        guard let planned = plan(own: own, fixes: fixes) else { return nil }
-        save(planned.record, for: appID)
-        GameConfig.update(game: appID, bottle: SteamBottle.name, prefix: SteamBottle.root) { $0 = planned.values }
+            own: own,
+            fixes: KnownFixes.recommended(for: appID, exes: own.exes ?? []).fixes,
+            committing: commit,
+        ) { values in
+            GameConfig.update(game: appID, bottle: SteamBottle.name, prefix: SteamBottle.root) { $0 = values }
+        }
+    }
+
+    /// ``applyAtFirstLaunch(appID:committing:)`` with what it reads passed
+    /// in and the game's values written through `write`.
+    static func apply(
+        appID: Int, enabled: Bool, hasRunRecord: Bool, own: ConfigValues, fixes: [KnownFix],
+        in root: URL = root, committing commit: () -> Bool, write: (ConfigValues) -> Void,
+    ) -> AppliedFixes? {
+        guard isFirstLaunch(
+            enabled: enabled, hasRunRecord: hasRunRecord, wasDecided: record(for: appID, in: root) != nil,
+        ), let planned = plan(own: own, fixes: fixes), commit() else { return nil }
+        save(planned.record, for: appID, in: root)
+        write(planned.values)
         return planned.record
     }
 

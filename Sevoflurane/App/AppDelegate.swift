@@ -16,9 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let runRecorder = RunRecorder()
     let stallWatch = StallWatch()
     var runMeter: Task<Void, Never>?
-    private lazy var appLinkServer = AppLinkServer(
-        supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
-    )
+    private lazy var appLinkServer: AppLinkServer = {
+        let server = AppLinkServer(
+            supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
+        )
+        server.onFixesApplied = { [weak self] appID in self?.announceFixesApplied(appID: appID) }
+        return server
+    }()
     private var menuMirror: SteamMenuMirror?
     private(set) var menuBarPopover: MenuBarPopover?
     let setupWindow = SetupWindow()
@@ -381,6 +385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated { self?.gameLaunchWatch.noteLaunchRequested() }
                 }
+            }
+            await bridge.setLaunchPreparation { [weak self] gameID in
+                guard let appID = await self?.host.appID(fromSteam: gameID), appID != 0 else { return }
+                await Self.prepareLaunch(appID: appID)
             }
             await bridge.setInstallGate { [weak self] appID in
                 guard let host = await self?.host else { return true }

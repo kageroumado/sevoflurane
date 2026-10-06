@@ -185,7 +185,12 @@ extension SteamBridge {
             // renderer change made in Settings takes effect on this launch
             // whatever started it, with no race against the game's DLL load.
             // A bounce (msync, engine) can't be applied inline and stays the
-            // launch path's job; only a restage is owed here.
+            // launch path's job; only a restage is owed here. The launch is
+            // readied first, since a first launch's fixes can pick the
+            // renderer.
+            if let launchPreparation, let gameID = (request["args"] as? [Any])?.first {
+                await launchPreparation("\(gameID)")
+            }
             if BottleGraphics.graphicsChangeSinceBoot().restage {
                 if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
                     log(.client, note)

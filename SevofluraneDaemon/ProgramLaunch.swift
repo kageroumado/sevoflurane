@@ -77,6 +77,7 @@ extension BottleSupervisor {
             program = refreshed.program
             if let storeNote = refreshed.note { note(storeNote) }
         }
+        await prepareLaunch(appID: id)
         stageGraphics(for: name, renderer: explicit, appID: id)
         programsSpawnedAt[id] = .now
         if SteamParent.wants(program) {
@@ -226,6 +227,17 @@ extension BottleSupervisor {
             path: url.standardizedFileURL.path, arguments: arguments,
             bottle: SteamBottle.name, kind: ProgramKind.program, addedAt: .now,
         ))
+    }
+
+    /// Readies a launch before its graphics are staged and its process
+    /// spawned (``LaunchPreparation``). A first launch's fixes are said in
+    /// the event log here and in a notification by the app.
+    func prepareLaunch(appID: Int) async {
+        let fixes = await LaunchPreparation.prepare(appID: appID) { EventLog.enqueue(.client, $0) }
+        guard let fixes else { return }
+        let name = GameConfig.game(appID).name ?? SharedGames.installed(appID: appID)?.name ?? "App \(appID)"
+        note(fixes.logLine(appID: appID, name: name))
+        Task(name: "Announce app \(appID)'s fixes") { await app.announceFixesApplied(appID: appID) }
     }
 
     /// Puts the renderer a launch asked for into the engine tree.

@@ -25,14 +25,16 @@ extension AppDelegate {
             // The run record opens here rather than at the first window:
             // a game that dies before it draws is the one worth recording.
             runRecorder.arm(appID: appID)
-            // The game's exes, read from its install directory now, so its
-            // env files — and the bundle that names it in the Dock — exist
-            // before the process starts rather than after its first window.
-            // A first launch takes the fix list's values, which an exe
-            // pattern can match, in the same pass.
+            // A launch the app carries was prepared before it reached Steam
+            // or the helper (``LaunchPreparation``). One it did not carry
+            // gets its exes read here, so its env files, and the bundle that
+            // names it in the Dock, are there by its first window at the
+            // latest; its first-launch fixes wait for a launch that is
+            // prepared before it starts.
             Task.detached(name: "Record app \(appID)'s executables") {
-                let recorded = GameExecutables.recordFromInstall(appID: appID)
-                await Self.prepareLaunch(appID: appID, recordedExecutables: recorded)
+                if GameExecutables.recordFromInstall(appID: appID) {
+                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                }
             }
         }
         // A process of the launch loaded winemac.drv. This is the attribution
