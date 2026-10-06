@@ -126,8 +126,8 @@ nonisolated enum StorageInventory {
             ),
             Entry(
                 id: "shaders",
-                name: "Shader packages",
-                detail: "Upscalers downloaded for Dormison.",
+                name: "Upscalers",
+                detail: "Extra upscalers downloaded for Dormison.",
                 url: ShaderPackages.root,
                 bytes: -1,
                 removal: .permanent("Settings › Graphics downloads them again."),
