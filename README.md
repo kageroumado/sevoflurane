@@ -344,6 +344,8 @@ are listed for anyone driving the engine directly.
 | `FinalFilter` | `lanczos` | the resampling pass after the upscaler |
 | `FrameRate` | off | the frame-rate capsule |
 | `FrameRateGraph` | off | the frame-time card (turns `FrameRate` on) |
+| `OverlayLevel` | `1` | what the counter shows: `1` the number, `2` the frame-time card, `3` the card with CPU, GPU, power and temperature |
+| `FrameRateLimit` | `0` | the most frames a second a game shows, on every present path; `0` is none |
 | `OpenGLPresenter` | on | `N` keeps every OpenGL drawable off the presenter |
 | `LinearMouse` | off | raw mouse-look movement |
 | `CursorConfine` | off | window-server cursor confinement for a game's clip |
@@ -353,7 +355,7 @@ are listed for anyone driving the engine directly.
 
 | Variable | What it does |
 |---|---|
-| `SEVO_RESIZABLE_WINDOWS`, `SEVO_PRESENTER`, `SEVO_UPSCALER`, `SEVO_FINAL_FILTER`, `SEVO_FPS`, `SEVO_FPS_GRAPH`, `SEVO_GL_PRESENTER`, `SEVO_LINEAR_MOUSE`, `SEVO_CURSOR_CONFINE` | bottle-wide defaults for the registry keys above |
+| `SEVO_RESIZABLE_WINDOWS`, `SEVO_PRESENTER`, `SEVO_UPSCALER`, `SEVO_FINAL_FILTER`, `SEVO_FPS`, `SEVO_FPS_GRAPH`, `SEVO_OVERLAY_LEVEL`, `SEVO_FPS_LIMIT`, `SEVO_GL_PRESENTER`, `SEVO_LINEAR_MOUSE`, `SEVO_CURSOR_CONFINE` | bottle-wide defaults for the registry keys above |
 | `SEVO_PRESENTATION_LOG`, `SEVO_PRESENTER_LOG`, `SEVO_PRESENTER_DEBUG`, `SEVO_GFX_LOG` | presentation, presenter and D3DMetal present-hook logging |
 | `SEVO_SHADER_DIR` | where the presenter loads shader packages from |
 | `SEVO_GPU_VENDOR_ID`, `_DEVICE_ID`, `_NAME`, `_MEMORY_MB`, `_DRIVER_VERSION`, `_DRIVER_PROVIDER`, `_DRIVER_DATE` | the GPU identity, memory and driver a Windows program sees (NVIDIA metadata when the vendor is unknown) |
@@ -463,8 +465,9 @@ runs on CrossOver.
   final filter, for games drawn through Metal, OpenGL (Wine's built-in
   renderer, which most Direct3D 9 visual novels use) and plain GDI.
 - **(Dormison)** A View menu in every game: switch upscaler and filter live,
-  Resizable Windows (⌥⌘R), Show Frame Rate (⌥⌘F), Show Frame Time Graph
-  (⌥⌘G), Show Picture Details (⌥⌘I). A short notice over the picture says
+  Resizable Windows (⌥⌘R), Show Frame Rate (⌥⌘F), Overlay Detail (the
+  frame-time card on ⌥⌘G, or the card with CPU, GPU, power and temperature),
+  Frame Rate Limit, Show Picture Details (⌥⌘I). A short notice over the picture says
   when the upscaler runs, and when a window is too small for it to.
 - DLSS through MetalFX on D3DMetal: a game's own DLSS setting works as on an
   NVIDIA card.

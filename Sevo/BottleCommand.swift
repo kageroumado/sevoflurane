@@ -13,7 +13,6 @@ enum ConfigSwitches {
     static let all: [Entry] = [
         Entry(key: "hud", path: \.hud),
         Entry(key: "fps", path: \.fps),
-        Entry(key: "fps-graph", path: \.fpsGraph),
         Entry(key: "cursor-confine", path: \.cursorConfine),
         Entry(key: "avx", path: \.avx),
         Entry(key: "large-address-aware", path: \.largeAddressAware),
@@ -22,6 +21,10 @@ enum ConfigSwitches {
     static var names: String {
         all.map(\.key).joined(separator: " | ")
     }
+
+    /// The frame rate counter's other keys, which take values of their own:
+    /// the keys a running game's View menu stores a choice under.
+    static let counterNames = "fps-limit | overlay | fps-graph"
 
     static func path(for key: String) -> (WritableKeyPath<ConfigValues, Bool?> & Sendable)? {
         all.first { $0.key == key }?.path
@@ -33,7 +36,6 @@ enum ConfigSwitches {
         switch key {
         case "hud": GameConfig.hud(bottle: bottle, game: appID)
         case "fps": GameConfig.fps(bottle: bottle, game: appID)
-        case "fps-graph": GameConfig.fpsGraph(bottle: bottle, game: appID)
         case "cursor-confine": GameConfig.cursorConfine(bottle: bottle, game: appID)
         case "avx": GameConfig.avx(bottle: bottle, game: appID)
         case "large-address-aware": GameConfig.largeAddressAware(bottle: bottle, game: appID)
@@ -61,6 +63,31 @@ enum ConfigKeyParsing {
             throw SevoExit.badInvocation
         }
         return curve
+    }
+
+    /// `off` or one of the rates View › Frame Rate Limit offers, spelled as
+    /// the engine's menu stores them.
+    static func frameRateLimit(_ value: String) throws -> FrameRateLimit? {
+        if value == "inherit" { return nil }
+        guard let limit = FrameRateLimit(rawValue: value) else {
+            let rates = FrameRateLimit.allCases.map(\.rawValue).joined(separator: " | ")
+            Sevo.printError("fps-limit must be one of \(rates) | inherit")
+            throw SevoExit.badInvocation
+        }
+        return limit
+    }
+
+    /// The counter's level as View › Overlay Detail stores it: 1 for the
+    /// number, 2 for the frame-time card, 3 for the card with the Mac's load,
+    /// power and temperature.
+    static func overlayDetail(_ value: String) throws -> OverlayDetail? {
+        if value == "inherit" { return nil }
+        guard let detail = OverlayDetail(rawValue: value) else {
+            Sevo.printError("overlay must be 1 (frame rate), 2 (and frame time), 3 (and CPU, GPU, power, "
+                + "temperature) or inherit")
+            throw SevoExit.badInvocation
+        }
+        return detail
     }
 
     /// How many processors a game is told of: `all` for every one (stored as
@@ -171,9 +198,9 @@ struct BottleCommand: AsyncParsableCommand {
     )
 
     @Argument(help: "list | config | deps [install <id>]") var verb: String = "list"
-    @Argument(help: "Config key: renderer | msync (msync+ on or off; msync+ works as the key too) | windows | upscaler | filter | mouse | retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug. Omit to print every key.")
+    @Argument(help: "Config key: renderer | msync (msync+ on or off; msync+ works as the key too) | windows | upscaler | filter | mouse | retina | emulate-modeset | processors | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | wine-debug. Omit to print every key.")
     var key: String?
-    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for processors: all, a count such as 8, or inherit; for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
+    @Argument(help: "New value; for windows: \(WindowTreatment.rungs); for processors: all, a count such as 8, or inherit; for fps-limit: off or 30 | 40 | 45 | 60 | 90 | 120; for overlay: 1 (frame rate), 2 (and frame time) or 3 (and CPU, GPU, power, temperature); for wine-debug: on to add exception traces and every library load, off for the errors the log always keeps, or Wine channels. Omit to read the key.")
     var value: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
@@ -267,6 +294,8 @@ struct BottleCommand: AsyncParsableCommand {
             for entry in ConfigSwitches.all {
                 print("\(entry.key) \(Self.switchSummary(entry.key))")
             }
+            print("overlay \(Self.overlaySummary)")
+            print("fps-limit \(Self.frameRateLimitSummary)")
             print("wine-debug \(WineLog.summary(debugMode: debugMode))")
             return
         }
@@ -285,6 +314,8 @@ struct BottleCommand: AsyncParsableCommand {
                     $0.key, bottle: SteamBottle.name, game: nil,
                 )?.value ?? false)
             }),
+            "overlay": GameConfig.overlayDetail(bottle: SteamBottle.name).value.level,
+            "fps-limit": GameConfig.frameRateLimit(bottle: SteamBottle.name).value.framesPerSecond,
             "wine-debug": debugMode || WineLog.isDiagnosing,
             "wine-debug-channels": WineLog.channels,
             "wine-debug-effective": WineLog.effectiveChannels(debugMode: debugMode),
@@ -302,6 +333,11 @@ struct BottleCommand: AsyncParsableCommand {
         case "retina": print(Self.retinaSummary)
         case "emulate-modeset": print(Self.modesetSummary)
         case "processors": print(Self.processorsSummary)
+        case "overlay": print(Self.overlaySummary)
+        case "fps-limit": print(Self.frameRateLimitSummary)
+        case "fps-graph":
+            let resolved = GameConfig.overlayDetail(bottle: SteamBottle.name)
+            print("\(resolved.value.showsFrameGraph) (\(resolved.source))")
         case "windows": print(Self.windowsSummary)
         case "upscaler": print(Self.upscalerSummary)
         case "filter": print(Self.filterSummary)
@@ -365,6 +401,19 @@ struct BottleCommand: AsyncParsableCommand {
             let processors = try ConfigKeyParsing.processors(value)
             updateBottle { $0.processors = processors }
             print("processors \(Self.processorsSummary) — \(Self.gameReach)")
+        case "overlay":
+            let detail = try ConfigKeyParsing.overlayDetail(value)
+            updateBottle { $0.overlayDetail = detail }
+            print("overlay \(Self.overlaySummary) — \(Self.gameReach)")
+        case "fps-limit":
+            let limit = try ConfigKeyParsing.frameRateLimit(value)
+            updateBottle { $0.frameRateLimit = limit }
+            print("fps-limit \(Self.frameRateLimitSummary) — \(Self.gameReach)")
+        case "fps-graph":
+            let on = try ConfigKeyParsing.flag(value, key: key)
+            let shown = GameConfig.fps(bottle: SteamBottle.name).value
+            updateBottle { $0.setFrameGraph(on, counterShown: shown) }
+            print("overlay \(Self.overlaySummary) — \(Self.gameReach)")
         case "retina":
             // The prefix's own HiDPI switch, written to the bottle's
             // `Mac Driver\\RetinaMode`; one answer for every process in it.
@@ -440,7 +489,8 @@ struct BottleCommand: AsyncParsableCommand {
     }
 
     private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | "
-        + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | wine-debug)"
+        + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | "
+        + "wine-debug)"
 
     /// The key a setting is stored and scripted under. The listing labels the
     /// sync switch `msync+`, its name everywhere a person reads it, so that
@@ -474,6 +524,18 @@ struct BottleCommand: AsyncParsableCommand {
     static var processorsSummary: String {
         let resolved = GameConfig.processors(bottle: SteamBottle.name)
         return "\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))"
+    }
+
+    /// What the bottle's frame rate counter shows, and where that comes from.
+    static var overlaySummary: String {
+        let resolved = GameConfig.overlayDetail(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
+    }
+
+    /// The bottle's frame rate limit, and where that comes from.
+    static var frameRateLimitSummary: String {
+        let resolved = GameConfig.frameRateLimit(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
     /// The bottle's window treatment, where it comes from, and what it

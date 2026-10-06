@@ -22,6 +22,171 @@
         }
       }
     },
+    "A card with every frame of the last five seconds drawn at the time it took, so a hitch shows as a spike the average hides, and the 1 % low: the frame rate of the slowest one in a hundred frames of the last ten seconds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一张卡片：按每帧耗时绘制最近五秒的帧，卡顿会显示为尖峰，即使平均值没有变化；并显示 1% 最低帧率，即最近十秒中最慢的 1% 帧所对应的帧率。"
+          }
+        }
+      }
+    },
+    "Counts the frames the engine put on screen, whichever renderer drew them. Overlay detail sets how much it shows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计引擎显示的帧数，与所用渲染器无关。“叠加层详情”决定它显示多少内容。"
+          }
+        }
+      }
+    },
+    "Dormison holds each frame until its turn, so the game draws no more frames than the limit and the Mac does less work for the same picture. It paces every renderer, Metal and OpenGL alike, with the upscaler on or off. A limit the game reaches steadily also plays more evenly than a rate that swings." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dormison 会让每一帧等到轮到它时再显示，因此游戏绘制的帧数不会超过上限，Mac 用更少的工作得到同样的画面。它对所有渲染器都有效，无论是 Metal 还是 OpenGL，也无论画面缩放器是否开启。游戏能稳定达到的上限，玩起来也比忽高忽低的帧率更平稳。"
+          }
+        }
+      }
+    },
+    "Everything (CPU, GPU, power, temperature)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部（CPU、GPU、功耗、温度）"
+          }
+        }
+      }
+    },
+    "Frame rate and frame time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率和帧时间"
+          }
+        }
+      }
+    },
+    "Frame rate limit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率上限"
+          }
+        }
+      }
+    },
+    "How much the frame rate counter shows. It appears when Frame rate counter is on." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率计数器显示多少内容。开启“帧率计数器”后才会出现。"
+          }
+        }
+      }
+    },
+    "One number." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个数字。"
+          }
+        }
+      }
+    },
+    "Overlay detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "叠加层详情"
+          }
+        }
+      }
+    },
+    "Saves battery and fan noise. Works on Dormison." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节省电量，降低风扇噪音。适用于 Dormison。"
+          }
+        }
+      }
+    },
+    "The card with a row for the game's CPU use, the GPU's load, the Mac's power draw and its temperature." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在卡片中再加一行，显示游戏的 CPU 占用、GPU 负载、Mac 的功耗和温度。"
+          }
+        }
+      }
+    },
+    "The frame rate at the top right of the game's window." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在游戏窗口右上角显示帧率。"
+          }
+        }
+      }
+    },
+    "View › Frame Rate Limit switches it while a game runs, and the frame rate counter shows the limit beside the rate." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏运行时，可从“显示 › 帧率上限”切换，帧率计数器会在帧率旁显示上限。"
+          }
+        }
+      }
+    },
+    "View › Overlay Detail switches it while a game runs, and ⌥⌘G picks the frame time card. sevo perf report charts a whole run after it ends." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏运行时，可从“显示 › 叠加层详情”切换，⌥⌘G 可直接选择帧时间卡片。运行结束后，sevo perf report 可绘制整次运行的图表。"
+          }
+        }
+      }
+    },
+    "What the frame rate counter shows while it is on." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率计数器开启时显示的内容。"
+          }
+        }
+      }
+    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2815,17 +2980,6 @@
         }
       }
     },
-    "Counts the frames the engine put on screen, whichever renderer drew them." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "统计引擎显示的帧数，与所用渲染器无关。"
-          }
-        }
-      }
-    },
     "CPU" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3560,17 +3714,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载、控制器和 Steam 界面。"
-          }
-        }
-      }
-    },
-    "Draws every frame of the last five seconds at the time it took, so a hitch shows as a spike the average hides. The 1 % low is the frame rate of the slowest one in a hundred frames of the last ten seconds." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按每帧耗时绘制最近五秒的帧。卡顿会显示为尖峰，即使平均值没有变化。1% 最低帧率指最近十秒中最慢的 1% 帧所对应的帧率。"
           }
         }
       }
@@ -4500,17 +4643,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帧率计数器"
-          }
-        }
-      }
-    },
-    "Frame time graph" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帧时间图表"
           }
         }
       }
@@ -6836,17 +6968,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "单个核心占用 100%"
-          }
-        }
-      }
-    },
-    "One number at the top right of the game's window." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在游戏窗口右上角显示一个数字。"
           }
         }
       }
@@ -9902,17 +10023,6 @@
         }
       }
     },
-    "The counter with the last five seconds of frames and the 1 % low." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示帧率计数器，以及最近五秒的帧时间和 1% 最低帧率。"
-          }
-        }
-      }
-    },
     "The CrossOver %@ trial on this Mac has ended. License it at codeweavers.com, or use Dormison." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11145,17 +11255,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏运行时，可从“显示 › 显示帧率”（⌥⌘F）切换。"
-          }
-        }
-      }
-    },
-    "View › Show Frame Time Graph (⌥⌘G) switches it while a game runs. sevo perf report charts a whole run after it ends." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "游戏运行时，可从“显示 › 显示帧时间图表”（⌥⌘G）切换。运行结束后，sevo perf report 可绘制整次运行的图表。"
           }
         }
       }

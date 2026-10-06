@@ -13,7 +13,8 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
     case retina
     case emulateModeset
     case fps
-    case fpsGraph
+    case overlayDetail
+    case frameRateLimit
     case hud
     case mouse
     case cursorConfine
@@ -258,7 +259,14 @@ nonisolated enum SettingCatalog {
             carrier: .registry("EmulateModeset"), reach: { _ in .registry },
         ),
         .flag(.fps, in: .picture, key: \.fps, copy: .fps, carrier: .environment(["SEVO_FPS"])),
-        .flag(.fpsGraph, in: .picture, key: \.fpsGraph, copy: .fpsGraph, carrier: .environment(["SEVO_FPS_GRAPH"])),
+        .choice(
+            .overlayDetail, in: .picture, key: \.overlayDetail, label: \.label, copy: .overlayDetail,
+            carrier: .environment(["SEVO_OVERLAY_LEVEL"]),
+        ),
+        .choice(
+            .frameRateLimit, in: .picture, key: \.frameRateLimit, label: \.label, copy: .frameRateLimit,
+            carrier: .environment(["SEVO_FPS_LIMIT"]),
+        ),
         .flag(.hud, in: .picture, key: \.hud, copy: .hud, carrier: .environment(["MTL_HUD_ENABLED"])),
         .choice(
             .mouse, in: .mouse, key: \.mouse, label: \.label, copy: .mouse,

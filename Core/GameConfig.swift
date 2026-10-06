@@ -235,6 +235,62 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// A cap on the frames a second a game shows (`SEVO_FPS_LIMIT`): the engine
+/// holds each frame until its turn on every present path, Metal and OpenGL
+/// alike (dormison `winemac.drv` `sevo_limiter`). The rates are the ones a
+/// running game's View › Frame Rate Limit offers.
+nonisolated enum FrameRateLimit: String, Codable, CaseIterable, Sendable {
+    case off
+    case fps30 = "30"
+    case fps40 = "40"
+    case fps45 = "45"
+    case fps60 = "60"
+    case fps90 = "90"
+    case fps120 = "120"
+
+    /// What the engine reads: frames a second, `0` for no limit.
+    var framesPerSecond: Int {
+        Int(rawValue) ?? 0
+    }
+
+    var label: String {
+        self == .off ? InterfaceCopy.localized("Off") : "\(rawValue) fps"
+    }
+}
+
+/// How much the frame rate counter shows (`SEVO_OVERLAY_LEVEL`), by the
+/// level the engine reads.
+nonisolated enum OverlayDetail: String, Codable, CaseIterable, Sendable {
+    /// The number alone.
+    case frameRate = "1"
+    /// A card with the number, the 1 % low and a graph of the last five
+    /// seconds of frame times.
+    case frameTime = "2"
+    /// The card with a row for the game's CPU, the GPU's load, the Mac's
+    /// power draw and its temperature.
+    case system = "3"
+
+    /// Whether the counter is the frame-time card, which is what `fps-graph`
+    /// reads.
+    var showsFrameGraph: Bool {
+        self != .frameRate
+    }
+
+    /// The level as the engine reads it.
+    var level: Int {
+        Int(rawValue) ?? 1
+    }
+
+    var label: String {
+        let value = switch self {
+        case .frameRate: "Frame rate"
+        case .frameTime: "Frame rate and frame time"
+        case .system: "Everything (CPU, GPU, power, temperature)"
+        }
+        return InterfaceCopy.localized(value)
+    }
+}
+
 /// One level of the settings hierarchy: the keys a game's launch reads, each
 /// optional so an absent one inherits from the level above. Game files also
 /// carry the executables the game is known to run under, which is what a
@@ -290,9 +346,13 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// game's window (`SEVO_FPS`): one number, from the engine's own count of
     /// presented frames, whichever renderer draws them.
     var fps: Bool?
-    /// Whether the counter grows into a card with a frame-time graph of the last
-    /// seconds and the 1 % low (`SEVO_FPS_GRAPH`). On, it shows the counter too.
-    var fpsGraph: Bool?
+    /// What the counter shows: the number, a card with the frame-time graph,
+    /// or that card with the Mac's load, power and temperature
+    /// (`SEVO_OVERLAY_LEVEL`).
+    var overlayDetail: OverlayDetail?
+    /// The most frames a second the engine lets the game show
+    /// (`SEVO_FPS_LIMIT`).
+    var frameRateLimit: FrameRateLimit?
     /// Whether a 32-bit game gets the whole 4 GB of address space rather than
     /// the low 2 GB.
     ///
@@ -362,12 +422,29 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
             || dllOverrides?.isEmpty == false || environment?.isEmpty == false
-            || hud != nil || fps != nil || fpsGraph != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
+            || hud != nil || fps != nil || overlayDetail != nil || frameRateLimit != nil
+            || largeAddressAware != nil || avx != nil || cursorConfine != nil
             || unifiedMemory != nil || tuning != nil || processors != nil || build != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
     var runsNatively: Bool { runner == GameRunner.nwjs }
+}
+
+nonisolated extension ConfigValues {
+    /// `fps-graph` at this level: on is the frame-time card with the counter
+    /// shown, off the number alone, `nil` hands the detail back. A running
+    /// game's View › Overlay Detail sends it ahead of the level itself, which
+    /// then has the last word.
+    mutating func setFrameGraph(_ on: Bool?, counterShown: Bool) {
+        switch on {
+        case nil: overlayDetail = nil
+        case false?: overlayDetail = .frameRate
+        case true?:
+            overlayDetail = .frameTime
+            if !counterShown { fps = true }
+        }
+    }
 }
 
 /// The runtimes a game can run on. `wine` is the absence of a choice, so it
@@ -470,7 +547,7 @@ nonisolated enum GameConfig {
         // were written, and a growing number of titles read the CPUID answer
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
-        hud: false, fps: false, fpsGraph: false, largeAddressAware: true, avx: true, unifiedMemory: false,
+        hud: false, fps: false, overlayDetail: .frameRate, frameRateLimit: .off, largeAddressAware: true, avx: true, unifiedMemory: false,
         cursorConfine: false, processors: 0,
     )
 
@@ -584,8 +661,16 @@ nonisolated enum GameConfig {
         resolve(\.fps, bottle: bottle, game: appID)
     }
 
-    static func fpsGraph(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
-        resolve(\.fpsGraph, bottle: bottle, game: appID)
+    /// What the counter shows in a launch in this bottle: for a specific game
+    /// when its id is known, otherwise the bottle's own value.
+    static func overlayDetail(bottle: String, game appID: Int? = nil) -> Resolved<OverlayDetail> {
+        resolve(\.overlayDetail, bottle: bottle, game: appID)
+    }
+
+    /// The frame rate limit a launch in this bottle gets: for a specific game
+    /// when its id is known, otherwise the bottle's own value.
+    static func frameRateLimit(bottle: String, game appID: Int? = nil) -> Resolved<FrameRateLimit> {
+        resolve(\.frameRateLimit, bottle: bottle, game: appID)
     }
 
     static func largeAddressAware(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {

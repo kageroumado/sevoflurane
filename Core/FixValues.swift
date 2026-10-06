@@ -25,7 +25,8 @@ nonisolated enum FixValues {
         out.emulateModeset = values.emulateModeset
         out.hud = values.hud
         out.fps = values.fps
-        out.fpsGraph = values.fpsGraph
+        out.overlayDetail = values.overlayDetail
+        out.frameRateLimit = values.frameRateLimit
         out.largeAddressAware = values.largeAddressAware
         out.avx = values.avx
         out.unifiedMemory = values.unifiedMemory

@@ -115,24 +115,51 @@ nonisolated extension SettingCopy {
 
     static let fps = SettingCopy(
         title: "Frame rate counter",
-        caption: "One number at the top right of the game's window.",
+        caption: "The frame rate at the top right of the game's window.",
         help: SettingHelp(
             title: "Frame rate counter",
-            summary: "Counts the frames the engine put on screen, whichever renderer drew them.",
+            summary: "Counts the frames the engine put on screen, whichever renderer drew them. "
+                + "Overlay detail sets how much it shows.",
             footnote: "View › Show Frame Rate (⌥⌘F) switches it while a game runs.",
         ),
     )
 
-    static let fpsGraph = SettingCopy(
-        title: "Frame time graph",
-        caption: "The counter with the last five seconds of frames and the 1 % low.",
+    static let overlayDetail = SettingCopy(
+        title: "Overlay detail",
+        caption: "What the frame rate counter shows while it is on.",
         help: SettingHelp(
-            title: "Frame time graph",
-            summary: "Draws every frame of the last five seconds at the time it took, so a hitch "
-                + "shows as a spike the average hides. The 1 % low is the frame rate of the "
-                + "slowest one in a hundred frames of the last ten seconds.",
-            footnote: "View › Show Frame Time Graph (⌥⌘G) switches it while a game runs. "
-                + "sevo perf report charts a whole run after it ends.",
+            title: "Overlay detail",
+            summary: "How much the frame rate counter shows. It appears when Frame rate counter is on.",
+            entries: [
+                .init(name: OverlayDetail.frameRate.label, text: "One number."),
+                .init(
+                    name: OverlayDetail.frameTime.label,
+                    text: "A card with every frame of the last five seconds drawn at the time it took, "
+                        + "so a hitch shows as a spike the average hides, and the 1 % low: the frame "
+                        + "rate of the slowest one in a hundred frames of the last ten seconds.",
+                ),
+                .init(
+                    name: OverlayDetail.system.label,
+                    text: "The card with a row for the game's CPU use, the GPU's load, the Mac's power "
+                        + "draw and its temperature.",
+                ),
+            ],
+            footnote: "View › Overlay Detail switches it while a game runs, and ⌥⌘G picks the "
+                + "frame time card. sevo perf report charts a whole run after it ends.",
+        ),
+    )
+
+    static let frameRateLimit = SettingCopy(
+        title: "Frame rate limit",
+        caption: "Saves battery and fan noise. Works on Dormison.",
+        help: SettingHelp(
+            title: "Frame rate limit",
+            summary: "Dormison holds each frame until its turn, so the game draws no more frames "
+                + "than the limit and the Mac does less work for the same picture. It paces every "
+                + "renderer, Metal and OpenGL alike, with the upscaler on or off. A limit the game reaches steadily also plays more evenly "
+                + "than a rate that swings.",
+            footnote: "View › Frame Rate Limit switches it while a game runs, and the frame rate "
+                + "counter shows the limit beside the rate.",
         ),
     )
 

@@ -254,6 +254,8 @@ nonisolated enum ConfigMaterializer {
         lines += switches.map { key, resolve in
             "\(key)=\(resolve(name, nil) ? "1" : "0")"
         }
+        lines.append("SEVO_OVERLAY_LEVEL=\(GameConfig.overlayDetail(bottle: name).value.rawValue)")
+        lines.append("SEVO_FPS_LIMIT=\(GameConfig.frameRateLimit(bottle: name).value.framesPerSecond)")
         lines += GameConfig.tuningParameters(bottle: name).environment.map { "\($0.key)=\($0.value)" }
         // What a running game's View menu needs: the engine's name for its
         // readout, and the `sevo` that stores a choice made there.
@@ -274,7 +276,6 @@ nonisolated enum ConfigMaterializer {
     private static let switches: [(key: String, resolve: @Sendable (String, Int?) -> Bool)] = [
         ("MTL_HUD_ENABLED", { GameConfig.hud(bottle: $0, game: $1).value }),
         ("SEVO_FPS", { GameConfig.fps(bottle: $0, game: $1).value }),
-        ("SEVO_FPS_GRAPH", { GameConfig.fpsGraph(bottle: $0, game: $1).value }),
         ("SEVO_LARGE_ADDRESS_AWARE", { GameConfig.largeAddressAware(bottle: $0, game: $1).value }),
         ("ROSETTA_ADVERTISE_AVX", { GameConfig.avx(bottle: $0, game: $1).value }),
         ("SEVO_CURSOR_CONFINE", { GameConfig.cursorConfine(bottle: $0, game: $1).value }),
@@ -286,7 +287,6 @@ nonisolated enum ConfigMaterializer {
         var own: [String: Bool] = [:]
         own["MTL_HUD_ENABLED"] = values.hud
         own["SEVO_FPS"] = values.fps
-        own["SEVO_FPS_GRAPH"] = values.fpsGraph
         own["SEVO_LARGE_ADDRESS_AWARE"] = values.largeAddressAware
         own["ROSETTA_ADVERTISE_AVX"] = values.avx
         own["SEVO_CURSOR_CONFINE"] = values.cursorConfine
@@ -329,6 +329,14 @@ nonisolated enum ConfigMaterializer {
         let own = ownSwitches(values)
         lines += switches.compactMap { key, _ in
             own[key].map { "\(key)=\($0 ? "1" : "0")" }
+        }
+        if let detail = values.overlayDetail {
+            lines.append("SEVO_OVERLAY_LEVEL=\(detail.rawValue)")
+        }
+        // No limit is `SEVO_FPS_LIMIT=0`, written so a game asking for none
+        // overrides a bottle that limits.
+        if let limit = values.frameRateLimit {
+            lines.append("SEVO_FPS_LIMIT=\(limit.framesPerSecond)")
         }
         if let tuning = values.tuning {
             lines += tuning.parameters(custom: values.tuningParameters).environment

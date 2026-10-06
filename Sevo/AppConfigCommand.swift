@@ -21,7 +21,12 @@ extension AppCommand {
             table), env <NAME>=<value> (a variable the game starts \
             with; <NAME>= starts it without that variable, <NAME> alone \
             drops it, inherit drops them all), the switches \(ConfigSwitches.names) (on | off | \
-            inherit), recommended to print what the fix table knows about \
+            inherit), fps-limit (off | 30 | 40 | 45 | 60 | 90 | 120 | inherit — \
+            the most frames a second the game shows), overlay (1 | 2 | 3 | \
+            inherit — the counter shows the frame rate, adds the frame-time \
+            card, or adds CPU, GPU, power and temperature), fps-graph (on | \
+            off | inherit — overlay 2 with the counter shown, or overlay 1), \
+            recommended to print what the fix table knows about \
             this game, windows (the values below), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
             shaders list names the packages), filter (nearest | bilinear | \
@@ -42,7 +47,7 @@ extension AppCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | runner | build | recommended | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | runner | build | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -90,6 +95,15 @@ extension AppCommand {
             case "processors":
                 let resolved = GameConfig.processors(bottle: bottle, game: appid)
                 print("\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))")
+            case "overlay":
+                let resolved = GameConfig.overlayDetail(bottle: bottle, game: appid)
+                print("\(resolved.value.rawValue) (\(resolved.source))")
+            case "fps-limit":
+                let resolved = GameConfig.frameRateLimit(bottle: bottle, game: appid)
+                print("\(resolved.value.rawValue) (\(resolved.source))")
+            case "fps-graph":
+                let resolved = GameConfig.overlayDetail(bottle: bottle, game: appid)
+                print("\(resolved.value.showsFrameGraph) (\(resolved.source))")
             case "dll":
                 print(Self.overrideLines(values))
             case "env":
@@ -138,6 +152,16 @@ extension AppCommand {
             case "processors":
                 let processors = try ConfigKeyParsing.processors(value)
                 updateGame(bottle: bottle) { $0.processors = processors }
+            case "overlay":
+                let detail = try ConfigKeyParsing.overlayDetail(value)
+                updateGame(bottle: bottle) { $0.overlayDetail = detail }
+            case "fps-limit":
+                let limit = try ConfigKeyParsing.frameRateLimit(value)
+                updateGame(bottle: bottle) { $0.frameRateLimit = limit }
+            case "fps-graph":
+                let on = try ConfigKeyParsing.flag(value, key: key)
+                let shown = GameConfig.fps(bottle: bottle, game: appid).value
+                updateGame(bottle: bottle) { $0.setFrameGraph(on, counterShown: shown) }
             case "dll":
                 try setDLLOverride(value, bottle: bottle)
                 await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
@@ -178,7 +202,8 @@ extension AppCommand {
         /// goes with it.
         private static func unknownKey(_ key: String) -> ExitCode {
             Sevo.printError("unknown key '\(key)' (renderer | windows | upscaler | filter | "
-                + "mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | runner | build | "
+                + "mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | "
+                + "\(ConfigSwitches.counterNames) | runner | build | "
                 + "recommended | detect | exe)")
             return SevoExit.badInvocation
         }
@@ -345,6 +370,10 @@ extension AppCommand {
                 let resolved = ConfigSwitches.resolved(entry.key, bottle: bottle, game: appid)
                 print("\(entry.key) \(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))")
             }
+            let overlay = GameConfig.overlayDetail(bottle: bottle, game: appid)
+            print("overlay \(overlay.value.rawValue) (\(overlay.source))")
+            let limit = GameConfig.frameRateLimit(bottle: bottle, game: appid)
+            print("fps-limit \(limit.value.rawValue) (\(limit.source))")
             print("runner \(values.runner ?? GameRunner.wine)")
             if let info = values.nwjs {
                 print(info.summary)
@@ -373,6 +402,8 @@ extension AppCommand {
             let filter = GameConfig.filter(bottle: bottle, game: appid)
             let mouse = GameConfig.mouse(bottle: bottle, game: appid)
             let processors = GameConfig.processors(bottle: bottle, game: appid)
+            let overlay = GameConfig.overlayDetail(bottle: bottle, game: appid)
+            let limit = GameConfig.frameRateLimit(bottle: bottle, game: appid)
             let values = GameConfig.game(appid)
             var payload: [String: Any] = [
                 "appid": appid,
@@ -397,6 +428,12 @@ extension AppCommand {
                 ],
                 "processors": [
                     "value": processors.value, "source": processors.source.description,
+                ],
+                "overlay": [
+                    "value": overlay.value.level, "source": overlay.source.description,
+                ],
+                "fps-limit": [
+                    "value": limit.value.framesPerSecond, "source": limit.source.description,
                 ],
                 "dll-overrides": values.dllOverrides ?? [:],
                 "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {
