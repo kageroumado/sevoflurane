@@ -242,8 +242,13 @@ enum SteamLibraryCompat {
          The chip is sized like the filter button beside it. */
       var CSS = STATE_CSS + "\\n" + [
         ".sevo-lib-badge{display:flex;align-items:center;flex:none;gap:3px;pointer-events:none}",
-        ".sevo-lib-badge .sevo-compat-icon>svg{width:14px;height:14px}",
+        /* The left list's rows color every svg in them; a badge keeps its state's color. */
+        ".sevo-lib-badge .sevo-compat-icon>svg{width:14px;height:14px;color:inherit !important}",
         ".sevo-lib-row{margin-inline-start:auto;padding:0 8px 0 6px}",
+        /* A row is sized to its title; held to the list's width, a long title
+           ends in an ellipsis and the badge stays in view. */
+        ".Panel:has(.sevo-lib-row){max-width:100%}",
+        "*:has(> .sevo-lib-row) > :not(.sevo-lib-badge):not([class]){min-width:0;overflow:hidden;text-overflow:ellipsis}",
         ".sevo-lib-tile{position:absolute;top:6px;left:6px;z-index:3;padding:3px;border-radius:12px;background-color:rgba(14,20,27,0.85)}",
         ".sevo-lib-tile .sevo-compat-icon>svg{width:16px;height:16px}",
         ".sevo-compat-native{color:#1a9fff}",
