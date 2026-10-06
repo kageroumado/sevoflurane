@@ -106,13 +106,18 @@ extension SteamWebHost {
         ActivationPolicy.recedeIfLastWindow(closing: window.nsWindow)
     }
 
-    /// Draws the Mac compatibility strip on game pages and store pages, or
-    /// takes it off, to match the stored choice. Called at adoption and
-    /// whenever Settings changes it, so a switch is visible on the page
-    /// already open.
+    /// Draws the Mac compatibility strip on game pages and store pages, and
+    /// the library's badges and "Plays on Mac" filter, or takes them off, to
+    /// match the stored choice. Called at adoption and whenever Settings
+    /// changes it, so a switch is visible on the page already open.
     func applyCompatibilityStrip() {
         let on = Preferences.compatibilityStrip
         desktop?.webView.evaluateJavaScript(on ? SteamCompatBadge.script : SteamCompatBadge.removalScript)
+        install(
+            on ? SteamLibraryCompat.contextScript : SteamLibraryCompat.contextRemovalScript,
+            describedAs: "Mac compatibility in the library", settledAt: SteamLibraryCompat.settled,
+        )
+        desktop?.webView.evaluateJavaScript(on ? SteamLibraryCompat.script : SteamLibraryCompat.removalScript)
         for window in [desktop].compactMap(\.self) + popups.values {
             window.evaluateOnStorePages(on ? SteamCompatBadge.storeScript : SteamCompatBadge.removalScript)
         }

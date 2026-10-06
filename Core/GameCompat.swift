@@ -111,6 +111,23 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
     let reason: String
 }
 
+/// One game's verdict as the library draws it: the Mac badge's state and
+/// whether the game's own macOS build plays, without the reasons. The
+/// library asks for hundreds at once; the game page asks for the whole
+/// ``GameCompatRecord``.
+nonisolated struct GameCompatSummary: Codable, Sendable, Equatable {
+    let appID: Int
+    let state: GameCompatBadge.State
+    /// The wiki rates the macOS build perfect or playable.
+    let native: Bool
+
+    /// Whether the game belongs under the library's "Plays on Mac" filter:
+    /// the Windows build is Verified or Playable, or the macOS build plays.
+    var playsOnMac: Bool {
+        native || state == .verified || state == .playable
+    }
+}
+
 /// The rules that turn the sources into the two badges.
 nonisolated enum GameCompatVerdict {
     /// Anti-cheat that lives in a kernel driver, so no translation layer can
@@ -274,6 +291,24 @@ nonisolated enum GameCompatVerdict {
         default:
             GameCompatBadge(state: .playable, label: "Playable", reason: reason)
         }
+    }
+
+    /// The library's verdict, from the same rules as the strip's badges.
+    static func summary(
+        appID: Int,
+        antiCheat: GameCompatRecord.AntiCheat?,
+        wiki: GameCompatRecord.WikiTiers?,
+        proton: GameCompatRecord.ProtonSummary?,
+        community: GameCompatRecord.Community?,
+        hasMacBuild: Bool,
+        architectures: GameCompatRecord.MacArchitectures?,
+    ) -> GameCompatSummary {
+        let native = native(wiki: wiki, hasMacBuild: hasMacBuild, architectures: architectures)
+        return GameCompatSummary(
+            appID: appID,
+            state: mac(antiCheat: antiCheat, wiki: wiki, proton: proton, community: community).state,
+            native: native?.state == .verified || native?.state == .playable,
+        )
     }
 
     /// The anti-cheat that stops the game outright, named for the reason

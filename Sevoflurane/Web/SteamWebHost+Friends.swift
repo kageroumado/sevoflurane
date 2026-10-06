@@ -265,7 +265,10 @@ extension SteamWebHost {
         }
     }
 
-    private func install(
+    /// Evaluates `script` in the context page until it answers one of
+    /// `outcomes`, once a second for ten seconds: Steam's globals appear a
+    /// moment after the page does.
+    func install(
         _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
     ) {
         Task(name: "Install \(what)") {

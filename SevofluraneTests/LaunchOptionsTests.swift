@@ -78,6 +78,18 @@ struct LaunchOptionsTests {
     }
 
     @Test
+    func `platforms for a whole library are read in one pass`() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("appinfo-\(UUID().uuidString).vdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try AppInfoFixture.megabonk().write(to: url)
+        #expect(SteamAppInfo.platforms(appIDs: [10, 3_405_340, 99], in: url) == [
+            10: ["windows", "macos", "linux"], 3_405_340: [],
+        ])
+        #expect(SteamAppInfo.platforms(appID: 10, in: url).contains("macos"))
+        #expect(SteamAppInfo.platforms(appID: 99, in: url).isEmpty)
+    }
+
+    @Test
     func `malformed JSON and unnumbered entries are nothing`() {
         #expect(LaunchOptions.parse("not json") == [])
         #expect(LaunchOptions.parse("{\"nIndex\":0}") == [])
@@ -152,7 +164,7 @@ private enum AppInfoFixture {
                         + string("description", "Megabonk (DX12 - Use only if game crashes)"),
                 ),
         )
-        let apps = entry(10, table("appinfo", table("common", string("name", "Counter-Strike"))) + Data([8]))
+        let apps = entry(10, table("appinfo", table("common", string("name", "Counter-Strike") + string("oslist", "windows, macos,linux"))) + Data([8]))
             + entry(3_405_340, table("appinfo", table("config", launch)) + Data([8]))
             + le(UInt32(0))
         let header = le(UInt32(0x0756_4429)) + le(UInt32(1))

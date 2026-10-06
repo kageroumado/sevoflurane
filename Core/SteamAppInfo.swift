@@ -40,11 +40,17 @@ nonisolated enum SteamAppInfo {
     /// The platforms Steam sells the game for (`common/oslist`: `windows`,
     /// `macos`, `linux`). Empty when the file or the app is missing.
     static func platforms(appID: Int, in url: URL = fileURL) -> Set<String> {
-        guard let data = try? Data(contentsOf: url, options: .alwaysMapped),
-              let app = keyValues(appID: appID, in: data),
-              case let .table(common)? = app["common"], case let .string(list)? = common["oslist"]
-        else { return [] }
-        return Set(list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+        platforms(appIDs: [appID], in: url)[appID] ?? []
+    }
+
+    /// ``platforms(appID:in:)`` for many apps in one pass over the file, the
+    /// way a whole library asks. Apps the file lacks are absent.
+    static func platforms(appIDs: Set<Int>, in url: URL = fileURL) -> [Int: Set<String>] {
+        guard let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return [:] }
+        return keyValues(appIDs: appIDs, in: data).mapValues { app in
+            guard case let .table(common)? = app["common"], case let .string(list)? = common["oslist"] else { return [] }
+            return Set(list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+        }
     }
 
     /// A binary KeyValues value.
@@ -65,29 +71,41 @@ nonisolated enum SteamAppInfo {
     /// One app's key-values, the `appinfo` table's contents, or `nil` when the
     /// app is not in the file or the file is not one this reads.
     static func keyValues(appID: Int, in data: Data) -> [String: Value]? {
+        keyValues(appIDs: [appID], in: data)[appID]
+    }
+
+    /// The key-values of every app in `appIDs` the file holds, read in one
+    /// walk: the string table is parsed once and the walk stops when the last
+    /// wanted app is found.
+    static func keyValues(appIDs: Set<Int>, in data: Data) -> [Int: [String: Value]] {
         var reader = Reader(data: data)
         guard let magic = reader.u32(), magic == version28 || magic == version29,
-              reader.u32() != nil else { return nil }
+              reader.u32() != nil else { return [:] }
         var strings: [String]?
         if magic == version29 {
-            guard let offset = reader.i64(), offset > 0, offset < Int64(data.count) else { return nil }
+            guard let offset = reader.i64(), offset > 0, offset < Int64(data.count) else { return [:] }
             var table = Reader(data: data, position: Int(offset))
             strings = table.stringTable()
-            guard strings != nil else { return nil }
+            guard strings != nil else { return [:] }
         }
-        while let id = reader.u32(), id != 0 {
-            guard let size = reader.u32() else { return nil }
+        var found: [Int: [String: Value]] = [:]
+        while found.count < appIDs.count, let id = reader.u32(), id != 0 {
+            guard let size = reader.u32() else { break }
             let next = reader.position + Int(size)
-            guard next <= data.count else { return nil }
-            if id == UInt32(appID) {
+            guard next <= data.count else { break }
+            if appIDs.contains(Int(id)) {
                 reader.position += entryPreamble
-                guard let root = reader.table(strings: strings) else { return nil }
-                if case let .table(appinfo)? = root["appinfo"] { return appinfo }
-                return root
+                if let root = reader.table(strings: strings) {
+                    if case let .table(appinfo)? = root["appinfo"] {
+                        found[Int(id)] = appinfo
+                    } else {
+                        found[Int(id)] = root
+                    }
+                }
             }
             reader.position = next
         }
-        return nil
+        return found
     }
 
     private struct Reader {

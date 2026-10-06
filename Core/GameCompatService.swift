@@ -7,8 +7,8 @@ import Foundation
 /// Two of the sources are whole tables fetched once (AreWeAntiCheatYet's
 /// `games.json`, AppleGamingWiki's compatibility table); three are per-app
 /// lookups (ProtonDB's summary, PCGamingWiki's app-id-to-title bridge,
-/// Sevoflurane's own community summary). The client's app cache adds
-/// whether a macOS build exists. A
+/// Sevoflurane's own community summary, which also answers in batches for the
+/// library). The client's app cache adds whether a macOS build exists. A
 /// source that cannot be reached reads as absent, never as an error: the
 /// badge for a game nobody has data on is "Unknown", and the page must never
 /// show a spinner that waits on a wiki.
@@ -104,6 +104,127 @@ actor GameCompatService {
             antiCheatBadge: GameCompatVerdict.antiCheat(antiCheat),
             fetchedAt: .now,
         )
+    }
+
+    // MARK: - The library
+
+    /// The library's verdicts for many games at once, from what costs no
+    /// per-game request: the two whole tables, the community database's
+    /// batches, the client's app cache, and whatever per-app answers the disk
+    /// already holds. A per-app lookup the answer lacks joins the queue
+    /// (``GameCompatBatch``), and the page asks again while ``pending`` says
+    /// some remain.
+    func summaries(for games: [GameCompatBatch.Game]) async -> (summaries: [GameCompatSummary], pending: Int) {
+        async let antiCheatTable = loadAntiCheatIndex()
+        async let wikiTable = loadWikiIndex()
+        async let communities = loadCommunities(appIDs: games.map(\.appID))
+        let platforms = SteamAppInfo.platforms(appIDs: Set(games.map(\.appID)))
+        let antiCheatIndex = await antiCheatTable
+        let wikiIndex = await wikiTable
+        let community = await communities
+        var lookups: [GameCompatBatch.Lookup] = []
+        let summaries = games.map { game in
+            let id = game.appID
+            let antiCheat = antiCheatIndex?.lookup(appID: id, name: game.name)
+            var wiki = wikiIndex?.lookup(title: game.name)
+            var titlePending = false
+            if wiki == nil, let wikiIndex {
+                let (data, fresh) = Self.cachedAnyAge(file: "pcgw/\(id).json")
+                if let data, let title = GameCompatSources.pcGamingWikiTitle(data: data) {
+                    wiki = wikiIndex.lookup(title: title)
+                }
+                if !fresh {
+                    lookups.append(.title(id))
+                    titlePending = data == nil
+                }
+            }
+            var proton: GameCompatRecord.ProtonSummary?
+            if !titlePending, GameCompatBatch.needsProton(antiCheat: antiCheat, wiki: wiki, community: community[id]) {
+                let (data, fresh) = Self.cachedAnyAge(file: "proton/\(id).json")
+                proton = data.flatMap { GameCompatSources.protonSummary(appID: id, data: $0) }
+                if !fresh { lookups.append(.proton(id)) }
+            }
+            let (architectures, _) = Self.cachedAnyAge(file: "pcgw-mac/\(id).json")
+            return GameCompatVerdict.summary(
+                appID: id, antiCheat: antiCheat, wiki: wiki, proton: proton, community: community[id],
+                hasMacBuild: platforms[id]?.contains("macos") == true,
+                architectures: architectures.flatMap {
+                    try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: $0)
+                },
+            )
+        }
+        enqueue(lookups)
+        return (summaries, queuedLookups.count)
+    }
+
+    /// Lookups waiting for their turn or in flight, in order and as a set.
+    private var lookupQueue: [GameCompatBatch.Lookup] = []
+    private var queuedLookups: Set<GameCompatBatch.Lookup> = []
+    private var lookupDrain: Task<Void, Never>?
+
+    private func enqueue(_ lookups: [GameCompatBatch.Lookup]) {
+        for lookup in lookups where queuedLookups.insert(lookup).inserted {
+            lookupQueue.append(lookup)
+        }
+        guard lookupDrain == nil, !lookupQueue.isEmpty else { return }
+        lookupDrain = Task(name: "Compat lookups") { await self.drainLookups() }
+    }
+
+    /// Runs the queue one lookup at a time, ``GameCompatBatch/lookupInterval``
+    /// apart; each answer lands in the disk cache the next ask reads.
+    private func drainLookups() async {
+        while !lookupQueue.isEmpty {
+            let lookup = lookupQueue.removeFirst()
+            switch lookup {
+            case let .title(id): _ = await loadPCGamingWikiTitle(appID: id)
+            case let .proton(id): _ = await loadProton(appID: id)
+            }
+            queuedLookups.remove(lookup)
+            try? await Task.sleep(for: GameCompatBatch.lookupInterval)
+        }
+        lookupDrain = nil
+    }
+
+    /// Sevoflurane's own summaries for many games: a day-fresh cached answer
+    /// where there is one, the batch endpoint for the rest, each answer
+    /// cached per game as ``loadCommunity(appID:)`` caches it. A batch that
+    /// fails leaves its games on whatever stale answer the disk holds.
+    private func loadCommunities(appIDs: [Int]) async -> [Int: GameCompatRecord.Community] {
+        var summaries: [Int: GameCompatRecord.Community] = [:]
+        var missing: [Int] = []
+        for id in appIDs {
+            let path = Self.cacheRoot.appendingPathComponent("community/\(id).json")
+            if let data = Self.cached(at: path, maxAge: Self.communityMaxAge) {
+                summaries[id] = GameCompatSources.community(data: data)
+            } else {
+                missing.append(id)
+            }
+        }
+        for request in GameCompatBatch.communityRequests(base: StatsUploader.baseURL, appIDs: missing) {
+            var bodies: [Int: Data]?
+            if let (data, response) = try? await session.data(from: request.url),
+               (response as? HTTPURLResponse)?.statusCode == 200 {
+                bodies = GameCompatBatch.communityBodies(data)
+            }
+            for id in request.appIDs {
+                let path = Self.cacheRoot.appendingPathComponent("community/\(id).json")
+                if let bodies {
+                    let body = bodies[id] ?? Data("{}".utf8)
+                    Self.store(body, at: path)
+                    summaries[id] = GameCompatSources.community(data: body)
+                } else if let stale = Self.cached(at: path, maxAge: nil) {
+                    summaries[id] = GameCompatSources.community(data: stale)
+                }
+            }
+        }
+        return summaries
+    }
+
+    /// A cached answer whatever its age, and whether it is still fresh.
+    private static func cachedAnyAge(file: String) -> (data: Data?, fresh: Bool) {
+        let path = cacheRoot.appendingPathComponent(file)
+        if let data = cached(at: path, maxAge: maxAge) { return (data, true) }
+        return (cached(at: path, maxAge: nil), false)
     }
 
     // MARK: - Whole tables

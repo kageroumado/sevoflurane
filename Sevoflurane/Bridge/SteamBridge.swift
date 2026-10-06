@@ -142,6 +142,9 @@ actor SteamBridge {
                 // here would serialize every asset load against CDP dispatch
                 // and the health probe. `/__web`, `/__loopback/`, `/`,
                 // `/index.html` and `/__eval` need actor state.
+                if request.method == "POST", request.path == "/__compat/batch" {
+                    return await Self.handleCompatBatchRequest(request)
+                }
                 if request.method == "GET", request.path.hasPrefix("/__compat/") {
                     return await Self.handleCompatRequest(request)
                 }

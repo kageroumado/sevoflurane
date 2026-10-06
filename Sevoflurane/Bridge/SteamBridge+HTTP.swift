@@ -97,6 +97,19 @@ extension SteamBridge {
         return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
+    /// `POST /__compat/batch` with `{"apps": [[appid, "name"], …]}`: the
+    /// library's verdicts for every game in it at once, compact
+    /// (``GameCompatBatch/answer(_:pending:)``), for the badges on its rows
+    /// and tiles and the "Plays on Mac" filter (``SteamLibraryCompat``).
+    nonisolated static func handleCompatBatchRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        let games = GameCompatBatch.games(fromRequest: request.body)
+        let (summaries, pending) = await GameCompatService.shared.summaries(for: games)
+        return .ok(
+            GameCompatBatch.answer(summaries, pending: pending),
+            type: "application/json", headers: [("Cache-Control", "no-store")],
+        )
+    }
+
     // MARK: - Steam's web properties
 
     /// `GET /__web?u=<absolute URL>`: one Steam web page or document, fetched
