@@ -55,26 +55,11 @@ enum SteamLibraryCompat {
         return null;
       }
     
-      var Filter = find("Found SteamDeckUnsupported set in AppFilter", function (exports) {
-        for (var key in exports) {
-          var proto = exports[key] && exports[key].prototype;
-          if (proto && typeof proto.MatchesImpl === "function" && typeof proto.MatchesScoredImpl === "function"
-              && Object.getOwnPropertyDescriptor(proto, "bIsEmpty")) return exports[key];
-        }
-        return null;
-      });
-      var observable = find("[MobX]", function (exports) {
-        for (var key in exports) {
-          if (typeof exports[key] === "function" && typeof exports[key].box === "function") return exports[key];
-        }
-        return null;
-      });
-    
       var KEY = \(JSLiteral.string(storageKey));
       var stored = false;
       try { stored = localStorage.getItem(KEY) === "on"; } catch (e) {}
       var plain = { on: stored, version: 0 };
-      var box = observable ? observable.box(plain, { deep: false }) : null;
+      var box = null;
       var plays = new Set();
       var probing = false;
     
@@ -111,37 +96,64 @@ enum SteamLibraryCompat {
         },
         enable: function () { lib.enabled = true; publish(current().on); refresh(); },
         disable: function () { lib.enabled = false; publish(current().on); },
-        sync: function () { if (libraryCount() !== asked) refresh(); }
+        sync: function () { patch(); if (libraryCount() !== asked) refresh(); }
       };
     
-      if (Filter && box) {
-        var proto = Filter.prototype;
-        if (!proto.__sevoMacFilter) {
-          var matches = proto.MatchesImpl;
-          var scored = proto.MatchesScoredImpl;
-          var empty = Object.getOwnPropertyDescriptor(proto, "bIsEmpty");
-          proto.MatchesImpl = function (app) { return hides(this, app) ? false : matches.call(this, app); };
-          proto.MatchesScoredImpl = function (app) { return hides(this, app) ? 0 : scored.call(this, app); };
-          /* An empty filter is skipped outright by some of the library's
-             lists; with the chip on, the library's filter is not empty. */
-          Object.defineProperty(proto, "bIsEmpty", {
-            configurable: true,
-            get: function () { return empty.get.call(this) && !(lib.isOn() && isLibraryFilter(this)); }
-          });
-          proto.__sevoMacFilter = true;
+      /* Steam loads the filter's module and makes the library's filter only
+         once the library is first drawn, which can be after this script
+         runs at boot, so the patch and its self-test are tried again at
+         each sync until they hold. */
+      var lastPatch = 0;
+      function patch() {
+        if (lib.available || Date.now() - lastPatch < 5000) return;
+        lastPatch = Date.now();
+        var Filter = find("Found SteamDeckUnsupported set in AppFilter", function (exports) {
+          for (var key in exports) {
+            var proto = exports[key] && exports[key].prototype;
+            if (proto && typeof proto.MatchesImpl === "function" && typeof proto.MatchesScoredImpl === "function"
+                && Object.getOwnPropertyDescriptor(proto, "bIsEmpty")) return exports[key];
+          }
+          return null;
+        });
+        var observable = find("[MobX]", function (exports) {
+          for (var key in exports) {
+            if (typeof exports[key] === "function" && typeof exports[key].box === "function") return exports[key];
+          }
+          return null;
+        });
+    
+        if (!box && observable) box = observable.box(plain, { deep: false });
+        if (Filter && box) {
+          var proto = Filter.prototype;
+          if (!proto.__sevoMacFilter) {
+            var matches = proto.MatchesImpl;
+            var scored = proto.MatchesScoredImpl;
+            var empty = Object.getOwnPropertyDescriptor(proto, "bIsEmpty");
+            proto.MatchesImpl = function (app) { return hides(this, app) ? false : matches.call(this, app); };
+            proto.MatchesScoredImpl = function (app) { return hides(this, app) ? 0 : scored.call(this, app); };
+            /* An empty filter is skipped outright by some of the library's
+               lists; with the chip on, the library's filter is not empty. */
+            Object.defineProperty(proto, "bIsEmpty", {
+              configurable: true,
+              get: function () { return empty.get.call(this) && !(lib.isOn() && isLibraryFilter(this)); }
+            });
+            proto.__sevoMacFilter = true;
+          }
+          /* The library's filter is a subclass that matches the app type
+             before it calls these, so the wrappers are run on it directly. */
+          try {
+            var live = uiStore.collectionsAppFilter;
+            probing = true;
+            lib.available = live instanceof Filter && proto.MatchesImpl.call(live, { appid: -1 }) === false
+              && proto.MatchesScoredImpl.call(live, { appid: -1 }) === 0;
+          } catch (e) {
+            lib.available = false;
+          } finally {
+            probing = false;
+          }
         }
-        /* The library's filter is a subclass that matches the app type
-           before it calls these, so the wrappers are run on it directly. */
-        try {
-          var live = uiStore.collectionsAppFilter;
-          probing = true;
-          lib.available = live instanceof Filter && proto.MatchesImpl.call(live, { appid: -1 }) === false
-            && proto.MatchesScoredImpl.call(live, { appid: -1 }) === 0;
-        } catch (e) {
-          lib.available = false;
-        } finally {
-          probing = false;
-        }
+    
+        if (lib.available) publish(current().on);
       }
     
       /* The library's games, as the bridge's batch endpoint takes them. */
@@ -194,6 +206,7 @@ enum SteamLibraryCompat {
           .catch(function () { inflight = false; later(60000); });
       }
     
+      patch();
       refresh();
       return lib.available ? "installed" : "installed without the filter";
     })()

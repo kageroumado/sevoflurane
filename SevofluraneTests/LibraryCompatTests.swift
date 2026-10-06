@@ -227,6 +227,21 @@ struct LibraryCompatTests {
     }
 
     @Test
+    func `a library filter Steam makes after boot is patched at the next sync`() throws {
+        let context = try #require(JSContext())
+        context.evaluateScript(Self.steam)
+        context.evaluateScript("var now = 0; Date.now = function () { return now; }; var made = uiStore.collectionsAppFilter; uiStore.collectionsAppFilter = undefined;")
+        #expect(context.evaluateScript(SteamLibraryCompat.contextScript)?.toString() == "installed without the filter")
+        context.evaluateScript("uiStore.collectionsAppFilter = made; __sevoLibraryCompat.sync()")
+        // Retries wait five seconds between scans of webpack's modules.
+        #expect(context.evaluateScript("__sevoLibraryCompat.available")?.toBool() == false)
+        context.evaluateScript("now = 5000; __sevoLibraryCompat.sync()")
+        #expect(context.evaluateScript("__sevoLibraryCompat.available")?.toBool() == true)
+        context.evaluateScript("__sevoLibraryCompat.toggle()")
+        #expect(context.evaluateScript("uiStore.collectionsAppFilter.MatchesImpl({ appid: 2 })")?.toBool() == false)
+    }
+
+    @Test
     func `the chip remembers being on`() throws {
         let context = try #require(JSContext())
         context.evaluateScript(Self.steam)
