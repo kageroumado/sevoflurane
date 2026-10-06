@@ -176,6 +176,13 @@ nonisolated extension Preferences {
         get { shared.object(forKey: "appliesKnownFixes") as? Bool ?? true }
         set { shared.set(newValue, forKey: "appliesKnownFixes") }
     }
+
+    /// The highest serial of a signed fix list this Mac took; a list below
+    /// it is a replay and refused (``FixList``).
+    static var fixListSerial: Int {
+        get { shared.integer(forKey: "fixListSerial") }
+        set { shared.set(newValue, forKey: "fixListSerial") }
+    }
 }
 
 // MARK: - Crash reports

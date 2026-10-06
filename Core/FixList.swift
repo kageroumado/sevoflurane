@@ -8,9 +8,13 @@ import Foundation
 /// A first launch applies the list without a click, so it is taken only
 /// signed: `fixes.json.sig` is the raw Ed25519 signature over the list's
 /// exact bytes, base64, from the key pinned here, made on the admin's Mac
-/// (`kagerou sevostats publish-fixes`). The signature is checked when the
-/// list arrives and again at every read of the cache, and every entry's
-/// values then pass ``FixValues/admitted(_:)``.
+/// (`kagerou sevostats publish-fixes`). The signed payload carries a
+/// `serial` that grows with every publish and the time it was `issued`; the
+/// highest serial taken is remembered (``Preferences/fixListSerial``) and a
+/// list below it is refused, so an old signed list cannot be replayed to
+/// bring back a fix that was retired. The signature and the serial are
+/// checked when the list arrives and again at every read of the cache, and
+/// every entry's values then pass ``FixValues/admitted(_:)``.
 ///
 /// The cache is asked for again once it is a week old with the `ETag` it
 /// came with, so an unchanged list costs a 304. A list that cannot be
@@ -48,38 +52,70 @@ nonisolated enum FixList {
         GameCompatService.cacheRoot.appendingPathComponent("fixes.etag")
     }
 
+    /// How far ahead of this Mac's clock a list may say it was issued.
+    static let issuedTolerance: TimeInterval = 24 * 3600
+
     /// Every fix, the built-in table first: where both name a value for the
     /// same game, the built-in one is the one that counts. The cached list
-    /// counts only while its signature verifies.
+    /// counts only while its signature verifies and its serial is still the
+    /// highest taken.
     static var current: [KnownFix] {
-        let served = (try? Data(contentsOf: cacheURL)).flatMap { body in
-            (try? Data(contentsOf: cachedSignatureURL)).map { verified(body, signature: $0) }
-        } ?? []
-        return merged(builtIn: KnownFixes.all, served: served)
+        guard let body = try? Data(contentsOf: cacheURL),
+              let signature = try? Data(contentsOf: cachedSignatureURL),
+              case let .taken(list) = verdict(on: body, signature: signature, highestSerial: Preferences.fixListSerial)
+        else { return KnownFixes.all }
+        return merged(builtIn: KnownFixes.all, served: list.fixes)
     }
 
-    /// The entries of `body` when `signature` is the pinned key's over it;
-    /// nothing otherwise.
-    static func verified(
-        _ body: Data, signature: Data, key: Curve25519.Signing.PublicKey? = pinnedKey,
-    ) -> [KnownFix] {
+    /// A signed list as it was read.
+    struct SignedList: Equatable {
+        let serial: Int
+        let issued: Date
+        let fixes: [KnownFix]
+    }
+
+    /// What a list is worth to this Mac.
+    enum Verdict: Equatable {
+        case taken(SignedList)
+        /// No valid signature from the fixes key over the bytes.
+        case unsigned
+        /// Signed, without a serial and an issued time this version reads.
+        case malformed
+        /// Signed, and older than a list this Mac took.
+        case older(serial: Int, highest: Int)
+        /// Signed, and issued more than ``issuedTolerance`` from now.
+        case fromTheFuture(Date)
+    }
+
+    /// Whether `body` is a list to take: a signature from `key` over its
+    /// exact bytes, a serial at least `highestSerial` (the same list again
+    /// is taken), and an issued time no later than a day from `now`.
+    static func verdict(
+        on body: Data, signature: Data, highestSerial: Int,
+        key: Curve25519.Signing.PublicKey? = pinnedKey, now: Date = .now,
+    ) -> Verdict {
         guard let key, (try? EngineSignature.verify(body, signatureFile: signature, subject: "fixes.json", key: key)) != nil
-        else { return [] }
-        return served(from: body)
+        else { return .unsigned }
+        guard let listing = try? JSONDecoder().decode(Listing.self, from: body),
+              let issued = try? Date(listing.issued, strategy: .iso8601)
+        else { return .malformed }
+        guard listing.serial >= highestSerial else { return .older(serial: listing.serial, highest: highestSerial) }
+        guard issued.timeIntervalSince(now) <= issuedTolerance else { return .fromTheFuture(issued) }
+        return .taken(SignedList(
+            serial: listing.serial, issued: issued,
+            fixes: listing.fixes.compactMap(\.fix).filter(\.values.hasSettings),
+        ))
     }
 
     // MARK: - Reading a served list
 
-    /// The entries of a signed list this version can read, each with only
-    /// the values ``FixValues/admitted(_:)`` lets through. An entry naming a
-    /// value this version does not know is left out on its own, and one left
-    /// setting nothing is left out too.
-    private static func served(from data: Data) -> [KnownFix] {
-        guard let listing = try? JSONDecoder().decode(Listing.self, from: data) else { return [] }
-        return listing.fixes.compactMap(\.fix).filter(\.values.hasSettings)
-    }
-
+    /// The signed payload. Each entry keeps only the values
+    /// ``FixValues/admitted(_:)`` lets through; an entry naming a value this
+    /// version does not know is left out on its own, and one left setting
+    /// nothing is left out too.
     private struct Listing: Decodable {
+        let serial: Int
+        let issued: String
         let fixes: [Entry]
     }
 
@@ -141,8 +177,8 @@ nonisolated enum FixList {
     // MARK: - Fetching
 
     /// Asks for the list when the cached one is older than ``maxAge`` or
-    /// missing, and keeps a new one only when its signature verifies.
-    /// Failures leave the cache as it is.
+    /// missing, and keeps a new one only when ``verdict(on:signature:highestSerial:key:now:)``
+    /// takes it. Failures leave the cache as it is.
     static func refreshIfStale(session: URLSession = .shared) async {
         let manager = FileManager.default
         let modified = (try? manager.attributesOfItem(atPath: cacheURL.path))?[.modificationDate] as? Date
@@ -158,14 +194,19 @@ nonisolated enum FixList {
         case 304:
             try? manager.setAttributes([.modificationDate: Date.now], ofItemAtPath: cacheURL.path)
         case 200:
-            guard let (signature, signed) = try? await session.data(from: signatureURL),
-                  (signed as? HTTPURLResponse)?.statusCode == 200, signature.count <= 1024,
-                  let key = pinnedKey,
-                  (try? EngineSignature.verify(body, signatureFile: signature, subject: "fixes.json", key: key)) != nil
+            let fetched = try? await session.data(from: signatureURL)
+            guard let (signature, signed) = fetched, (signed as? HTTPURLResponse)?.statusCode == 200,
+                  signature.count <= 1024
             else {
-                log("fix list: the downloaded list has no valid signature from the fixes key; ignored")
+                log("fix list: no signature beside the downloaded list; ignored")
                 return
             }
+            let verdict = verdict(on: body, signature: signature, highestSerial: Preferences.fixListSerial)
+            guard case let .taken(list) = verdict else {
+                log("fix list: the downloaded list was refused (\(verdict)); the cached one stands")
+                return
+            }
+            Preferences.fixListSerial = list.serial
             try? manager.createDirectory(at: GameCompatService.cacheRoot, withIntermediateDirectories: true)
             try? signature.write(to: cachedSignatureURL, options: .atomic)
             try? body.write(to: cacheURL, options: .atomic)
@@ -174,7 +215,7 @@ nonisolated enum FixList {
             } else {
                 try? manager.removeItem(at: tagURL)
             }
-            log("fix list: \(served(from: body).count) signed entries taken")
+            log("fix list: serial \(list.serial) taken, \(list.fixes.count) entries")
         default:
             break
         }

@@ -7,7 +7,7 @@ import Foundation
 /// undo; after that it is a chip in Settings that someone presses. Every
 /// entry names what was measured, because the reason is what the user is
 /// being asked to judge.
-nonisolated struct KnownFix: Sendable, Identifiable {
+nonisolated struct KnownFix: Equatable, Sendable, Identifiable {
     /// The Steam app this is about, for a fix that belongs to one game.
     let appID: Int?
     /// A lower-cased executable name, `*` standing for any run of characters,

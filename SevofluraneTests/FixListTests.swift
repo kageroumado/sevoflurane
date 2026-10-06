@@ -8,7 +8,7 @@ import Testing
 /// undoing a fix on a game's own values.
 struct FixListTests {
     private static let served = Data("""
-    {"fixes": [
+    {"serial": 3, "issued": "2026-10-06T00:00:00Z", "fixes": [
       {"id": 1, "appid": 1962700, "title": "Subnautica 2", "values": {"renderer": "d3dmetal"}, "reason": "Seeded."},
       {"id": 2, "appid": 1962700, "title": "Subnautica 2", "values": {"renderer": "dxmt", "processors": 6},
        "reason": "Six is enough."},
@@ -21,31 +21,97 @@ struct FixListTests {
     /// Stands in for the fixes key, whose private half only the admin's Mac holds.
     private static let key = Curve25519.Signing.PrivateKey()
 
-    /// `body` as the server serves it after `kagerou sevostats publish-fixes`.
-    private static func signed(_ body: Data, by key: Curve25519.Signing.PrivateKey = key) throws -> [KnownFix] {
+    private static let now = Date(timeIntervalSince1970: 1_791_244_800) // 2026-10-06T00:00:00Z
+
+    /// What this Mac makes of `body` as the server serves it after `kagerou
+    /// sevostats publish-fixes`, having taken serial `highest` before.
+    private static func verdict(
+        _ body: Data, by key: Curve25519.Signing.PrivateKey = key, highest: Int = 0,
+    ) throws -> FixList.Verdict {
         let signature = try key.signature(for: body).base64EncodedData()
-        return FixList.verified(body, signature: signature, key: Self.key.publicKey)
+        return FixList.verdict(on: body, signature: signature, highestSerial: highest, key: Self.key.publicKey, now: now)
     }
+
+    /// The entries of a list this Mac takes; none for one it refuses.
+    private static func signed(_ body: Data) throws -> [KnownFix] {
+        guard case let .taken(list) = try verdict(body) else { return [] }
+        return list.fixes
+    }
+
+    /// The five built-in entries as `kagerou sevostats publish-fixes` built
+    /// and signed them on the admin's Mac with the real fixes key, serial 1.
+    private static let adminSigned = Data(base64Encoded: [
+        "eyJmaXhlcyI6W3siYXBwaWQiOjE5NjI3MDAsImlkIjoxLCJyZWFzb24iOiJTdWJuYXV0aWNhIDIgcmVuZGVycyB3aXRoIERpcmVj",
+        "dDNEIDEyLCBhbmQgRDNETWV0YWwgaXMgdGhlIG9ubHkgbGF5ZXIgaGVyZSB0aGF0IGFuc3dlcnMgaXQuIiwidGl0bGUiOiJTdWJu",
+        "YXV0aWNhIDIiLCJ2YWx1ZXMiOnsicmVuZGVyZXIiOiJkM2RtZXRhbCJ9fSx7ImFwcGlkIjozMzk4MDAsImlkIjoyLCJyZWFzb24i",
+        "OiJXaXRob3V0IGZha2VkIG1vZGUgY2hhbmdlcyB0aGUgZ2FtZSBpcyBvZmZlcmVkIHRoZSBkaXNwbGF5J3MgMTY6OSBtb2RlcyBh",
+        "bG9uZTsgd2l0aCB0aGVtIHdpbjMydSBhZGRzIDI2IHZpcnR1YWwgbW9kZXMsIHRoZSA0OjMgb25lcyB0aGlzIGdhbWUgbG9va3Mg",
+        "Zm9yIGluY2x1ZGVkLiIsInRpdGxlIjoiSHVuaWVQb3AiLCJ2YWx1ZXMiOnsiZW11bGF0ZU1vZGVzZXQiOnRydWV9fSx7ImFwcGlk",
+        "IjozMTAzNjAsImlkIjozLCJyZWFzb24iOiJVbml0eSA1IHN0YXJ0cyBhIHdvcmtlciBwZXIgcHJvY2Vzc29yIGFuZCBrZWVwcyBl",
+        "dmVyeSBvbmUgc3Bpbm5pbmcgdW5kZXIgUm9zZXR0YTogb24gYSAxNi1jb3JlIE00IE1heCB0aGUgZ2FtZSB1c2VkIDEzNTcgJSBD",
+        "UFUgYXQgNTQgZnBzLCBzdGFsbGluZyBzZXZlcmFsIHRpbWVzIGEgc2Vjb25kLCBhbmQgdG9sZCBvZiA4IHByb2Nlc3NvcnMsIDE4",
+        "NCAlIGF0IDExNyBmcHMuIiwidGl0bGUiOiJIaWd1cmFzaGkgV2hlbiBUaGV5IENyeSBIb3UgLSBDaC4xIE9uaWtha3VzaGkiLCJ2",
+        "YWx1ZXMiOnsicHJvY2Vzc29ycyI6OH19LHsiYXBwaWQiOjE5MzM2NjAsImlkIjo0LCJyZWFzb24iOiJBbiBSUEcgTWFrZXIgTVYg",
+        "Z2FtZSBvbiBOVy5qczogdGhlIG5hdGl2ZSBtYWNPUyBydW50aW1lIHJ1bnMgaXQgb3V0c2lkZSB0aGUgYm90dGxlLCB3aXRoIGl0",
+        "cyBhY2hpZXZlbWVudHMgY2FycmllZCBieSBhIHN0dWIuIiwidGl0bGUiOiJEZW1vbnMgUm9vdHMiLCJ2YWx1ZXMiOnsicnVubmVy",
+        "IjoibndqcyJ9fSx7ImV4ZSI6Im53LmV4ZSIsImlkIjo1LCJyZWFzb24iOiJUaGUgZ2FtZSBpcyBOVy5qczogdGhlIG5hdGl2ZSBt",
+        "YWNPUyBydW50aW1lIHJ1bnMgaXQgb3V0c2lkZSB0aGUgYm90dGxlLCBhdCB0aGUgc3BlZWQgb2YgYSBNYWMgYnJvd3NlciByYXRo",
+        "ZXIgdGhhbiBvZiBSb3NldHRhLiIsInRpdGxlIjoiTlcuanMgZ2FtZXMiLCJ2YWx1ZXMiOnsicnVubmVyIjoibndqcyJ9fV0sImlz",
+        "c3VlZCI6IjIwMjYtMTAtMDZUMDE6MDk6NDVaIiwic2VyaWFsIjoxfQo=",
+    ].joined())!
+
+    private static let adminSignature =
+        Data("V1Xcm8wFfJlMxJ/cKwhM74F53cBLZnuOTVyx8Y3GrbN8lgVRSWS+p/Ya6KOiwYlXmNCZ7XO1qAyCigerHgitBQ==".utf8)
 
     @Test
     func `a served entry this version cannot read is left out alone`() throws {
         let fixes = try Self.signed(Self.served)
         #expect(fixes.map(\.title) == ["Subnautica 2", "Subnautica 2", "Unreal"])
         #expect(fixes[2].exePattern == "game-win64-shipping.exe")
-        #expect(try Self.signed(Data("not json".utf8)).isEmpty)
+        #expect(try Self.verdict(Data("not json".utf8)) == .malformed)
+    }
+
+    @Test
+    func `the list the admin's Mac signed verifies with the pinned key`() {
+        let verdict = FixList.verdict(
+            on: Self.adminSigned, signature: Self.adminSignature, highestSerial: 1, now: Self.now,
+        )
+        guard case let .taken(list) = verdict else {
+            Issue.record("refused: \(verdict)")
+            return
+        }
+        #expect(list.serial == 1)
+        #expect(list.fixes.count == KnownFixes.all.count)
+        #expect(FixList.merged(builtIn: KnownFixes.all, served: list.fixes) == KnownFixes.all)
     }
 
     @Test
     func `a list without the fixes key's signature is ignored`() throws {
-        #expect(try Self.signed(Self.served, by: Curve25519.Signing.PrivateKey()).isEmpty)
-        #expect(FixList.verified(Self.served, signature: Data("not a signature".utf8), key: Self.key.publicKey).isEmpty)
+        #expect(try Self.verdict(Self.served, by: Curve25519.Signing.PrivateKey()) == .unsigned)
+        #expect(FixList.verdict(
+            on: Self.served, signature: Data("not a signature".utf8), highestSerial: 0, key: Self.key.publicKey,
+        ) == .unsigned)
         var tampered = Self.served
         tampered.append(contentsOf: Data(" ".utf8))
         let signature = try Self.key.signature(for: Self.served).base64EncodedData()
-        #expect(FixList.verified(tampered, signature: signature, key: Self.key.publicKey).isEmpty)
+        #expect(FixList.verdict(on: tampered, signature: signature, highestSerial: 0, key: Self.key.publicKey) == .unsigned)
         // The pinned key is a real one, and the test key is not it.
         #expect(FixList.pinnedKey != nil)
-        #expect(FixList.verified(Self.served, signature: signature).isEmpty)
+        #expect(FixList.verdict(on: Self.served, signature: signature, highestSerial: 0) == .unsigned)
+    }
+
+    @Test
+    func `an older list is refused and the same one taken again`() throws {
+        #expect(try Self.verdict(Self.served, highest: 4) == .older(serial: 3, highest: 4))
+        guard case let .taken(again) = try Self.verdict(Self.served, highest: 3) else {
+            Issue.record("the list already taken was refused")
+            return
+        }
+        #expect(again.serial == 3)
+        let tomorrow = Data(#"{"serial": 9, "issued": "2026-10-08T00:00:00Z", "fixes": []}"#.utf8)
+        #expect(try Self.verdict(tomorrow) == .fromTheFuture(Date(timeIntervalSince1970: 1_791_417_600)))
+        let unnumbered = Data(#"{"fixes": []}"#.utf8)
+        #expect(try Self.verdict(unnumbered) == .malformed)
     }
 
     @Test
@@ -64,7 +130,7 @@ struct FixListTests {
     @Test
     func `a value that could reach a file, the registry or the log as more than itself is dropped`() throws {
         let fixes = try Self.signed(Data(#"""
-        {"fixes": [
+        {"serial": 1, "issued": "2026-10-06T00:00:00Z", "fixes": [
           {"appid": 480, "title": "Spacewar\nfixes: forged line", "reason": "Why.\r\nAnother.",
            "values": {"upscaler": "x\nDYLD_INSERT_LIBRARIES=/tmp/a.dylib", "processors": 9999,
                       "dllOverrides": {"d3d11": "n,b", "..\\evil": "n", "Bad\"Name": "n", "x": "native"},
