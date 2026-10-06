@@ -57,6 +57,11 @@ struct GameRendererTests {
         #expect(FileManager.default.fileExists(
             atPath: directory.appendingPathComponent("i386-windows/d3d11.dll").path,
         ))
+        // DXMT's winemetal.dll finds its unix half beside it, which is the
+        // engine's own: an engine before b2 looks nowhere else.
+        #expect(try FileManager.default.destinationOfSymbolicLink(
+            atPath: directory.appendingPathComponent("x86_64-unix").path,
+        ) == tree.root.appendingPathComponent("wine/lib/wine/x86_64-unix").standardizedFileURL.path)
         // Twice is the same answer: the materializer runs at every store
         // change and at every client start.
         #expect(EngineRenderers.prependDirectory(

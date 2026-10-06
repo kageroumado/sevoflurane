@@ -274,7 +274,24 @@ nonisolated enum EngineRenderers {
             )) != nil else { continue }
             linked = true
         }
-        return linked ? directory : nil
+        guard linked else { return nil }
+        linkUnixHalves(in: directory, engine: engine)
+        return directory
+    }
+
+    /// Links `x86_64-unix` in a prepend directory to the engine's own unix
+    /// modules. Wine loads a builtin's unix half from beside the DLL it found
+    /// (`load_builtin_unixlib`), so DXMT's `winemetal.dll`, found here, looks
+    /// for `winemetal.so` here too; an engine before Dormison b2 has no other
+    /// place to find it, and the game dies at load. The same `.so` the
+    /// bottle's own staging pairs every DXMT version with.
+    private static func linkUnixHalves(in directory: URL, engine: URL) {
+        let manager = FileManager.default
+        let link = directory.appendingPathComponent("x86_64-unix")
+        let destination = engine.appendingPathComponent("wine/lib/wine/x86_64-unix").standardizedFileURL.path
+        guard (try? manager.destinationOfSymbolicLink(atPath: link.path)) != destination else { return }
+        try? manager.removeItem(at: link)
+        try? manager.createSymbolicLink(atPath: link.path, withDestinationPath: destination)
     }
 
     /// The `WINEDLLOVERRIDES` a game loading a renderer from `directory`
