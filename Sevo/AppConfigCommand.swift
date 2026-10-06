@@ -18,7 +18,9 @@ extension AppCommand {
             inherit — how many processors the game is told of; a Unity 5 \
             game keeps a worker spinning on each), dll <name>=<mode> \
             (n,b | b,n | n | b | empty for disabled; <name>= drops one, inherit drops the \
-            table), the switches \(ConfigSwitches.names) (on | off | \
+            table), env <NAME>=<value> (a variable the game starts \
+            with; <NAME>= starts it without that variable, <NAME> alone \
+            drops it, inherit drops them all), the switches \(ConfigSwitches.names) (on | off | \
             inherit), recommended to print what the fix table knows about \
             this game, windows (the values below), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
@@ -40,7 +42,7 @@ extension AppCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | build | recommended | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | runner | build | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -90,6 +92,8 @@ extension AppCommand {
                 print("\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))")
             case "dll":
                 print(Self.overrideLines(values))
+            case "env":
+                print(Self.environmentLines(values))
             case "windows":
                 let resolved = GameConfig.windows(bottle: bottle, game: appid)
                 print("\(resolved.value.rawValue) (\(resolved.source)) — \(resolved.value.summary)")
@@ -137,6 +141,8 @@ extension AppCommand {
             case "dll":
                 try setDLLOverride(value, bottle: bottle)
                 await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            case "env":
+                try setEnvironment(value, bottle: bottle)
             case "windows":
                 let treatment = try ConfigKeyParsing.windows(value)
                 updateGame(bottle: bottle) { $0.windows = treatment }
@@ -172,7 +178,7 @@ extension AppCommand {
         /// goes with it.
         private static func unknownKey(_ key: String) -> ExitCode {
             Sevo.printError("unknown key '\(key)' (renderer | windows | upscaler | filter | "
-                + "mouse | emulate-modeset | processors | dll | \(ConfigSwitches.names) | runner | build | "
+                + "mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | runner | build | "
                 + "recommended | detect | exe)")
             return SevoExit.badInvocation
         }
@@ -213,6 +219,29 @@ extension AppCommand {
                 table[parsed.dll] = parsed.mode
                 values.dllOverrides = table.isEmpty ? nil : table
             }
+        }
+
+        /// Sets, empties or drops one variable of this game's environment, or
+        /// drops them all for `inherit`.
+        private func setEnvironment(_ value: String, bottle: String) throws {
+            guard value != "inherit" else {
+                updateGame(bottle: bottle) { $0.environment = nil }
+                return
+            }
+            let name = value.split(separator: "=", maxSplits: 1).first.map(String.init) ?? value
+            let variable = value.contains("=") ? String(value.dropFirst(name.count + 1)) : nil
+            if let problem = UserEnvironment.problem(name: name, value: variable ?? "") {
+                throw ValidationError("\(name): \(problem.message)")
+            }
+            updateGame(bottle: bottle) {
+                SettingReducer.reduce(&$0, .setEnvironment(name: name, value: variable))
+            }
+        }
+
+        /// This game's own variables, one per line.
+        private static func environmentLines(_ values: ConfigValues) -> String {
+            let lines = UserEnvironment.lines(values.environment)
+            return lines.isEmpty ? "none — the bottle's own variables apply" : lines.joined(separator: "\n")
         }
 
         /// What the fix table says about this game: the keys it names, the
@@ -311,6 +340,7 @@ extension AppCommand {
             let processors = GameConfig.processors(bottle: bottle, game: appid)
             print("processors \(ConfigKeyParsing.processorsLabel(processors.value)) (\(processors.source))")
             print("dll \(Self.overrideLines(values).replacingOccurrences(of: "\n", with: " "))")
+            print("env \(Self.environmentLines(values).replacingOccurrences(of: "\n", with: " "))")
             for entry in ConfigSwitches.all {
                 let resolved = ConfigSwitches.resolved(entry.key, bottle: bottle, game: appid)
                 print("\(entry.key) \(resolved?.value ?? false) (\(resolved?.source.description ?? "?"))")

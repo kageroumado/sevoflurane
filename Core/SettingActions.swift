@@ -32,6 +32,9 @@ nonisolated enum SettingAction: Equatable, Sendable {
     case setTuningParameters(TuningParameters)
     /// Gives a library a load order for this game; `nil` takes it away.
     case setDLLOverride(library: String, order: String?)
+    /// Sets a variable by name at this level; `nil` takes it away. A pair
+    /// ``UserEnvironment/problem(name:value:)`` refuses changes nothing.
+    case setEnvironment(name: String, value: String?)
 }
 
 nonisolated enum SettingReducer {
@@ -54,6 +57,11 @@ nonisolated enum SettingReducer {
             var table = values.dllOverrides ?? [:]
             table[library] = order
             values.dllOverrides = table.isEmpty ? nil : table
+        case let .setEnvironment(name, value):
+            if let value, UserEnvironment.problem(name: name, value: value) != nil { return }
+            var table = values.environment ?? [:]
+            table[name] = value
+            values.environment = table.isEmpty ? nil : table
         }
     }
 }

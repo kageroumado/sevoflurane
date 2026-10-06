@@ -311,6 +311,28 @@ nonisolated extension SettingCopy {
         ),
     )
 
+    static let environment = SettingHelp(
+        title: "Environment",
+        summary: "Variables the game starts with, by name: the DXVK_HUD=1 or WINEDLLOVERRIDES=… a fix "
+            + "for a game often names.",
+        entries: [
+            .init(
+                name: "Steam's launch options",
+                text: "A line such as DXVK_HUD=1 %command% -windowed, the form Proton fixes are shared in, "
+                    + "works too. Sevoflurane moves the variables ahead of %command% here, and Steam "
+                    + "keeps %command% -windowed.",
+            ),
+            .init(
+                name: "Over a setting",
+                text: "A variable a setting above also writes takes that setting's place, and its row "
+                    + "says which.",
+            ),
+            .init(name: "An empty value", text: "Removes the variable, for a game that misreads one."),
+        ],
+        footnote: "Settings › Engine holds the variables every game gets; a game's own win. A change applies "
+            + "the next time the game starts.",
+    )
+
     static let dllOverrides = SettingHelp(
         title: "DLL overrides",
         summary: "Wine ships its own version of most Windows libraries and prefers it. An override "

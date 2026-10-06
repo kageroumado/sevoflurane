@@ -159,7 +159,7 @@ private struct GamesPlaceholder: View {
 // MARK: - The form
 
 /// The selected game's form: the catalog's groups at the game level, then
-/// its DLL overrides. Everything it changes goes through one store.
+/// its DLL overrides and its environment. Everything it changes goes through one store.
 private struct GameForm: View {
     let gameID: Int
     let name: String
@@ -187,6 +187,7 @@ private struct GameForm: View {
                 heading: name, recommendation: recommendation,
             )
             GameDLLOverridesSection(store: store)
+            EnvironmentSection(store: store)
             if let program = AdoptedPrograms.program(gameID),
                FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
                 FPSUnlockerSection()

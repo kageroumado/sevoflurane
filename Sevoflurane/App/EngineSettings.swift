@@ -3,9 +3,9 @@ import SwiftUI
 
 /// Settings › Engine: everything about the Wine underneath — which engine
 /// runs the bottle, which bottle, thread synchronization, the dependencies
-/// games commonly miss, DLL overrides, Wine's own configuration window, and
-/// Repair. One pane, because these knobs all answer the same question: "what
-/// is the Windows machine my games run on?"
+/// games commonly miss, DLL overrides, environment variables, Wine's own
+/// configuration window, and Repair. One pane, because these knobs all answer
+/// the same question: "what is the Windows machine my games run on?"
 struct EngineSettings: View {
     let store: EngineStore
     let graphics: GraphicsStore
@@ -34,6 +34,7 @@ struct EngineSettings: View {
             MsyncSection(graphics: graphics, crossOver: store.stagedEngine.isCrossOver, highlighted: highlighted)
             if !store.stagedEngine.isCrossOver {
                 SettingSections(store: defaults, shaders: shaders, highlighted: highlighted)
+                EnvironmentSection(store: defaults)
             }
             DependenciesSection(
                 store: store,

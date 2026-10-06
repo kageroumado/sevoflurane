@@ -159,6 +159,7 @@ extension SteamBridge {
         id: ObjectIdentifier,
         cdp: CDPClient,
     ) async throws {
+        var request = request
         guard let rid = request["id"] as? Int,
               let path = request["path"] as? String,
               let session = pages[id] else { return }
@@ -190,7 +191,11 @@ extension SteamBridge {
                 }
                 BottleGraphics.recordBootedSelection()
             }
+            await adoptLaunchCommand(beforeRunning: request, cdp: cdp)
             onGameLaunch?()
+        }
+        if path == "SteamClient.Apps.SetAppLaunchOptions" {
+            request = await adoptingLaunchCommand(in: request)
         }
         if path == "SteamClient.Apps.TerminateApp",
            let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {

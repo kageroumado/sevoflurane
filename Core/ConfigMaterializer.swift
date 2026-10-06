@@ -262,6 +262,8 @@ nonisolated enum ConfigMaterializer {
         let level = DiagnosticLevel.current
         lines.append("WINEDEBUG=\(level.channels())")
         lines += level.rendererLines
+        // Last, so a variable set by name wins over the rows above.
+        lines += UserEnvironment.lines(GameConfig.bottle(name).environment)
         return lines
     }
 
@@ -332,6 +334,7 @@ nonisolated enum ConfigMaterializer {
             lines += tuning.parameters(custom: values.tuningParameters).environment
                 .map { "\($0.key)=\($0.value)" }
         }
+        lines += UserEnvironment.lines(values.environment)
         return lines
     }
 

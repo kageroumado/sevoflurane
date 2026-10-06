@@ -278,6 +278,10 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// `n,b`, `b,n`, `n`, `b`, or the empty string for disabled
     /// (`DllOverrides`, per program under `AppDefaults\<exe>`).
     var dllOverrides: [String: String]?
+    /// Variables set by name, written after the lines this level's rows
+    /// write, so one of them wins over a row that writes the same name
+    /// (``UserEnvironment``). An empty value removes the variable.
+    var environment: [String: String]?
     /// Whether Metal draws its performance HUD over the game
     /// (`MTL_HUD_ENABLED`) — frame time, GPU time and memory, from the driver
     /// itself rather than from anything the game exposes.
@@ -357,7 +361,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var hasSettings: Bool {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
-            || dllOverrides?.isEmpty == false
+            || dllOverrides?.isEmpty == false || environment?.isEmpty == false
             || hud != nil || fps != nil || fpsGraph != nil || largeAddressAware != nil || avx != nil || cursorConfine != nil
             || unifiedMemory != nil || tuning != nil || processors != nil || build != nil
     }

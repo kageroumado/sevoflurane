@@ -523,10 +523,10 @@ it. Every row has a one-line summary and an (i) for the full explanation.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
   DXVK versions, upscalers (CuNNy, Anime4K) to download.
 - **Engine**: engines, bottles and the update channel, msync+, defaults for
-  every game, game dependencies, DLL overrides, Wine configuration,
-  library-load logging, repair.
-- **Games**: one game's picture, mouse, performance and DLL overrides, each
-  inherited from Engine until changed. A **known fix** marks the setting a
+  every game, game dependencies, DLL overrides, environment variables, Wine
+  configuration, library-load logging, repair.
+- **Games**: one game's picture, mouse, performance, DLL overrides and
+  environment variables, each inherited from Engine until changed. A **known fix** marks the setting a
   game needs, one click to apply.
 - **HoYoverse**: install, update and verify HoYoverse games (above).
 - **Storage**, **Recovery**, **Diagnostics**: below.
@@ -537,7 +537,12 @@ Game dependencies are the Visual C++ runtimes, the Direct3D shader compiler,
 DirectX June 2010, core fonts and CJK fonts, each installable on its own; a new
 bottle gets them all. DLL overrides are Wine's own load orders, for the bottle
 or one game; `sevo app repair-dll` installs the package behind a missing DLL
-and pins the fix to that game.
+and pins the fix to that game. Environment variables are set by name for the
+bottle or one game, and Steam's launch options take the form Proton fixes are
+shared in: `DXVK_HUD=1 %command% -windowed` moves `DXVK_HUD=1` into the game's
+Environment at its next launch, `PROTON_USE_WINED3D` and
+`PROTON_FORCE_LARGE_ADDRESS_AWARE` set their own rows, and Steam keeps
+`%command% -windowed`.
 
 ### Storage
 
