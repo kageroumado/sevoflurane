@@ -26,6 +26,18 @@ nonisolated enum RunLog {
         return names.contains { $0.hasSuffix(".jsonl") }
     }
 
+    /// Whether a run of `appID` was ever recorded here, in any month kept.
+    static func hasRecord(forApp appID: Int, in root: URL = root) -> Bool {
+        monthFiles(in: root).reversed().contains { url in
+            lines(in: url).contains { (try? decoder.decode(AppOnly.self, from: Data($0)))?.appid == appID }
+        }
+    }
+
+    /// The one field ``hasRecord(forApp:in:)`` reads of a record.
+    private struct AppOnly: Decodable {
+        let appid: Int
+    }
+
     /// How many months are kept.
     static let monthsKept = 12
 
@@ -200,8 +212,13 @@ nonisolated enum RunLog {
     /// names either: a `.jsonl` whose month has been compressed is read from
     /// the `.jsonl.z` beside it, and a `.jsonl.z` is decompressed.
     private static func records(in url: URL) -> [RunRecord] {
+        lines(in: url).compactMap { try? decoder.decode(RunRecord.self, from: Data($0)) }
+    }
+
+    /// A month's lines, from its plain file or its compressed one.
+    private static func lines(in url: URL) -> [Data.SubSequence] {
         let manager = FileManager.default
-        var data: Data? = if url.pathExtension == compressedExtension {
+        let data: Data? = if url.pathExtension == compressedExtension {
             decompressed(at: url)
         } else if manager.fileExists(atPath: url.path) {
             try? Data(contentsOf: url)
@@ -209,9 +226,7 @@ nonisolated enum RunLog {
             decompressed(at: url.appendingPathExtension(compressedExtension))
         }
         guard let data else { return [] }
-        return data.split(separator: UInt8(ascii: "\n")).compactMap {
-            try? decoder.decode(RunRecord.self, from: Data($0))
-        }
+        return data.split(separator: UInt8(ascii: "\n"))
     }
 
     private static func decompressed(at url: URL) -> Data? {

@@ -2,10 +2,11 @@ import Foundation
 
 /// A setting this app knows a particular game wants, and why.
 ///
-/// A fix is a recommendation and never an action: a game that launches fine
-/// keeps what it has, and the value only moves when someone presses the chip
-/// in Settings. Every entry names what was measured, because the reason is
-/// what the user is being asked to judge.
+/// A fix is applied once, at the game's first launch under Sevoflurane and
+/// only to keys the game has no value of its own for (``FixLedger``), with an
+/// undo; after that it is a chip in Settings that someone presses. Every
+/// entry names what was measured, because the reason is what the user is
+/// being asked to judge.
 nonisolated struct KnownFix: Sendable, Identifiable {
     /// The Steam app this is about, for a fix that belongs to one game.
     let appID: Int?
@@ -47,7 +48,9 @@ nonisolated struct KnownFix: Sendable, Identifiable {
 }
 
 /// The per-game quirk table: app id or executable shape to the settings that
-/// game wants, with the measurement behind each one.
+/// game wants, with the measurement behind each one. ``all`` is the table
+/// this app ships; ``recommended(for:exes:)`` reads it together with the
+/// community database's list (``FixList``).
 ///
 /// The report window reads the same table, so a run that ends badly and the
 /// fix for it are one entry.
@@ -159,7 +162,12 @@ nonisolated enum KnownFixes {
     /// sets, and the entries themselves so a control can show the reason
     /// behind the key it is about.
     static func recommended(for appID: Int, exes: [String] = []) -> Recommendation {
-        Recommendation(fixes: all.filter { $0.matches(appID: appID, exes: exes) })
+        recommended(for: appID, exes: exes, from: FixList.current)
+    }
+
+    /// What `table` says about this game.
+    static func recommended(for appID: Int, exes: [String] = [], from table: [KnownFix]) -> Recommendation {
+        Recommendation(fixes: table.filter { $0.matches(appID: appID, exes: exes) })
     }
 
     /// What the table says about a game, read one key at a time.

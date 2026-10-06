@@ -527,11 +527,16 @@ it. Every row has a one-line summary and an (i) for the full explanation.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
   DXVK versions, upscalers (CuNNy, Anime4K) to download.
 - **Engine**: engines, bottles and the update channel, msync+, defaults for
-  every game, game dependencies, DLL overrides, environment variables, Wine
-  configuration, library-load logging, repair.
+  every game, known fixes, game dependencies, DLL overrides, environment
+  variables, Wine configuration, library-load logging, repair.
 - **Games**: one game's picture, mouse, performance, DLL overrides and
-  environment variables, each inherited from Engine until changed. A **known fix** marks the setting a
-  game needs, one click to apply.
+  environment variables, each inherited from Engine until changed. A **known
+  fix** marks the setting a game needs, one click to apply. The fix list (the
+  built-in table plus the community database's signed list, curated from
+  "plays with fixes" reports) is applied by itself at a game's first launch
+  where the game has no value of its own, announced with an Undo; the settings
+  it set say "Set by the fix list" with their undo. Engine › Apply known fixes
+  automatically turns it off.
 - **HoYoverse**: install, update and verify HoYoverse games (above).
 - **Storage**, **Recovery**, **Diagnostics**: below.
 - **About**: version, links, Acknowledgements for every third-party component

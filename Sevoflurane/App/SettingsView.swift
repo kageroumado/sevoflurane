@@ -275,6 +275,14 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
                     keywords: ["filter", "nearest", "bilinear", "lanczos", "resample", "pixel"],
                 ),
                 SearchableSetting(
+                    id: .engineKnownFixes,
+                    title: "Apply known fixes automatically",
+                    keywords: [
+                        "fix", "fixes", "known", "automatic", "first launch", "protonfixes",
+                        "recommended", "quirk", "undo",
+                    ],
+                ),
+                SearchableSetting(
                     id: .engineDependencies,
                     title: "Missing game dependencies",
                     keywords: [
@@ -561,6 +569,7 @@ enum SettingsAnchor: String, CaseIterable {
     case engineUpscaler = "engine.upscaler"
     case engineFilter = "engine.filter"
     case engineMouse = "engine.mouse"
+    case engineKnownFixes = "engine.knownFixes"
     case engineDependencies = "engine.dependencies"
     case engineOverrides = "engine.overrides"
     case engineWinecfg = "engine.winecfg"

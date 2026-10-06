@@ -28,10 +28,11 @@ extension AppDelegate {
             // The game's exes, read from its install directory now, so its
             // env files — and the bundle that names it in the Dock — exist
             // before the process starts rather than after its first window.
+            // A first launch takes the fix list's values, which an exe
+            // pattern can match, in the same pass.
             Task.detached(name: "Record app \(appID)'s executables") {
-                if GameExecutables.recordFromInstall(appID: appID) {
-                    ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-                }
+                let recorded = GameExecutables.recordFromInstall(appID: appID)
+                await Self.prepareLaunch(appID: appID, recordedExecutables: recorded)
             }
         }
         // A process of the launch loaded winemac.drv. This is the attribution

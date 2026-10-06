@@ -11,6 +11,10 @@ struct SettingSections: View {
     let heading: String?
     /// What the fix table says about that game.
     let recommendation: KnownFixes.Recommendation
+    /// What the fix list set on that game at its first launch.
+    let appliedFixes: AppliedFixes?
+    /// Puts one key the fix list set back, by its stored name.
+    let undoFix: (String) -> Void
     /// The groups with a row at this level, each with its rows, read once:
     /// whether a row is offered for a game can take a read of Steam's app
     /// cache.
@@ -19,12 +23,15 @@ struct SettingSections: View {
     init(
         store: SettingsStore, shaders: ShaderStore, highlighted: SettingsAnchor?, heading: String? = nil,
         recommendation: KnownFixes.Recommendation = KnownFixes.Recommendation(fixes: []),
+        appliedFixes: AppliedFixes? = nil, undoFix: @escaping (String) -> Void = { _ in },
     ) {
         self.store = store
         self.shaders = shaders
         self.highlighted = highlighted
         self.heading = heading
         self.recommendation = recommendation
+        self.appliedFixes = appliedFixes
+        self.undoFix = undoFix
         groups = SettingGroup.allCases
             .map { ($0, SettingCatalog.settings(in: $0, at: store.level, game: store.scope.game)) }
             .filter { !$0.settings.isEmpty }
@@ -38,6 +45,7 @@ struct SettingSections: View {
                     SettingRow(
                         setting: setting, store: store, shaders: shaders,
                         recommended: setting.recommended(recommendation),
+                        fixed: fixMark(for: setting),
                     )
                     .highlightable(setting.id.anchor(at: level), highlighted: highlighted)
                 }
@@ -47,6 +55,13 @@ struct SettingSections: View {
                 if let footer = Self.footer(of: group, at: level) { Text(footer) }
             }
         }
+    }
+
+    /// The fix list's mark for a row whose value it set and nobody changed since.
+    private func fixMark(for setting: Setting) -> SettingRow.FixMark? {
+        let key = setting.id.rawValue
+        guard let appliedFixes, appliedFixes.sets(key, in: store.values) else { return nil }
+        return SettingRow.FixMark(reason: appliedFixes.reasons) { undoFix(key) }
     }
 
     private static func footer(of group: SettingGroup, at level: SettingLevel) -> LocalizedStringResource? {
@@ -80,13 +95,21 @@ private struct SettingGroupHeader: View {
 
 /// One setting: its control with an (i), the line under it, what a change
 /// costs when that is more than the next launch, and the chip the fix table
-/// earns when it names a value this game does not have. Nothing applies
-/// itself; the chip is the click.
+/// earns when it names a value this game does not have — or, where the fix
+/// list set the value at the game's first launch, the mark that says so
+/// with its undo.
 struct SettingRow: View {
     let setting: Setting
     let store: SettingsStore
     let shaders: ShaderStore
     let recommended: (value: SettingValue, reason: String)?
+    var fixed: FixMark?
+
+    /// The fix list set this row's value: why, and what puts it back.
+    struct FixMark {
+        let reason: String
+        let undo: () -> Void
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
@@ -112,7 +135,9 @@ struct SettingRow: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            if let recommended, store.own(setting) != recommended.value {
+            if let fixed {
+                FixListMark(reason: fixed.reason, undo: fixed.undo)
+            } else if let recommended, store.own(setting) != recommended.value {
                 RecommendedChip(reason: recommended.reason) {
                     store.send(.set(setting.id, recommended.value))
                 }
@@ -227,6 +252,31 @@ private struct RecommendedChip: View {
                 .accessibilityHidden(true)
         }
         .help(InterfaceCopy.localized(reason))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The mark a control wears when the fix list set its value at the game's
+/// first launch, with the reason as the tooltip and the undo beside it.
+struct FixListMark: View {
+    let reason: String
+    let undo: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Space.xs) {
+            Text("Set by the fix list")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(verbatim: "·")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Button("Undo", action: undo)
+                .buttonStyle(.link)
+                .font(.caption)
+                .accessibilityHint(reason)
+        }
+        .help(reason)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

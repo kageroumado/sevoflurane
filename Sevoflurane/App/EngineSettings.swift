@@ -36,6 +36,7 @@ struct EngineSettings: View {
                 SettingSections(store: defaults, shaders: shaders, highlighted: highlighted)
                 EnvironmentSection(store: defaults)
             }
+            KnownFixesSection(highlighted: highlighted)
             DependenciesSection(
                 store: store,
                 compatibility: compatibility,
@@ -465,6 +466,31 @@ private struct MsyncSection: View {
                 graphics.update(selection)
             },
         )
+    }
+}
+
+// MARK: - Known fixes
+
+/// Whether a game's first launch takes the fix list's values (``FixLedger``).
+private struct KnownFixesSection: View {
+    let highlighted: SettingsAnchor?
+    @State private var applies = Preferences.appliesKnownFixes
+
+    var body: some View {
+        Section {
+            Toggle(isOn: $applies) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Apply known fixes automatically")
+                    Text("The first time a game starts, settings the fix list names for it are set where the game has none of its own. Settings › Games shows each one with an undo.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .onChange(of: applies) { _, on in Preferences.appliesKnownFixes = on }
+            .highlightable(.engineKnownFixes, highlighted: highlighted)
+        }
     }
 }
 

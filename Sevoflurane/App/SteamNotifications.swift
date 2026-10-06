@@ -120,6 +120,7 @@ final class SteamNotifications {
         let forwarder = Forwarder(relay: self)
         delegate = forwarder
         center.delegate = forwarder
+        center.setNotificationCategories([Self.fixesCategory])
         Task(name: "Read notification authorization") { await refreshAuthorization() }
     }
 
@@ -250,7 +251,65 @@ final class SteamNotifications {
         return try? UNNotificationAttachment(identifier: "", url: file)
     }
 
+    // MARK: - The fix list
+
+    /// The fix list's notification carries one action, Undo.
+    private static let fixesCategory = UNNotificationCategory(
+        identifier: "fixes",
+        actions: [UNNotificationAction(identifier: undoAction, title: String(localized: "Undo"))],
+        intentIdentifiers: [],
+    )
+
+    private static let undoAction = "undo"
+
+    /// Says that a game's first launch took the fix list's `settings`, with
+    /// an Undo; a click opens the game in Settings › Games, which offers the
+    /// same undo. Without permission to post it is a line in the log.
+    func postFixesApplied(appID: Int, name: String, settings: [String]) {
+        guard let center, [.authorized, .provisional].contains(authorization) else {
+            EventLog.shared.log(
+                .app,
+                "fixes: no notification for \(name) (notifications \(authorization.name)); "
+                    + "Settings › Games offers the undo",
+            )
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = name
+        content.body = String(localized: "Set by the fix list: \(settings.joined(separator: ", "))")
+        content.categoryIdentifier = Self.fixesCategory.identifier
+        content.userInfo = Route.fixes(appID: appID).userInfo
+        content.threadIdentifier = Route.fixes(appID: appID).threadIdentifier
+        Task(name: "Post the fix list's notification for \(appID)") {
+            do {
+                try await center.add(
+                    UNNotificationRequest(identifier: "fixes-\(appID)", content: content, trigger: nil),
+                )
+            } catch {
+                EventLog.shared.log(.app, "could not post the fix list's notification for \(appID): \(error)")
+            }
+        }
+    }
+
+    /// Undoes what the fix list set on a game, from the notification's action.
+    private func undoFixes(appID: Int) {
+        Task.detached(name: "Undo the fix list for \(appID)") {
+            guard FixLedger.undo(appID: appID) != nil else { return }
+            EventLog.enqueue(.app, "fixes: app \(appID) put back from the notification")
+        }
+    }
+
     // MARK: - Clicks
+
+    /// A notification's button, or the notification itself when `action`
+    /// is the default one.
+    func handleResponse(action: String, userInfo: [AnyHashable: Any]) {
+        if action == Self.undoAction, case let .fixes(appID) = Route(userInfo: userInfo) {
+            undoFixes(appID: appID)
+        } else {
+            handleClick(userInfo: userInfo)
+        }
+    }
 
     /// Opens what a clicked notification was about. The friends list and a
     /// chat are their own windows, so none of this shows Steam's desktop
@@ -264,6 +323,9 @@ final class SteamNotifications {
         case .steam:
             EventLog.shared.log(.window, "notification click routed to Steam — showing Steam")
             host?.showSteam()
+        case let .fixes(appID):
+            let name = GameConfig.game(appID).name ?? "App \(appID)"
+            (NSApp.delegate as? AppDelegate)?.showGameSettings(id: appID, name: name)
         }
     }
 
@@ -278,12 +340,15 @@ final class SteamNotifications {
         case friends
         /// Steam's own window, for the notifications that are about a game.
         case steam
+        /// Settings › Games on one game, for what the fix list set on it.
+        case fixes(appID: Int)
 
         var userInfo: [AnyHashable: Any] {
             switch self {
             case let .chat(accountID): ["open": "chat", "accountid": accountID]
             case .friends: ["open": "friends"]
             case .steam: ["open": "steam"]
+            case let .fixes(appID): ["open": "fixes", "appid": appID]
             }
         }
 
@@ -294,6 +359,7 @@ final class SteamNotifications {
             case let .chat(accountID): "chat-\(accountID)"
             case .friends: "friends"
             case .steam: "steam"
+            case .fixes: "fixes"
             }
         }
 
@@ -303,6 +369,8 @@ final class SteamNotifications {
                 self = .chat(accountID: userInfo["accountid"] as? String ?? "")
             case "steam":
                 self = .steam
+            case "fixes":
+                self = .fixes(appID: userInfo["appid"] as? Int ?? 0)
             default:
                 self = .friends
             }
@@ -401,7 +469,8 @@ final class SteamNotifications {
             didReceive response: UNNotificationResponse,
         ) async {
             let userInfo = response.notification.request.content.userInfo
-            await MainActor.run { relay?.handleClick(userInfo: userInfo) }
+            let action = response.actionIdentifier
+            await MainActor.run { relay?.handleResponse(action: action, userInfo: userInfo) }
         }
     }
 }

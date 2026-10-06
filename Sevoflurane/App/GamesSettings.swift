@@ -167,6 +167,8 @@ private struct GameForm: View {
     let highlighted: SettingsAnchor?
     let recommendation: KnownFixes.Recommendation
     @State private var store: SettingsStore
+    /// What the fix list set on this game at its first launch.
+    @State private var appliedFixes: AppliedFixes?
 
     init(
         gameID: Int, name: String, shaders: ShaderStore, highlighted: SettingsAnchor?,
@@ -178,6 +180,7 @@ private struct GameForm: View {
         self.highlighted = highlighted
         self.recommendation = recommendation
         _store = State(initialValue: SettingsStore(scope: .game(gameID, bottle: SteamBottle.name)))
+        _appliedFixes = State(initialValue: FixLedger.record(for: gameID))
     }
 
     var body: some View {
@@ -185,9 +188,15 @@ private struct GameForm: View {
             SettingSections(
                 store: store, shaders: shaders, highlighted: highlighted,
                 heading: name, recommendation: recommendation,
+                appliedFixes: appliedFixes, undoFix: { undoFixes([$0]) },
             )
             GameDLLOverridesSection(store: store)
             EnvironmentSection(store: store)
+            if let appliedFixes, !appliedFixes.keys(in: store.values).isEmpty {
+                FixListSection(fixes: appliedFixes, settings: appliedFixes.keys(in: store.values)) {
+                    undoFixes(nil)
+                }
+            }
             if let program = AdoptedPrograms.program(gameID) {
                 if SteamLibraryShortcuts.canList(program) {
                     SteamLibrarySection(programID: gameID)
@@ -199,6 +208,57 @@ private struct GameForm: View {
         }
         .formStyle(.grouped)
         .highlightable(.gamesSettings, highlighted: highlighted)
+    }
+
+    /// Puts `keys` (all of them when `nil`) back as they were before the fix
+    /// list, the way the notification's Undo does.
+    private func undoFixes(_ keys: Set<String>?) {
+        appliedFixes = FixLedger.undo(appID: gameID, keys: keys, inBackground: true)
+        store.reload()
+    }
+}
+
+// MARK: - The fix list
+
+/// What the fix list set on this game at its first launch and still holds,
+/// with the undo for all of it: the native runner and DLL overrides have no
+/// row of their own to carry the mark.
+private struct FixListSection: View {
+    let fixes: AppliedFixes
+    /// The stored names of the keys the fix list still holds.
+    let settings: [String]
+    let undo: () -> Void
+
+    var body: some View {
+        Section {
+            ForEach(fixes.fixes, id: \.title) { fix in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fix.title)
+                    Text(InterfaceCopy.localized(fix.reason))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack {
+                Text(remaining.joined(separator: ", "))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Undo", action: undo)
+            }
+        } header: {
+            Text("Set by the fix list")
+        } footer: {
+            Text("Set at the game's first launch, where it had no value of its own. Undo puts back what it had.")
+        }
+    }
+
+    /// The settings still held, in Settings' words.
+    private var remaining: [String] {
+        var held = fixes
+        held.applied = ConfigValues(fields: fixes.applied.fields.filter { settings.contains($0.key) }) ?? .empty
+        return held.settingNames
     }
 }
 

@@ -63,6 +63,12 @@ final class SettingsStore {
         values = environment.values(scope)
     }
 
+    /// Reads the level back after a write that went around ``send(_:)``:
+    /// the fix list's undo.
+    func reload() {
+        values = environment.values(scope)
+    }
+
     // MARK: - Bindings
 
     /// A setting's own value, for a control that can say Inherit.

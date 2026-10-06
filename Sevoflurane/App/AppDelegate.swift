@@ -98,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             StatsUploader.submit(record)
         }
         Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
+        Task.detached(name: "Refresh the fix list") { await FixList.refreshIfStale() }
     }
 
     /// What a finished run leaves on disk beyond its record: a report at level

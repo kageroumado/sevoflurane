@@ -167,6 +167,17 @@ nonisolated extension Preferences {
     }
 }
 
+// MARK: - Fixes
+
+nonisolated extension Preferences {
+    /// Whether a game's first launch takes the fix list's values for the
+    /// settings it has no value of its own for (``FixLedger``).
+    static var appliesKnownFixes: Bool {
+        get { shared.object(forKey: "appliesKnownFixes") as? Bool ?? true }
+        set { shared.set(newValue, forKey: "appliesKnownFixes") }
+    }
+}
+
 // MARK: - Crash reports
 
 nonisolated extension Preferences {
