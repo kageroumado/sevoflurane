@@ -19,6 +19,7 @@ struct EngineReleaseTests {
     func `the SDL bus stays on for Dormison releases, and only there`() {
         #expect(Engine.managed(version: "dormison-r1").keepsSDLBus)
         #expect(Engine.managed(version: "dormison-b2").keepsSDLBus)
+        #expect(Engine.managed(version: "dormison-b2-dev").keepsSDLBus)
         #expect(!Engine.managed(version: "custom").keepsSDLBus)
         #expect(!Engine.crossover.keepsSDLBus)
         #expect(!Engine.crossoverPreview.keepsSDLBus)

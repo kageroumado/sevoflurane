@@ -382,9 +382,11 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// of waking every millisecond, and it is the backend that delivers an Xbox
     /// Wireless Controller over Bluetooth to a game; the IOHID backend alone
     /// never does. Other engines' SDL bus wakes every millisecond, about 2.6 %
-    /// CPU at idle, so they run without it.
+    /// CPU at idle, so they run without it. Every Dormison build carries the
+    /// polling bus, a local one (`dormison-b2-dev`) as much as a release.
     var keepsSDLBus: Bool {
-        managedRelease != nil
+        guard case let .managed(version) = self else { return false }
+        return version.hasPrefix("dormison-")
     }
 
     /// "Dormison b1" for the engine directory `dormison-b1`, "Dormison r3"
