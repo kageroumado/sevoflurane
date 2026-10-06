@@ -9,8 +9,10 @@ import Foundation
 /// answers a hundred games a request. What remains per game is PCGamingWiki's
 /// app-id-to-title bridge, asked only for a title the wiki does not know by
 /// name, and ProtonDB, asked only when nothing Mac-side has a verdict, which
-/// keeps the badge in the library the same as the strip on the game's page.
-/// Both wait in a queue one second apart, PCGamingWiki's published rate.
+/// keeps the badge in the library the same as the strip on the game's page,
+/// and PCGamingWiki's page for a macOS build that would otherwise count as
+/// playing. All wait in a queue one second apart, PCGamingWiki's published
+/// rate.
 nonisolated enum GameCompatBatch {
     /// One game the library asks about: its app id and display name, the
     /// name being what the wiki joins on.
@@ -25,6 +27,9 @@ nonisolated enum GameCompatBatch {
         case title(Int)
         /// ProtonDB's summary for the app.
         case proton(Int)
+        /// The architectures of the app's macOS build, from its PCGamingWiki
+        /// page.
+        case architecture(Int)
     }
 
     /// The most games one request may name; a library past this asks again.

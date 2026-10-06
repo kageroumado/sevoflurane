@@ -24,12 +24,19 @@ actor GameCompatService {
         .appendingPathComponent("Compat")
 
     private let session: URLSession
+    /// Where this service keeps its answers: ``cacheRoot``, or a folder of a
+    /// test's own.
+    private let cache: URL
+    /// The client's app cache, which says whether a macOS build exists.
+    private let appInfo: URL
     private var antiCheatIndex: GameCompatSources.AntiCheatIndex?
     private var wikiIndex: GameCompatSources.WikiIndex?
     private var antiCheatLoad: Task<GameCompatSources.AntiCheatIndex?, Never>?
     private var wikiLoad: Task<GameCompatSources.WikiIndex?, Never>?
 
-    init(session: URLSession? = nil) {
+    init(session: URLSession? = nil, cache: URL = cacheRoot, appInfo: URL = SteamAppInfo.fileURL) {
+        self.cache = cache
+        self.appInfo = appInfo
         if let session {
             self.session = session
         } else {
@@ -62,12 +69,12 @@ actor GameCompatService {
         if ignoringCache {
             antiCheatIndex = nil
             wikiIndex = nil
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("proton/\(appID).json"))
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("pcgw/\(appID).json"))
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("community/\(appID).json"))
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("pcgw-mac/\(appID).json"))
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("awacy.json"))
-            try? FileManager.default.removeItem(at: Self.cacheRoot.appendingPathComponent("applegamingwiki.json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("proton/\(appID).json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw/\(appID).json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("community/\(appID).json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw-mac/\(appID).json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("awacy.json"))
+            try? FileManager.default.removeItem(at: cache.appendingPathComponent("applegamingwiki.json"))
         }
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
@@ -80,7 +87,7 @@ actor GameCompatService {
         }
         let protonSummary = await proton
         let communitySummary = await community
-        let hasMacBuild = SteamAppInfo.platforms(appID: appID).contains("macos")
+        let hasMacBuild = SteamAppInfo.platforms(appID: appID, in: appInfo).contains("macos")
         // The architecture only changes the macOS cell, so it is asked for
         // only when that cell would show without it.
         let architectures = GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild) == nil
@@ -113,12 +120,14 @@ actor GameCompatService {
     /// batches, the client's app cache, and whatever per-app answers the disk
     /// already holds. A per-app lookup the answer lacks joins the queue
     /// (``GameCompatBatch``), and the page asks again while ``pending`` says
-    /// some remain.
+    /// some remain. A macOS build that would count as playing waits on its
+    /// architectures there too, as the game's page does: a 32-bit-only build
+    /// plays nowhere on Apple silicon.
     func summaries(for games: [GameCompatBatch.Game]) async -> (summaries: [GameCompatSummary], pending: Int) {
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
         async let communities = loadCommunities(appIDs: games.map(\.appID))
-        let platforms = SteamAppInfo.platforms(appIDs: Set(games.map(\.appID)))
+        let platforms = SteamAppInfo.platforms(appIDs: Set(games.map(\.appID)), in: appInfo)
         let antiCheatIndex = await antiCheatTable
         let wikiIndex = await wikiTable
         let community = await communities
@@ -129,7 +138,7 @@ actor GameCompatService {
             var wiki = wikiIndex?.lookup(title: game.name)
             var titlePending = false
             if wiki == nil, let wikiIndex {
-                let (data, fresh) = Self.cachedAnyAge(file: "pcgw/\(id).json")
+                let (data, fresh) = cachedAnyAge(file: "pcgw/\(id).json")
                 if let data, let title = GameCompatSources.pcGamingWikiTitle(data: data) {
                     wiki = wikiIndex.lookup(title: title)
                 }
@@ -140,17 +149,22 @@ actor GameCompatService {
             }
             var proton: GameCompatRecord.ProtonSummary?
             if !titlePending, GameCompatBatch.needsProton(antiCheat: antiCheat, wiki: wiki, community: community[id]) {
-                let (data, fresh) = Self.cachedAnyAge(file: "proton/\(id).json")
+                let (data, fresh) = cachedAnyAge(file: "proton/\(id).json")
                 proton = data.flatMap { GameCompatSources.protonSummary(appID: id, data: $0) }
                 if !fresh { lookups.append(.proton(id)) }
             }
-            let (architectures, _) = Self.cachedAnyAge(file: "pcgw-mac/\(id).json")
+            let hasMacBuild = platforms[id]?.contains("macos") == true
+            var architectures: GameCompatRecord.MacArchitectures?
+            if GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild) != nil {
+                let (data, fresh) = cachedAnyAge(file: "pcgw-mac/\(id).json")
+                architectures = data.flatMap {
+                    try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: $0)
+                }
+                if !fresh { lookups.append(.architecture(id)) }
+            }
             return GameCompatVerdict.summary(
                 appID: id, antiCheat: antiCheat, wiki: wiki, proton: proton, community: community[id],
-                hasMacBuild: platforms[id]?.contains("macos") == true,
-                architectures: architectures.flatMap {
-                    try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: $0)
-                },
+                hasMacBuild: hasMacBuild, architectures: architectures,
             )
         }
         enqueue(lookups)
@@ -178,6 +192,14 @@ actor GameCompatService {
             switch lookup {
             case let .title(id): _ = await loadPCGamingWikiTitle(appID: id)
             case let .proton(id): _ = await loadProton(appID: id)
+            case let .architecture(id):
+                // The page text is asked for by title, which is a request
+                // of its own when the disk lacks it, and takes its own turn.
+                if Self.cached(at: cache.appendingPathComponent("pcgw/\(id).json"), maxAge: Self.maxAge) == nil {
+                    _ = await loadPCGamingWikiTitle(appID: id)
+                    try? await Task.sleep(for: GameCompatBatch.lookupInterval)
+                }
+                _ = await loadMacArchitectures(appID: id)
             }
             queuedLookups.remove(lookup)
             try? await Task.sleep(for: GameCompatBatch.lookupInterval)
@@ -193,7 +215,7 @@ actor GameCompatService {
         var summaries: [Int: GameCompatRecord.Community] = [:]
         var missing: [Int] = []
         for id in appIDs {
-            let path = Self.cacheRoot.appendingPathComponent("community/\(id).json")
+            let path = cache.appendingPathComponent("community/\(id).json")
             if let data = Self.cached(at: path, maxAge: Self.communityMaxAge) {
                 summaries[id] = GameCompatSources.community(data: data)
             } else {
@@ -207,7 +229,7 @@ actor GameCompatService {
                 bodies = GameCompatBatch.communityBodies(data)
             }
             for id in request.appIDs {
-                let path = Self.cacheRoot.appendingPathComponent("community/\(id).json")
+                let path = cache.appendingPathComponent("community/\(id).json")
                 if let bodies {
                     let body = bodies[id] ?? Data("{}".utf8)
                     Self.store(body, at: path)
@@ -221,10 +243,10 @@ actor GameCompatService {
     }
 
     /// A cached answer whatever its age, and whether it is still fresh.
-    private static func cachedAnyAge(file: String) -> (data: Data?, fresh: Bool) {
-        let path = cacheRoot.appendingPathComponent(file)
-        if let data = cached(at: path, maxAge: maxAge) { return (data, true) }
-        return (cached(at: path, maxAge: nil), false)
+    private func cachedAnyAge(file: String) -> (data: Data?, fresh: Bool) {
+        let path = cache.appendingPathComponent(file)
+        if let data = Self.cached(at: path, maxAge: Self.maxAge) { return (data, true) }
+        return (Self.cached(at: path, maxAge: nil), false)
     }
 
     // MARK: - Whole tables
@@ -288,12 +310,19 @@ actor GameCompatService {
     /// The macOS build's architectures from the game's PCGamingWiki page.
     /// Only the three fields are kept on disk; a page is tens of kilobytes.
     private func loadMacArchitectures(appID: Int) async -> GameCompatRecord.MacArchitectures? {
-        let path = Self.cacheRoot.appendingPathComponent("pcgw-mac/\(appID).json")
+        let path = cache.appendingPathComponent("pcgw-mac/\(appID).json")
         if let data = Self.cached(at: path, maxAge: Self.maxAge) {
             return try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: data)
         }
-        guard let title = await loadPCGamingWikiTitle(appID: appID),
-              let url = GameCompatSources.pcGamingWikiTextURL(title: title),
+        guard let title = await loadPCGamingWikiTitle(appID: appID) else {
+            // PCGamingWiki answered and has no page for the app: kept as an
+            // answer, so the library's queue asks again only once it is stale.
+            if Self.cached(at: cache.appendingPathComponent("pcgw/\(appID).json"), maxAge: Self.maxAge) != nil {
+                Self.store(Data("null".utf8), at: path)
+            }
+            return nil
+        }
+        guard let url = GameCompatSources.pcGamingWikiTextURL(title: title),
               let (data, response) = try? await session.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let text = GameCompatSources.pcGamingWikiText(data: data)
@@ -319,7 +348,7 @@ actor GameCompatService {
     private func cachedOrFetched(
         file: String, from url: URL, maxAge: TimeInterval = GameCompatService.maxAge, acceptingMissesAs miss: Data? = nil,
     ) async -> Data? {
-        let path = Self.cacheRoot.appendingPathComponent(file)
+        let path = cache.appendingPathComponent(file)
         if let data = Self.cached(at: path, maxAge: maxAge) { return data }
         do {
             let (data, response) = try await session.data(from: url)

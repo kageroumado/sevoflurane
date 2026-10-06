@@ -251,3 +251,79 @@ struct LibraryCompatTests {
         #expect(context.evaluateScript("uiStore.collectionsAppFilter.MatchesImpl({ appid: 2 })")?.toBool() == false)
     }
 }
+
+/// The library's bulk path asks for the same evidence the game's page does.
+struct LibraryCompatLookupTests {
+    @Test
+    func `a 32-bit-only macOS build leaves the Mac filter once its architectures arrive`() async throws {
+        let cache = FileManager.default.temporaryDirectory.appending(path: "compat-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let service = GameCompatService(
+            session: CompatStub.session(), cache: cache, appInfo: cache.appending(path: "appinfo.vdf"),
+        )
+        let game = GameCompatBatch.Game(appID: CompatStub.appID, name: CompatStub.title)
+
+        let first = await service.summaries(for: [game])
+        // Rated perfect on the wiki and nothing on disk yet: native until the
+        // page says otherwise, with that page waiting in the queue.
+        #expect(first.summaries == [GameCompatSummary(appID: CompatStub.appID, state: .unsupported, native: true)])
+        #expect(first.pending == 1)
+
+        var latest = first
+        let deadline = ContinuousClock.now + .seconds(15)
+        while latest.pending > 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(250))
+            latest = await service.summaries(for: [game])
+        }
+        #expect(latest.pending == 0)
+        #expect(latest.summaries == [GameCompatSummary(appID: CompatStub.appID, state: .unsupported, native: false)])
+    }
+}
+
+/// The community sources as one game's answers: the wiki rates its macOS
+/// build perfect and its Windows build unplayable, and PCGamingWiki's page
+/// lists a 32-bit Intel build alone.
+private final class CompatStub: URLProtocol {
+    static let appID = 9_000_001
+    static let title = "Old Mac Game"
+
+    static func session() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CompatStub.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private static func body(for url: URL) -> String {
+        let query = url.query ?? ""
+        switch url.host {
+        case "www.applegamingwiki.com":
+            return #"[{"Page":"\#(title)","native":"perfect","rosetta 2":"na","crossover":"unplayable","wine":"unplayable","parallels":"na"}]"#
+        case "www.pcgamingwiki.com" where query.contains("action=idlookup"):
+            return #"{"idlookup":[{"title":{"Page":"\#(title)"}}]}"#
+        case "www.pcgamingwiki.com" where query.contains("action=parse"):
+            return #"{"parse":{"title":"\#(title)","pageid":1,"wikitext":"{{API\n|macos intel 32-bit app = true\n|macos intel 64-bit app = false\n|macos arm app = false\n}}"}}"#
+        case "raw.githubusercontent.com":
+            return "[]"
+        default:
+            return "{}"
+        }
+    }
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let url = request.url ?? URL(string: "https://stub.invalid")!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(Self.body(for: url).utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
