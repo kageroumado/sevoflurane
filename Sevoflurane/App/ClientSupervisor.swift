@@ -28,6 +28,10 @@ final class ClientSupervisor {
 
     private(set) var health: Health = .starting
 
+    /// Told each time the client becomes healthy: signed in, its services
+    /// up, ready for calls that change what it stores.
+    @ObservationIgnored var onHealthy: (() -> Void)?
+
     /// Set while the daemon is unregistered, unapproved, or not answering. The
     /// menu bar shows the way out — Login Items, then Retry — rather than a
     /// state that looks like Steam's fault.
@@ -202,7 +206,9 @@ final class ClientSupervisor {
     /// nothing else — there is one state machine and it is not here.
     func apply(_ snapshot: SupervisorSnapshot) {
         daemonIsUnreachable = false
+        let wasHealthy = health == .healthy
         health = snapshot.supervisorHealth
+        if !wasHealthy, health == .healthy { onHealthy?() }
         isBusyRestarting = snapshot.isBusyRestarting
         hostPressure = snapshot.host
     }

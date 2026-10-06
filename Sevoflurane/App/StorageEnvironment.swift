@@ -89,6 +89,7 @@ final class LiveStorageEnvironment: StorageEnvironment {
 
     func remove(program: StorageInventory.Program) throws {
         try StorageInventory.remove(program: program)
+        SteamLibraryShortcuts.shared.sync()
     }
 
     func linkable() -> [SharedGames.Candidate] {

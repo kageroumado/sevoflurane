@@ -535,6 +535,12 @@ private struct ProgramRow: View {
             }
             Divider()
             KeepInDockItem(bundle: dockBundle)
+            if SteamLibraryShortcuts.canList(entry.program) {
+                Toggle("Show in Steam's Library", isOn: Binding(
+                    get: { entry.program.inSteamLibrary == true },
+                    set: { quickLaunch.setInSteamLibrary($0, for: entry) },
+                ))
+            }
             Button("Show in Finder") { quickLaunch.showInFinder(entry) }
             Button("Remove") { quickLaunch.remove(entry) }
             Divider()

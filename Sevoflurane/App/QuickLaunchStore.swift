@@ -174,6 +174,14 @@ final class QuickLaunchStore {
         AdoptedPrograms.remove(entry.id)
         icons[entry.id] = nil
         EventLog.shared.log(.setup, "removed \(entry.name) from Quick Launch")
+        SteamLibraryShortcuts.shared.sync()
+        refresh()
+    }
+
+    /// Lists a program in Steam's library as a non-Steam game, or takes it out.
+    func setInSteamLibrary(_ listed: Bool, for entry: AdoptedPrograms.Entry) {
+        guard simulated == nil else { return }
+        SteamLibraryShortcuts.shared.setListed(listed, programID: entry.id)
         refresh()
     }
 

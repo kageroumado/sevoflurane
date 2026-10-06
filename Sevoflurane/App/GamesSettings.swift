@@ -188,13 +188,44 @@ private struct GameForm: View {
             )
             GameDLLOverridesSection(store: store)
             EnvironmentSection(store: store)
-            if let program = AdoptedPrograms.program(gameID),
-               FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
-                FPSUnlockerSection()
+            if let program = AdoptedPrograms.program(gameID) {
+                if SteamLibraryShortcuts.canList(program) {
+                    SteamLibrarySection(programID: gameID)
+                }
+                if FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
+                    FPSUnlockerSection()
+                }
             }
         }
         .formStyle(.grouped)
         .highlightable(.gamesSettings, highlighted: highlighted)
+    }
+}
+
+// MARK: - Steam's library
+
+/// Whether an adopted program is listed in Steam's library as a non-Steam
+/// game (``SteamLibraryShortcuts``).
+private struct SteamLibrarySection: View {
+    let programID: Int
+    /// The switch as last set here; the record until then.
+    @State private var listed: Bool?
+
+    var body: some View {
+        Section {
+            Toggle("Show in Steam's library", isOn: Binding(
+                get: { listed ?? (AdoptedPrograms.program(programID)?.inSteamLibrary == true) },
+                set: { isOn in
+                    listed = isOn
+                    SteamLibraryShortcuts.shared.setListed(isOn, programID: programID)
+                },
+            ))
+        } footer: {
+            Text("""
+            Listed as a non-Steam game, it starts from Steam's library and Big Picture, with Steam Input and the \
+            overlay, and keeps the settings, Dock tile and run records it has here.
+            """)
+        }
     }
 }
 

@@ -519,10 +519,12 @@ final nonisolated class RunRecorder {
         open.filter { $0.value.record.runner == GameRunner.nwjs }.map(\.key)
     }
 
-    /// The open runs of programs added to Quick Launch, which Steam never
-    /// started and sends no lifetime edge for: like a native run, only their
-    /// own processes tell their end. A game Steam launched through a
-    /// non-Steam shortcut has an id in the same range, but no program entry.
+    /// The open runs of programs added to Quick Launch. A start from Quick
+    /// Launch sends no lifetime edge: like a native run, only their own
+    /// processes tell their end. A start from Steam's library has Steam's
+    /// edge as well, and whichever comes first closes the run. A shortcut the
+    /// user made in Steam for anything else has an id in the same range, but
+    /// no program entry.
     var programRuns: [Int] {
         open.filter { appID, run in
             run.record.runner != GameRunner.nwjs && AdoptedPrograms.program(appID) != nil

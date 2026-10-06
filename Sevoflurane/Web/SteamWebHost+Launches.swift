@@ -9,7 +9,7 @@ extension SteamWebHost {
         case "start":
             lastLoggedLaunchTask = nil
             EventLog.shared.log(.client, "launch \(appID): \(task.isEmpty ? "begun" : task)")
-            let id = Int(appID) ?? 0
+            let id = self.appID(fromSteam: appID) ?? 0
             setLaunch(GameLaunch(appID: id, detail: "Preparing…", actionID: Int(actionID)), clearAfter: 180)
             if id != 0 { onGameLaunchStart?(id) }
         case "task":
@@ -19,7 +19,7 @@ extension SteamWebHost {
                 lastLoggedLaunchTask = "\(appID):\(task)"
                 EventLog.shared.log(.client, "launch \(appID): \(task)")
             }
-            let id = Int(appID) ?? activeLaunch?.appID ?? 0
+            let id = self.appID(fromSteam: appID) ?? activeLaunch?.appID ?? 0
             let actionID = activeLaunch?.appID == id ? activeLaunch?.actionID : nil
             setLaunch(GameLaunch(appID: id, detail: Self.launchTaskText(task), actionID: actionID), clearAfter: 180)
         case "end":
@@ -39,7 +39,7 @@ extension SteamWebHost {
             // worth one check that there is something to look at.
             repairBlankDesktop()
         case "error":
-            let id = Int(appID) ?? activeLaunch?.appID ?? 0
+            let id = self.appID(fromSteam: appID) ?? activeLaunch?.appID ?? 0
             EventLog.shared.log(
                 .client,
                 "launch \(id): Steam reported an error\(task.isEmpty ? "" : " — \(task)")",
@@ -49,13 +49,19 @@ extension SteamWebHost {
                 onGameActionError?(id, task)
             }
         case "life":
-            guard let id = Int(appID), id != 0 else { return }
+            guard let id = self.appID(fromSteam: appID), id != 0 else { return }
             let running = task == "1"
             EventLog.shared.log(.client, "app \(id) \(running ? "is running" : "stopped running")")
             onGameRunningChanged?(id, running)
         default:
             break
         }
+    }
+
+    /// The app id behind an id Steam's events carry
+    /// (``SteamShortcuts/appID(fromSteam:aliases:)``).
+    func appID(fromSteam steamID: String) -> Int? {
+        SteamShortcuts.appID(fromSteam: steamID, aliases: shortcutPrograms)
     }
 
     /// Steam's launch-pipeline task names, in user words. `Show*` tasks are

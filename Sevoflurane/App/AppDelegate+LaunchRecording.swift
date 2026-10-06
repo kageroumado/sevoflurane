@@ -177,8 +177,10 @@ extension AppDelegate {
             }
         }
         stallWatch.onGameProcessGone = { [bridge] appID in
+            let gameID = AdoptedPrograms.program(appID)?.steamShortcutID
+                .map(SteamShortcuts.gameID(shortcutID:)) ?? String(appID)
             Task(name: "End Steam's entry for \(appID)") {
-                if await !bridge.terminateApp(appID) {
+                if await !bridge.terminateApp(gameID: gameID) {
                     EventLog.enqueue(.client, "could not ask the client to end \(appID): the bridge is down")
                 }
             }

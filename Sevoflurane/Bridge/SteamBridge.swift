@@ -289,10 +289,13 @@ actor SteamBridge {
         return (hidden ?? "").split(separator: "\n").map(String.init)
     }
 
-    /// Asks the client to end `appID` the way its own Stop button does, on the
+    /// Asks the client to end a game the way its own Stop button does, on the
     /// connection the bridge already holds. Sent for a run whose process is gone
     /// while Steam still lists it: the call clears the entry, and a later launch
     /// is answered again rather than dropped.
+    ///
+    /// `gameID` is Steam's game id: the app id for a Steam game, the 64-bit id
+    /// for a shortcut (``SteamShortcuts/gameID(shortcutID:)``).
     ///
     /// Straight over CDP rather than through the page's forward path, which
     /// records a stop request and would turn the run's record into a stop the
@@ -300,14 +303,24 @@ actor SteamBridge {
     ///
     /// Answers whether the client took the call. False when the bridge holds no
     /// connection or the call did not return in time.
-    func terminateApp(_ appID: Int) async -> Bool {
+    func terminateApp(gameID: String) async -> Bool {
         guard let cdp, await !cdp.isClosed else { return false }
         let answer = try? await withDeadline(ClientLifecycle.cdpCallCap) {
             try await cdp.evaluate(
-                "SteamClient.Apps.TerminateApp(\(JSLiteral.string(String(appID))), false), \"sent\"",
+                "SteamClient.Apps.TerminateApp(\(JSLiteral.string(gameID)), false), \"sent\"",
             )
         }
         return answer != nil
+    }
+
+    /// Runs a script in the client's `SharedJSContext` on the connection the
+    /// bridge already holds, and answers its value once a promise it returns
+    /// settles. Nil when the bridge holds no connection, the script threw or
+    /// answered null, or it ran past `cap`.
+    func evaluateInClient(_ script: String, cap: Duration = ClientLifecycle.cdpCallCap) async -> String? {
+        guard let cdp, await !cdp.isClosed else { return nil }
+        let answer = try? await withDeadline(cap) { try await cdp.evaluate(script) }
+        return answer ?? nil
     }
 
     /// The sweep, with the names it may hide compiled in.

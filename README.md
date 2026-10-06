@@ -497,6 +497,10 @@ runs on CrossOver.
   installer wrote.
 - Quick Launch programs play like Steam games: per-game settings, Dock tile,
   run records and reports.
+- Quick Launch programs are listed in Steam's library as non-Steam games, so
+  Big Picture, Steam Input and the overlay reach them, and a start from there
+  keeps their settings, Dock tile and run records. Show in Steam's Library, in
+  the row's menu or Settings › Games, takes one out.
 - **Genshin Impact at 120 fps**: the engine carries a frame-rate unlocker
   (genshin-fps-unlock's stub, MIT, two megabytes). Switched on in
   Settings › Games, it starts beside the game 30 seconds after launch, at the

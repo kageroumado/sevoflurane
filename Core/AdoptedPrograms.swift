@@ -24,6 +24,13 @@ nonisolated struct AdoptedProgram: Codable, Equatable, Sendable {
     /// A directory inside `drive_c` that an installer created, so Storage can
     /// account for it and take it away again.
     var installedRoot: String?
+    /// Whether the program is listed in Steam's library as a non-Steam game,
+    /// where Big Picture, Steam Input and the overlay reach it
+    /// (``SteamShortcuts``). Absent reads as no.
+    var inSteamLibrary: Bool?
+    /// The app id Steam gave the program's shortcut, which Steam's launch
+    /// and lifetime events name it by.
+    var steamShortcutID: Int?
 
     var url: URL {
         URL(fileURLWithPath: path)
@@ -94,6 +101,17 @@ nonisolated enum AdoptedPrograms {
         GameConfig.game(id).program
     }
 
+    /// Changes one program's record in place. Nothing happens for an id with
+    /// no program behind it.
+    static func update(_ id: Int, _ change: (inout AdoptedProgram) -> Void) {
+        var values = GameConfig.game(id)
+        guard var program = values.program else { return }
+        change(&program)
+        guard program != values.program else { return }
+        values.program = program
+        GameConfig.setGame(id, values)
+    }
+
     /// The entry behind one id.
     static func entry(_ id: Int) -> Entry? {
         let values = GameConfig.game(id)
@@ -122,6 +140,7 @@ nonisolated enum AdoptedPrograms {
     /// The record fills `name` and `exes` as well, which is what makes
     /// ``ConfigMaterializer`` build the launcher bundle and write the env
     /// file: from that moment every per-game setting reaches it unchanged.
+    /// Anything but an installer is listed in Steam's library as well.
     @discardableResult
     static func adopt(
         exe url: URL,
@@ -138,6 +157,7 @@ nonisolated enum AdoptedPrograms {
         values.program = AdoptedProgram(
             path: url.standardizedFileURL.path, arguments: arguments, bottle: bottle,
             kind: kind, addedAt: .now, installedRoot: installedRoot,
+            inSteamLibrary: kind != ProgramKind.installer,
         )
         GameConfig.setGame(id, values)
         return id

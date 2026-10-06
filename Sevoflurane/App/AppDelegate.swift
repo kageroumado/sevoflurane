@@ -386,6 +386,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     MainActor.assumeIsolated { self?.supervisor.wake(.clientConnectionLost) }
                 }
             }
+            // Steam's list of non-Steam games follows the adopted programs
+            // whenever a client is there to take the calls.
+            SteamLibraryShortcuts.shared.bridge = bridge
+            SteamLibraryShortcuts.shared.onAliases = { [host] in host.shortcutPrograms = $0 }
+            supervisor.onHealthy = { SteamLibraryShortcuts.shared.sync() }
             host.bootstrap()
             supervisor.start()
             // The client's own cookie jar is the app's web session;

@@ -330,6 +330,10 @@ final class SteamWebHost {
     /// The launch task the log last carried, as `appid:task`.
     var lastLoggedLaunchTask: String?
 
+    /// Shortcut app id → adopted program id, for the programs Steam lists
+    /// as non-Steam games (``SteamShortcuts/aliases(_:)``).
+    @ObservationIgnored var shortcutPrograms: [Int: Int] = [:]
+
     /// The expected refusals this page has already logged, so each is said
     /// once per page load.
     private var loggedRefusals: Set<String> = []

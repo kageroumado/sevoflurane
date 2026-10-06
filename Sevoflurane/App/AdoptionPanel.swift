@@ -156,6 +156,7 @@ final class AdoptionModel {
             exe: url, name: trimmedName, kind: verdict.kind, bottle: SteamBottle.name,
         )
         EventLog.shared.log(.setup, "added \(trimmedName) to Quick Launch")
+        SteamLibraryShortcuts.shared.sync()
         if play { launch(id) }
         onFinish?()
     }
@@ -202,6 +203,7 @@ final class AdoptionModel {
             )
         }
         EventLog.shared.log(.setup, "added \(chosen.count) installed program(s) to Quick Launch")
+        SteamLibraryShortcuts.shared.sync()
         onFinish?()
     }
 
