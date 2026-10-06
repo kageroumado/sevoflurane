@@ -191,6 +191,7 @@ extension SteamBridge {
                 }
                 BottleGraphics.recordBootedSelection()
             }
+            await retargetStoreShortcut(beforeRunning: request, cdp: cdp)
             await adoptLaunchCommand(beforeRunning: request, cdp: cdp)
             onGameLaunch?()
         }
