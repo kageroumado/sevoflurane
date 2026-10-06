@@ -1,9 +1,11 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import Sevoflurane
 
-/// The served fix list, its merge under the built-in table, the first-launch
-/// decision, and applying and undoing a fix on a game's own values.
+/// The served fix list, its signature and the values it may carry, its merge
+/// under the built-in table, the first-launch decision, and applying and
+/// undoing a fix on a game's own values.
 struct FixListTests {
     private static let served = Data("""
     {"fixes": [
@@ -16,17 +18,39 @@ struct FixListTests {
     ]}
     """.utf8)
 
-    @Test
-    func `a served entry this version cannot read is left out alone`() {
-        let fixes = FixList.served(from: Self.served)
-        #expect(fixes.map(\.title) == ["Subnautica 2", "Subnautica 2", "Unreal"])
-        #expect(fixes[2].exePattern == "game-win64-shipping.exe")
-        #expect(FixList.served(from: Data("not json".utf8)).isEmpty)
+    /// Stands in for the fixes key, whose private half only the admin's Mac holds.
+    private static let key = Curve25519.Signing.PrivateKey()
+
+    /// `body` as the server serves it after `kagerou sevostats publish-fixes`.
+    private static func signed(_ body: Data, by key: Curve25519.Signing.PrivateKey = key) throws -> [KnownFix] {
+        let signature = try key.signature(for: body).base64EncodedData()
+        return FixList.verified(body, signature: signature, key: Self.key.publicKey)
     }
 
     @Test
-    func `the built-in table wins a key both set`() {
-        let merged = FixList.merged(builtIn: KnownFixes.all, served: FixList.served(from: Self.served))
+    func `a served entry this version cannot read is left out alone`() throws {
+        let fixes = try Self.signed(Self.served)
+        #expect(fixes.map(\.title) == ["Subnautica 2", "Subnautica 2", "Unreal"])
+        #expect(fixes[2].exePattern == "game-win64-shipping.exe")
+        #expect(try Self.signed(Data("not json".utf8)).isEmpty)
+    }
+
+    @Test
+    func `a list without the fixes key's signature is ignored`() throws {
+        #expect(try Self.signed(Self.served, by: Curve25519.Signing.PrivateKey()).isEmpty)
+        #expect(FixList.verified(Self.served, signature: Data("not a signature".utf8), key: Self.key.publicKey).isEmpty)
+        var tampered = Self.served
+        tampered.append(contentsOf: Data(" ".utf8))
+        let signature = try Self.key.signature(for: Self.served).base64EncodedData()
+        #expect(FixList.verified(tampered, signature: signature, key: Self.key.publicKey).isEmpty)
+        // The pinned key is a real one, and the test key is not it.
+        #expect(FixList.pinnedKey != nil)
+        #expect(FixList.verified(Self.served, signature: signature).isEmpty)
+    }
+
+    @Test
+    func `the built-in table wins a key both set`() throws {
+        let merged = try FixList.merged(builtIn: KnownFixes.all, served: Self.signed(Self.served))
         // The seeded copy of a built-in entry adds nothing; the second keeps
         // only the key the built-in one does not set.
         #expect(merged.count == KnownFixes.all.count + 2)
@@ -35,6 +59,66 @@ struct FixListTests {
         #expect(recommendation.value(for: \.processors) == 6)
         let unreal = KnownFixes.recommended(for: 99, exes: ["game-win64-shipping.exe"], from: merged)
         #expect(unreal.value(for: \.avx) == false)
+    }
+
+    @Test
+    func `a value that could reach a file, the registry or the log as more than itself is dropped`() throws {
+        let fixes = try Self.signed(Data(#"""
+        {"fixes": [
+          {"appid": 480, "title": "Spacewar\nfixes: forged line", "reason": "Why.\r\nAnother.",
+           "values": {"upscaler": "x\nDYLD_INSERT_LIBRARIES=/tmp/a.dylib", "processors": 9999,
+                      "dllOverrides": {"d3d11": "n,b", "..\\evil": "n", "Bad\"Name": "n", "x": "native"},
+                      "tuningParameters": {"waitSpin": 1, "adaptive": true, "objectSpin": 1},
+                      "program": {"path": "/tmp/a.exe", "arguments": [], "bottle": "Steam", "kind": "exe", "addedAt": 0},
+                      "name": "Renamed", "avx": false}},
+          {"exe": "../game.exe", "title": "Path", "reason": "Why.", "values": {"avx": false}},
+          {"appid": 481, "title": "Package", "reason": "Why.", "values": {"upscaler": "../../shaders"}}
+        ]}
+        """#.utf8))
+        #expect(fixes.count == 1)
+        let fix = try #require(fixes.first)
+        #expect(fix.title == "Spacewar fixes: forged line")
+        #expect(fix.reason == "Why. Another.")
+        #expect(fix.values.upscaler == nil)
+        #expect(fix.values.processors == nil)
+        #expect(fix.values.dllOverrides == ["d3d11": "n,b"])
+        #expect(fix.values.tuningParameters == nil)
+        #expect(fix.values.program == nil)
+        #expect(fix.values.name == nil)
+        #expect(fix.values.avx == false)
+    }
+
+    @Test
+    func `a malformed DLL name is refused`() {
+        #expect(FixValues.isValidDLL("d3d11"))
+        #expect(FixValues.isValidDLL("xinput1_3"))
+        for name in ["D3D11", "..", "a/b", #"a\b"#, "a b", "", String(repeating: "a", count: 65), "a\"b"] {
+            #expect(!FixValues.isValidDLL(name), "\(name)")
+        }
+    }
+
+    @Test
+    func `a variable that steers the loader, Wine or the app, or names a path, is only offered`() {
+        var values = ConfigValues.empty
+        values.environment = [
+            "DXVK_ASYNC": "1", "DYLD_INSERT_LIBRARIES": "x", "LD_PRELOAD": "x", "WINEDLLOVERRIDES": "d3d11=n",
+            "WINEPREFIX": "x", "SEVO_CPU_COUNT": "2", "GAME_DATA": "/Users/me/x", "GAME_WIN": #"C:\x"#,
+            "GAME_HOME": "~/x", "LINE": "a\nb", "1BAD": "x",
+        ]
+        values.runner = GameRunner.nwjs
+        let offered = FixValues.admitted(values).environment ?? [:]
+        // Reserved names and malformed ones never pass; the rest may be offered.
+        #expect(offered["WINEPREFIX"] == nil)
+        #expect(offered["DYLD_INSERT_LIBRARIES"] == nil)
+        #expect(offered["LINE"] == nil)
+        #expect(offered["1BAD"] == nil)
+        #expect(offered["LD_PRELOAD"] == "x")
+        let automatic = FixValues.automatic(values)
+        #expect(automatic.environment == ["DXVK_ASYNC": "1"])
+        #expect(automatic.runner == nil)
+        let fix = KnownFix(appID: 1, exePattern: nil, title: "Env", values: values, reason: "Why.")
+        let planned = FixLedger.plan(own: .empty, fixes: [fix])
+        #expect(planned?.values.environment == ["DXVK_ASYNC": "1"])
     }
 
     @Test

@@ -47,12 +47,6 @@ nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
 nonisolated enum FixLedger {
     static let root = GameConfig.root.appendingPathComponent("fixes")
 
-    /// Keys a fix sets that a first launch leaves to the chip in Settings:
-    /// the native runner fetches a runtime matched to the game's own NW.js
-    /// build before it can run anything, and the rest is the file's
-    /// bookkeeping.
-    static let manualKeys: Set<String> = ["runner", "nwjs", "nwjsRuntime", "exes", "name", "program"]
-
     // MARK: - The decision
 
     /// Whether a launch is one the fix list applies to: the switch is on, no
@@ -62,10 +56,11 @@ nonisolated enum FixLedger {
         enabled && !hasRunRecord && !wasDecided
     }
 
-    /// The game's values with every fix folded in where it has no value of
-    /// its own, and the record of what changed; `nil` when the fixes set
-    /// nothing the game lacks. The first fix to name a key wins it; a table
-    /// gains the entries it does not have.
+    /// The game's values with every fix's automatic part
+    /// (``FixValues/automatic(_:)``) folded in where it has no value of its
+    /// own, and the record of what changed; `nil` when the fixes set nothing
+    /// the game lacks. The first fix to name a key wins it; a table gains the
+    /// entries it does not have.
     static func plan(
         own: ConfigValues, fixes: [KnownFix], date: Date = .now,
     ) -> (values: ConfigValues, record: AppliedFixes)? {
@@ -75,7 +70,7 @@ nonisolated enum FixLedger {
         var sources: [AppliedFixes.Source] = []
         for fix in fixes {
             var contributed = false
-            for (key, value) in fix.values.fields where !manualKeys.contains(key) {
+            for (key, value) in FixValues.automatic(fix.values).fields {
                 switch fields[key] {
                 case nil:
                     fields[key] = value
