@@ -490,6 +490,9 @@ runs on CrossOver.
   it to Valve's Steam for Mac, which opens its install page where the game
   is not installed yet. Set per game in Settings › Games or the game's menu
   in the menu bar; the compat strip's Details play it once.
+- When your account signs in on another computer or in Steam for Mac, Steam
+  here signs out: a notification and the menu bar say so and offer
+  Reconnect, and a session Steam for Mac took comes back when it quits.
 - Discord shows "Playing <game>" under the game's own Discord entry. Games
   with their own Discord support publish their own status through a relay in
   the bottle **(Dormison)**. Two switches in Settings › General.

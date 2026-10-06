@@ -120,7 +120,7 @@ final class SteamNotifications {
         let forwarder = Forwarder(relay: self)
         delegate = forwarder
         center.delegate = forwarder
-        center.setNotificationCategories([Self.fixesCategory])
+        center.setNotificationCategories([Self.fixesCategory, Self.sessionCategory])
         Task(name: "Read notification authorization") { await refreshAuthorization() }
     }
 
@@ -299,6 +299,52 @@ final class SteamNotifications {
         }
     }
 
+    // MARK: - The Steam session
+
+    /// The signed-out notification carries one action, Reconnect.
+    private static let sessionCategory = UNNotificationCategory(
+        identifier: "session",
+        actions: [UNNotificationAction(identifier: reconnectAction, title: String(localized: "Reconnect"))],
+        intentIdentifiers: [],
+    )
+
+    private static let reconnectAction = "reconnect"
+    private static let sessionIdentifier = "signed-in-elsewhere"
+
+    /// Says that the bottle's Steam was signed out because its account
+    /// signed in on another client, naming Steam for Mac when that is the
+    /// one. Without permission to post it is a line in the log, and the menu
+    /// bar says the same.
+    func postSignedInElsewhere(bySteamForMac: Bool) {
+        guard let center, [.authorized, .provisional].contains(authorization) else {
+            EventLog.shared.log(
+                .app, "session: no notification (notifications \(authorization.name)); the menu bar offers Reconnect",
+            )
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Steam signed out here")
+        content.body = bySteamForMac
+            ? String(localized: "Your account signed in to Steam for Mac. Steam reconnects here when Steam for Mac quits.")
+            : String(localized: "Your account signed in on another computer.")
+        content.categoryIdentifier = Self.sessionCategory.identifier
+        content.userInfo = Route.steam.userInfo
+        Task(name: "Post the signed-out notification") {
+            do {
+                try await center.add(
+                    UNNotificationRequest(identifier: Self.sessionIdentifier, content: content, trigger: nil),
+                )
+            } catch {
+                EventLog.shared.log(.app, "could not post the signed-out notification: \(error)")
+            }
+        }
+    }
+
+    /// Takes the signed-out notification back once Steam is signed in again.
+    func withdrawSignedInElsewhere() {
+        center?.removeDeliveredNotifications(withIdentifiers: [Self.sessionIdentifier])
+    }
+
     // MARK: - Clicks
 
     /// A notification's button, or the notification itself when `action`
@@ -306,6 +352,8 @@ final class SteamNotifications {
     func handleResponse(action: String, userInfo: [AnyHashable: Any]) {
         if action == Self.undoAction, case let .fixes(appID) = Route(userInfo: userInfo) {
             undoFixes(appID: appID)
+        } else if action == Self.reconnectAction {
+            (NSApp.delegate as? AppDelegate)?.steamSession.reconnect(because: "Reconnect in the notification")
         } else {
             handleClick(userInfo: userInfo)
         }

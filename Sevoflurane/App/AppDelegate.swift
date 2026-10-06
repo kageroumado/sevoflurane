@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let provisioner = Provisioner()
     lazy var supervisor = ClientSupervisor(host: host, bridge: bridge)
     let notifications = SteamNotifications()
+    lazy var steamSession = SteamSessionWatch(bridge: bridge)
     let gameLaunchWatch = GameLaunchWatch()
     let runRecorder = RunRecorder()
     let stallWatch = StallWatch()
@@ -219,6 +220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications.host = host
         host.notifications = notifications
         notifications.start()
+        steamSession.notifications = notifications
+        supervisor.session = steamSession
         menuBarPopover = MenuBarPopover(
             host: host, supervisor: supervisor, notifications: notifications,
             setup: setupWindow,

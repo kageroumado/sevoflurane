@@ -57,6 +57,11 @@ nonisolated enum SteamBottle {
         steamRoot(inBottle: root)
     }
 
+    /// The client's connection log, where it says when its session ends.
+    static var connectionLog: URL {
+        steamRoot.appendingPathComponent("logs/connection_log.txt")
+    }
+
     /// Steam's UI bundle, served by the bridge with the shim injected.
     static var steamui: URL {
         steamRoot.appendingPathComponent("steamui")

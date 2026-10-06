@@ -120,6 +120,9 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
     var build: String?
     /// What else weighs on this Mac, while it is more than ordinary.
     var host: HostPressure?
+    /// The session the client lost to another sign-in of its account, while
+    /// it stays lost. Beside the verdict: the client is healthy, and signed out.
+    var signedInElsewhere: SteamSessionLoss?
 
     init(
         health: String = "starting",
@@ -129,6 +132,7 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
         version: String = "0",
         build: String? = nil,
         host: HostPressure? = nil,
+        signedInElsewhere: SteamSessionLoss? = nil,
     ) {
         self.health = health
         self.detail = detail
@@ -137,11 +141,12 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
         self.version = version
         self.build = build
         self.host = host
+        self.signedInElsewhere = signedInElsewhere
     }
 
     init(
         _ health: SupervisorHealth, isBusyRestarting: Bool, version: String, build: String? = nil,
-        host: HostPressure? = nil,
+        host: HostPressure? = nil, signedInElsewhere: SteamSessionLoss? = nil,
     ) {
         self.init(
             health: health.wireName,
@@ -151,6 +156,7 @@ nonisolated struct SupervisorSnapshot: Codable, Equatable, Sendable {
             version: version,
             build: build,
             host: host,
+            signedInElsewhere: signedInElsewhere,
         )
     }
 

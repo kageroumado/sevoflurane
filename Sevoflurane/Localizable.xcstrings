@@ -11748,6 +11748,76 @@
           }
         }
       }
+    },
+    "Steam signed out here" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 已在此处退出登录"
+          }
+        }
+      }
+    },
+    "Your account signed in to Steam for Mac. Steam reconnects here when Steam for Mac quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的账户已登录 Steam for Mac。退出 Steam for Mac 后，此处的 Steam 会重新连接。"
+          }
+        }
+      }
+    },
+    "Your account signed in on another computer." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的账户已在另一台电脑上登录。"
+          }
+        }
+      }
+    },
+    "Reconnect" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新连接"
+          }
+        }
+      }
+    },
+    "Signed in elsewhere" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已在别处登录"
+          }
+        }
+      }
+    },
+    "Steam here signs out while Steam for Mac is signed in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam for Mac 登录期间，此处的 Steam 会退出登录"
+          }
+        }
+      }
+    },
+    "A Steam account signs in to one Steam at a time. When Steam for Mac signs in, Steam in Sevoflurane goes offline, and it reconnects when you quit Steam for Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个 Steam 账户同一时间只能登录一个 Steam。Steam for Mac 登录后，Sevoflurane 中的 Steam 会离线；退出 Steam for Mac 后它会重新连接。"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

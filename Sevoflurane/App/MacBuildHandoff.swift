@@ -75,10 +75,15 @@ enum MacBuildHandoff {
                     ? "play \(what): handed to Steam for Mac (macOS version)"
                     : "play \(what): not installed in Steam for Mac, opening its install page there",
             )
-            NSWorkspace.shared.open([link], withApplicationAt: steam, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                guard let error else { return }
-                EventLog.shared.log(.client, "play \(what): Steam for Mac did not open \(link): \(error.localizedDescription)")
+            (NSApp.delegate as? AppDelegate)?.steamSession.noteHandoff()
+            guard Preferences.toldAboutSteamForMacSession else {
+                ModalAlerts.present {
+                    tellAboutTheSession()
+                    open(link, in: steam, for: what)
+                }
+                return true
             }
+            open(link, in: steam, for: what)
             return true
         case let .steamForMacMissing(appID):
             let what = name ?? GameConfig.game(appID).name ?? String(appID)
@@ -86,6 +91,29 @@ enum MacBuildHandoff {
             ModalAlerts.present { askWithoutSteamForMac(appID: appID, name: what) }
             return true
         }
+    }
+
+    private static func open(_ link: URL, in steam: URL, for what: String) {
+        NSWorkspace.shared.open([link], withApplicationAt: steam, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            guard let error else { return }
+            EventLog.enqueue(.client, "play \(what): Steam for Mac did not open \(link): \(error.localizedDescription)")
+        }
+    }
+
+    /// Said once, before the first game goes to Steam for Mac: one account
+    /// holds one Steam session, so Steam here signs out while Steam for Mac is
+    /// signed in, and ``SteamSessionWatch`` brings it back when Steam for Mac
+    /// quits.
+    private static func tellAboutTheSession() {
+        Preferences.toldAboutSteamForMacSession = true
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Steam here signs out while Steam for Mac is signed in")
+        alert.informativeText = String(localized: """
+        A Steam account signs in to one Steam at a time. When Steam for Mac signs in, Steam in \
+        Sevoflurane goes offline, and it reconnects when you quit Steam for Mac.
+        """)
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.runModal()
     }
 
     /// The macOS version is chosen and Steam for Mac is missing: get it, or

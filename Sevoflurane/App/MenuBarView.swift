@@ -36,6 +36,7 @@ struct MenuBarView: View {
                 FooterBar(host: host, supervisor: supervisor, isSettingUp: true) { confirmingQuit = true }
             } else {
                 SupervisorNotice(host: host, supervisor: supervisor)
+                if let session = supervisor.session { SessionNotice(session: session) }
                 HostPressureNotice(supervisor: supervisor)
                 GamesColumn(
                     host: host, supervisor: supervisor, graphics: graphics,
@@ -365,6 +366,33 @@ private struct HostPressureNotice: View {
                 title: "Your Mac is under heavy load",
                 detail: "\(sentence) Games launch and run more slowly while this continues.",
             )
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
+}
+
+// MARK: - The Steam session
+
+/// The bottle's Steam signed out because its account signed in on another
+/// client. The client is healthy, so the supervisor card stays away; this is
+/// what says why Steam reads "No connection", and the way back.
+private struct SessionNotice: View {
+    let session: SteamSessionWatch
+
+    var body: some View {
+        if session.loss != nil {
+            NoticeCard(
+                symbol: "person.crop.circle.badge.exclamationmark",
+                tint: .orange,
+                title: "Steam signed out here",
+                detail: session.holder == .steamForMac
+                    ? "Your account signed in to Steam for Mac. Steam reconnects here when Steam for Mac quits."
+                    : "Your account signed in on another computer.",
+            ) {
+                Button("Reconnect") { session.reconnect(because: "Reconnect in the menu bar") }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(Theme.onAccent)
+            }
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
         }
     }

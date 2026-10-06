@@ -32,6 +32,10 @@ final class ClientSupervisor {
     /// up, ready for calls that change what it stores.
     @ObservationIgnored var onHealthy: (() -> Void)?
 
+    /// What the app does about a session the client lost to another sign-in
+    /// of its account, fed from every verdict the daemon pushes.
+    @ObservationIgnored var session: SteamSessionWatch?
+
     /// Set while the daemon is unregistered, unapproved, or not answering. The
     /// menu bar shows the way out — Login Items, then Retry — rather than a
     /// state that looks like Steam's fault.
@@ -48,8 +52,10 @@ final class ClientSupervisor {
         health.displayStatusText
     }
 
+    /// Whether the menu-bar glyph carries the attention badge: a fault, or a
+    /// Steam that another sign-in of its account signed out.
     var needsAttention: Bool {
-        daemonIsUnreachable || health.needsAttention
+        daemonIsUnreachable || health.needsAttention || session?.loss != nil
     }
 
     private let host: SteamWebHost
@@ -211,6 +217,7 @@ final class ClientSupervisor {
         if !wasHealthy, health == .healthy { onHealthy?() }
         isBusyRestarting = snapshot.isBusyRestarting
         hostPressure = snapshot.host
+        session?.update(snapshot.signedInElsewhere)
     }
 
     /// Reads `/status` once. A push covers every change; this covers the two
@@ -224,10 +231,16 @@ final class ClientSupervisor {
             health: name,
             detail: object["detail"] as? String ?? "",
             needsAttention: object["needsAttention"] as? Bool ?? false,
-            host: (object["host"] as? [String: Any])
-                .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-                .flatMap { try? JSONDecoder().decode(HostPressure.self, from: $0) },
+            host: Self.decode(HostPressure.self, from: object["host"]),
+            signedInElsewhere: Self.decode(SteamSessionLoss.self, from: object["signedInElsewhere"]),
         ))
+    }
+
+    /// One object of `/status`, decoded; nil when it is `null` or absent.
+    private static func decode<Value: Decodable>(_: Value.Type, from field: Any?) -> Value? {
+        (field as? [String: Any])
+            .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            .flatMap { try? JSONDecoder().decode(Value.self, from: $0) }
     }
 
     /// Posts the facts, every tick. The post is the app's heartbeat as much as

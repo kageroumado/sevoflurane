@@ -143,6 +143,14 @@ nonisolated extension Preferences {
         get { shared.object(forKey: "updateFailureLoggedAt") as? Date }
         set { shared.set(newValue, forKey: "updateFailureLoggedAt") }
     }
+
+    /// Whether the person has been told that Steam here signs out while Steam
+    /// for Mac is signed in to the same account. Told once, at the first game
+    /// handed to Steam for Mac.
+    static var toldAboutSteamForMacSession: Bool {
+        get { bool(forKey: "toldAboutSteamForMacSession", default: false) }
+        set { shared.set(newValue, forKey: "toldAboutSteamForMacSession") }
+    }
 }
 
 // MARK: - Discord

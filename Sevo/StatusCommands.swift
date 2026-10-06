@@ -89,12 +89,16 @@ enum StatusReport {
             "app_attached": appState == .attached,
             "dump_rate_10m": snapshot.dumpCount,
             "client_pinned": snapshot.pinned,
+            "signed_in_elsewhere": snapshot.appStatus?["signedInElsewhere"] ?? NSNull(),
         ]
         var line = "engine \(engine) · "
             + BottleIdentity.statusText(clientBottle: clientBottle, configured: SteamBottle.name, steamInstalled: steamOK)
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
             + " · supervision \(supervision) · app \(appState.rawValue)"
         if let incomplete { line += " · bottle incomplete (\(incomplete))" }
+        if snapshot.appStatus?["signedInElsewhere"] is [String: Any] {
+            line += " · Steam signed out: its account signed in on another client"
+        }
         if snapshot.appStatus?["debug"] as? Bool == true { line += " · debug mode on" }
         return (dict, line)
     }

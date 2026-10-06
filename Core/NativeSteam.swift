@@ -19,6 +19,12 @@ nonisolated enum NativeSteam {
         UserHome.url.appendingPathComponent("Library/Application Support/Steam", isDirectory: true)
     }
 
+    /// Steam for Mac's connection log, the same format as the bottle client's
+    /// (``SteamConnectionLog``).
+    static var connectionLog: URL {
+        root.appendingPathComponent("logs/connection_log.txt")
+    }
+
     /// One game Steam for Mac has a manifest for.
     struct Game: Equatable, Sendable {
         let appID: Int

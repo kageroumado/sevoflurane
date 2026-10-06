@@ -180,6 +180,44 @@ final class BottleSupervisor {
     /// About fifteen seconds of probes.
     private static let calmerReadingsToSettle = 5
 
+    // MARK: - The Steam session
+
+    /// The client's connection log, followed at the probe cadence: the one
+    /// place that says the account signed in somewhere else. Steam never
+    /// reconnects after that, and nothing else this side can see it — the
+    /// process, the page and Steam's services all stay up.
+    private var connectionLog: SteamConnectionLog.Follower?
+    /// Called when the session is lost to another sign-in or comes back.
+    var onSessionChange: ((SteamSessionLoss?) -> Void)?
+
+    /// The session the bottle's client lost to another sign-in of its
+    /// account, while it stays lost. The client itself is healthy, so this
+    /// sits beside the verdict rather than in it: a restart would sign it in
+    /// again and sign the other client out.
+    var sessionLoss: SteamSessionLoss? {
+        connectionLog?.loss
+    }
+
+    private func followConnectionLog() {
+        let before = sessionLoss
+        let file = SteamBottle.connectionLog
+        if connectionLog?.file != file { connectionLog = SteamConnectionLog.Follower(file: file) }
+        _ = connectionLog?.read()
+        let after = sessionLoss
+        guard after != before else { return }
+        if let after {
+            log.log(
+                .client,
+                "Steam was signed out: \(after.account) signed in on another client "
+                    + "('\(after.reason.logWords)' at \(after.date.formatted(date: .omitted, time: .standard))) "
+                    + "— Steam does not reconnect by itself",
+            )
+        } else {
+            log.log(.client, "Steam is signed in again")
+        }
+        onSessionChange?(after)
+    }
+
     var statusText: String {
         health.statusText
     }
@@ -453,6 +491,7 @@ final class BottleSupervisor {
 
     private func probe() async {
         samplePressure()
+        if !isQuitting { followConnectionLog() }
         if isPaused || isRestarting || isQuitting {
             // The display hold follows the game, whatever the client is
             // doing: a game that exits during a client restart releases it

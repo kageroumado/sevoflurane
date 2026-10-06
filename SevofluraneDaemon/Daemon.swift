@@ -55,6 +55,12 @@ final class Daemon {
                 await self.app.push(self.snapshot(health, of: supervisor))
             }
         }
+        supervisor.onSessionChange = { [weak self] _ in
+            guard let self else { return }
+            Task(name: "Push the Steam session") {
+                await self.app.push(self.snapshot(supervisor.health, of: supervisor))
+            }
+        }
         supervisor.onPressureChange = { [weak self] _ in
             guard let self else { return }
             Task(name: "Push the Mac's load") {
@@ -110,6 +116,7 @@ final class Daemon {
             version: Daemon.bundledAppVersion,
             build: Daemon.build,
             host: supervisor.pressure.isElevated ? supervisor.pressure : nil,
+            signedInElsewhere: supervisor.sessionLoss,
         )
     }
 

@@ -71,12 +71,14 @@ private struct StatusChip: View {
     @State private var isHovered = false
 
     /// Every word that reports the client's run state names Steam, because the symbol alone says
-    /// only how and nothing beside it says what about. The three that skip the name report
-    /// something else: the Steam account, this app's own switch, and the restart it is in the
+    /// only how and nothing beside it says what about. The ones that skip the name report
+    /// something else: the Steam account (signed out, or signed in elsewhere), this app's own switch, and the restart it is in the
     /// middle of.
     private var status: (word: LocalizedStringResource, symbol: String) {
         switch supervisor.health {
         case .starting, .launching: ("Steam starting", "hourglass")
+        case .healthy where supervisor.session?.loss != nil:
+            ("Signed in elsewhere", "person.crop.circle.badge.exclamationmark")
         case .healthy: ("Steam running", "checkmark.circle")
         case .waitingForSignIn: ("Signed out", "person.crop.circle.badge.questionmark")
         case .degraded: ("Steam wedged", "exclamationmark.triangle")

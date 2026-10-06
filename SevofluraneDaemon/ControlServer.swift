@@ -354,6 +354,7 @@ final class ControlServer {
             + #""daemon":"running","version":\#(JSLiteral.string(version)),"#
             + #""build":\#(JSLiteral.string(Daemon.build ?? "")),"#
             + #""host":\#(Self.hostJSON(supervisor.pressure)),"#
+            + #""signedInElsewhere":\#(Self.sessionJSON(supervisor.sessionLoss)),"#
             + #""health":\#(JSLiteral.string(supervisor.health.wireName)),"#
             + #""detail":\#(JSLiteral.string(supervisor.statusText)),"#
             + #""debug":\#(debug),"#
@@ -364,6 +365,13 @@ final class ControlServer {
     /// The Mac's load as JSON while it is more than ordinary, `null` otherwise.
     private static func hostJSON(_ pressure: HostPressure) -> String {
         guard pressure.isElevated, let data = try? JSONEncoder().encode(pressure) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The session the client lost to another sign-in as JSON, `null` while
+    /// it is signed in.
+    private static func sessionJSON(_ loss: SteamSessionLoss?) -> String {
+        guard let loss, let data = try? JSONEncoder().encode(loss) else { return "null" }
         return String(decoding: data, as: UTF8.self)
     }
 
