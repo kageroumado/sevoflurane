@@ -329,16 +329,26 @@ struct SetupInstallStep: View {
 /// The managed engine cannot ship Apple's D3DMetal, so this step fetches it
 /// in the app, through Apple's own sign-in. CrossOver brings its own, and
 /// never sees this step.
+///
+/// While Apple's page is on it, the window is tall (``SetupView``) and the
+/// glyph gives its room to the page.
 struct SetupGraphicsStep: View {
     let download: GPTkDownload
     let store: GraphicsStore?
     let isSimulated: Bool
 
+    /// Whether Apple's sign-in page is on this step, in this app.
+    static func hostsSignIn(_ download: GPTkDownload, isSimulated: Bool) -> Bool {
+        download.route == .here && !isSimulated
+    }
+
     var body: some View {
+        // The subtitle's negation answers a belief people arrive with: that
+        // a download from developer.apple.com needs the paid program.
         SetupPage(
-            glyph: "cube.transparent",
+            glyph: Self.hostsSignIn(download, isSimulated: isSimulated) ? nil : "cube.transparent",
             title: "DirectX 12 games",
-            subtitle: "Optional. Apple\u{2019}s D3DMetal, free with an Apple developer sign-in.",
+            subtitle: "Optional and free. Any Apple Account works; no paid developer membership.",
         ) {
             GPTkDownloadPanel(
                 download: download,

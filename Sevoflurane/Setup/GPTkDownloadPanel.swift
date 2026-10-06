@@ -38,7 +38,7 @@ struct GPTkDownloadPanel: View {
             case .browser:
                 GPTkBrowserRoute(watch: download.folderWatch)
             }
-            if !download.items.isEmpty { itemList }
+            if !download.items.isEmpty, !coversPageWithItems { itemList }
             chooseFileRow
         }
         .onAppear {
@@ -101,20 +101,43 @@ struct GPTkDownloadPanel: View {
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    /// Whether the download cover is up with the item list as its content,
+    /// so the list is drawn there and not again below.
+    private var coversPageWithItems: Bool {
+        download.route == .here && !isSimulated && download.pageLoaded && download.autoPhase == .downloading
+    }
+
     private var instructions: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: download.autoPhase == .manual
-                ? "hand.point.up.left" : "info.circle")
-                .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
-                .accessibilityHidden(true)
-            Text(InterfaceCopy.localized(download.autoPhase == .manual
-                    ? "Click Download on the release and the beta you want. Each installs here when its download ends."
-                    : "Sign in with your Apple Account. The first time, Apple asks you to accept its free developer agreement. The newest release and beta then download and install here."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: download.autoPhase == .manual
+                    ? "hand.point.up.left" : "info.circle")
+                    .foregroundStyle(download.autoPhase == .manual ? .orange : .secondary)
+                    .accessibilityHidden(true)
+                hint
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            if download.stoppedEnrollment {
+                Label("The paid program isn\u{2019}t needed. The free account is enough.", systemImage: "checkmark.seal")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.tint)
+            }
         }
+    }
+
+    /// The sign-in hint, or in the manual fallback the row to click, named as
+    /// Apple's page names it.
+    private var hint: Text {
+        guard download.autoPhase == .manual else {
+            return Text("Sign in with any Apple Account, and accept Apple\u{2019}s free developer agreement if it asks. The paid Developer Program isn\u{2019}t needed. Sevoflurane picks the right download and installs it here.")
+        }
+        if let candidate = download.manualCandidate {
+            return Text("Click Download on \u{201C}\(candidate)\u{201D}, outlined below. It installs here when its download ends.")
+        }
+        return Text("Click Download on \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer. It installs here when its download ends.")
     }
 
     private var webView: some View {
@@ -124,6 +147,8 @@ struct GPTkDownloadPanel: View {
                     ProgressView().controlSize(.large)
                 } else if download.autoPhase == .searching {
                     searchingOverlay
+                } else if download.autoPhase == .downloading {
+                    downloadCover
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -144,6 +169,42 @@ struct GPTkDownloadPanel: View {
                     .font(.callout.weight(.medium))
             }
         }
+    }
+
+    /// Covers the page from the picks until the downloads have installed:
+    /// what was picked, and its progress. The page comes back only when a
+    /// download failed and the user asks for it.
+    private var downloadCover: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            VStack(spacing: 14) {
+                coverTitle
+                    .font(.callout.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                itemList
+                    .frame(maxWidth: 380)
+                if hasFailure, !download.isBusy {
+                    Button("Show Apple\u{2019}s Page") { download.showPage() }
+                }
+            }
+            .padding(24)
+        }
+    }
+
+    private var hasFailure: Bool {
+        download.items.contains { $0.phase.isFailure }
+    }
+
+    private var coverTitle: Text {
+        let versions = download.pickedVersions.formatted(.list(type: .and))
+        if download.isBusy {
+            return Text("Downloading D3DMetal \(versions), nothing to click")
+        }
+        if hasFailure {
+            return Text("A download stopped. Its reason is below.")
+        }
+        return Text("D3DMetal \(versions) installed")
     }
 
     private var itemList: some View {
@@ -216,7 +277,7 @@ private struct GPTkBrowserRoute: View {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                Text("Sign in on Apple\u{2019}s page and download \u{201C}Evaluation environment for Windows games\u{201D}, the small file with D3DMetal in it. The Game Porting Toolkit works too. Sevoflurane installs it the moment it lands.")
+                Text("Sign in on Apple\u{2019}s page with any Apple Account and download \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer, the small file with D3DMetal in it. Sevoflurane installs it the moment it lands.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

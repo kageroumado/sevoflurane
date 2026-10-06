@@ -23,10 +23,13 @@ final class SetupWindow {
     /// Opens the wizard in a new window, replacing any earlier one.
     func present(_ view: SetupView) {
         finish()
+        var view = view
+        view.resizeWindow = { [weak self] tall in self?.resize(tall: tall) }
         let controller = NSHostingController(rootView: view)
-        // The window is one size for the whole flow. Left to the hosting
-        // controller, a step whose content asks for more grows the window
-        // mid-flow and it never shrinks back.
+        // The window's size is this controller's to set: ``SetupMetrics``
+        // for the flow, taller only for Apple's sign-in page. Left to the
+        // hosting controller, a step whose content asks for more grows the
+        // window mid-flow and it never shrinks back.
         controller.sizingOptions = []
         let window = NSWindow(contentViewController: controller)
         window.setContentSize(SetupMetrics.windowSize)
@@ -51,6 +54,31 @@ final class SetupWindow {
         isUnfinished = true
         window.center()
         show()
+    }
+
+    /// Grows the window to ``SetupMetrics/tallWindowHeight`` (within the
+    /// screen) or returns it to ``SetupMetrics/windowSize``, keeping its top
+    /// edge where it is unless the screen's bottom pushes it up.
+    private func resize(tall: Bool) {
+        guard let window else { return }
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame
+        var size = SetupMetrics.windowSize
+        if tall, let visible {
+            size.height = max(size.height, min(SetupMetrics.tallWindowHeight, visible.height - 40))
+        }
+        guard window.contentRect(forFrameRect: window.frame).size != size else { return }
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin.x = window.frame.minX
+        frame.origin.y = window.frame.maxY - frame.height
+        if let visible, frame.minY < visible.minY {
+            frame.origin.y = visible.minY
+        }
+        window.contentMinSize = size
+        window.contentMaxSize = size
+        window.setFrame(
+            frame, display: true,
+            animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+        )
     }
 
     /// Brings the wizard back where it was left. Answers whether there was

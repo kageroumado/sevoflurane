@@ -4,6 +4,9 @@ import SwiftUI
 /// The measurements every step of the first-run assistant shares.
 enum SetupMetrics {
     static let windowSize = CGSize(width: 600, height: 700)
+    /// The window's height while a step hosts Apple's sign-in page, which
+    /// needs the room; kept under the screen's visible height.
+    static let tallWindowHeight: CGFloat = 920
     /// The column the glyph, the titles and the lists sit in.
     static let contentInset: CGFloat = 60
     static let topInset: CGFloat = 64
@@ -15,24 +18,28 @@ enum SetupMetrics {
 }
 
 /// One step's page: a large glyph, a title with a gray subtitle under it, and
-/// the step's lists, all in one leading-aligned column.
+/// the step's lists, all in one leading-aligned column. A page without a
+/// glyph gives its room to the content.
 struct SetupPage<Content: View>: View {
-    let glyph: String
+    let glyph: String?
     let title: String
     let subtitle: String
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Image(systemName: glyph)
-                .font(.system(size: SetupMetrics.glyphSize, weight: .regular))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.tint)
-                .frame(height: SetupMetrics.glyphSize + 8, alignment: .bottomLeading)
-                .accessibilityHidden(true)
+            if let glyph {
+                Image(systemName: glyph)
+                    .font(.system(size: SetupMetrics.glyphSize, weight: .regular))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
+                    .frame(height: SetupMetrics.glyphSize + 8, alignment: .bottomLeading)
+                    .padding(.bottom, Theme.Space.xl)
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
             Text(InterfaceCopy.localized(title))
                 .font(.title2.weight(.semibold))
-                .padding(.top, Theme.Space.xl)
             Text(InterfaceCopy.localized(subtitle))
                 .font(.title3)
                 .foregroundStyle(.secondary)

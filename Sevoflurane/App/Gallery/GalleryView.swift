@@ -204,6 +204,7 @@
                 makeGraphics: { Fixtures.wizardGraphics },
                 onFinished: {},
             )
+            .frame(height: SetupMetrics.windowSize.height)
             .background(.background, in: Theme.cardShape)
             .clipShape(Theme.cardShape)
         }

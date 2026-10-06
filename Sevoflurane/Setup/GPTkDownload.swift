@@ -108,7 +108,9 @@ final class GPTkDownload: NSObject {
 
     /// Where the automatic pick-and-download stands, for the panel's
     /// overlay: `searching` covers the page from sign-in until versions are
-    /// chosen; `manual` is the fallback when nothing parseable stabilized.
+    /// chosen, `downloading` keeps it covered while the picks download and
+    /// install, and `manual` is the fallback when nothing parseable
+    /// stabilized, the one phase that shows Apple's page itself.
     enum AutoPhase {
         case idle
         case searching
@@ -117,6 +119,21 @@ final class GPTkDownload: NSObject {
     }
 
     private(set) var autoPhase: AutoPhase = .idle
+    /// The versions the automatic pick chose, in the order it chose them:
+    /// "4.0", "4.0 beta 2".
+    private(set) var pickedVersions: [String] = []
+    /// The row the manual fallback outlined on Apple's page, as the page
+    /// names it: "Evaluation environment for Windows games 4.0 beta 2".
+    private(set) var manualCandidate: String?
+    /// Whether a link toward the paid Developer Program was stopped and
+    /// Apple's download page put back in its place.
+    private(set) var stoppedEnrollment = false
+
+    /// Uncovers Apple's page, for clicking a download by hand after an
+    /// automatic one failed.
+    func showPage() {
+        autoPhase = .manual
+    }
 
     private var nextID = 0
     private var startedDownloads: Set<String> = []
@@ -157,7 +174,10 @@ final class GPTkDownload: NSObject {
     /// seconds.
     /// "list" fires when the signed-in download table first exists, "none"
     /// when it stabilizes with nothing parseable — the panel's overlay and
-    /// fallback hint key off those.
+    /// fallback hint key off those. With "none", the row whose text names the
+    /// newest version (a release over its own betas, the evaluation
+    /// environment over the toolkit) is outlined and scrolled to, and its
+    /// name travels as `candidate`.
     private static let autoDownloadScript = """
     (function () {
       if (window.__sevoGPTkAutoDownload) { return; }
@@ -213,6 +233,47 @@ final class GPTkDownload: NSObject {
         if (beta && release && !newer(beta, release)) { beta = null; }
         return [release, beta].filter(Boolean);
       };
+      const rowPattern =
+        /(evaluation environment for windows games|game porting toolkit)\\s*(\\d+(?:\\.\\d+)*)(?:\\s*beta\\s*(\\d+))?/i;
+      const ranksAbove = (a, b) => {
+        const len = Math.max(a.version.length, b.version.length);
+        for (let i = 0; i < len; i += 1) {
+          const x = a.version[i] || 0;
+          const y = b.version[i] || 0;
+          if (x !== y) { return x > y; }
+        }
+        if ((a.beta === null) !== (b.beta === null)) { return a.beta === null; }
+        if (a.beta !== b.beta) { return a.beta > b.beta; }
+        return a.evaluation && !b.evaluation;
+      };
+      // The deepest element whose text names a toolkit row: its text may be
+      // split over several nodes, so whole elements are matched.
+      const outlineBestRow = () => {
+        let best = null;
+        for (const element of document.body.querySelectorAll("*")) {
+          const text = element.textContent || "";
+          if (text.length > 200) { continue; }
+          const m = text.match(rowPattern);
+          if (!m) { continue; }
+          if (Array.from(element.children).some((child) => rowPattern.test(child.textContent || ""))) {
+            continue;
+          }
+          const candidate = {
+            element,
+            name: m[0].replace(/\\s+/g, " ").trim(),
+            evaluation: m[1].toLowerCase().startsWith("evaluation"),
+            version: m[2].split(".").map(Number),
+            beta: m[3] ? Number(m[3]) : null,
+          };
+          if (!best || ranksAbove(candidate, best)) { best = candidate; }
+        }
+        if (!best) { return null; }
+        best.element.style.outline = "3px solid #ff9f0a";
+        best.element.style.outlineOffset = "4px";
+        best.element.style.borderRadius = "6px";
+        best.element.scrollIntoView({ block: "center", behavior: "smooth" });
+        return best.name;
+      };
       let announcedList = false;
       let reportedKeys = "";
       let lastSignature = "";
@@ -235,7 +296,7 @@ final class GPTkDownload: NSObject {
         if (found.length === 0) {
           if (reportedKeys !== "none") {
             reportedKeys = "none";
-            post({ type: "none" });
+            post({ type: "none", candidate: outlineBestRow() });
           }
           return;
         }
@@ -248,6 +309,31 @@ final class GPTkDownload: NSObject {
       }, 1000);
     })();
     """
+
+    /// Whether a URL leads into the paid Apple Developer Program's
+    /// enrollment, which the toolkit download never needs: a developer.apple.com
+    /// page with an `enroll` or `enrollment` segment in its path or fragment
+    /// (`/programs/enroll/`, `/enroll/app`, `/account/#/enroll`).
+    nonisolated static func isEnrollment(_ url: URL) -> Bool {
+        guard let host = url.host()?.lowercased(),
+              host == "developer.apple.com" || host.hasSuffix(".developer.apple.com") else { return false }
+        let fragment = url.fragment(percentEncoded: false)?.split(separator: "/").map(String.init) ?? []
+        return (url.pathComponents + fragment).contains { segment in
+            ["enroll", "enrollment"].contains(segment.lowercased())
+        }
+    }
+
+    /// The versions a pick's download links name, in order, each once.
+    nonisolated static func versions(inLinks links: [String]) -> [String] {
+        var versions: [String] = []
+        for link in links {
+            guard let url = URL(string: link),
+                  let version = version(inFilename: url.lastPathComponent),
+                  !versions.contains(version) else { continue }
+            versions.append(version)
+        }
+        return versions
+    }
 
     /// Whether a URL is one of Apple's authenticated developer downloads, the
     /// only place a toolkit is fetched from.
@@ -309,9 +395,15 @@ extension GPTkDownload: WKScriptMessageHandler {
         case "list":
             if autoPhase == .idle { autoPhase = .searching }
         case "none":
+            manualCandidate = body["candidate"] as? String
             if autoPhase == .searching { autoPhase = .manual }
         case "picks":
             guard let urls = body["urls"] as? [String] else { return }
+            let apple = urls.filter { URL(string: $0).map(Self.isAppleDownload) ?? false }
+            for version in Self.versions(inLinks: apple) where !pickedVersions.contains(version) {
+                pickedVersions.append(version)
+            }
+            stoppedEnrollment = false
             for raw in urls where !startedDownloads.contains(raw) {
                 guard let url = URL(string: raw), Self.isAppleDownload(url) else { continue }
                 startedDownloads.insert(raw)
@@ -327,6 +419,22 @@ extension GPTkDownload: WKScriptMessageHandler {
 }
 
 extension GPTkDownload: WKNavigationDelegate {
+    /// A link into the paid program's enrollment is stopped, and Apple's
+    /// download page is loaded in its place with a note saying the free
+    /// account is enough.
+    func webView(
+        _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+    ) async -> WKNavigationActionPolicy {
+        guard navigationAction.targetFrame?.isMainFrame != false,
+              let url = navigationAction.request.url, Self.isEnrollment(url) else { return .allow }
+        EventLog.shared.log(.setup, "D3DMetal download: stopped a link to \(url.path()), the paid program")
+        stoppedEnrollment = true
+        // Once the cancellation has gone through, so the two navigations
+        // never race.
+        DispatchQueue.main.async { webView.load(URLRequest(url: Self.pageURL)) }
+        return .cancel
+    }
+
     func webView(
         _: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
     ) async -> WKNavigationResponsePolicy {

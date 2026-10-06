@@ -247,7 +247,7 @@ struct GraphicsSettings: View {
             }
             .padding(16)
         }
-        .frame(width: 760, height: 620)
+        .frame(width: 760, height: 820)
     }
 
     private func addD3DMetal() {

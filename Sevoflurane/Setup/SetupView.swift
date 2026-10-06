@@ -29,6 +29,10 @@ struct SetupView: View {
     /// one with no engine behind it, which is what lets that step be walked
     /// at all: without it a dry run has to skip past it.
     var makeGraphics: (() -> GraphicsStore)?
+    /// Asks the window for its tall height (`true`) or its usual one, as a
+    /// step hosting Apple's sign-in page comes and goes. ``SetupWindow``
+    /// sets it; the view fills whatever height the window has.
+    var resizeWindow: (_ tall: Bool) -> Void = { _ in }
 
     enum Step: String, CaseIterable {
         case welcome
@@ -102,14 +106,17 @@ struct SetupView: View {
     var body: some View {
         VStack(spacing: 0) {
             page
+                .animation(.smooth, value: wantsTallWindow)
             footer
         }
-        .frame(width: SetupMetrics.windowSize.width, height: SetupMetrics.windowSize.height)
+        .frame(width: SetupMetrics.windowSize.width)
+        .frame(maxHeight: .infinity)
         // The page is the whole window, titlebar included: its own top inset
-        // clears the traffic lights. Inside the titlebar's safe area the fixed
-        // frame is pushed down by the titlebar's height and the footer is cut
+        // clears the traffic lights. Inside the titlebar's safe area the
+        // page is pushed down by the titlebar's height and the footer is cut
         // off at the bottom.
         .ignoresSafeArea()
+        .onChange(of: wantsTallWindow, initial: true) { _, tall in resizeWindow(tall) }
         .task {
             if !provisioner.isDryRun {
                 bundledEngine = EngineInstaller.bundledTarball()
@@ -251,6 +258,10 @@ struct SetupView: View {
     }
 
     // MARK: - What the steps ask
+
+    private var wantsTallWindow: Bool {
+        step == .graphics && SetupGraphicsStep.hostsSignIn(gptk, isSimulated: provisioner.isDryRun)
+    }
 
     private var usesManagedEngine: Bool {
         if case .managed = Engine.active { true } else { false }
