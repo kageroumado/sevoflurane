@@ -381,6 +381,52 @@ final class SteamMenuMirror: NSObject {
     })()
     """
 
+    // MARK: - Friends status
+
+    /// One persona state as the Friends menu offers it: Steam's label, in
+    /// Steam's language, and where the strip holds it.
+    struct StatusChoice: Equatable {
+        let label: String
+        /// The DOM child index ``clickScript(rootTitle:childIndex:label:)``
+        /// takes.
+        let childIndex: Int
+        /// Whether this is the state the user is in: Steam marks it with a
+        /// check.
+        let isCurrent: Bool
+        let isEnabled: Bool
+    }
+
+    private static let friendsTitle = "Friends"
+
+    /// Online, Away, Invisible and Offline.
+    private static let personaStateCount = 4
+
+    /// The persona states the cached Friends menu offers, in Steam's order;
+    /// empty until the page has answered for it.
+    var friendsStatuses: [StatusChoice] {
+        Self.statusChoices(in: model[Self.friendsTitle] ?? [])
+    }
+
+    /// The Friends menu's last group, which Steam builds from the four
+    /// persona states. It is found by position so it reads the same in every
+    /// language Steam speaks; a last group of any other size is some other
+    /// menu, and answers none.
+    static func statusChoices(in items: [MirroredItem]) -> [StatusChoice] {
+        guard let rule = items.lastIndex(where: { $0.sep == true }) else { return [] }
+        let group = items.indices.dropFirst(rule + 1)
+        guard group.count == personaStateCount,
+              group.allSatisfy({ items[$0].sep != true && !(items[$0].label ?? "").isEmpty })
+        else { return [] }
+        return group.map { index in
+            StatusChoice(
+                label: items[index].label ?? "",
+                childIndex: index,
+                isCurrent: items[index].on == true,
+                isEnabled: items[index].disabled != true,
+            )
+        }
+    }
+
     // MARK: - Refresh triggers
 
     /// Arms and disarms the frontmost tick, which only earns its wakeups while
@@ -424,7 +470,16 @@ final class SteamMenuMirror: NSObject {
     private func activate(_ sender: NSMenuItem) {
         guard let childIndex = sender.representedObject as? Int,
               let rootTitle = sender.menu?.title else { return }
-        let label = sender.title
+        dispatch(rootTitle: rootTitle, childIndex: childIndex, label: sender.title)
+    }
+
+    /// Chooses one persona state, the way choosing it in the Friends menu
+    /// does.
+    func setFriendsStatus(_ choice: StatusChoice) {
+        dispatch(rootTitle: Self.friendsTitle, childIndex: choice.childIndex, label: choice.label)
+    }
+
+    private func dispatch(rootTitle: String, childIndex: Int, label: String) {
         Task(name: "Dispatch \(rootTitle) ▸ \(label)") {
             let outcome = await host?.evaluateInContext(
                 Self.clickScript(rootTitle: rootTitle, childIndex: childIndex, label: label),

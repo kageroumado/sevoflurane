@@ -69,20 +69,61 @@ extension AppDelegate {
         }
     }
 
-    /// The Dock tile's menu: the recent games the popover opens with, each
-    /// started the way its row starts it.
+    /// The Dock tile's menu (``DockMenu``), built anew each time the Dock
+    /// asks for it, which keeps every change to it inside the moment the Dock
+    /// reads it.
     func applicationDockMenu(_: NSApplication) -> NSMenu? {
-        guard isRuntimeStarted, !setupWindow.isUnfinished, !host.recentGames.isEmpty else { return nil }
+        guard isRuntimeStarted, !setupWindow.isUnfinished else { return nil }
+        let entries = DockMenu.entries(
+            recentGames: host.recentGames,
+            statuses: host.menuMirror?.friendsStatuses ?? [],
+            clientIsReady: supervisor.health == .healthy,
+        )
         let menu = NSMenu()
-        for game in host.recentGames {
+        menu.autoenablesItems = false
+        for entry in entries {
+            menu.addItem(dockMenuItem(for: entry))
+        }
+        return menu
+    }
+
+    private func dockMenuItem(for entry: DockMenu.Entry) -> NSMenuItem {
+        switch entry {
+        case let .game(game):
             let item = NSMenuItem(
                 title: game.name, action: #selector(playRecentGame(_:)), keyEquivalent: "",
             )
             item.target = self
             item.tag = game.id
-            menu.addItem(item)
+            return item
+        case let .destination(destination, isEnabled):
+            let item = NSMenuItem(
+                title: destination.title, action: #selector(openDockDestination(_:)), keyEquivalent: "",
+            )
+            item.target = self
+            item.representedObject = destination
+            item.isEnabled = isEnabled
+            return item
+        case let .friendsStatus(statuses, isEnabled):
+            let item = NSMenuItem(title: String(localized: "Set Friends Status"), action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            submenu.autoenablesItems = false
+            for status in statuses {
+                let row = NSMenuItem(
+                    title: status.label, action: #selector(setFriendsStatus(_:)), keyEquivalent: "",
+                )
+                row.target = self
+                row.representedObject = status
+                row.state = status.isCurrent ? .on : .off
+                row.isEnabled = status.isEnabled
+                submenu.addItem(row)
+            }
+            item.submenu = submenu
+            item.isEnabled = isEnabled
+            return item
+        case .separator:
+            return .separator()
         }
-        return menu
     }
 
     @objc
@@ -90,6 +131,27 @@ extension AppDelegate {
         guard let game = host.recentGames.first(where: { $0.id == item.tag }) else { return }
         ActivationPolicy.claimRightForALaunch()
         Task(name: "Launch \(game.name) from the Dock menu") { await supervisor.launch(game) }
+    }
+
+    @objc
+    private func openDockDestination(_ item: NSMenuItem) {
+        guard let destination = item.representedObject as? DockMenu.Destination else { return }
+        EventLog.shared.log(.window, "Dock menu: \(destination.title)")
+        guard let url = destination.steamURL else {
+            host.openFriends()
+            return
+        }
+        // The page opens in Steam's window, which comes up first so the route
+        // has somewhere to land.
+        host.showSteam()
+        host.executeSteamURL(url)
+    }
+
+    @objc
+    private func setFriendsStatus(_ item: NSMenuItem) {
+        guard let status = item.representedObject as? SteamMenuMirror.StatusChoice else { return }
+        EventLog.shared.log(.menu, "Dock menu: friends status \(status.label)")
+        host.menuMirror?.setFriendsStatus(status)
     }
 
     /// Shows the adoption panel, or holds the program until the app is past
