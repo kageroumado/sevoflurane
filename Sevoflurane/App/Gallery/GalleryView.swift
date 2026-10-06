@@ -132,6 +132,13 @@
                     }
                 }
 
+                section("Settings — Epic & GOG", minimum: 520) {
+                    tile("Signed in, one update out, an install running") {
+                        StoresSettings(highlighted: nil, store: Fixtures.stores)
+                            .frame(width: 520, height: 720)
+                    }
+                }
+
                 section("Settings — Recovery", minimum: 500) {
                     ForEach(Fixtures.repairs, id: \.label) { pane in
                         tile(pane.label) {
@@ -260,6 +267,31 @@
                     kind: .update,
                     progress: SophonProgress(phase: .patching, bytesDone: 3_200_000_000, bytesTotal: 5_100_000_000, filesDone: 811, filesTotal: 1402),
                 )],
+            )
+        }()
+
+        /// An Epic account with two games installed, one of them a build
+        /// behind, and a third downloading.
+        static let stores: StoresStore = {
+            func title(_ id: String, _ name: String) -> StoreTitle {
+                StoreTitle(store: .epic, id: id, title: name, art: nil, version: "2.0")
+            }
+            let base = "/Users/you/Library/Application Support/Sevoflurane/Bottles/Steam/drive_c/Program Files/Epic Games"
+            var account = StoresStore.Account(client: .ready, name: "you")
+            account.library = [title("Owl", "Owl Story"), title("Fortress", "A Fortress"), title("Tide", "Tidewater"), title("Lumen", "Lumen")]
+            account.installs = [
+                StoreInstall(store: .epic, id: "Owl", title: "Owl Story", path: "\(base)/Owl", version: "2.0", size: 6_400_000_000),
+                StoreInstall(store: .epic, id: "Fortress", title: "A Fortress", path: "\(base)/Fortress", version: "1.9", size: 21_000_000_000),
+            ]
+            account.updates = ["Fortress": "2.0"]
+            account.loaded = true
+            var job = StoresStore.Job(kind: .install, title: "Tidewater")
+            job.progress = StoreProgress(phase: .downloading, fraction: 0.42)
+            job.downloadSize = 9_800_000_000
+            return StoresStore(
+                fixture: [.epic: account, .gog: StoresStore.Account(client: .ready)],
+                jobs: [.epic: ("Tide", job)],
+                sizes: ["epic:Tide": 12_300_000_000, "epic:Lumen": 3_100_000_000],
             )
         }()
 
