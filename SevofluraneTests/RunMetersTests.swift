@@ -246,6 +246,24 @@ struct RunMetersTests {
     }
 
     @Test
+    func `a program's run closing tells the close hook, which Steam never would`() async throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let recorder = try makeRecorder(in: root)
+        var closed: [Int] = []
+        recorder.onClose = { closed.append($0) }
+        recorder.arm(appID: 2_000_000_000)
+        recorder.noteNativeProcesses(alive: true, forApp: 2_000_000_000, gone: nil)
+        #expect(closed.isEmpty)
+        recorder.noteNativeProcesses(alive: false, forApp: 2_000_000_000, gone: nil)
+        #expect(closed == [2_000_000_000])
+        // A second ending of a run already closed is no second close.
+        recorder.noteStopped(appID: 2_000_000_000)
+        #expect(closed == [2_000_000_000])
+        _ = try await records(in: root, waitingFor: 1)
+    }
+
+    @Test
     func `a native run whose processes never appear closes after its checks`() async throws {
         let root = try scratch()
         defer { try? manager.removeItem(at: root) }
@@ -312,12 +330,15 @@ struct RunMetersTests {
         return url
     }
 
+    /// No exit grace: the closing queue is shared, and a program's grace
+    /// would hold every other test's record behind it.
     private func makeRecorder(in root: URL) throws -> RunRecorder {
         let wine = root.appendingPathComponent("wine.log")
         if !manager.fileExists(atPath: wine.path) { try Data().write(to: wine) }
         return RunRecorder(
             runs: root, wineLog: wine,
             processLog: root.appendingPathComponent("gameprocess_log.txt"),
+            programExitGrace: .zero,
         )
     }
 

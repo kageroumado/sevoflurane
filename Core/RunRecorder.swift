@@ -223,6 +223,11 @@ final nonisolated class RunRecorder {
     /// Called on the closing queue, after the record is on disk.
     nonisolated(unsafe) static var didRecord: (@Sendable (RunRecord, String) -> Void)?
 
+    /// A run has just closed, called with its app id on the caller's thread
+    /// before the record is written. Every way a run ends passes through
+    /// here, an adopted program's included, which Steam never announces.
+    var onClose: ((Int) -> Void)?
+
     private var open: [Int: OpenRun] = [:]
     private var hasGroomed = false
     /// The directory this recorder's records and armed runs live in, and
@@ -699,6 +704,7 @@ final nonisolated class RunRecorder {
     ) {
         guard var run = open.removeValue(forKey: appID) else { return }
         closedRuns += 1
+        onClose?(appID)
         confirmedRunning.remove(appID)
         nativeSeen.remove(appID)
         nativeUnseen[appID] = nil

@@ -71,6 +71,10 @@ extension AppDelegate {
                 return
             }
             self?.runRecorder.noteStopped(appID: appID)
+        }
+        // A run's close is the exit edge for every game, a Quick Launch
+        // program's too, so the Discord activity goes with it.
+        runRecorder.onClose = { appID in
             DiscordPresence.shared.gameStopped(appID)
             Task.detached(name: "Clear the Discord activity") {
                 await DiscordPresence.shared.clear(forGame: appID)
