@@ -106,6 +106,9 @@ extension BottleSupervisor {
         }
         let companion = SteamParent.prefix(for: SteamBottle.name)
         let environment = SteamParent.environment(bottle: SteamBottle.name, engine: engine)
+        if SteamParent.serverEngine(of: companion) != nil {
+            await awaitLastSession(of: name, environment: environment, engine: engine)
+        }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: companion)
         // The parent names the program's exit with this id in its
         // `sevo:steam-parent exit` line, the full 32-bit code (ProgramExit).
@@ -124,6 +127,27 @@ extension BottleSupervisor {
             }
         }
         return nil
+    }
+
+    /// Lets the companion's wineserver from the last session go before a
+    /// game starts in it.
+    ///
+    /// Wine keeps a server up for a few seconds after its last process, and a
+    /// HoYoverse game started into that server takes the kernel-driver path
+    /// and dies about twenty seconds in, in `MHYPBase.dll`, where the same
+    /// launch into a fresh server plays. A server still holding a
+    /// program after ``SteamParent/lastSessionWait`` is left running and the
+    /// launch goes ahead.
+    private func awaitLastSession(of name: String, environment: [String: String], engine: Engine) async {
+        let started = ContinuousClock.now
+        _ = await Subprocess.run(
+            engine.wineserverURL.path, ["-w"], environment: environment, timeout: SteamParent.lastSessionWait,
+        )
+        if ContinuousClock.now - started >= SteamParent.lastSessionWait {
+            note("the companion prefix still runs a program after \(SteamParent.lastSessionWait.components.seconds) s; starting \(name) beside it")
+        } else {
+            note("waited for the companion prefix's last session to end before starting \(name)")
+        }
     }
 
     /// Starts the frame-rate unlocker (``FPSUnlocker``) in the companion once

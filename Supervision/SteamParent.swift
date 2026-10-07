@@ -36,6 +36,11 @@ nonisolated enum SteamParent {
         "genshinimpact.exe", "yuanshen.exe", "zenlesszonezero.exe", "bh3.exe",
     ]
 
+    /// How long a launch waits for the companion's previous wineserver to
+    /// exit. Wine's own linger is a few seconds; a program still running
+    /// there holds it much longer.
+    static let lastSessionWait: Duration = .seconds(20)
+
     /// Whether a program is one of them.
     static func wants(_ program: AdoptedProgram) -> Bool {
         executables.contains(program.url.lastPathComponent.lowercased())
