@@ -62,9 +62,16 @@ and play. Games appear as players share their runs.
 - **Game Mode, automatically.** Each game launches as its own Mac app with its
   own name and Dock icon, so macOS turns on Game Mode when it fills the
   screen.
+- **A library that knows the Mac.** Every game in Steam's library carries its
+  Mac verdict from the community database, a Mac button keeps only the games
+  that play, and installing a game whose anti-cheat cannot run asks first.
+  Games Steam sells for macOS can play their Mac version.
+- **Fixes that apply themselves.** A game's first launch takes the settings
+  other players found it needs, from a signed list, with an Undo. Launch
+  options written for Proton (`DXVK_HUD=1 %command%`) work as they are.
 - **Not just Steam.** Open any Windows program from Finder. Sevoflurane tells
-  a game from an installer, runs or installs it, and gives it the same
-  treatment.
+  a game from an installer, runs or installs it, gives it the same treatment
+  and lists it in Steam's library.
 
 ## Get started
 
@@ -80,7 +87,7 @@ and play. Games appear as players share their runs.
 
 Sevoflurane needs macOS 26 or later on Apple silicon. Setup installs Rosetta
 when it is missing. For DirectX 12 games, add Apple's Game Porting Toolkit
-during setup; the download uses Apple's sign-in. CrossOver includes its own
+during setup; the download takes any free Apple Account. CrossOver includes its own
 copy of D3DMetal, the toolkit's graphics translator.
 
 ## Renderers
@@ -130,7 +137,6 @@ restarts.
   synthetic tests and has not raised the frame rate of any game measured
   (Black Myth: Wukong, Rise of the Tomb Raider). It is off by default; the
   Custom preset opens its three numbers.
-- Media Foundation video decodes in software.
 - Unity games on Mono that crash within seconds of launch (TABS, Aka Manto)
   are an open engine bug.
 - Steam's in-game overlay is a window Sevoflurane hosts beside the game; it
@@ -396,7 +402,8 @@ runs on CrossOver.
   everything" adds optional fonts and legacy runtimes (about 320 MB).
 - Six named install stages with a live percentage. Rosetta is installed when
   missing.
-- Get Apple's Game Porting Toolkit by signing in with Apple in the app, by
+- Get Apple's Game Porting Toolkit by signing in with any free Apple Account
+  in the app, by
   downloading it in your browser (the Downloads folder is watched), or from a
   file you have. CrossOver brings its own D3DMetal.
 - Close the window and setup keeps going in the menu bar; reopening brings it
@@ -428,6 +435,16 @@ runs on CrossOver.
   then AppleGamingWiki's Wine and CrossOver ratings, then ProtonDB; the
   game's macOS version when it has one; and its anti-cheat from
   AreWeAntiCheatYet. Details link to each source.
+- The library badges every game with its Mac verdict, and a Mac button beside
+  its search keeps only the games that play.
+- Installing a game whose anti-cheat cannot run on a Mac, or whose verdict is
+  Unsupported, asks first; Install Anyway goes ahead.
+- The Dock menu works like Steam's: recent games, Store, Library, Community,
+  Friends, Settings, Big Picture and your friends status.
+- Custom styles: CSS files in the Styles folder restyle Steam's windows, and
+  optionally its store and community pages, reloading as they are saved.
+  Settings › General › Custom style opens the folder and names the selectors
+  that survive Steam updates.
 - Streamer Mode shows a chosen name and picture in place of your Steam
   account, hides the wallet balance, and shows friends as AI models in every
   Steam window, for recording and streaming.
@@ -475,6 +492,10 @@ runs on CrossOver.
   cropped away. Off by default, per game or bottle.
 - DLSS through MetalFX on D3DMetal: a game's own DLSS setting works as on an
   NVIDIA card.
+- Controllers: Xbox, PlayStation and other pads reach games through XInput and
+  DirectInput, with rumble.
+- **(Dormison)** Video a game plays through Media Foundation, H.264 and HEVC,
+  decodes on the Mac's media engine.
 - **(Dormison)** Raw mouse-look and cursor confinement for games that need
   them.
 - **(Dormison)** A processor cap per game, for Unity 5 games that keep a
