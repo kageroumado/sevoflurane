@@ -44,7 +44,9 @@
 - **按需开启超分与缩放。** 游戏保持自己的渲染分辨率，再把画面放大到窗口大小。可以选 Lanczos、MetalFX，或适合动漫画面的 Anime4K 和 CuNNy。
 - **DirectX 12。** 通过 Sevoflurane 自己的 Wine 版本 [Dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)，配合 Apple 游戏移植工具包（Game Porting Toolkit）中的 D3DMetal 运行游戏。
 - **自动启用游戏模式。** 每款游戏都作为独立的 Mac App 启动，有自己的名称和程序坞图标。游戏全屏时，macOS 会自动开启游戏模式。
-- **Steam 以外的程序。** 从访达打开 Windows 程序，Sevoflurane 会判断它是游戏还是安装程序，帮你运行或安装，也提供同样的窗口和游戏功能。
+- **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下 Mac 按钮就只显示能玩的游戏；安装反作弊无法运行的游戏前会先询问。Steam 提供 macOS 版的游戏，可以直接玩它的 Mac 版本。
+- **自动应用修复。** 游戏首次启动时，会从一份签名列表中套用其他玩家发现它需要的设置，并可撤销。为 Proton 写的启动选项（`DXVK_HUD=1 %command%`）也能直接使用。
+- **Steam 以外的程序。** 从访达打开任意 Windows 程序，Sevoflurane 会判断它是游戏还是安装程序，帮你运行或安装，提供同样的窗口和游戏功能，并把它列进 Steam 游戏库。
 
 ## 开始使用
 
@@ -53,7 +55,7 @@
 3. **登录 Steam。** 和平时一样登录就好。
 4. **开始玩。** 随时可以换引擎，也可以为每款游戏单独设置。
 
-Sevoflurane 需要搭载 Apple 芯片、运行 macOS 26 或更新版本的 Mac。没有安装 Rosetta 时，设置向导会帮你安装。要玩 DirectX 12 游戏，请在设置过程中添加 Apple 的游戏移植工具包，下载时需要登录 Apple 账户。CrossOver 自带工具包中的图形转换组件 D3DMetal。
+Sevoflurane 需要搭载 Apple 芯片、运行 macOS 26 或更新版本的 Mac。没有安装 Rosetta 时，设置向导会帮你安装。要玩 DirectX 12 游戏，请在设置过程中添加 Apple 的游戏移植工具包，下载时登录任意免费 Apple 账户即可。CrossOver 自带工具包中的图形转换组件 D3DMetal。
 
 ## 渲染器
 
@@ -76,12 +78,12 @@ Sevoflurane 需要搭载 Apple 芯片、运行 macOS 26 或更新版本的 Mac�
 ## 已知限制
 
 - 需要 Windows 内核反作弊的游戏或联机模式无法运行，但游戏的离线模式可能仍然可用。
+- 《崩坏：星穹铁道》可以安装和更新，但在 Wine 下启动几秒后会被其保护机制关闭。
 - Windows 部分通过 Rosetta 运行，因此需要安装 Rosetta，也会有转译开销。缺少 Rosetta 时，设置向导会安装它。
 - DirectX 12 需要 Apple 游戏移植工具包。它只能由 Apple 分发，设置向导会通过你的 Apple 账户下载。32 位 DirectX 12 游戏无法运行。
 - 画面缩放器在游戏启动时接入。运行中切换缩放算法会立即生效；如果要把缩放器从关闭改为开启，或从开启改为关闭，需要下次启动游戏才会生效。
 - 使用多重采样、立体渲染、浮点或 10 位格式的 OpenGL 绘制表面会直接显示，不经过画面缩放器。DXMT 和 DXVK 通过画面呈现器（presenter）显示的路径尚未测试。
 - 线程等待的“实验性”预设在合成测试中缩短了线程间等待，但在已测游戏（《黑神话：悟空》《古墓丽影：崛起》）中没有提高帧率。默认关闭；“自定义”预设可以调整其中的三个数值。
-- Media Foundation 视频使用软件解码。
 - 使用 Mono 的 Unity 游戏如果在启动几秒内崩溃（如 TABS、《赤マント》），属于尚未解决的引擎问题。
 - Steam 游戏内叠加界面由 Sevoflurane 以独立窗口承载，显示在游戏旁边，不会画进游戏本身的画面。
 
@@ -89,7 +91,7 @@ Sevoflurane 需要搭载 Apple 芯片、运行 macOS 26 或更新版本的 Mac�
 
 **设置 › 关于 › 存储诊断信息…** 会保存一个 ZIP，包含日志、`sevo doctor` 报告、引擎信息、Steam 自身的日志和最近的崩溃报告。里面的每个文件都会移除账户名、个人文件夹路径、Mac 名称和 Steam ID；分享前还是建议自己看一遍。也可以在终端运行 `sevo diag`。
 
-游戏崩溃，或卡死后被看门狗结束时，Sevoflurane 会询问是否向开发者发送这次运行的脱敏报告。选择“不再询问”即可关闭这个提示。
+游戏崩溃、卡死后被看门狗结束，或在启动时报错退出时，Sevoflurane 会询问是否向开发者发送这次运行的脱敏报告。即使游戏自带的崩溃处理程序悄悄结束了它，也算作崩溃。选择“不再询问”即可关闭这个提示。
 
 主要日志在 `~/Library/Logs/Sevoflurane.log` 和 `~/Library/Logs/Sevoflurane-wine.log`。Wine 日志始终记录错误和异常，所以游戏自行退出也会留下线索。“设置 › 诊断”控制每次运行的记录量；如果还不够，可以在“设置 › 引擎”开启记录游戏加载的每个库。`sevo runs` 会列出每次启动所用的环境和结束方式，“报告”窗口会显示同样的记录，以及崩溃留下的信息。
 
@@ -116,6 +118,7 @@ sevo recover [--deep]
 sevo daemon repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config|repair-dll|detect
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
+sevo hoyo list|status FOLDER|install GAME FOLDER|update FOLDER|verify FOLDER [--repair]
 sevo engine list|install [--file TARBALL]|d3dmetal|use|channel|check-manifest
 sevo update check|use|install|remove
 sevo bottle list|config <key> [value]|deps [install ID]
@@ -127,13 +130,15 @@ sevo holds
 sevo orphans [--end]
 sevo run PROGRAM [ARGS]
 sevo debug on|off|status
+sevo streamer on|off|status
+sevo sync sweep [--json]
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo benchmark
 sevo logs [--tail N] [-f] [--wine]
 ```
 
-`sevo recover --deep` 还会清除网页缓存并修复客户端。`sevo diag save` 保存报告时，会附带容器中 Steam 自身的引导、连接、webhelper、游戏进程和控制台日志；加上 `--no-steam-logs` 可以省略这些日志。`sevo perf compare` 会比较设置更改前后，游戏的平均帧率和 1% low 是否有可测量的变化；`sevo holds` 会列出是什么让显示器保持唤醒。
+`sevo recover --deep` 还会清除网页缓存并修复客户端。`sevo sync sweep` 请 msync+ 唤醒睡在已可用对象上的线程（例如游戏退出时恰好在设置客户端等待的某个对象，导致 steam.exe 主线程一直沉睡），并指出是哪个对象、还有谁共享它。`sevo diag save` 保存报告时，会附带容器中 Steam 自身的引导、连接、webhelper、游戏进程和控制台日志；加上 `--no-steam-logs` 可以省略这些日志。`sevo perf compare` 会比较设置更改前后，游戏的平均帧率和 1% low 是否有可测量的变化；`sevo holds` 会列出是什么让显示器保持唤醒。
 
 退出码：0 表示成功，1 表示操作失败，2 表示调用方式无效，3 表示安装不完整，4 表示无法连接客户端。App 运行时，客户端的启动、退出和重启等命令会经过它的监管程序。
 
@@ -141,7 +146,7 @@ sevo logs [--tail N] [-f] [--wine]
 
 ### MCP
 
-`sevo mcp` 提供一个 stdio MCP 服务器。它的 27 个工具涵盖诊断、客户端恢复、游戏库查询、游戏安装与启动、快速启动程序、下载、最近的运行记录、帧时间比较、诊断级别和日志。还提供 `sevo://status`、`sevo://doctor`、`sevo://log` 和 `sevo://library` 资源。
+`sevo mcp` 提供一个 stdio MCP 服务器。它的 31 个工具涵盖诊断、客户端恢复、游戏库查询、游戏安装与启动、快速启动程序、下载、HoYoverse 游戏更新、最近的运行记录、帧时间比较、诊断级别和日志。还提供 `sevo://status`、`sevo://doctor`、`sevo://log` 和 `sevo://library` 资源。
 
 “设置 › 通用”会列出检测到的助手，每个助手有独立的注册开关：Claude Code（附带一个指导诊断流程的 skill）、Claude Desktop、Codex 和 Hermes。其他助手可以手动添加：
 
@@ -226,6 +231,7 @@ msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量�
 | `SEVO_GPU_VENDOR_ID`, `_DEVICE_ID`, `_NAME`, `_MEMORY_MB`, `_DRIVER_VERSION`, `_DRIVER_PROVIDER`, `_DRIVER_DATE` | Windows 程序看到的 GPU 型号、显存和驱动信息（厂商未知时使用 NVIDIA 元数据） |
 | `SEVO_FORCE_UMA` | 设为 `1` 时，报告 GPU 实际是否使用统一内存，以及 Mac 的真实内存容量 |
 | `SEVO_LARGE_ADDRESS_AWARE` | 设为 `1` 时，让 32 位程序使用完整的 4 GB 地址空间 |
+| `SEVO_CPU_COUNT` | 设为 `<n>` 时，告诉程序这台 Mac 有 `n` 个处理器（`GetSystemInfo`、亲和性掩码、`GetLogicalProcessorInformation`）；小于 1，或等于、大于实际数量时，保留全部处理器 |
 | `SEVO_OBJECT_SPIN`, `SEVO_ACK_SPIN`, `SEVO_WAIT_SPIN`, `SEVO_WAIT_SPIN_ADAPT`, `SEVO_YIELD`, `SEVO_ALERT_ALWAYS_WAKE` | 线程等待前的可选自旋（默认关闭） |
 | `SEVO_SYNC_STATS` | 写入各进程等待计数的文件路径 |
 | `SEVO_COREAUDIO_DEVICE_BUFFER` | 设为 `1` 时，把缓冲区大小和音量写到整个音频设备上，用于对比 |
@@ -255,7 +261,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 选择 Dormison（随 App 附带或下载），或已安装的 CrossOver、CrossOver Preview，同时显示各个版本的试用或授权状态。
 - 接入 Mac 上已有的 Steam，或新建一个有名字的容器。“下载全部”还会安装可选字体和旧版运行库（约 320 MB）。
 - 安装分为六个有名称的阶段，实时显示百分比。缺少 Rosetta 时会安装它。
-- Apple 游戏移植工具包可以在 App 内登录 Apple 账户下载，也可以通过浏览器下载（会监测“下载”文件夹），或选择已有文件。CrossOver 自带 D3DMetal。
+- Apple 游戏移植工具包可以在 App 内登录任意免费 Apple 账户下载，也可以通过浏览器下载（会监测“下载”文件夹），或选择已有文件。CrossOver 自带 D3DMetal。
 - 关闭窗口后，设置向导会继续在菜单栏中运行；重新打开就能回到原来的进度。
 - `sevo setup` 可以不打开窗口完成设置。
 
@@ -273,12 +279,17 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 网页上的 `steam://` 链接可以用 Sevoflurane 打开（在“设置 › 通用”中设为由它接管）。
 - 开启低电量模式或减弱动态效果时，Steam 中对应的设置也会开启；关闭后恢复你原来的设置。
 - 游戏的库页面和商店页面会显示 Mac 兼容性条：Windows 版本的评级优先采用 Sevoflurane 玩家自己的运行记录（数据足够时），其次是 AppleGamingWiki 的 Wine 和 CrossOver 评级，再次是 ProtonDB；如果游戏有 macOS 版本，也会单独显示；反作弊信息来自 AreWeAntiCheatYet。详情中附有各个来源的链接。
+- 游戏库为每款游戏标上 Mac 评级，搜索框旁的 Mac 按钮可以只显示能玩的游戏。
+- 安装反作弊无法在 Mac 上运行、或评级为“不支持”的游戏时，会先询问；选择“仍然安装”即可继续。
+- 程序坞菜单和 Steam 的一样：最近玩过的游戏、商店、游戏库、社区、好友、设置、大屏幕模式和你的好友状态。
+- 自定样式：Styles 文件夹中的 CSS 文件可以改变 Steam 窗口的样式，也可以选择同时作用于商店和社区页面，保存后立即重新加载。“设置 › 通用 › 自定样式”会打开该文件夹，并列出在 Steam 更新后仍然有效的选择器。
+- 主播模式会用你选择的名称和头像代替 Steam 账户，隐藏钱包余额，并在所有 Steam 窗口中把好友显示为 AI 模型，方便录制和直播。
 
 ### 菜单栏
 
 - 最近玩过的游戏带有封面、开始按钮和实时启动状态。
 - 向下滚动可以查看所有已安装游戏，按字母索引。
-- 每款游戏的菜单提供：本次使用指定渲染器运行、始终使用指定渲染器运行、游戏设置，以及“在程序坞中保留”。
+- 每款游戏的菜单提供：“使用…运行”（仅本次启动）、“始终使用…”、“游戏设置…”和“在程序坞中保留”。菜单里只列出这台 Mac 能运行的渲染器：使用 Dormison 并添加工具包后才会出现 D3DMetal，已固定使用它的游戏会保留原设置。
 - 快速启动程序和游戏放在一起，可以在访达中显示或移除。“添加 Windows 游戏…”会打开文件选择器。
 - 健康状态卡片说明客户端出了什么问题，并提供修复操作。
 - macOS 尚未批准后台辅助程序时，会显示提示卡片。
@@ -286,7 +297,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - Steam 长时间把游戏停在“正在同步”时，会给出提示。
 - 缺少必要的 Windows 组件时，提示容器不完整。
 - 打开 Steam（⌘O）、好友（⌘F，附未读数量）和状态标签。
-- ⋯ 菜单提供：重新加载 Steam 界面、重启 Steam 客户端、重启 Windows、强制退出 Steam、强制退出全部、打开事件日志、调试模式、自动更新。
+- ⋯ 菜单提供：重新加载 Steam 界面、重启 Steam 客户端、重启 Windows、强制退出 Steam、强制退出全部、打开事件日志、调试模式、主播模式、自动更新。
 - 底部可以切换渲染器，退出时会请求确认。
 
 ### 玩游戏
@@ -295,13 +306,19 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - **（Dormison）** 选择“在程序坞中保留”，或把游戏从菜单栏拖到程序坞，就能保留它的图标，之后点一下即可启动。
 - **（Dormison）** 全屏游戏和锁定窗口大小的游戏，也能以自身分辨率运行在可调整大小的窗口中。
 - **（Dormison）** 通过 Metal、OpenGL（Wine 内建渲染器，大多数 Direct3D 9 视觉小说使用这条路径）和普通 GDI 绘制的游戏，可以使用 Lanczos、MetalFX、Anime4K 或 CuNNy 进行超分与缩放，再应用最终滤镜。
-- **（Dormison）** 每款游戏都有 View（显示）菜单，可以实时切换画面缩放器和滤镜，以及选择 Show Frame Rate（显示帧率，⌥⌘F）、Overlay Detail（叠加层详情：⌥⌘G 选择帧时间卡片，也可加上 CPU、GPU、功耗和温度）、Frame Rate Limit（帧率上限）、Show Picture Details（显示画面详情，⌥⌘I）。
+- **（Dormison）** 每款游戏都有 View（显示）菜单，可以实时切换画面缩放器和滤镜，以及选择 Resizable Windows（可调整大小的窗口，⌥⌘R）、Show Frame Rate（显示帧率，⌥⌘F）、Overlay Detail（叠加层详情：⌥⌘G 选择帧时间卡片，也可加上 CPU、GPU、功耗和温度）、Frame Rate Limit（帧率上限）、Show Picture Details（显示画面详情，⌥⌘I）。画面缩放器开始工作，或窗口太小无法使用它时，画面上会短暂显示提示。
 - **（Dormison）** 菜单移至菜单栏：程序自己的 Win32 菜单移到 macOS 菜单栏中，Ctrl 快捷键可用 ⌘ 触发，窗口内的菜单条被裁掉。默认关闭，可按游戏或容器开启。
 - D3DMetal 通过 MetalFX 提供 DLSS：游戏里的 DLSS 选项可以像在 NVIDIA 显卡上一样使用。
+- 控制器：Xbox、PlayStation 等手柄通过 XInput 和 DirectInput 连接游戏，支持震动。
+- **（Dormison）** 游戏通过 Media Foundation 播放的 H.264 和 HEVC 视频，由 Mac 的媒体引擎硬件解码。
 - **（Dormison）** 为有需要的游戏提供原始鼠标视角输入和光标范围限制。
+- **（Dormison）** 可以为单款游戏限制处理器数量，适用于在每个核心上都留一个自旋工作线程的 Unity 5 游戏：《寒蝉鸣泣之时 奉》建议设为 8。
 - 游戏运行时让显示器保持唤醒，退出后允许显示器休眠。
 - 游戏点击关闭按钮后没有响应时，可以选择继续等待或结束游戏。
+- 通过 Steam 的“停止”按钮或 `sevo app terminate` 停止游戏时，会先完整结束它的所有进程，再通知 Steam，因此主动停止不会留下“意外退出”对话框或崩溃报告。
 - NW.js 游戏（包括 RPG Maker MV 和 MZ）使用 macOS 运行时运行，保留 Steam 游戏时长和成就。
+- Steam 提供 macOS 版的游戏，也可以改玩它的 Mac 版本：点击“开始游戏”会把它交给 Valve 的 Steam for Mac；游戏尚未安装时，会打开它的安装页面。可在“设置 › 游戏”或菜单栏里的游戏菜单中按游戏设置；兼容性条的详情中可以单次以这种方式运行。
+- 你的账户在另一台电脑或 Steam for Mac 中登录时，这里的 Steam 会退出登录：通知和菜单栏会说明情况并提供“重新连接”；被 Steam for Mac 占用的会话会在它退出后自动恢复。
 - Discord 使用游戏自己的条目显示“正在玩 <游戏>”。自带 Discord 支持的游戏通过容器内的中继发布自己的状态 **（Dormison）**。两项功能在“设置 › 通用”中分别开关。
 
 ### Steam 以外的 Windows 程序
@@ -309,21 +326,25 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 在访达中用 Sevoflurane 打开任意 `.exe`，或选择“添加 Windows 游戏…”。面板会显示图标、名称和版本，并判断它更像游戏还是安装程序；可以只运行一次，也可以加入快速启动。
 - 安装程序运行完后，Sevoflurane 会列出它新增的程序，让你选择要保留哪些。移除程序时，会把其安装程序写入的文件移到废纸篓。
 - 快速启动程序和 Steam 游戏一样，支持单独设置、程序坞图标、运行记录和报告。
+- 快速启动程序会作为非 Steam 游戏列进 Steam 游戏库，因此大屏幕模式、Steam 输入和叠加界面都能用于它们；从那里启动时，单独设置、程序坞图标和运行记录照样保留。在该行的菜单或“设置 › 游戏”中关闭“在 Steam 库中显示”即可将其移出。
+- **《原神》120 fps**：引擎附带一个帧率解锁器（genshin-fps-unlock 的 stub，MIT 许可，2 MB）。在“设置 › 游戏”中开启后，它会在游戏启动 30 秒后随游戏一起运行，使用那里选定的帧率；也可以改用你自己的解锁器。因为它会修改游戏内存，默认关闭。
 - **访达缩略图**：在访达的图标、列表、画廊视图和快速查看中，`.exe` 会显示自己的图标。图标直接从文件读取，无需运行程序。Sevoflurane 运行过一次后即可使用。
 - 程序需要 Windows 内核驱动时，Sevoflurane 会提示。
+- **不用 HoYoPlay 玩 HoYoverse 游戏**：《原神》《崩坏：星穹铁道》和《绝区零》可以直接从 HoYoPlay 使用的服务器安装、更新和校验，在“设置 › HoYoverse”中或用 `sevo hoyo` 操作。更新会下载 HoYoverse 为你当前版本提供的补丁；下载中断后会从中断处继续。《原神》和《绝区零》安装后会加入快速启动。
 
 ### 设置
 
 设置可以精确搜索到每一行，选中后对应行会闪烁提示。每一行都有一句简短说明，点 (i) 可以查看完整解释。
 
-- **通用**：登录时打开、自动重启 Steam、Steam 自身设置、`steam://` 链接、命令行工具、AI 助手、兼容性信息栏、社区分享、Discord、卸载。
-- **图形**：默认渲染器、向游戏报告的 GPU 信息、DXMT 和 DXVK 版本、着色器包。
-- **引擎**：引擎、容器和更新渠道、msync+、所有游戏的默认设置、游戏依赖、DLL 覆盖、Wine 配置、库加载日志、修复。
-- **游戏**：单款游戏的画面、鼠标、性能和 DLL 覆盖设置，未单独修改的项目会继承引擎默认值。游戏需要某个设置时，会标出**已知修复方案**，点一下即可应用。
+- **通用**：登录时打开、自动重启 Steam、Steam 自身设置、`steam://` 链接、命令行工具、AI 助手、兼容性信息栏、主播模式、社区分享、Discord、卸载。
+- **图形**：默认渲染器、向游戏报告的 GPU 信息、DXMT 和 DXVK 版本、可下载的画面缩放器（CuNNy、Anime4K）。
+- **引擎**：引擎、容器和更新渠道、msync+、所有游戏的默认设置、已知修复、游戏依赖项、DLL 覆盖设置、环境变量、Wine 配置、库加载日志、修复。
+- **游戏**：单款游戏的画面、鼠标、性能、DLL 覆盖设置和环境变量，未单独修改的项目会继承“引擎”中的设置。游戏需要某个设置时，会标出**已知修复**，点一下即可应用。修复列表（内置表格，加上社区数据库根据“需修复后可玩”报告整理的签名列表）会在游戏首次启动时自动应用到游戏尚未单独设置的项目，并附带“撤销”提示；被它修改的设置会标注“由修复列表设置”，可以撤销。在“引擎 › 自动应用已知修复”中可以关闭此功能。
+- **HoYoverse**：安装、更新和校验 HoYoverse 游戏（见上文）。
 - **存储空间**、**恢复**、**诊断**：见下文。
 - **关于**：版本、链接、各个第三方组件和数据源的致谢，以及许可证。
 
-游戏依赖包括 Visual C++ 运行库、Direct3D 着色器编译器、DirectX June 2010、核心字体和中日韩字体。每项都可以单独安装，新建容器会全部安装。DLL 覆盖使用 Wine 自身的加载顺序，可以对整个容器或单款游戏设置；`sevo app repair-dll` 会安装缺失 DLL 所属的软件包，并为该游戏固定相应的修复配置。
+游戏依赖项包括 Visual C++ 运行库、Direct3D 着色器编译器、DirectX June 2010、核心字体和中日韩字体。每项都可以单独安装，新建容器会全部安装。DLL 覆盖使用 Wine 自身的加载顺序，可以对整个容器或单款游戏设置；`sevo app repair-dll` 会安装缺失 DLL 所属的软件包，并为该游戏固定相应的修复配置。环境变量按名称为整个容器或单款游戏设置。Steam 的启动选项也接受 Proton 修复方案常用的写法：`DXVK_HUD=1 %command% -windowed` 会在下次启动时把 `DXVK_HUD=1` 移到该游戏的“环境变量”中，`PROTON_USE_WINED3D` 和 `PROTON_FORCE_LARGE_ADDRESS_AWARE` 会设置各自对应的选项，Steam 则保留 `%command% -windowed`。
 
 ### 存储空间
 
@@ -340,6 +361,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 首次运行时，macOS 会要求批准辅助程序（系统设置 › 通用 › 登录项与扩展）。未批准时 Steam 无法启动，App 会说明原因。
 - 系统负载较高时（其他 App 占用处理器、内存压力、温度、低电量模式），辅助程序会把判定 Steam 卡死前的等待时间延长到平时的两到三倍，并在日志中记录原因。
 - Wine 服务器退出后，残留进程会自动结束（`sevo orphans` 可以列出它们）。
+- Steam 客户端卡在主线程时，在任何重启之前，会先进行一次 msync+ 丢失唤醒扫描；游戏退出后仍在沉睡的线程会被原地唤醒。
 - **设置 › 恢复**：重启或强制退出 Steam、取消卡住的菜单、修复辅助程序或容器、重新安装着色器编译器、重启 Windows、清除着色器缓存、重建 Steam 环境（保留游戏和存档）。
 - **常见问题**：内置指南根据你看到的现象提供修复方法，包括缺少 DLL、黑屏、文字变方框、模组不生效、开场视频黑屏、菜单卡死、辅助程序无法启动。
 
@@ -348,7 +370,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - “设置 › 通用 › 社区 › **共享运行统计数据**”（只询问一次）会把每次结束的运行记录发送到 [kagerou.glass/sevoflurane/games](https://kagerou.glass/sevoflurane/games)：游戏、引擎、渲染器、设置、macOS 版本、芯片、运行时长、游戏帧率和结束方式。
 - 数据不包含能指明你或你的 Mac 身份的信息：没有标题、路径或账户，启动时间也会取整到小时。可以预览实际发送的完整内容。
 - 运行记录使用安全隔区中生成的密钥签名，Mac 支持时还会通过 App Attest 验证。**删除我共享的内容…**（或 `sevo stats delete`）会删除这些记录，并生成新的匿名身份。
-- 在“报告”窗口回答“运行得怎么样？”，或使用 `sevo report`，可以添加结论（可玩、修复后可玩、可以启动、无法运行）和可选备注。
+- 在“报告”窗口回答“运行得怎么样？”，或使用 `sevo report`，可以添加结论（可玩、需修复后可玩、可启动、无法运行）和可选备注。
 - 游戏页面按引擎和芯片展示运行情况，并附上每份报告的配置。Steam 没有销售的游戏在接入后也会有自己的页面。
 
 ### 诊断
@@ -357,6 +379,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 调试模式：在一次会话内收集报告所需的全部信息。
 - “报告”窗口：显示每次运行所用的环境、结束方式、错误，以及对已知故障的直白解释。可以保存 ZIP，或打开预先填好的 GitHub Issue。
 - 崩溃或被看门狗结束后，会询问是否发送脱敏报告。
+- 如果某次运行中有许多线程一直自旋，会提供一键限制游戏可见处理器数量的选项。
 - 进程监视器：显示 Sevoflurane 管理的所有进程，并标出占满单个核心的游戏。
 - 每种日志和报告都有容量上限，优先清理最旧的内容。
 - `sevo perf compare` 比较平均帧率和 1% low 是否有可测量的变化；`sevo holds` 列出是什么让显示器保持唤醒。
