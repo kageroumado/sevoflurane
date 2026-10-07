@@ -39,7 +39,7 @@ nonisolated enum GameLogs {
         var everyUnityLog: [(url: URL, written: Date)]?
         for record in records.reversed() {
             var sources = unityLogs(for: record) ?? {
-                let all = everyUnityLog ?? unityPlayerLogs(underUsers: windowsUsers)
+                let all = everyUnityLog ?? windowsUserRoots.flatMap(unityPlayerLogs(underUsers:))
                 everyUnityLog = all
                 guard let window = window(of: record) else { return [] }
                 return all.filter { window.contains($0.written) }.map(\.url)
@@ -86,27 +86,34 @@ nonisolated enum GameLogs {
         return start ... end
     }
 
-    /// The bottle's Windows profiles, one directory per user.
-    private static var windowsUsers: URL {
-        SteamBottle.root.appendingPathComponent("drive_c/users")
+    /// The Windows profiles a game can write under: the bottle's, and the
+    /// companion prefix's, where the programs that need a `steam.exe` parent
+    /// run (HoYoverse's games).
+    private static var windowsUserRoots: [URL] {
+        [SteamBottle.root, SteamBottle.companion].map { $0.appendingPathComponent("drive_c/users") }
     }
 
     // MARK: - Unity
 
     /// The file the Unity player writes now, and the one it rotated the
-    /// previous launch's output into.
-    static let unityLogNames = ["Player.log", "Player-prev.log"]
+    /// previous launch's output into, under Unity's names and under the ones
+    /// HoYoverse's players use.
+    static let unityLogNames = ["Player.log", "Player-prev.log", "output_log.txt", "output_log.txt.last"]
+
+    /// The names a player's current log goes by.
+    private static let currentUnityLogNames = ["Player.log", "output_log.txt"]
 
     /// Where a run's Unity player writes, from the identity in its install.
     /// `nil` when the install names no company and product, which is the
     /// caller's cue to fall back to the write times.
     private static func unityLogs(for record: RunRecord) -> [URL]? {
-        guard let install = SharedGames.installed(appID: record.appid),
-              let identity = unityIdentity(inInstall: install.directory, exe: record.exe)
+        let install = SharedGames.installed(appID: record.appid)?.directory
+            ?? AdoptedPrograms.program(record.appid)?.url.deletingLastPathComponent()
+        guard let install, let identity = unityIdentity(inInstall: install, exe: record.exe)
         else { return nil }
-        return unityLogs(
-            company: identity.company, product: identity.product, underUsers: windowsUsers,
-        )
+        return windowsUserRoots.flatMap {
+            unityLogs(company: identity.company, product: identity.product, underUsers: $0)
+        }
     }
 
     /// The Unity logs a company and product wrote, in every Windows profile
@@ -168,9 +175,11 @@ nonisolated enum GameLogs {
             let lowRoot = user.url.appendingPathComponent("AppData/LocalLow")
             for company in InstallDirectory.entries(in: lowRoot) where company.isDirectory {
                 for product in InstallDirectory.entries(in: company.url) where product.isDirectory {
-                    let log = product.url.appendingPathComponent(unityLogNames[0])
-                    guard let written = modified(log) else { continue }
-                    found.append((log, written))
+                    for name in currentUnityLogNames {
+                        let log = product.url.appendingPathComponent(name)
+                        guard let written = modified(log) else { continue }
+                        found.append((log, written))
+                    }
                 }
             }
         }
@@ -205,11 +214,13 @@ nonisolated enum GameLogs {
                 .filter(\.isDirectory)
                 .map { $0.url.appendingPathComponent("Saved") }
         }
-        for user in InstallDirectory.entries(in: windowsUsers) where user.isDirectory {
-            let local = user.url.appendingPathComponent("AppData/Local")
-            savedDirectories += InstallDirectory.entries(in: local)
-                .filter { $0.isDirectory && (project == nil || $0.name.lowercased() == project) }
-                .map { $0.url.appendingPathComponent("Saved") }
+        for users in windowsUserRoots {
+            for user in InstallDirectory.entries(in: users) where user.isDirectory {
+                let local = user.url.appendingPathComponent("AppData/Local")
+                savedDirectories += InstallDirectory.entries(in: local)
+                    .filter { $0.isDirectory && (project == nil || $0.name.lowercased() == project) }
+                    .map { $0.url.appendingPathComponent("Saved") }
+            }
         }
         var found: [URL] = []
         for saved in savedDirectories {

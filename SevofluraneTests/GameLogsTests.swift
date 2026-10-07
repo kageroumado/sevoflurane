@@ -36,7 +36,7 @@ struct GameLogsTests {
     /// A Windows profile tree with one product's logs under `LocalLow`.
     private func makeLocalLow(
         in root: URL, user: String = "crossover", company: String, product: String,
-        files: [String] = GameLogs.unityLogNames,
+        files: [String] = ["Player.log", "Player-prev.log"],
     ) throws -> URL {
         let users = root.appendingPathComponent("users")
         let directory = users
@@ -104,6 +104,19 @@ struct GameLogsTests {
         let found = GameLogs.unityLogs(company: "Landfall", product: "TABS", underUsers: users)
             .map(\.lastPathComponent)
         #expect(found == ["Player.log", "Player-prev.log"])
+    }
+
+    @Test
+    func `a HoYoverse player's output_log and its last session are both taken`() throws {
+        let root = try scratch()
+        defer { try? manager.removeItem(at: root) }
+        let users = try makeLocalLow(
+            in: root, user: "elysia", company: "miHoYo", product: "Genshin Impact",
+            files: ["output_log.txt", "output_log.txt.last", "LocalLog.log"],
+        )
+        let found = GameLogs.unityLogs(company: "miHoYo", product: "Genshin Impact", underUsers: users)
+            .map(\.lastPathComponent)
+        #expect(found == ["output_log.txt", "output_log.txt.last"])
     }
 
     @Test
