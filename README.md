@@ -65,7 +65,10 @@ and play. Games appear as players share their runs.
 - **A library that knows the Mac.** Every game in Steam's library carries its
   Mac verdict from the community database, a Mac button keeps only the games
   that play, and installing a game whose anti-cheat cannot run asks first.
-  Games Steam sells for macOS can play their Mac version.
+- **The Mac version, when there is one.** Plenty of a Steam library has a
+  native macOS version too. Choose it for a game and Play starts that version
+  through Valve's Steam for Mac, or opens its install page there; the game's
+  menu in the menu bar or Settings › Games switches it.
 - **Fixes that apply themselves.** A game's first launch takes the settings
   other players found it needs, from a signed list, with an Undo. Launch
   options written for Proton (`DXVK_HUD=1 %command%`) work as they are.

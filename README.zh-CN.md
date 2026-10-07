@@ -44,7 +44,8 @@
 - **按需开启超分与缩放。** 游戏保持自己的渲染分辨率，再把画面放大到窗口大小。可以选 Lanczos、MetalFX，或适合动漫画面的 Anime4K 和 CuNNy。
 - **DirectX 12。** 通过 Sevoflurane 自己的 Wine 版本 [Dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)，配合 Apple 游戏移植工具包（Game Porting Toolkit）中的 D3DMetal 运行游戏。
 - **自动启用游戏模式。** 每款游戏都作为独立的 Mac App 启动，有自己的名称和程序坞图标。游戏全屏时，macOS 会自动开启游戏模式。
-- **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下 Mac 按钮就只显示能玩的游戏；安装反作弊无法运行的游戏前会先询问。Steam 提供 macOS 版的游戏，可以直接玩它的 Mac 版本。
+- **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下 Mac 按钮就只显示能玩的游戏；安装反作弊无法运行的游戏前会先询问。
+- **有 Mac 版，就玩 Mac 版。** Steam 游戏库里不少游戏也有原生 macOS 版本。为某款游戏选择它后，“开始游戏”会通过 Valve 的 Steam for Mac 启动这个版本，没安装时则打开那里的安装页面；可以在菜单栏中该游戏的菜单或“设置 › 游戏”里切换。
 - **自动应用修复。** 游戏首次启动时，会从一份签名列表中套用其他玩家发现它需要的设置，并可撤销。为 Proton 写的启动选项（`DXVK_HUD=1 %command%`）也能直接使用。
 - **Steam 以外的程序。** 从访达打开任意 Windows 程序，Sevoflurane 会判断它是游戏还是安装程序，帮你运行或安装，提供同样的窗口和游戏功能，并把它列进 Steam 游戏库。
 
