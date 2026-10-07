@@ -21,6 +21,7 @@ nonisolated enum ReportStripper {
         "the bottle's Windows user, rewritten to ~",
         "this Mac's name and account",
         "Steam ids and persona names",
+        "game account ids (uid=)",
         "lines that carry addresses and no symbol",
         "lines repeated more than \(collapseOver) times, kept once with a count",
     ]

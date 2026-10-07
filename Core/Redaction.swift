@@ -9,7 +9,8 @@ import SystemConfiguration
 /// signed-in id. The rewrites below are the ones that can be made without
 /// reading the text: a path under a home directory becomes `~`, the bottle's
 /// Windows user becomes `~`, this Mac's name and account become placeholders,
-/// and anything shaped like a Steam id becomes `<steamid>`.
+/// anything shaped like a Steam id becomes `<steamid>`, and a game account's
+/// `uid=` or `UID:` number becomes `<uid>`.
 ///
 /// A persona name is not derivable from a string, so a caller that knows one
 /// passes it in.
@@ -19,6 +20,7 @@ nonisolated enum Redaction {
     static let persona = "<persona>"
     static let host = "<host>"
     static let user = "<user>"
+    static let gameAccount = "<uid>"
 
     /// `text` with this Mac's account, any home directory, the bottle's
     /// Windows user, the machine's name and every Steam id taken out.
@@ -38,6 +40,7 @@ nonisolated enum Redaction {
             "sers/",
             "sers\\",
             "7656119",
+            "uid",
             NSUserName(),
             NSFullUserName(),
         ] + machineNames + personas)
@@ -89,6 +92,7 @@ nonisolated enum Redaction {
         result = result.replacing(macHome) { _ in home }
         result = result.replacing(windowsUser) { match in "\(match.output.1)~" }
         result = result.replacing(steamIDDigits) { _ in steamID }
+        result = result.replacing(gameAccountID) { match in "\(match.output.1)\(gameAccount)" }
         for name in machineNames {
             result = result.replacingOccurrences(of: name, with: host)
         }
@@ -136,6 +140,11 @@ nonisolated enum Redaction {
     /// `Public` are the accounts macOS and Windows create for everyone.
     private nonisolated(unsafe) static let windowsUser =
         /(?i)(users[\/\\])(?!(?:Shared|Public)(?:[\/\\]|$))[^\/\\"'\s]+/
+
+    /// A game account's number after `uid=` or `UID:`: HoYoverse's player
+    /// writes it into every SDK URL it logs, and its games print it on screen.
+    private nonisolated(unsafe) static let gameAccountID =
+        /(?i)(\buid\s*[=:]\s*)\d{5,}/
 
     /// A Steam id: the individual-account block, seventeen digits.
     private nonisolated(unsafe) static let steamIDDigits = /\b7656119\d{10}\b/

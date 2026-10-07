@@ -11,6 +11,17 @@ struct RedactionTests {
     }
 
     @Test
+    func `a game account's uid becomes a placeholder, in a short text and in a long one`() {
+        let line = "PreLoadSWURL: https://sdk.hoyoverse.com/sw.html?game=hk4e&region=os_euro&uid=712345678&lang=en"
+        let expected = "PreLoadSWURL: https://sdk.hoyoverse.com/sw.html?game=hk4e&region=os_euro&uid=<uid>&lang=en"
+        #expect(Redaction.apply(to: line) == expected)
+        #expect(Redaction.apply(to: "UID: 712345678") == "UID: <uid>")
+        let filler = String(repeating: "frame presented\n", count: 8000)
+        #expect(Redaction.apply(to: filler + line).hasSuffix(expected))
+        #expect(Redaction.apply(to: "build 2.55.0.0, fluid=1") == "build 2.55.0.0, fluid=1")
+    }
+
+    @Test
     func `this Mac's name becomes a placeholder`() throws {
         var buffer = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
         try #require(gethostname(&buffer, buffer.count - 1) == 0)
