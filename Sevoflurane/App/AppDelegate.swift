@@ -731,11 +731,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate: NSMenuItemValidation {
-    /// Checks the Streamer Mode item while the mode is on. Every other item
-    /// this delegate answers for stays enabled.
+    @objc
+    func checkForUpdates(_: Any?) {
+        SilentUpdates.shared.checkOrInstallFromMenu()
+    }
+
+    /// Checks the Streamer Mode item while the mode is on and titles the update
+    /// item. Every item this delegate answers for stays enabled.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleStreamerMode(_:)) {
             menuItem.state = StreamerMode.isOn ? .on : .off
+        }
+        if menuItem.action == #selector(checkForUpdates(_:)) {
+            SilentUpdates.shared.refresh()
+            menuItem.title = SilentUpdates.shared.menuItemTitle
         }
         return true
     }

@@ -1,3 +1,4 @@
+import AppKit
 import AppUpdater
 import Foundation
 import Observation
@@ -15,7 +16,7 @@ import TiptoeGitHub
 /// gate below vetoes exactly that. It is a veto, not a preference: Tiptoe's own patience relaxes
 /// over days, this never does.
 ///
-/// One check loop serves both modes (`installsAutomatically`): with auto-update off the daily
+/// One check loop serves both modes (`installsAutomatically`): with auto-update off the
 /// check still runs and still answers ``availableVersion`` — the footer's version chip draws from
 /// it — but nothing downloads or installs except through ``updateNow()``.
 ///
@@ -29,9 +30,27 @@ final class SilentUpdates {
     static let owner = "kageroumado"
     static let repo = "sevoflurane"
 
-    /// Once a day: finding an update sooner would not install it sooner anyway, because the gate
-    /// holds every swap until the Mac is idle and no game is up.
-    private static let checkInterval: TimeInterval = 60 * 60 * 24
+    /// Every four hours: the version chip and the app menu say an update is out as soon as a
+    /// check finds it, and a Mac that stays on for days hears about a fix the same day.
+    private static let checkInterval: TimeInterval = 4 * 60 * 60
+
+    /// How often a failing check is written to the event log.
+    private static let failureLogInterval: TimeInterval = 24 * 60 * 60
+
+    /// When a downloaded update may replace the app. Steam's window is open for most of the
+    /// time the app runs and holds nothing a relaunch loses, so only unsaved work (a sheet or
+    /// a modal) blocks the swap; the game gate keeps it out of every play session. Five
+    /// minutes without input at first, one minute after a day of waiting, and after a day the
+    /// app asks (``askToRestart(for:)``).
+    private static let quietPolicy = QuietPolicy(
+        rungs: [
+            .init(after: 0, idleSeconds: 5 * 60, windows: .onlyUnsavedBlocks),
+            .init(after: 24 * 60 * 60, idleSeconds: 60, windows: .onlyUnsavedBlocks),
+        ],
+        escalateAfter: 24 * 60 * 60,
+        pollInterval: 60,
+        gateTimeout: 5,
+    )
 
     /// Progress of a user-initiated Update Now, for the version chip. A successful install
     /// replaces the process, so the only terminal state this side of the swap is `.failed`.
@@ -55,7 +74,7 @@ final class SilentUpdates {
     /// Read from Tiptoe's store at launch; cleared by ``acknowledgeUpdate()``.
     private(set) var justUpdatedVersion: String?
 
-    /// The one long-lived updater: daily check loop, `availableVersion`, and the quiet-moment
+    /// The one long-lived updater: check loop, `availableVersion`, and the quiet-moment
     /// install when the mode allows it. Created up front so its `Tiptoe` reconciles the recorded
     /// wait (and surfaces `justUpdatedTo`) even before `start()`.
     @ObservationIgnored private let github: TiptoeGitHub
@@ -70,20 +89,95 @@ final class SilentUpdates {
     private init() {
         updater = AppUpdater(owner: Self.owner, repo: Self.repo)
         updater.allowPrereleases = Self.takesPrereleases(Preferences.updateChannel)
-        github = TiptoeGitHub(updater: updater, checkInterval: Self.checkInterval)
-            .gate("a game is running") { await Self.noGameRunning() }
-            .installsAutomatically(false)
+        github = TiptoeGitHub(
+            updater: updater, checkInterval: Self.checkInterval,
+            tiptoe: Tiptoe(policy: Self.quietPolicy),
+        )
+        .gate("a game is running") { await Self.noGameRunning() }
+        .installsAutomatically(false)
         github.onChecksFailing = { error in
             let now = Date.now
             if let last = Preferences.updateFailureLoggedAt,
-               now.timeIntervalSince(last) < Self.checkInterval { return }
+               now.timeIntervalSince(last) < Self.failureLogInterval { return }
             Preferences.updateFailureLoggedAt = now
             EventLog.enqueue(
                 .update,
                 "update checks are failing (said once a day): \(error.localizedDescription)",
             )
         }
+        github.tiptoe.onWaitingTooLong = { pending in
+            EventLog.enqueue(.update, "update \(pending.version) has waited a day for a quiet moment; asking")
+            ModalAlerts.present { SilentUpdates.shared.askToRestart(for: pending.version) }
+        }
+        github.tiptoe.onWillInstall = { pending in
+            EventLog.enqueue(.update, "installing update \(pending.version)")
+        }
         justUpdatedVersion = github.tiptoe.justUpdatedTo
+    }
+
+    /// The update has been held for a day: the Mac is never idle long enough, or never idle
+    /// without a game up. Asked once per held version; Later leaves it to the quiet moment.
+    private func askToRestart(for version: String) {
+        let display = AppVersion.display(version)
+        let alert = NSAlert()
+        alert.messageText = "Sevoflurane \(display) is ready"
+        alert.informativeText = "Restarting installs it. Steam closes and opens again, "
+            + "along with any game running in it."
+        alert.addButton(withTitle: "Restart to Update")
+        alert.addButton(withTitle: "Later")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task(name: "Install the held update") {
+            await updateNow()
+            if case let .failed(message) = manualPhase { Self.alert(message) }
+        }
+    }
+
+    /// The app menu's update item: installs a found update, or checks and says the app is
+    /// current.
+    func checkOrInstallFromMenu() {
+        #if DEBUG
+            ModalAlerts.present {
+                let alert = NSAlert()
+                alert.messageText = "A development build cannot update itself."
+                alert.runModal()
+            }
+        #else
+            Task(name: "Update from the app menu") {
+                if availableVersion == nil, pendingVersion == nil {
+                    await github.checkNow()
+                    refresh()
+                }
+                if availableVersion != nil || pendingVersion != nil {
+                    await updateNow()
+                    if case let .failed(message) = manualPhase { Self.alert(message) }
+                    return
+                }
+                ModalAlerts.present {
+                    let alert = NSAlert()
+                    alert.messageText = "Sevoflurane is up to date"
+                    alert.informativeText = "Version \(AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "dev")) is the newest "
+                        + (Preferences.updateChannel == .beta ? "release or beta." : "release.")
+                    alert.runModal()
+                }
+            }
+        #endif
+    }
+
+    private static func alert(_ message: String) {
+        ModalAlerts.present {
+            let alert = NSAlert()
+            alert.messageText = "Sevoflurane could not update"
+            alert.informativeText = message
+            alert.runModal()
+        }
+    }
+
+    /// The app menu's title for ``checkOrInstallFromMenu()``.
+    var menuItemTitle: String {
+        if let version = (availableVersion ?? pendingVersion).map(AppVersion.display) {
+            return "Install Update \(version)…"
+        }
+        return "Check for Updates…"
     }
 
     // MARK: - The check loop

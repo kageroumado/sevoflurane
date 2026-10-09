@@ -43,6 +43,12 @@ enum SevofluraneMainMenu {
             action: #selector(AppDelegate.showAbout(_:)),
             keyEquivalent: "",
         )
+        // Titled by `AppDelegate.validateMenuItem(_:)`: "Install Update …" once one is out.
+        menu.addItem(
+            withTitle: "Check for Updates…",
+            action: #selector(AppDelegate.checkForUpdates(_:)),
+            keyEquivalent: "",
+        )
         menu.addItem(.separator())
         // No ⌘, here: in this app that shortcut belongs to Steam ▸ Settings,
         // which is the settings window a user of a Steam client means.
