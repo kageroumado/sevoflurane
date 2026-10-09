@@ -597,6 +597,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var quitTask: Task<Void, Never>?
 
+    /// Set when a quit is reissued from the run loop (``applicationShouldTerminate(_:)``).
+    private var isQuittingFromRunLoop = false
+
     /// Quitting Sevoflurane quits Steam: the daemon that owns the bottle is
     /// asked to bring it down, and the quit waits for its answer. This is the
     /// only path that asks — a crash or a force-quit sends nothing, which is
@@ -612,6 +615,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Steam this copy found running is the other copy's.
         if isDuplicate { return .terminateNow }
         guard quitTask == nil else { return .terminateCancel }
+        // `.terminateLater` waits for the teardown task below, whose jobs run on the main queue.
+        // A terminate issued from inside a main-queue job (AppUpdater's swap, any `Task` that
+        // quits) holds that queue for as long as AppKit's nested loop runs, so the teardown never
+        // starts and the app sits on "Quitting" forever. Such a quit is reissued from the run
+        // loop, where the main queue drains. A quit Apple event (logout, restart, `osascript`)
+        // is answered in place: cancelling it would cancel the logout.
+        if !isQuittingFromRunLoop, NSAppleEventManager.shared().currentAppleEvent == nil {
+            isQuittingFromRunLoop = true
+            RunLoop.main.perform(inModes: [.default, .modalPanel]) { NSApp.terminate(nil) }
+            return .terminateCancel
+        }
         // Before the bottle comes down: a game still up ends here, and after
         // the teardown nothing is left that could say how.
         runMeter?.cancel()
