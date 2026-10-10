@@ -1043,6 +1043,16 @@
         }
       }
     },
+    "A game's Play in setting can hand its macOS version to Valve's Steam for Mac, which needs its own sign-in and the game installed there. Otherwise macOS versions install and play in Sevoflurane's Steam." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏的“运行于”设置可以把其 macOS 版本交给 Valve 的 Steam for Mac，它需要单独登录，并在那里安装该游戏。否则 macOS 版本会在 Sevoflurane 的 Steam 中安装和运行。"
+          }
+        }
+      }
+    },
     "A game's threads hand work to each other thousands of times a second. Putting a thread to sleep and waking it costs far more on macOS than on Windows, so a thread can spin briefly first in case its wake-up is about to arrive." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6067,17 +6077,6 @@
         }
       }
     },
-    "macOS (Steam for Mac)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "macOS（Steam for Mac）"
-          }
-        }
-      }
-    },
     "macOS acceleration" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7313,6 +7312,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始游戏 %@"
+          }
+        }
+      }
+    },
+    "Play in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行于"
           }
         }
       }
@@ -8700,6 +8709,16 @@
         }
       }
     },
+    "Sevoflurane or Steam for Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 或 Steam for Mac"
+          }
+        }
+      }
+    },
     "Sevoflurane waits in the menu bar." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8728,6 +8747,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sevoflurane 自带的引擎，借助 Apple 的工具包支持 DirectX 12 和游戏画面缩放。"
+          }
+        }
+      }
+    },
+    "Sevoflurane's Steam. On an engine that plays macOS versions, the game page's Version button picks macOS or Windows; otherwise this is the Windows version. Every setting on this page applies to the Windows version." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevoflurane 的 Steam。在能运行 macOS 版本的引擎上，由游戏页面的“版本”按钮选择 macOS 或 Windows；否则即为 Windows 版本。此页面上的所有设置都作用于 Windows 版本。"
           }
         }
       }
@@ -9278,12 +9307,32 @@
         }
       }
     },
+    "Steam for Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam for Mac"
+          }
+        }
+      }
+    },
     "Steam for Mac is not installed" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "未安装 Steam for Mac"
+          }
+        }
+      }
+    },
+    "Steam for Mac runs the macOS version, with the game installed there." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 Steam for Mac 运行 macOS 版本，需要在那里安装该游戏。"
           }
         }
       }
@@ -9453,13 +9502,12 @@
         }
       }
     },
-    "Steam sells this game for macOS too. Play can start either version." : {
-      "extractionState" : "manual",
+    "Steam sells this game for macOS too. Play can run it here or in Valve's Steam for Mac." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Steam 也提供此游戏的 macOS 版本。“开始游戏”可以启动其中任一版本。"
+            "value" : "Steam 也提供此游戏的 macOS 版本。“开始游戏”可以在这里运行它，也可以交给 Valve 的 Steam for Mac。"
           }
         }
       }
@@ -10093,13 +10141,12 @@
         }
       }
     },
-    "The game's own macOS version, started by Valve's Steam for Mac, which needs the game installed there. Play opens its install page when the game is not, and the settings on this page stay with the Windows version." : {
-      "extractionState" : "manual",
+    "The game's macOS version, started by Valve's Steam for Mac, which needs the game installed there. Play opens its install page when the game is not, and the settings on this page stay with the Windows version." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "游戏自带的 macOS 版本，由 Valve 的 Steam for Mac 启动，需要在那里安装该游戏。若尚未安装，“开始游戏”会打开其安装页面；此页面上的设置只作用于 Windows 版本。"
+            "value" : "游戏的 macOS 版本，由 Valve 的 Steam for Mac 启动，需要在那里安装该游戏。若尚未安装，“开始游戏”会打开其安装页面；此页面上的设置只作用于 Windows 版本。"
           }
         }
       }
@@ -10188,17 +10235,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac 温度过高%@，macOS 正在降低运行速度"
-          }
-        }
-      }
-    },
-    "The macOS version starts in Steam for Mac, with the game installed there." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "macOS 版本会在 Steam for Mac 中启动，需要在那里安装该游戏。"
           }
         }
       }
@@ -10381,17 +10417,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "窗口系统会缩放画面。"
-          }
-        }
-      }
-    },
-    "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows 版本，在 Sevoflurane 的 Steam 中运行。此页面上的所有设置都作用于它。"
           }
         }
       }
@@ -11441,34 +11466,12 @@
         }
       }
     },
-    "Windows (Sevoflurane)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows（Sevoflurane）"
-          }
-        }
-      }
-    },
     "Windows games on macOS" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 macOS 上运行 Windows 游戏"
-          }
-        }
-      }
-    },
-    "Windows or macOS version" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Windows 或 macOS 版本"
           }
         }
       }

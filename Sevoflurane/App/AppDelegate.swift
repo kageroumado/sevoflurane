@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a throw during the rest of startup is still recorded.
         ExceptionWatch.install()
         installSharedHooks()
+        NativeSteam.adoptEarlierChoices(games: Array(GameConfig.games().values))
         // Before anything can start a bottle process, so the client this
         // launch brings up is not the killed session's verbose one.
         DebugModeSwitch.shared.clearStaleFile()

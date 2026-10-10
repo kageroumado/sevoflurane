@@ -112,14 +112,16 @@ extension SteamWebHost {
     /// changes it, so a switch is visible on the page already open.
     func applyCompatibilityStrip() {
         let on = Preferences.compatibilityStrip
-        desktop?.webView.evaluateJavaScript(on ? SteamCompatBadge.script : SteamCompatBadge.removalScript)
+        // Read by the strip's "Play in Steam for Mac" link (`playsInThisSteam`).
+        let steamForMac = "window.__sevoSteamForMac = \(Preferences.offersSteamForMac);\n"
+        desktop?.webView.evaluateJavaScript(steamForMac + (on ? SteamCompatBadge.script : SteamCompatBadge.removalScript))
         install(
             on ? SteamLibraryCompat.contextScript : SteamLibraryCompat.contextRemovalScript,
             describedAs: "Mac compatibility in the library", settledAt: SteamLibraryCompat.settled,
         )
         desktop?.webView.evaluateJavaScript(on ? SteamLibraryCompat.script : SteamLibraryCompat.removalScript)
         for window in [desktop].compactMap(\.self) + popups.values {
-            window.evaluateOnStorePages(on ? SteamCompatBadge.storeScript : SteamCompatBadge.removalScript)
+            window.evaluateOnStorePages(steamForMac + (on ? SteamCompatBadge.storeScript : SteamCompatBadge.removalScript))
         }
     }
 

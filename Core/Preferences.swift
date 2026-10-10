@@ -151,6 +151,14 @@ nonisolated extension Preferences {
         get { bool(forKey: "toldAboutSteamForMacSession", default: false) }
         set { shared.set(newValue, forKey: "toldAboutSteamForMacSession") }
     }
+
+    /// Whether a game's Play setting offers Valve's Steam for Mac as where its
+    /// macOS version runs, on an engine that plays macOS versions in
+    /// Sevoflurane's own Steam (``NativeSteam/isOffered``). Off by default.
+    static var offersSteamForMac: Bool {
+        get { bool(forKey: "offersSteamForMac", default: false) }
+        set { shared.set(newValue, forKey: "offersSteamForMac") }
+    }
 }
 
 // MARK: - Discord

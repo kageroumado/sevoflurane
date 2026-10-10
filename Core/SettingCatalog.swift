@@ -197,8 +197,9 @@ nonisolated extension Setting {
 nonisolated enum SettingCatalog {
     /// Every setting, in the order a pane shows them.
     static let all: [Setting] = [
-        // Offered where Steam sells a macOS build. The bottle has no say: the
-        // choice is between two programs, made per game.
+        // Offered where Steam sells a macOS build and Steam for Mac is offered
+        // (``NativeSteam/isOffered``). The bottle has no say: the choice is
+        // between two programs, made per game.
         Setting(
             id: .build, group: .build, levels: [.game], copy: .build,
             control: .choices(GameBuild.allCases.map { SettingChoice(value: $0.rawValue, label: $0.label) }),
@@ -208,7 +209,7 @@ nonisolated enum SettingCatalog {
             resolved: { _, _ in .choice(GameBuild.windows.rawValue) },
             reach: { _ in .nextLaunch },
             recommended: { _ in nil },
-            offered: { SteamAppInfo.platforms(appID: $0).contains("macos") },
+            offered: { NativeSteam.isOffered && SteamAppInfo.platforms(appID: $0).contains("macos") },
             inherits: false,
         ),
         // Automatic is the bottle's business — it consults CrossOver's own

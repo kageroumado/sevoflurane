@@ -55,6 +55,29 @@ nonisolated enum NativeSteam {
         }
     }
 
+    /// Whether Play can hand games to Steam for Mac. An engine that plays macOS
+    /// versions in Sevoflurane's own Steam makes it an option the person turns
+    /// on; on any other engine it is the only way to a macOS version, so it is
+    /// always offered.
+    static var isOffered: Bool {
+        isOffered(enginePlaysMacOS: Engine.running.supportsSteamPlayMacOS, optedIn: Preferences.offersSteamForMac)
+    }
+
+    static func isOffered(enginePlaysMacOS: Bool, optedIn: Bool) -> Bool {
+        !enginePlaysMacOS || optedIn
+    }
+
+    /// Turns the option on for anyone who already sent a game to Steam for Mac,
+    /// so an engine that plays macOS versions itself changes nothing for them.
+    /// Runs once.
+    static func adoptEarlierChoices(games: [ConfigValues]) {
+        guard !Preferences.shared.bool(forKey: adoptedKey) else { return }
+        Preferences.shared.set(true, forKey: adoptedKey)
+        if games.contains(where: { $0.build == .mac }) { Preferences.offersSteamForMac = true }
+    }
+
+    private static let adoptedKey = "offersSteamForMacAdopted"
+
     /// Whether Steam for Mac has every file of the game on disk.
     static func isInstalled(appID: Int, root: URL = root) -> Bool {
         steamapps(root: root).contains { steamapps in
@@ -65,16 +88,18 @@ nonisolated enum NativeSteam {
     }
 }
 
-/// Which build of a game Play starts: the Windows build the bottle runs, or
-/// the game's own macOS build through Steam for Mac.
+/// Where Play runs a game: Sevoflurane's own Steam, or Valve's Steam for Mac
+/// with the game's macOS version installed there. Which version Sevoflurane's
+/// Steam installs is Steam's own per-game choice (``SteamPlayMacOS``) where the
+/// engine plays macOS versions, and the Windows version otherwise.
 nonisolated enum GameBuild: String, Codable, CaseIterable, Sendable {
     case windows
     case mac
 
     var label: String {
         let value = switch self {
-        case .windows: "Windows (Sevoflurane)"
-        case .mac: "macOS (Steam for Mac)"
+        case .windows: "Sevoflurane"
+        case .mac: "Steam for Mac"
         }
         return InterfaceCopy.localized(value)
     }

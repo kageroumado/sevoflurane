@@ -66,9 +66,9 @@ and play. Games appear as players share their runs.
   Mac verdict from the community database, a Mac button keeps only the games
   that play, and installing a game whose anti-cheat cannot run asks first.
 - **The Mac version, when there is one.** Plenty of a Steam library has a
-  native macOS version too. Choose it for a game and Play starts that version
-  through Valve's Steam for Mac, or opens its install page there; the game's
-  menu in the menu bar or Settings › Games switches it.
+  native macOS version too. Install asks which version to get, and the game
+  page switches it later; the macOS version plays in Sevoflurane's own Steam,
+  or in Valve's Steam for Mac if you turn that option on.
 - **Fixes that apply themselves.** A game's first launch takes the settings
   other players found it needs, from a signed list, with an Undo. Launch
   options written for Proton (`DXVK_HUD=1 %command%`) work as they are.
@@ -511,10 +511,11 @@ runs on CrossOver.
   "quit unexpectedly" dialog or crash report behind.
 - NW.js games, including RPG Maker MV and MZ, run on a macOS runtime with
   Steam playtime and achievements.
-- A game Steam sells for macOS can play its Mac version instead: Play hands
-  it to Valve's Steam for Mac, which opens its install page where the game
-  is not installed yet. Set per game in Settings › Games or the game's menu
-  in the menu bar; the compat strip's Details play it once.
+- A game Steam sells for macOS can hand its Mac version to Valve's Steam for
+  Mac, which opens its install page where the game is not installed yet. Set
+  per game in Settings › Games or the game's menu in the menu bar; the compat
+  strip's Details play it once. On an engine that plays macOS versions itself,
+  this is an option, off by default, under Settings › General › Steam for Mac.
 - On an engine with Steam Play for macOS builds, Steam here installs and
   plays a game's macOS version itself. Install asks which version, with each
   download's size and its compatibility rating; the play bar's Version entry

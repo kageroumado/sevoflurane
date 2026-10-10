@@ -55,7 +55,7 @@ enum MacBuildHandoff {
     /// Looks for Steam for Mac and the game's install only for the macOS
     /// build, so a Windows Play reads one file.
     private static func route(appID: Int, build: GameBuild?) -> MacBuildRoute {
-        guard build == .mac else { return .windows }
+        guard build == .mac, NativeSteam.isOffered else { return .windows }
         return MacBuildRoute.decide(
             appID: appID, build: build, hasSteamForMac: steamForMac != nil,
             installedThere: NativeSteam.isInstalled(appID: appID),

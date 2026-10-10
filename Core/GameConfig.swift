@@ -396,9 +396,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
     /// version, naming a runner this one does not know, still reads.
     var runner: String?
-    /// Game level only: whether Play starts the Windows build in the bottle
-    /// (the default) or the game's own macOS build through Steam for Mac
-    /// (``MacBuildRoute``). Read by the app at every Play.
+    /// Game level only: whether Play runs the game in Sevoflurane's Steam (the
+    /// default) or hands its macOS version to Steam for Mac (``MacBuildRoute``),
+    /// honored while ``NativeSteam/isOffered``. Read by the app at every Play.
     var build: GameBuild?
     /// Game level only: what ``NWJSGames`` found about the game's own NW.js
     /// build, recorded whether or not the native runner is switched on.

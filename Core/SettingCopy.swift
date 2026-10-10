@@ -188,19 +188,21 @@ nonisolated extension SettingCopy {
     )
 
     static let build = SettingCopy(
-        title: "Play",
-        caption: "The macOS version starts in Steam for Mac, with the game installed there.",
+        title: "Play in",
+        caption: "Steam for Mac runs the macOS version, with the game installed there.",
         help: SettingHelp(
-            title: "Windows or macOS version",
-            summary: "Steam sells this game for macOS too. Play can start either version.",
+            title: "Sevoflurane or Steam for Mac",
+            summary: "Steam sells this game for macOS too. Play can run it here or in Valve's Steam for Mac.",
             entries: [
                 .init(
                     name: GameBuild.windows.label,
-                    text: "The Windows version, in Sevoflurane's Steam. Every setting on this page applies to it.",
+                    text: "Sevoflurane's Steam. On an engine that plays macOS versions, the game page's Version "
+                        + "button picks macOS or Windows; otherwise this is the Windows version. Every setting "
+                        + "on this page applies to the Windows version.",
                 ),
                 .init(
                     name: GameBuild.mac.label,
-                    text: "The game's own macOS version, started by Valve's Steam for Mac, which needs the game "
+                    text: "The game's macOS version, started by Valve's Steam for Mac, which needs the game "
                         + "installed there. Play opens its install page when the game is not, and the settings "
                         + "on this page stay with the Windows version.",
                 ),

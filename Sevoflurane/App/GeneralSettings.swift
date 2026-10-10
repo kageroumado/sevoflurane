@@ -313,6 +313,7 @@ private struct GeneralSteamPagesSection: View {
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
     @State private var compatibilityStrip = true
+    @State private var offersSteamForMac = false
 
     var body: some View {
         Section {
@@ -331,6 +332,22 @@ private struct GeneralSteamPagesSection: View {
             }
             .highlightable(.generalCompatStrip, highlighted: highlighted)
             .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
+            if Engine.running.supportsSteamPlayMacOS {
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle("Steam for Mac", isOn: $offersSteamForMac)
+                        .toggleStyle(.switch)
+                        .onChange(of: offersSteamForMac) { _, enabled in
+                            // Reading the preference in onAppear lands here too.
+                            guard enabled != Preferences.offersSteamForMac else { return }
+                            Preferences.offersSteamForMac = enabled
+                            steam?.applyCompatibilityStrip()
+                        }
+                    Text("A game's Play in setting can hand its macOS version to Valve's Steam for Mac, which needs its own sign-in and the game installed there. Otherwise macOS versions install and play in Sevoflurane's Steam.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .onAppear { offersSteamForMac = Preferences.offersSteamForMac }
+            }
         } header: {
             Text("Steam pages")
         }

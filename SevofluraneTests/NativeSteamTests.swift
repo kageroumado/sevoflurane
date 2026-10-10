@@ -106,4 +106,18 @@ struct NativeSteamTests {
         #expect(MacBuildRoute.windows.link == nil)
         #expect(MacBuildRoute.steamForMacMissing(1).link == nil)
     }
+
+    // MARK: - Steam for Mac as an option
+
+    @Test
+    func `Steam for Mac is always offered on an engine without macOS versions`() {
+        #expect(NativeSteam.isOffered(enginePlaysMacOS: false, optedIn: false))
+        #expect(NativeSteam.isOffered(enginePlaysMacOS: false, optedIn: true))
+    }
+
+    @Test
+    func `Steam for Mac is an option on an engine that plays macOS versions`() {
+        #expect(!NativeSteam.isOffered(enginePlaysMacOS: true, optedIn: false))
+        #expect(NativeSteam.isOffered(enginePlaysMacOS: true, optedIn: true))
+    }
 }
