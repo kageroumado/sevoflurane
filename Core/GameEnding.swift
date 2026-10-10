@@ -23,6 +23,11 @@ import Foundation
 /// whose `TerminateApp` finds no process to tear down and clears its own
 /// record of the run. A game that crashes on its own still files its report:
 /// only the stop the player or `sevo` asked for takes this path.
+///
+/// A macOS build runs under the engine's native supervisor
+/// (``NativeSessions``), which owns the game's process group and the pipe
+/// Steam's waiter watches; that build is stopped through its supervisor first,
+/// and the same ladder then ends whatever of it is left.
 nonisolated enum GameEnding {
     /// How long a process gets to leave on `SIGTERM` before `SIGKILL`.
     static let grace: Duration = .seconds(5)
@@ -66,30 +71,48 @@ nonisolated enum GameEnding {
         var terminated: [pid_t] = []
         var killed: [pid_t] = []
         var survivors: [pid_t] = []
+        /// The native supervisors that ended their macOS build and exited.
+        var sessionsStopped: [pid_t] = []
+        /// The native supervisors still running when their stop's wait ran
+        /// out; the ladder then signaled them with the rest.
+        var sessionsUnstopped: [pid_t] = []
 
         var isEmpty: Bool {
             terminated.isEmpty && killed.isEmpty && survivors.isEmpty
+                && sessionsStopped.isEmpty && sessionsUnstopped.isEmpty
         }
 
         /// One line for the log, or `nil` when there was nothing to end.
         var summary: String? {
             guard !isEmpty else { return nil }
             var parts: [String] = []
+            if !sessionsStopped.isEmpty {
+                parts.append("\(Self.count(sessionsStopped, "macOS build")) stopped through the native supervisor")
+            }
+            if !sessionsUnstopped.isEmpty {
+                parts.append("\(Self.count(sessionsUnstopped, "native supervisor")) ignored the stop: \(sessionsUnstopped)")
+            }
             if !terminated.isEmpty { parts.append("\(Self.count(terminated)) ended on SIGTERM") }
             if !killed.isEmpty { parts.append("\(Self.count(killed)) needed SIGKILL") }
             if !survivors.isEmpty { parts.append("\(Self.count(survivors)) survived: \(survivors)") }
             return "game processes: " + parts.joined(separator: ", ")
         }
 
-        private static func count(_ pids: [pid_t]) -> String {
-            pids.count == 1 ? "1 process" : "\(pids.count) processes"
+        private static func count(_ pids: [pid_t], _ noun: String = "process") -> String {
+            let plural = noun.hasSuffix("s") ? noun + "es" : noun + "s"
+            return pids.count == 1 ? "1 \(noun)" : "\(pids.count) \(plural)"
         }
     }
 
-    /// Ends the game's processes in this bottle, named from its executables
-    /// (``processes(ofApp:)``), and answers what it took.
+    /// Ends the game: its running macOS builds through their supervisors,
+    /// then every process of it still alive (``processes(ofApp:)``), and
+    /// answers what it took.
     static func end(appID: Int) async -> Outcome {
-        await end(processes(ofApp: appID))
+        let stop = await NativeSessions.stop(appID: appID, in: NativeSessions.live(removingStale: true))
+        var outcome = await end(processes(ofApp: appID))
+        outcome.sessionsStopped = stop.stopped
+        outcome.sessionsUnstopped = stop.survivors
+        return outcome
     }
 
     /// `SIGTERM` to every live process at once, `grace` for them to go, then
@@ -128,11 +151,19 @@ nonisolated enum GameEnding {
 
     // MARK: - Which processes are the game's
 
-    /// The game's own processes in this bottle, named from its executables:
-    /// every plausible exe in a Steam game's install directory, the one file
-    /// an adopted program is. An app whose files cannot be placed has no name
-    /// to match, and then only Steam's record speaks for it.
+    /// The game's own processes: those of its running macOS builds
+    /// (``NativeSessions``), and those in this bottle named from its
+    /// executables — every plausible exe in a Steam game's install directory,
+    /// the one file an adopted program is. An app whose files cannot be placed
+    /// and that runs no macOS build has nothing to match, and then only
+    /// Steam's record speaks for it.
     static func processes(ofApp appID: Int) async -> [pid_t] {
+        let native = NativeSessions.processes(ofApp: appID, in: NativeSessions.live())
+        let bottled = await bottleProcesses(ofApp: appID)
+        return native + bottled.filter { !native.contains($0) }
+    }
+
+    private static func bottleProcesses(ofApp appID: Int) async -> [pid_t] {
         let names = executableNames(ofApp: appID)
         guard !names.isEmpty else { return [] }
         // `pgrep` matches a pattern anywhere in the command line, so the

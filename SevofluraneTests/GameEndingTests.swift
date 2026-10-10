@@ -78,7 +78,7 @@ struct GameEndingTests {
 
 /// A machine whose processes die on the signal each was told to, a set time
 /// after it, with a clock that only the ladder's own sleeps advance.
-private final class FakeProcesses: GameEnding.Processes {
+final class FakeProcesses: GameEnding.Processes {
     enum Fate: Equatable {
         case dies(on: Int32, after: Duration)
         case immortal
