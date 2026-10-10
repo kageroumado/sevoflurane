@@ -45,6 +45,27 @@ and play. Games appear as players share their runs.
 
 <p align="center"><a href="https://kagerou.glass/sevoflurane/games/"><img src=".github/compatibility.svg" alt="Find your game — community compatibility database" width="360" height="80"></a></p>
 
+## Mac or Windows, per game
+
+Plenty of a Steam library ships a native macOS version beside the Windows one.
+Sevoflurane's Steam installs either, and you choose per game: **Install** asks
+which version to get, with each download's size and how it runs, and recommends
+the better one.
+
+<p align="center"><img src=".github/sevoflurane-version-install.png" alt="A game page in Sevoflurane's Steam with the Install menu open, offering the macOS version (412 MB) and the Windows version (404 MB, recommended, playable through Sevoflurane)" width="820"><br><sub><b>install</b> ・ pick the version to download</sub></p>
+
+The **Version** button on the play bar switches an installed game later: the
+menu says how much Steam will download, and Steam fetches the other version as
+an update. Games with Steam Cloud keep their saves across the switch.
+
+<p align="center"><img src=".github/sevoflurane-version-switch.png" alt="An installed game's Version menu: the macOS version is recommended and rated Perfect, the Windows version is installed and rated Playable" width="820"><br><sub><b>switch</b> ・ the play bar's Version menu</sub></p>
+
+A macOS version runs natively, outside Wine, and still signs in through
+Sevoflurane's Steam: achievements, stats and cloud saves work without a second
+client. Steam's Stop button, Sevoflurane's menu and quitting the game all end it
+cleanly. Valve's Steam for Mac stays available as an option under
+**Settings › General › Steam for Mac**.
+
 ## Highlights
 
 - **Steam, always Retina.** Steam's interface runs in native web views at the
@@ -66,10 +87,9 @@ and play. Games appear as players share their runs.
   Mac verdict from the community database, an Apple button beside Recent and
   Ready to Play keeps only the games that play on this Mac, as in Steam for
   Mac, and installing a game whose anti-cheat cannot run asks first.
-- **The Mac version, when there is one.** Plenty of a Steam library has a
-  native macOS version too. Install asks which version to get, and the game
-  page switches it later; the macOS version plays in Sevoflurane's own Steam,
-  or in Valve's Steam for Mac if you turn that option on.
+- **The Mac version, when there is one.** A game with a native macOS version
+  installs either version, and switches between them later; see
+  [Mac or Windows, per game](#mac-or-windows-per-game).
 - **Fixes that apply themselves.** A game's first launch takes the settings
   other players found it needs, from a signed list, with an Undo. Launch
   options written for Proton (`DXVK_HUD=1 %command%`) work as they are.
@@ -523,10 +543,16 @@ runs on CrossOver.
 - On an engine with Steam Play for macOS builds, Steam here installs and
   plays a game's macOS version itself. Install asks which version, with each
   download's size and its compatibility rating; the play bar's Version entry
-  switches an installed game and says what it downloads first.
+  switches an installed game and says what it downloads first. When Steam
+  refuses a switch, the menu says so and offers Try Again.
+- A macOS version runs natively and reaches Steam through Sevoflurane's
+  bridge. Steam's Stop, Sevoflurane's stop, quitting the app and switching
+  engines end it and everything it started; its window is brought forward,
+  holds the display awake and takes the overlay like a Windows game's, and its
+  runs are recorded as macOS runs, crashes included.
 - Properties › Compatibility is there for games with a macOS version, as on
   Steam for Linux: "Force the use of a specific Steam Play compatibility tool"
-  lists Native macOS version. The library marks games set to it with .
+  lists Native macOS version. The library marks games set to it with an Apple mark.
 - When your account signs in on another computer or in Steam for Mac, Steam
   here signs out: a notification and the menu bar say so and offer
   Reconnect, and a session Steam for Mac took comes back when it quits.

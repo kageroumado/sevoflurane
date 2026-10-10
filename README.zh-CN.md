@@ -37,6 +37,18 @@
 
 <p align="center"><a href="https://kagerou.glass/sevoflurane/games/?lang=zh-CN"><img src=".github/compatibility.zh-CN.svg" alt="看看你的游戏能不能玩 — 社区游戏兼容性数据库" width="360" height="80"></a></p>
 
+## Mac 版还是 Windows 版，每款游戏自己选
+
+Steam 游戏库里不少游戏在 Windows 版之外还有原生 macOS 版。Sevoflurane 的 Steam 两种都能安装，按游戏选择：点**安装**时会问要下载哪个版本，并列出每个版本的下载大小和运行情况，推荐更合适的那个。
+
+<p align="center"><img src=".github/sevoflurane-version-install.png" alt="Sevoflurane 的 Steam 中一款游戏的页面，安装菜单已展开，提供 macOS 版本（412 MB）和 Windows 版本（404 MB，推荐，通过 Sevoflurane 可玩）" width="820"><br><sub><b>安装</b> ・ 选择要下载的版本</sub></p>
+
+之后可以用游戏栏里的**版本**按钮切换已安装的游戏：菜单会说明 Steam 需要下载多少，Steam 会把另一个版本作为更新下载。支持 Steam 云的游戏，切换后存档依然保留。
+
+<p align="center"><img src=".github/sevoflurane-version-switch.png" alt="已安装游戏的版本菜单：macOS 版本为推荐，评级“完美”；Windows 版本已安装，评级“可玩”" width="820"><br><sub><b>切换</b> ・ 游戏栏里的版本菜单</sub></p>
+
+macOS 版本在 Wine 之外原生运行，仍通过 Sevoflurane 的 Steam 登录：成就、统计和云存档都能用，不需要第二个客户端。无论是点 Steam 的“停止”按钮、用 Sevoflurane 的菜单，还是直接退出游戏，都能干净地结束。Valve 的 Steam for Mac 仍可作为选项，在**设置 › 通用 › Steam for Mac** 中开启。
+
 ## 主要功能
 
 - **清晰的 Steam 界面。** 使用原生网页视图，按屏幕的实际缩放比例显示，保持 Retina 清晰度。Steam 菜单放进菜单栏，通知交给 macOS 显示。
@@ -45,7 +57,7 @@
 - **DirectX 12。** 通过 Sevoflurane 自己的 Wine 版本 [Dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)，配合 Apple 游戏移植工具包（Game Porting Toolkit）中的 D3DMetal 运行游戏。
 - **自动启用游戏模式。** 每款游戏都作为独立的 Mac App 启动，有自己的名称和程序坞图标。游戏全屏时，macOS 会自动开启游戏模式。
 - **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下“最近”和“可玩”旁边的苹果按钮就只显示能在这台 Mac 上玩的游戏，与 Steam for Mac 一致；安装反作弊无法运行的游戏前会先询问。
-- **有 Mac 版，就玩 Mac 版。** Steam 游戏库里不少游戏也有原生 macOS 版本。为某款游戏选择它后，“开始游戏”会通过 Valve 的 Steam for Mac 启动这个版本，没安装时则打开那里的安装页面；可以在菜单栏中该游戏的菜单或“设置 › 游戏”里切换。
+- **有 Mac 版，就玩 Mac 版。** 有原生 macOS 版本的游戏，两个版本都能安装，之后还能随时切换，详见 [Mac 版还是 Windows 版，每款游戏自己选](#mac-版还是-windows-版每款游戏自己选)。
 - **自动应用修复。** 游戏首次启动时，会从一份签名列表中套用其他玩家发现它需要的设置，并可撤销。为 Proton 写的启动选项（`DXVK_HUD=1 %command%`）也能直接使用。
 - **Steam 以外的程序。** 从访达打开任意 Windows 程序，Sevoflurane 会判断它是游戏还是安装程序，帮你运行或安装，提供同样的窗口和游戏功能，并把它列进 Steam 游戏库。
 
@@ -318,7 +330,10 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 游戏点击关闭按钮后没有响应时，可以选择继续等待或结束游戏。
 - 通过 Steam 的“停止”按钮或 `sevo app terminate` 停止游戏时，会先完整结束它的所有进程，再通知 Steam，因此主动停止不会留下“意外退出”对话框或崩溃报告。
 - NW.js 游戏（包括 RPG Maker MV 和 MZ）使用 macOS 运行时运行，保留 Steam 游戏时长和成就。
-- Steam 提供 macOS 版的游戏，也可以改玩它的 Mac 版本：点击“开始游戏”会把它交给 Valve 的 Steam for Mac；游戏尚未安装时，会打开它的安装页面。可在“设置 › 游戏”或菜单栏里的游戏菜单中按游戏设置；兼容性条的详情中可以单次以这种方式运行。
+- Steam 提供 macOS 版的游戏，可以把 Mac 版本交给 Valve 的 Steam for Mac；游戏尚未安装时，会打开它的安装页面。可在“设置 › 游戏”或菜单栏里的游戏菜单中按游戏设置；兼容性条的详情中可以单次以这种方式运行。在能自己运行 macOS 版本的引擎上，这是一个默认关闭的选项，位于“设置 › 通用 › Steam for Mac”。
+- 在支持 macOS 版本 Steam Play 的引擎上，这里的 Steam 会自己安装并运行游戏的 macOS 版本。点“安装”会询问要哪个版本，并列出每个版本的下载大小和兼容性评级；游戏栏里的“版本”可以切换已安装的游戏，并先说明要下载多少。Steam 拒绝切换时，菜单会说明并提供“重试”。
+- 有 macOS 版本的游戏在“属性 › 兼容性”中也可以设置，和 Linux 版 Steam 一样：“强制使用特定 Steam Play 兼容性工具”中列有 Native macOS version。游戏库会给设为它的游戏加上苹果标记。
+- macOS 版本原生运行，通过 Sevoflurane 的桥接连上 Steam。Steam 的“停止”、Sevoflurane 的停止、退出 App 和切换引擎，都会结束它以及它启动的所有进程；它的窗口会被带到前台、保持显示器唤醒并支持叠加层，和 Windows 游戏一样；运行记录会标为 macOS，崩溃也会如实记录。
 - 你的账户在另一台电脑或 Steam for Mac 中登录时，这里的 Steam 会退出登录：通知和菜单栏会说明情况并提供“重新连接”；被 Steam for Mac 占用的会话会在它退出后自动恢复。
 - Discord 使用游戏自己的条目显示“正在玩 <游戏>”。自带 Discord 支持的游戏通过容器内的中继发布自己的状态 **（Dormison）**。两项功能在“设置 › 通用”中分别开关。
 
