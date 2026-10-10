@@ -265,7 +265,8 @@ final class GameLaunchWatch {
             // A window of some Mac application: there are dozens of those on
             // any Mac, and none of them is a game.
             guard program.source != .owner || program.name.hasSuffix(".exe") else { continue }
-            guard program.name.hasSuffix(".exe") else {
+            let macOSBuild = program.source == .native && program.name.hasSuffix(".app")
+            guard program.name.hasSuffix(".exe") || macOSBuild else {
                 report("\(program.name) (pid \(pid)) is not an .exe — not a game window")
                 continue
             }

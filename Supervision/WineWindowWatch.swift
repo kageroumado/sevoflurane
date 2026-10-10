@@ -1,4 +1,5 @@
 import CoreGraphics
+import Darwin
 import Foundation
 import os
 
@@ -41,7 +42,9 @@ nonisolated enum WineWindowWatch {
             case loader
             /// The process runs through a game's launcher bundle (``GameLaunchers``).
             case bundle
-            /// A game run outside the bottle (``NWJSRunner``).
+            /// A game run outside the bottle: an NW.js game (``NWJSRunner``),
+            /// named after its exe, or a macOS build Steam Play installed
+            /// (``SteamPlayMacOS``), named after its `.app`.
             case native
             /// Nothing claimed the process, so the window's owner names it.
             case owner
@@ -65,6 +68,9 @@ nonisolated enum WineWindowWatch {
         let name = owner.lowercased()
         if bottleLoaders.contains(name) {
             return windowsProgram(of: pid).map { Program(name: $0, source: .loader) }
+        }
+        if let bundle = macOSBuild(of: pid) {
+            return Program(name: bundle, source: .native)
         }
         // A process's arguments cost a KERN_ARGMAX buffer each and this is
         // asked of every window on screen, so nothing is asked of the kernel
@@ -110,6 +116,23 @@ nonisolated enum WineWindowWatch {
               let exe = GameConfig.game(appID).exes?.first
         else { return nil }
         return exe.lowercased()
+    }
+
+    /// The lowercased `.app` of a game's macOS build that the dock shim runs out
+    /// of the bottle's Steam library, or `nil` for any other process. One
+    /// `proc_pidpath` per pid, which the caller caches.
+    static func macOSBuild(of pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        return macOSBuild(executablePath: String(cString: buffer), bottle: SteamBottle.root.path)
+    }
+
+    static func macOSBuild(executablePath path: String, bottle: String) -> String? {
+        guard path.hasPrefix(bottle + "/"), path.contains("/steamapps/common/"),
+              let range = path.range(of: ".app/Contents/MacOS/")
+        else { return nil }
+        let bundle = path[..<range.lowerBound].split(separator: "/").last.map(String.init) ?? ""
+        return bundle.isEmpty ? nil : (bundle + ".app").lowercased()
     }
 
     /// The client's two window-bearing processes. The Mac Steam client's own

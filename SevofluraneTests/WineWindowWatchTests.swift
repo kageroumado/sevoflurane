@@ -59,4 +59,14 @@ struct WineWindowWatchTests {
         #expect(!WineWindowWatch.isGameProgram("discord"))
         #expect(!WineWindowWatch.isGameProgram("sevoflurane"))
     }
+
+    @Test
+    func `a macOS build in the bottle's Steam library is named after its app`() {
+        let bottle = "/Users/k/Library/Application Support/Sevoflurane/Bottles/Steam"
+        let game = bottle + "/drive_c/Program Files (x86)/Steam/steamapps/common/Valheim/valheim.app/Contents/MacOS/Valheim"
+        #expect(WineWindowWatch.macOSBuild(executablePath: game, bottle: bottle) == "valheim.app")
+        // A Mac application elsewhere, and a helper inside the bottle that is no game's build.
+        #expect(WineWindowWatch.macOSBuild(executablePath: "/Applications/Discord.app/Contents/MacOS/Discord", bottle: bottle) == nil)
+        #expect(WineWindowWatch.macOSBuild(executablePath: bottle + "/drive_c/windows/system32/winemenubuilder", bottle: bottle) == nil)
+    }
 }
