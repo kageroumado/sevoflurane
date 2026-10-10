@@ -106,13 +106,27 @@ final class SilentUpdates {
             )
         }
         github.tiptoe.onWaitingTooLong = { pending in
-            EventLog.enqueue(.update, "update \(pending.version) has waited a day for a quiet moment; asking")
-            ModalAlerts.present { SilentUpdates.shared.askToRestart(for: pending.version) }
+            Task(name: "Ask to restart for the held update") {
+                await SilentUpdates.shared.askWhenNoGameRuns(version: pending.version)
+            }
         }
         github.tiptoe.onWillInstall = { pending in
             EventLog.enqueue(.update, "installing update \(pending.version)")
         }
         justUpdatedVersion = github.tiptoe.justUpdatedTo
+    }
+
+    /// How often a held prompt looks again for a moment with no game up.
+    private static let promptRetryInterval: Duration = .seconds(60)
+
+    /// Holds the day-old prompt until nothing is being played: shown during a game, it would
+    /// open behind it, and while it waits it counts as a modal that blocks the quiet install.
+    private func askWhenNoGameRuns(version: String) async {
+        while await !(Self.noGameRunning()) {
+            try? await Task.sleep(for: Self.promptRetryInterval)
+        }
+        EventLog.enqueue(.update, "update \(version) has waited a day for a quiet moment; asking")
+        ModalAlerts.present { SilentUpdates.shared.askToRestart(for: version) }
     }
 
     /// The update has been held for a day: the Mac is never idle long enough, or never idle
@@ -147,9 +161,9 @@ final class SilentUpdates {
                     await github.checkNow()
                     refresh()
                 }
-                if availableVersion != nil || pendingVersion != nil {
-                    await updateNow()
-                    if case let .failed(message) = manualPhase { Self.alert(message) }
+                if let version = availableVersion ?? pendingVersion {
+                    let playing = await !(Self.noGameRunning())
+                    ModalAlerts.present { SilentUpdates.shared.confirmInstall(version, whilePlaying: playing) }
                     return
                 }
                 ModalAlerts.present {
@@ -161,6 +175,22 @@ final class SilentUpdates {
                 }
             }
         #endif
+    }
+
+    /// Asks before the menu's update replaces the app: it closes Steam and any game in it.
+    private func confirmInstall(_ version: String, whilePlaying playing: Bool) {
+        let alert = NSAlert()
+        alert.messageText = "Install Sevoflurane \(AppVersion.display(version))?"
+        alert.informativeText = playing
+            ? "A game is running. Installing closes it, then Steam, and opens Sevoflurane again."
+            : "Installing closes Steam and opens Sevoflurane again."
+        alert.addButton(withTitle: "Install and Restart")
+        alert.addButton(withTitle: "Later")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task(name: "Install the update from the app menu") {
+            await updateNow()
+            if case let .failed(message) = manualPhase { Self.alert(message) }
+        }
     }
 
     private static func alert(_ message: String) {
@@ -253,6 +283,8 @@ final class SilentUpdates {
             // after the install call returns — wait it out before declaring failure.
             try? await Task.sleep(for: .seconds(4))
             refresh()
+            // The swap's quit can run past four seconds while the teardown brings Steam down.
+            guard !AppDelegate.isQuitting else { return }
             manualPhase = .failed(
                 "Could not install the update. Try again, or open the releases page.",
             )
@@ -278,15 +310,21 @@ final class SilentUpdates {
 
     // MARK: - The gate
 
-    /// What the app knows of a play session beyond the screen: whether a run is being recorded
-    /// and whether a launch is in flight. Set by the app delegate, which owns both.
-    @ObservationIgnored var sessionState: () -> (recording: Bool, launching: Bool) = { (false, false) }
+    /// What the app knows beyond the screen: whether a run is being recorded, whether a launch
+    /// is in flight, and whether setup is installing something. Set by the app delegate, which
+    /// owns all three.
+    @ObservationIgnored var sessionState: () -> (recording: Bool, launching: Bool, settingUp: Bool) = {
+        (false, false, false)
+    }
 
     /// A Steam session is in play while a run is open, a launch is on its way, or a game's window
     /// is on screen — a game still loading has no window, and one on another Space or minimized
-    /// may not show one. Any of them vetoes the swap.
-    nonisolated static func mayInstall(recording: Bool, activeLaunch: Bool, gameWindow: Bool) -> Bool {
-        !recording && !activeLaunch && !gameWindow
+    /// may not show one. Setup at work holds the swap too: a quit tears down a half-built
+    /// bottle. Any of them vetoes the swap.
+    nonisolated static func mayInstall(
+        recording: Bool, activeLaunch: Bool, gameWindow: Bool, settingUp: Bool = false,
+    ) -> Bool {
+        !recording && !activeLaunch && !gameWindow && !settingUp
     }
 
     /// `GameLaunchWatch` already knows how to tell a game's window from the client's own
@@ -298,6 +336,7 @@ final class SilentUpdates {
                 recording: session.recording,
                 activeLaunch: session.launching,
                 gameWindow: GameLaunchWatch.firstGameWindow() != nil,
+                settingUp: session.settingUp,
             )
         }
     }

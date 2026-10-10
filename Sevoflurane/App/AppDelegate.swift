@@ -430,8 +430,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startSilentUpdates() {
-        SilentUpdates.shared.sessionState = { [runRecorder, host] in
-            (runRecorder.isRecording, host.activeLaunch != nil)
+        SilentUpdates.shared.sessionState = { [runRecorder, host, provisioner] in
+            (runRecorder.isRecording, host.activeLaunch != nil, provisioner.isWorking)
         }
         SilentUpdates.shared.start(
             autoInstall: Preferences.app.object(forKey: "autoUpdate") as? Bool ?? true,
@@ -598,6 +598,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var quitTask: Task<Void, Never>?
 
+    /// The quit teardown is under way, for anything that would otherwise read the wait for
+    /// the process to end as a failure.
+    private(set) static var isQuitting = false
+
     /// Set when a quit is reissued from the run loop (``applicationShouldTerminate(_:)``).
     private var isQuittingFromRunLoop = false
 
@@ -633,6 +637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stallWatch.stop()
         runRecorder.closeAll()
         supervisor.beginQuit()
+        Self.isQuitting = true
         quitTask = Task(name: "Quit teardown") {
             GameDisplayHold.gameDidExit()
             await provisioner.endForQuit()

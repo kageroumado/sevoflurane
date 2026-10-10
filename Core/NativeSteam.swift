@@ -67,16 +67,13 @@ nonisolated enum NativeSteam {
         !enginePlaysMacOS || optedIn
     }
 
-    /// Turns the option on for anyone who already sent a game to Steam for Mac,
-    /// so an engine that plays macOS versions itself changes nothing for them.
-    /// Runs once.
+    /// Turns the option on for anyone sending a game to Steam for Mac while it
+    /// is the only way to a macOS version, so moving to an engine that plays
+    /// macOS versions itself changes nothing for them. Runs at every launch.
     static func adoptEarlierChoices(games: [ConfigValues]) {
-        guard !Preferences.shared.bool(forKey: adoptedKey) else { return }
-        Preferences.shared.set(true, forKey: adoptedKey)
+        guard !Engine.running.supportsSteamPlayMacOS else { return }
         if games.contains(where: { $0.build == .mac }) { Preferences.offersSteamForMac = true }
     }
-
-    private static let adoptedKey = "offersSteamForMacAdopted"
 
     /// Whether Steam for Mac has every file of the game on disk.
     static func isInstalled(appID: Int, root: URL = root) -> Bool {

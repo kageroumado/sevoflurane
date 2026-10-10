@@ -114,6 +114,7 @@ extension SteamWebHost {
         let on = Preferences.compatibilityStrip
         // Read by the strip's "Play in Steam for Mac" link (`playsInThisSteam`).
         let steamForMac = "window.__sevoSteamForMac = \(Preferences.offersSteamForMac);\n"
+            + "window.__sevoNativeBuildsOn = \(Engine.running.supportsSteamPlayMacOS);\n"
         desktop?.webView.evaluateJavaScript(steamForMac + (on ? SteamCompatBadge.script : SteamCompatBadge.removalScript))
         install(
             on ? SteamLibraryCompat.contextScript : SteamLibraryCompat.contextRemovalScript,

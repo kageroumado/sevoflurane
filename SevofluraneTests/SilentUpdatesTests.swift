@@ -9,5 +9,6 @@ struct SilentUpdatesTests {
         #expect(!SilentUpdates.mayInstall(recording: true, activeLaunch: false, gameWindow: false))
         #expect(!SilentUpdates.mayInstall(recording: false, activeLaunch: true, gameWindow: false))
         #expect(!SilentUpdates.mayInstall(recording: false, activeLaunch: false, gameWindow: true))
+        #expect(!SilentUpdates.mayInstall(recording: false, activeLaunch: false, gameWindow: false, settingUp: true))
     }
 }

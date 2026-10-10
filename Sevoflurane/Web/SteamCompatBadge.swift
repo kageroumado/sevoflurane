@@ -440,7 +440,8 @@ enum SteamCompatBadge {
         if (h) h.postMessage({ playMac: Number(appid) });
       }
     
-      function playsInThisSteam() { return false; }
+      /* Store pages have no context page: the app sets both flags before this script. */
+      function playsInThisSteam() { return window.__sevoSteamForMac === false && window.__sevoNativeBuildsOn === true; }
     
       function currentAppID() {
         var match = location.pathname.match(/^\\/app\\/(\\d+)/);

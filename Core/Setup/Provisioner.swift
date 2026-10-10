@@ -317,7 +317,8 @@ final class Provisioner {
         return result.output
     }
 
-    private var isWorking: Bool {
+    /// Setup is installing or repairing something: an engine, the bottle, the client.
+    var isWorking: Bool {
         if case .working = activity { true } else { false }
     }
 
