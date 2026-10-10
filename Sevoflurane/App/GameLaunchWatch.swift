@@ -218,12 +218,21 @@ final class GameLaunchWatch {
     /// answer cannot change while the process lives. A pid reused by another
     /// process inside the same three minutes would be named after the dead
     /// one, which costs a wrong name in a log line.
+    ///
+    /// A macOS build is matched against the pass's sessions before the cache:
+    /// its window can be listed a moment before its supervisor's file is
+    /// written, and an answer cached in that moment would hold for the whole
+    /// watch.
     nonisolated struct ProgramCache {
         private var programs: [pid_t: WineWindowWatch.Program?] = [:]
 
-        mutating func program(owner: String, pid: pid_t) -> WineWindowWatch.Program? {
+        mutating func program(
+            owner: String, pid: pid_t, sessions: [NativeSessions.Session],
+        ) -> WineWindowWatch.Program? {
+            if let build = WineWindowWatch.macOSBuild(of: pid, sessions: sessions) { return build }
             if let known = programs[pid] { return known }
-            let resolved = GameLaunchWatch.isHelper(owner) ? nil : WineWindowWatch.resolve(owner: owner, pid: pid)
+            let resolved = GameLaunchWatch.isHelper(owner)
+                ? nil : WineWindowWatch.resolve(owner: owner, pid: pid, sessions: [])
             programs[pid] = resolved
             return resolved
         }
@@ -252,6 +261,7 @@ final class GameLaunchWatch {
         // Read once per pass, at the first window that needs it: which game
         // claims an exe is a directory of config files.
         var games: [Int: ConfigValues]?
+        let sessions = NativeSessions.live()
         // Windows the window server keeps but does not show are listed too,
         // so a game that puts one up without ever showing it is reported
         // rather than silently passed over.
@@ -261,12 +271,11 @@ final class GameLaunchWatch {
         for entry in list {
             guard let owner = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t,
-                  let program = programs.program(owner: owner, pid: pid) else { continue }
+                  let program = programs.program(owner: owner, pid: pid, sessions: sessions) else { continue }
             // A window of some Mac application: there are dozens of those on
             // any Mac, and none of them is a game.
             guard program.source != .owner || program.name.hasSuffix(".exe") else { continue }
-            let macOSBuild = program.source == .native && program.name.hasSuffix(".app")
-            guard program.name.hasSuffix(".exe") || macOSBuild else {
+            guard program.name.hasSuffix(".exe") || program.source == .macOSBuild else {
                 report("\(program.name) (pid \(pid)) is not an .exe — not a game window")
                 continue
             }
@@ -279,11 +288,16 @@ final class GameLaunchWatch {
                 continue
             }
             if let appID {
-                let known = games ?? GameConfig.games()
-                games = known
-                let exe = program.name.lowercased()
-                if let claimant = known.first(where: { $0.value.exes?.contains(exe) == true })?.key,
-                   claimant != appID {
+                let claimant: Int?
+                if program.source == .macOSBuild {
+                    claimant = program.appID
+                } else {
+                    let known = games ?? GameConfig.games()
+                    games = known
+                    let exe = program.name.lowercased()
+                    claimant = known.first(where: { $0.value.exes?.contains(exe) == true })?.key
+                }
+                if let claimant, claimant != appID {
                     report("game window (\(program.name)) belongs to app \(claimant) — still waiting")
                     continue
                 }

@@ -32,45 +32,59 @@ nonisolated enum WineWindowWatch {
         "wine", "wine64", "wine-preloader", "wine64-preloader",
     ]
 
-    /// A window's Windows program and what named it.
+    /// A window's program and what named it.
     struct Program: Equatable, Sendable {
         /// Where the name came from, which is also how much it is worth: the
-        /// first three are the bottle's own answers about its own processes,
-        /// while `owner` is whatever macOS calls the window's application.
+        /// first four say which game a process runs, from the bottle's or the
+        /// engine's own records, while `owner` is whatever macOS calls the
+        /// window's application.
         enum Source: Equatable, Sendable {
             /// The process is the engine's loader; the name is its command line.
             case loader
             /// The process runs through a game's launcher bundle (``GameLaunchers``).
             case bundle
-            /// A game run outside the bottle: an NW.js game (``NWJSRunner``),
-            /// named after its exe, or a macOS build Steam Play installed
-            /// (``SteamPlayMacOS``), named after its `.app`.
+            /// An NW.js game run outside the bottle (``NWJSRunner``), named
+            /// after its exe.
             case native
+            /// A macOS build Steam Play installed (``SteamPlayMacOS``), running
+            /// under the engine's native supervisor (``NativeSessions``) and
+            /// named after its `.app`.
+            case macOSBuild
             /// Nothing claimed the process, so the window's owner names it.
             case owner
         }
 
         let name: String
         let source: Source
+        /// The app whose session runs the process; set for ``Source/macOSBuild``.
+        var appID: Int?
+
+        /// Whether the window is a game's: a macOS build's, or an `.exe`
+        /// window owned by none of the client's infrastructure.
+        var isGame: Bool {
+            source == .macOSBuild || WineWindowWatch.isGameProgram(name)
+        }
     }
 
-    /// The Windows program behind an on-screen window, lowercased: the owner
+    /// The program behind an on-screen window, lowercased: the owner
     /// name when the engine reports one, otherwise the program inside the
-    /// loader process. `GameLaunchWatch` classifies by the same answer.
-    static func program(owner: String, pid: pid_t) -> String? {
-        resolve(owner: owner, pid: pid)?.name
+    /// loader process. `sessions` are the running macOS builds, read once per
+    /// pass over the window list (``NativeSessions/live(inBottle:machine:removingStale:)``).
+    static func program(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> String? {
+        resolve(owner: owner, pid: pid, sessions: sessions)?.name
     }
 
-    /// As ``program(owner:pid:)``, and says which of the four supplies
+    /// As ``program(owner:pid:sessions:)``, and says which of the supplies
     /// answered — what a launch's log line needs to report that a game came
-    /// up through its own bundle.
-    static func resolve(owner: String, pid: pid_t) -> Program? {
+    /// up through its own bundle, and what a window's consumers need to tell
+    /// a macOS build from a Mac application.
+    static func resolve(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
+        if let build = macOSBuild(of: pid, sessions: sessions) {
+            return build
+        }
         let name = owner.lowercased()
         if bottleLoaders.contains(name) {
             return windowsProgram(of: pid).map { Program(name: $0, source: .loader) }
-        }
-        if let bundle = macOSBuild(of: pid) {
-            return Program(name: bundle, source: .native)
         }
         // A process's arguments cost a KERN_ARGMAX buffer each and this is
         // asked of every window on screen, so nothing is asked of the kernel
@@ -96,6 +110,16 @@ nonisolated enum WineWindowWatch {
         return Program(name: name, source: .owner)
     }
 
+    /// The macOS build a process belongs to, from the native supervisor's
+    /// session files: the game itself or any process in its group, wherever
+    /// its Steam library is. `nil` for every other process, Mac applications
+    /// with an `.app` of their own included.
+    static func macOSBuild(of pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
+        NativeSessions.session(owning: pid, in: sessions).map {
+            Program(name: $0.name, source: .macOSBuild, appID: $0.appID)
+        }
+    }
+
     /// The Windows program a game running through its own loader bundle is
     /// on, or `nil` when this window belongs to something else.
     private static func bundledProgram(_ fields: [String]) -> String? {
@@ -116,23 +140,6 @@ nonisolated enum WineWindowWatch {
               let exe = GameConfig.game(appID).exes?.first
         else { return nil }
         return exe.lowercased()
-    }
-
-    /// The lowercased `.app` of a game's macOS build that the dock shim runs out
-    /// of the bottle's Steam library, or `nil` for any other process. One
-    /// `proc_pidpath` per pid, which the caller caches.
-    static func macOSBuild(of pid: pid_t) -> String? {
-        var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
-        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
-        return macOSBuild(executablePath: String(cString: buffer), bottle: SteamBottle.root.path)
-    }
-
-    static func macOSBuild(executablePath path: String, bottle: String) -> String? {
-        guard path.hasPrefix(bottle + "/"), path.contains("/steamapps/common/"),
-              let range = path.range(of: ".app/Contents/MacOS/")
-        else { return nil }
-        let bundle = path[..<range.lowerBound].split(separator: "/").last.map(String.init) ?? ""
-        return bundle.isEmpty ? nil : (bundle + ".app").lowercased()
     }
 
     /// The client's two window-bearing processes. The Mac Steam client's own
@@ -222,14 +229,16 @@ nonisolated enum WineWindowWatch {
             as? [[String: Any]] else { return Scan(wineWindows: [], game: nil) }
         var wineWindows: [Window] = []
         var game: Window?
-        var resolved: [pid_t: String] = [:]
+        var resolved: [pid_t: Program] = [:]
+        let sessions = NativeSessions.live()
         for entry in list {
             guard entry[kCGWindowLayer as String] as? Int == 0,
                   let owner = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t else { continue }
-            guard let name = resolved[pid] ?? program(owner: owner, pid: pid) else { continue }
-            resolved[pid] = name
-            let isGame = isGameProgram(name)
+            guard let program = resolved[pid] ?? resolve(owner: owner, pid: pid, sessions: sessions) else { continue }
+            resolved[pid] = program
+            let name = program.name
+            let isGame = program.isGame
             guard isGame || clientPrograms.contains(name) else { continue }
             let bounds = entry[kCGWindowBounds as String] as? [String: Any] ?? [:]
             let window = Window(
@@ -268,8 +277,9 @@ nonisolated enum WineWindowWatch {
         let layer: Int
     }
 
-    /// The largest on-screen game window (a `.exe` window owned by none of the
-    /// client's infrastructure), or `nil` when no game window is up. Windows at
+    /// The largest on-screen game window (``Program/isGame``: a macOS build's,
+    /// or an `.exe` window owned by none of the client's infrastructure), or
+    /// `nil` when no game window is up. Windows at
     /// every level are considered: a frontmost fullscreen game is not at level
     /// zero, which is exactly when the overlay needs to find it.
     @concurrent
@@ -279,15 +289,16 @@ nonisolated enum WineWindowWatch {
             as? [[String: Any]] else { return nil }
         var best: GameWindow?
         var bestArea: CGFloat = 0
-        var resolved: [pid_t: String] = [:]
+        var resolved: [pid_t: Program] = [:]
+        let sessions = NativeSessions.live()
         for entry in list {
             guard let owner = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t,
                   let layer = entry[kCGWindowLayer as String] as? Int,
                   let bounds = entry[kCGWindowBounds as String] as? [String: Any] else { continue }
-            guard let name = resolved[pid] ?? program(owner: owner, pid: pid) else { continue }
-            resolved[pid] = name
-            guard isGameProgram(name) else { continue }
+            guard let program = resolved[pid] ?? resolve(owner: owner, pid: pid, sessions: sessions) else { continue }
+            resolved[pid] = program
+            guard program.isGame else { continue }
             let rect = CGRect(
                 x: (bounds["X"] as? NSNumber)?.doubleValue ?? 0,
                 y: (bounds["Y"] as? NSNumber)?.doubleValue ?? 0,

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Sevoflurane
 
@@ -60,13 +61,57 @@ struct WineWindowWatchTests {
         #expect(!WineWindowWatch.isGameProgram("sevoflurane"))
     }
 
-    @Test
-    func `a macOS build in the bottle's Steam library is named after its app`() {
-        let bottle = "/Users/k/Library/Application Support/Sevoflurane/Bottles/Steam"
-        let game = bottle + "/drive_c/Program Files (x86)/Steam/steamapps/common/Valheim/valheim.app/Contents/MacOS/Valheim"
-        #expect(WineWindowWatch.macOSBuild(executablePath: game, bottle: bottle) == "valheim.app")
-        // A Mac application elsewhere, and a helper inside the bottle that is no game's build.
-        #expect(WineWindowWatch.macOSBuild(executablePath: "/Applications/Discord.app/Contents/MacOS/Discord", bottle: bottle) == nil)
-        #expect(WineWindowWatch.macOSBuild(executablePath: bottle + "/drive_c/windows/system32/winemenubuilder", bottle: bottle) == nil)
+    /// A macOS build on an external library: its path is nowhere near the
+    /// bottle, and only its session names it.
+    private static func session(game: pid_t, group: pid_t, appID: Int = 892_970) -> NativeSessions.Session {
+        NativeSessions.Session(
+            appID: appID, supervisor: 4242, game: game, processGroup: group,
+            executable: "/Volumes/Games/SteamLibrary/steamapps/common/Valheim/Valheim.app/Contents/MacOS/Valheim",
+            bundle: "/Volumes/Games/SteamLibrary/steamapps/common/Valheim/Valheim.app",
+            started: Date(timeIntervalSince1970: 1_760_112_345),
+        )
     }
+
+    @Test
+    func `a process in a native session is that macOS build, named after its app`() throws {
+        let me = getpid()
+        let program = try #require(
+            WineWindowWatch.resolve(owner: "Valheim", pid: me, sessions: [Self.session(game: me, group: 1)]),
+        )
+        #expect(program == WineWindowWatch.Program(name: "valheim.app", source: .macOSBuild, appID: 892_970))
+        #expect(program.isGame)
+        // The name alone, as an `.app`, is no game.
+        #expect(!WineWindowWatch.isGameProgram("valheim.app"))
+    }
+
+    @Test
+    func `a Mac application outside every session is not a game`() throws {
+        let me = getpid()
+        let other = Self.session(game: me + 100_000, group: me + 100_000)
+        let program = try #require(WineWindowWatch.resolve(owner: "Discord", pid: me, sessions: [other]))
+        #expect(program.source == .owner)
+        #expect(!program.isGame)
+        #expect(WineWindowWatch.macOSBuild(of: me, sessions: []) == nil)
+    }
+
+    @Test
+    func `a child in the game's process group belongs to its session`() throws {
+        let machine = FakeSessionMachine(groups: [501: 500, 502: 777])
+        let session = Self.session(game: 500, group: 500)
+        #expect(NativeSessions.session(owning: 500, in: [session], machine: machine) == session)
+        #expect(NativeSessions.session(owning: 501, in: [session], machine: machine) == session)
+        #expect(NativeSessions.session(owning: 502, in: [session], machine: machine) == nil)
+        #expect(NativeSessions.session(owning: 503, in: [session], machine: machine) == nil)
+    }
+}
+
+/// Process groups and supervisors as a test sets them.
+struct FakeSessionMachine: NativeSessions.Machine {
+    var groups: [pid_t: pid_t] = [:]
+    var supervisors: Set<pid_t> = []
+    var members: [pid_t: [pid_t]] = [:]
+
+    func isSupervisor(_ pid: pid_t) -> Bool { supervisors.contains(pid) }
+    func processGroup(of pid: pid_t) -> pid_t? { groups[pid] }
+    func members(ofProcessGroup group: pid_t) -> [pid_t] { members[group] ?? [] }
 }

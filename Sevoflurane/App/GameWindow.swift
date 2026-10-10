@@ -25,6 +25,7 @@ enum GameWindow {
         else { return nil }
         // Largest first: the frame-rate counter and a launcher can share the game's process.
         let sorted = list.sorted { area(of: $0) > area(of: $1) }
+        let sessions = NativeSessions.live()
         for entry in sorted {
             guard entry[kCGWindowLayer as String] as? Int == 0,
                   let ownerName = entry[kCGWindowOwnerName as String] as? String,
@@ -33,11 +34,11 @@ enum GameWindow {
                   let boundsDict = entry[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
             else { continue }
-            guard let exe = WineWindowWatch.program(owner: ownerName, pid: pid),
-                  exe.hasSuffix(".exe"),
-                  !WineWindowWatch.gameInfrastructureOwners.contains(exe),
+            guard let program = WineWindowWatch.resolve(owner: ownerName, pid: pid, sessions: sessions),
+                  program.isGame,
                   !WineWindowWatch.isOverlay(width: Int(bounds.width), height: Int(bounds.height))
             else { continue }
+            let exe = program.name
 
             let (index, scale, displayTopLeft) = display(for: bounds)
             // kCGWindowName needs the Screen Recording permission; the app
