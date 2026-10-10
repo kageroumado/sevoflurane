@@ -226,7 +226,7 @@ enum SteamLibraryCompat {
     /// the search. The rows and tiles carry no app id in the DOM; React's
     /// fiber on each holds the props it was drawn from, the app id among
     /// them. Idempotent and self-reapplying, like ``SteamCompatBadge``.
-    static let script = "(function () {\n" + SteamCompatBadge.glyphs + desktop + "\n})()"
+    static let script = "(function () {\n" + SteamCompatBadge.glyphs + SteamNativeBuilds.platformGlyphs + desktop + "\n})()"
 
     private static let desktop = """
       if (window.__sevoLibraryBadges) {
@@ -252,6 +252,9 @@ enum SteamLibraryCompat {
         ".sevo-lib-tile{position:absolute;top:6px;left:6px;z-index:3;padding:3px;border-radius:12px;background-color:rgba(14,20,27,0.85)}",
         ".sevo-lib-tile .sevo-compat-icon>svg{width:16px;height:16px}",
         ".sevo-compat-native{color:#1a9fff}",
+        ".sevo-lib-badge .sevo-platform{display:flex;color:#dcdedf}",
+        ".sevo-lib-badge .sevo-platform>svg{width:14px;height:14px}",
+        ".sevo-lib-tile .sevo-platform>svg{width:16px;height:16px}",
         "#sevo-mac-chip{display:flex;align-items:center;gap:5px;height:32px;padding:0 8px;margin-inline-start:2px;border-radius:2px;color:#8b929a;font-size:10px;font-weight:700;text-transform:uppercase;cursor:pointer;user-select:none;flex:none}",
         "#sevo-mac-chip:hover{background-color:#3d4450;color:#fff}",
         "#sevo-mac-chip.sevo-on{background-color:#3d4450;color:#fff}",
@@ -316,6 +319,10 @@ enum SteamLibraryCompat {
           html += glyph("verified").replace("sevo-compat-verified", "sevo-compat-native");
           words.push("Native macOS version plays");
         }
+        if (verdict.m) {
+          html += platformGlyph("macos");
+          words.push("Set to its macOS version");
+        }
         return html ? { html: html, title: words.join(" · ") } : null;
       }
     
@@ -331,7 +338,7 @@ enum SteamLibraryCompat {
             if (existing) existing.remove();
             continue;
           }
-          var key = appid + ":" + verdict.s + ":" + (verdict.n ? 1 : 0);
+          var key = appid + ":" + verdict.s + ":" + (verdict.n ? 1 : 0) + (verdict.m ? 1 : 0);
           if (existing && existing.dataset.key === key && existing === host.lastElementChild) continue;
           var element = existing || document.createElement("span");
           element.className = "sevo-lib-badge " + kind;

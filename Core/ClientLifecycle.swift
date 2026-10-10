@@ -539,6 +539,13 @@ nonisolated enum ClientLifecycle {
             try? trail.close()
             clientDidExit(finished.terminationStatus)
         }
+        // The macOS-build tool, registered while the client is down: its
+        // mappings live in config.vdf, which a running client rewrites.
+        if Engine.active.supportsSteamPlayMacOS {
+            for note in SteamPlayMacOS.prepareClient(steamRoot: SteamBottle.steamRoot, engineRoot: Engine.active.root) {
+                log("Steam Play for macOS builds: \(note)")
+            }
+        }
         // The per-bottle and per-program env files the engine reads at
         // every process start, from the store as it stands now.
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)

@@ -311,7 +311,19 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// With it, a setting reaches a game at its next launch; without it, the
     /// game inherits the client's environment and waits for a Steam restart.
     var supportsEnvFiles: Bool {
-        (engineInfo?["features"] as? [String])?.contains("env-files") == true
+        features.contains("env-files")
+    }
+
+    /// What a managed engine declares it can do (`features` in
+    /// `engine-info.json`); empty for CrossOver and for an engine without the
+    /// file.
+    var features: [String] {
+        engineInfo.map(Self.features(inEngineInfo:)) ?? []
+    }
+
+    /// The `features` an `engine-info.json` declares.
+    static func features(inEngineInfo info: [String: Any]) -> [String] {
+        info["features"] as? [String] ?? []
     }
 
     /// The relay that serves `\\.\pipe\discord-ipc-0` inside the bottle and

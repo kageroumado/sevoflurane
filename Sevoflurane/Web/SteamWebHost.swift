@@ -782,6 +782,9 @@ final class SteamWebHost {
         // The Mac compatibility strip on game pages, in the slot Steam's own
         // Deck strip leaves empty on a desktop client.
         applyCompatibilityStrip()
+        // The choice between a game's macOS and Windows builds, where the
+        // engine runs macOS builds.
+        applyNativeBuilds()
         Task(name: "Register game-action events") {
             let result = await evaluateInContext(Self.gameActionScript)
             EventLog.shared.log(.client, "game-action events: \(result ?? "no answer")")

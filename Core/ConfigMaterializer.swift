@@ -82,7 +82,7 @@ nonisolated enum ConfigMaterializer {
             }
             games.append(game)
         }
-        let files = appFiles(games)
+        let files = withClientFile(appFiles(games), steamPlay: engine.supportsSteamPlayMacOS)
         for (exe, claimants) in sharedExecutables(games) {
             noteShared(exe, by: claimants)
         }
@@ -157,6 +157,18 @@ nonisolated enum ConfigMaterializer {
             let apps = owners.map { String($0.appID) }.joined(separator: ", ")
             files[file] = ["# apps \(apps) all ship \(exe)"] + agreed
         }
+        return files
+    }
+
+    /// `steam.exe`'s own file, with Steam Play switched on for an engine that
+    /// runs macOS builds (``SteamPlayMacOS``). A game that ships its own
+    /// `steam.exe` keeps its lines, and the switch is added to them; the
+    /// engine reads the file at the client's next start.
+    static func withClientFile(_ files: [String: [String]], steamPlay: Bool) -> [String: [String]] {
+        guard steamPlay else { return files }
+        var files = files
+        let line = SteamPlayMacOS.environmentLine
+        files[SteamPlayMacOS.clientEnvFile] = (files[SteamPlayMacOS.clientEnvFile] ?? []).filter { $0 != line } + [line]
         return files
     }
 

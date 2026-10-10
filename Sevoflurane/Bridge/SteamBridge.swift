@@ -168,6 +168,9 @@ actor SteamBridge {
                 if request.method == "GET", request.path.hasPrefix("/__compat/") {
                     return await Self.handleCompatRequest(request)
                 }
+                if request.method == "GET", request.path.hasPrefix("/__native/") {
+                    return await Self.handleNativeBuildRequest(request)
+                }
                 if request.path == "/__web" {
                     return await self?.handleWebRequest(request) ?? .error(500, "bridge gone")
                 }

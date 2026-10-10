@@ -436,8 +436,9 @@ runs on CrossOver.
 - Library and store pages carry a Mac compatibility strip: a verdict on the
   Windows build from Sevoflurane players' own runs where there are enough,
   then AppleGamingWiki's Wine and CrossOver ratings, then ProtonDB; the
-  game's macOS version when it has one; and its anti-cheat from
-  AreWeAntiCheatYet. Details link to each source.
+  game's macOS version when it has one, each cell naming the version it
+  rates; and its anti-cheat from AreWeAntiCheatYet. Details link to each
+  source.
 - The library badges every game with its Mac verdict, and a Mac button beside
   its search keeps only the games that play.
 - Installing a game whose anti-cheat cannot run on a Mac, or whose verdict is
@@ -514,6 +515,13 @@ runs on CrossOver.
   it to Valve's Steam for Mac, which opens its install page where the game
   is not installed yet. Set per game in Settings › Games or the game's menu
   in the menu bar; the compat strip's Details play it once.
+- On an engine with Steam Play for macOS builds, Steam here installs and
+  plays a game's macOS version itself. Install asks which version, with each
+  download's size and its compatibility rating; the play bar's Version entry
+  switches an installed game and says what it downloads first.
+- Properties › Compatibility is there for games with a macOS version, as on
+  Steam for Linux: "Force the use of a specific Steam Play compatibility tool"
+  lists Native macOS version. The library marks games set to it with .
 - When your account signs in on another computer or in Steam for Mac, Steam
   here signs out: a notification and the menu bar say so and offer
   Reconnect, and a session Steam for Mac took comes back when it quits.

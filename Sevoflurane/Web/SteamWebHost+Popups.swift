@@ -122,4 +122,18 @@ extension SteamWebHost {
             window.evaluateOnStorePages(on ? SteamCompatBadge.storeScript : SteamCompatBadge.removalScript)
         }
     }
+
+    /// Offers each game's macOS build beside its Windows one
+    /// (``SteamNativeBuilds``) when the client's engine runs macOS builds,
+    /// and takes the offer off otherwise. Called at adoption, which follows
+    /// every client start, so an engine switch is reflected with the client
+    /// it boots.
+    func applyNativeBuilds() {
+        let on = Engine.running.supportsSteamPlayMacOS
+        install(
+            on ? SteamNativeBuilds.contextScript : SteamNativeBuilds.contextRemovalScript,
+            describedAs: "native macOS builds", settledAt: SteamNativeBuilds.settled,
+        )
+        desktop?.webView.evaluateJavaScript(on ? SteamNativeBuilds.script : SteamNativeBuilds.removalScript)
+    }
 }

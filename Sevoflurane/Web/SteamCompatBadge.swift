@@ -74,7 +74,7 @@ enum SteamCompatBadge {
       var SLOT_ID = "sevo-compat-slot";
       var STRIP_ID = "sevo-compat";
       var PANEL_ID = "sevo-compat-panel";
-
+    
       /* Steam's rules for the Deck strip, values copied from its stylesheet:
          the strip, its 16px title, the 10px uppercase label, and the Details
          pill and its hover swap.
@@ -125,7 +125,7 @@ enum SteamCompatBadge {
         rows.push(row(mac.state, "<b>Windows version:</b> " + esc(mac.reason), record.wiki && link(record.wiki.pageURL, "AppleGamingWiki")));
         var arch = record.macArchitectures;
         if (record.nativeBadge) {
-          var play = record.nativeBadge.state !== "unsupported"
+          var play = record.nativeBadge.state !== "unsupported" && !playsInThisSteam()
             ? '<a class="sevo-compat-link sevo-compat-play" data-appid="' + esc(appid) + '">Play in Steam for Mac</a>' : "";
           rows.push(row(record.nativeBadge.state, "<b>macOS version:</b> " + esc(record.nativeBadge.reason), play));
         } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
@@ -181,8 +181,10 @@ enum SteamCompatBadge {
         var mac = record ? record.mac : { state: "unknown", label: "Checking…" };
         var ac = record ? record.antiCheatBadge : { state: "unknown", label: "Checking…" };
         var native = record && record.nativeBadge;
-        strip.innerHTML = cell("Mac Compatibility", mac)
-          + (native ? SEP + cell("Native on macOS", native) : "")
+        /* With a macOS build beside it, each cell names the build it rates,
+           so "Unknown" and "Native" read as two builds rather than one
+           contradiction. */
+        strip.innerHTML = (native ? cell("Windows version", mac) + SEP + cell("macOS version", native) : cell("Mac Compatibility", mac))
           + SEP + cell("Anti-Cheat", ac)
           + '<div class="sevo-compat-details" role="button" tabindex="0">' + (open[appid] ? "Hide" : "Details") + "</div>";
         if (record) {
@@ -330,6 +332,12 @@ enum SteamCompatBadge {
         } catch (e) {}
       }
     
+      /* The macOS build installs and plays through this Steam
+         (``SteamNativeBuilds``), so Steam for Mac is no longer the way to it. */
+      function playsInThisSteam() {
+        try { return !!(ctx.__sevoNativeBuilds && ctx.__sevoNativeBuilds.enabled); } catch (e) { return false; }
+      }
+    
       function load(appid, strip, panel) {
         if (records[appid]) { render(strip, panel, appid, records[appid]); return; }
         var o = overview(appid);
@@ -429,6 +437,8 @@ enum SteamCompatBadge {
         var h = handler();
         if (h) h.postMessage({ playMac: Number(appid) });
       }
+    
+      function playsInThisSteam() { return false; }
     
       function currentAppID() {
         var match = location.pathname.match(/^\\/app\\/(\\d+)/);

@@ -89,14 +89,20 @@ nonisolated enum GameCompatBatch {
         return GameCompatVerdict.antiCheatBlocker(antiCheat) == nil
     }
 
-    /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "n": native}}}`.
-    /// A game with nothing to draw (Unknown, no playable macOS build) is left
-    /// out, which the page reads as Unknown. `pending` counts the lookups
-    /// still queued, so the page knows to ask again.
-    static func answer(_ summaries: [GameCompatSummary], pending: Int) -> Data {
+    /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "n": native, "m": true}}}`.
+    /// `m` marks a game set to its macOS build (``SteamPlayMacOS``), from
+    /// `macBuilds`. A game with nothing to draw (Unknown, no playable macOS
+    /// build, Windows build) is left out, which the page reads as Unknown.
+    /// `pending` counts the lookups still queued, so the page knows to ask
+    /// again.
+    static func answer(_ summaries: [GameCompatSummary], pending: Int, macBuilds: Set<Int> = []) -> Data {
         var apps: [String: Any] = [:]
-        for summary in summaries where summary.state != .unknown || summary.native {
-            apps[String(summary.appID)] = ["s": summary.state.rawValue, "n": summary.native]
+        for summary in summaries {
+            let mac = macBuilds.contains(summary.appID)
+            guard summary.state != .unknown || summary.native || mac else { continue }
+            var entry: [String: Any] = ["s": summary.state.rawValue, "n": summary.native]
+            if mac { entry["m"] = true }
+            apps[String(summary.appID)] = entry
         }
         let object: [String: Any] = ["pending": pending, "apps": apps]
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data("{}".utf8)

@@ -291,7 +291,7 @@ nonisolated enum GameCompatVerdict {
             guard hasMacBuild else { return nil }
             return GameCompatBadge(
                 state: .unknown, label: "Available",
-                reason: "Steam lists a macOS version. Steam for Mac runs it directly, outside the bottle.",
+                reason: "Steam lists a macOS version.",
             )
         }
         let reason = "AppleGamingWiki rates the macOS version \(describe(tier))\(how)."

@@ -99,15 +99,42 @@ extension SteamBridge {
 
     /// `POST /__compat/batch` with `{"apps": [[appid, "name"], …]}`: the
     /// library's verdicts for every game in it at once, compact
-    /// (``GameCompatBatch/answer(_:pending:)``), for the badges on its rows
+    /// (``GameCompatBatch/answer(_:pending:macBuilds:)``), for the badges on its rows
     /// and tiles and the "Plays on Mac" filter (``SteamLibraryCompat``).
     nonisolated static func handleCompatBatchRequest(_ request: HTTPRequest) async -> HTTPResponse {
         let games = GameCompatBatch.games(fromRequest: request.body)
         let (summaries, pending) = await GameCompatService.shared.summaries(for: games)
+        let mapped = Engine.running.supportsSteamPlayMacOS ? SteamPlayMacOS.mappedApps() : []
         return .ok(
-            GameCompatBatch.answer(summaries, pending: pending),
+            GameCompatBatch.answer(summaries, pending: pending, macBuilds: mapped),
             type: "application/json", headers: [("Cache-Control", "no-store")],
         )
+    }
+
+    /// How long the native-build answer waits for the compatibility record
+    /// its hints come from. The game page asked for the record already, so
+    /// it is usually on disk; past this the hints read as unrated.
+    private static let nativeRecordPatience: Duration = .seconds(3)
+
+    /// `GET /__native/<appid>?name=<display name>`: the choice between the
+    /// game's macOS and Windows builds as the game page offers it
+    /// (``NativeBuildInfo``, ``SteamNativeBuilds``).
+    nonisolated static func handleNativeBuildRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        let id = String(request.path.dropFirst("/__native/".count)).prefix(while: { $0 != "." })
+        guard let appID = Int(id) else { return .error(404, "Not Found") }
+        let items = URLComponents(string: "http://127.0.0.1" + request.target)?.queryItems ?? []
+        let name = items.first { $0.name == "name" }?.value ?? ""
+        let record = try? await withDeadline(nativeRecordPatience) {
+            await GameCompatService.shared.record(appID: appID, name: name, deckCategory: nil)
+        }
+        let appInfo = (try? Data(contentsOf: SteamAppInfo.fileURL, options: .alwaysMapped))
+            .flatMap { SteamAppInfo.keyValues(appID: appID, in: $0) }
+        let info = NativeBuildInfo.make(
+            appID: appID, enabled: Engine.running.supportsSteamPlayMacOS, appInfo: appInfo,
+            manifest: NativeBuildInfo.manifest(appID: appID), record: record,
+        )
+        let body = (try? JSONEncoder().encode(info)) ?? Data("{}".utf8)
+        return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
     // MARK: - Steam's web properties
