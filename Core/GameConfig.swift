@@ -456,6 +456,10 @@ nonisolated enum GameRunner {
     static let wine = "wine"
     static let nwjs = "nwjs"
     static let all = [wine, nwjs]
+    /// A game's own macOS build, set by Steam's mapping (``SteamPlayMacOS``)
+    /// rather than by a game setting, so it is outside ``all``. A run record
+    /// names it as its runner and renderer.
+    static let macos = "macos"
 }
 
 /// What a changed setting costs to reach the game — the badge Settings shows

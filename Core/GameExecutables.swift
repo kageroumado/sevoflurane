@@ -60,7 +60,11 @@ nonisolated enum GameExecutables {
         let known = Set(GameConfig.game(appID).exes ?? [])
         let found = executables(in: directory)
         guard !found.isEmpty else {
-            log("app \(appID): no executables under \(directory.path)")
+            // A macOS build installed through Steam Play holds an .app and no exe.
+            let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+            if !entries.contains(where: { $0.hasSuffix(".app") }) {
+                log("app \(appID): no executables under \(directory.path)")
+            }
             return false
         }
         let new = found.filter { !known.contains($0) }

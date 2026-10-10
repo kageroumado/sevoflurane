@@ -82,11 +82,14 @@ nonisolated struct RunInProgress: Sendable {
         }
         let code = exit?.code ?? programStatus
         let lines = provenance.isEmpty ? wineTail : provenance + "\n" + wineTail
-        if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: lines) {
-            record.renderer = answered
-            record.rendererConfirmed = true
-        } else if record.runner != GameRunner.nwjs, record.rendererConfirmed != true {
-            record.rendererConfirmed = false
+        // A macOS build ran natively: the wine log holds only the bridge helper's lines.
+        if record.runner != GameRunner.macos {
+            if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: lines) {
+                record.renderer = answered
+                record.rendererConfirmed = true
+            } else if record.runner != GameRunner.nwjs, record.rendererConfirmed != true {
+                record.rendererConfirmed = false
+            }
         }
         let ending = WineExceptionTrail.ending(
             in: wineTail,
@@ -319,16 +322,18 @@ final nonisolated class RunRecorder {
             ?? bootedEngine.map(Self.steamProcessLogURL(forEngine:))
             ?? Self.steamProcessLogURL
         let now = Date.now
-        let record = RunRecord(
+        let native = Engine.running.supportsSteamPlayMacOS && SteamPlayMacOS.mappedApps().contains(appID)
+        var record = RunRecord(
             t: runRecordStamp.string(from: now),
             appid: appID,
             name: values.name,
             engine: (bootedEngine ?? Engine.active).recordIdentifier,
-            renderer: values.runner == GameRunner.nwjs ? GameRunner.nwjs : selection.renderer.rawValue,
-            runner: values.runner ?? GameRunner.wine,
+            renderer: native ? GameRunner.macos
+                : values.runner == GameRunner.nwjs ? GameRunner.nwjs : selection.renderer.rawValue,
+            runner: native ? GameRunner.macos : values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
             tuning: Self.tuningLabel(forApp: appID),
-            upscaler: GameConfig.upscaler(bottle: SteamBottle.name, game: appID).value,
+            upscaler: native ? nil : GameConfig.upscaler(bottle: SteamBottle.name, game: appID).value,
             msync: selection.msync,
             d3dmetal: selection.d3dMetalVersion,
             macos: Self.macOSVersion,
@@ -338,6 +343,10 @@ final nonisolated class RunRecorder {
             memoryGB: MacHardware.memoryGB,
             host: Self.hostState(),
         )
+        if native {
+            record.d3dmetal = nil
+            record.rendererConfirmed = true
+        }
         open[appID] = OpenRun(
             started: .now,
             record: record,
@@ -478,7 +487,7 @@ final nonisolated class RunRecorder {
         if !lines.isEmpty {
             run.provenance += run.provenance.isEmpty ? lines : "\n" + lines
         }
-        let answered = WineProvenance.renderer(
+        let answered = run.record.runner == GameRunner.macos ? nil : WineProvenance.renderer(
             forApp: read.appID, exe: run.record.exe, pid: run.gamePID, in: run.provenance,
         )
         let changed = answered.map { $0 != run.record.renderer || run.record.rendererConfirmed != true } ?? false
