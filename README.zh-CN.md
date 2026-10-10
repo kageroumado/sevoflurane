@@ -44,7 +44,7 @@
 - **按需开启超分与缩放。** 游戏保持自己的渲染分辨率，再把画面放大到窗口大小。可以选 Lanczos、MetalFX，或适合动漫画面的 Anime4K 和 CuNNy。
 - **DirectX 12。** 通过 Sevoflurane 自己的 Wine 版本 [Dormison](https://github.com/kageroumado/dormison/blob/main/README.zh-CN.md)，配合 Apple 游戏移植工具包（Game Porting Toolkit）中的 D3DMetal 运行游戏。
 - **自动启用游戏模式。** 每款游戏都作为独立的 Mac App 启动，有自己的名称和程序坞图标。游戏全屏时，macOS 会自动开启游戏模式。
-- **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下 Mac 按钮就只显示能玩的游戏；安装反作弊无法运行的游戏前会先询问。
+- **懂 Mac 的游戏库。** Steam 游戏库里的每款游戏都带有社区数据库给出的 Mac 评级，点一下“最近”和“可玩”旁边的苹果按钮就只显示能在这台 Mac 上玩的游戏，与 Steam for Mac 一致；安装反作弊无法运行的游戏前会先询问。
 - **有 Mac 版，就玩 Mac 版。** Steam 游戏库里不少游戏也有原生 macOS 版本。为某款游戏选择它后，“开始游戏”会通过 Valve 的 Steam for Mac 启动这个版本，没安装时则打开那里的安装页面；可以在菜单栏中该游戏的菜单或“设置 › 游戏”里切换。
 - **自动应用修复。** 游戏首次启动时，会从一份签名列表中套用其他玩家发现它需要的设置，并可撤销。为 Proton 写的启动选项（`DXVK_HUD=1 %command%`）也能直接使用。
 - **Steam 以外的程序。** 从访达打开任意 Windows 程序，Sevoflurane 会判断它是游戏还是安装程序，帮你运行或安装，提供同样的窗口和游戏功能，并把它列进 Steam 游戏库。
@@ -280,7 +280,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 - 网页上的 `steam://` 链接可以用 Sevoflurane 打开（在“设置 › 通用”中设为由它接管）。
 - 开启低电量模式或减弱动态效果时，Steam 中对应的设置也会开启；关闭后恢复你原来的设置。
 - 游戏的库页面和商店页面会显示 Mac 兼容性条：Windows 版本的评级优先采用 Sevoflurane 玩家自己的运行记录（数据足够时），其次是 AppleGamingWiki 的 Wine 和 CrossOver 评级，再次是 ProtonDB；如果游戏有 macOS 版本，也会单独显示；反作弊信息来自 AreWeAntiCheatYet。详情中附有各个来源的链接。
-- 游戏库为每款游戏标上 Mac 评级，搜索框旁的 Mac 按钮可以只显示能玩的游戏。
+- 游戏库为每款游戏标上 Mac 评级，“最近”和“可玩”旁边的苹果筛选只保留能在这台 Mac 上玩的游戏：能运行的 macOS 版本，或 Sevoflurane 玩家、AppleGamingWiki 评为“已验证”或“可玩”的 Windows 版本。来自 Linux 的 ProtonDB 评级只显示在徽章上，不计入筛选。
 - 安装反作弊无法在 Mac 上运行、或评级为“不支持”的游戏时，会先询问；选择“仍然安装”即可继续。
 - 程序坞菜单和 Steam 的一样：最近玩过的游戏、商店、游戏库、社区、好友、设置、大屏幕模式和你的好友状态。
 - 自定样式：Styles 文件夹中的 CSS 文件可以改变 Steam 窗口的样式，也可以选择同时作用于商店和社区页面，保存后立即重新加载。“设置 › 通用 › 自定样式”会打开该文件夹，并列出在 Steam 更新后仍然有效的选择器。

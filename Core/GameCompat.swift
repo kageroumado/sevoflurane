@@ -120,11 +120,18 @@ nonisolated struct GameCompatSummary: Codable, Sendable, Equatable {
     let state: GameCompatBadge.State
     /// The wiki rates the macOS build perfect or playable.
     let native: Bool
+    /// The macOS build runs on Apple silicon: rated playable, or unrated with
+    /// PCGamingWiki naming a 64-bit Intel or arm64 slice. An unrated build alone
+    /// does not count: plenty of the macOS builds Steam lists are 32-bit only.
+    var macRunnable = false
+    /// The Windows verdict comes from Mac evidence: Sevoflurane players' runs or
+    /// AppleGamingWiki. A ProtonDB rating is Linux evidence.
+    var macEvidence = false
 
-    /// Whether the game belongs under the library's "Plays on Mac" filter:
-    /// the Windows build is Verified or Playable, or the macOS build plays.
+    /// Whether the game belongs under the library's Apple filter: its macOS
+    /// build runs, or Mac evidence rates its Windows build Verified or Playable.
     var playsOnMac: Bool {
-        native || state == .verified || state == .playable
+        native || macRunnable || (macEvidence && (state == .verified || state == .playable))
     }
 }
 
@@ -316,10 +323,17 @@ nonisolated enum GameCompatVerdict {
         architectures: GameCompatRecord.MacArchitectures?,
     ) -> GameCompatSummary {
         let native = native(wiki: wiki, hasMacBuild: hasMacBuild, architectures: architectures)
+        let communityRated = community.map { rank($0.verdict) != nil } ?? false
+        let wikiRated = wiki.map { wikiEvidence($0) != nil } ?? false
         return GameCompatSummary(
             appID: appID,
             state: mac(antiCheat: antiCheat, wiki: wiki, proton: proton, community: community).state,
             native: native?.state == .verified || native?.state == .playable,
+            macRunnable: native.map { badge in
+                badge.state == .verified || badge.state == .playable
+                    || (badge.state == .unknown && (architectures?.intel64 == true || architectures?.arm == true))
+            } ?? false,
+            macEvidence: communityRated || wikiRated,
         )
     }
 

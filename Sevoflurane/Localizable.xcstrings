@@ -1022,12 +1022,12 @@
         }
       }
     },
-    "A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, its Mac button keeps only the games that play, and Install warns before a game known to fail. Sevoflurane's own players' runs come first where there are enough." : {
+    "A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, its Apple filter keeps only the games that play on this Mac, and Install warns before a game known to fail. Sevoflurane's own players' runs come first where there are enough." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "游戏的库页面和商店页面会显示它在 Mac 上的运行情况、是否有 macOS 版本，以及其反作弊的情况。游戏库会为每个游戏加上标记，Mac 按钮只保留可以运行的游戏，安装已知无法运行的游戏前会给出提醒。在数据足够时，优先采用 Sevoflurane 玩家自己的运行记录。"
+            "value" : "游戏的库页面和商店页面会显示它在 Mac 上的运行情况、是否有 macOS 版本，以及其反作弊的情况。游戏库会为每个游戏加上标记，苹果筛选只保留可以运行的游戏，安装已知无法运行的游戏前会给出提醒。在数据足够时，优先采用 Sevoflurane 玩家自己的运行记录。"
           }
         }
       }

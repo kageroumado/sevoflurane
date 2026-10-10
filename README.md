@@ -63,8 +63,9 @@ and play. Games appear as players share their runs.
   own name and Dock icon, so macOS turns on Game Mode when it fills the
   screen.
 - **A library that knows the Mac.** Every game in Steam's library carries its
-  Mac verdict from the community database, a Mac button keeps only the games
-  that play, and installing a game whose anti-cheat cannot run asks first.
+  Mac verdict from the community database, an Apple button beside Recent and
+  Ready to Play keeps only the games that play on this Mac, as in Steam for
+  Mac, and installing a game whose anti-cheat cannot run asks first.
 - **The Mac version, when there is one.** Plenty of a Steam library has a
   native macOS version too. Install asks which version to get, and the game
   page switches it later; the macOS version plays in Sevoflurane's own Steam,
@@ -439,8 +440,11 @@ runs on CrossOver.
   game's macOS version when it has one, each cell naming the version it
   rates; and its anti-cheat from AreWeAntiCheatYet. Details link to each
   source.
-- The library badges every game with its Mac verdict, and a Mac button beside
-  its search keeps only the games that play.
+- The library badges every game with its Mac verdict, and the Apple filter
+  beside Recent and Ready to Play keeps only the games that play on this Mac: a
+  macOS version that runs, or a Windows version that Sevoflurane players or
+  AppleGamingWiki rate Verified or Playable. ProtonDB ratings, which come from
+  Linux, show on the badge and stay out of the filter.
 - Installing a game whose anti-cheat cannot run on a Mac, or whose verdict is
   Unsupported, asks first; Install Anyway goes ahead.
 - The Dock menu works like Steam's: recent games, Store, Library, Community,

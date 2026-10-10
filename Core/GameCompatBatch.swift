@@ -89,8 +89,9 @@ nonisolated enum GameCompatBatch {
         return GameCompatVerdict.antiCheatBlocker(antiCheat) == nil
     }
 
-    /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "n": native, "m": true}}}`.
-    /// `m` marks a game set to its macOS build (``SteamPlayMacOS``), from
+    /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "n": native, "p": true, "m": true}}}`.
+    /// `p` marks a game the Apple filter keeps (``GameCompatSummary/playsOnMac``),
+    /// `m` a game set to its macOS build (``SteamPlayMacOS``), from
     /// `macBuilds`. A game with nothing to draw (Unknown, no playable macOS
     /// build, Windows build) is left out, which the page reads as Unknown.
     /// `pending` counts the lookups still queued, so the page knows to ask
@@ -99,8 +100,9 @@ nonisolated enum GameCompatBatch {
         var apps: [String: Any] = [:]
         for summary in summaries {
             let mac = macBuilds.contains(summary.appID)
-            guard summary.state != .unknown || summary.native || mac else { continue }
+            guard summary.state != .unknown || summary.native || summary.macRunnable || mac else { continue }
             var entry: [String: Any] = ["s": summary.state.rawValue, "n": summary.native]
+            if summary.playsOnMac || mac { entry["p"] = true }
             if mac { entry["m"] = true }
             apps[String(summary.appID)] = entry
         }

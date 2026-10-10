@@ -23,12 +23,12 @@ struct LibraryCompatTests {
     // MARK: - Summaries
 
     @Test
-    func `a summary carries the strip's state and whether the macOS build plays`() {
+    func `a summary carries the strip's state and whether the macOS build plays`() throws {
         let sims = GameCompatVerdict.summary(
             appID: 1222670, antiCheat: nil, wiki: wiki(native: "perfect", crossover: "unplayable", wine: "perfect"),
             proton: nil, community: nil, hasMacBuild: true, architectures: nil,
         )
-        #expect(sims == GameCompatSummary(appID: 1222670, state: .playable, native: true))
+        #expect(sims == GameCompatSummary(appID: 1222670, state: .playable, native: true, macRunnable: true, macEvidence: true))
         #expect(sims.playsOnMac)
         // A macOS build Steam lists and nobody rated is "Available", which
         // the filter does not count: plenty of those are 32-bit.
@@ -43,6 +43,20 @@ struct LibraryCompatTests {
         )
         #expect(broken.state == .unsupported)
         #expect(!broken.playsOnMac)
+        // ProtonDB alone is Linux evidence: the badge says Playable, the Apple filter leaves it out.
+        let linuxOnly = try GameCompatVerdict.summary(
+            appID: 4, antiCheat: nil, wiki: nil,
+            proton: GameCompatRecord.ProtonSummary(tier: "silver", confidence: "good", total: 40, sourceURL: #require(URL(string: "https://www.protondb.com/app/4"))),
+            community: nil, hasMacBuild: false, architectures: nil,
+        )
+        #expect(linuxOnly.state == .playable)
+        #expect(!linuxOnly.playsOnMac)
+        // An unrated macOS build with a 64-bit slice runs.
+        let universal = GameCompatVerdict.summary(
+            appID: 5, antiCheat: nil, wiki: nil, proton: nil, community: nil, hasMacBuild: true,
+            architectures: GameCompatRecord.MacArchitectures(intel32: nil, intel64: true, arm: true),
+        )
+        #expect(universal.playsOnMac)
     }
 
     @Test
@@ -147,7 +161,7 @@ struct LibraryCompatTests {
     function fetch(url, options) {
       fetched.push({ url: url, body: JSON.parse(options.body) });
       return Promise.resolve({ ok: true, json: function () {
-        return Promise.resolve({ pending: 2, apps: { "1": { s: "playable", n: false }, "3": { s: "unknown", n: true }, "4": { s: "unsupported", n: false } } });
+        return Promise.resolve({ pending: 2, apps: { "1": { s: "playable", n: false, p: true }, "3": { s: "unknown", n: true, p: true }, "4": { s: "unsupported", n: false } } });
       } });
     }
     class Filter {

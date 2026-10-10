@@ -197,7 +197,7 @@ enum SteamLibraryCompat {
             var next = new Set();
             for (var id in answer.apps) {
               var v = answer.apps[id];
-              if (v.n || v.s === "verified" || v.s === "playable") next.add(Number(id));
+              if (v.p) next.add(Number(id));
             }
             plays = next;
             publish(current().on);
@@ -255,10 +255,14 @@ enum SteamLibraryCompat {
         ".sevo-lib-badge .sevo-platform{display:flex;color:#dcdedf}",
         ".sevo-lib-badge .sevo-platform>svg{width:14px;height:14px}",
         ".sevo-lib-tile .sevo-platform>svg{width:16px;height:16px}",
-        "#sevo-mac-chip{display:flex;align-items:center;gap:5px;height:32px;padding:0 8px;margin-inline-start:2px;border-radius:2px;color:#8b929a;font-size:10px;font-weight:700;text-transform:uppercase;cursor:pointer;user-select:none;flex:none}",
-        "#sevo-mac-chip:hover{background-color:#3d4450;color:#fff}",
-        "#sevo-mac-chip.sevo-on{background-color:#3d4450;color:#fff}",
-        "#sevo-mac-chip .sevo-compat-icon>svg{width:16px;height:16px}"
+        "#sevo-mac-chip:not(.sevo-in-bar){display:flex;align-items:center;gap:5px;height:32px;padding:0 8px;margin-inline-start:2px;border-radius:2px;color:#8b929a;font-size:10px;font-weight:700;text-transform:uppercase;cursor:pointer;user-select:none;flex:none}",
+        "#sevo-mac-chip:not(.sevo-in-bar):hover{background-color:#3d4450;color:#fff}",
+        "#sevo-mac-chip.sevo-on:not(.sevo-in-bar){background-color:#3d4450;color:#fff}",
+        "#sevo-mac-chip .sevo-compat-icon>svg{width:16px;height:16px}",
+        /* In the bar, Steam's CheckboxWithImage class sizes and colors the
+           button; the glyph takes the size of Steam's own icons there. */
+        "#sevo-mac-chip.sevo-in-bar .sevo-platform{display:flex;align-items:center;justify-content:center}",
+        "#sevo-mac-chip.sevo-in-bar svg{width:20px;height:20px}"
       ].join("\\n");
     
       var LABELS = { verified: "Verified", playable: "Playable", unsupported: "Unsupported" };
@@ -274,7 +278,10 @@ enum SteamLibraryCompat {
         try { chunk.push([["sevo-library-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) { return null; }
         if (!req || !req.m) return null;
         var found = {};
-        var wanted = { search: "AdvancedSearchContainer", row: "GameListEntryContainer", tile: "LibraryItemBox" };
+        var wanted = {
+          search: "AdvancedSearchContainer", row: "GameListEntryContainer", tile: "LibraryItemBox",
+          filters: "ViewFiltersBar"
+        };
         for (var id in req.m) {
           var source = String(req.m[id]);
           if (source.length > 20000) continue;
@@ -349,11 +356,39 @@ enum SteamLibraryCompat {
         }
       }
     
+      /* Steam for Mac draws an Apple filter first in the bar beside the
+         collection picker (Recent, Ready to Play); Steam on Windows leaves the
+         slot out. The toggle goes there, in Steam's own button classes. */
+      function filtersBar() {
+        var f = names.filters;
+        if (!f || !f.ViewFiltersBar || !f.Filters || !f.CheckboxWithImage) return null;
+        return document.querySelector("." + f.ViewFiltersBar + " ." + f.Filters);
+      }
+
       function placeChip(lib) {
-        var anchor = document.querySelector("." + names.search.Container + " ." + names.search.AdvancedSearchContainer);
+        var bar = filtersBar();
+        var anchor = bar ? null : document.querySelector("." + names.search.Container + " ." + names.search.AdvancedSearchContainer);
         var chip = document.getElementById(CHIP_ID);
-        if (!lib.available || !anchor) {
+        if (!lib.available || (!bar && !anchor)) {
           if (chip) chip.remove();
+          return;
+        }
+        var on = lib.isOn();
+        var title = on ? "Showing games that play on this Mac. Click to show every game."
+          : "Show only games that play on this Mac";
+        if (bar) {
+          if (!chip || chip.parentElement !== bar || bar.firstElementChild !== chip) {
+            if (chip) chip.remove();
+            chip = document.createElement("div");
+            chip.id = CHIP_ID;
+            chip.setAttribute("role", "button");
+            chip.tabIndex = 0;
+            chip.innerHTML = platformGlyph("macos");
+            bar.insertBefore(chip, bar.firstElementChild);
+          }
+          chip.className = names.filters.CheckboxWithImage + " sevo-in-bar" + (on && names.filters.Active ? " " + names.filters.Active : "");
+          chip.setAttribute("aria-pressed", on ? "true" : "false");
+          chip.title = title;
           return;
         }
         if (!chip || chip.previousElementSibling !== anchor) {
@@ -365,11 +400,9 @@ enum SteamLibraryCompat {
           chip.innerHTML = glyph("verified") + "<span>Mac</span>";
           anchor.insertAdjacentElement("afterend", chip);
         }
-        var on = lib.isOn();
-        chip.classList.toggle("sevo-on", on);
+        chip.className = on ? "sevo-on" : "";
         chip.setAttribute("aria-pressed", on ? "true" : "false");
-        chip.title = on ? "Showing games that play on a Mac. Click to show every game."
-          : "Show only games that play on a Mac";
+        chip.title = title;
       }
     
       function clear() {

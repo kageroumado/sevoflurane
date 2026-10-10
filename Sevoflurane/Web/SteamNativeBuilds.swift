@@ -192,6 +192,9 @@ enum SteamNativeBuilds {
         "#sevo-native-menu .sevo-native-hint{font-size:12px;color:#8b929a}",
         "#sevo-native-menu .sevo-native-tag{margin-inline-start:6px;padding:0 5px;border-radius:2px;background:#1a9fff;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;vertical-align:1px}",
         "#sevo-native-menu .sevo-native-size{font-size:12px;color:#8b929a;white-space:nowrap}",
+        "#sevo-native-menu .sevo-native-rule{height:1px;margin:4px 0;background:#4c5564}",
+        ".sevo-install-platform{display:inline-flex;align-items:center;margin-inline-start:10px;opacity:1}",
+        ".sevo-install-platform svg{width:18px;height:18px}",
         "#sevo-native-menu .sevo-native-foot{padding:6px 18px 10px;font-size:11px;color:#8b929a;border-top:1px solid #4c5564;margin-top:4px}",
         "#sevo-native-menu .sevo-native-confirm{padding:14px 18px;display:flex;flex-direction:column;gap:8px}",
         "#sevo-native-menu .sevo-native-title{font-size:15px;color:#fff}",
@@ -328,11 +331,19 @@ enum SteamNativeBuilds {
           + '<span class="sevo-native-size">' + esc(right) + "</span></div>";
       }
     
-      function menuHTML(appid, info, mode) {
+      function menuHTML(appid, info, mode, devices) {
         var current = chosen(appid, info);
+        /* Steam's own ▾ lists the devices that can stream the game; with it
+           taken over, its list is one item away. */
+        var other = devices
+          ? '<div class="sevo-native-item sevo-native-devices" role="menuitem" tabindex="0">'
+            + '<span class="sevo-native-text"><span class="sevo-native-name">Play on another device…</span>'
+            + '<span class="sevo-native-hint">Steam Link and Remote Play</span></span></div>'
+          : "";
         return '<div class="sevo-native-head">' + (mode === "install" ? "Install which version?" : "Version") + "</div>"
           + item("macos", info, current, mode)
           + item("windows", info, current, mode)
+          + (other ? '<div class="sevo-native-rule"></div>' + other : "")
           + '<div class="sevo-native-foot">You can switch any time from the play bar or Properties › Compatibility.</div>';
       }
     
@@ -350,14 +361,14 @@ enum SteamNativeBuilds {
           + "</div></div>";
       }
     
-      function openMenu(anchor, appid, info, mode) {
+      function openMenu(anchor, appid, info, mode, devices) {
         closeMenu();
         var element = document.createElement("div");
         element.id = MENU_ID;
         element.setAttribute("role", "menu");
-        element.innerHTML = menuHTML(appid, info, mode);
+        element.innerHTML = menuHTML(appid, info, mode, devices);
         document.body.appendChild(element);
-        menu = { element: element, appid: appid, mode: mode, anchor: anchor };
+        menu = { element: element, appid: appid, mode: mode, anchor: anchor, devices: devices || null };
         place();
         var first = element.querySelector(".sevo-native-item");
         if (first) first.focus();
@@ -440,8 +451,34 @@ enum SteamNativeBuilds {
         }
       }
     
+      /* The Install button of a game with a macOS version carries the version
+         it is set to, so the choice is visible before the menu opens. */
+      function placeInstallMarker(appid, info) {
+        var buttons = document.querySelectorAll("." + classes.play.PlayButton);
+        var o = info && overview(appid);
+        var platform = info && o && !o.installed ? chosen(appid, info) : null;
+        for (var i = 0; i < buttons.length; i++) {
+          var button = buttons[i];
+          var marker = button.querySelector(".sevo-install-platform");
+          if (!platform || !button.querySelector(".SVGIcon_Download")) {
+            if (marker) marker.remove();
+            continue;
+          }
+          if (marker && marker.dataset.platform === platform) continue;
+          if (marker) marker.remove();
+          marker = document.createElement("span");
+          marker.className = "sevo-install-platform";
+          marker.dataset.platform = platform;
+          marker.title = "Installs the " + NAMES[platform] + ". Click to choose.";
+          marker.innerHTML = platformGlyph(platform);
+          button.appendChild(marker);
+        }
+      }
+
       function clear() {
         closeMenu();
+        var markers = document.querySelectorAll(".sevo-install-platform");
+        for (var m = 0; m < markers.length; m++) markers[m].remove();
         var stats = document.querySelectorAll("." + STAT_CLASS);
         for (var i = 0; i < stats.length; i++) stats[i].remove();
       }
@@ -474,7 +511,9 @@ enum SteamNativeBuilds {
         var appid = currentAppID();
         if (menu && menu.appid !== appid) closeMenu();
         if (menu) place();
-        placeStats(appid, appid ? offered(appid) : null);
+        var info = appid ? offered(appid) : null;
+        placeStats(appid, info);
+        placeInstallMarker(appid, info);
       }
     
       // MARK: Events
@@ -486,12 +525,28 @@ enum SteamNativeBuilds {
         return button && button.querySelector(".SVGIcon_Download") ? button : null;
       }
     
+      /* Set while a click is handed back to Steam's own ▾. */
+      var passThrough = false;
+
+      function streamingSelector(target) {
+        var name = classes.play.StreamingSelector;
+        return name && target.closest ? target.closest("." + name) : null;
+      }
+
       function onClick(event) {
         if (!classes || !active()) return;
+        if (passThrough) { passThrough = false; return; }
         var target = event.target;
         if (menu && menu.element.contains(target)) {
           event.preventDefault();
           event.stopPropagation();
+          if (target.closest(".sevo-native-devices") && menu.devices) {
+            var devices = menu.devices;
+            closeMenu();
+            passThrough = true;
+            devices.click();
+            return;
+          }
           var pick = target.closest(".sevo-native-item");
           var go = target.closest(".sevo-native-go");
           if (target.closest(".sevo-native-cancel")) { closeMenu(); return; }
@@ -524,6 +579,18 @@ enum SteamNativeBuilds {
             if (ready && currentAppID() === appid) openMenu(pressed.parentElement || pressed, appid, ready, "install");
             else ctx.SteamClient.Installs.OpenInstallWizard([appid]);
           });
+          return;
+        }
+        /* Steam's ▾ beside Install picks a streaming device; for a game with a
+           macOS version it opens the version menu, devices one item below. */
+        var selector = info && streamingSelector(target);
+        var o = selector && overview(appid);
+        if (selector && o && !o.installed) {
+          event.preventDefault();
+          event.stopPropagation();
+          var box = selector.parentElement || selector;
+          if (menu && menu.anchor === box) { closeMenu(); return; }
+          openMenu(box, appid, info, "install", selector);
           return;
         }
         var install = info && pressed;
