@@ -96,7 +96,17 @@ enum SteamLibraryCompat {
         },
         enable: function () { lib.enabled = true; publish(current().on); refresh(); },
         disable: function () { lib.enabled = false; publish(current().on); },
-        sync: function () { patch(); if (libraryCount() !== asked) refresh(); }
+        sync: function () {
+          patch();
+          if (libraryCount() !== asked || Date.now() - answeredAt > STALE_AFTER) refresh();
+        },
+        /* A game's build changed: ask now, and once more after Steam has had
+           time to write the mapping the bridge reads. */
+        invalidate: function () {
+          if (inflight) again = true; else refresh();
+          clearTimeout(settle);
+          settle = setTimeout(refresh, SETTLE_AFTER);
+        }
       };
     
       /* Steam loads the filter's module and makes the library's filter only
@@ -171,10 +181,17 @@ enum SteamLibraryCompat {
         try { return collectionStore.allAppsCollection.allApps.length; } catch (e) { return 0; }
       }
     
-      /* The library's size at the last ask; a purchase or a removal asks again. */
+      /* The library's size at the last ask; a purchase or a removal asks again.
+         An answer older than STALE_AFTER is asked again at the next sync, which
+         catches a build changed outside the version menu. */
       var asked = -1;
+      var answeredAt = 0;
       var inflight = false;
+      var again = false;
       var timer = 0;
+      var settle = 0;
+      var STALE_AFTER = 120000;
+      var SETTLE_AFTER = 15000;
       function later(ms) { clearTimeout(timer); timer = setTimeout(refresh, ms); }
     
       function refresh() {
@@ -191,6 +208,8 @@ enum SteamLibraryCompat {
           .then(function (response) { return response.ok ? response.json() : null; })
           .then(function (answer) {
             inflight = false;
+            answeredAt = Date.now();
+            if (again) { again = false; refresh(); return; }
             if (!answer || !answer.apps) { later(60000); return; }
             lib.verdicts = answer.apps;
             lib.pending = answer.pending || 0;
@@ -203,7 +222,7 @@ enum SteamLibraryCompat {
             publish(current().on);
             if (lib.pending > 0) later(30000);
           })
-          .catch(function () { inflight = false; later(60000); });
+          .catch(function () { inflight = false; answeredAt = Date.now(); later(60000); });
       }
     
       patch();

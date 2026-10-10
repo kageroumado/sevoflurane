@@ -182,6 +182,27 @@ struct SteamPlayMacOSTests {
         #expect(apps["2"]?["m"] as? Bool == true)
     }
 
+    /// A 32-bit-only macOS build, or one rated broken beside an unsupported
+    /// Windows build, stays out of the Apple filter however it is mapped.
+    @Test
+    func `a game set to its macOS build plays on this Mac only on the evidence`() throws {
+        let data = GameCompatBatch.answer([
+            GameCompatSummary(appID: 1, state: .unsupported, native: false),
+            GameCompatSummary(appID: 2, state: .unknown, native: false, macRunnable: false),
+            GameCompatSummary(appID: 3, state: .unknown, native: false, macRunnable: true),
+            GameCompatSummary(appID: 4, state: .playable, native: false, macEvidence: true),
+        ], pending: 0, macBuilds: [1, 2, 3])
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let apps = try #require(object["apps"] as? [String: [String: Any]])
+        #expect(apps["1"]?["m"] as? Bool == true)
+        #expect(apps["1"]?["p"] == nil)
+        #expect(apps["2"]?["m"] as? Bool == true)
+        #expect(apps["2"]?["p"] == nil)
+        #expect(apps["3"]?["p"] as? Bool == true)
+        #expect(apps["4"]?["p"] as? Bool == true)
+        #expect(apps["4"]?["m"] == nil)
+    }
+
     // MARK: - The choice on the game page
 
     /// Escape Dungeon 2's depots as the client's app cache lists them: one per

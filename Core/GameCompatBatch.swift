@@ -90,10 +90,12 @@ nonisolated enum GameCompatBatch {
     }
 
     /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "n": native, "p": true, "m": true}}}`.
-    /// `p` marks a game the Apple filter keeps (``GameCompatSummary/playsOnMac``),
-    /// `m` a game set to its macOS build (``SteamPlayMacOS``), from
-    /// `macBuilds`. A game with nothing to draw (Unknown, no playable macOS
-    /// build, Windows build) is left out, which the page reads as Unknown.
+    /// `p` marks a game the Apple filter keeps, from the evidence alone
+    /// (``GameCompatSummary/playsOnMac``); `m` a game set to its macOS build
+    /// (``SteamPlayMacOS``), from `macBuilds`, which is the player's choice of
+    /// build and says nothing about whether it plays. A game with nothing to
+    /// draw (Unknown, no playable macOS build, Windows build) is left out,
+    /// which the page reads as Unknown.
     /// `pending` counts the lookups still queued, so the page knows to ask
     /// again.
     static func answer(_ summaries: [GameCompatSummary], pending: Int, macBuilds: Set<Int> = []) -> Data {
@@ -102,7 +104,7 @@ nonisolated enum GameCompatBatch {
             let mac = macBuilds.contains(summary.appID)
             guard summary.state != .unknown || summary.native || summary.macRunnable || mac else { continue }
             var entry: [String: Any] = ["s": summary.state.rawValue, "n": summary.native]
-            if summary.playsOnMac || mac { entry["p"] = true }
+            if summary.playsOnMac { entry["p"] = true }
             if mac { entry["m"] = true }
             apps[String(summary.appID)] = entry
         }
