@@ -36,8 +36,8 @@ protocol SetupEnvironment: AnyObject {
 
     /// Installs the managed engine — the path taken when no usable CrossOver
     /// exists: from `tarball` when someone has the file, else the signed one
-    /// shipped with this copy of the app, else the release on this Mac's
-    /// update channel (beta unless the user chose Release), downloaded. The outcome's output is the version installed. The
+    /// shipped with this copy of the app, else the release the manifest
+    /// names, downloaded. The outcome's output is the version installed. The
     /// fraction is download progress, or `nil` where none is measurable.
     func installEngine(
         from tarball: URL?,
@@ -163,7 +163,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
                 )
                 return .success(version)
             }
-            let release = try await EngineInstaller.channelRelease()
+            let release = try await EngineInstaller.latestRelease()
             try await EngineInstaller.install(release, progress: progress)
             return .success(release.version)
         } catch {

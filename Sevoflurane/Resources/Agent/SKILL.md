@@ -30,7 +30,6 @@ in short.
 | `sevo hoyo status <folder>` / `update <folder>` / `verify <folder> [--repair]` / `install <game> <folder>` | Genshin Impact, Honkai: Star Rail and Zenless Zone Zero from HoYoPlay's servers, without HoYoPlay. MCP: `hoyo_list`, `hoyo_status`, `hoyo_verify`, `hoyo_update`. Star Rail updates but does not start under Wine. |
 | `sevo bottle config [key] [value]` / `sevo bottle deps` | Defaults for every game, and the Windows runtimes and fonts installed in the bottle. The key `msync` switches msync+, Dormison's fork of CrossOver's msync. |
 | `sevo engine list` / `use <name>` | Installed engines, and the one the next client restart boots. |
-| `sevo engine channel [beta\|stable]` | The update channel app and engine updates both follow: `beta` (the default) or `stable`, the releases. While only betas are out, `stable` has nothing to install. |
 | `sevo runs` | The last launches: what each ran on, how long, how it ended, and the recognized failure. |
 | `sevo perf list` / `compare` / `report` / `label` | Frame-time traces: list them, compare configurations, chart them, name them. |
 | `sevo report <run> --verdict <v>` | Tells the community database how a run went: `plays`, `plays-with-fixes`, `launches` or `fails`, with an optional `--note`. |

@@ -23,7 +23,7 @@ struct EngineManifestTests {
     @Test
     func `decodes schema 1`() throws {
         let manifest = try EngineManifest.decode(Data(manifestJSON.utf8))
-        let stable = try #require(manifest.stable)
+        let stable = try manifest.release()
         #expect(stable.version == "wine11.15-r1")
         #expect(stable.sha256 == "abc123")
     }
@@ -37,8 +37,8 @@ struct EngineManifestTests {
     }
 
     /// The shape `publish-engine.sh` writes: schema 2, a tested component
-    /// with its digest and the engine it ships with, and a channel on the
-    /// engine repository's release.
+    /// with its digest and the engine it ships with, and the release under
+    /// `stable`.
     private let publishedJSON = """
     {
       "schema": 2,
@@ -67,7 +67,7 @@ struct EngineManifestTests {
         let manifest = try EngineManifest.decode(Data(publishedJSON.utf8), verified: true)
         #expect(manifest.problems().isEmpty)
         #expect(manifest.verified)
-        #expect(manifest.stable?.fromVerifiedManifest == true)
+        #expect(try manifest.release().fromVerifiedManifest)
         #expect(manifest.components?["dxmt"]?.first?.sha256?.count == 64)
     }
 
@@ -87,7 +87,7 @@ struct EngineManifestTests {
     func `a decode without verification marks every release untrusted`() throws {
         let manifest = try EngineManifest.decode(Data(publishedJSON.utf8))
         #expect(!manifest.verified)
-        #expect(manifest.stable?.fromVerifiedManifest == false)
+        #expect(try !manifest.release().fromVerifiedManifest)
     }
 
     @Test
@@ -102,12 +102,12 @@ struct EngineManifestTests {
         #expect(problems.contains { $0.contains("channels.stable.sizeBytes") })
     }
 
-    /// A channel entry the way `publish-engine.sh` writes one.
-    private static func channel(_ version: String) -> String {
+    /// A manifest entry the way `publish-engine.sh` writes one.
+    private static func entry(_ version: String) -> String {
         """
         {
           "version": "\(version)",
-          "minAppVersion": "1.0-beta.1",
+          "minAppVersion": "1.0",
           "url": "https://github.com/kageroumado/dormison/releases/download/\(version)/\(version).tar.xz",
           "sha256": "694477832c85da7bfa09793029eae182cd2aafd2bfe819c91888ec39be6e93be",
           "sizeBytes": 229890008
@@ -115,86 +115,40 @@ struct EngineManifestTests {
         """
     }
 
-    private static func manifest(stable: String? = nil, beta: String? = nil) throws -> EngineManifest {
-        let channels = [("stable", stable), ("beta", beta)]
-            .compactMap { name, version in version.map { "\"\(name)\": \(channel($0))" } }
+    private static func manifest(_ entries: [String: String]) throws -> EngineManifest {
+        let channels = entries.sorted { $0.key < $1.key }
+            .map { name, version in "\"\(name)\": \(entry(version))" }
             .joined(separator: ",")
         return try EngineManifest.decode(Data(#"{"schema": 2, "channels": {\#(channels)}}"#.utf8))
     }
 
-    /// Before anything is released the feed carries a beta alone, and that
-    /// is a feed the publish gate lets through.
+    /// `publish-engine.sh` writes the release under `stable` and `beta`
+    /// alike; the app reads `stable`.
     @Test
-    func `a manifest with a beta and no release passes the publish gate`() throws {
-        let feed = try Self.manifest(beta: "dormison-b1")
+    func `the release is the stable entry`() throws {
+        let feed = try Self.manifest(["stable": "dormison-r5", "beta": "dormison-r5"])
         #expect(feed.problems().isEmpty)
-        #expect(feed.stable == nil)
-        #expect(feed.beta?.version == "dormison-b1")
+        #expect(try feed.release().version == "dormison-r5")
     }
 
     @Test
-    func `a manifest with no channel at all does not`() throws {
-        let problems = try Self.manifest().problems()
-        #expect(problems.contains { $0.contains("no channel") })
+    func `a beta entry alone is no engine`() throws {
+        let feed = try Self.manifest(["beta": "dormison-r5"])
+        #expect(throws: EngineManifest.NoRelease()) { try feed.release() }
+        #expect(feed.problems().contains { $0.contains("no engine") })
     }
 
     @Test
-    func `a channel the app does not read is named`() throws {
-        let feed = try EngineManifest.decode(Data(#"{"schema": 2, "channels": {"nightly": \#(Self.channel("dormison-b1"))}}"#.utf8))
-        #expect(feed.problems().contains { $0.contains("channels.nightly is not a channel the app reads") })
+    func `a manifest with no entry at all names no engine`() throws {
+        let feed = try Self.manifest([:])
+        #expect(feed.problems().contains { $0.contains("no engine") })
+        #expect(EngineManifest.NoRelease().description.contains("names no engine"))
     }
 
     @Test
-    func `beta takes the beta, and release takes nothing while only betas are out`() throws {
-        let feed = try Self.manifest(beta: "dormison-b1")
-        #expect(feed.release(for: .beta)?.version == "dormison-b1")
-        #expect(feed.release(for: .stable) == nil)
-        #expect(try feed.requireRelease(for: .beta).version == "dormison-b1")
-        #expect(throws: EngineManifest.NoRelease(channel: .stable)) {
-            try feed.requireRelease(for: .stable)
-        }
-    }
-
-    /// The error a Mac on Release reads in the setup assistant and in
-    /// `sevo engine install`: what is wrong and the one move that fixes it.
-    @Test
-    func `an empty release channel says to switch to beta`() {
-        let message = EngineManifest.NoRelease(channel: .stable).description
-        #expect(message.contains("No release"))
-        #expect(message.contains("Beta"))
-        #expect(message.contains("sevo engine channel beta"))
-    }
-
-    @Test
-    func `beta takes the newer of the beta and the release`() throws {
-        let ahead = try Self.manifest(stable: "dormison-r1", beta: "dormison-b2")
-        #expect(ahead.release(for: .beta)?.version == "dormison-b2")
-        #expect(ahead.release(for: .stable)?.version == "dormison-r1")
-        let overtaken = try Self.manifest(stable: "dormison-r2", beta: "dormison-b2")
-        #expect(overtaken.release(for: .beta)?.version == "dormison-r2")
-        let releaseOnly = try Self.manifest(stable: "dormison-r2")
-        #expect(releaseOnly.release(for: .beta)?.version == "dormison-r2")
-    }
-}
-
-/// App and engine updates follow one channel, beta until someone picks Release.
-struct UpdateChannelTests {
-    @Test
-    func `a Mac that never chose is on beta`() {
-        #expect(Preferences.updateChannel(stored: nil) == .beta)
-        #expect(Preferences.updateChannel(stored: "nightly") == .beta)
-    }
-
-    @Test
-    func `a stored choice is kept`() {
-        #expect(Preferences.updateChannel(stored: "stable") == .stable)
-        #expect(Preferences.updateChannel(stored: "beta") == .beta)
-    }
-
-    @Test
-    func `the app takes prereleases on beta alone`() {
-        #expect(SilentUpdates.takesPrereleases(.beta))
-        #expect(!SilentUpdates.takesPrereleases(.stable))
+    func `a key the app does not read is named`() throws {
+        let feed = try Self.manifest(["stable": "dormison-r5", "nightly": "dormison-r5"])
+        #expect(feed.problems().contains { $0.contains("channels.nightly is not a key the app reads") })
     }
 }
 

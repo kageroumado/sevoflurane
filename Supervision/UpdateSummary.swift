@@ -39,14 +39,14 @@ final class UpdateSummary {
         }
     }
 
-    /// The feed's engine on this Mac's channel, named the way the picker
+    /// The feed's engine, named the way the picker
     /// names it, when every managed engine on this Mac is older than it. A
     /// Mac with none at all is not told: the engine picker already offers to
     /// fetch one.
     static func newerEngine(
-        in manifest: EngineManifest, installed: [String], channel: UpdateChannel = Preferences.updateChannel,
+        in manifest: EngineManifest, installed: [String],
     ) -> String? {
-        guard let release = manifest.release(for: channel), !installed.isEmpty,
+        guard let release = try? manifest.release(), !installed.isEmpty,
               isNewerEngine(release.version, thanAll: installed)
         else { return nil }
         return Engine.managedDisplayName(release.version)

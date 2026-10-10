@@ -14,13 +14,10 @@ import Foundation
 /// (``bundledTarball(resources:beside:)``), or the tree `package-engine.sh`
 /// left behind for whoever built it.
 nonisolated enum EngineInstaller {
-    /// Fetches the release this Mac's update channel names, or reports why
-    /// there is none: a Mac on Release while only betas are out is told to
-    /// switch (``EngineManifest/NoRelease``).
-    static func channelRelease(
-        for channel: UpdateChannel = Preferences.updateChannel,
-    ) async throws -> EngineManifest.Release {
-        try await EngineManifest.fetch().requireRelease(for: channel)
+    /// Fetches the release the feed offers, or reports that it names none
+    /// (``EngineManifest/NoRelease``).
+    static func latestRelease() async throws -> EngineManifest.Release {
+        try await EngineManifest.fetch().release()
     }
 
     static func isInstalled(_ release: EngineManifest.Release) -> Bool {
@@ -80,7 +77,7 @@ nonisolated enum EngineInstaller {
     }
 
     /// Installs an engine already on this Mac and returns the version it
-    /// carried: `dormison-b<N>.tar.xz` as the release ships it, or the
+    /// carried: `dormison-r<N>.tar.xz` as the release ships it, or the
     /// directory `package-engine.sh` assembled, which is what is inside that
     /// tarball. Either way the version has to be new — an installed engine is
     /// never replaced.

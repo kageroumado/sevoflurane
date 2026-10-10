@@ -11,25 +11,12 @@ struct EngineCommand: AsyncParsableCommand {
         abstract: "Wine engines: Dormison releases and CrossOver.",
     )
 
-    @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | channel [stable|beta] | check-manifest")
+    @Argument(help: "list | install [--file TARBALL-OR-FOLDER] | d3dmetal | use | check-manifest")
     var verb: String = "list"
     @Argument(
-        help: "For use: the engine to switch to (a name from `sevo engine list`); for channel: stable (releases) or beta, the channel app and engine updates both follow; for check-manifest: the engine.json to check.",
+        help: "For use: the engine to switch to (a name from `sevo engine list`); for check-manifest: the engine.json to check.",
     )
     var target: String?
-    @Option(
-        name: .customLong("channel"),
-        help: "For install: take this channel's release instead of the Mac's setting (stable | beta).",
-    ) var channelName: String?
-
-    private func channel() throws -> UpdateChannel? {
-        guard let channelName else { return nil }
-        guard let channel = UpdateChannel(rawValue: channelName) else {
-            Sevo.printError("--channel \(channelName): stable or beta")
-            throw SevoExit.badInvocation
-        }
-        return channel
-    }
     @Option(
         name: .customLong("sig"),
         help: "For check-manifest: the engine.json.sig to verify against the pinned key.",
@@ -60,7 +47,7 @@ struct EngineCommand: AsyncParsableCommand {
     ) var manifest: String?
     @Option(
         name: .customLong("file"),
-        help: "For install: an engine tarball (dormison-b<N>.tar.xz) or an engine folder on disk, in place of the download; a .sig beside a tarball is verified.",
+        help: "For install: an engine tarball (dormison-r<N>.tar.xz) or an engine folder on disk, in place of the download; a .sig beside a tarball is verified.",
     ) var file: String?
     @Flag(name: .customLong("json")) var asJSON = false
 
@@ -74,29 +61,11 @@ struct EngineCommand: AsyncParsableCommand {
             try await addD3DMetal()
         case "use":
             try await use()
-        case "channel":
-            try setChannel()
         case "check-manifest":
             try checkManifest()
         default:
-            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use | channel | check-manifest)")
+            Sevo.printError("engine \(verb): unknown verb (list | install | d3dmetal | use | check-manifest)")
             throw SevoExit.badInvocation
-        }
-    }
-
-    /// Reads or sets which channel this Mac takes app and engine updates
-    /// from. The next engine install, the next engine update check and the
-    /// app's next update check read it; nothing already installed changes.
-    private func setChannel() throws {
-        if let target {
-            guard let channel = UpdateChannel(rawValue: target) else {
-                Sevo.printError("engine channel \(target): stable or beta")
-                throw SevoExit.badInvocation
-            }
-            Preferences.updateChannel = channel
-            print("update channel: \(channel.rawValue) — the next app update check and engine install take it")
-        } else {
-            print("update channel: \(Preferences.updateChannel.rawValue)")
         }
     }
 
@@ -140,8 +109,7 @@ struct EngineCommand: AsyncParsableCommand {
             print(Sevo.json(summary, pretty: true))
         } else if problems.isEmpty {
             let named = summary["channels"] as? [String: String] ?? [:]
-            var channels = named.sorted { $0.key < $1.key }.map { "\($0.key) → \($0.value)" }
-            if named[UpdateChannel.stable.rawValue] == nil { channels.append("stable empty") }
+            let channels = named.sorted { $0.key < $1.key }.map { "\($0.key) → \($0.value)" }
             print("manifest ok: schema \(summary["schema"] ?? "?"), \(channels.joined(separator: ", "))"
                 + ((summary["signature"] as? String).map { ", signature \($0)" } ?? ""))
         } else {
@@ -253,9 +221,8 @@ struct EngineCommand: AsyncParsableCommand {
         }
     }
 
-    /// Downloads and installs the release on this Mac's update channel (or
-    /// `--channel`'s) — the CLI face
-    /// of the wizard's built-in-engine stage — or, with `--file`, installs
+    /// Downloads and installs the release the feed names — the CLI face of
+    /// the wizard's built-in-engine stage — or, with `--file`, installs
     /// the tarball or engine folder on disk, the route for a Mac the release
     /// feed does not reach and for a tree built here.
     private func install() async throws {
@@ -279,10 +246,9 @@ struct EngineCommand: AsyncParsableCommand {
         } ?? EngineManifest.url
         do {
             let fetched = try await EngineManifest.fetch(from: manifestURL)
-            let wanted = try channel() ?? Preferences.updateChannel
             let release: EngineManifest.Release
             do {
-                release = try fetched.requireRelease(for: wanted)
+                release = try fetched.release()
             } catch {
                 Sevo.printError("\(error)")
                 throw SevoExit.failed
@@ -297,7 +263,7 @@ struct EngineCommand: AsyncParsableCommand {
             throw code
         } catch {
             Sevo.printError("engine install failed: \(error)")
-            Sevo.printError("with the tarball on disk: sevo engine install --file dormison-b<N>.tar.xz")
+            Sevo.printError("with the tarball on disk: sevo engine install --file dormison-r<N>.tar.xz")
             throw SevoExit.failed
         }
     }

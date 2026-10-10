@@ -2,7 +2,7 @@
 # Puts the engine inside the app: the signed Dormison tarball a fresh install would download,
 # with its `.sig`, in Contents/Resources/Engine, where first-run setup installs it without a
 # download (EngineInstaller.bundledTarball) and a newer app hands its newer engine over at
-# launch (EngineStore). Later engines still arrive through the update channel.
+# launch (EngineStore). Later engines arrive as releases from the manifest.
 #
 # Runs as the app target's "Embed engine" build phase, in Release builds only. The releases
 # come from `publish-engine.sh` (a real run or `--dry-run`) in $DORMISON_BUILD/releases,
@@ -17,11 +17,10 @@ fi
 releases="${SEVO_ENGINE_RELEASES:-${DORMISON_BUILD:-$HOME/Developer/build/dormison}/releases}"
 destination="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Engine"
 
-# The engine a fresh install on the default channel (beta) would download: the newer of the
-# manifest's beta and release, in the app's order (Engine.isOlderVersion: dormison-r10 <
-# dormison-b11 < dormison-r11). The highest number on disk can be an older series the
-# manifest no longer names. Without a manifest, the newest signed dormison-b<N> or
-# dormison-r<N> in that same order.
+# The engine a fresh install would download: the manifest's `stable` release. The highest
+# number on disk can be an older series the manifest no longer names. Without a manifest, the
+# newest signed dormison-b<N> or dormison-r<N> in the app's order (Engine.isOlderVersion:
+# dormison-r10 < dormison-b11 < dormison-r11).
 tarball=$(/usr/bin/python3 - "$releases" <<'PY'
 import json, os, re, sys
 
@@ -39,7 +38,7 @@ names = []
 try:
     with open(os.path.join(releases, "engine.json")) as manifest:
         channels = json.load(manifest)["channels"]
-    names = [channels[name]["version"] for name in ("stable", "beta") if name in channels]
+    names = [channels["stable"]["version"]]
 except (OSError, ValueError, KeyError):
     names = [entry[: -len(".tar.xz")] for entry in os.listdir(releases) if entry.endswith(".tar.xz")] \
         if os.path.isdir(releases) else []

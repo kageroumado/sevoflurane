@@ -79,7 +79,7 @@ and play. Games appear as players share their runs.
 
 ## Get started
 
-1. **Download and open.** Sevoflurane is in beta, at 1.1 beta 1. Mount the
+1. **Download and open.** Mount the
    [disk image](https://kagerou.glass/get/sevoflurane?from=readme)
    (every version is on the [releases page](https://github.com/kageroumado/sevoflurane/releases)),
    drag Sevoflurane to Applications, then launch it.
@@ -199,7 +199,7 @@ sevo daemon repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config|repair-dll|detect
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
 sevo hoyo list|status FOLDER|install GAME FOLDER|update FOLDER|verify FOLDER [--repair]
-sevo engine list|install [--file TARBALL]|d3dmetal|use|channel|check-manifest
+sevo engine list|install [--file TARBALL]|d3dmetal|use|check-manifest
 sevo update check|use|install|remove
 sevo bottle list|config <key> [value]|deps [install ID]
 sevo shaders list|install|remove
@@ -573,7 +573,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
   strip, Streamer Mode, community sharing, Discord, uninstall.
 - **Graphics**: default renderer, the GPU games are told they run on, DXMT and
   DXVK versions, upscalers (CuNNy, Anime4K) to download.
-- **Engine**: engines, bottles and the update channel, msync+, defaults for
+- **Engine**: engines and bottles, msync+, defaults for
   every game, known fixes, game dependencies, DLL overrides, environment
   variables, Wine configuration, library-load logging, repair.
 - **Games**: one game's picture, mouse, performance, DLL overrides and
@@ -678,10 +678,9 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
 - The app updates itself from GitHub Releases once the Mac is idle and no game
   runs, or at once from the footer's Update chip. Auto Update turns it off.
 - A dot on the Settings button means a newer engine or renderer.
-- The app and Dormison follow one update channel, Beta or Release, set in
-  Settings › Engine or with `sevo engine channel`. Beta is the default; the
-  Release channel carries nothing until the first release.
-- Dormison betas and releases are signed and verified before they install.
+- Every version of the app and of Dormison ships as a regular GitHub release:
+  the app as 1.4, 1.5 and on, the engine as r5, r6 and on.
+- Dormison releases are signed and verified before they install.
 
 ### Engines
 

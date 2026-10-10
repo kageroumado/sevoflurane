@@ -20,8 +20,7 @@ import TiptoeGitHub
 /// check still runs and still answers ``availableVersion`` — the footer's version chip draws from
 /// it — but nothing downloads or installs except through ``updateNow()``.
 ///
-/// The update channel (``Preferences/updateChannel``) is the engine's: on Beta the check takes
-/// GitHub prereleases as well as releases, on Release it takes releases alone.
+/// The check takes GitHub releases alone: every version of the app ships as one.
 @MainActor
 @Observable
 final class SilentUpdates {
@@ -79,16 +78,9 @@ final class SilentUpdates {
     /// wait (and surfaces `justUpdatedTo`) even before `start()`.
     @ObservationIgnored private let github: TiptoeGitHub
 
-    /// What `github` checks through, kept to set whether prereleases count: AppUpdater reads
-    /// the flag at every check, so a channel change needs no new updater.
-    @ObservationIgnored private let updater: AppUpdater
-
-    /// Set by ``start(autoInstall:)``: a channel change checks again only once the loop runs.
-    @ObservationIgnored private var isStarted = false
-
     private init() {
-        updater = AppUpdater(owner: Self.owner, repo: Self.repo)
-        updater.allowPrereleases = Self.takesPrereleases(Preferences.updateChannel)
+        let updater = AppUpdater(owner: Self.owner, repo: Self.repo)
+        updater.allowPrereleases = false
         github = TiptoeGitHub(
             updater: updater, checkInterval: Self.checkInterval,
             tiptoe: Tiptoe(policy: Self.quietPolicy),
@@ -169,8 +161,7 @@ final class SilentUpdates {
                 ModalAlerts.present {
                     let alert = NSAlert()
                     alert.messageText = "Sevoflurane is up to date"
-                    alert.informativeText = "Version \(AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "dev")) is the newest "
-                        + (Preferences.updateChannel == .beta ? "release or beta." : "release.")
+                    alert.informativeText = "Version \(AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "dev")) is the newest release."
                     alert.runModal()
                 }
             }
@@ -220,28 +211,7 @@ final class SilentUpdates {
         // out from under Xcode.
         #if !DEBUG
             github.installsAutomatically(autoInstall).start()
-            isStarted = true
         #endif
-    }
-
-    /// Whether a check on `channel` counts GitHub prereleases: Beta does, Release takes the
-    /// releases alone.
-    nonisolated static func takesPrereleases(_ channel: UpdateChannel) -> Bool {
-        channel == .beta
-    }
-
-    /// Brings the check in line with the update channel, which Settings and `sevo engine
-    /// channel` both write. A change checks again at once, so a Mac moved to Beta hears about
-    /// the newest beta now rather than at tomorrow's check.
-    func followUpdateChannel() {
-        let wanted = Self.takesPrereleases(Preferences.updateChannel)
-        guard updater.allowPrereleases != wanted else { return }
-        updater.allowPrereleases = wanted
-        guard isStarted else { return }
-        Task(name: "Check for updates on the new channel") { [weak self] in
-            await self?.github.checkNow()
-            self?.refresh()
-        }
     }
 
     /// Reacts to the version chip's Auto switch. Turning auto off keeps the check loop (and
@@ -256,7 +226,6 @@ final class SilentUpdates {
     /// Copies Tiptoe's state into the observable properties. Called when the popover appears and
     /// after update actions — Tiptoe has no change callback.
     func refresh() {
-        followUpdateChannel()
         pendingVersion = github.tiptoe.pending?.version
         availableVersion = github.availableVersion
     }
@@ -302,8 +271,7 @@ final class SilentUpdates {
         github.tiptoe.acknowledge()
     }
 
-    /// Every release and beta: `/releases/latest` leaves prereleases out, and while only betas
-    /// are out it has nothing to show.
+    /// Every release, the newest first.
     var releasesPageURL: URL {
         URL(string: "https://github.com/\(Self.owner)/\(Self.repo)/releases")!
     }

@@ -51,7 +51,7 @@
 
 ## 开始使用
 
-1. **下载并打开。** Sevoflurane 目前处于 Beta 阶段，版本为 1.1 beta 1。下载并挂载[磁盘映像](https://kagerou.glass/get/sevoflurane?from=readme)（所有版本都在[发布页](https://github.com/kageroumado/sevoflurane/releases)），把 Sevoflurane 拖进“应用程序”，然后打开。
+1. **下载并打开。** 下载并挂载[磁盘映像](https://kagerou.glass/get/sevoflurane?from=readme)（所有版本都在[发布页](https://github.com/kageroumado/sevoflurane/releases)），把 Sevoflurane 拖进“应用程序”，然后打开。
 2. **安装引擎和依赖。** 选择 Dormison 或 CrossOver 作为引擎，新建一个容器（bottle），或接入已有的容器。
 3. **登录 Steam。** 和平时一样登录就好。
 4. **开始玩。** 随时可以换引擎，也可以为每款游戏单独设置。
@@ -120,7 +120,7 @@ sevo daemon repair
 sevo app list|info|launch|terminate|install|verify|uninstall|compat|config|repair-dll|detect
 sevo program add PATH|list|remove ID|launch ID|run PATH [ARGS]
 sevo hoyo list|status FOLDER|install GAME FOLDER|update FOLDER|verify FOLDER [--repair]
-sevo engine list|install [--file TARBALL]|d3dmetal|use|channel|check-manifest
+sevo engine list|install [--file TARBALL]|d3dmetal|use|check-manifest
 sevo update check|use|install|remove
 sevo bottle list|config <key> [value]|deps [install ID]
 sevo shaders list|install|remove
@@ -339,7 +339,7 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 
 - **通用**：登录时打开、自动重启 Steam、Steam 自身设置、`steam://` 链接、命令行工具、AI 助手、兼容性信息栏、主播模式、社区分享、Discord、卸载。
 - **图形**：默认渲染器、向游戏报告的 GPU 信息、DXMT 和 DXVK 版本、可下载的画面缩放器（CuNNy、Anime4K）。
-- **引擎**：引擎、容器和更新渠道、msync+、所有游戏的默认设置、已知修复、游戏依赖项、DLL 覆盖设置、环境变量、Wine 配置、库加载日志、修复。
+- **引擎**：引擎和容器、msync+、所有游戏的默认设置、已知修复、游戏依赖项、DLL 覆盖设置、环境变量、Wine 配置、库加载日志、修复。
 - **游戏**：单款游戏的画面、鼠标、性能、DLL 覆盖设置和环境变量，未单独修改的项目会继承“引擎”中的设置。游戏需要某个设置时，会标出**已知修复**，点一下即可应用。修复列表（内置表格，加上社区数据库根据“需修复后可玩”报告整理的签名列表）会在游戏首次启动时自动应用到游戏尚未单独设置的项目，并附带“撤销”提示；被它修改的设置会标注“由修复列表设置”，可以撤销。在“引擎 › 自动应用已知修复”中可以关闭此功能。
 - **HoYoverse**：安装、更新和校验 HoYoverse 游戏（见上文）。
 - **存储空间**、**恢复**、**诊断**：见下文。
@@ -389,8 +389,8 @@ MIT。项目与 Valve 无关联。Steam 是 Valve Corporation 的商标。
 
 - Mac 空闲且没有游戏运行时，App 会从 GitHub Releases 自动更新；也可以点击底部的更新标签立即更新。“自动更新”开关可以关闭这项功能。
 - 设置按钮上出现圆点，表示有更新的引擎或渲染器。
-- App 和 Dormison 共用一个更新渠道：Beta 版或正式版，可在“设置 › 引擎”中或用 `sevo engine channel` 设置。默认为 Beta 版；在第一个正式版发布之前，正式版渠道没有内容。
-- Dormison 的 Beta 版和正式版都带有签名，安装前会验证。
+- App 和 Dormison 的每个版本都以普通 GitHub 正式版发布：App 依次为 1.4、1.5……，引擎依次为 r5、r6……。
+- Dormison 的每个版本都带有签名，安装前会验证。
 
 ### 引擎
 
