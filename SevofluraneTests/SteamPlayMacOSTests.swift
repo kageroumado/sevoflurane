@@ -354,6 +354,122 @@ struct SteamPlayMacOSTests {
         #expect(context.evaluateScript("dt(1)")?.toBool() == true)
     }
 
+    /// The desktop window, Steam's client calls and its stores, faked just
+    /// enough for the version menu to open and a choice to run. `mapping` is
+    /// what `SpecifyCompatTool` does: reject, apply, or resolve without the
+    /// details ever showing it.
+    private static func desktop(mapping: String) -> String {
+        """
+        var window = this;
+        var innerWidth = 1000, innerHeight = 800;
+        var timers = [];
+        function setTimeout(f) { timers.push(f); return timers.length; }
+        function clearTimeout() {}
+        function runTimers() { for (var i = 0; i < 50 && timers.length; i++) timers.shift()(); }
+        function El() { this.innerHTML = ""; this.style = {}; this.dataset = {}; this.isConnected = false; }
+        El.prototype.setAttribute = function () {};
+        El.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, bottom: 10 }; };
+        El.prototype.querySelector = function (selector) {
+          return this.innerHTML.indexOf(selector.slice(1)) !== -1 ? { focus: function () {} } : null;
+        };
+        El.prototype.remove = function () { this.isConnected = false; };
+        var made = [];
+        var document = {
+          head: new El(), body: { appendChild: function (e) { e.isConnected = true; } },
+          createElement: function () { var e = new El(); made.push(e); return e; },
+          getElementById: function () { return null; },
+          querySelectorAll: function () { return []; },
+          addEventListener: function () {}
+        };
+        function MutationObserver() {} MutationObserver.prototype.observe = function () {};
+        function addEventListener() {}
+        var info = { enabled: true, hasMacBuild: true, runnable: true, sameFiles: false, installed: "windows",
+          recommended: "macos", macHint: "", windowsHint: "", tool: "sevoflurane_macos" };
+        function fetch() { return Promise.resolve({ ok: true, json: function () { return Promise.resolve(info); } }); }
+        var detailsOf7 = { vecPlatforms: ["windows", "osx"], strCompatToolName: "" };
+        var appDetailsStore = { GetAppDetails: function () { return detailsOf7; } };
+        var appStore = { GetAppOverviewByAppID: function () { return { app_type: 1, display_name: "Seven", installed: false }; } };
+        var MainWindowBrowserManager = { m_lastLocation: { pathname: "/library/app/7" } };
+        var wizard = [];
+        var invalidated = 0;
+        var __sevoLibraryCompat = { invalidate: function () { invalidated++; } };
+        var SteamClient = {
+          Installs: { OpenInstallWizard: function (ids) { wizard.push(ids); } },
+          Apps: { SpecifyCompatTool: function (appid, tool) {
+            var mapping = \(JSLiteral.string(mapping));
+            if (mapping === "reject") return Promise.reject(new Error("refused"));
+            if (mapping === "apply") detailsOf7.strCompatToolName = tool;
+            return Promise.resolve();
+          } }
+        };
+        """
+    }
+
+    private static func openChooser(_ context: JSContext) {
+        context.evaluateScript(SteamNativeBuilds.script)
+        // A choice before the bridge has answered asks it and does nothing more.
+        context.evaluateScript("__sevoNativeMenu.choose(7, 'windows', 'install');")
+        // The answer is in; the Install menu opens under its button.
+        context.evaluateScript("var anchor = new El(); anchor.isConnected = true;")
+        context.evaluateScript("__sevoNativeMenu.openMenu(anchor, 7, info, 'install');")
+    }
+
+    @Test
+    func `a platform change Steam refuses keeps the wizard closed and offers a retry`() throws {
+        let context = try #require(JSContext())
+        context.evaluateScript(Self.desktop(mapping: "reject"))
+        Self.openChooser(context)
+        context.evaluateScript("__sevoNativeMenu.choose(7, 'macos', 'install');")
+        context.evaluateScript("runTimers();")
+        func js(_ source: String) -> String? { context.evaluateScript(source)?.toString() }
+        #expect(js("wizard.length") == "0")
+        #expect(js("invalidated") == "0")
+        let panel = js("made.filter(function (e) { return e.isConnected; }).map(function (e) { return e.innerHTML; }).join()") ?? ""
+        #expect(panel.contains("sevo-native-retry"))
+        #expect(panel.contains(#"data-platform="macos" data-mode="install""#))
+        #expect(panel.contains("Steam did not set the macOS version"))
+    }
+
+    @Test
+    func `a platform change opens the wizard once the details show it`() throws {
+        let context = try #require(JSContext())
+        context.evaluateScript(Self.desktop(mapping: "apply"))
+        Self.openChooser(context)
+        context.evaluateScript("__sevoNativeMenu.choose(7, 'macos', 'install');")
+        func js(_ source: String) -> String? { context.evaluateScript(source)?.toString() }
+        #expect(js("JSON.stringify(wizard)") == "[[7]]")
+        #expect(js("invalidated") == "1")
+        #expect(js("made.filter(function (e) { return e.isConnected; }).length") == "0")
+    }
+
+    @Test
+    func `a platform change the details never show is a failure`() throws {
+        let context = try #require(JSContext())
+        context.evaluateScript(Self.desktop(mapping: "silent"))
+        Self.openChooser(context)
+        context.evaluateScript("__sevoNativeMenu.choose(7, 'macos', 'install');")
+        context.evaluateScript("runTimers();")
+        func js(_ source: String) -> String? { context.evaluateScript(source)?.toString() }
+        #expect(js("wizard.length") == "0")
+        #expect(js("made.filter(function (e) { return e.isConnected; }).map(function (e) { return e.innerHTML; }).join()")?
+            .contains("sevo-native-retry") == true)
+    }
+
+    @Test
+    func `the switch menu marks the build on disk as installed, whatever the mapping`() throws {
+        let context = try #require(JSContext())
+        context.evaluateScript(Self.desktop(mapping: "apply"))
+        context.evaluateScript(SteamNativeBuilds.script)
+        // Set to macOS while the Windows depots are still the ones on disk.
+        context.evaluateScript("detailsOf7.strCompatToolName = 'sevoflurane_macos'; var anchor = new El(); anchor.isConnected = true;")
+        context.evaluateScript("__sevoNativeMenu.openMenu(anchor, 7, info, 'switch');")
+        let html = context.evaluateScript("made[made.length - 1].innerHTML")?.toString() ?? ""
+        let windows = try #require(html.range(of: #"data-platform="windows""#))
+        let installed = try #require(html.range(of: "Installed</span>"))
+        #expect(installed.lowerBound > windows.lowerBound)
+        #expect(html.contains(#"sevo-native-current" role="menuitemradio" tabindex="0" aria-checked="true" data-platform="macos""#))
+    }
+
     @Test
     func `a Steam build without the shape leaves the platform alone`() throws {
         let context = try #require(JSContext())

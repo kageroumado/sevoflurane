@@ -8551,6 +8551,26 @@
         }
       }
     },
+    "Setting the macOS version…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在设为 macOS 版本…"
+          }
+        }
+      }
+    },
+    "Setting the Windows version…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在设为 Windows 版本…"
+          }
+        }
+      }
+    },
     "Setting up Steam" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9251,6 +9271,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法停止 Steam，因此设置保留了原有容器。请重试，或先从菜单栏退出 Steam。"
+          }
+        }
+      }
+    },
+    "Steam did not set the macOS version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 未能设为 macOS 版本"
+          }
+        }
+      }
+    },
+    "Steam did not set the Windows version" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steam 未能设为 Windows 版本"
           }
         }
       }
@@ -10085,6 +10125,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "游戏只看到这么多处理器，也只启动这么多工作线程。占用大部分处理器时间却仍然卡顿的游戏，处理器更少时会更流畅。"
+          }
+        }
+      }
+    },
+    "The game stays on the version it had. Try again, or choose the version in Properties › Compatibility." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "游戏保持原来的版本。请重试，或在“属性 › 兼容性”中选择版本。"
           }
         }
       }

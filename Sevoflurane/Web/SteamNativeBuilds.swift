@@ -7,7 +7,9 @@ import Foundation
 /// - **Install**: for a game with a macOS build that runs here, the game
 ///   page's Install button opens a menu with both versions, each with its
 ///   download size and a line from the compatibility verdicts. The choice is
-///   mapped with `SpecifyCompatTool`, then Steam's own install wizard opens.
+///   mapped with `SpecifyCompatTool`, and Steam's own install wizard opens
+///   once the game's details show the mapping; a mapping Steam refuses is
+///   said in the menu, with a retry.
 /// - **The play bar**: an installed game gets a "Version" entry beside Cloud
 ///   Status, in the same shape. It switches builds, saying first what Steam
 ///   will download.
@@ -159,7 +161,24 @@ enum SteamNativeBuilds {
 
     /// The desktop window's half: the install menu and the play bar's Version
     /// entry. Idempotent and self-reapplying, like ``SteamCompatBadge``.
-    static let script = "(function () {\n" + platformGlyphs + desktop + "\n})()"
+    static let script = "(function () {\n" + platformGlyphs + text + desktop + "\n})()"
+
+    /// The menu's lines for a platform change in progress and one Steam
+    /// refused, in the app's language.
+    private static var text: String {
+        let lines: [(String, String)] = [
+            ("workingMacos", String(localized: "Setting the macOS version…")),
+            ("workingWindows", String(localized: "Setting the Windows version…")),
+            ("failedMacos", String(localized: "Steam did not set the macOS version")),
+            ("failedWindows", String(localized: "Steam did not set the Windows version")),
+            ("failedBody", String(localized: "The game stays on the version it had. Try again, or choose the version in Properties › Compatibility.")),
+            ("retry", String(localized: "Try Again")),
+            ("close", String(localized: "Close")),
+        ]
+        return "  var TEXT = {"
+            + lines.map { "\($0.0): \(JSLiteral.inlineString($0.1))" }.joined(separator: ", ")
+            + "};\n"
+    }
 
     private static let desktop = """
       if (window.__sevoNativeMenu) {
@@ -173,6 +192,9 @@ enum SteamNativeBuilds {
       var MENU_ID = "sevo-native-menu";
       var STAT_CLASS = "sevo-native-stat";
       var ANSWER_LIFE = 20000;
+      /* How long Steam gets to show a mapping it accepted in the game's details. */
+      var CONFIRM_WITHIN = 4000;
+      var CONFIRM_EVERY = 200;
     
       /* Steam's context menu, values from its stylesheet: #3d4450, 13px
          items padded 8px 18px, the desktop hover inverting to light. The
@@ -300,6 +322,13 @@ enum SteamNativeBuilds {
         var d = details(appid);
         return d && d.strCompatToolName === info.tool ? "macos" : "windows";
       }
+
+      /* The build on disk, from the depots the manifest lists; the mapping
+         when the depots serve both builds. A switch still downloading keeps
+         the build it had. */
+      function installedBuild(appid, info) {
+        return info.installed || chosen(appid, info);
+      }
     
       function size(bytes) {
         if (typeof bytes !== "number" || !(bytes > 0)) return "";
@@ -313,15 +342,15 @@ enum SteamNativeBuilds {
     
       // MARK: The menu
     
-      function item(platform, info, current, mode) {
+      function item(platform, info, current, mode, installed) {
         var hint = platform === "macos" ? info.macHint : info.windowsHint;
         var tag = "";
-        if (mode === "switch" && platform === current) tag = '<span class="sevo-native-tag">Installed</span>';
+        if (mode === "switch" && platform === installed) tag = '<span class="sevo-native-tag">Installed</span>';
         else if (platform === info.recommended) tag = '<span class="sevo-native-tag">Recommended</span>';
         var amount = size(download(info, platform));
         /* A switch names what it downloads; the build already on disk needs no size. */
         var right = mode !== "switch" ? amount
-          : platform === current ? ""
+          : platform === installed ? ""
           : info.sameFiles ? "No download" : amount;
         return '<div class="sevo-native-item' + (platform === current ? " sevo-native-current" : "") + '" role="menuitemradio" tabindex="0"'
           + ' aria-checked="' + (platform === current) + '" data-platform="' + platform + '">'
@@ -333,6 +362,7 @@ enum SteamNativeBuilds {
     
       function menuHTML(appid, info, mode, devices) {
         var current = chosen(appid, info);
+        var installed = installedBuild(appid, info);
         /* Steam's own ▾ lists the devices that can stream the game; with it
            taken over, its list is one item away. */
         var other = devices
@@ -341,8 +371,8 @@ enum SteamNativeBuilds {
             + '<span class="sevo-native-hint">Steam Link and Remote Play</span></span></div>'
           : "";
         return '<div class="sevo-native-head">' + (mode === "install" ? "Install which version?" : "Version") + "</div>"
-          + item("macos", info, current, mode)
-          + item("windows", info, current, mode)
+          + item("macos", info, current, mode, installed)
+          + item("windows", info, current, mode, installed)
           + (other ? '<div class="sevo-native-rule"></div>' + other : "")
           + '<div class="sevo-native-foot">You can switch any time from the play bar or Properties › Compatibility.</div>';
       }
@@ -361,17 +391,53 @@ enum SteamNativeBuilds {
           + "</div></div>";
       }
     
+      function workingHTML(target) {
+        return '<div class="sevo-native-confirm" aria-busy="true">'
+          + '<div class="sevo-native-body">' + esc(target === "macos" ? TEXT.workingMacos : TEXT.workingWindows) + "</div></div>";
+      }
+
+      /* Steam refused the mapping, or never showed it: the game keeps the
+         build it had, and the choice can be made again from here. */
+      function failedHTML(target, mode) {
+        return '<div class="sevo-native-confirm" role="alert">'
+          + '<div class="sevo-native-title">' + esc(target === "macos" ? TEXT.failedMacos : TEXT.failedWindows) + "</div>"
+          + '<div class="sevo-native-body">' + esc(TEXT.failedBody) + "</div>"
+          + '<div class="sevo-native-buttons">'
+          + '<button type="button" class="DialogButton _DialogLayout Primary sevo-native-retry" data-platform="' + target + '" data-mode="' + mode + '">' + esc(TEXT.retry) + "</button>"
+          + '<button type="button" class="DialogButton _DialogLayout Secondary sevo-native-cancel">' + esc(TEXT.close) + "</button>"
+          + "</div></div>";
+      }
+
       function openMenu(anchor, appid, info, mode, devices) {
+        openPanel(anchor, appid, mode, menuHTML(appid, info, mode, devices), devices);
+        var first = menu.element.querySelector(".sevo-native-item");
+        if (first) first.focus();
+      }
+
+      function openPanel(anchor, appid, mode, html, devices) {
         closeMenu();
         var element = document.createElement("div");
         element.id = MENU_ID;
         element.setAttribute("role", "menu");
-        element.innerHTML = menuHTML(appid, info, mode, devices);
+        element.innerHTML = html;
         document.body.appendChild(element);
         menu = { element: element, appid: appid, mode: mode, anchor: anchor, devices: devices || null };
         place();
-        var first = element.querySelector(".sevo-native-item");
-        if (first) first.focus();
+      }
+
+      /* Shows `html` in the menu still open for the game, or reopens it at
+         the anchor it had. */
+      function showInMenu(appid, mode, anchor, html) {
+        if (menu && menu.appid === appid) {
+          menu.element.innerHTML = html;
+          place();
+        } else if (anchor && anchor.isConnected && currentAppID() === appid) {
+          openPanel(anchor, appid, mode, html);
+        } else {
+          return;
+        }
+        var button = menu.element.querySelector(".sevo-native-retry");
+        if (button) button.focus();
       }
     
       /* Under the anchor, kept inside the window. */
@@ -392,25 +458,47 @@ enum SteamNativeBuilds {
         menu = null;
       }
     
-      /* Maps the game, then carries on: the install wizard for Install,
-         nothing more for a switch, which Steam answers by downloading the
-         other build's depots. */
+      /* Maps the game, then carries on once Steam shows the mapping in the
+         game's details: the install wizard for Install, nothing more for a
+         switch, which Steam answers by downloading the other build's depots.
+         A refused or unconfirmed mapping leaves the game as it was and says
+         so in the menu, with the choice one click away. */
       function choose(appid, platform, mode) {
         var info = answer(appid);
         var steam = ctx.SteamClient;
         if (!info || !steam || !steam.Apps) return;
-        closeMenu();
         var tool = platform === "macos" ? info.tool : "";
+        var anchor = menu && menu.appid === appid ? menu.anchor : null;
+        showInMenu(appid, mode, anchor, workingHTML(platform));
+        function effective() {
+          var d = details(appid);
+          if (!d) return false;
+          return platform === "macos" ? d.strCompatToolName === info.tool : d.strCompatToolName !== info.tool;
+        }
+        function confirmed() {
+          delete answers[appid];
+          if (menu && menu.appid === appid) closeMenu();
+          if (ctx.__sevoLibraryCompat && typeof ctx.__sevoLibraryCompat.invalidate === "function") {
+            try { ctx.__sevoLibraryCompat.invalidate(); } catch (e) {}
+          }
+          if (mode === "install") steam.Installs.OpenInstallWizard([appid]);
+          schedule();
+        }
+        function failed() {
+          delete answers[appid];
+          showInMenu(appid, mode, anchor, failedHTML(platform, mode));
+          schedule();
+        }
+        function check(waited) {
+          if (effective()) { confirmed(); return; }
+          if (waited >= CONFIRM_WITHIN) { failed(); return; }
+          setTimeout(function () { check(waited + CONFIRM_EVERY); }, CONFIRM_EVERY);
+        }
         Promise.resolve()
           .then(function () { return steam.Apps.SpecifyCompatTool(appid, tool); })
-          .catch(function () {})
-          .then(function () {
-            delete answers[appid];
-            if (mode === "install") steam.Installs.OpenInstallWizard([appid]);
-            schedule();
-          });
+          .then(function () { check(0); }, failed);
       }
-    
+
       // MARK: The play bar
     
       function statHTML(platform) {
@@ -430,7 +518,7 @@ enum SteamNativeBuilds {
         var sections = document.querySelectorAll("." + classes.bar.GameStatsSection);
         var o = overview(appid);
         var show = info && o && o.installed;
-        var platform = show ? chosen(appid, info) : null;
+        var platform = show ? installedBuild(appid, info) : null;
         for (var i = 0; i < sections.length; i++) {
           var section = sections[i];
           var stat = section.querySelector(":scope > ." + STAT_CLASS);
@@ -549,8 +637,10 @@ enum SteamNativeBuilds {
           }
           var pick = target.closest(".sevo-native-item");
           var go = target.closest(".sevo-native-go");
+          var retry = target.closest(".sevo-native-retry");
           if (target.closest(".sevo-native-cancel")) { closeMenu(); return; }
           if (go) { choose(menu.appid, go.getAttribute("data-platform"), "switch"); return; }
+          if (retry) { choose(menu.appid, retry.getAttribute("data-platform"), retry.getAttribute("data-mode")); return; }
           if (!pick) return;
           var platform = pick.getAttribute("data-platform");
           var info = answer(menu.appid);
@@ -631,7 +721,7 @@ enum SteamNativeBuilds {
       document.addEventListener("keydown", onKey, true);
       window.addEventListener("resize", function () { if (menu) place(); });
     
-      var self = window.__sevoNativeMenu = { apply: apply, enabled: true };
+      var self = window.__sevoNativeMenu = { apply: apply, openMenu: openMenu, choose: choose, enabled: true };
       apply();
       return "installed";
     """
