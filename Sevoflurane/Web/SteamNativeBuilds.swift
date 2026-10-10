@@ -118,7 +118,8 @@ enum SteamNativeBuilds {
       }
     
       /* frames[0] is this function, [1] the getter, [2] the Linux test,
-         [3] its caller. */
+         [3] its caller. Asked last: a stack trace on every read of PLATFORM costs more
+         than the app-details lookup that rules out most games. */
       function askedByThePageList() {
         var frames = String(new Error().stack || "").split("\\n");
         if (frames.length < 4 || frames[2].indexOf(gate + "@") !== 0) return false;
@@ -133,7 +134,7 @@ enum SteamNativeBuilds {
         configurable: true,
         enumerable: descriptor.enumerable,
         get: function () {
-          if (lib.enabled && real !== "linux" && askedByThePageList() && lastAskedHasMacBuild()) return "linux";
+          if (lib.enabled && real !== "linux" && lastAskedHasMacBuild() && askedByThePageList()) return "linux";
           return real;
         },
         set: function (value) { real = value; }
