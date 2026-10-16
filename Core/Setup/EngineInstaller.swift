@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// Downloads, verifies, and installs a managed engine release into
@@ -62,7 +61,7 @@ nonisolated enum EngineInstaller {
         guard size == release.sizeBytes else {
             throw InstallError("engine tarball is \(size) bytes, the manifest declares \(release.sizeBytes)")
         }
-        let digest = try sha256(of: tarball)
+        let digest = try FileDigest.sha256(of: tarball)
         guard digest == release.sha256.lowercased() else {
             throw InstallError("engine tarball hash mismatch: \(digest)")
         }
@@ -384,17 +383,6 @@ nonisolated enum EngineInstaller {
             }
             observation?.invalidate()
         }
-    }
-
-    /// Streaming SHA-256 — engine tarballs are hundreds of MB.
-    static func sha256(of file: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: 4 << 20), !chunk.isEmpty {
-            hasher.update(data: chunk)
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private struct InstallError: Error, CustomStringConvertible {

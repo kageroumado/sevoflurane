@@ -188,7 +188,7 @@ nonisolated enum RendererVersions {
             try manager.moveItem(at: downloaded, to: local)
         }
         if let sha256 {
-            let actual = try EngineInstaller.sha256(of: local)
+            let actual = try FileDigest.sha256(of: local)
             guard actual == sha256.lowercased() else {
                 throw InstallError("the download does not match its checksum")
             }

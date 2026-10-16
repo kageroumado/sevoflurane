@@ -10,16 +10,9 @@ nonisolated enum SophonCodec {
         Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    /// md5 of a file, read four megabytes at a time; the largest game file
-    /// is over 500 MB.
+    /// md5 of a file, streamed a block at a time.
     static func md5(of file: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        var hasher = Insecure.MD5()
-        while let block = try handle.read(upToCount: 4 << 20), !block.isEmpty {
-            hasher.update(data: block)
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        try FileDigest.md5(of: file)
     }
 
     /// One zstd chunk or manifest, decompressed to the size it is listed at.

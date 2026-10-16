@@ -299,7 +299,7 @@ nonisolated enum ShaderPackages {
             let tarball = staging.appendingPathComponent(url.lastPathComponent)
             try await download(url, to: tarball, expectedSize: size, progress: progress)
             if let sha256 {
-                let actual = try EngineInstaller.sha256(of: tarball)
+                let actual = try FileDigest.sha256(of: tarball)
                 guard actual == sha256.lowercased() else {
                     throw InstallError("the download of \(available.title) does not match its checksum")
                 }
