@@ -19,42 +19,28 @@ enum CompanionHandoff {
         NSWorkspace.shared.open(installed ? companion.openURL : companion.pageURL)
     }
 
-    /// Opens the companion's Workshop page in Steam, through the app's own
-    /// `steam://` handler, which brings the client forward.
+    /// Opens the companion's Workshop page in this app's own Steam, which
+    /// comes forward for it. (`steam://` through NSWorkspace would go to
+    /// whichever Steam is registered for the scheme, Valve's included.)
     static func openWorkshop(appID: Int) {
-        guard let companion = GameCompanion.all[appID] else { return }
+        guard let companion = GameCompanion.all[appID], let delegate = NSApp.delegate as? AppDelegate else { return }
         EventLog.shared.log(.client, "\(companion.name): opening its Workshop")
-        NSWorkspace.shared.open(companion.workshopURL)
+        delegate.host.showSteam()
+        delegate.host.executeSteamURL(companion.workshopURL)
     }
 
     /// Takes a Play of a companion app, whose own window never draws here:
-    /// says what the app is for, opens its Workshop by default, and offers
-    /// the partner. `false` for an app that is no companion.
+    /// opens its Workshop in Steam and shows the guide over it. `false` for
+    /// an app that is no companion.
     static func take(appID: Int) -> Bool {
         guard let companion = GameCompanion.all[appID] else { return false }
-        let installed = isInstalled(companion)
-        let alert = NSAlert()
-        alert.messageText = String(localized: "\(companion.name) wallpapers play through \(companion.partner)")
-        alert.informativeText = installed
-            ? companion.reason
-            : companion.reason + " " + String(localized: "\(companion.partner) is free, from the maker of Sevoflurane.")
-        alert.addButton(withTitle: String(localized: "Open Workshop"))
-        alert.addButton(withTitle: installed
-            ? String(localized: "Open \(companion.partner)") : String(localized: "Get \(companion.partner)"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        // An agent app has no activation of its own, and the alert would open behind Steam.
-        alert.window.level = .floating
-        NSApp.activate()
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: openWorkshop(appID: appID)
-        case .alertSecondButtonReturn: open(appID: appID)
-        default: break
-        }
+        openWorkshop(appID: appID)
+        CompanionGuide.shared.show(companion)
         return true
     }
 
-    /// ``take(appID:)`` for a Play that arrives inside an await: the alert
-    /// runs on the main run loop's next turn, as ``InstallWarning`` does.
+    /// ``take(appID:)`` for a Play that arrives inside an await: the panel
+    /// opens on the main run loop's next turn, as ``InstallWarning`` does.
     static func takeRunGame(appID: Int) async -> Bool {
         guard GameCompanion.all[appID] != nil else { return false }
         return await withCheckedContinuation { continuation in

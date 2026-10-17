@@ -12130,12 +12130,62 @@
         }
       }
     },
-    "Open Workshop": {
+    "Subscribe": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开创意工坊"
+            "value": "订阅"
+          }
+        }
+      }
+    },
+    "Pick wallpapers on the Workshop, open in Steam now. Steam downloads them.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在创意工坊挑选壁纸（Steam 已打开它）。Steam 会下载它们。"
+          }
+        }
+      }
+    },
+    "%@ makes videos": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 制作视频"
+          }
+        }
+      }
+    },
+    "%@ finds the downloads and turns each one into a looping video wallpaper.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 会找到这些下载，把每一张做成循环的视频墙纸。"
+          }
+        }
+      }
+    },
+    "Choose in System Settings": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在“系统设置”中选择"
+          }
+        }
+      }
+    },
+    "Pick them under Wallpaper, like any video.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在“墙纸”里选择它们，和其他视频一样。"
           }
         }
       }
