@@ -152,6 +152,9 @@
         var installerFailures: Int
         private var installerFailedIn: Set<String> = []
         private(set) var setAsideBottles: [String] = []
+        /// Bottles whose boot left no 32-bit system DLLs; the next one
+        /// created is complete.
+        var incompleteBottles: Set<String> = []
 
         init(
             scenario: SetupScenario,
@@ -285,10 +288,15 @@
             installerFailedIn.contains(name)
         }
 
+        func bottleIsComplete(named name: String) -> Bool {
+            !incompleteBottles.contains(name)
+        }
+
         func setAsideBottle(named name: String) async throws -> String {
             let aside = "\(name).broken-dry-run"
             log("would run: wineserver -k in \(name), then rename it \(aside)")
             installerFailedIn.remove(name)
+            incompleteBottles.remove(name)
             setAsideBottles.append(aside)
             state = SetupDetection(
                 rosetta: state.rosetta,

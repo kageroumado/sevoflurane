@@ -340,22 +340,23 @@ final class Provisioner {
     }
 
     private func createBottleIfMissing(_ bottleName: String) async throws {
-        // Steam's installer failing in a bottle usually means the bottle
-        // itself is unfit: run into it again, it fails the same way. One with
-        // no Steam in it holds nothing to keep, so it is set aside and built
-        // again.
+        // A bottle with no Steam in it holds nothing to keep, so one that is
+        // unfit is set aside and built again: one whose boot never finished,
+        // or one Steam's installer failed in, which fails the same way when
+        // the installer runs into it again.
         let rebuilding = bottleRecord(named: bottleName).map {
-            !$0.hasSteam && environment.steamInstallerFailed(inBottle: bottleName)
+            !$0.hasSteam && (!environment.bottleIsComplete(named: bottleName)
+                || environment.steamInstallerFailed(inBottle: bottleName))
         }
         if rebuilding == false { return }
         beginStage(3, "Creating the Steam environment…")
         if rebuilding == true {
             do {
                 let aside = try await environment.setAsideBottle(named: bottleName)
-                SetupLog.log("provision: Steam's installer failed in bottle \(bottleName); set it aside as \(aside) to build it again")
+                SetupLog.log("provision: bottle \(bottleName) is unfinished or Steam's installer failed in it; set it aside as \(aside) to build it again")
             } catch {
                 throw ProvisionError(
-                    String(localized: "could not set aside the bottle Steam's installer failed in: \(error.localizedDescription)"),
+                    String(localized: "could not set aside an unfinished bottle: \(error.localizedDescription)"),
                     leavesNothingToStart: true,
                 )
             }
@@ -370,6 +371,13 @@ final class Provisioner {
             )
         }
         await refreshDetection()
+        guard environment.bottleIsComplete(named: bottleName) else {
+            SetupLog.log("provision: bottle \(bottleName) booted without its 32-bit system DLLs (syswow64)")
+            throw ProvisionError(
+                String(localized: "the new bottle has no 32-bit Windows files, so the engine may be damaged"),
+                leavesNothingToStart: true,
+            )
+        }
     }
 
     private func installBootstrapper(

@@ -69,6 +69,14 @@ protocol SetupEnvironment: AnyObject {
     /// built again: still no Steam in it, and a bottle setup made.
     func steamInstallerFailed(inBottle name: String) -> Bool
 
+    /// Whether the bottle's boot finished: its 32-bit system DLLs are in
+    /// place. `wineboot -u` exits 0 when its 32-bit half fails, and a boot
+    /// killed in its first seconds still leaves `system.reg`, so neither the
+    /// exit status nor detection's marker says so; such a bottle fails every
+    /// 32-bit program, Steam's installer first, with `could not load
+    /// kernel32.dll`.
+    func bottleIsComplete(named name: String) -> Bool
+
     /// Ends the bottle's processes and renames it `<name>.broken-<time>`,
     /// which detection passes over, so the bottle stage creates it anew.
     /// Answers the name it was given.
@@ -295,6 +303,14 @@ final class LiveSetupEnvironment: SetupEnvironment {
         // is ever built again.
         guard !Engine.active.isCrossOver else { return false }
         return FileManager.default.fileExists(atPath: Self.installerFailureMarker(inBottle: name).path)
+    }
+
+    func bottleIsComplete(named name: String) -> Bool {
+        // CrossOver builds and repairs its own bottles.
+        guard !Engine.active.isCrossOver else { return true }
+        let kernel32 = Engine.active.bottlesRoot.appendingPathComponent(name)
+            .appendingPathComponent("drive_c/windows/syswow64/kernel32.dll")
+        return FileManager.default.fileExists(atPath: kernel32.path)
     }
 
     func setAsideBottle(named name: String) async throws -> String {

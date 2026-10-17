@@ -2763,6 +2763,17 @@
         }
       }
     },
+    "could not set aside an unfinished bottle: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移开未完成的容器：%@"
+          }
+        }
+      }
+    },
     "Could not write a report." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2781,17 +2792,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法写入报告：%@"
-          }
-        }
-      }
-    },
-    "could not set aside the bottle Steam's installer failed in: %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法移开 Steam 安装程序失败的容器：%@"
           }
         }
       }
@@ -10266,6 +10266,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "直接使用鼠标移动距离：无论移动速度如何，相同的手部位移都会让视角转动相同幅度。这是射击游戏通常需要的方式。"
+          }
+        }
+      }
+    },
+    "the new bottle has no 32-bit Windows files, so the engine may be damaged" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新容器缺少 32 位 Windows 文件，引擎可能已损坏"
           }
         }
       }

@@ -131,6 +131,31 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `a bottle whose boot never finished is built again`() async {
+        let (provisioner, env) = makeProvisioner(.bottleWithoutSteam)
+        env.incompleteBottles = [SetupScenario.bottleName]
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.setAsideBottles == ["\(SetupScenario.bottleName).broken-dry-run"])
+        #expect(env.state.steamBottles.count == 1)
+    }
+
+    @Test
+    func `a bottle that boots without its 32-bit files stops setup before the installer`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle)
+        env.incompleteBottles = [SetupScenario.bottleName]
+        env.installerFailures = .max
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        guard case let .failed(reason) = provisioner.activity else {
+            Issue.record("expected .failed, got \(provisioner.activity)")
+            return
+        }
+        #expect(reason.contains("32-bit"))
+    }
+
+    @Test
     func `a bottle without Steam that no installer failed in is kept`() async {
         let (provisioner, env) = makeProvisioner(.bottleWithoutSteam)
         await provisioner.refreshDetection()
