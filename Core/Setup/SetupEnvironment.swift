@@ -65,8 +65,8 @@ protocol SetupEnvironment: AnyObject {
     /// into it a second time.
     func markSteamInstallerFailed(inBottle name: String)
 
-    /// Whether Steam's installer failed in the bottle and the bottle may be
-    /// built again: still no Steam in it, and a bottle setup made.
+    /// Whether Steam's installer failed in the bottle and setup made it, so
+    /// it may be built again.
     func steamInstallerFailed(inBottle name: String) -> Bool
 
     /// Whether the bottle's boot finished: its 32-bit system DLLs are in
@@ -205,7 +205,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
                     "--template",
                     "win10_64",
                     "--description",
-                    "Sevoflurane Steam",
+                    Self.crossOverDescription,
                 ],
                 timeout: .seconds(600),
             )
@@ -298,16 +298,12 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     func steamInstallerFailed(inBottle name: String) -> Bool {
-        // A CrossOver bottle can be one the person made and filled with their
-        // own programs, so only a managed prefix, which setup alone creates,
-        // is ever built again.
-        guard !Engine.active.isCrossOver else { return false }
+        guard Self.setupMade(bottle: name) else { return false }
         return FileManager.default.fileExists(atPath: Self.installerFailureMarker(inBottle: name).path)
     }
 
     func bottleIsComplete(named name: String) -> Bool {
-        // CrossOver builds and repairs its own bottles.
-        guard !Engine.active.isCrossOver else { return true }
+        guard Self.setupMade(bottle: name) else { return true }
         let kernel32 = Engine.active.bottlesRoot.appendingPathComponent(name)
             .appendingPathComponent("drive_c/windows/syswow64/kernel32.dll")
         return FileManager.default.fileExists(atPath: kernel32.path)
@@ -325,6 +321,21 @@ final class LiveSetupEnvironment: SetupEnvironment {
         )
         return aside
     }
+
+    /// Whether setup made the bottle, which is what lets it be judged and
+    /// built again: a managed prefix always, a CrossOver bottle when it
+    /// carries ``crossOverDescription``. Any other CrossOver bottle is one the
+    /// person made, possibly holding their own programs.
+    private static func setupMade(bottle name: String) -> Bool {
+        guard Engine.active.isCrossOver else { return true }
+        let conf = Engine.active.bottlesRoot.appendingPathComponent(name)
+            .appendingPathComponent("cxbottle.conf")
+        guard let text = try? String(contentsOf: conf, encoding: .utf8) else { return false }
+        return text.contains("\"Description\" = \"\(crossOverDescription)\"")
+    }
+
+    /// The description `cxbottle --create` writes into a bottle setup makes.
+    private static let crossOverDescription = "Sevoflurane Steam"
 
     private static func installerFailureMarker(inBottle name: String) -> URL {
         Engine.active.bottlesRoot.appendingPathComponent(name)
