@@ -106,6 +106,30 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
         active = engine
     }
 
+    /// Stores the first-run assistant's answer, Dormison or CrossOver, and
+    /// moves ``active`` to it, so the bottle step lists that engine's bottles.
+    /// Where Dormison is chosen and none is installed yet, ``active`` is a
+    /// managed engine with no version until the engine stage installs one and
+    /// resolves it: the stages before it run no Wine. A stored choice of the
+    /// same kind stays, so a hand-picked build survives a second run.
+    static func chooseAtSetup(managed: Bool) {
+        let stored = Preferences.shared.string(forKey: preferenceKey)
+        if stored == nil || managed != preferenceWantsManaged {
+            Preferences.shared.set(managed ? "managed" : "crossover", forKey: preferenceKey)
+        }
+        active = preferred() ?? (managed ? .managed(version: "") : .crossover)
+    }
+
+    /// The engine the first-run assistant starts on: the stored choice, else
+    /// CrossOver where Steam is already set up in a CrossOver bottle, else
+    /// Dormison.
+    static var setupStartsOnCrossOver: Bool {
+        if let stored = Preferences.shared.string(forKey: preferenceKey) {
+            return stored.hasPrefix("crossover")
+        }
+        return SetupProbe.bottles(for: .crossover).contains { $0.name == SteamBottle.name && $0.hasSteam }
+    }
+
     /// After the app installs a newer release or beta engine: a stored choice
     /// that names an older one (`managed:dormison-b1`) moves to it, so the
     /// client's next start runs what the app carries, and this process's

@@ -98,6 +98,7 @@ struct SetupView: View {
         self.makeGraphics = makeGraphics
         self.onFinished = onFinished
         _step = State(initialValue: step)
+        _engineChoice = State(initialValue: Engine.setupStartsOnCrossOver ? .crossover : .builtIn)
         // Opening straight onto the graphics step skips the transition that
         // would otherwise build the store, so build it here instead.
         _graphicsStore = State(initialValue: step == .graphics ? makeGraphics?() : nil)
@@ -324,6 +325,11 @@ struct SetupView: View {
     }
 
     private func advanceFromEngine() {
+        // Before anything reads it: the engine stage installs Dormison only
+        // when the stored choice asks for it or no CrossOver is usable.
+        if !provisioner.isDryRun {
+            Engine.chooseAtSetup(managed: engineChoice == .builtIn)
+        }
         guard needsBottleChoice else {
             beginProvisioning()
             return
