@@ -61,11 +61,14 @@ extension SteamWebHost {
     /// copy under a Windows install is files Steam would leave behind.
     private func takeSteamForMacCopy(appID: Int) async {
         guard Engine.running.supportsSteamPlayMacOS else { return }
+        // Either source alone misses a case: the page's details are loaded
+        // only for a game whose page was opened, and `config.vdf` takes a
+        // mapping made moments ago only when Steam next writes it.
         let tool = JSLiteral.string(SteamPlayMacOS.toolName)
-        let mapped = await evaluateInContext(
+        let inPage = await evaluateInContext(
             "(function () { try { var d = appDetailsStore.GetAppDetails(\(appID)); return String(!!d && d.strCompatToolName === \(tool)); } catch (e) { return 'false'; } })()",
         )
-        guard mapped == "true" else { return }
+        guard inPage == "true" || SteamPlayMacOS.mappedApps().contains(appID) else { return }
         switch await Self.take(appID: appID) {
         case let .cloned(copy, _, elapsed):
             EventLog.shared.log(
