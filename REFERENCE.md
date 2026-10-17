@@ -18,7 +18,7 @@ and play. Games appear as players share their runs.
 One app plays through another: subscribe to **Wallpaper Engine** wallpapers on
 its Workshop, and [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane),
 free from the same developer, finds them and plays them as your Mac's wallpaper.
-Its page says so, Play offers Phosphene, and the Mac filter keeps it.
+Its page says so, Play opens the Workshop and offers Phosphene, and the Mac filter keeps it.
 
 ## Mac or Windows, per game
 

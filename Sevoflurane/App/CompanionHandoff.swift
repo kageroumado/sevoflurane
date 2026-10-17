@@ -19,9 +19,17 @@ enum CompanionHandoff {
         NSWorkspace.shared.open(installed ? companion.openURL : companion.pageURL)
     }
 
-    /// Takes a Play of a companion app: says what the app is for here and
-    /// offers the partner. `false` for an app that is no companion, or when
-    /// the person asked for the launch anyway.
+    /// Opens the companion's Workshop page in Steam, through the app's own
+    /// `steam://` handler, which brings the client forward.
+    static func openWorkshop(appID: Int) {
+        guard let companion = GameCompanion.all[appID] else { return }
+        EventLog.shared.log(.client, "\(companion.name): opening its Workshop")
+        NSWorkspace.shared.open(companion.workshopURL)
+    }
+
+    /// Takes a Play of a companion app, whose own window never draws here:
+    /// says what the app is for, opens its Workshop by default, and offers
+    /// the partner. `false` for an app that is no companion.
     static func take(appID: Int) -> Bool {
         guard let companion = GameCompanion.all[appID] else { return false }
         let installed = isInstalled(companion)
@@ -30,23 +38,19 @@ enum CompanionHandoff {
         alert.informativeText = installed
             ? companion.reason
             : companion.reason + " " + String(localized: "\(companion.partner) is free, from the maker of Sevoflurane.")
+        alert.addButton(withTitle: String(localized: "Open Workshop"))
         alert.addButton(withTitle: installed
             ? String(localized: "Open \(companion.partner)") : String(localized: "Get \(companion.partner)"))
-        alert.addButton(withTitle: String(localized: "Launch Anyway"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         // An agent app has no activation of its own, and the alert would open behind Steam.
         alert.window.level = .floating
         NSApp.activate()
         switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            open(appID: appID)
-            return true
-        case .alertSecondButtonReturn:
-            EventLog.shared.log(.client, "\(companion.name): launching anyway")
-            return false
-        default:
-            return true
+        case .alertFirstButtonReturn: openWorkshop(appID: appID)
+        case .alertSecondButtonReturn: open(appID: appID)
+        default: break
         }
+        return true
     }
 
     /// ``take(appID:)`` for a Play that arrives inside an await: the alert

@@ -12,6 +12,8 @@ nonisolated struct GameCompanion: Codable, Sendable, Equatable {
     let partnerBundleID: String
     /// Opens the partner where the downloads show.
     let openURL: URL
+    /// The Workshop page in Steam, where the downloads are chosen.
+    let workshopURL: URL
     /// Where to get the partner.
     let pageURL: URL
     /// The strip's reason line, and the body of the Play alert.
@@ -23,6 +25,7 @@ nonisolated struct GameCompanion: Codable, Sendable, Equatable {
         partner: "Phosphene",
         partnerBundleID: "glass.kagerou.phosphene",
         openURL: URL(string: "phosphene://library/wallpaper-engine")!,
+        workshopURL: URL(string: "steam://url/SteamWorkshopPage/431960")!,
         pageURL: URL(string: "https://kagerou.glass/phosphene/?from=sevoflurane")!,
         reason: "Subscribe to wallpapers on the Workshop; Phosphene finds them and plays them as your Mac's wallpaper.",
     )

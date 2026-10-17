@@ -5921,16 +5921,6 @@
         }
       }
     },
-    "Launch Anyway": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仍要启动"
-          }
-        }
-      }
-    },
     "Launches": {
       "localizations": {
         "zh-Hans": {
@@ -12136,6 +12126,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Phosphene 会找到 Steam 下载的壁纸，并作为 Mac 的墙纸播放。"
+          }
+        }
+      }
+    },
+    "Open Workshop": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开创意工坊"
           }
         }
       }
