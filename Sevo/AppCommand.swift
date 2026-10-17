@@ -523,11 +523,14 @@ struct AppCommand: AsyncParsableCommand {
             }
             // Steam shows a mapping it took in the game's details within a
             // few seconds; an install started before that takes Windows depots.
+            // The details exist only once something asks for them, as a game's
+            // page does.
             let tool = JSLiteral.string(SteamPlayMacOS.toolName)
             let mapped = try await SteamJS.eval("""
             (async () => {
               await SteamClient.Apps.SpecifyCompatTool(\(appid), \(tool));
-              for (let i = 0; i < 20; i++) {
+              try { appDetailsStore.RequestAppDetails(\(appid)); } catch (e) {}
+              for (let i = 0; i < 40; i++) {
                 const d = appDetailsStore.GetAppDetails(\(appid));
                 if (d && d.strCompatToolName === \(tool)) return 'mapped';
                 await new Promise(r => setTimeout(r, 200));
