@@ -47,7 +47,46 @@ extension SteamWebHost {
     /// nothing known stands against, after ``InstallWarning`` for one that
     /// anti-cheat or an Unsupported verdict does. The warning follows the
     /// Mac compatibility switch, as the strip and the library's badges do.
+    /// An install that goes ahead of a game set to its macOS version takes
+    /// Steam for Mac's copy first, whichever button started it.
     func confirmInstall(appID: Int) async -> Bool {
+        guard await passesCompatibilityWarning(appID: appID) else { return false }
+        await takeSteamForMacCopy(appID: appID)
+        return true
+    }
+
+    /// Clones Steam for Mac's copy into the library when the game is set to
+    /// its macOS version, before Steam's wizard looks at the disk
+    /// (``SteamForMacCopy``). A game set to Windows takes nothing: a macOS
+    /// copy under a Windows install is files Steam would leave behind.
+    private func takeSteamForMacCopy(appID: Int) async {
+        guard Engine.running.supportsSteamPlayMacOS else { return }
+        let tool = JSLiteral.string(SteamPlayMacOS.toolName)
+        let mapped = await evaluateInContext(
+            "(function () { try { var d = appDetailsStore.GetAppDetails(\(appID)); return String(!!d && d.strCompatToolName === \(tool)); } catch (e) { return 'false'; } })()",
+        )
+        guard mapped == "true" else { return }
+        switch await Self.take(appID: appID) {
+        case let .cloned(copy, _, elapsed):
+            EventLog.shared.log(
+                .client,
+                "install \(appID): cloned Steam for Mac's \(copy.installDir) (build \(copy.buildID ?? "?"), \(copy.bytes) bytes) "
+                    + "in \(elapsed.formatted(.units(allowed: [.seconds, .milliseconds], width: .narrow))); Steam checks it",
+            )
+        case .nothing:
+            break
+        case let .failed(reason):
+            EventLog.shared.log(.client, "install \(appID): Steam for Mac's copy not taken, so Steam downloads: \(reason)")
+        }
+    }
+
+    /// Off the main actor: a large game is a large tree of file records.
+    @concurrent
+    private nonisolated static func take(appID: Int) async -> SteamForMacCopy.Taken {
+        SteamForMacCopy.takeForInstall(appID: appID)
+    }
+
+    private func passesCompatibilityWarning(appID: Int) async -> Bool {
         guard Preferences.compatibilityStrip else { return true }
         let name = await evaluateInContext(
             "(function () { try { var o = appStore.GetAppOverviewByAppID(\(appID)); return (o && o.display_name) || ''; } catch (e) { return ''; } })()",

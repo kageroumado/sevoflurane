@@ -2742,16 +2742,6 @@
         }
       }
     },
-    "Copying the macOS version from Steam for Mac…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在从 Steam for Mac 复制 macOS 版本…"
-          }
-        }
-      }
-    },
     "Copyright © 2026 kageroumado. MIT License." : {
       "localizations" : {
         "zh-Hans" : {

@@ -87,6 +87,33 @@ nonisolated enum SteamForMacCopy {
         return copy
     }
 
+    /// What taking the copy for an install came to.
+    enum Taken: Equatable {
+        /// Cloned into the library, in `elapsed`.
+        case cloned(Copy, URL, elapsed: Duration)
+        /// Nothing to take: Steam for Mac has no complete copy at rest, or a
+        /// folder of the game's name is already in the library.
+        case nothing
+        case failed(String)
+    }
+
+    /// Clones Steam for Mac's copy into the bottle's library ahead of an
+    /// install of the game's macOS version, so Steam checks it rather than
+    /// downloads it. A folder already in place is left for Steam to check.
+    static func takeForInstall(appID: Int) -> Taken {
+        guard let copy = copy(appID: appID) else { return .nothing }
+        guard let library = bottleLibrary else { return .failed("the bottle has no Steam library") }
+        let started = ContinuousClock.now
+        do {
+            let target = try clone(copy, into: library)
+            return .cloned(copy, target, elapsed: started.duration(to: .now))
+        } catch .targetExists {
+            return .nothing
+        } catch {
+            return .failed(error.description)
+        }
+    }
+
     /// Where the copy goes in the bottle library `steamapps`.
     static func target(for copy: Copy, in steamapps: URL) -> URL {
         steamapps.appendingPathComponent("common/\(copy.installDir)", isDirectory: true)

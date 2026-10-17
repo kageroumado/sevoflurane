@@ -138,52 +138,6 @@ extension SteamBridge {
         return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
-    /// `POST /__native/<appid>/copy`: clones Steam for Mac's copy of the game
-    /// into the bottle's library, ahead of the macOS build's install, which
-    /// then checks the files rather than downloading them. Answers
-    /// `{"cloned": true}` or `{"cloned": false, "reason": …}`; the install
-    /// goes ahead either way.
-    nonisolated static func handleSteamForMacCopyRequest(_ request: HTTPRequest) async -> HTTPResponse {
-        let id = request.path.dropFirst("/__native/".count).prefix(while: { $0 != "/" })
-        guard let appID = Int(id) else { return .error(404, "Not Found") }
-        let outcome = await cloneSteamForMacCopy(appID: appID)
-        let body: [String: Any] = switch outcome {
-        case let .success(target):
-            ["cloned": true, "folder": target.lastPathComponent]
-        case let .failure(failure):
-            ["cloned": false, "reason": failure.reason]
-        }
-        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data("{}".utf8)
-        return .ok(data, type: "application/json", headers: [("Cache-Control", "no-store")])
-    }
-
-    /// Off the bridge's executor: a clone of a large game copies its whole
-    /// tree of file records.
-    @concurrent
-    private nonisolated static func cloneSteamForMacCopy(appID: Int) async -> Result<URL, CopyFailure> {
-        guard Engine.running.supportsSteamPlayMacOS else { return .failure("the engine plays no macOS versions") }
-        guard let copy = SteamForMacCopy.copy(appID: appID) else {
-            return .failure("Steam for Mac has no complete copy at rest")
-        }
-        guard let library = SteamForMacCopy.bottleLibrary else { return .failure("the bottle has no Steam library") }
-        let started = ContinuousClock.now
-        do {
-            let target = try SteamForMacCopy.clone(copy, into: library)
-            let elapsed = started.duration(to: .now).formatted(.units(allowed: [.seconds, .milliseconds], width: .narrow))
-            EventLog.enqueue(.client, "copy \(appID): cloned Steam for Mac's \(copy.installDir) (build \(copy.buildID ?? "?"), \(copy.bytes) bytes) into the bottle in \(elapsed)")
-            return .success(target)
-        } catch {
-            EventLog.enqueue(.client, "copy \(appID): Steam for Mac's copy not cloned: \(error)")
-            return .failure(CopyFailure(error.description))
-        }
-    }
-
-    struct CopyFailure: Error, ExpressibleByStringLiteral {
-        let reason: String
-        init(_ reason: String) { self.reason = reason }
-        init(stringLiteral value: String) { reason = value }
-    }
-
     // MARK: - Steam's web properties
 
     /// `GET /__web?u=<absolute URL>`: one Steam web page or document, fetched

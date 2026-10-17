@@ -510,20 +510,16 @@ struct AppCommand: AsyncParsableCommand {
             guard Engine.active.supportsSteamPlayMacOS else {
                 throw ClientOps.Failure.message("the engine plays no macOS versions: switch to Dormison (sevo engine use)")
             }
-            guard let copy = SteamForMacCopy.copy(appID: appid) else {
-                throw ClientOps.Failure.message("Steam for Mac has no complete copy of \(appid) at rest")
-            }
-            guard let library = SteamForMacCopy.bottleLibrary else {
-                throw ClientOps.Failure.message("the bottle has no Steam library")
-            }
-            do {
-                let target = try SteamForMacCopy.clone(copy, into: library)
+            switch SteamForMacCopy.takeForInstall(appID: appid) {
+            case let .cloned(copy, target, _):
                 print("cloned Steam for Mac's \(copy.installDir) into \(target.path)")
-            } catch let .targetExists(target) {
-                // An earlier run's clone, or files Steam will check all the same.
-                print("\(target.path) is already in the library; Steam checks what is there")
-            } catch {
-                throw ClientOps.Failure.message("Steam for Mac's copy was not cloned: \(error)")
+            case .nothing:
+                guard SteamForMacCopy.copy(appID: appid) != nil else {
+                    throw ClientOps.Failure.message("Steam for Mac has no complete copy of \(appid) at rest")
+                }
+                print("the game's folder is already in the library; Steam checks what is there")
+            case let .failed(reason):
+                throw ClientOps.Failure.message("Steam for Mac's copy was not cloned: \(reason)")
             }
             // Steam shows a mapping it took in the game's details within a
             // few seconds; an install started before that takes Windows depots.

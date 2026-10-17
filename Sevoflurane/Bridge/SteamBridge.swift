@@ -168,9 +168,6 @@ actor SteamBridge {
                 if request.method == "GET", request.path.hasPrefix("/__compat/") {
                     return await Self.handleCompatRequest(request)
                 }
-                if request.method == "POST", request.path.hasPrefix("/__native/"), request.path.hasSuffix("/copy") {
-                    return await Self.handleSteamForMacCopyRequest(request)
-                }
                 if request.method == "GET", request.path.hasPrefix("/__native/") {
                     return await Self.handleNativeBuildRequest(request)
                 }

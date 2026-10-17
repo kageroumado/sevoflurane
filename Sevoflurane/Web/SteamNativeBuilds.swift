@@ -243,7 +243,6 @@ enum SteamNativeBuilds {
         let lines: [(String, String)] = [
             ("workingMacos", String(localized: "Setting the macOS version…")),
             ("workingWindows", String(localized: "Setting the Windows version…")),
-            ("copyingMacos", String(localized: "Copying the macOS version from Steam for Mac…")),
             ("inSteamForMac", String(localized: "In Steam for Mac")),
             ("failedMacos", String(localized: "Steam did not set the macOS version")),
             ("failedWindows", String(localized: "Steam did not set the Windows version")),
@@ -436,7 +435,7 @@ enum SteamNativeBuilds {
         var right = mode !== "switch" ? amount
           : platform === installed ? ""
           : info.sameFiles ? "No download" : amount;
-        /* Steam for Mac's copy is cloned in, and Steam only checks it. */
+        /* Steam for Mac's copy is cloned in at the install gate, and Steam only checks it. */
         if (mode === "install" && platform === "macos" && info.steamForMacCopy) {
           right = "No download";
           hint = hint + " · " + TEXT.inSteamForMac;
@@ -480,20 +479,6 @@ enum SteamNativeBuilds {
           + '<button type="button" class="DialogButton _DialogLayout Primary sevo-native-go" data-platform="' + target + '">Switch</button>'
           + '<button type="button" class="DialogButton _DialogLayout Secondary sevo-native-cancel">Cancel</button>'
           + "</div></div>";
-      }
-    
-      function copyingHTML() {
-        return '<div class="sevo-native-confirm" aria-busy="true">'
-          + '<div class="sevo-native-body">' + esc(TEXT.copyingMacos) + "</div></div>";
-      }
-    
-      /* Clones Steam for Mac's copy into the library before the wizard, so
-         Steam checks those files instead of downloading them. Resolves either
-         way: without the clone the install downloads as it always did. */
-      function copyFromSteamForMac(appid) {
-        return fetch("/__native/" + appid + "/copy", { method: "POST", cache: "no-store" })
-          .then(function (response) { return response.ok ? response.json() : null; })
-          .catch(function () { return null; });
       }
     
       function workingHTML(target) {
@@ -623,19 +608,11 @@ enum SteamNativeBuilds {
             schedule();
             return;
           }
-          function wizard() {
-            openWizard(appid, function (opened) {
-              if (opened) { if (menu && menu.appid === appid) closeMenu(); }
-              else showInMenu(appid, mode, anchor, failedHTML(platform, mode, "wizard"));
-              schedule();
-            });
-          }
-          if (platform === "macos" && info.steamForMacCopy) {
-            showInMenu(appid, mode, anchor, copyingHTML());
-            copyFromSteamForMac(appid).then(wizard);
-          } else {
-            wizard();
-          }
+          openWizard(appid, function (opened) {
+            if (opened) { if (menu && menu.appid === appid) closeMenu(); }
+            else showInMenu(appid, mode, anchor, failedHTML(platform, mode, "wizard"));
+            schedule();
+          });
         }
         function failed() {
           delete answers[appid];
