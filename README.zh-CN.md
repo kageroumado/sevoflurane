@@ -25,7 +25,7 @@ Sevoflurane 为 Mac 带来类似 Proton 的体验，在同一个 Steam 界面中
 - **启动：** 菜单栏和程序坞中的最近及已安装游戏、单次或永久渲染器选择，以及外部程序快速启动。
 - **游戏窗口（Dormison）：** 独立程序坞图标、游戏模式、可调整大小的固定分辨率窗口、Lanczos/MetalFX/Anime4K/CuNNy 放大、实时滤镜、帧率限制及 CPU/GPU/帧时间显示。
 - **输入与视频：** 支持震动的 Xbox/PlayStation 手柄，D3DMetal 上通过 MetalFX 实现 DLSS。Dormison 另支持原始鼠标、光标限制、原生 Win32 菜单、CPU 核心数限制及 H.264/HEVC 硬件解码。
-- **原生游戏：** 支持的引擎可安装 macOS 游戏并按游戏切换版本，也可转交 Steam for Mac；原生 NW.js 游戏保留 Steam 游戏时长和成就。
+- **原生游戏：** 支持的引擎可安装 macOS 游戏并按游戏切换版本；Steam for Mac 已安装的游戏直接取用其副本，无需重新下载；也可转交 Steam for Mac；原生 NW.js 游戏保留 Steam 游戏时长和成就。
 - **游戏会话：** 保持显示器唤醒、终止卡住的游戏、清理进程、Steam 重连及 Discord 活动；Dormison 还可转发游戏自己的 Discord 状态。
 - **外部游戏：** Finder 启动 `.exe`、缩略图、安装程序跟踪、快速启动、非 Steam 游戏库条目、Steam Input、覆盖层及运行报告；提示内核驱动依赖。
 - **HoYoverse：** 安装、更新、断点续传及校验原神、崩坏：星穹铁道和绝区零。原神帧率解锁修改游戏内存，默认关闭。

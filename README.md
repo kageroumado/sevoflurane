@@ -25,7 +25,7 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 - **Launchers:** recent and installed games in the menu bar and Dock menu; per-launch or persistent renderer choices; Quick Launch for external programs.
 - **Game windows (Dormison):** independent Dock icons, Game Mode, resizable fixed-resolution windows, Lanczos/MetalFX/Anime4K/CuNNy upscaling, live filters, frame-rate limits, and CPU/GPU/frame-time overlays.
 - **Input and media:** Xbox/PlayStation controller input with rumble; DLSS through MetalFX on D3DMetal. Dormison adds raw mouse input, cursor confinement, native Win32 menus, CPU caps, and hardware H.264/HEVC decoding.
-- **Native games:** macOS game installs and per-game version switching on supported engines; optional handoff to Steam for Mac. Native NW.js games retain Steam playtime and achievements.
+- **Native games:** macOS game installs and per-game version switching on supported engines; a game Steam for Mac already has installs from its copy without a download; optional handoff to Steam for Mac. Native NW.js games retain Steam playtime and achievements.
 - **Game sessions:** display-awake holds, stuck-game termination, complete process cleanup, Steam reconnection, and Discord activity; Dormison also relays games’ own Discord integration.
 - **External games:** Finder `.exe` launch and thumbnails, installer tracking, Quick Launch, non-Steam library entries, Steam Input, overlay, and run reports. Kernel-driver dependencies are reported.
 - **HoYoverse:** install, update, resume downloads, and verify Genshin Impact, Honkai: Star Rail, and Zenless Zone Zero. Optional Genshin frame-rate unlocker is off by default because it modifies game memory.

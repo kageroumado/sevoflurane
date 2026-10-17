@@ -23,6 +23,7 @@ in short.
 | `sevo status` | Engine, bottle, client, bridge, supervision and app, in one line. |
 | `sevo app list` / `sevo app info <appid>` | The library, and one game's overview. |
 | `sevo app launch <appid>` | Launches through Steam and waits for the game's window. |
+| `sevo app install <appid> [--from-steam-for-mac]` | Queues an install. With the flag, the macOS version comes from the copy Steam for Mac has: cloned into the bottle's library and checked by Steam, with nothing downloaded. |
 | `sevo app terminate <appid>` | Stops a game — its processes first, then Steam's record — and waits for it to go. |
 | `sevo app config <appid> [key] [value]` | A game's own settings: `renderer`, `upscaler`, `windows`, `hud`, `fps`, `overlay` (1-3: frame rate, frame time card, plus CPU/GPU/power/temperature), `fps-limit` (off or 30-120), `fps-graph`, `menu-bar` (a program's menus in the macOS menu bar), `dll`, `env NAME=value` (a variable the game starts with), `processors`, and more. With no key it prints every setting and the level it comes from. |
 | `sevo app repair-dll <appid> <dll>` | For "X.dll was not found": installs the package that carries it and pins the fix to that game. |
