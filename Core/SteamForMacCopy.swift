@@ -73,6 +73,20 @@ nonisolated enum SteamForMacCopy {
         return nil
     }
 
+    /// The bottle library a copy goes into: the client's first library,
+    /// where its install wizard puts a game unless told otherwise.
+    static var bottleLibrary: URL? {
+        SteamLibraries.steamapps().first
+    }
+
+    /// Steam for Mac's copy of the game when it can be cloned into the
+    /// bottle's library now.
+    static func offer(appID: Int) -> Copy? {
+        guard let copy = copy(appID: appID), let library = bottleLibrary,
+              refusal(for: copy, in: library) == nil else { return nil }
+        return copy
+    }
+
     /// Where the copy goes in the bottle library `steamapps`.
     static func target(for copy: Copy, in steamapps: URL) -> URL {
         steamapps.appendingPathComponent("common/\(copy.installDir)", isDirectory: true)

@@ -73,6 +73,19 @@ nonisolated enum ReparseLinks {
         return made
     }
 
+    /// ``restore(in:)`` over the game's folder when the build installed in
+    /// the bottle is its macOS one; `0` for any other game.
+    @discardableResult
+    static func restoreInstalledMacOSVersion(appID: Int) -> Int {
+        guard let manifest = NativeBuildInfo.manifest(appID: appID),
+              let data = try? Data(contentsOf: SteamAppInfo.fileURL, options: .alwaysMapped),
+              let app = SteamAppInfo.keyValues(appID: appID, in: data),
+              NativeBuildInfo.installedBuild(manifest: manifest, depots: NativeBuildInfo.depots(inAppInfo: app)) == .macos,
+              let game = SharedGames.installed(appID: appID)
+        else { return 0 }
+        return restore(in: game.directory)
+    }
+
     private static func attribute(of file: URL) -> Data? {
         let size = getxattr(file.path, attribute, nil, 0, 0, XATTR_NOFOLLOW)
         guard size > 0, size <= 16 * 1024 else { return nil }

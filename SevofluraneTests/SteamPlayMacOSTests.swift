@@ -292,6 +292,29 @@ struct SteamPlayMacOSTests {
         #expect(!none.hasMacBuild && none.macDownload == nil && none.installed == nil && !none.sameFiles)
     }
 
+    @Test
+    func `Steam for Mac's copy is offered only for a game this bottle lacks`() throws {
+        let copy = SteamForMacCopy.Copy(
+            appID: 1_309_000, name: "Escape Dungeon 2", directory: URL(fileURLWithPath: "/tmp/EscapeDungeon2"),
+            installDir: "EscapeDungeon2", bytes: 1_765_620_218, buildID: "20039850",
+        )
+        let offered = NativeBuildInfo.make(
+            appID: 1_309_000, enabled: true, appInfo: Self.escapeDungeon, manifest: nil, record: nil, steamForMacCopy: copy,
+        )
+        #expect(offered.steamForMacCopy == .init(bytes: 1_765_620_218))
+        let json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(offered)) as? [String: Any])
+        #expect((json["steamForMacCopy"] as? [String: Any])?["bytes"] as? Int == 1_765_620_218)
+        let installed = NativeBuildInfo.make(
+            appID: 1_309_000, enabled: true, appInfo: Self.escapeDungeon,
+            manifest: Self.manifest(depots: [1_309_003]), record: nil, steamForMacCopy: copy,
+        )
+        #expect(installed.steamForMacCopy == nil)
+        let crossOver = NativeBuildInfo.make(
+            appID: 1_309_000, enabled: false, appInfo: Self.escapeDungeon, manifest: nil, record: nil, steamForMacCopy: copy,
+        )
+        #expect(crossOver.steamForMacCopy == nil)
+    }
+
     // MARK: - The page scripts
 
     @Test
@@ -401,7 +424,7 @@ struct SteamPlayMacOSTests {
               wizard.push([ids, client]);
               if (\(JSLiteral.string(wizard)) === "shows") shown.forEach(function (f) { f({ currentAppID: ids[0], eInstallState: 5 }); });
             },
-            RegisterForShowInstallWizard: \(wizard == "unsubscribable" ? "undefined" : Self.showSubscription)
+            RegisterForShowInstallWizard: \(wizard == "unsubscribable" ? "undefined" : showSubscription)
           },
           Apps: { SpecifyCompatTool: function (appid, tool) {
             var mapping = \(JSLiteral.string(mapping));
@@ -415,11 +438,11 @@ struct SteamPlayMacOSTests {
 
     /// Steam's show-event subscription, handing back its unregister.
     private static let showSubscription = """
-        function (f) {
-          shown.push(f);
-          return { unregister: function () { shown = shown.filter(function (g) { return g !== f; }); } };
-        }
-        """
+    function (f) {
+      shown.push(f);
+      return { unregister: function () { shown = shown.filter(function (g) { return g !== f; }); } };
+    }
+    """
 
     private static func openChooser(_ context: JSContext) {
         context.evaluateScript(SteamNativeBuilds.script)

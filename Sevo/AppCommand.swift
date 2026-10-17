@@ -485,9 +485,12 @@ struct AppCommand: AsyncParsableCommand {
         @Argument var appid: Int
         @Flag(help: "Accept the game's license agreement when Steam shows one.")
         var acceptLicense = false
+        @Flag(help: "Install the macOS version from the copy Steam for Mac has: cloned, then checked by Steam, not downloaded.")
+        var fromSteamForMac = false
 
         func run() async throws {
             try await handlingFailures {
+                if fromSteamForMac { try await takeSteamForMacCopy() }
                 let outcome = try await SteamOps.install(appid, acceptLicense: acceptLicense)
                 switch outcome {
                 case "ok": print("install queued for \(appid) — watch: sevo downloads status")
@@ -498,6 +501,46 @@ struct AppCommand: AsyncParsableCommand {
                     print("Steam is showing the license agreement for \(appid). Accept it in the Steam window, or run this again with --accept-license.")
                 default: print("install of \(appid) stopped: \(outcome)")
                 }
+            }
+        }
+
+        /// Sets the game to its macOS version and clones Steam for Mac's copy
+        /// into the bottle's library, so the install that follows checks it.
+        private func takeSteamForMacCopy() async throws {
+            guard Engine.active.supportsSteamPlayMacOS else {
+                throw ClientOps.Failure.message("the engine plays no macOS versions: switch to Dormison (sevo engine use)")
+            }
+            guard let copy = SteamForMacCopy.copy(appID: appid) else {
+                throw ClientOps.Failure.message("Steam for Mac has no complete copy of \(appid) at rest")
+            }
+            guard let library = SteamForMacCopy.bottleLibrary else {
+                throw ClientOps.Failure.message("the bottle has no Steam library")
+            }
+            do {
+                let target = try SteamForMacCopy.clone(copy, into: library)
+                print("cloned Steam for Mac's \(copy.installDir) into \(target.path)")
+            } catch let .targetExists(target) {
+                // An earlier run's clone, or files Steam will check all the same.
+                print("\(target.path) is already in the library; Steam checks what is there")
+            } catch {
+                throw ClientOps.Failure.message("Steam for Mac's copy was not cloned: \(error)")
+            }
+            // Steam shows a mapping it took in the game's details within a
+            // few seconds; an install started before that takes Windows depots.
+            let tool = JSLiteral.string(SteamPlayMacOS.toolName)
+            let mapped = try await SteamJS.eval("""
+            (async () => {
+              await SteamClient.Apps.SpecifyCompatTool(\(appid), \(tool));
+              for (let i = 0; i < 20; i++) {
+                const d = appDetailsStore.GetAppDetails(\(appid));
+                if (d && d.strCompatToolName === \(tool)) return 'mapped';
+                await new Promise(r => setTimeout(r, 200));
+              }
+              return 'unconfirmed';
+            })()
+            """)
+            guard mapped == "mapped" else {
+                throw ClientOps.Failure.message("Steam did not set \(appid) to its macOS version; the clone stays in the library for the next try")
             }
         }
     }

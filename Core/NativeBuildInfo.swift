@@ -27,6 +27,17 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
     let windowsHint: String
     /// The tool to map the game to for its macOS build.
     let tool: String
+    /// Steam for Mac's copy of the game, which installing the macOS build
+    /// clones in place of a download (``SteamForMacCopy``); `nil` when there
+    /// is none to take: the game is installed here, Steam for Mac has no
+    /// complete copy at rest, or the copy cannot be cloned into the library.
+    var steamForMacCopy: CopyOffer? = nil
+
+    /// What the page shows of Steam for Mac's copy.
+    struct CopyOffer: Codable, Sendable, Equatable {
+        /// What the copy occupies on disk, which the clone shares.
+        let bytes: Int64
+    }
 
     // MARK: - Depots
 
@@ -119,9 +130,11 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
     // MARK: - Assembly
 
     /// The page's answer for one game, from the app cache, the game's
-    /// manifest, and its compatibility record when one is at hand.
+    /// manifest, its compatibility record when one is at hand, and Steam for
+    /// Mac's copy when one could be cloned.
     static func make(
         appID _: Int, enabled: Bool, appInfo: [String: SteamAppInfo.Value]?, manifest: String?, record: GameCompatRecord?,
+        steamForMacCopy: SteamForMacCopy.Copy? = nil,
     ) -> NativeBuildInfo {
         var platforms: Set<String> = []
         if case let .table(common)? = appInfo?["common"], case let .string(list)? = common["oslist"] {
@@ -139,6 +152,7 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
             macHint: macHint(record?.nativeBadge),
             windowsHint: windowsHint(record?.mac),
             tool: SteamPlayMacOS.toolName,
+            steamForMacCopy: manifest == nil && enabled ? steamForMacCopy.map { CopyOffer(bytes: $0.bytes) } : nil,
         )
     }
 

@@ -1,9 +1,10 @@
 import Foundation
 import Synchronization
 
-/// What a launch owes a game before any process of it runs: the executables
-/// of its install on record, so its env files name it, and on its first
-/// launch under Sevoflurane the fix list's values written (``FixLedger``).
+/// What a launch owes a game before any process of it runs: a macOS
+/// version's symlinks real (``ReparseLinks``), the executables of its install
+/// on record, so its env files name it, and on its first launch under
+/// Sevoflurane the fix list's values written (``FixLedger``).
 ///
 /// Every path that stages graphics for a game, spawns it or hands it to
 /// Steam awaits this first, so the process reads its settings, DLL overrides
@@ -22,6 +23,8 @@ nonisolated enum LaunchPreparation {
         appID: Int, budget: Duration = budget, log: @escaping @Sendable (String) -> Void,
     ) async -> AppliedFixes? {
         let outcome = await run(within: budget) { gate in
+            let linked = ReparseLinks.restoreInstalledMacOSVersion(appID: appID)
+            if linked > 0 { log("launch \(appID): made \(linked) symlinks of its macOS version real for macOS") }
             let recorded = GameExecutables.recordFromInstall(appID: appID)
             let fixes = FixLedger.applyAtFirstLaunch(appID: appID, committing: gate.commit)
             if fixes == nil, recorded {

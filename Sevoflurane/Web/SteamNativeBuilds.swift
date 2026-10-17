@@ -75,10 +75,10 @@ enum SteamNativeBuilds {
       var req = null;
       try { webpackChunksteamui.push([["sevo-native-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) {}
       if (!req || !req.m) return "waiting";
-
+    
       var PLATFORMS = ["windows", "macos", "linux"];
       var LABEL = '"#AppProperties_CompatibilityPage"';
-
+    
       function eachExport(exports, visit) {
         if (!exports || typeof exports !== "object") return;
         Object.keys(exports).forEach(function (key) {
@@ -87,7 +87,7 @@ enum SteamNativeBuilds {
           visit(value);
         });
       }
-
+    
       /* Steam's Linux test and the config object it reads, from the small
          modules that read the platform. */
       function linuxTest() {
@@ -122,7 +122,7 @@ enum SteamNativeBuilds {
         }
         return null;
       }
-
+    
       /* The function that owns the code at `at`: the walk out to the block
          around it, then that block's head. */
       function enclosingName(source, at) {
@@ -140,13 +140,13 @@ enum SteamNativeBuilds {
         }
         return null;
       }
-
+    
       function nearestFunction(source, at) {
         var start = source.lastIndexOf("function ", at);
         var hit = start === -1 ? null : source.slice(start, start + 64).match(/^function\\s*([\\w$]+)\\s*\\(/);
         return hit ? hit[1] : null;
       }
-
+    
       /* Every function that may list the page. Two readings of each owner,
          so a brace inside a string that misleads the walk still leaves the
          other; a name only counts when the stack shows it calling the test. */
@@ -162,7 +162,7 @@ enum SteamNativeBuilds {
         }
         return names;
       }
-
+    
       /* Lists the page, or says why it cannot. */
       function listPage() {
         var test = linuxTest();
@@ -171,7 +171,7 @@ enum SteamNativeBuilds {
         if (!names.length) return "no function holds the page's label";
         var descriptor = Object.getOwnPropertyDescriptor(test.config, "PLATFORM");
         if (!descriptor || !descriptor.configurable || !("value" in descriptor)) return "the platform is not a plain property";
-
+    
         var store = window.appDetailsStore;
         var details = store.GetAppDetails;
         var lastAsked = 0;
@@ -179,14 +179,14 @@ enum SteamNativeBuilds {
           lastAsked = appid;
           return details.apply(this, arguments);
         };
-
+    
         function lastAskedHasMacBuild() {
           try {
             var d = lastAsked && details.call(store, lastAsked);
             return !!(d && d.vecPlatforms && d.vecPlatforms.indexOf("osx") !== -1);
           } catch (e) { return false; }
         }
-
+    
         /* Asked last: a stack trace on every read of PLATFORM costs more
            than the app-details lookup that rules out most games. */
         function askedByThePageList() {
@@ -198,7 +198,7 @@ enum SteamNativeBuilds {
           }
           return false;
         }
-
+    
         var real = descriptor.value;
         Object.defineProperty(test.config, "PLATFORM", {
           configurable: true,
@@ -214,7 +214,7 @@ enum SteamNativeBuilds {
         lib.pages = names;
         return null;
       }
-
+    
       lib = window.__sevoNativeBuilds = { enabled: true, page: false };
       var missing = listPage();
       return missing ? "installed without the Compatibility page: " + missing : "installed";
@@ -243,6 +243,8 @@ enum SteamNativeBuilds {
         let lines: [(String, String)] = [
             ("workingMacos", String(localized: "Setting the macOS version…")),
             ("workingWindows", String(localized: "Setting the Windows version…")),
+            ("copyingMacos", String(localized: "Copying the macOS version from Steam for Mac…")),
+            ("inSteamForMac", String(localized: "In Steam for Mac")),
             ("failedMacos", String(localized: "Steam did not set the macOS version")),
             ("failedWindows", String(localized: "Steam did not set the Windows version")),
             ("failedBody", String(localized: "The game stays on the version it had. Try again, or choose the version in Properties › Compatibility.")),
@@ -356,7 +358,7 @@ enum SteamNativeBuilds {
         var here = o && o.local_per_client_data;
         return here ? !!here.installed : !!(o && o.installed);
       }
-
+    
       function details(appid) {
         try { return ctx.appDetailsStore.GetAppDetails(appid) || null; } catch (e) { return null; }
       }
@@ -405,7 +407,7 @@ enum SteamNativeBuilds {
         var d = details(appid);
         return d && d.strCompatToolName === info.tool ? "macos" : "windows";
       }
-
+    
       /* The build on disk, from the depots the manifest lists; the mapping
          when the depots serve both builds. A switch still downloading keeps
          the build it had. */
@@ -434,6 +436,11 @@ enum SteamNativeBuilds {
         var right = mode !== "switch" ? amount
           : platform === installed ? ""
           : info.sameFiles ? "No download" : amount;
+        /* Steam for Mac's copy is cloned in, and Steam only checks it. */
+        if (mode === "install" && platform === "macos" && info.steamForMacCopy) {
+          right = "No download";
+          hint = hint + " · " + TEXT.inSteamForMac;
+        }
         return '<div class="sevo-native-item' + (platform === current ? " sevo-native-current" : "") + '" role="menuitemradio" tabindex="0"'
           + ' aria-checked="' + (platform === current) + '" data-platform="' + platform + '">'
           + platformGlyph(platform)
@@ -475,11 +482,25 @@ enum SteamNativeBuilds {
           + "</div></div>";
       }
     
+      function copyingHTML() {
+        return '<div class="sevo-native-confirm" aria-busy="true">'
+          + '<div class="sevo-native-body">' + esc(TEXT.copyingMacos) + "</div></div>";
+      }
+    
+      /* Clones Steam for Mac's copy into the library before the wizard, so
+         Steam checks those files instead of downloading them. Resolves either
+         way: without the clone the install downloads as it always did. */
+      function copyFromSteamForMac(appid) {
+        return fetch("/__native/" + appid + "/copy", { method: "POST", cache: "no-store" })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .catch(function () { return null; });
+      }
+    
       function workingHTML(target) {
         return '<div class="sevo-native-confirm" aria-busy="true">'
           + '<div class="sevo-native-body">' + esc(target === "macos" ? TEXT.workingMacos : TEXT.workingWindows) + "</div></div>";
       }
-
+    
       /* Steam refused the mapping, or never showed it: the game keeps the
          build it had, and the choice can be made again from here. */
       function failedHTML(target, mode, what) {
@@ -493,13 +514,13 @@ enum SteamNativeBuilds {
           + '<button type="button" class="DialogButton _DialogLayout Secondary sevo-native-cancel">' + esc(TEXT.close) + "</button>"
           + "</div></div>";
       }
-
+    
       function openMenu(anchor, appid, info, mode, devices) {
         openPanel(anchor, appid, mode, menuHTML(appid, info, mode, devices), devices);
         var first = menu.element.querySelector(".sevo-native-item");
         if (first) first.focus();
       }
-
+    
       function openPanel(anchor, appid, mode, html, devices) {
         closeMenu();
         var element = document.createElement("div");
@@ -510,7 +531,7 @@ enum SteamNativeBuilds {
         menu = { element: element, appid: appid, mode: mode, anchor: anchor, devices: devices || null };
         place();
       }
-
+    
       /* Shows `html` in the menu still open for the game, or reopens it at
          the anchor it had. */
       function showInMenu(appid, mode, anchor, html) {
@@ -577,7 +598,7 @@ enum SteamNativeBuilds {
         if (!registration) { finish(true); return; }
         timer = setTimeout(function () { finish(false); }, WIZARD_WITHIN);
       }
-
+    
       /* Sets the game to `platform`, then in install mode opens Steam's
          wizard. `at` is where the progress and any failure show when no menu
          is open: the Install button pressed directly. */
@@ -602,11 +623,19 @@ enum SteamNativeBuilds {
             schedule();
             return;
           }
-          openWizard(appid, function (opened) {
-            if (opened) { if (menu && menu.appid === appid) closeMenu(); }
-            else showInMenu(appid, mode, anchor, failedHTML(platform, mode, "wizard"));
-            schedule();
-          });
+          function wizard() {
+            openWizard(appid, function (opened) {
+              if (opened) { if (menu && menu.appid === appid) closeMenu(); }
+              else showInMenu(appid, mode, anchor, failedHTML(platform, mode, "wizard"));
+              schedule();
+            });
+          }
+          if (platform === "macos" && info.steamForMacCopy) {
+            showInMenu(appid, mode, anchor, copyingHTML());
+            copyFromSteamForMac(appid).then(wizard);
+          } else {
+            wizard();
+          }
         }
         function failed() {
           delete answers[appid];
@@ -625,7 +654,7 @@ enum SteamNativeBuilds {
           .then(function () { return steam.Apps.SpecifyCompatTool(appid, tool); })
           .then(function () { check(0); }, failed);
       }
-
+    
       // MARK: The play bar
     
       function statHTML(platform) {
@@ -692,13 +721,13 @@ enum SteamNativeBuilds {
           button.appendChild(marker);
         }
       }
-
+    
       /* Steam's split-button ▾, the one it draws beside Play for streaming:
          its own classes and its own arrow, so its stylesheet draws the
          segment, its hover and its focus. Where Steam draws its ▾ itself,
          that one opens the version menu and none is added. */
       var FLAT_ARROW = '<svg xmlns="http://www.w3.org/2000/svg" class="SVGIcon_Button SVGIcon_FlatArrow" viewBox="0 0 256 256" style="transform:rotate(180deg)"><polygon points="13.913,141 128,59 242.087,141" fill="#ffffff"></polygon></svg>';
-
+    
       function placeSelector(button, show) {
         var box = button.parentElement;
         if (!box) return;
@@ -730,7 +759,7 @@ enum SteamNativeBuilds {
           box.dataset.sevoSplit = "1";
         }
       }
-
+    
       function clear() {
         closeMenu();
         var markers = document.querySelectorAll(".sevo-install-platform");
@@ -793,12 +822,12 @@ enum SteamNativeBuilds {
     
       /* Set while a click is handed back to Steam's own ▾. */
       var passThrough = false;
-
+    
       function streamingSelector(target) {
         var name = classes.play.StreamingSelector;
         return name && target.closest ? target.closest("." + name) : null;
       }
-
+    
       function onClick(event) {
         if (!classes || !active()) return;
         if (passThrough) { passThrough = false; return; }

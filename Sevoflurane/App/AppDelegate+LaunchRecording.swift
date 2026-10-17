@@ -27,11 +27,15 @@ extension AppDelegate {
             runRecorder.arm(appID: appID)
             // A launch the app carries was prepared before it reached Steam
             // or the helper (``LaunchPreparation``). One it did not carry
-            // gets its exes read here, so its env files, and the bundle that
-            // names it in the Dock, are there by its first window at the
-            // latest; its first-launch fixes wait for a launch that is
-            // prepared before it starts.
+            // gets its exes read and its macOS version's symlinks made here,
+            // so its env files, and the bundle that names it in the Dock, are
+            // there by its first window at the latest; its first-launch fixes
+            // wait for a launch that is prepared before it starts.
             Task.detached(name: "Record app \(appID)'s executables") {
+                let linked = ReparseLinks.restoreInstalledMacOSVersion(appID: appID)
+                if linked > 0 {
+                    EventLog.enqueue(.client, "launch \(appID): made \(linked) symlinks of its macOS version real for macOS")
+                }
                 if GameExecutables.recordFromInstall(appID: appID) {
                     ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
                 }
