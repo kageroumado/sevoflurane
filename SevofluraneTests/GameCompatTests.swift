@@ -380,7 +380,7 @@ struct CompatibilityStripSwitchTests {
         #expect(SteamCompatBadge.storeScript.contains("messageHandlers.\(SteamCompatBadge.storeHandler)"))
         // Both pages draw the same cells from the same record.
         for script in [SteamCompatBadge.script, SteamCompatBadge.storeScript] {
-            #expect(script.contains(#"cell("macOS version", native)"#))
+            #expect(script.contains(#"cell("macOS version", native, nativeMark(native, appid))"#))
             #expect(script.contains("Sevoflurane players:"))
         }
     }

@@ -287,9 +287,11 @@ struct LibraryCompatLookupTests {
 
         let first = await service.summaries(for: [game])
         // Rated perfect on the wiki and nothing on disk yet: native until the
-        // page says otherwise, with that page waiting in the queue.
+        // page says otherwise, with that page waiting in the queue. The tier
+        // is the Windows version's, which the wiki rates unplayable.
         #expect(first.summaries == [GameCompatSummary(
             appID: CompatStub.appID, state: .unsupported, native: true, macRunnable: true, macEvidence: true,
+            tier: .borked,
         )])
         #expect(first.summaries.first?.playsOnMac == true)
         #expect(first.pending == 1)
@@ -303,6 +305,7 @@ struct LibraryCompatLookupTests {
         #expect(latest.pending == 0)
         #expect(latest.summaries == [GameCompatSummary(
             appID: CompatStub.appID, state: .unsupported, native: false, macRunnable: false, macEvidence: true,
+            tier: .borked,
         )])
         #expect(latest.summaries.first?.playsOnMac == false)
     }
