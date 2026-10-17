@@ -12140,16 +12140,6 @@
         }
       }
     },
-    "Pick wallpapers on the Workshop, open in Steam now. Steam downloads them.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在创意工坊挑选壁纸（Steam 已打开它）。Steam 会下载它们。"
-          }
-        }
-      }
-    },
     "%@ makes videos": {
       "localizations": {
         "zh-Hans": {
@@ -12186,6 +12176,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "在“墙纸”里选择它们，和其他视频一样。"
+          }
+        }
+      }
+    },
+    "The Workshop is open in Steam: pick wallpapers there, and Steam downloads them.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创意工坊已在 Steam 中打开：在那里挑选壁纸，Steam 会下载它们。"
           }
         }
       }
