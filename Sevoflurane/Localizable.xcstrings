@@ -2785,6 +2785,17 @@
         }
       }
     },
+    "could not set aside the bottle Steam's installer failed in: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移开 Steam 安装程序失败的容器：%@"
+          }
+        }
+      }
+    },
     "Count Me In" : {
       "localizations" : {
         "zh-Hans" : {

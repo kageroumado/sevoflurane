@@ -114,6 +114,32 @@ struct OnboardingDryRunTests {
     }
 
     @Test
+    func `try again builds afresh the bottle Steam's installer failed in`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle)
+        env.installerFailures = 1
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        guard case .failed = provisioner.activity else {
+            Issue.record("expected .failed, got \(provisioner.activity)")
+            return
+        }
+        #expect(env.state.bottles.count == 1)
+        await provisioner.retry()
+        #expect(provisioner.activity == .done)
+        #expect(env.setAsideBottles == ["\(SetupScenario.bottleName).broken-dry-run"])
+        #expect(env.state.steamBottles.count == 1)
+    }
+
+    @Test
+    func `a bottle without Steam that no installer failed in is kept`() async {
+        let (provisioner, env) = makeProvisioner(.bottleWithoutSteam)
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.setAsideBottles.isEmpty)
+    }
+
+    @Test
     func `steam in a differently named bottle still needs setup`() async {
         let (provisioner, env) = makeProvisioner(.provisioned)
         env.renameSteamBottle(to: "SomeOtherBottle")

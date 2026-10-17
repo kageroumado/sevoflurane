@@ -340,10 +340,27 @@ final class Provisioner {
     }
 
     private func createBottleIfMissing(_ bottleName: String) async throws {
-        guard bottleRecord(named: bottleName) == nil else {
-            return
+        // Steam's installer failing in a bottle usually means the bottle
+        // itself is unfit: run into it again, it fails the same way. One with
+        // no Steam in it holds nothing to keep, so it is set aside and built
+        // again.
+        let rebuilding = bottleRecord(named: bottleName).map {
+            !$0.hasSteam && environment.steamInstallerFailed(inBottle: bottleName)
         }
+        if rebuilding == false { return }
         beginStage(3, "Creating the Steam environment…")
+        if rebuilding == true {
+            do {
+                let aside = try await environment.setAsideBottle(named: bottleName)
+                SetupLog.log("provision: Steam's installer failed in bottle \(bottleName); set it aside as \(aside) to build it again")
+            } catch {
+                throw ProvisionError(
+                    String(localized: "could not set aside the bottle Steam's installer failed in: \(error.localizedDescription)"),
+                    leavesNothingToStart: true,
+                )
+            }
+            await refreshDetection()
+        }
         SetupLog.log("provision: creating bottle \(bottleName) (win10_64)")
         let create = await environment.createBottle(named: bottleName)
         guard create.succeeded else {
@@ -369,6 +386,7 @@ final class Provisioner {
         SetupLog.log("provision: silent NSIS install")
         let install = await environment.runSteamInstaller(inBottle: bottleName)
         guard install.succeeded else {
+            environment.markSteamInstallerFailed(inBottle: bottleName)
             let status = install.status.map(String.init) ?? InterfaceCopy.localized("no exit status")
             let output = install.output.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ProvisionError(

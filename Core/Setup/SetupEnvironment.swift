@@ -60,6 +60,20 @@ protocol SetupEnvironment: AnyObject {
     /// with Wine's error channel on so a failure carries a reason.
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome
 
+    /// Marks the bottle as one Steam's installer failed in, so the next
+    /// provisioning pass builds it again instead of running the installer
+    /// into it a second time.
+    func markSteamInstallerFailed(inBottle name: String)
+
+    /// Whether Steam's installer failed in the bottle and the bottle may be
+    /// built again: still no Steam in it, and a bottle setup made.
+    func steamInstallerFailed(inBottle name: String) -> Bool
+
+    /// Ends the bottle's processes and renames it `<name>.broken-<time>`,
+    /// which detection passes over, so the bottle stage creates it anew.
+    /// Answers the name it was given.
+    func setAsideBottle(named name: String) async throws -> String
+
     /// Bootstrapper → full client, the long headless download. Exit status is
     /// deliberately unreported: the updater's exit code is unreliable, so the
     /// caller re-detects and judges by what landed on disk.
@@ -265,6 +279,40 @@ final class LiveSetupEnvironment: SetupEnvironment {
             bottle: name, args: [#"C:\SteamSetup.exe"#, "/S"],
             wineDebug: "err+all",
         )
+    }
+
+    func markSteamInstallerFailed(inBottle name: String) {
+        let marker = Self.installerFailureMarker(inBottle: name)
+        try? FileManager.default.createDirectory(
+            at: marker.deletingLastPathComponent(), withIntermediateDirectories: true,
+        )
+        try? Data().write(to: marker)
+    }
+
+    func steamInstallerFailed(inBottle name: String) -> Bool {
+        // A CrossOver bottle can be one the person made and filled with their
+        // own programs, so only a managed prefix, which setup alone creates,
+        // is ever built again.
+        guard !Engine.active.isCrossOver else { return false }
+        return FileManager.default.fileExists(atPath: Self.installerFailureMarker(inBottle: name).path)
+    }
+
+    func setAsideBottle(named name: String) async throws -> String {
+        await endWineProcesses(inBottle: name)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let aside = "\(name).broken-\(formatter.string(from: .now))"
+        let root = Engine.active.bottlesRoot
+        try FileManager.default.moveItem(
+            at: root.appendingPathComponent(name), to: root.appendingPathComponent(aside),
+        )
+        return aside
+    }
+
+    private static func installerFailureMarker(inBottle name: String) -> URL {
+        Engine.active.bottlesRoot.appendingPathComponent(name)
+            .appendingPathComponent(".sevo/steam-installer-failed")
     }
 
     func updateSteamClient(inBottle name: String) async {

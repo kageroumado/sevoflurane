@@ -147,6 +147,11 @@
         /// package that is worth ending a setup over and one that is not.
         var failingDependencies: Set<String> = []
         private(set) var dependencyInstalls: [String] = []
+        /// How many Steam installer runs fail before one succeeds: every run
+        /// in the installer-fails scenario.
+        var installerFailures: Int
+        private var installerFailedIn: Set<String> = []
+        private(set) var setAsideBottles: [String] = []
 
         init(
             scenario: SetupScenario,
@@ -155,6 +160,7 @@
         ) {
             self.scenario = scenario
             self.stepDelay = stepDelay
+            installerFailures = scenario == .installerFails ? .max : 0
             // A caller that has its own machine in mind passes it: the Engine
             // pane builds its list from detection and its bottles from
             // ``DemoEngineEnvironment``, and a re-detect that reverted to the
@@ -260,7 +266,8 @@
         }
 
         func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
-            guard scenario != .installerFails else {
+            guard installerFailures == 0 else {
+                if installerFailures != .max { installerFailures -= 1 }
                 log("simulating installer failure: wine --bottle \(name) "
                     + #"C:\SteamSetup.exe /S → exit 1"#)
                 return .failure("simulated NSIS failure (scenario installer-fails)")
@@ -268,6 +275,28 @@
             log(#"would run: wine --bottle \#(name) C:\SteamSetup.exe /S"#)
             await pause()
             return .success()
+        }
+
+        func markSteamInstallerFailed(inBottle name: String) {
+            installerFailedIn.insert(name)
+        }
+
+        func steamInstallerFailed(inBottle name: String) -> Bool {
+            installerFailedIn.contains(name)
+        }
+
+        func setAsideBottle(named name: String) async throws -> String {
+            let aside = "\(name).broken-dry-run"
+            log("would run: wineserver -k in \(name), then rename it \(aside)")
+            installerFailedIn.remove(name)
+            setAsideBottles.append(aside)
+            state = SetupDetection(
+                rosetta: state.rosetta,
+                crossover: state.crossover,
+                bottles: state.bottles.filter { $0.name != name },
+                managedEngineVersions: state.managedEngineVersions,
+            )
+            return aside
         }
 
         func updateSteamClient(inBottle name: String) async {
