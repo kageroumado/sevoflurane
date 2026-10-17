@@ -62,7 +62,10 @@ struct SetupCommand: AsyncParsableCommand {
     }
 
     /// `--engine` is a deliberate override of the detection default, so an
-    /// impossible choice is an error rather than a silent fallback.
+    /// impossible choice is an error rather than a silent fallback. It is
+    /// stored like the assistant's Engine step, because the engine stage
+    /// resolves the active engine again from the stored choice, and installs
+    /// Dormison when that choice asks for it.
     private func resolveEngine(from detection: SetupDetection) throws -> Engine {
         switch engine {
         case nil:
@@ -72,13 +75,11 @@ struct SetupCommand: AsyncParsableCommand {
                 Sevo.printError("no usable CrossOver on this machine")
                 throw SevoExit.notProvisioned
             }
-            return .crossover
+            Engine.chooseAtSetup(managed: false)
+            return Engine.active
         case "builtin":
-            guard let version = detection.managedEngineVersions.last else {
-                Sevo.printError("no built-in engine installed — run: sevo engine install")
-                throw SevoExit.notProvisioned
-            }
-            return .managed(version: version)
+            Engine.chooseAtSetup(managed: true)
+            return Engine.active
         default:
             Sevo.printError("--engine must be builtin or crossover")
             throw SevoExit.badInvocation
