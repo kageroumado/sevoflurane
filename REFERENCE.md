@@ -568,7 +568,12 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
 - macOS asks you to approve the helper on first run (System Settings ›
   General › Login Items & Extensions). Without it Steam cannot start, and the
   app says so.
-
+- Steam hidden costs about 5% of one processor core and 3 GB of memory: the
+  Wine client and its CEF processes keep running so a game can start at once,
+  while the Steam page WebKit shows is only drawn when a window is on screen.
+  Measured with Steam idle for two days on an M1 Max and an M3 Pro. A hot
+  laptop with Steam hidden is a bug; send `sevo diag save` and the Process
+  Monitor's view.
 - Under load (other apps' processor time, memory pressure, temperature, Low
   Power Mode) the helper waits two to three times as long before calling
   Steam hung, and logs why.
