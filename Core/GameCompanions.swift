@@ -24,8 +24,7 @@ nonisolated struct GameCompanion: Codable, Sendable, Equatable {
         partnerBundleID: "glass.kagerou.phosphene",
         openURL: URL(string: "phosphene://library/wallpaper-engine")!,
         pageURL: URL(string: "https://kagerou.glass/phosphene/?from=sevoflurane")!,
-        reason: "Wallpaper Engine's own window stays blank on a Mac. Steam still downloads every wallpaper "
-            + "you subscribe to on the Workshop, and Phosphene turns them into video wallpapers.",
+        reason: "Subscribe to wallpapers on the Workshop; Phosphene finds them and plays them as your Mac's wallpaper.",
     )
 
     static let all: [Int: GameCompanion] = [wallpaperEngine.appID: wallpaperEngine]

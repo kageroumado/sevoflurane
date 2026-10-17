@@ -52,22 +52,6 @@
         }
       }
     },
-    "“%@” downloads here; %@ shows the wallpapers": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "“%1$@” downloads here; %2$@ shows the wallpapers"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“%1$@”在这里只负责下载；壁纸由 %2$@ 来显示"
-          }
-        }
-      }
-    },
     "“%@” has stopped answering": {
       "extractionState": "manual",
       "localizations": {
@@ -5793,16 +5777,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "具体原因请查看游戏的 Player.log。报告压缩包的 games/ 文件夹中包含该文件。"
-          }
-        }
-      }
-    },
-    "Its own window stays blank on a Mac. Phosphene turns the wallpapers Steam downloads into video wallpapers.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "它自己的窗口在 Mac 上是空白的。Phosphene 会把 Steam 下载的壁纸变成视频墙纸。"
           }
         }
       }
@@ -12142,6 +12116,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mac 当前负载较高"
+          }
+        }
+      }
+    },
+    "%@ wallpapers play through %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 的壁纸通过 %2$@ 播放"
+          }
+        }
+      }
+    },
+    "Phosphene finds the wallpapers Steam downloads and plays them as your Mac's wallpaper.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phosphene 会找到 Steam 下载的壁纸，并作为 Mac 的墙纸播放。"
           }
         }
       }

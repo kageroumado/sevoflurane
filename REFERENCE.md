@@ -15,11 +15,10 @@ and play. Games appear as players share their runs.
 
 <p align="center"><a href="https://kagerou.glass/sevoflurane/games/"><img src=".github/compatibility.svg" alt="Find your game — community compatibility database" width="360" height="80"></a></p>
 
-One app is rated through another: **Wallpaper Engine**'s own window stays
-blank on a Mac, but Steam downloads every wallpaper you subscribe to on its
-Workshop, and [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane),
-free from the same developer, turns them into video wallpapers. Its page says
-so, Play offers Phosphene instead, and the Mac filter keeps it.
+One app plays through another: subscribe to **Wallpaper Engine** wallpapers on
+its Workshop, and [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane),
+free from the same developer, finds them and plays them as your Mac's wallpaper.
+Its page says so, Play offers Phosphene, and the Mac filter keeps it.
 
 ## Mac or Windows, per game
 

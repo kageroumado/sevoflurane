@@ -26,9 +26,7 @@ enum CompanionHandoff {
         guard let companion = GameCompanion.all[appID] else { return false }
         let installed = isInstalled(companion)
         let alert = NSAlert()
-        alert.messageText = String(
-            localized: "\u{201C}\(companion.name)\u{201D} downloads here; \(companion.partner) shows the wallpapers",
-        )
+        alert.messageText = String(localized: "\(companion.name) wallpapers play through \(companion.partner)")
         alert.informativeText = installed
             ? companion.reason
             : companion.reason + " " + String(localized: "\(companion.partner) is free, from the maker of Sevoflurane.")

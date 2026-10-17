@@ -267,7 +267,7 @@ enum SteamLibraryCompat {
             ("fromLinux", "", String(localized: "Rated on Linux by ProtonDB; untested on a Mac.")),
             ("macAvailable", String(localized: "macOS version available"), String(localized: "Steam has a macOS version of this game that runs on Apple silicon. The version menu beside Install chooses it.")),
             ("macSet", String(localized: "Set to its macOS version"), String(localized: "Steam installs and plays this game's own macOS version.")),
-            ("companion", String(localized: "Plays through Phosphene"), String(localized: "Its own window stays blank on a Mac. Phosphene turns the wallpapers Steam downloads into video wallpapers.")),
+            ("companion", String(localized: "Plays through Phosphene"), String(localized: "Phosphene finds the wallpapers Steam downloads and plays them as your Mac's wallpaper.")),
             ("filterOn", String(localized: "Showing games that play on this Mac"), String(localized: "Click to show every game.")),
             ("filterOff", String(localized: "Show games that play on this Mac"), String(localized: "Keeps the games Mac players rate Verified or Playable, and those with a macOS version that runs on Apple silicon.")),
         ]

@@ -8,7 +8,7 @@
 
 想贡献数据，在**设置 › 通用 › 社区 › 共享运行统计数据**中开启，然后照常玩就好。有人分享运行记录后，游戏就会出现在数据库里。
 
-有一个 App 的评级来自另一个 App：**Wallpaper Engine** 自己的窗口在 Mac 上是空白的，但 Steam 仍会下载你在其创意工坊订阅的每一张壁纸，而同一位开发者的免费 App [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane) 能把它们变成视频墙纸。它的页面会这样说明，点“开始”会改为推荐 Phosphene，Mac 筛选也会保留它。
+有一个 App 要通过另一个 App 来用：在 **Wallpaper Engine** 的创意工坊订阅壁纸，同一位开发者的免费 App [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane) 就会找到它们，并作为 Mac 的墙纸播放。它的页面会这样说明，点“开始”会推荐 Phosphene，Mac 筛选也会保留它。
 
 <p align="center"><a href="https://kagerou.glass/sevoflurane/games/?lang=zh-CN"><img src=".github/compatibility.zh-CN.svg" alt="看看你的游戏能不能玩 — 社区游戏兼容性数据库" width="360" height="80"></a></p>
 
