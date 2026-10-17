@@ -133,6 +133,15 @@ struct ReparseLinksTests {
     }
 
     @Test
+    func `steam's commit leftovers are told apart from depot names`() {
+        #expect(ReparseLinks.isCommitLeftover("rff293.tmp"))
+        #expect(ReparseLinks.isCommitLeftover("rff1a2b.tmp"))
+        #expect(!ReparseLinks.isCommitLeftover("rff.tmp"))
+        #expect(!ReparseLinks.isCommitLeftover("Headers"))
+        #expect(!ReparseLinks.isCommitLeftover("rffle.tmp.bak"))
+    }
+
+    @Test
     func `a relative symlink's target reads with forward slashes`() {
         #expect(ReparseLinks.relativeTarget(ofReparseData: Self.current) == "A")
         #expect(ReparseLinks.relativeTarget(ofReparseData: Self.headers) == "Versions/Current/Headers")
@@ -152,7 +161,10 @@ struct ReparseLinksTests {
         try FileManager.default.createDirectory(at: framework.appending(path: "Resources"), withIntermediateDirectories: true)
         try Self.writeReparse(Self.reparse("Versions\\Current\\Resources"), at: framework.appending(path: "Resources?"))
 
+        try Self.writeReparse(Self.reparse("Versions\\Current\\Headers"), at: framework.appending(path: "rff293.tmp?"))
+
         #expect(ReparseLinks.restore(in: base) == 2)
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: framework.appending(path: "rff293.tmp").path)) == nil)
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: framework.appending(path: "Versions/Current").path) == "A")
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: framework.appending(path: "Headers").path) == "Versions/Current/Headers")
         #expect(FileManager.default.fileExists(atPath: framework.appending(path: "Headers").path))

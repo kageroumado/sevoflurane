@@ -52,7 +52,7 @@ nonisolated enum ReparseLinks {
         var made = 0
         for case let file as URL in walk {
             let name = file.lastPathComponent
-            guard name.count > 1, name.hasSuffix("?"),
+            guard name.count > 1, name.hasSuffix("?"), !isCommitLeftover(String(name.dropLast())),
                   let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
                   values.isRegularFile == true, values.fileSize == 0,
                   let data = attribute(of: file), let target = relativeTarget(ofReparseData: data)
@@ -84,6 +84,14 @@ nonisolated enum ReparseLinks {
               let game = SharedGames.installed(appID: appID)
         else { return 0 }
         return restore(in: game.directory)
+    }
+
+    /// Steam commits a file under a temporary `rff<hex>.tmp` name and then
+    /// renames it; Wine leaves the temporary name's reparse file behind, a
+    /// name no depot lists.
+    static func isCommitLeftover(_ name: String) -> Bool {
+        name.hasPrefix("rff") && name.hasSuffix(".tmp") && name.count > 7
+            && name.dropFirst(3).dropLast(4).allSatisfy(\.isHexDigit)
     }
 
     private static func attribute(of file: URL) -> Data? {
