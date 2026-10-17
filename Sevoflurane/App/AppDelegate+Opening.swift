@@ -53,8 +53,9 @@ extension AppDelegate {
         let name = host.libraryGames.first { $0.id == id }?.name
             ?? GameConfig.game(id).name ?? String(id)
         EventLog.shared.log(.client, "Dock tile: starting \(name)")
-        // Steam for Mac starts a macOS build; no wait for the bottle's client.
-        if MacBuildHandoff.take(appID: id, name: name) { return }
+        // Steam for Mac starts a macOS build, a partner app a companion's
+        // downloads; no wait for the bottle's client.
+        if MacBuildHandoff.take(appID: id, name: name) || CompanionHandoff.take(appID: id) { return }
         Task(name: "Launch \(name) from the Dock") {
             let deadline = ContinuousClock.now + Self.dockLaunchBudget
             while supervisor.health != .healthy {

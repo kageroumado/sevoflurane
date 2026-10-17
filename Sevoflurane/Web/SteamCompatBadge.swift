@@ -98,224 +98,241 @@ enum SteamCompatBadge {
     /// Everything both pages draw with: Steam's glyphs and strip styles, and
     /// the strip and Details panel built from a record.
     private static let common = glyphs + SteamNativeBuilds.platformGlyphs
-        + "  var MAC_TOOL = \(JSLiteral.string(SteamPlayMacOS.toolName));\n" + """
-      /* The macOS version's mark is the apple, as in the library: muted, and
-         blue once the game is set to it; its rating is the word beside it.
-         One that cannot be played keeps Steam's unsupported mark. The store
-         page cannot read the mapping, so there it stays muted. */
-      function nativeMark(badge, appid) {
-        if (badge.state === "unsupported") return glyph("unsupported");
-        var set = false;
-        try {
-          var c = window.opener || window;
-          var d = c.appDetailsStore && c.appDetailsStore.GetAppDetails(Number(appid));
-          set = !!(d && d.strCompatToolName === MAC_TOOL);
-        } catch (e) {}
-        return '<span class="sevo-compat-icon sevo-compat-mac sevo-mac-' + (set ? "set" : "available") + '">'
-          + '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="' + PLATFORM_PATHS.macos + '" fill="currentColor"></path></svg></span>';
-      }
-
-      var STYLE_ID = "sevo-compat-style";
-      var SLOT_ID = "sevo-compat-slot";
-      var STRIP_ID = "sevo-compat";
-      var PANEL_ID = "sevo-compat-panel";
-    
-      /* Steam's rules for the Deck strip, values copied from its stylesheet:
-         the strip, its 16px title, the 10px uppercase label, and the Details
-         pill and its hover swap.
-         The store's right column is narrow, so there the cells stack. */
-      var CSS = STATE_CSS + "\\n" + MEDAL_CSS + "\\n" + [
-        ".sevo-compat-slot{padding:6px 20px 0}",
-        ".sevo-compat-slot.sevo-compat-store{padding:0 0 12px}",
-        ".sevo-compat{background-color:#23262e;padding:8px 22px;border-radius:2px;display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px;color:#fff}",
-        ".sevo-compat-store .sevo-compat{padding:10px 14px;column-gap:14px;row-gap:6px}",
-        ".sevo-compat-store .sevo-compat-sep{display:none}",
-        ".sevo-compat-store .sevo-compat-title{font-size:13px;flex:1 1 55%}",
-        ".sevo-compat-store .sevo-compat-details{margin-inline-start:0;margin-top:4px}",
-        ".sevo-compat-title{font-size:16px}",
-        ".sevo-compat-label{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:10px;font-weight:700;text-transform:uppercase}",
-        ".sevo-compat-sep{width:1px;height:20px;background-color:#3d4450;margin:0 8px}",
-        ".sevo-compat-details{background-color:#3d4450;padding:6px 14px;font-size:12px;border-radius:2px;color:#fff;text-decoration:none;cursor:pointer;margin-inline-start:auto;user-select:none}",
-        ".sevo-compat-details:hover{background-color:#fff;color:#000}",
-        ".sevo-compat-panel{background-color:#23262e;padding:12px 22px 14px;margin-top:2px;border-radius:2px;color:#dcdedf;font-size:12px;display:flex;flex-direction:column;gap:6px}",
-        ".sevo-compat-store .sevo-compat-panel{padding:10px 14px 12px}",
-        /* An author `display` beats the UA's `[hidden]` rule; say it again. */
-        ".sevo-compat-panel[hidden]{display:none}",
-        ".sevo-compat-row{display:flex;flex-direction:row;align-items:flex-start;gap:10px;line-height:20px}",
-        ".sevo-compat-row b{color:#fff;font-weight:600}",
-        ".sevo-compat-link{color:#1a9fff;cursor:pointer;text-decoration:none;white-space:nowrap}",
-        ".sevo-compat-link:hover{color:#00bbff}",
-        ".sevo-compat-mac.sevo-mac-available{color:#8b929a}",
-        ".sevo-compat-mac.sevo-mac-set{color:#1a9fff}",
-        ".sevo-compat-note{font-style:italic;color:#8b929a;margin-inline-start:30px;line-height:18px}"
-      ].join("\\n");
-    
-      var records = {};
-      var open = {};
-    
-      function esc(text) {
-        return String(text == null ? "" : text)
-          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-      }
-    
-      var DECK = { 1: ["unsupported", "Unsupported"], 2: ["playable", "Playable"], 3: ["verified", "Verified"] };
-    
-      function tierWord(tier) {
-        return tier && tier !== "na" && tier !== "unknown" ? tier : null;
-      }
-    
-      function panelHTML(record, appid) {
-        var rows = [];
-        var mac = record.mac || {};
-        var ac = record.antiCheatBadge || {};
-        var c = record.community;
-        rows.push(row(mark(mac), "<b>Windows version:</b> " + esc(mac.reason), record.wiki && link(record.wiki.pageURL, "AppleGamingWiki")));
-        var arch = record.macArchitectures;
-        if (record.nativeBadge) {
-          var play = record.nativeBadge.state !== "unsupported" && !playsInThisSteam()
-            ? '<a class="sevo-compat-link sevo-compat-play" data-appid="' + esc(appid) + '">Play in Steam for Mac</a>' : "";
-          rows.push(row(nativeMark(record.nativeBadge, appid), "<b>macOS version:</b> " + esc(record.nativeBadge.reason), play));
-        } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
-          rows.push(row(medal("borked"), "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
-        }
-        rows.push(row(mark(ac), "<b>Anti-cheat:</b> " + esc(ac.reason), record.antiCheat && link(record.antiCheat.sourceURL, "AreWeAntiCheatYet")));
-        if (record.antiCheat && record.antiCheat.notes) {
-          record.antiCheat.notes.slice(0, 3).forEach(function (note) {
-            rows.push('<div class="sevo-compat-note">' + esc(note) + "</div>");
-          });
-        }
-        if (c) {
-          var verdict = tierWord(c.verdict) ? c.verdict : "not rated yet";
-          var fps = typeof c.medianFPS === "number" ? ", " + Math.round(c.medianFPS) + " fps median" : "";
-          rows.push(row(null, "<b>Sevoflurane players:</b> " + esc(verdict) + " (" + Number(c.runs).toLocaleString() + " runs on " + (c.installs === 1 ? "1 Mac" : Number(c.installs).toLocaleString() + " Macs") + esc(fps) + ")", link(c.pageURL, "Game database")));
-        }
-        if (record.wiki) {
-          var tiers = [];
-          if (tierWord(record.wiki.native)) tiers.push("native Mac build " + record.wiki.native);
-          if (tierWord(record.wiki.rosetta2)) tiers.push("Rosetta 2 " + record.wiki.rosetta2);
-          if (tierWord(record.wiki.crossover)) tiers.push("CrossOver " + record.wiki.crossover);
-          if (tierWord(record.wiki.wine)) tiers.push("Wine " + record.wiki.wine);
-          if (tierWord(record.wiki.parallels)) tiers.push("Parallels " + record.wiki.parallels);
-          if (tiers.length) rows.push(row(null, "<b>AppleGamingWiki:</b> " + esc(tiers.join(" · "))));
-        }
-        var deck = DECK[record.deckCategory];
-        if (deck) rows.push(row(glyph(deck[0]), "<b>Steam Deck:</b> " + deck[1] + " (Valve's own program)"));
-        if (record.proton) {
-          var p = record.proton;
-          rows.push(row(null, "<b>Linux / Proton:</b> " + esc(p.tier) + " (" + Number(p.total).toLocaleString() + " reports, " + esc(p.confidence) + " confidence). A Linux measurement.", link(p.sourceURL, "ProtonDB")));
-        }
-        return rows.join("");
-      }
-    
-      function row(icon, html, trailing) {
-        return '<div class="sevo-compat-row">' + (icon || '<span class="sevo-compat-icon"></span>')
-          + "<span>" + html + (trailing ? " " + trailing : "") + "</span></div>";
-      }
-    
-      function link(url, text) {
-        if (!url) return "";
-        return '<a class="sevo-compat-link" data-href="' + esc(url) + '">' + esc(text) + " ↗</a>";
-      }
-    
-      function cell(title, badge, icon) {
-        return '<div class="sevo-compat-title">' + esc(title) + "</div>"
-          + '<div class="sevo-compat-label">' + (icon || mark(badge)) + "<span>" + esc(badge.label) + "</span></div>";
-      }
-    
-      var SEP = '<span class="sevo-compat-sep"></span>';
-    
-      function render(strip, panel, appid, record) {
-        var mac = record ? record.mac : { state: "unknown", label: "Checking…" };
-        var ac = record ? record.antiCheatBadge : { state: "unknown", label: "Checking…" };
-        var native = record && record.nativeBadge;
-        /* With a macOS build beside it, each cell names the build it rates,
-           so "Unknown" and "Native" read as two builds rather than one
-           contradiction. */
-        strip.innerHTML = (native ? cell("Windows version", mac) + SEP + cell("macOS version", native, nativeMark(native, appid)) : cell("Mac Compatibility", mac))
-          + SEP + cell("Anti-Cheat", ac)
-          + '<div class="sevo-compat-details" role="button" tabindex="0">' + (open[appid] ? "Hide" : "Details") + "</div>";
-        if (record) {
-          panel.innerHTML = panelHTML(record, appid);
-          panel.hidden = !open[appid];
-        } else {
-          panel.hidden = true;
-        }
-      }
-    
-      var UNREACHABLE = {
-        mac: { state: "unknown", label: "Unknown", reason: "The compatibility databases could not be reached." },
-        antiCheatBadge: { state: "unknown", label: "Unknown", reason: "The compatibility databases could not be reached." }
-      };
-    
-      /* Draws the record once it arrives, if the strip is still the one it
-         was asked for. */
-      function settle(strip, panel, appid, record) {
-        if (record && record.mac) records[appid] = record;
-        if (strip.isConnected && strip.dataset.appid === appid) render(strip, panel, appid, records[appid] || UNREACHABLE);
-      }
-    
-      function onClick(event) {
-        var target = event.target;
-        var play = target.closest && target.closest(".sevo-compat-play");
-        if (play) {
-          event.preventDefault();
-          playMac(play.getAttribute("data-appid"));
-          return;
-        }
-        var anchor = target.closest && target.closest(".sevo-compat-link");
-        if (anchor) {
-          event.preventDefault();
-          openExternal(anchor.getAttribute("data-href"));
-          return;
-        }
-        var details = target.closest && target.closest(".sevo-compat-details");
-        if (details) {
-          var strip = document.getElementById(STRIP_ID);
-          var panel = document.getElementById(PANEL_ID);
-          if (!strip || !panel) return;
-          var appid = strip.dataset.appid;
-          open[appid] = !open[appid];
-          if (records[appid]) render(strip, panel, appid, records[appid]);
-        }
-      }
-    
-      function ensureStyle() {
-        if (!document.head) return false;
-        if (!document.getElementById(STYLE_ID)) {
-          var style = document.createElement("style");
-          style.id = STYLE_ID;
-          style.textContent = CSS;
-          document.head.appendChild(style);
-        }
-        return true;
-      }
-    
-      /* A fresh slot holding an empty strip and a hidden panel. */
-      function makeSlot(appid, extraClass) {
-        var slot = document.createElement("div");
-        slot.id = SLOT_ID;
-        slot.className = "sevo-compat-slot" + (extraClass ? " " + extraClass : "");
-        slot.dataset.appid = appid;
-        var strip = document.createElement("div");
-        strip.id = STRIP_ID;
-        strip.className = "sevo-compat";
-        strip.dataset.appid = appid;
-        var panel = document.createElement("div");
-        panel.id = PANEL_ID;
-        panel.className = "sevo-compat-panel";
-        panel.hidden = true;
-        slot.appendChild(strip);
-        slot.appendChild(panel);
-        return slot;
-      }
-    
-      var pending = 0;
-      function schedule() {
-        if (pending) return;
-        pending = setTimeout(function () { pending = 0; apply(); }, 150);
-      }
-    
-    """
+        + "  var MAC_TOOL = \(JSLiteral.string(SteamPlayMacOS.toolName));\n"
+        + "  var COMPANIONS = \(GameCompanion.appIDsLiteral);\n" + """
+          /* The macOS version's mark is the apple, as in the library: muted, and
+             blue once the game is set to it; its rating is the word beside it.
+             One that cannot be played keeps Steam's unsupported mark. The store
+             page cannot read the mapping, so there it stays muted. */
+          function nativeMark(badge, appid) {
+            if (badge.state === "unsupported") return glyph("unsupported");
+            var set = false;
+            try {
+              var c = window.opener || window;
+              var d = c.appDetailsStore && c.appDetailsStore.GetAppDetails(Number(appid));
+              set = !!(d && d.strCompatToolName === MAC_TOOL);
+            } catch (e) {}
+            return '<span class="sevo-compat-icon sevo-compat-mac sevo-mac-' + (set ? "set" : "available") + '">'
+              + '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="' + PLATFORM_PATHS.macos + '" fill="currentColor"></path></svg></span>';
+          }
+        
+          var STYLE_ID = "sevo-compat-style";
+          var SLOT_ID = "sevo-compat-slot";
+          var STRIP_ID = "sevo-compat";
+          var PANEL_ID = "sevo-compat-panel";
+        
+          /* Steam's rules for the Deck strip, values copied from its stylesheet:
+             the strip, its 16px title, the 10px uppercase label, and the Details
+             pill and its hover swap.
+             The store's right column is narrow, so there the cells stack. */
+          var CSS = STATE_CSS + "\\n" + MEDAL_CSS + "\\n" + [
+            ".sevo-compat-slot{padding:6px 20px 0}",
+            ".sevo-compat-slot.sevo-compat-store{padding:0 0 12px}",
+            ".sevo-compat{background-color:#23262e;padding:8px 22px;border-radius:2px;display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px;color:#fff}",
+            ".sevo-compat-store .sevo-compat{padding:10px 14px;column-gap:14px;row-gap:6px}",
+            ".sevo-compat-store .sevo-compat-sep{display:none}",
+            ".sevo-compat-store .sevo-compat-title{font-size:13px;flex:1 1 55%}",
+            ".sevo-compat-store .sevo-compat-details{margin-inline-start:0;margin-top:4px}",
+            ".sevo-compat-title{font-size:16px}",
+            ".sevo-compat-label{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:10px;font-weight:700;text-transform:uppercase}",
+            ".sevo-compat-sep{width:1px;height:20px;background-color:#3d4450;margin:0 8px}",
+            ".sevo-compat-details{background-color:#3d4450;padding:6px 14px;font-size:12px;border-radius:2px;color:#fff;text-decoration:none;cursor:pointer;margin-inline-start:auto;user-select:none}",
+            ".sevo-compat-details:hover{background-color:#fff;color:#000}",
+            /* A companion's pill takes the Details pill's place at the end; Details follows it. */
+            ".sevo-compat-companion+.sevo-compat-details{margin-inline-start:8px}",
+            ".sevo-compat-panel{background-color:#23262e;padding:12px 22px 14px;margin-top:2px;border-radius:2px;color:#dcdedf;font-size:12px;display:flex;flex-direction:column;gap:6px}",
+            ".sevo-compat-store .sevo-compat-panel{padding:10px 14px 12px}",
+            /* An author `display` beats the UA's `[hidden]` rule; say it again. */
+            ".sevo-compat-panel[hidden]{display:none}",
+            ".sevo-compat-row{display:flex;flex-direction:row;align-items:flex-start;gap:10px;line-height:20px}",
+            ".sevo-compat-row b{color:#fff;font-weight:600}",
+            ".sevo-compat-link{color:#1a9fff;cursor:pointer;text-decoration:none;white-space:nowrap}",
+            ".sevo-compat-link:hover{color:#00bbff}",
+            ".sevo-compat-mac.sevo-mac-available{color:#8b929a}",
+            ".sevo-compat-mac.sevo-mac-set{color:#1a9fff}",
+            ".sevo-compat-note{font-style:italic;color:#8b929a;margin-inline-start:30px;line-height:18px}"
+          ].join("\\n");
+        
+          var records = {};
+          var open = {};
+        
+          function esc(text) {
+            return String(text == null ? "" : text)
+              .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+          }
+        
+          var DECK = { 1: ["unsupported", "Unsupported"], 2: ["playable", "Playable"], 3: ["verified", "Verified"] };
+        
+          function tierWord(tier) {
+            return tier && tier !== "na" && tier !== "unknown" ? tier : null;
+          }
+        
+          function panelHTML(record, appid) {
+            var rows = [];
+            if (record.companion) {
+              var cp = record.companion;
+              rows.push(row(glyph("verified"), "<b>" + esc(cp.partner) + ":</b> " + esc(cp.reason), link(cp.pageURL, "kagerou.glass")));
+              return rows.join("");
+            }
+            var mac = record.mac || {};
+            var ac = record.antiCheatBadge || {};
+            var c = record.community;
+            rows.push(row(mark(mac), "<b>Windows version:</b> " + esc(mac.reason), record.wiki && link(record.wiki.pageURL, "AppleGamingWiki")));
+            var arch = record.macArchitectures;
+            if (record.nativeBadge) {
+              var play = record.nativeBadge.state !== "unsupported" && !playsInThisSteam()
+                ? '<a class="sevo-compat-link sevo-compat-play" data-appid="' + esc(appid) + '">Play in Steam for Mac</a>' : "";
+              rows.push(row(nativeMark(record.nativeBadge, appid), "<b>macOS version:</b> " + esc(record.nativeBadge.reason), play));
+            } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
+              rows.push(row(medal("borked"), "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
+            }
+            rows.push(row(mark(ac), "<b>Anti-cheat:</b> " + esc(ac.reason), record.antiCheat && link(record.antiCheat.sourceURL, "AreWeAntiCheatYet")));
+            if (record.antiCheat && record.antiCheat.notes) {
+              record.antiCheat.notes.slice(0, 3).forEach(function (note) {
+                rows.push('<div class="sevo-compat-note">' + esc(note) + "</div>");
+              });
+            }
+            if (c) {
+              var verdict = tierWord(c.verdict) ? c.verdict : "not rated yet";
+              var fps = typeof c.medianFPS === "number" ? ", " + Math.round(c.medianFPS) + " fps median" : "";
+              rows.push(row(null, "<b>Sevoflurane players:</b> " + esc(verdict) + " (" + Number(c.runs).toLocaleString() + " runs on " + (c.installs === 1 ? "1 Mac" : Number(c.installs).toLocaleString() + " Macs") + esc(fps) + ")", link(c.pageURL, "Game database")));
+            }
+            if (record.wiki) {
+              var tiers = [];
+              if (tierWord(record.wiki.native)) tiers.push("native Mac build " + record.wiki.native);
+              if (tierWord(record.wiki.rosetta2)) tiers.push("Rosetta 2 " + record.wiki.rosetta2);
+              if (tierWord(record.wiki.crossover)) tiers.push("CrossOver " + record.wiki.crossover);
+              if (tierWord(record.wiki.wine)) tiers.push("Wine " + record.wiki.wine);
+              if (tierWord(record.wiki.parallels)) tiers.push("Parallels " + record.wiki.parallels);
+              if (tiers.length) rows.push(row(null, "<b>AppleGamingWiki:</b> " + esc(tiers.join(" · "))));
+            }
+            var deck = DECK[record.deckCategory];
+            if (deck) rows.push(row(glyph(deck[0]), "<b>Steam Deck:</b> " + deck[1] + " (Valve's own program)"));
+            if (record.proton) {
+              var p = record.proton;
+              rows.push(row(null, "<b>Linux / Proton:</b> " + esc(p.tier) + " (" + Number(p.total).toLocaleString() + " reports, " + esc(p.confidence) + " confidence). A Linux measurement.", link(p.sourceURL, "ProtonDB")));
+            }
+            return rows.join("");
+          }
+        
+          function row(icon, html, trailing) {
+            return '<div class="sevo-compat-row">' + (icon || '<span class="sevo-compat-icon"></span>')
+              + "<span>" + html + (trailing ? " " + trailing : "") + "</span></div>";
+          }
+        
+          function link(url, text) {
+            if (!url) return "";
+            return '<a class="sevo-compat-link" data-href="' + esc(url) + '">' + esc(text) + " ↗</a>";
+          }
+        
+          function cell(title, badge, icon) {
+            return '<div class="sevo-compat-title">' + esc(title) + "</div>"
+              + '<div class="sevo-compat-label">' + (icon || mark(badge)) + "<span>" + esc(badge.label) + "</span></div>";
+          }
+        
+          var SEP = '<span class="sevo-compat-sep"></span>';
+        
+          function render(strip, panel, appid, record) {
+            var mac = record ? record.mac : { state: "unknown", label: "Checking…" };
+            var ac = record ? record.antiCheatBadge : { state: "unknown", label: "Checking…" };
+            var native = record && record.nativeBadge;
+            var companion = record && record.companion;
+            /* With a macOS build beside it, each cell names the build it rates,
+               so "Unknown" and "Native" read as two builds rather than one
+               contradiction. A companion app shows its partner's pill instead of
+               an anti-cheat cell: nothing of its own runs here. */
+            strip.innerHTML = (native ? cell("Windows version", mac) + SEP + cell("macOS version", native, nativeMark(native, appid)) : cell("Mac Compatibility", mac))
+              + (companion ? "" : SEP + cell("Anti-Cheat", ac))
+              + (companion ? '<div class="sevo-compat-details sevo-compat-companion" role="button" tabindex="0" data-appid="' + esc(appid) + '">Open ' + esc(companion.partner) + "</div>" : "")
+              + '<div class="sevo-compat-details" role="button" tabindex="0">' + (open[appid] ? "Hide" : "Details") + "</div>";
+            if (record) {
+              panel.innerHTML = panelHTML(record, appid);
+              panel.hidden = !open[appid];
+            } else {
+              panel.hidden = true;
+            }
+          }
+        
+          var UNREACHABLE = {
+            mac: { state: "unknown", label: "Unknown", reason: "The compatibility databases could not be reached." },
+            antiCheatBadge: { state: "unknown", label: "Unknown", reason: "The compatibility databases could not be reached." }
+          };
+        
+          /* Draws the record once it arrives, if the strip is still the one it
+             was asked for. */
+          function settle(strip, panel, appid, record) {
+            if (record && record.mac) records[appid] = record;
+            if (strip.isConnected && strip.dataset.appid === appid) render(strip, panel, appid, records[appid] || UNREACHABLE);
+          }
+        
+          function onClick(event) {
+            var target = event.target;
+            var companion = target.closest && target.closest(".sevo-compat-companion");
+            if (companion) {
+              event.preventDefault();
+              openCompanion(companion.getAttribute("data-appid"));
+              return;
+            }
+            var play = target.closest && target.closest(".sevo-compat-play");
+            if (play) {
+              event.preventDefault();
+              playMac(play.getAttribute("data-appid"));
+              return;
+            }
+            var anchor = target.closest && target.closest(".sevo-compat-link");
+            if (anchor) {
+              event.preventDefault();
+              openExternal(anchor.getAttribute("data-href"));
+              return;
+            }
+            var details = target.closest && target.closest(".sevo-compat-details");
+            if (details) {
+              var strip = document.getElementById(STRIP_ID);
+              var panel = document.getElementById(PANEL_ID);
+              if (!strip || !panel) return;
+              var appid = strip.dataset.appid;
+              open[appid] = !open[appid];
+              if (records[appid]) render(strip, panel, appid, records[appid]);
+            }
+          }
+        
+          function ensureStyle() {
+            if (!document.head) return false;
+            if (!document.getElementById(STYLE_ID)) {
+              var style = document.createElement("style");
+              style.id = STYLE_ID;
+              style.textContent = CSS;
+              document.head.appendChild(style);
+            }
+            return true;
+          }
+        
+          /* A fresh slot holding an empty strip and a hidden panel. */
+          function makeSlot(appid, extraClass) {
+            var slot = document.createElement("div");
+            slot.id = SLOT_ID;
+            slot.className = "sevo-compat-slot" + (extraClass ? " " + extraClass : "");
+            slot.dataset.appid = appid;
+            var strip = document.createElement("div");
+            strip.id = STRIP_ID;
+            strip.className = "sevo-compat";
+            strip.dataset.appid = appid;
+            var panel = document.createElement("div");
+            panel.id = PANEL_ID;
+            panel.className = "sevo-compat-panel";
+            panel.hidden = true;
+            slot.appendChild(strip);
+            slot.appendChild(panel);
+            return slot;
+          }
+        
+          var pending = 0;
+          function schedule() {
+            if (pending) return;
+            pending = setTimeout(function () { pending = 0; apply(); }, 150);
+          }
+        
+        """
 
     /// The library page: the slot under the game page's tab bar, the record
     /// from the bridge.
@@ -379,6 +396,12 @@ enum SteamCompatBadge {
         } catch (e) {}
       }
     
+      function openCompanion(appid) {
+        try {
+          window.webkit.messageHandlers.sevoWindow.postMessage({ fn: "__openCompanion", args: [appid] });
+        } catch (e) {}
+      }
+    
       /* The macOS build installs and plays through this Steam
          (``SteamNativeBuilds``) on an engine that runs macOS builds, so Steam
          for Mac is the way to it only when the person turned that option on
@@ -435,8 +458,9 @@ enum SteamCompatBadge {
         var where = appid && placement();
         var o = appid && overview(appid);
         /* Only games get a strip: shortcuts, mods, tools and soundtracks have
-           no entry anywhere, and Steam skips its own strip for them too. */
-        var eligible = where && o && !(o.BIsModOrShortcut && o.BIsModOrShortcut()) && o.app_type === 1;
+           no entry anywhere, and Steam skips its own strip for them too. A
+           companion app is filed under Software and gets one. */
+        var eligible = where && o && !(o.BIsModOrShortcut && o.BIsModOrShortcut()) && (o.app_type === 1 || COMPANIONS[appid]);
         if (!eligible) {
           if (slot) slot.remove();
           return;
@@ -487,6 +511,11 @@ enum SteamCompatBadge {
       function playMac(appid) {
         var h = handler();
         if (h) h.postMessage({ playMac: Number(appid) });
+      }
+    
+      function openCompanion(appid) {
+        var h = handler();
+        if (h) h.postMessage({ companion: Number(appid) });
       }
     
       /* Store pages have no context page: the app sets both flags before this script. */

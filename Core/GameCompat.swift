@@ -94,6 +94,20 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     let nativeBadge: GameCompatBadge?
     let antiCheatBadge: GameCompatBadge
     let fetchedAt: Date
+    /// Set for an app that serves a Mac through a partner app (``GameCompanion``).
+    var companion: GameCompanion? = nil
+
+    /// The record of a companion app: Verified through its partner, with no
+    /// database behind it, since nothing the databases rate is what runs.
+    static func companion(_ companion: GameCompanion, name: String, deckCategory: Int?) -> GameCompatRecord {
+        GameCompatRecord(
+            appID: companion.appID, name: name.isEmpty ? companion.name : name,
+            antiCheat: nil, wiki: nil, proton: nil, community: nil, hasMacBuild: false, macArchitectures: nil,
+            deckCategory: deckCategory,
+            mac: GameCompatVerdict.companion(companion), nativeBadge: nil,
+            antiCheatBadge: GameCompatVerdict.antiCheat(nil), fetchedAt: .now, companion: companion,
+        )
+    }
 }
 
 /// One headline badge: a state the app's rules read (the Apple filter, the
@@ -188,6 +202,8 @@ nonisolated struct GameCompatSummary: Codable, Sendable, Equatable {
     /// The Windows verdict rests on ProtonDB alone: a Linux rating, untested
     /// on a Mac.
     var linuxOnly = false
+    /// The partner app a companion plays through (``GameCompanion``).
+    var companion: String? = nil
 
     /// Whether the game belongs under the library's Apple filter: its macOS
     /// build runs, or Mac evidence rates its Windows build Verified or Playable.
@@ -359,6 +375,18 @@ nonisolated enum GameCompatVerdict {
         }
         let reason = "AppleGamingWiki rates the macOS version \(describe(tier))\(how)."
         return GameCompatBadge(state: nativeState(tier), label: nativeLabel(tier), reason: reason)
+    }
+
+    /// The badge of a companion app: Verified, through the partner that uses
+    /// what Steam downloads.
+    static func companion(_ companion: GameCompanion) -> GameCompatBadge {
+        GameCompatBadge(state: .verified, label: "Through \(companion.partner)", reason: companion.reason)
+    }
+
+    /// The library's verdict for a companion app: it plays on this Mac, by
+    /// Mac evidence, through its partner.
+    static func summary(companion: GameCompanion, appID: Int) -> GameCompatSummary {
+        GameCompatSummary(appID: appID, state: .verified, native: false, macEvidence: true, companion: companion.partner)
     }
 
     /// The library's verdict, from the same rules as the strip's badges.

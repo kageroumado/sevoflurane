@@ -23,6 +23,17 @@ struct LibraryCompatTests {
     // MARK: - Summaries
 
     @Test
+    func `a companion app plays on this Mac and the answer names its partner`() throws {
+        let summary = GameCompatVerdict.summary(companion: .wallpaperEngine, appID: 431_960)
+        #expect(summary.playsOnMac)
+        let answer = try JSONSerialization.jsonObject(with: GameCompatBatch.answer([summary], pending: 0)) as? [String: Any]
+        let entry = (answer?["apps"] as? [String: Any])?["431960"] as? [String: Any]
+        #expect(entry?["c"] as? String == "Phosphene")
+        #expect(entry?["p"] as? Bool == true)
+        #expect(entry?["t"] == nil)
+    }
+
+    @Test
     func `a summary carries the strip's state and whether the macOS build plays`() throws {
         let sims = GameCompatVerdict.summary(
             appID: 1222670, antiCheat: nil, wiki: wiki(native: "perfect", crossover: "unplayable", wine: "perfect"),

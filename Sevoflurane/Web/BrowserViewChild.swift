@@ -327,6 +327,10 @@ private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithRepl
             MacBuildHandoff.playMacBuild(appID: appID)
             return (nil, nil)
         }
+        if let appID = (body["companion"] as? NSNumber)?.intValue, appID > 0 {
+            CompanionHandoff.open(appID: appID)
+            return (nil, nil)
+        }
         guard Preferences.compatibilityStrip else { return (#"{"off":true}"#, nil) }
         guard let appID = (body["appid"] as? NSNumber)?.intValue, appID > 0 else { return (nil, "no appid") }
         let name = body["name"] as? String ?? ""

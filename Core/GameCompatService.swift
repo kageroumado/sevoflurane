@@ -66,6 +66,9 @@ actor GameCompatService {
     }
 
     func record(appID: Int, name: String, deckCategory: Int?, ignoringCache: Bool = false) async -> GameCompatRecord {
+        if let companion = GameCompanion.all[appID] {
+            return .companion(companion, name: name, deckCategory: deckCategory)
+        }
         if ignoringCache {
             antiCheatIndex = nil
             wikiIndex = nil
@@ -134,6 +137,9 @@ actor GameCompatService {
         var lookups: [GameCompatBatch.Lookup] = []
         let summaries = games.map { game in
             let id = game.appID
+            if let companion = GameCompanion.all[id] {
+                return GameCompatVerdict.summary(companion: companion, appID: id)
+            }
             let antiCheat = antiCheatIndex?.lookup(appID: id, name: game.name)
             var wiki = wikiIndex?.lookup(title: game.name)
             var titlePending = false

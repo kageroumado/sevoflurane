@@ -327,6 +327,8 @@ final class ClientSupervisor {
             MacBuildHandoff.allowWindowsLaunch(appID: appID)
         } else if MacBuildHandoff.take(appID: appID, name: name) {
             return
+        } else if await CompanionHandoff.takeRunGame(appID: appID) {
+            return
         }
         var path = "/game/launch?appid=\(appID)&name=\(Self.escaped(name))"
         if let explicit { path += "&renderer=\(explicit.rawValue)" }

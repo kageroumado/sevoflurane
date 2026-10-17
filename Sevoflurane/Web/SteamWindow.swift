@@ -353,6 +353,11 @@ final class SteamWindow: NSObject {
             if let appID = Int(string(args, 0)) {
                 MacBuildHandoff.playMacBuild(appID: appID)
             }
+        case "__openCompanion":
+            // The compat strip's "Open Phosphene" on a companion app.
+            if let appID = Int(string(args, 0)) {
+                CompanionHandoff.open(appID: appID)
+            }
         case "__steamNotification":
             // The context page's toast subscription
             // (SteamWebHost.notificationScript), one decoded notification.
@@ -456,8 +461,8 @@ final class SteamWindow: NSObject {
         }
         let query = URLComponents(string: "about:blank?" + parameters)?
             .queryItems ?? []
-        /// `Double("nan")` and `Double("inf")` both parse, and these values
-        /// become window sizes — the same trap as the shim's numbers.
+        // `Double("nan")` and `Double("inf")` both parse, and these values
+        // become window sizes — the same trap as the shim's numbers.
         func value(_ key: String) -> CGFloat? {
             guard let raw = query.first(where: { $0.name == key })?.value,
                   let number = Double(raw), number.isFinite else { return nil }

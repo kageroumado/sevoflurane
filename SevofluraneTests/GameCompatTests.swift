@@ -36,6 +36,20 @@ struct GameCompatTests {
         )
     }
 
+    // MARK: - Companions
+
+    @Test
+    func `a companion app is Verified through its partner and installs without a warning`() {
+        let record = GameCompatRecord.companion(.wallpaperEngine, name: "", deckCategory: nil)
+        #expect(record.name == "Wallpaper Engine")
+        #expect(record.mac.state == .verified)
+        #expect(record.mac.label == "Through Phosphene")
+        #expect(record.mac.tier == nil)
+        #expect(GameCompatVerdict.installRisk(record) == nil)
+        #expect(record.companion == .wallpaperEngine)
+        #expect(GameCompanion.appIDsLiteral == "{431960: true}")
+    }
+
     // MARK: - The Mac badge
 
     @Test

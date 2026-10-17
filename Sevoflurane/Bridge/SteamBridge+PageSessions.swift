@@ -261,12 +261,15 @@ extension SteamBridge {
         ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
     }
 
-    /// Whether a call is a `RunGame` for a game set to its macOS build, which
-    /// Steam for Mac then has instead of the client (``MacBuildHandoff``).
+    /// Whether a call is a `RunGame` this side takes instead of the client:
+    /// a game set to its macOS build goes to Steam for Mac
+    /// (``MacBuildHandoff``), a companion app to its partner
+    /// (``CompanionHandoff``).
     private static func handsOffToSteamForMac(path: String, request: [String: Any]) async -> Bool {
         guard path == "SteamClient.Apps.RunGame",
               let appID = (request["args"] as? [Any])?.first.flatMap({ Int("\($0)") }) else { return false }
-        return await MacBuildHandoff.takeRunGame(appID: appID)
+        if await MacBuildHandoff.takeRunGame(appID: appID) { return true }
+        return await CompanionHandoff.takeRunGame(appID: appID)
     }
 
     /// Whether `path` names a member of `SteamClient` by dotted identifiers
