@@ -50,6 +50,31 @@ extension SteamWebCoordinator: WKUIDelegate {
         host?.window(for: webView)?.detach(reason: .steamClosedIt)
     }
 
+    /// A file input in Steam's UI — Set Custom Artwork, a custom icon for a
+    /// non-Steam game — asks for a file. CEF opens the client's own dialog;
+    /// here the Mac's open panel answers, and WebKit hands the page the file.
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame _: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void,
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.prompt = String(localized: "Choose")
+        let present: (NSApplication.ModalResponse) -> Void = { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+        if let window = webView.window, window.isVisible {
+            panel.beginSheetModal(for: window, completionHandler: present)
+        } else {
+            NSApp.activate()
+            present(panel.runModal())
+        }
+    }
+
     /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
     /// this (private) delegate method it answers a zero rect, which Steam's
     /// menu placement reads as "the window fills nothing at the bottom of the

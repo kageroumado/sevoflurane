@@ -177,6 +177,10 @@ extension SteamBridge {
             ws.send(text: Self.resultReply(rid: rid, outcome: ["ok": true, "v": NSNull()]))
             return
         }
+        if let outcome = await Self.answersOnTheMac(path: path, request: request) {
+            ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
+            return
+        }
         if path == "SteamClient.Apps.RunGame" {
             // The one choke point every launch funnels through — menu bar,
             // the library's Play button, steam://run. Reconcile the renderer
@@ -259,6 +263,30 @@ extension SteamBridge {
             registrations.removeValue(forKey: handle)
         }
         ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
+    }
+
+    /// A call the Mac answers in the client's place, with the reply the page
+    /// gets: Steam's file dialog, which the client would open off screen
+    /// with the rest of its native windows, becomes the Mac's panel; Add
+    /// desktop shortcut, a `.url` on the bottle's Windows desktop that
+    /// reaches nobody, becomes an alias of the game's bundle on the Mac's.
+    /// `nil` for any other call, or a shortcut for a game with no bundle yet.
+    private static func answersOnTheMac(path: String, request: [String: Any]) async -> [String: Any]? {
+        let argument = (request["args"] as? [Any])?.first
+        switch path {
+        case "SteamClient.System.OpenFileDialog":
+            let options = SteamFileDialogs.Options(argument as? [String: Any] ?? [:])
+            guard let chosen = await SteamFileDialogs.choose(options) else {
+                return ["ok": false, "e": ["result": SteamFileDialogs.cancelledResult, "message": "cancelled"]]
+            }
+            return ["ok": true, "v": chosen]
+        case "SteamClient.Apps.CreateDesktopShortcutForApp":
+            guard let appID = argument.flatMap({ Int("\($0)") }),
+                  await DesktopShortcuts.take(appID: appID) else { return nil }
+            return ["ok": true, "v": NSNull()]
+        default:
+            return nil
+        }
     }
 
     /// Whether a call is a `RunGame` this side takes instead of the client:
