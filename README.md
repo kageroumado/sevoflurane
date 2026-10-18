@@ -22,7 +22,7 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 - **Steam:** Library, Store, Friends, chats, Big Picture, keyboard, and controller configuration in Mac windows; native menus, clipboard, launch-choice alerts, `steam://` links, and macOS notifications.
 - **Personalization:** CSS styles with live reload, Streamer Mode, and Low Power Mode/Reduce Motion integration.
 - **Compatibility:** per-version ratings from Sevoflurane runs, AppleGamingWiki, and ProtonDB; anti-cheat information; library medals, native-Mac markers, and a playable-on-this-Mac filter. Linux ratings are displayed separately from the Mac filter.
-- **Launchers:** recent and installed games in the menu bar and Dock menu; per-launch or persistent renderer choices; Quick Launch for external programs.
+- **Launchers:** recent and installed games in the menu bar and Dock menu; Keep in Dock and a Games folder in the Dock; per-launch or persistent renderer choices; Quick Launch for external programs.
 - **Game windows (Dormison):** independent Dock icons, Game Mode, resizable fixed-resolution windows, Lanczos/MetalFX/Anime4K/CuNNy upscaling, live filters, frame-rate limits, and CPU/GPU/frame-time overlays.
 - **Input and media:** Xbox/PlayStation controller input with rumble; DLSS through MetalFX on D3DMetal. Dormison adds raw mouse input, cursor confinement, native Win32 menus, CPU caps, and hardware H.264/HEVC decoding.
 - **Native games:** macOS game installs and per-game version switching on supported engines; a game Steam for Mac already has installs from its copy without a download; optional handoff to Steam for Mac. Native NW.js games retain Steam playtime and achievements.

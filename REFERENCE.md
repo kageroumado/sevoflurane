@@ -411,8 +411,8 @@ runs on CrossOver.
   and Keep in Dock. The renderers offered are the ones the machine can run:
   D3DMetal appears on Dormison once a toolkit is added, and a game already
   pinned to it keeps its pin.
-- Quick Launch programs beside your games, with Show in Finder and Remove.
-  Add Windows Game… opens a file picker.
+- Quick Launch programs beside your games, with Rename…, Show in Finder and
+  Remove. Add Windows Game… opens a file picker.
 - A health card that names what's wrong with the client and offers the fix.
 - A card when macOS has not approved the background helper yet.
 - A notice naming the program causing unusually high system load, shown only
@@ -429,8 +429,19 @@ runs on CrossOver.
 
 - **(Dormison)** Every game is its own app to macOS: its own Dock tile, name
   and icon, and Game Mode when it is frontmost and full screen.
-- **(Dormison)** Keep in Dock, or drag a game from the menu bar onto the Dock,
-  to keep its tile there. A click on it starts the game.
+- **(Dormison)** Keep in Dock (a game's menu, or Settings › Games › Keep in
+  Dock), or drag a game from the menu bar onto the Dock, to keep its tile
+  there. A click on it starts the game, or brings it forward when it is
+  running. While a game runs, the Dock's own Options menu on its tile offers
+  Keep in Dock too.
+- **(Dormison)** A kept tile has a menu of its own while the game is not
+  running: Play, Play with a renderer, Game Settings…; a HoYoverse game's tile
+  shows "update" when a newer build is out and a progress bar while it
+  downloads.
+- **(Dormison)** Settings › General › Games folder in the Dock keeps a folder
+  of every game that has run beside the Dock's other folders: each game under
+  its own icon, the last played on top. Spotlight finds the games by name as
+  well.
 - **(Dormison)** Full-screen and fixed-size games run in resizable windows at
   their own resolution.
 - **(Dormison)** Upscaling with Lanczos, MetalFX, Anime4K or CuNNy, plus a
@@ -496,6 +507,9 @@ runs on CrossOver.
   installer wrote.
 - Quick Launch programs play like Steam games: per-game settings, Dock tile,
   run records and reports.
+- Steam's own file pickers — Browse… in Add a Non-Steam Game, Set Custom
+  Artwork, a custom icon — open the Mac's panel. Add desktop shortcut puts an
+  alias of the game's own bundle on the Desktop.
 - Quick Launch programs are listed in Steam's library as non-Steam games, so
   Big Picture, Steam Input and the overlay reach them, and a start from there
   keeps their settings, Dock tile and run records. Show in Steam's Library, in
