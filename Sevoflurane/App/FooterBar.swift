@@ -145,6 +145,9 @@ struct FooterBar: View {
                         Label("Auto Update", systemImage: "arrow.down.circle")
                     }
                     .help("Install updates automatically while no game runs")
+                    Button("Check for Updates…", systemImage: "arrow.clockwise") {
+                        SilentUpdates.shared.checkOrInstallFromMenu()
+                    }
                     Text("Version \(Self.versionString)")
                 } label: {
                     Color.clear.contentShape(.rect)

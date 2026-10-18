@@ -20,6 +20,10 @@ import TiptoeGitHub
 /// check still runs and still answers ``availableVersion`` — the footer's version chip draws from
 /// it — but nothing downloads or installs except through ``updateNow()``.
 ///
+/// The loop ticks every ``checkInterval``; between ticks, opening the popover or waking the Mac
+/// repeats the check once it is ``staleAfter`` old, and the menus make one on demand. Each is a
+/// single GitHub metadata request, which GitHub itself caches for a minute.
+///
 /// The check takes GitHub releases alone: every version of the app ships as one.
 @MainActor
 @Observable
@@ -32,6 +36,14 @@ final class SilentUpdates {
     /// Every four hours: the version chip and the app menu say an update is out as soon as a
     /// check finds it, and a Mac that stays on for days hears about a fix the same day.
     private static let checkInterval: TimeInterval = 4 * 60 * 60
+
+    /// A check older than this is repeated when the popover opens or the Mac wakes: the loop's
+    /// tick may have landed while the Mac slept, or at a launch before the network was up.
+    private static let staleAfter: TimeInterval = 60 * 60
+
+    /// The network comes back a beat after the Mac does; asking at the wake notification itself
+    /// fails and leaves the next try to the loop.
+    private static let wakeGrace: Duration = .seconds(20)
 
     /// How often a failing check is written to the event log.
     private static let failureLogInterval: TimeInterval = 24 * 60 * 60
@@ -77,6 +89,15 @@ final class SilentUpdates {
     /// install when the mode allows it. Created up front so its `Tiptoe` reconciles the recorded
     /// wait (and surfaces `justUpdatedTo`) even before `start()`.
     @ObservationIgnored private let github: TiptoeGitHub
+    @ObservationIgnored private var wakeObserver: (any NSObjectProtocol)?
+
+    /// When this object last asked GitHub itself. The loop's own ticks are not visible here, so
+    /// this is a floor on freshness: a stale check may repeat a tick made minutes ago, at the
+    /// cost of one cached metadata request.
+    @ObservationIgnored private var lastCheckedAt: Date?
+
+    /// The one metadata request in flight, shared by whoever asks while it runs.
+    @ObservationIgnored private var checkInFlight: Task<Void, Never>?
 
     private init() {
         let updater = AppUpdater(owner: Self.owner, repo: Self.repo)
@@ -142,8 +163,9 @@ final class SilentUpdates {
         }
     }
 
-    /// The app menu's update item: installs a found update, or checks and says the app is
-    /// current.
+    /// The menus' update item: asks GitHub, then offers to install what it found or says the
+    /// app is current. Always asks, even with a version already known: the version the dialog
+    /// names must be the newest, and a download held for days may be a release behind.
     func checkOrInstallFromMenu() {
         #if DEBUG
             ModalAlerts.present {
@@ -153,10 +175,7 @@ final class SilentUpdates {
             }
         #else
             Task(name: "Update from the app menu") {
-                if availableVersion == nil, pendingVersion == nil {
-                    await github.checkNow()
-                    refresh()
-                }
+                await check()
                 if let version = availableVersion ?? pendingVersion {
                     let playing = await !(Self.noGameRunning())
                     ModalAlerts.present { SilentUpdates.shared.confirmInstall(version, whilePlaying: playing) }
@@ -215,6 +234,13 @@ final class SilentUpdates {
         // out from under Xcode.
         #if !DEBUG
             github.installsAutomatically(autoInstall).start()
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main,
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.checkAfterWake()
+                }
+            }
         #endif
     }
 
@@ -234,6 +260,39 @@ final class SilentUpdates {
         availableVersion = github.availableVersion
     }
 
+    /// The check the popover's appearance and the Mac's waking make, when the last one is old
+    /// enough to be worth repeating. Quiet: nothing in the UI shows its progress.
+    func checkIfStale() {
+        // A development build does not poll GitHub on its own.
+        #if !DEBUG
+            if let lastCheckedAt, Date.now.timeIntervalSince(lastCheckedAt) < Self.staleAfter { return }
+            Task(name: "Check for updates (stale)") { await check() }
+        #endif
+    }
+
+    private func checkAfterWake() {
+        Task(name: "Check for updates after wake") { [weak self] in
+            try? await Task.sleep(for: Self.wakeGrace)
+            self?.checkIfStale()
+        }
+    }
+
+    /// One metadata request; a second caller while it runs waits for the same answer.
+    private func check() async {
+        if let checkInFlight {
+            await checkInFlight.value
+            return
+        }
+        let task = Task(name: "Check for updates") { [github] in
+            await github.checkNow()
+        }
+        checkInFlight = task
+        await task.value
+        checkInFlight = nil
+        lastCheckedAt = .now
+        refresh()
+    }
+
     // MARK: - Update Now
 
     /// Download (if needed), verify, and install the newest release right away — the user asked,
@@ -246,6 +305,14 @@ final class SilentUpdates {
             manualPhase = .failed("A development build cannot update itself.")
         #else
             manualPhase = .working
+
+            // Ask GitHub first. With automatic installs on, the DMG the loop downloaded may be
+            // days old and one release behind, and `github.updateNow()` installs what it holds
+            // as it stands; this check replaces a stale download with the newest release. With
+            // installs off it only refreshes `availableVersion`, and `updateNow()` downloads
+            // the newest itself.
+            await check()
+
             guard await github.updateNow() else {
                 manualPhase = .failed(
                     "Could not download the update. Check your connection, or open the releases page.",

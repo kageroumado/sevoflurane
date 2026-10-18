@@ -94,6 +94,7 @@ struct MenuBarView: View {
             quickLaunch.refresh()
             graphics.refresh()
             SilentUpdates.shared.refresh()
+            SilentUpdates.shared.checkIfStale()
             UpdateSummary.shared.checkOnce()
         }
     }
