@@ -105,6 +105,7 @@ nonisolated enum ConfigMaterializer {
 
         removeStale(in: appsDir, keeping: Set(files.keys))
         GameLaunchers.remove(keeping: launchers)
+        GamesFolder.sync(appIDs: launchers)
         // A game switched back to wine keeps its browsing-data link (the two
         // runners share one store by design) and loses the wrapper package,
         // which describes a run that is no longer arranged.

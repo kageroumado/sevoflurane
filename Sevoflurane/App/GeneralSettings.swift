@@ -17,6 +17,7 @@ struct GeneralSettings: View {
             GeneralStartupSection(
                 provisioner: provisioner, steam: steam, supervisor: supervisor, highlighted: highlighted,
             )
+            GeneralDockSection()
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             GeneralCustomStyleSection(steam: steam, highlighted: highlighted)
@@ -65,6 +66,47 @@ private struct GeneralStartupSection: View {
             }
             SteamLinksRow()
         }
+    }
+}
+
+/// The Games folder in the Dock (``GamesFolder``, ``DockTiles``): a stack of
+/// every game's own icon beside the Dock's other folders, the last played
+/// on top.
+private struct GeneralDockSection: View {
+    /// The switch as last set here; the Dock's own record until then.
+    @State private var kept: Bool?
+
+    var body: some View {
+        Section {
+            Toggle("Games folder in the Dock", isOn: Binding(
+                get: { kept ?? false },
+                set: { isOn in
+                    kept = isOn
+                    Task.detached(name: isOn ? "Keep the Games folder in the Dock" : "Take the Games folder out of the Dock") {
+                        if isOn {
+                            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+                            DockTiles.keepFolder(GamesFolder.root, label: GamesFolder.label)
+                        } else {
+                            DockTiles.removeFolder(GamesFolder.root)
+                        }
+                    }
+                },
+            ))
+            .toggleStyle(.switch)
+        } footer: {
+            Text("""
+            A folder of every game that has run, beside the Dock's other folders: each game under its own icon, \
+            the last played on top, a click to start one. Right-click the folder to show it as a grid, a fan or a list.
+            """)
+        }
+        .task {
+            kept = await Self.readKept()
+        }
+    }
+
+    @concurrent
+    private nonisolated static func readKept() async -> Bool {
+        DockTiles.isFolderKept(GamesFolder.root)
     }
 }
 

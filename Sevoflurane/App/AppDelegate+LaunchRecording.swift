@@ -25,6 +25,9 @@ extension AppDelegate {
             // The run record opens here rather than at the first window:
             // a game that dies before it draws is the one worth recording.
             runRecorder.arm(appID: appID)
+            Task.detached(name: "Put app \(appID) first in the Games folder") {
+                GamesFolder.markPlayed(appID: appID)
+            }
             // A launch the app carries was prepared before it reached Steam
             // or the helper (``LaunchPreparation``). One it did not carry
             // gets its exes read and its macOS version's symlinks made here,
