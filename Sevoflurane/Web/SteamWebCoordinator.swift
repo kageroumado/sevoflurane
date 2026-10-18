@@ -53,26 +53,31 @@ extension SteamWebCoordinator: WKUIDelegate {
     /// A file input in Steam's UI — Set Custom Artwork, a custom icon for a
     /// non-Steam game — asks for a file. CEF opens the client's own dialog;
     /// here the Mac's open panel answers, and WebKit hands the page the file.
+    ///
+    /// The async form of the requirement: the completion-handler form takes
+    /// a `@MainActor` block, and a method declared with a plain closure
+    /// binds to no selector at all, so WebKit finds no delegate and the
+    /// click does nothing, 2026-10-18.
     func webView(
         _ webView: WKWebView,
         runOpenPanelWith parameters: WKOpenPanelParameters,
         initiatedByFrame _: WKFrameInfo,
-        completionHandler: @escaping ([URL]?) -> Void,
-    ) {
+    ) async -> [URL]? {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.canChooseFiles = true
         panel.prompt = String(localized: "Choose")
-        let present: (NSApplication.ModalResponse) -> Void = { response in
-            completionHandler(response == .OK ? panel.urls : nil)
-        }
+        let response: NSApplication.ModalResponse
         if let window = webView.window, window.isVisible {
-            panel.beginSheetModal(for: window, completionHandler: present)
+            response = await panel.beginSheetModal(for: window)
         } else {
             NSApp.activate()
-            present(panel.runModal())
+            response = await withCheckedContinuation { continuation in
+                panel.begin { continuation.resume(returning: $0) }
+            }
         }
+        return response == .OK ? panel.urls : nil
     }
 
     /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
