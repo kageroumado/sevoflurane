@@ -25,6 +25,36 @@ nonisolated enum GameLaunchers {
     static let root = AppIdentity.supportFolder
         .appendingPathComponent("Launchers")
 
+    /// The Dock tile plug-in every bundle carries, when this process is
+    /// inside Sevoflurane.app or beside it: the Dock loads it out of a kept
+    /// tile while the game is not running, for the tile's menu and badge.
+    static var dockTilePlugIn: URL? {
+        var app = Bundle.main.bundleURL
+        while app.pathExtension != "app" {
+            let parent = app.deletingLastPathComponent()
+            guard parent.path != app.path, parent.path != "/" else { return nil }
+            app = parent
+        }
+        let plugIn = app.appendingPathComponent("Contents/PlugIns/\(dockTilePlugInName)")
+        return FileManager.default.fileExists(atPath: plugIn.path) ? plugIn : nil
+    }
+
+    static let dockTilePlugInName = "SevofluraneDockTile.docktileplugin"
+
+    /// Where the app says what a tile shows while the game is not running:
+    /// the plug-in reads it beside the bundle.
+    static func tileStateFile(appID: Int) -> URL {
+        directory(appID: appID).appendingPathComponent(tileStateName)
+    }
+
+    private static let tileStateName = "tile.json"
+
+    /// The renderers the tile's Play with menu offers, for every game at
+    /// once: the plug-in reads this beside the bundles.
+    static var renderersFile: URL {
+        root.appendingPathComponent("renderers.json")
+    }
+
     /// Whether any game has a bundle right now — the cheap question to ask
     /// before the expensive one.
     static var hasBundles: Bool {
@@ -54,12 +84,7 @@ nonisolated enum GameLaunchers {
         let contents = bundle.appendingPathComponent("Contents")
         let executable = contents.appendingPathComponent("MacOS/\(stem)")
         do {
-            // A renamed game leaves a bundle behind that is no longer anyone's.
-            for entry in (try? manager.contentsOfDirectory(
-                at: directory, includingPropertiesForKeys: nil,
-            )) ?? [] where entry.lastPathComponent != bundle.lastPathComponent {
-                try? manager.removeItem(at: entry)
-            }
+            removeOtherBundles(in: directory, keeping: bundle)
             try manager.createDirectory(
                 at: contents.appendingPathComponent("MacOS"), withIntermediateDirectories: true,
             )
@@ -88,9 +113,11 @@ nonisolated enum GameLaunchers {
                     try manager.copyItem(at: source, to: destination)
                 }
             }
+            var iconChanged = false
             if let icon = GameIcon.icns(appID: appID, title: title) {
                 let destination = contents.appendingPathComponent("Resources/\(iconName).icns")
                 if !manager.contentsEqual(atPath: icon.path, andPath: destination.path) {
+                    iconChanged = true
                     try? manager.removeItem(at: destination)
                     try manager.copyItem(at: icon, to: destination)
                     // LaunchServices caches a bundle's icon against the bundle's
@@ -102,16 +129,18 @@ nonisolated enum GameLaunchers {
             let hasIcon = manager.fileExists(
                 atPath: contents.appendingPathComponent("Resources/\(iconName).icns").path,
             )
+            let plugIn = copyDockTilePlugIn(into: contents)
             let plist = writePlist(
                 to: contents.appendingPathComponent("Info.plist"),
-                title: title, stem: stem, appID: appID, hasIcon: hasIcon, engine: engine,
+                title: title, stem: stem, appID: appID, engine: engine,
+                carrying: (icon: hasIcon, plugIn: plugIn.present),
             )
             let stamp = Data("APPL????".utf8)
             let pkgInfo = contents.appendingPathComponent("PkgInfo")
             if (try? Data(contentsOf: pkgInfo)) != stamp { try stamp.write(to: pkgInfo) }
-            // The signature covers the plist and the executable, so it is
-            // renewed whenever either of them was.
-            if copied || plist {
+            // The signature seals the plist, the executable, the icon and the
+            // plug-in, so it is renewed whenever any of them was.
+            if copied || plist || plugIn.copied || iconChanged {
                 sign(bundle)
                 log("launcher: built \(stem).app on \(engine.description)")
             }
@@ -174,6 +203,18 @@ nonisolated enum GameLaunchers {
 
     private static let iconName = "app"
 
+    /// A renamed game leaves a bundle behind that is no longer anyone's.
+    /// The tile's state file lives beside the bundle and stays.
+    private static func removeOtherBundles(in directory: URL, keeping bundle: URL) {
+        let manager = FileManager.default
+        for entry in (try? manager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil,
+        )) ?? [] where entry.lastPathComponent != bundle.lastPathComponent
+            && entry.lastPathComponent != tileStateName {
+            try? manager.removeItem(at: entry)
+        }
+    }
+
     /// The engine a bundle's loader was copied from, or `nil` for a bundle
     /// that predates the record.
     private static func recordedEngine(in contents: URL) -> String? {
@@ -200,11 +241,37 @@ nonisolated enum GameLaunchers {
         return files
     }
 
+    /// Puts the app's Dock tile plug-in into the bundle, or replaces it when
+    /// the app's differs — by content, since a build installed later can be
+    /// older. Answers whether one is there, and whether this call wrote it.
+    /// A process without the app beside it (a bare `sevo`) leaves whatever
+    /// is there.
+    private static func copyDockTilePlugIn(into contents: URL) -> (present: Bool, copied: Bool) {
+        let manager = FileManager.default
+        let destination = contents.appendingPathComponent("PlugIns/\(dockTilePlugInName)")
+        let present = manager.fileExists(atPath: destination.path)
+        guard let source = dockTilePlugIn else { return (present, false) }
+        let binary = "Contents/MacOS/SevofluraneDockTile"
+        if present, manager.contentsEqual(
+            atPath: source.appendingPathComponent(binary).path,
+            andPath: destination.appendingPathComponent(binary).path,
+        ) { return (true, false) }
+        do {
+            try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? manager.removeItem(at: destination)
+            try manager.copyItem(at: source, to: destination)
+            return (true, true)
+        } catch {
+            log("launcher: could not copy the Dock tile plug-in: \(error.localizedDescription)")
+            return (present, false)
+        }
+    }
+
     /// Answers whether it wrote, so a signature is only renewed when the
     /// thing it covers changed.
     private static func writePlist(
-        to destination: URL, title: String, stem: String,
-        appID: Int, hasIcon: Bool, engine: Engine,
+        to destination: URL, title: String, stem: String, appID: Int, engine: Engine,
+        carrying resources: (icon: Bool, plugIn: Bool),
     ) -> Bool {
         var plist: [String: Any] = [
             "CFBundleName": title,
@@ -222,7 +289,8 @@ nonisolated enum GameLaunchers {
             // no longer matches its tree.
             engineKey: engine.preferenceValue,
         ]
-        if hasIcon { plist["CFBundleIconFile"] = iconName }
+        if resources.icon { plist["CFBundleIconFile"] = iconName }
+        if resources.plugIn { plist["NSDockTilePlugIn"] = dockTilePlugInName }
         guard let data = try? PropertyListSerialization.data(
             fromPropertyList: plist, format: .xml, options: 0,
         ) else { return false }

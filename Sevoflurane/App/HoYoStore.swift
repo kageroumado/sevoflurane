@@ -32,8 +32,13 @@ final class HoYoStore {
         var task: Task<Void, Never>?
     }
 
-    private(set) var rows: [Row] = []
-    private(set) var jobs: [String: Job] = [:]
+    private(set) var rows: [Row] = [] {
+        didSet { publishTiles() }
+    }
+
+    private(set) var jobs: [String: Job] = [:] {
+        didSet { publishTiles() }
+    }
     /// The last word on each folder: a finished update, the files a check
     /// found, a failure.
     private(set) var notes: [String: String] = [:]
@@ -197,5 +202,44 @@ final class HoYoStore {
     private func update(_ id: String, _ change: (inout Row) -> Void) {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
         change(&rows[index])
+    }
+
+    // MARK: - The Dock tiles
+
+    /// The Quick Launch program behind each row's folder, by row id, read
+    /// when the rows are and kept for the progress ticks between.
+    private var tilePrograms: [String: Int] = [:]
+    private var tileFolders: Set<String> = []
+    private var tileStates: [Int: DockTileState.State] = [:]
+
+    /// Tells each game's Dock tile what the row knows (``DockTileState``):
+    /// "update" while a newer build is published, the download's progress
+    /// while a job runs.
+    private func publishTiles() {
+        guard !isFixture else { return }
+        let folders = Set(rows.map(\.id))
+        if tileFolders != folders {
+            tileFolders = folders
+            let programs = AdoptedPrograms.all()
+            tilePrograms = Dictionary(uniqueKeysWithValues: rows.compactMap { row in
+                let exe = row.installation.folder.appending(path: row.installation.game.executable).standardizedFileURL
+                return programs.first { $0.program.url.standardizedFileURL == exe }.map { (row.id, $0.id) }
+            })
+        }
+        for row in rows {
+            guard let program = tilePrograms[row.id] else { continue }
+            var state = DockTileState.State()
+            if let plan = row.plan, plan.kind != .upToDate, jobs[row.id] == nil {
+                state.badge = String(localized: "update")
+            }
+            if let job = jobs[row.id], job.kind == .install || job.kind == .update {
+                state.progress = ((job.progress?.fraction ?? 0) * 100).rounded() / 100
+            }
+            guard tileStates[program] != state else { continue }
+            tileStates[program] = state
+            Task.detached(name: "Publish \(program)'s Dock tile") {
+                DockTileState.write(state, appID: program)
+            }
+        }
     }
 }

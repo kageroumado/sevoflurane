@@ -17,6 +17,7 @@
 		0BAA00000000000000100005 /* SophonCodecs in Frameworks */ = {isa = PBXBuildFile; productRef = 0BAA00000000000000100002 /* SophonCodecs */; };
 		0BAA00000000000000100006 /* SophonCodecs in Frameworks */ = {isa = PBXBuildFile; productRef = 0BAA00000000000000100003 /* SophonCodecs */; };
 		0BAA00000000000000100007 /* SophonCodecs in Frameworks */ = {isa = PBXBuildFile; productRef = 0BAA00000000000000100004 /* SophonCodecs */; };
+		0BAA0000000000000011000C /* SevofluraneDockTile.docktileplugin in Embed Dock tile plug-in */ = {isa = PBXBuildFile; fileRef = 0BAA00000000000000110001 /* SevofluraneDockTile.docktileplugin */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +49,13 @@
 			remoteGlobalIDString = 0BAA000000000000000F0006;
 			remoteInfo = sevo;
 		};
+		0BAA0000000000000011000E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0B33EFD230290E5E00182A68 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0BAA00000000000000110002;
+			remoteInfo = SevofluraneDockTile;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -77,6 +85,15 @@
 			);
 			name = "Embed sevo";
 		};
+		0BAA0000000000000011000B /* Embed Dock tile plug-in */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				0BAA0000000000000011000C /* SevofluraneDockTile.docktileplugin in Embed Dock tile plug-in */,
+			);
+			name = "Embed Dock tile plug-in";
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +102,7 @@
 		0BAA000000000000000D0001 /* SevofluraneDaemon */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = SevofluraneDaemon; sourceTree = BUILT_PRODUCTS_DIR; };
 		0BAA000000000000000E0001 /* SevofluraneThumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SevofluraneThumbnail.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0BAA000000000000000F0002 /* sevo */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = sevo; sourceTree = BUILT_PRODUCTS_DIR; };
+		0BAA00000000000000110001 /* SevofluraneDockTile.docktileplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SevofluraneDockTile.docktileplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -101,6 +119,13 @@
 				Info.plist,
 			);
 			target = 0BAA000000000000000E0002 /* SevofluraneThumbnail */;
+		};
+		0BAA0000000000000011000F /* Exceptions for "SevofluraneDockTile" folder in "SevofluraneDockTile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0BAA00000000000000110002 /* SevofluraneDockTile */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -164,6 +189,14 @@
 			path = Supervision;
 			sourceTree = "<group>";
 		};
+		0BAA00000000000000110003 /* SevofluraneDockTile */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0BAA0000000000000011000F /* Exceptions for "SevofluraneDockTile" folder in "SevofluraneDockTile" target */,
+			);
+			path = SevofluraneDockTile;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -199,6 +232,13 @@
 				0BAA000000000000000F0003 /* ArgumentParser in Frameworks */,
 			);
 		};
+		0BAA00000000000000110006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -211,6 +251,7 @@
 				0BAA000000000000000D0005 /* SevofluraneDaemon */,
 				0BAA000000000000000F0009 /* Sevo */,
 				0BAA000000000000000E0003 /* SevofluraneThumbnail */,
+				0BAA00000000000000110003 /* SevofluraneDockTile */,
 				0B33EFEA30290E6100182A68 /* SevofluraneTests */,
 				0BAA000000000000000E0004 /* Shared */,
 				0B33EFDB30290E5E00182A68 /* Products */,
@@ -224,6 +265,7 @@
 				0BAA000000000000000D0001 /* SevofluraneDaemon */,
 				0BAA000000000000000F0002 /* sevo */,
 				0BAA000000000000000E0001 /* SevofluraneThumbnail.appex */,
+				0BAA00000000000000110001 /* SevofluraneDockTile.docktileplugin */,
 				0B33EFE730290E6100182A68 /* SevofluraneTests.xctest */,
 			);
 			name = Products;
@@ -244,6 +286,7 @@
 				0BAA000000000000000D0010 /* Name the helper */,
 				0BAA000000000000000F0007 /* Embed sevo */,
 				0BAA000000000000000E000B /* Embed Foundation Extensions */,
+				0BAA0000000000000011000B /* Embed Dock tile plug-in */,
 			);
 			buildRules = (
 			);
@@ -251,6 +294,7 @@
 				0BAA000000000000000D000E /* PBXTargetDependency */,
 				0BAA000000000000000F000B /* PBXTargetDependency */,
 				0BAA000000000000000E000D /* PBXTargetDependency */,
+				0BAA0000000000000011000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0B33EFDC30290E5E00182A68 /* Sevoflurane */,
@@ -356,6 +400,24 @@
 			productReference = 0BAA000000000000000F0002 /* sevo */;
 			productType = "com.apple.product-type.tool";
 		};
+		0BAA00000000000000110002 /* SevofluraneDockTile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0BAA00000000000000110008 /* Build configuration list for PBXNativeTarget "SevofluraneDockTile" */;
+			buildPhases = (
+				0BAA00000000000000110005 /* Sources */,
+				0BAA00000000000000110006 /* Frameworks */,
+				0BAA00000000000000110007 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				0BAA00000000000000110003 /* SevofluraneDockTile */,
+			);
+			name = SevofluraneDockTile;
+			productName = SevofluraneDockTile;
+			productReference = 0BAA00000000000000110001 /* SevofluraneDockTile.docktileplugin */;
+			productType = "com.apple.product-type.bundle";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -400,6 +462,7 @@
 				0B33EFD930290E5E00182A68 /* Sevoflurane */,
 				0BAA000000000000000D0007 /* SevofluraneDaemon */,
 				0BAA000000000000000E0002 /* SevofluraneThumbnail */,
+				0BAA00000000000000110002 /* SevofluraneDockTile */,
 				0BAA000000000000000F0006 /* sevo */,
 				0B33EFE630290E6100182A68 /* SevofluraneTests */,
 			);
@@ -421,6 +484,13 @@
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
+		};
+		0BAA00000000000000110007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
@@ -483,6 +553,13 @@
 			files = (
 			);
 		};
+		0BAA00000000000000110005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -505,6 +582,11 @@
 			isa = PBXTargetDependency;
 			target = 0BAA000000000000000F0006 /* sevo */;
 			targetProxy = 0BAA000000000000000F0005 /* PBXContainerItemProxy */;
+		};
+		0BAA0000000000000011000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0BAA00000000000000110002 /* SevofluraneDockTile */;
+			targetProxy = 0BAA0000000000000011000E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -902,6 +984,60 @@
 			};
 			name = Release;
 		};
+		0BAA00000000000000110009 /* Debug configuration for PBXNativeTarget "SevofluraneDockTile" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "arm64 x86_64";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 52K336H235;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SevofluraneDockTile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sevoflurane Dock Tile";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.6.1;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.debug.docktile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				WRAPPER_EXTENSION = docktileplugin;
+			};
+			name = Debug;
+		};
+		0BAA0000000000000011000A /* Release configuration for PBXNativeTarget "SevofluraneDockTile" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "arm64 x86_64";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 52K336H235;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SevofluraneDockTile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sevoflurane Dock Tile";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.6.1;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = glass.kagerou.sevoflurane.docktile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				WRAPPER_EXTENSION = docktileplugin;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -951,6 +1087,15 @@
 				0BAA000000000000000F000F /* Debug configuration for PBXNativeTarget "sevo" */,
 				0BAA000000000000000F0010 /* Release configuration for PBXNativeTarget "sevo" */,
 			);
+			defaultConfigurationName = Release;
+		};
+		0BAA00000000000000110008 /* Build configuration list for PBXNativeTarget "SevofluraneDockTile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0BAA00000000000000110009 /* Debug configuration for PBXNativeTarget "SevofluraneDockTile" */,
+				0BAA0000000000000011000A /* Release configuration for PBXNativeTarget "SevofluraneDockTile" */,
+			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

@@ -198,11 +198,23 @@ final class GraphicsStore {
         if versions != d3dMetalVersions { d3dMetalVersions = versions }
         let active = environment.activeToolkit()?.version
         if active != activeD3DMetal { activeD3DMetal = active }
+        publishTileRenderers()
+    }
+
+    /// Tells every game's Dock tile which renderers its Play with menu may
+    /// offer (``DockTileState``): the plug-in behind a kept tile reads the
+    /// file, having no store of its own.
+    private func publishTileRenderers() {
+        let offered = menuRenderers.map { (id: $0.rawValue, label: $0.label) }
+        Task.detached(name: "Publish the renderers to the Dock tiles") {
+            DockTileState.writeRenderers(offered)
+        }
     }
 
     func update(_ selection: BottleGraphics.Selection) {
         guard selection != self.selection else { return }
         self.selection = selection
+        defer { publishTileRenderers() }
         do {
             try environment.apply(selection)
             EventLog.shared.log(
@@ -218,6 +230,7 @@ final class GraphicsStore {
     /// `nil` means the engine's own — CrossOver's copy, with no shadow tree.
     func chooseD3DMetal(version: String?) {
         activeD3DMetal = version
+        defer { publishTileRenderers() }
         do {
             try environment.chooseToolkit(version: version)
         } catch {
