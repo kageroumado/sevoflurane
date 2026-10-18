@@ -1,10 +1,10 @@
 import AppKit
 
 extension AppDelegate {
-    /// `steam://` links from browsers and other apps and `sevoflurane://play`
-    /// from a game's Dock tile (CFBundleURLTypes), and
-    /// Windows executables opened with Sevoflurane from Finder
-    /// (CFBundleDocumentTypes).
+    /// `steam://` links from browsers and other apps, `sevoflurane://play`
+    /// and `sevoflurane://settings` from a game's Dock tile and its menu
+    /// (CFBundleURLTypes), and Windows executables opened with Sevoflurane
+    /// from Finder (CFBundleDocumentTypes).
     ///
     /// A link brings Steam's window up first, so the routed page has
     /// somewhere to land; an executable opens the adoption panel instead,
@@ -33,30 +33,69 @@ extension AppDelegate {
     /// How long a Dock tile's launch waits for a client that is still coming
     /// up: a cold boot, with Steam's stores, takes a minute or two.
     private static let dockLaunchBudget = Duration.seconds(300)
+    /// How long it waits for the helper, which a tile that started this app
+    /// finds still registering: seconds, usually.
+    private static let dockHelperBudget = Duration.seconds(60)
 
     /// A game's Dock tile, opened: its loader handed the open to
-    /// `sevoflurane://play/<id>`. The game starts the way its menu bar row
-    /// starts it; a Steam game waits for a client that can take the launch,
-    /// which is the whole of the wait when the tile also started this app.
+    /// `sevoflurane://play/<id>`. A game already running comes forward, as a
+    /// Mac app's tile would bring it. Otherwise the game starts the way its
+    /// menu bar row starts it; a Steam game waits for a client that can take
+    /// the launch, a Quick Launch program for the helper alone, which is the
+    /// whole of the wait when the tile also started this app.
     private func playFromDock(_ url: URL) {
-        guard url.host() == "play", let id = Int(url.lastPathComponent) else { return }
+        guard let id = Int(url.lastPathComponent) else { return }
+        if url.host() == "settings" {
+            let name = host.libraryGames.first { $0.id == id }?.name ?? GameConfig.game(id).name ?? String(id)
+            EventLog.shared.log(.window, "Dock tile: settings of \(name)")
+            GameSettingsItem.open(id: id, name: name)
+            return
+        }
+        guard url.host() == "play" else { return }
+        // The tile's menu names a renderer for this one launch.
+        let renderer = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "renderer" }?.value.flatMap(Renderer.init(rawValue:))
         if setupWindow.show() {
             EventLog.shared.log(.window, "Dock tile for \(id) while setup is unfinished — showing setup")
             return
         }
         if AdoptedPrograms.isAdopted(id) {
             guard let entry = AdoptedPrograms.entry(id) else { return }
-            EventLog.shared.log(.client, "Dock tile: starting \(entry.name)")
-            (menuBarPopover?.quickLaunch ?? dockQuickLaunch).launch(entry)
+            Task(name: "Launch \(entry.name) from the Dock") {
+                if await RunningGame.activate(
+                    appID: id, exes: [entry.program.url.lastPathComponent],
+                    folder: entry.program.url.deletingLastPathComponent().lastPathComponent,
+                ) {
+                    EventLog.shared.log(.client, "Dock tile: \(entry.name) is running — brought forward")
+                    return
+                }
+                EventLog.shared.log(.client, "Dock tile: starting \(entry.name)")
+                let deadline = ContinuousClock.now + Self.dockHelperBudget
+                while await !DaemonService.isAnswering() {
+                    guard ContinuousClock.now < deadline else {
+                        EventLog.shared.log(.client, "Dock tile: \(entry.name) not started, the helper never answered")
+                        return
+                    }
+                    try? await Task.sleep(for: .seconds(1))
+                }
+                (menuBarPopover?.quickLaunch ?? dockQuickLaunch).launch(entry, renderer: renderer, origin: .dock)
+            }
             return
         }
         let name = host.libraryGames.first { $0.id == id }?.name
             ?? GameConfig.game(id).name ?? String(id)
-        EventLog.shared.log(.client, "Dock tile: starting \(name)")
         // Steam for Mac starts a macOS build, a partner app a companion's
         // downloads; no wait for the bottle's client.
         if MacBuildHandoff.take(appID: id, name: name) || CompanionHandoff.take(appID: id) { return }
         Task(name: "Launch \(name) from the Dock") {
+            if await RunningGame.activate(
+                appID: id, exes: GameConfig.game(id).exes ?? [],
+                folder: SharedGames.installDirectory(appID: id)?.lastPathComponent,
+            ) {
+                EventLog.shared.log(.client, "Dock tile: \(name) is running — brought forward")
+                return
+            }
+            EventLog.shared.log(.client, "Dock tile: starting \(name)")
             let deadline = ContinuousClock.now + Self.dockLaunchBudget
             while supervisor.health != .healthy {
                 guard ContinuousClock.now < deadline else {
@@ -66,7 +105,7 @@ extension AppDelegate {
                 try? await Task.sleep(for: .seconds(1))
             }
             ActivationPolicy.claimRightForALaunch()
-            await supervisor.launch(appID: id, name: name)
+            await supervisor.launch(appID: id, name: name, renderer: renderer)
         }
     }
 

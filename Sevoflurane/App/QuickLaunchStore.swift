@@ -88,8 +88,16 @@ final class QuickLaunchStore {
     /// made five games, 2026-09-26.
     private(set) var launching: Set<Int> = []
 
+    /// Where a launch was asked for, which decides where a refusal is heard:
+    /// the popover row carries its own status line, a Dock tile has nothing
+    /// but the notification.
+    enum Origin {
+        case popover
+        case dock
+    }
+
     /// Starts a program through the daemon, which is the bottle's one parent.
-    func launch(_ entry: AdoptedPrograms.Entry, renderer: Renderer? = nil) {
+    func launch(_ entry: AdoptedPrograms.Entry, renderer: Renderer? = nil, origin: Origin = .popover) {
         guard simulated == nil, launching.insert(entry.id).inserted else { return }
         ActivationPolicy.claimRightForALaunch()
         let ticket = launchHooks?.pressed(entry.id) ?? nil
@@ -105,6 +113,11 @@ final class QuickLaunchStore {
                     .client,
                     "could not start \(entry.name): the background helper did not answer",
                 )
+                if origin == .dock, let delegate = NSApp.delegate as? AppDelegate {
+                    delegate.notifications.postLaunchDeclined(
+                        name: entry.name, reason: String(localized: "The background helper did not answer."),
+                    )
+                }
                 launching.remove(entry.id)
                 launchHooks?.ended(entry.id, ticket)
                 return
@@ -118,6 +131,9 @@ final class QuickLaunchStore {
                 // a failure, said here with the helper's reason.
                 if reply.status != 409 {
                     EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
+                }
+                if origin == .dock, let delegate = NSApp.delegate as? AppDelegate {
+                    delegate.notifications.postLaunchDeclined(name: entry.name, reason: Self.reason(reply.data))
                 }
                 launchHooks?.ended(entry.id, ticket)
                 return
@@ -190,6 +206,29 @@ final class QuickLaunchStore {
 
     func showInFinder(_ entry: AdoptedPrograms.Entry) {
         NSWorkspace.shared.activateFileViewerSelecting([entry.program.url])
+    }
+
+    /// Gives a program the name its row, its Steam shortcut and its Dock tile
+    /// show. The launcher bundle is rebuilt under the new title, and a tile
+    /// kept for the old one follows it.
+    func rename(_ entry: AdoptedPrograms.Entry, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard simulated == nil, !name.isEmpty, name != entry.name else { return }
+        // Read before the record changes: the helper's next pass rebuilds
+        // the bundle under the new name on its own.
+        let old = GameLaunchers.dockableBundle(appID: entry.id)
+        var values = GameConfig.game(entry.id)
+        values.name = name
+        GameConfig.setGame(entry.id, values)
+        EventLog.shared.log(.setup, "renamed \(entry.name) to \(name)")
+        SteamLibraryShortcuts.shared.sync()
+        refresh()
+        Task.detached(name: "Rebuild \(name)'s bundle") {
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            if let old, let new = GameLaunchers.dockableBundle(appID: entry.id), old != new {
+                DockTiles.replace(old, with: new)
+            }
+        }
     }
 
     /// Asks for an executable and opens the adoption panel on it.

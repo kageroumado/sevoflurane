@@ -482,8 +482,45 @@ private struct ProgramRow: View {
     let renderers: [Renderer]
     @State private var isHovered = false
     @State private var dockBundle: URL?
+    /// The name as it is being typed; `nil` outside a rename.
+    @State private var draftName: String?
+    @FocusState private var isEditingName: Bool
 
     var body: some View {
+        if draftName != nil {
+            renameRow
+        } else {
+            playRow
+        }
+    }
+
+    /// The row with its name as a field: Return keeps the name, Escape or a
+    /// click elsewhere drops it.
+    private var renameRow: some View {
+        HStack(spacing: Theme.Space.md) {
+            artwork
+            TextField("Name", text: Binding(
+                get: { draftName ?? entry.name },
+                set: { draftName = $0 },
+            ))
+            .textFieldStyle(.plain)
+            .font(.system(size: 12))
+            .focused($isEditingName)
+            .onSubmit {
+                if let draftName { quickLaunch.rename(entry, to: draftName) }
+                self.draftName = nil
+            }
+            .onExitCommand { draftName = nil }
+            .onChange(of: isEditingName) { _, focused in
+                if !focused { draftName = nil }
+            }
+            Spacer(minLength: Theme.Space.sm)
+        }
+        .padding(.vertical, Theme.Space.xs)
+        .onAppear { isEditingName = true }
+    }
+
+    private var playRow: some View {
         Button {
             quickLaunch.launch(entry)
         } label: {
@@ -526,7 +563,7 @@ private struct ProgramRow: View {
             withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
         .modifier(DockDrag(bundle: dockBundle))
-        .task(id: entry.id) { dockBundle = await Self.readDockBundle(entry.id) }
+        .task(id: "\(entry.id) \(entry.name)") { dockBundle = await Self.readDockBundle(entry.id) }
         .contextMenu {
             Menu("Run with…") {
                 ForEach(renderers, id: \.self) { renderer in
@@ -541,6 +578,7 @@ private struct ProgramRow: View {
                     set: { quickLaunch.setInSteamLibrary($0, for: entry) },
                 ))
             }
+            Button("Rename…") { draftName = entry.name }
             Button("Show in Finder") { quickLaunch.showInFinder(entry) }
             Button("Remove") { quickLaunch.remove(entry) }
             Divider()
@@ -632,7 +670,7 @@ private struct AddProgramRow: View {
 
 /// The context-menu way into a game's own page in Settings › Games, where
 /// what the menu above it sets is one of many things.
-private struct GameSettingsItem: View {
+struct GameSettingsItem: View {
     let id: Int
     let name: String
 

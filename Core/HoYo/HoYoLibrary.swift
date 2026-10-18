@@ -43,6 +43,14 @@ nonisolated enum HoYoLibrary {
         guard installation.game.launches else { return nil }
         let exe = installation.folder.appending(path: installation.game.executable).standardizedFileURL
         if let existing = AdoptedPrograms.all().first(where: { $0.program.url.standardizedFileURL == exe }) {
+            // Adopted by hand before this library knew the game, it carries
+            // the executable's stem for a name; the game's own is better on
+            // a Dock tile.
+            if existing.name == exe.deletingPathExtension().lastPathComponent {
+                var values = GameConfig.game(existing.id)
+                values.name = installation.game.displayName
+                GameConfig.setGame(existing.id, values)
+            }
             return existing.id
         }
         return AdoptedPrograms.adopt(

@@ -205,6 +205,7 @@ private struct GameForm: View {
                     FPSUnlockerSection()
                 }
             }
+            DockSection(gameID: gameID)
         }
         .formStyle(.grouped)
         .highlightable(.gamesSettings, highlighted: highlighted)
@@ -286,6 +287,54 @@ private struct SteamLibrarySection: View {
             overlay, and keeps the settings, Dock tile and run records it has here.
             """)
         }
+    }
+}
+
+// MARK: - The Dock
+
+/// The game's own tile in the Dock (``DockTiles``), kept or not. The bundle
+/// the tile is made of exists once the game has been launched, so until
+/// then the section says that is what it is waiting for.
+private struct DockSection: View {
+    let gameID: Int
+    @State private var bundle: URL?
+    /// The switch as last set here; the Dock's own record until then.
+    @State private var kept: Bool?
+
+    var body: some View {
+        Section {
+            Toggle("Keep in Dock", isOn: Binding(
+                get: { kept ?? false },
+                set: { isOn in
+                    guard let bundle else { return }
+                    kept = isOn
+                    Task.detached(name: isOn ? "Keep \(gameID) in the Dock" : "Take \(gameID) out of the Dock") {
+                        if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
+                    }
+                },
+            ))
+            .disabled(bundle == nil)
+        } footer: {
+            if bundle == nil {
+                Text("The game gets an icon of its own in the Dock at its first launch; after that it can stay there.")
+            } else {
+                Text("""
+                Its own icon in the Dock, where a click starts it. While the game runs, right-clicking the icon \
+                offers the same under Options.
+                """)
+            }
+        }
+        .task(id: gameID) {
+            let facts = await Self.read(gameID)
+            bundle = facts.bundle
+            kept = facts.kept
+        }
+    }
+
+    @concurrent
+    private nonisolated static func read(_ gameID: Int) async -> (bundle: URL?, kept: Bool) {
+        let bundle = GameLaunchers.dockableBundle(appID: gameID)
+        return (bundle, bundle.map(DockTiles.isKept) ?? false)
     }
 }
 

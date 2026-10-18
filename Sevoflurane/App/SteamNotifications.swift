@@ -291,6 +291,28 @@ final class SteamNotifications {
         }
     }
 
+    /// A Dock tile's launch the helper declined — the program is still
+    /// starting, or its executable is gone — said where a Dock press can hear
+    /// it. A row in the popover has its own status line for the same news.
+    func postLaunchDeclined(name: String, reason: String) {
+        guard let center, [.authorized, .provisional].contains(authorization) else {
+            EventLog.shared.log(.app, "Dock tile: no notification for \(name) (notifications \(authorization.name))")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = name
+        content.body = reason
+        Task(name: "Post the declined launch of \(name)") {
+            do {
+                try await center.add(
+                    UNNotificationRequest(identifier: "launch-declined-\(name)", content: content, trigger: nil),
+                )
+            } catch {
+                EventLog.shared.log(.app, "could not post the declined launch of \(name): \(error)")
+            }
+        }
+    }
+
     /// Undoes what the fix list set on a game, from the notification's action.
     private func undoFixes(appID: Int) {
         Task.detached(name: "Undo the fix list for \(appID)") {
