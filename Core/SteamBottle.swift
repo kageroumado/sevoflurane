@@ -72,6 +72,32 @@ nonisolated enum SteamBottle {
         steamRoot.appendingPathComponent("appcache/librarycache")
     }
 
+    /// The signed-in account's custom library art, where
+    /// `SetCustomArtworkForApp` writes and the client's `/customimages/`
+    /// reads: `userdata/<account id>/config/grid`. `nil` before anyone has
+    /// signed in.
+    static var customArtwork: URL? {
+        guard let text = try? String(
+            contentsOf: steamRoot.appendingPathComponent("config/loginusers.vdf"), encoding: .utf8,
+        ), let account = signedInAccountID(loginUsers: text) else { return nil }
+        return steamRoot.appendingPathComponent("userdata/\(account)/config/grid")
+    }
+
+    /// The 32-bit account id of the account `loginusers.vdf` names as the
+    /// signed-in one: the entry marked `MostRecent`, or the newest
+    /// `timestamp` in a file whose entries carry no mark. The file keys each
+    /// account by its 64-bit SteamID, whose low word is the account id that
+    /// names its `userdata` folder.
+    static func signedInAccountID(loginUsers text: String) -> UInt32? {
+        let users = TextKeyValues.parse(text)?["users"]?.entries ?? []
+        let marked = users.first { $0.value["MostRecent"]?.string == "1" }
+        let chosen = marked ?? users.max {
+            Int($0.value["timestamp"]?.string ?? "") ?? 0 < Int($1.value["timestamp"]?.string ?? "") ?? 0
+        }
+        guard let chosen, let steamID = UInt64(chosen.key) else { return nil }
+        return UInt32(truncatingIfNeeded: steamID)
+    }
+
     /// Crash and assert dumps the client drops when steamwebhelper dies;
     /// their arrival rate is the crash-loop signature.
     static var dumps: URL {

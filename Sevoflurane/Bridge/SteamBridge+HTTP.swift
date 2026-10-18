@@ -238,6 +238,21 @@ extension SteamBridge {
 
     private static let loopbackMissCap = 60
 
+    // MARK: - Custom art
+
+    /// Where Steam's UI asks for the art a person set on a game: a path
+    /// relative to its own origin, `/customimages/<appid><suffix>.<ext>`,
+    /// plus `<appid>.json` for the logo's placement.
+    nonisolated static let customImagesPrefix = "/customimages/"
+
+    /// `GET /customimages/<file>`: what CEF serves from the signed-in
+    /// account's grid folder. Unanswered, the library's image falls through
+    /// to Steam's stock art and a custom logo or hero never shows.
+    nonisolated static func handleCustomImageRequest(_ request: HTTPRequest) -> HTTPResponse {
+        guard let grid = SteamBottle.customArtwork else { return .error(404, "Not Found") }
+        return serveFile(under: grid, path: String(request.path.dropFirst(customImagesPrefix.count)))
+    }
+
     // MARK: - Art
 
     nonisolated static func handleArtRequest(_ request: HTTPRequest) -> HTTPResponse {

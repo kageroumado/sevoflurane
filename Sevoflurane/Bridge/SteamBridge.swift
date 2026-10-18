@@ -174,6 +174,9 @@ actor SteamBridge {
                 if request.path == "/__web" {
                     return await self?.handleWebRequest(request) ?? .error(500, "bridge gone")
                 }
+                if request.method == "GET", request.path.hasPrefix(Self.customImagesPrefix) {
+                    return Self.handleCustomImageRequest(request)
+                }
                 if request.path.hasPrefix(LoopbackAssets.pathPrefix + "/") {
                     return await self?.handleLoopbackRequest(request) ?? .error(500, "bridge gone")
                 }
@@ -190,7 +193,14 @@ actor SteamBridge {
             }
             art.start()
             artServer = art
-            let page = try WebSocketServer(port: BridgePorts.pageWS, label: "page", gate: .pageWS)
+            // Sized for Set Custom Artwork, whose one call carries the whole
+            // image as base64; a hero image runs to several megabytes.
+            let page = try WebSocketServer(
+                port: BridgePorts.pageWS,
+                label: "page",
+                gate: .pageWS,
+                maxMessageSize: 64 * 1024 * 1024,
+            )
             page.start { [weak self] connection in
                 Task { await self?.attachPage(connection, queue: page.queue) }
             }
