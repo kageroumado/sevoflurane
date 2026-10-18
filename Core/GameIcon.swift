@@ -26,24 +26,85 @@ nonisolated enum GameIcon {
             "DockIcons/\(fileSafe(title)).app/Contents/Resources/icon.icns",
         )
         if manager.fileExists(atPath: cached.path) { return cached }
-        guard let raster = steamIcon(appID: appID) ?? packageIcon(appID: appID) else { return nil }
-        return icns(from: raster, named: "\(appID)")
+        guard let artwork = bestArtwork(appID: appID) else { return nil }
+        return icns(from: artwork, named: "\(appID)")
+    }
+
+    /// The sharpest square picture of a Steam game before it has run: the
+    /// executable's own icon when it carries a Retina-sized one, else the
+    /// middle square of Steam's library capsule (600 px), else the
+    /// executable's smaller icon, else Steam's client icon, which is 32 px
+    /// for most games and would be a blur on any tile.
+    private static func bestArtwork(appID: Int) -> CGImage? {
+        let exeIcon = executableIcon(appID: appID)
+        if let exeIcon, exeIcon.width >= retinaTile { return exeIcon }
+        if let capsule = capsuleSquare(appID: appID) { return capsule }
+        if let exeIcon, exeIcon.width >= 64 { return exeIcon }
+        if let raster = steamIcon(appID: appID) ?? packageIcon(appID: appID) {
+            return image(at: raster)
+        }
+        return exeIcon
+    }
+
+    /// A tile is 128 points; this is its Retina size.
+    private static let retinaTile = 256
+
+    /// The icon in the game's own executable, found by the names the game
+    /// has on record inside its install folder.
+    private static func executableIcon(appID: Int) -> CGImage? {
+        guard let exes = GameConfig.game(appID).exes, !exes.isEmpty,
+              let directory = SharedGames.installDirectory(appID: appID) else { return nil }
+        let wanted = Set(exes.map { $0.lowercased() })
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory, includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+        ) else { return nil }
+        var found: [String: URL] = [:]
+        for case let file as URL in enumerator {
+            if enumerator.level > 3 { enumerator.skipDescendants() }
+            let name = file.lastPathComponent.lowercased()
+            if wanted.contains(name), found[name] == nil { found[name] = file }
+            if found.count == wanted.count { break }
+        }
+        for exe in exes {
+            if let url = found[exe.lowercased()], let icon = PEResources.icon(at: url) { return icon }
+        }
+        return nil
+    }
+
+    /// The middle square of the library capsule Steam keeps for an
+    /// installed game (`library_600x900.jpg`): box art, 600 px on a side.
+    private static func capsuleSquare(appID: Int) -> CGImage? {
+        let capsule = SteamBottle.libraryCache.appendingPathComponent("\(appID)/library_600x900.jpg")
+        guard let image = image(at: capsule) else { return nil }
+        let side = min(image.width, image.height)
+        return image.cropping(to: CGRect(
+            x: (image.width - side) / 2, y: (image.height - side) / 2, width: side, height: side,
+        ))
+    }
+
+    private static func image(at url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
     /// An adopted program's icon: the artwork in its own PE resources, drawn
     /// onto the macOS icon platter (``IconShaping``) so the Dock tile and the
     /// Quick Look thumbnail of the same exe show one picture.
     ///
-    /// The result is cached under the program's id and rebuilt whenever the
-    /// executable is newer than the icon, which is how a program that updates
-    /// itself in place gets its new artwork.
+    /// The result is cached under the program's id and the renderer's
+    /// version, and rebuilt whenever the executable is newer than the icon,
+    /// which is how a program that updates itself in place gets its new
+    /// artwork.
     static func shapedICNS(forProgramAt exe: URL, named name: String) -> URL? {
         let manager = FileManager.default
         let cache = iconCache
-        let icns = cache.appendingPathComponent("\(name)-program.icns")
+        let stem = "\(name)-program-\(IconShaping.version)"
+        let icns = cache.appendingPathComponent("\(stem).icns")
         if isFresh(icns, against: exe) { return icns }
+        try? manager.removeItem(at: cache.appendingPathComponent("\(name)-program.icns"))
         let artwork = PEResources.icon(at: exe)
-        let iconset = cache.appendingPathComponent("\(name)-program.iconset")
+        let iconset = cache.appendingPathComponent("\(stem).iconset")
         try? manager.removeItem(at: iconset)
         guard (try? manager.createDirectory(at: iconset, withIntermediateDirectories: true)) != nil
         else { return nil }
@@ -120,18 +181,21 @@ nonisolated enum GameIcon {
         return (width, height)
     }
 
-    /// Turns a raster into an `.icns`, cached so that rebuilding a bundle does
-    /// not rebuild the icon. Every representation is drawn into an RGBA
+    /// Named in every cached render of a Steam game's icon: a change to
+    /// where the picture comes from re-renders each one once.
+    private static let version = 2
+
+    /// Turns a picture into an `.icns`, cached so that rebuilding a bundle
+    /// does not rebuild the icon. Every representation is drawn into an RGBA
     /// bitmap: LaunchServices applies the macOS icon shape (continuous
     /// corners, platter, glass edge) only to an icon with an alpha channel,
     /// and shows an opaque one as the square it is.
-    private static func icns(from raster: URL, named name: String) -> URL? {
+    private static func icns(from image: CGImage, named name: String) -> URL? {
         let manager = FileManager.default
         let cache = iconCache
-        let icns = cache.appendingPathComponent("\(name)-rgba.icns")
+        let icns = cache.appendingPathComponent("\(name)-rgba-\(version).icns")
         if manager.fileExists(atPath: icns.path) { return icns }
-        guard let source = CGImageSourceCreateWithURL(raster as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        try? manager.removeItem(at: cache.appendingPathComponent("\(name)-rgba.icns"))
         let iconset = cache.appendingPathComponent("\(name).iconset")
         try? manager.removeItem(at: iconset)
         guard (try? manager.createDirectory(at: iconset, withIntermediateDirectories: true)) != nil

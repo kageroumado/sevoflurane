@@ -8,14 +8,19 @@ import ImageIO
 ///
 /// A Windows icon is a bare square raster, and a bare square beside the
 /// rounded tiles of every other app reads as a broken image rather than a
-/// different platform. So the square is inset onto a platter cut to the icon
-/// grid's corner — 185.4 units of radius on an 824-unit side — and the result
-/// carries an alpha channel, which is what makes LaunchServices treat it as
-/// an icon it may shape rather than a picture it must show whole.
+/// different platform. The square is cut to the icon grid's corner — 185.4
+/// units of radius on an 824-unit side — and the result carries an alpha
+/// channel, which is what makes LaunchServices treat it as an icon it may
+/// shape rather than a picture it must show whole. Artwork that fills its
+/// square (box art, a portrait) fills the shape; a glyph with clear space
+/// around it is inset onto a gray platter, the way a Mac app's glyph sits.
 nonisolated enum IconShaping {
+    /// Named in every cached render, so a change to the drawing re-renders
+    /// each icon once.
+    static let version = 2
     /// The corner radius as a fraction of the side, from Apple's icon grid.
     static let cornerRatio = 185.4 / 824.0
-    /// How much of the platter the program's own artwork covers.
+    /// How much of the platter a glyph covers.
     static let artworkRatio = 0.8
 
     /// The platter's gray. One look, light, because a rendered icon is one
@@ -103,9 +108,37 @@ nonisolated enum IconShaping {
         context.fill(rect)
         if let artwork {
             context.interpolationQuality = .high
-            context.draw(artwork, in: artworkRect(in: rect))
+            context.draw(artwork, in: fillsItsSquare(artwork) ? rect : artworkRect(in: rect))
         }
         context.restoreGState()
+    }
+
+    /// Whether the artwork is a picture that fills its square rather than a
+    /// glyph with clear space around it. Read off the middle three fifths of
+    /// each edge, one pixel in: a glyph leaves those pixels clear, a picture
+    /// paints them. Genshin's Paimon square is the case that named the rule.
+    static func fillsItsSquare(_ artwork: CGImage) -> Bool {
+        let side = 32
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                  space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+              ) else { return false }
+        context.draw(artwork, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let data = context.data else { return false }
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
+        let row = context.bytesPerRow
+        func isOpaque(_ x: Int, _ y: Int) -> Bool { pixels[y * row + x * 4 + 3] >= 250 }
+        let span = (side / 5) ..< (side - side / 5)
+        var opaque = 0
+        var sampled = 0
+        for along in span {
+            for (x, y) in [(along, 1), (along, side - 2), (1, along), (side - 2, along)] {
+                sampled += 1
+                if isOpaque(x, y) { opaque += 1 }
+            }
+        }
+        return opaque * 20 >= sampled * 19
     }
 
     /// Where the program's artwork sits: centered, square, and short of the
