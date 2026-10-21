@@ -32,8 +32,8 @@ actor DiscordPresence {
     static let shared = DiscordPresence()
 
     /// Sevoflurane's Discord application, which a game Discord's database
-    /// does not name is published under. Nil leaves such a game unpublished.
-    static let fallbackApplicationID: String? = nil
+    /// does not name is published under.
+    static let fallbackApplicationID = "1562606589373055026"
 
     /// One game, as Discord will show it.
     struct Activity: Sendable, Equatable {
@@ -56,15 +56,10 @@ actor DiscordPresence {
             self.started = started
         }
 
-        /// A game Discord's database does not name, under `applicationID`;
-        /// nil when there is no application to publish it under.
-        static func fallback(
-            named name: String,
-            applicationID: String? = DiscordPresence.fallbackApplicationID,
-            started: Date = .now,
-        ) -> Activity? {
-            guard let applicationID else { return nil }
-            return Activity(applicationID: applicationID, name: name, details: name, started: started)
+        /// A game Discord's database does not name, under Sevoflurane's
+        /// application.
+        static func fallback(named name: String, started: Date = .now) -> Activity {
+            Activity(applicationID: fallbackApplicationID, name: name, details: name, started: started)
         }
     }
 

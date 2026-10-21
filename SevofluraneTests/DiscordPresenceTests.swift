@@ -71,15 +71,13 @@ struct DiscordPresenceTests {
         defer { discord.stop() }
 
         let started = Date(timeIntervalSince1970: 1_700_000_000)
-        let activity = try #require(DiscordPresence.Activity.fallback(
-            named: "Yandere Simulator", applicationID: "1430000000000000000", started: started,
-        ))
+        let activity = DiscordPresence.Activity.fallback(named: "Yandere Simulator", started: started)
         let presence = DiscordPresence(directory: discord.directory)
         try await presence.show(activity, forGame: 2_000_000_001, ticket: 0)
         try await Self.wait(for: 2, on: discord)
 
         #expect(String(decoding: discord.frames[0].payload, as: UTF8.self)
-            == #"{"client_id":"1430000000000000000","v":1}"#)
+            == #"{"client_id":"1562606589373055026","v":1}"#)
         let body = try Self.object(discord.frames[1].payload)
         let arguments = try #require(body["args"] as? [String: Any])
         let published = try #require(arguments["activity"] as? [String: Any])
@@ -97,10 +95,10 @@ struct DiscordPresenceTests {
     }
 
     @Test
-    func `the fallback activity exists only with a fallback application`() {
-        #expect(DiscordPresence.Activity.fallback(named: "Yandere Simulator", applicationID: nil) == nil)
-        #expect(DiscordPresence.Activity.fallback(named: "Yandere Simulator")?.applicationID
-            == DiscordPresence.fallbackApplicationID)
+    func `the fallback activity is Sevoflurane's, with the game's name as its details`() {
+        let activity = DiscordPresence.Activity.fallback(named: "Yandere Simulator")
+        #expect(activity.applicationID == DiscordPresence.fallbackApplicationID)
+        #expect(activity.details == "Yandere Simulator")
     }
 
     @Test

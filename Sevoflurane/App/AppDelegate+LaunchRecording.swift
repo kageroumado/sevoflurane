@@ -218,8 +218,7 @@ extension AppDelegate {
     /// Tells Discord which game is on screen, under that game's own Discord
     /// application: a game Discord's database names shows the way its native
     /// build would, and one it does not name shows under Sevoflurane's
-    /// application with its own name as the details, or nothing while
-    /// ``DiscordPresence/fallbackApplicationID`` is nil. The database is asked
+    /// application with its own name as the details. The database is asked
     /// by Steam app id, then by an adopted program's executable, which is what
     /// Discord's own scanner goes by, then by name.
     ///
@@ -245,12 +244,9 @@ extension AppDelegate {
             let activity: DiscordPresence.Activity
             if let application = resolved {
                 activity = .init(applicationID: application.id, name: application.name)
-            } else if let fallback = DiscordPresence.Activity.fallback(named: name) {
-                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so it is published under Sevoflurane's")
-                activity = fallback
             } else {
-                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so nothing is published")
-                return
+                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so it is published under Sevoflurane's")
+                activity = .fallback(named: name)
             }
             try? await DiscordPresence.shared.show(activity, forGame: appID, ticket: ticket)
         }
