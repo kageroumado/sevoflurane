@@ -170,6 +170,30 @@ struct DiscordPresenceTests {
         #expect(discord.stop())
     }
 
+    @Test
+    func `a Discord library up to three folders below the game is found`() throws {
+        let game = try Self.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: game) }
+        try Data().write(to: game.appendingPathComponent("YandereSimulator.exe"))
+        #expect(!DiscordPresence.shipsDiscordLibrary(in: game))
+
+        // Where a Unity game keeps its native plugins.
+        let plugins = game.appendingPathComponent("YandereSimulator_Data/Plugins/x86_64")
+        try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+        try Data().write(to: plugins.appendingPathComponent("discord-rpc.dll"))
+        #expect(DiscordPresence.shipsDiscordLibrary(in: game))
+    }
+
+    @Test
+    func `a Discord library four folders down is out of reach`() throws {
+        let game = try Self.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: game) }
+        let deep = game.appendingPathComponent("a/b/c/d")
+        try FileManager.default.createDirectory(at: deep, withIntermediateDirectories: true)
+        try Data().write(to: deep.appendingPathComponent("discord_game_sdk.dll"))
+        #expect(!DiscordPresence.shipsDiscordLibrary(in: game))
+    }
+
     // MARK: - Helpers
 
     /// A directory short enough for `sun_path`, which holds 104 bytes.

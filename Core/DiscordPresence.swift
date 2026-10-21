@@ -323,14 +323,23 @@ actor DiscordPresence {
     /// one folder down, the same shape ``GameExecutables`` scans for.
     private static let maxDepth = 3
 
-    /// Whether the installed game ships a Discord library of its own.
+    /// Whether the game ships a Discord library of its own: an adopted
+    /// program's folder is searched, else the installed Steam game's.
     ///
     /// Such a game publishes its own activity through the in-bottle bridge,
     /// with its own artwork, state and buttons. The app stays quiet so the two
     /// do not fight over the same status line.
     static func publishesItsOwn(appID: Int) -> Bool {
-        guard let installed = SharedGames.installed(appID: appID) else { return false }
-        var queue: [(URL, Int)] = [(installed.directory, 0)]
+        let folder = AdoptedPrograms.program(appID)?.url.deletingLastPathComponent()
+            ?? SharedGames.installed(appID: appID)?.directory
+        guard let folder else { return false }
+        return shipsDiscordLibrary(in: folder)
+    }
+
+    /// Whether `folder`, or a folder up to ``maxDepth`` below it, holds a
+    /// Discord library.
+    static func shipsDiscordLibrary(in folder: URL) -> Bool {
+        var queue: [(URL, Int)] = [(folder, 0)]
         while let (folder, depth) = queue.first {
             queue.removeFirst()
             for entry in InstallDirectory.entries(in: folder) {
