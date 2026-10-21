@@ -273,16 +273,7 @@
 
   /* Steam passes binary as ArrayBuffers and as typed-array views; JSON drops
      both, so they cross the bridge as base64 envelopes that carry the view
-     type — some callbacks reject an ArrayBuffer where a Uint8Array is due.
-
-     The client also builds URLs on its own origin in native code — a local
-     screenshot is https://steamloopback.host/screenshots/<path> — and hands
-     them over as plain strings, which the serve-time rewrite of the bundle
-     never sees. They come in as the path alone, the form the client's other
-     calls already return: the bundle prefixes a value with its origin unless
-     it starts with https:// (sp.js `fu`), and that prefix is rewritten to
-     this page's loopback route, where the bridge answers it. */
-  var CLIENT_ORIGIN = "https://steamloopback.host/";
+     type — some callbacks reject an ArrayBuffer where a Uint8Array is due. */
   function enc(v) {
     if (v instanceof ArrayBuffer) return { __sevoBin: b64(new Uint8Array(v)), __sevoView: "" };
     if (ArrayBuffer.isView(v)) {
@@ -298,9 +289,6 @@
     return v;
   }
   function dec(v) {
-    if (typeof v === "string" && v.lastIndexOf(CLIENT_ORIGIN, 0) === 0) {
-      return v.slice(CLIENT_ORIGIN.length);
-    }
     if (v && typeof v === "object" && typeof v.__sevoBin === "string") {
       var s = atob(v.__sevoBin), u = new Uint8Array(s.length);
       for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);

@@ -30,6 +30,19 @@ nonisolated enum LoopbackAssets {
         "/windows/icon", "/overlays/thumbnail", "/gamerecordings/", "/screenshots/",
     ]
 
+    /// A path under ``pathPrefix`` with the route's own URL stripped from its
+    /// head, as often as it repeats. The bundle prefixes a value with the
+    /// client's origin unless it starts with `https://` (sp.js `fu`), and the
+    /// rewritten prefix is this server's `http://` origin, so a URL that went
+    /// through two such helpers arrives as
+    /// `/http://127.0.0.1:<port>/__loopback/screenshots/…`.
+    static func unprefixed(_ path: String) -> String {
+        let route = "/" + pageOrigin + pathPrefix
+        var path = path
+        while path.hasPrefix(route + "/") { path.removeFirst(route.count) }
+        return path
+    }
+
     /// Whether a path under ``pathPrefix`` is one of ``clientSynthesized``,
     /// judged on its decoded spelling. The client resolves dot segments, the
     /// percent-encoded ones included, before it answers, so a path that holds

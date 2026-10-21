@@ -76,6 +76,15 @@ struct LoopbackRewriteTests {
     }
 
     @Test
+    func `a url the bundle prefixed twice comes back to its path`() {
+        let route = LoopbackAssets.pageOrigin + LoopbackAssets.pathPrefix
+        #expect(LoopbackAssets.unprefixed("/\(route)/screenshots/310360/screenshots/1.jpg")
+            == "/screenshots/310360/screenshots/1.jpg")
+        #expect(LoopbackAssets.unprefixed("/\(route)/\(route)/public/a.png") == "/public/a.png")
+        #expect(LoopbackAssets.unprefixed("/screenshots/1.jpg") == "/screenshots/1.jpg")
+    }
+
+    @Test
     func `the client's own endpoints are asked of the client`() {
         #expect(LoopbackAssets.isClientSynthesized("/screenshots/382744611/760/remote/698780/screenshots/1.jpg"))
         #expect(LoopbackAssets.isClientSynthesized("/gamerecordings/timelines/abc.json"))

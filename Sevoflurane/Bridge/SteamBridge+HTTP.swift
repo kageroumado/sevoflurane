@@ -162,7 +162,7 @@ extension SteamBridge {
         guard request.method == "GET" || request.method == "HEAD" else {
             return .error(405, "Method \(request.method) Not Allowed")
         }
-        let path = String(request.path.dropFirst(LoopbackAssets.pathPrefix.count))
+        let path = LoopbackAssets.unprefixed(String(request.path.dropFirst(LoopbackAssets.pathPrefix.count)))
         if LoopbackAssets.isClientSynthesized(path) {
             let target = request.query.isEmpty ? path : path + "?" + request.query
             return await fetchFromClient(target)
