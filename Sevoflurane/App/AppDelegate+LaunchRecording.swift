@@ -217,9 +217,11 @@ extension AppDelegate {
 
     /// Tells Discord which game is on screen, under that game's own Discord
     /// application: a game Discord's database names shows the way its native
-    /// build would, and one it does not name shows nothing. The database is
-    /// asked by Steam app id, then by an adopted program's executable, which
-    /// is what Discord's own scanner goes by, then by name.
+    /// build would, and one it does not name shows under Sevoflurane's
+    /// application with its own name as the details, or nothing while
+    /// ``DiscordPresence/fallbackApplicationID`` is nil. The database is asked
+    /// by Steam app id, then by an adopted program's executable, which is what
+    /// Discord's own scanner goes by, then by name.
     ///
     /// Detached, because the name comes off disk and the socket is the Discord
     /// client's to answer at its own pace. A game that ships its own Discord
@@ -240,13 +242,16 @@ extension AppDelegate {
                 resolved = await applications.applicationID(executable: executable)
             }
             if resolved == nil { resolved = await applications.applicationID(named: name) }
-            guard let application = resolved else {
+            let activity: DiscordPresence.Activity
+            if let application = resolved {
+                activity = .init(applicationID: application.id, name: application.name)
+            } else if let fallback = DiscordPresence.Activity.fallback(named: name) {
+                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so it is published under Sevoflurane's")
+                activity = fallback
+            } else {
                 EventLog.enqueue(.client, "\(name) is not in Discord's game list, so nothing is published")
                 return
             }
-            let activity = DiscordPresence.Activity(
-                applicationID: application.id, name: application.name,
-            )
             try? await DiscordPresence.shared.show(activity, forGame: appID, ticket: ticket)
         }
     }

@@ -66,6 +66,44 @@ struct DiscordPresenceTests {
     }
 
     @Test
+    func `a game Discord does not name is published under the fallback with its name as details`() async throws {
+        let discord = try FakeDiscord(replyingWith: .ready)
+        defer { discord.stop() }
+
+        let started = Date(timeIntervalSince1970: 1_700_000_000)
+        let activity = try #require(DiscordPresence.Activity.fallback(
+            named: "Yandere Simulator", applicationID: "1430000000000000000", started: started,
+        ))
+        let presence = DiscordPresence(directory: discord.directory)
+        try await presence.show(activity, forGame: 2_000_000_001, ticket: 0)
+        try await Self.wait(for: 2, on: discord)
+
+        #expect(String(decoding: discord.frames[0].payload, as: UTF8.self)
+            == #"{"client_id":"1430000000000000000","v":1}"#)
+        let body = try Self.object(discord.frames[1].payload)
+        let arguments = try #require(body["args"] as? [String: Any])
+        let published = try #require(arguments["activity"] as? [String: Any])
+        #expect(published.keys.sorted() == ["details", "status_display_type", "timestamps", "type"])
+        #expect(published["type"] as? Int == 0)
+        #expect(published["details"] as? String == "Yandere Simulator")
+        #expect(published["status_display_type"] as? Int == 2)
+        #expect((published["timestamps"] as? [String: Any])?["start"] as? Int == 1_700_000_000_000)
+
+        // The game's stop takes it away the way it takes any game's.
+        await presence.clear(forGame: 2_000_000_001)
+        try await Self.wait(for: 3, on: discord)
+        let cleared = try Self.object(discord.frames[2].payload)
+        #expect((cleared["args"] as? [String: Any])?["activity"] is NSNull)
+    }
+
+    @Test
+    func `the fallback activity exists only with a fallback application`() {
+        #expect(DiscordPresence.Activity.fallback(named: "Yandere Simulator", applicationID: nil) == nil)
+        #expect(DiscordPresence.Activity.fallback(named: "Yandere Simulator")?.applicationID
+            == DiscordPresence.fallbackApplicationID)
+    }
+
+    @Test
     func `a close reply ends the session and publishes nothing`() async throws {
         let discord = try FakeDiscord(replyingWith: .close)
         defer { discord.stop() }

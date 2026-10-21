@@ -10,6 +10,10 @@ import Synchronization
 /// is what Discord's detection shows for a game running natively.
 /// ``DiscordApplications`` resolves the id.
 ///
+/// A game Discord's database does not name is published under Sevoflurane's
+/// own application, ``fallbackApplicationID``, with the game's name as the
+/// activity's details, so the status still reads "Playing <game>".
+///
 /// Most Windows games ship no Discord support at all, and Discord's own game
 /// scanner sees `wine64-preloader` rather than a game, so nothing appears in a
 /// player's status by itself. The app knows the game, its Steam app id and how
@@ -27,20 +31,40 @@ actor DiscordPresence {
     /// The session the app publishes through.
     static let shared = DiscordPresence()
 
+    /// Sevoflurane's Discord application, which a game Discord's database
+    /// does not name is published under. Nil leaves such a game unpublished.
+    static let fallbackApplicationID: String? = nil
+
     /// One game, as Discord will show it.
     struct Activity: Sendable, Equatable {
         /// The Discord application the game is registered as, which is what
         /// Discord names the activity after.
         var applicationID: String
-        /// The game's name, as Discord's database spells it.
+        /// The game's name, as Discord's database spells it, or as the app
+        /// knows it for a game published under ``fallbackApplicationID``.
         var name: String
+        /// The line Discord shows in place of the application's name: the
+        /// game's, for a game published under ``fallbackApplicationID``.
+        var details: String?
         /// When play began.
         var started: Date
 
-        init(applicationID: String, name: String, started: Date = .now) {
+        init(applicationID: String, name: String, details: String? = nil, started: Date = .now) {
             self.applicationID = applicationID
             self.name = name
+            self.details = details
             self.started = started
+        }
+
+        /// A game Discord's database does not name, under `applicationID`;
+        /// nil when there is no application to publish it under.
+        static func fallback(
+            named name: String,
+            applicationID: String? = DiscordPresence.fallbackApplicationID,
+            started: Date = .now,
+        ) -> Activity? {
+            guard let applicationID else { return nil }
+            return Activity(applicationID: applicationID, name: name, details: name, started: started)
         }
     }
 
@@ -172,13 +196,21 @@ actor DiscordPresence {
     ///
     /// The handshake already named the game, and Discord fills the name, the
     /// icon and the store links in from that application, so the activity
-    /// carries only its type and when play began. `pid` is the app's own,
-    /// which is the process Discord watches to clear the activity.
+    /// carries only its type and when play began. An activity with details
+    /// carries them too, with `status_display_type` 2, which has the member
+    /// list read "Playing <details>" in place of the application's name; its
+    /// image is the application's own. `pid` is the app's own, which is the
+    /// process Discord watches to clear the activity.
     static func setActivity(_ activity: Activity) -> Data {
-        command("SET_ACTIVITY", activity: [
+        var payload: [String: Any] = [
             "type": 0,
             "timestamps": ["start": Int(activity.started.timeIntervalSince1970 * 1000)],
-        ])
+        ]
+        if let details = activity.details {
+            payload["details"] = details
+            payload["status_display_type"] = 2
+        }
+        return command("SET_ACTIVITY", activity: payload)
     }
 
     /// The `SET_ACTIVITY` payload that takes the activity away.

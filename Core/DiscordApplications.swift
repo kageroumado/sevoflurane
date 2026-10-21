@@ -16,7 +16,7 @@ import Foundation
 /// launches still shows up.
 ///
 /// A source that cannot be reached reads as absent: a failed refresh leaves
-/// the stale index in place, and a game the index does not name publishes
+/// the stale index in place, and a game the index does not name resolves to
 /// nothing.
 actor DiscordApplications {
     /// The index the app publishes through.
