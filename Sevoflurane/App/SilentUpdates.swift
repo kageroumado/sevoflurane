@@ -87,7 +87,8 @@ final class SilentUpdates {
 
     /// The one long-lived updater: check loop, `availableVersion`, and the quiet-moment
     /// install when the mode allows it. Created up front so its `Tiptoe` reconciles the recorded
-    /// wait (and surfaces `justUpdatedTo`) even before `start()`.
+    /// wait and the post-update notice against the running bundle (a notice that outlived its
+    /// version is dropped, `1.5` and `1.5.0` read as one version) even before `start()`.
     @ObservationIgnored private let github: TiptoeGitHub
     @ObservationIgnored private var wakeObserver: (any NSObjectProtocol)?
 
@@ -126,11 +127,7 @@ final class SilentUpdates {
         github.tiptoe.onWillInstall = { pending in
             EventLog.enqueue(.update, "installing update \(pending.version)")
         }
-        justUpdatedVersion = PostUpdateNotice.reconcile(
-            recordedVersion: github.tiptoe.justUpdatedTo,
-            runningVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-            acknowledge: { github.tiptoe.acknowledge() },
-        )
+        justUpdatedVersion = github.tiptoe.justUpdatedTo
     }
 
     /// How often a held prompt looks again for a moment with no game up.
@@ -306,12 +303,10 @@ final class SilentUpdates {
         #else
             manualPhase = .working
 
-            // Ask GitHub first. With automatic installs on, the DMG the loop downloaded may be
-            // days old and one release behind, and `github.updateNow()` installs what it holds
-            // as it stands; this check replaces a stale download with the newest release. With
-            // installs off it only refreshes `availableVersion`, and `updateNow()` downloads
-            // the newest itself.
-            await check()
+            // `github.updateNow()` asks GitHub itself and replaces a download that fell behind,
+            // but answers a press during a running check with whatever is already held — with
+            // auto-install off, nothing. So a check this object started finishes first.
+            await checkInFlight?.value
 
             guard await github.updateNow() else {
                 manualPhase = .failed(
