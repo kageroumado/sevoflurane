@@ -30,6 +30,18 @@ nonisolated enum LoopbackAssets {
         "/windows/icon", "/overlays/thumbnail", "/gamerecordings/", "/screenshots/",
     ]
 
+    /// Whether a path under ``pathPrefix`` is one of ``clientSynthesized``,
+    /// judged on its decoded spelling. The client resolves dot segments, the
+    /// percent-encoded ones included, before it answers, so a path that holds
+    /// one is refused rather than matched by its head: `/screenshots/../config`
+    /// would otherwise read the files ``privateDirectories`` withholds.
+    static func isClientSynthesized(_ path: String) -> Bool {
+        guard let decoded = path.removingPercentEncoding, !decoded.contains("\\") else { return false }
+        let segments = decoded.split(separator: "/", omittingEmptySubsequences: false)
+        guard !segments.contains(where: { $0 == "." || $0 == ".." }) else { return false }
+        return clientSynthesized.contains(where: decoded.hasPrefix)
+    }
+
     static var pageOrigin: String { "http://127.0.0.1:\(BridgePorts.steamUI)" }
 
     /// The Steam install's directories that hold the account rather than the

@@ -76,6 +76,23 @@ struct LoopbackRewriteTests {
     }
 
     @Test
+    func `the client's own endpoints are asked of the client`() {
+        #expect(LoopbackAssets.isClientSynthesized("/screenshots/382744611/760/remote/698780/screenshots/1.jpg"))
+        #expect(LoopbackAssets.isClientSynthesized("/gamerecordings/timelines/abc.json"))
+        #expect(LoopbackAssets.isClientSynthesized("/overlays/thumbnail"))
+        #expect(!LoopbackAssets.isClientSynthesized("/public/images/avatar.png"))
+    }
+
+    @Test
+    func `a client endpoint's head does not carry a path out of it`() {
+        #expect(!LoopbackAssets.isClientSynthesized("/screenshots/../config/loginusers.vdf"))
+        #expect(!LoopbackAssets.isClientSynthesized("/gamerecordings/%2e%2e/userdata/1/config/localconfig.vdf"))
+        #expect(!LoopbackAssets.isClientSynthesized("/screenshots/%2E%2E%2Fssfn123"))
+        #expect(!LoopbackAssets.isClientSynthesized("/screenshots/./a.jpg"))
+        #expect(!LoopbackAssets.isClientSynthesized("/screenshots/..%5Cconfig%5Cconfig.vdf"))
+    }
+
+    @Test
     func `the UI's assets are served`() {
         #expect(LoopbackAssets.isServable("/public/images/avatar.png"))
         #expect(LoopbackAssets.isServable("/steamui/css/library.css"))
