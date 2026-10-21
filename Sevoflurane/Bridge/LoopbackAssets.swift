@@ -23,10 +23,11 @@ nonisolated enum LoopbackAssets {
     /// The path everything the client used to serve is reachable under.
     static let pathPrefix = "/__loopback"
 
-    /// The endpoints the client synthesizes rather than reads from disk. They
-    /// exist only inside CEF, so the bridge asks the client for them.
+    /// The endpoints only the client answers: synthesized in memory, or read
+    /// from the account's `userdata`, which the bridge withholds. They exist
+    /// only inside CEF, so the bridge asks the client for them.
     static let clientSynthesized = [
-        "/windows/icon", "/overlays/thumbnail", "/gamerecordings/",
+        "/windows/icon", "/overlays/thumbnail", "/gamerecordings/", "/screenshots/",
     ]
 
     static var pageOrigin: String { "http://127.0.0.1:\(BridgePorts.steamUI)" }

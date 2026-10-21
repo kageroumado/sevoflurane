@@ -191,7 +191,7 @@ extension SteamBridge {
             const r = await fetch(\(JSLiteral.string(target)));
             if (!r.ok) return "";
             const b = await r.blob();
-            if (b.size > \(Self.clientAssetCap)) return "";
+            if (b.size > \(Self.clientAssetCap(for: target))) return "";
             return await new Promise(done => {
               const reader = new FileReader();
               reader.onload = () => done(String(reader.result));
@@ -214,8 +214,12 @@ extension SteamBridge {
     /// The largest asset read back out of the client. A data URL crosses CDP
     /// as one JSON string, so a recording's video segments land well over it
     /// and take the logged 404 — which is the point: the log then names what a
-    /// playtest actually asked for.
-    private static let clientAssetCap = 4 * 1024 * 1024
+    /// playtest actually asked for. A screenshot is one image the page shows
+    /// whole, at the game's full resolution, so it gets the room for one:
+    /// 32 MB, which base64 grows to ~43 MB, inside CDPClient's 64 MB message.
+    private static func clientAssetCap(for target: String) -> Int {
+        target.hasPrefix("/screenshots/") ? 32 * 1024 * 1024 : 4 * 1024 * 1024
+    }
 
     private nonisolated static func decodeDataURL(_ text: String) -> (type: String, body: Data)? {
         guard text.hasPrefix("data:"), let comma = text.firstIndex(of: ",") else { return nil }
