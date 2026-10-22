@@ -1,9 +1,10 @@
 import CryptoKit
 import Foundation
 
-/// The trust anchor for everything the engine pipeline downloads: an Ed25519
-/// public key compiled into the app, whose private half signs every engine
-/// release (`dormison/build-macos/publish-engine.sh`). A release asset's
+/// The trust anchor for everything the engine pipeline downloads: Ed25519
+/// public keys compiled into the app, whose private halves sign engine
+/// releases (`dormison/build-macos/publish-engine.sh`). A signature from any
+/// pinned key is accepted. A release asset's
 /// signature is the raw 64-byte Ed25519 signature over the asset's bytes,
 /// base64, in a sibling file named `<asset>.sig`; the manifest is signed the
 /// same way (`engine.json.sig`). Verification happens before a manifest is
@@ -14,21 +15,32 @@ import Foundation
 /// shares these sources and runs from `Contents/Helpers` with no bundle of its
 /// own, and one definition cannot drift.
 nonisolated enum EngineSignature {
-    /// Raw 32-byte Ed25519 public key, base64. The private half is
-    /// `infrastructure/publish/keys/dormison-ed25519.pem`.
-    static let pinnedPublicKeyBase64 = "7uDuIZdCZyobjZcPL12zL+UNOCpHSvLXvVRFHA7bzzA="
+    /// Raw 32-byte Ed25519 public keys, base64, under
+    /// `infrastructure/publish/keys/`. Releases are signed with the key this
+    /// app shipped with until enough installs carry the one that replaces it,
+    /// whose private half was never in a repository; the manifest's
+    /// `minAppVersion` keeps a release signed with the new key from apps that
+    /// pin only the old one.
+    static let pinnedPublicKeysBase64 = [
+        // dormison-ed25519-2026-10.pem
+        "5sQ6cDQSthaMVF3fZEVs9hTvnn0j2WZ2OuKOeNvBmPM=",
+        // dormison-ed25519.pem, exposed in the infrastructure repository's
+        // history (security-audit-2026-10-13 S1): drop it once installs pin both.
+        "7uDuIZdCZyobjZcPL12zL+UNOCpHSvLXvVRFHA7bzzA=",
+    ]
 
     /// Release assets are accepted only from these repositories, over HTTPS.
     static let allowedAssetPathPrefixes = [
         "/kageroumado/dormison/releases/download/",
     ]
 
-    static var pinnedKey: Curve25519.Signing.PublicKey {
+    static var pinnedKeys: [Curve25519.Signing.PublicKey] {
         get throws {
-            guard let raw = Data(base64Encoded: pinnedPublicKeyBase64),
-                  let key = try? Curve25519.Signing.PublicKey(rawRepresentation: raw)
-            else { throw Failure.keyMissing }
-            return key
+            let keys = pinnedPublicKeysBase64.compactMap { encoded in
+                Data(base64Encoded: encoded).flatMap { try? Curve25519.Signing.PublicKey(rawRepresentation: $0) }
+            }
+            guard keys.count == pinnedPublicKeysBase64.count else { throw Failure.keyMissing }
+            return keys
         }
     }
 
@@ -57,14 +69,21 @@ nonisolated enum EngineSignature {
         return signature
     }
 
-    /// Verifies `signatureFile` over `message` with the pinned key.
+    /// Verifies `signatureFile` over `message` with `key`, or with any of the
+    /// pinned keys.
     static func verify(
         _ message: some DataProtocol, signatureFile: Data, subject: String,
         key: Curve25519.Signing.PublicKey? = nil,
     ) throws {
-        let key = try key ?? pinnedKey
+        try verify(message, signatureFile: signatureFile, subject: subject, keys: key.map { [$0] } ?? pinnedKeys)
+    }
+
+    /// Verifies `signatureFile` over `message` with any of `keys`.
+    static func verify(
+        _ message: some DataProtocol, signatureFile: Data, subject: String, keys: [Curve25519.Signing.PublicKey],
+    ) throws {
         let signature = try signature(fromFile: signatureFile)
-        guard key.isValidSignature(signature, for: message) else {
+        guard keys.contains(where: { $0.isValidSignature(signature, for: message) }) else {
             throw Failure.signatureInvalid(subject)
         }
     }
@@ -112,7 +131,7 @@ nonisolated enum EngineSignature {
             case .signatureMalformed:
                 "the signature file is not a base64 Ed25519 signature"
             case let .signatureInvalid(subject):
-                "\(subject) does not carry a valid signature from the engine key"
+                "\(subject) does not carry a valid signature from an engine key"
             case let .urlNotAllowed(url):
                 "\(url.absoluteString) is not a release asset of a kageroumado repository"
             }

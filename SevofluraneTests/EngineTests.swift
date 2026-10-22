@@ -199,8 +199,26 @@ struct EngineSignatureTests {
     }
 
     @Test
-    func `the pinned key is a usable Ed25519 public key`() throws {
-        _ = try EngineSignature.pinnedKey
+    func `every pinned key is a usable Ed25519 public key`() throws {
+        #expect(try EngineSignature.pinnedKeys.count == 2)
+    }
+
+    @Test
+    func `a signature from any trusted key verifies, and one from another key does not`() throws {
+        let message = Data(#"{"engines":[]}"#.utf8)
+        let old = Curve25519.Signing.PrivateKey(), new = Curve25519.Signing.PrivateKey()
+        let trusted = [new.publicKey, old.publicKey]
+        for signer in [old, new] {
+            let signatureFile = try Data(signer.signature(for: message).base64EncodedString().utf8)
+            try EngineSignature.verify(message, signatureFile: signatureFile, subject: "engine.json", keys: trusted)
+        }
+        let stranger = try Data(Curve25519.Signing.PrivateKey().signature(for: message).base64EncodedString().utf8)
+        #expect(throws: EngineSignature.Failure.signatureInvalid("engine.json")) {
+            try EngineSignature.verify(message, signatureFile: stranger, subject: "engine.json", keys: trusted)
+        }
+        #expect(throws: EngineSignature.Failure.signatureInvalid("engine.json")) {
+            try EngineSignature.verify(message, signatureFile: stranger, subject: "engine.json")
+        }
     }
 }
 
