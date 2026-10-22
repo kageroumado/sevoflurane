@@ -517,6 +517,15 @@ struct CompatibilityStripSwitchTests {
     }
 
     @Test
+    func `the 32-bit macOS row informs without a failing medal`() {
+        // The Windows version is the one that plays, so the row rates nothing.
+        for script in [SteamCompatBadge.script, SteamCompatBadge.storeScript] {
+            #expect(script.contains(#"row(infoMark(), "<b>macOS version:</b> 32-bit only"#))
+            #expect(!script.contains(#"medal("borked"), "<b>macOS version:</b>"#))
+        }
+    }
+
+    @Test
     func `removal stands the script down rather than uninstalling it`() {
         #expect(SteamCompatBadge.script.contains("enabled: true"))
         #expect(SteamCompatBadge.removalScript.contains("__sevoCompat.enabled = false"))

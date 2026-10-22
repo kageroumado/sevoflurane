@@ -116,6 +116,13 @@ enum SteamCompatBadge {
               + '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="' + PLATFORM_PATHS.macos + '" fill="currentColor"></path></svg></span>';
           }
         
+          /* A row that informs and rates nothing: Steam's "i" disc, muted like
+             the apple. */
+          function infoMark() {
+            return '<span class="sevo-compat-icon sevo-compat-info"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">'
+              + '<path fill-rule="evenodd" clip-rule="evenodd" d="' + PATHS.playable + '" fill="currentColor"></path></svg></span>';
+          }
+
           var STYLE_ID = "sevo-compat-style";
           var SLOT_ID = "sevo-compat-slot";
           var STRIP_ID = "sevo-compat";
@@ -150,6 +157,7 @@ enum SteamCompatBadge {
             ".sevo-compat-link:hover{color:#00bbff}",
             ".sevo-compat-mac.sevo-mac-available{color:#8b929a}",
             ".sevo-compat-mac.sevo-mac-set{color:#1a9fff}",
+            ".sevo-compat-info{color:#8b929a}",
             ".sevo-compat-note{font-style:italic;color:#8b929a;margin-inline-start:30px;line-height:18px}"
           ].join("\\n");
         
@@ -184,7 +192,7 @@ enum SteamCompatBadge {
                 ? '<a class="sevo-compat-link sevo-compat-play" data-appid="' + esc(appid) + '">Play in Steam for Mac</a>' : "";
               rows.push(row(nativeMark(record.nativeBadge, appid), "<b>macOS version:</b> " + esc(record.nativeBadge.reason), play));
             } else if (arch && arch.intel32 === true && arch.intel64 !== true && arch.arm !== true) {
-              rows.push(row(medal("borked"), "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
+              rows.push(row(infoMark(), "<b>macOS version:</b> 32-bit only, which no Apple silicon Mac can run. The Windows version is the one that plays here.", link(arch.pageURL, "PCGamingWiki")));
             }
             rows.push(row(mark(ac), "<b>Anti-cheat:</b> " + esc(ac.reason), record.antiCheat && link(record.antiCheat.sourceURL, "AreWeAntiCheatYet")));
             if (record.antiCheat && record.antiCheat.notes) {
