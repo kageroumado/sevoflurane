@@ -29,14 +29,21 @@ actor GameCompatService {
     private let cache: URL
     /// The client's app cache, which says whether a macOS build exists.
     private let appInfo: URL
+    /// The engine the community database is asked about, as run records name
+    /// it: ``runningEngine()``, or a test's own.
+    private let engine: @Sendable () -> String?
     private var antiCheatIndex: GameCompatSources.AntiCheatIndex?
     private var wikiIndex: GameCompatSources.WikiIndex?
     private var antiCheatLoad: Task<GameCompatSources.AntiCheatIndex?, Never>?
     private var wikiLoad: Task<GameCompatSources.WikiIndex?, Never>?
 
-    init(session: URLSession? = nil, cache: URL = cacheRoot, appInfo: URL = SteamAppInfo.fileURL) {
+    init(
+        session: URLSession? = nil, cache: URL = cacheRoot, appInfo: URL = SteamAppInfo.fileURL,
+        engine: @escaping @Sendable () -> String? = GameCompatService.runningEngine,
+    ) {
         self.cache = cache
         self.appInfo = appInfo
+        self.engine = engine
         if let session {
             self.session = session
         } else {
@@ -54,6 +61,13 @@ actor GameCompatService {
         }
     }
 
+    /// The engine a game started now runs on (``Engine/running``), by its
+    /// run-record name; `nil` while setup has yet to install one.
+    nonisolated static func runningEngine() -> String? {
+        let identifier = Engine.running.recordIdentifier
+        return identifier.isEmpty ? nil : identifier
+    }
+
     /// The record for one app, as JSON for the page and the CLI.
     func recordJSON(appID: Int, name: String, deckCategory: Int?, ignoringCache: Bool = false) async -> Data {
         let record = await self.record(
@@ -69,12 +83,15 @@ actor GameCompatService {
         if let companion = GameCompanion.all[appID] {
             return .companion(companion, name: name, deckCategory: deckCategory)
         }
+        let engine = self.engine()
         if ignoringCache {
             antiCheatIndex = nil
             wikiIndex = nil
             try? FileManager.default.removeItem(at: cache.appendingPathComponent("proton/\(appID).json"))
             try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw/\(appID).json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("community/\(appID).json"))
+            try? FileManager.default.removeItem(
+                at: cache.appendingPathComponent(GameCompatSources.communityCacheFile(appID: appID, engine: engine)),
+            )
             try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw-mac/\(appID).json"))
             try? FileManager.default.removeItem(at: cache.appendingPathComponent("awacy.json"))
             try? FileManager.default.removeItem(at: cache.appendingPathComponent("applegamingwiki.json"))
@@ -82,7 +99,7 @@ actor GameCompatService {
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
         async let proton = loadProton(appID: appID)
-        async let community = loadCommunity(appID: appID)
+        async let community = loadCommunity(appID: appID, engine: engine)
         let antiCheat = await antiCheatTable?.lookup(appID: appID, name: name)
         var wiki = await wikiTable?.lookup(title: name)
         if wiki == nil, let table = await wikiTable, let title = await loadPCGamingWikiTitle(appID: appID) {
@@ -129,7 +146,7 @@ actor GameCompatService {
     func summaries(for games: [GameCompatBatch.Game]) async -> (summaries: [GameCompatSummary], pending: Int) {
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
-        async let communities = loadCommunities(appIDs: games.map(\.appID))
+        async let communities = loadCommunities(appIDs: games.map(\.appID), engine: self.engine())
         let platforms = SteamAppInfo.platforms(appIDs: Set(games.map(\.appID)), in: appInfo)
         let antiCheatIndex = await antiCheatTable
         let wikiIndex = await wikiTable
@@ -213,29 +230,29 @@ actor GameCompatService {
         lookupDrain = nil
     }
 
-    /// Sevoflurane's own summaries for many games: a day-fresh cached answer
-    /// where there is one, the batch endpoint for the rest, each answer
-    /// cached per game as ``loadCommunity(appID:)`` caches it. A batch that
-    /// fails leaves its games on whatever stale answer the disk holds.
-    private func loadCommunities(appIDs: [Int]) async -> [Int: GameCompatRecord.Community] {
+    /// Sevoflurane's own summaries for many games on `engine`: a day-fresh
+    /// cached answer where there is one, the batch endpoint for the rest, each
+    /// answer cached per game as ``loadCommunity(appID:engine:)`` caches it. A
+    /// batch that fails leaves its games on whatever stale answer the disk holds.
+    private func loadCommunities(appIDs: [Int], engine: String?) async -> [Int: GameCompatRecord.Community] {
         var summaries: [Int: GameCompatRecord.Community] = [:]
         var missing: [Int] = []
         for id in appIDs {
-            let path = cache.appendingPathComponent("community/\(id).json")
+            let path = cache.appendingPathComponent(GameCompatSources.communityCacheFile(appID: id, engine: engine))
             if let data = Self.cached(at: path, maxAge: Self.communityMaxAge) {
                 summaries[id] = GameCompatSources.community(data: data)
             } else {
                 missing.append(id)
             }
         }
-        for request in GameCompatBatch.communityRequests(base: StatsUploader.baseURL, appIDs: missing) {
+        for request in GameCompatBatch.communityRequests(base: StatsUploader.baseURL, appIDs: missing, engine: engine) {
             var bodies: [Int: Data]?
             if let (data, response) = try? await session.data(from: request.url),
                (response as? HTTPURLResponse)?.statusCode == 200 {
                 bodies = GameCompatBatch.communityBodies(data)
             }
             for id in request.appIDs {
-                let path = cache.appendingPathComponent("community/\(id).json")
+                let path = cache.appendingPathComponent(GameCompatSources.communityCacheFile(appID: id, engine: engine))
                 if let bodies {
                     let body = bodies[id] ?? Data("{}".utf8)
                     Self.store(body, at: path)
@@ -301,12 +318,12 @@ actor GameCompatService {
         return GameCompatSources.protonSummary(appID: appID, data: data)
     }
 
-    /// Sevoflurane's own summary for the app. Runs arrive daily, so this
-    /// answer is kept a day where the community tables are kept a week.
-    private func loadCommunity(appID: Int) async -> GameCompatRecord.Community? {
+    /// Sevoflurane's own summary for the app on `engine`. Runs arrive daily,
+    /// so this answer is kept a day where the community tables are kept a week.
+    private func loadCommunity(appID: Int, engine: String?) async -> GameCompatRecord.Community? {
         guard let data = await cachedOrFetched(
-            file: "community/\(appID).json",
-            from: StatsUploader.baseURL.appendingPathComponent("games/\(appID)"),
+            file: GameCompatSources.communityCacheFile(appID: appID, engine: engine),
+            from: GameCompatSources.communityURL(base: StatsUploader.baseURL, appID: appID, engine: engine),
             maxAge: Self.communityMaxAge,
             acceptingMissesAs: Data("{}".utf8),
         ) else { return nil }

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Sevoflurane
 
@@ -29,10 +30,14 @@ struct GameCompatTests {
         )
     }
 
-    private func community(_ verdict: String, runs: Int = 12, installs: Int = 4) -> GameCompatRecord.Community {
+    private func community(
+        _ verdict: String, runs: Int = 12, installs: Int = 4, leftOut: Int = 0,
+        reachedFrame: Double? = nil, played: Double? = nil, crashed: Double? = nil,
+    ) -> GameCompatRecord.Community {
         GameCompatRecord.Community(
             verdict: verdict, runs: runs, installs: installs, engine: "dormison-b1", medianFPS: 58,
             pageURL: URL(string: "https://kagerou.glass/sevoflurane/games/1-x")!,
+            leftOut: leftOut, reachedFrame: reachedFrame, played: played, crashed: crashed,
         )
     }
 
@@ -126,6 +131,100 @@ struct GameCompatTests {
         #expect(crashes.state == .unsupported)
         let glitches = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: nil, community: community("runs"))
         #expect(glitches.state == .playable)
+    }
+
+    @Test
+    func `the community sentence tells one Mac's runs as runs`() {
+        // Portal: three runs on one Mac, two of which never drew a frame.
+        let portal = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("unplayable", runs: 3, installs: 1, reachedFrame: 0.333, played: 0.333, crashed: 0),
+        )
+        #expect(portal.tier == .borked)
+        #expect(portal.reason == "Sevoflurane players: it reached a frame in 1 of 3 runs on 1 Mac.")
+        #expect(!portal.reason.contains("crashing"))
+        // 9-nine-: it draws, but one session in four lasted.
+        let nine = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 4, installs: 1, reachedFrame: 1, played: 0.25, crashed: 0),
+        )
+        #expect(nine.tier == .bronze)
+        #expect(nine.reason
+            == "Sevoflurane players: it starts, but only 1 of 4 runs on 1 Mac was played past five minutes and ended by the player.")
+        #expect(!nine.reason.contains("glitches"))
+        let crashes = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 4, installs: 1, reachedFrame: 1, played: 0.75, crashed: 0.25),
+        )
+        #expect(crashes.reason == "Sevoflurane players: it plays, but 1 of 4 runs on 1 Mac crashed.")
+        let dark = GameCompatVerdict.describe(community("unplayable", runs: 3, installs: 1, reachedFrame: 0, played: 0, crashed: 0))
+        #expect(dark == "Sevoflurane players: it reached no frame in 3 runs on 1 Mac.")
+    }
+
+    @Test
+    func `the community sentence counts the judged runs and tells several Macs' shares as shares`() {
+        // Two runs a tool stopped: the sentence counts the three the verdict
+        // was taken over, and a frame share that includes stopped runs is no
+        // count of them.
+        let stopped = GameCompatVerdict.describe(
+            community("unplayable", runs: 5, installs: 1, leftOut: 2, reachedFrame: 0.4, played: 0, crashed: 0),
+        )
+        #expect(stopped == "Sevoflurane players: it reached a frame in fewer than half the runs, across 3 runs on 1 Mac.")
+        let short = GameCompatVerdict.describe(
+            community("runs", runs: 12, installs: 4, reachedFrame: 0.9, played: 0.4, crashed: 0),
+        )
+        #expect(short == "Sevoflurane players: it starts, but fewer than half the runs on a typical Mac were played past five minutes and ended by the player, across 12 runs on 4 Macs.")
+        #expect(GameCompatVerdict.describe(community("playable")) == "Sevoflurane players: playable across 12 runs on 4 Macs.")
+        // A summary from a server that sends no figures keeps to the verdict.
+        #expect(GameCompatVerdict.describe(community("unplayable")) == "Sevoflurane players rate it Borked across 12 runs on 4 Macs.")
+    }
+
+    @Test
+    func `one Mac below the wiki gives the wiki's tier capped at Silver, and names both`() {
+        // Portal: one Mac drew a frame in one run of three; the wiki rates
+        // Wine playable and CrossOver perfect.
+        let oneMac = community("unplayable", runs: 3, installs: 1, reachedFrame: 0.333, played: 0.333, crashed: 0)
+        let portal = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: proton("platinum", total: 267),
+            community: oneMac,
+        )
+        #expect(portal.tier == .silver)
+        #expect(portal.state == .playable)
+        #expect(portal.reason == "AppleGamingWiki rates Wine playable, with minor glitches and CrossOver perfect. "
+            + "Sevoflurane players: it reached a frame in 1 of 3 runs on 1 Mac.")
+        let record = GameCompatRecord(
+            appID: 400, name: "Portal", antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: nil,
+            community: oneMac, hasMacBuild: false, macArchitectures: nil, deckCategory: nil, mac: portal, nativeBadge: nil,
+            antiCheatBadge: GameCompatVerdict.antiCheat(nil), fetchedAt: .now,
+        )
+        #expect(GameCompatVerdict.installRisk(record) == nil)
+        // A wiki tier below Silver stays where it is.
+        let bronze = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(wine: "runs"), proton: nil, community: oneMac)
+        #expect(bronze.tier == .bronze)
+        // One Mac that rates it at least as well as the wiki keeps its own verdict.
+        let better = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(wine: "unplayable"), proton: nil,
+            community: community("perfect", runs: 3, installs: 1),
+        )
+        #expect(better.tier == .platinum)
+        #expect(!better.reason.contains("AppleGamingWiki"))
+        // The anti-cheat caveat is kept as it is on the wiki's own path.
+        let guarded = GameCompatVerdict.mac(
+            antiCheat: antiCheat(["BattlEye"], status: "Denied"), wiki: wiki(crossover: "perfect", wine: "playable"),
+            proton: nil, community: oneMac,
+        )
+        #expect(guarded.tier == .silver)
+        #expect(guarded.reason.contains("Online play"))
+    }
+
+    @Test
+    func `two Macs below the wiki keep the community's verdict`() {
+        let badge = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: nil,
+            community: community("unplayable", runs: 6, installs: 2, reachedFrame: 0.25, played: 0, crashed: 0),
+        )
+        #expect(badge.tier == .borked)
+        #expect(badge.reason == "Sevoflurane players: it reached a frame in fewer than half the runs on a typical Mac, across 6 runs on 2 Macs.")
     }
 
     @Test
@@ -323,7 +422,25 @@ struct GameCompatTests {
         #expect(summary.runs == 3)
         #expect(summary.medianFPS == 57.6)
         #expect(summary.pageURL.absoluteString == "https://kagerou.glass/sevoflurane/games/1962700-subnautica-2")
+        // A summary without the figures reads as one with none left out.
+        #expect(summary.leftOut == 0)
+        #expect(summary.reachedFrame == nil)
         #expect(GameCompatSources.community(data: Data("{}".utf8)) == nil)
+    }
+
+    @Test
+    func `the community summary carries the figures its verdict was taken from`() throws {
+        let json = """
+        {"appid":400,"engine":"dormison-r8","runs":5,"installs":1,"left_out":2,"reached_frame":0.333,
+         "played":0.333,"crashed":0,"verdict":"unplayable","total_runs":5,
+         "url":"https://kagerou.glass/sevoflurane/games/400-portal","game":{"appid":400}}
+        """
+        let summary = try #require(GameCompatSources.community(data: Data(json.utf8)))
+        #expect(summary.leftOut == 2)
+        #expect(summary.judged == 3)
+        #expect(summary.reachedFrame == 0.333)
+        #expect(summary.played == 0.333)
+        #expect(summary.crashed == 0)
     }
 
     @Test
@@ -400,6 +517,15 @@ struct CompatibilityStripSwitchTests {
     }
 
     @Test
+    func `the 32-bit macOS row informs without a failing medal`() {
+        // The Windows version is the one that plays, so the row rates nothing.
+        for script in [SteamCompatBadge.script, SteamCompatBadge.storeScript] {
+            #expect(script.contains(#"row(infoMark(), "<b>macOS version:</b> 32-bit only"#))
+            #expect(!script.contains(#"medal("borked"), "<b>macOS version:</b>"#))
+        }
+    }
+
+    @Test
     func `removal stands the script down rather than uninstalling it`() {
         #expect(SteamCompatBadge.script.contains("enabled: true"))
         #expect(SteamCompatBadge.removalScript.contains("__sevoCompat.enabled = false"))
@@ -410,4 +536,91 @@ struct CompatibilityStripSwitchTests {
         // And the observer that puts the strip back has to read the flag.
         #expect(SteamCompatBadge.script.contains("!window.__sevoCompat.enabled"))
     }
+}
+
+/// The community database is asked about the engine the bottle runs, and an
+/// engine's answer is kept apart from another's.
+struct GameCompatEngineTests {
+    /// The engine a test's service asks about, changed between asks.
+    private final class Choice: Sendable {
+        let engine = Mutex<String?>(nil)
+    }
+
+    @Test
+    func `the community summary is asked for the bottle's engine, and a switch asks again`() async throws {
+        let cache = FileManager.default.temporaryDirectory.appending(path: "compat-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let choice = Choice()
+        choice.engine.withLock { $0 = "dormison-r7" }
+        let service = GameCompatService(
+            session: CommunityStub.session(), cache: cache, appInfo: cache.appending(path: "appinfo.vdf"),
+            engine: { choice.engine.withLock { $0 } },
+        )
+        let id = CommunityStub.appID
+
+        let r7 = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
+        #expect(r7.community?.engine == "dormison-r7")
+        choice.engine.withLock { $0 = "dormison-r8" }
+        let r8 = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
+        #expect(r8.community?.engine == "dormison-r8")
+        // Back on r7, its day-fresh answer is read from disk.
+        choice.engine.withLock { $0 = "dormison-r7" }
+        let again = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
+        #expect(again.community?.engine == "dormison-r7")
+        #expect(CommunityStub.asked() == ["dormison-r7", "dormison-r8"])
+    }
+
+    @Test
+    func `the single request names the engine, and none without one`() throws {
+        let base = try #require(URL(string: "https://kagerou.glass/api/sevoflurane/v1"))
+        let named = GameCompatSources.communityURL(base: base, appID: 400, engine: "dormison-r8")
+        #expect(named.absoluteString == "https://kagerou.glass/api/sevoflurane/v1/games/400?engine=dormison-r8")
+        let plain = GameCompatSources.communityURL(base: base, appID: 400, engine: nil)
+        #expect(plain.absoluteString == "https://kagerou.glass/api/sevoflurane/v1/games/400")
+        #expect(GameCompatSources.communityCacheFile(appID: 400, engine: "crossover") == "community/crossover/400.json")
+        #expect(GameCompatSources.communityCacheFile(appID: 400, engine: nil) != "community/crossover/400.json")
+    }
+}
+
+/// Sevoflurane's community database for one game, answering with the engine
+/// each request named; every other source answers empty.
+private final class CommunityStub: URLProtocol, @unchecked Sendable {
+    static let appID = 9_000_002
+    private static let engines = Mutex<[String]>([])
+
+    /// The engines the game's summary was asked for, in order.
+    static func asked() -> [String] {
+        engines.withLock { $0 }
+    }
+
+    static func session() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CommunityStub.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let url = request.url ?? URL(string: "https://stub.invalid")!
+        var body = "{}"
+        if url.path.hasSuffix("/games/\(Self.appID)") {
+            let engine = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "engine" }?.value ?? ""
+            Self.engines.withLock { $0.append(engine) }
+            body = #"{"verdict":"perfect","runs":5,"installs":2,"engine":"\#(engine)","url":"https://kagerou.glass/g/1"}"#
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
