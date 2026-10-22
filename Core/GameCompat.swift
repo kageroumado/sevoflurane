@@ -477,7 +477,9 @@ nonisolated enum GameCompatVerdict {
         switch (wine, crossover) {
         case let (wine?, crossover?) where wine != crossover:
             let better = rank(wine)! > rank(crossover)! ? wine : crossover
-            let reason = "AppleGamingWiki rates Wine \(describe(wine)) and CrossOver \(describe(crossover))."
+            let first = describe(wine)
+            let joint = first.contains(",") ? ", and" : " and"
+            let reason = "AppleGamingWiki rates Wine \(first)\(joint) CrossOver \(describe(crossover))."
             return (better, rank(better)! >= rank("runs")!, reason)
         case let (wine?, crossover):
             let both = crossover == nil ? "Wine" : "Wine and CrossOver"

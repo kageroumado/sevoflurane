@@ -189,7 +189,7 @@ struct GameCompatTests {
         )
         #expect(portal.tier == .silver)
         #expect(portal.state == .playable)
-        #expect(portal.reason == "AppleGamingWiki rates Wine playable, with minor glitches and CrossOver perfect. "
+        #expect(portal.reason == "AppleGamingWiki rates Wine playable, with minor glitches, and CrossOver perfect. "
             + "Sevoflurane players: it reached a frame in 1 of 3 runs on 1 Mac.")
         let record = GameCompatRecord(
             appID: 400, name: "Portal", antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: nil,
