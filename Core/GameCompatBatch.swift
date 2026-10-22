@@ -6,7 +6,7 @@ import Foundation
 ///
 /// The whole-table sources (AppleGamingWiki, AreWeAntiCheatYet) and the
 /// client's app cache cost nothing per game, and Sevoflurane's database
-/// answers ten games a request for the bottle's engine. What remains per game is PCGamingWiki's
+/// answers a hundred games a request. What remains per game is PCGamingWiki's
 /// app-id-to-title bridge, asked only for a title the wiki does not know by
 /// name, and ProtonDB, asked only when nothing Mac-side has a verdict, which
 /// keeps the badge in the library the same as the strip on the game's page,
@@ -34,11 +34,8 @@ nonisolated enum GameCompatBatch {
 
     /// The most games one request may name; a library past this asks again.
     static let maxGames = 5000
-    /// The most app ids the community database answers in one request, and
-    /// the most it answers for one engine: a summary for an engine is computed
-    /// from the game's runs rather than read.
+    /// The most app ids the community database answers in one request.
     static let communityChunk = 100
-    static let engineCommunityChunk = 10
     /// The pause between two queued lookups.
     static let lookupInterval: Duration = .seconds(1)
 
@@ -56,15 +53,12 @@ nonisolated enum GameCompatBatch {
         return games
     }
 
-    /// The community database's batch requests for `appIDs` on `engine`: a
-    /// hundred apiece, or ten when an engine is named.
-    static func communityRequests(base: URL, appIDs: [Int], engine: String?) -> [(url: URL, appIDs: [Int])] {
-        let size = engine == nil ? communityChunk : engineCommunityChunk
-        return stride(from: 0, to: appIDs.count, by: size).compactMap { start in
-            let chunk = Array(appIDs[start ..< min(start + size, appIDs.count)])
+    /// The community database's batch requests for `appIDs`, a hundred apiece.
+    static func communityRequests(base: URL, appIDs: [Int]) -> [(url: URL, appIDs: [Int])] {
+        stride(from: 0, to: appIDs.count, by: communityChunk).compactMap { start in
+            let chunk = Array(appIDs[start ..< min(start + communityChunk, appIDs.count)])
             var components = URLComponents(url: base.appendingPathComponent("games"), resolvingAgainstBaseURL: false)
             components?.queryItems = [URLQueryItem(name: "appids", value: chunk.map(String.init).joined(separator: ","))]
-                + GameCompatSources.engineQuery(engine)
             return components?.url.map { ($0, chunk) }
         }
     }

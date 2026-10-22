@@ -96,21 +96,14 @@ struct LibraryCompatTests {
     }
 
     @Test
-    func `the community database is asked a hundred games at a time, or ten for one engine`() throws {
+    func `the community database is asked a hundred games at a time`() throws {
         let base = try #require(URL(string: "https://kagerou.glass/api/sevoflurane/v1"))
-        let requests = GameCompatBatch.communityRequests(base: base, appIDs: Array(1 ... 250), engine: nil)
+        let requests = GameCompatBatch.communityRequests(base: base, appIDs: Array(1 ... 250))
         #expect(requests.map(\.appIDs.count) == [100, 100, 50])
         #expect(requests[0].url.absoluteString.hasPrefix("https://kagerou.glass/api/sevoflurane/v1/games?appids=1%2C2%2C3")
             || requests[0].url.absoluteString.hasPrefix("https://kagerou.glass/api/sevoflurane/v1/games?appids=1,2,3"))
-        #expect(!requests[0].url.absoluteString.contains("engine="))
         #expect(requests[2].appIDs.first == 201)
-        #expect(GameCompatBatch.communityRequests(base: base, appIDs: [], engine: nil).isEmpty)
-        // The server answers at most ten games a request for one engine.
-        let engine = GameCompatBatch.communityRequests(base: base, appIDs: Array(1 ... 25), engine: "dormison-r8")
-        #expect(engine.map(\.appIDs.count) == [10, 10, 5])
-        let query = try #require(URLComponents(url: engine[0].url, resolvingAgainstBaseURL: false)?.queryItems)
-        #expect(query.first { $0.name == "engine" }?.value == "dormison-r8")
-        #expect(query.first { $0.name == "appids" }?.value == "1,2,3,4,5,6,7,8,9,10")
+        #expect(GameCompatBatch.communityRequests(base: base, appIDs: []).isEmpty)
     }
 
     @Test

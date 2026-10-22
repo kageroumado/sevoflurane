@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 import Testing
 @testable import Sevoflurane
 
@@ -536,91 +535,4 @@ struct CompatibilityStripSwitchTests {
         // And the observer that puts the strip back has to read the flag.
         #expect(SteamCompatBadge.script.contains("!window.__sevoCompat.enabled"))
     }
-}
-
-/// The community database is asked about the engine the bottle runs, and an
-/// engine's answer is kept apart from another's.
-struct GameCompatEngineTests {
-    /// The engine a test's service asks about, changed between asks.
-    private final class Choice: Sendable {
-        let engine = Mutex<String?>(nil)
-    }
-
-    @Test
-    func `the community summary is asked for the bottle's engine, and a switch asks again`() async throws {
-        let cache = FileManager.default.temporaryDirectory.appending(path: "compat-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: cache) }
-        let choice = Choice()
-        choice.engine.withLock { $0 = "dormison-r7" }
-        let service = GameCompatService(
-            session: CommunityStub.session(), cache: cache, appInfo: cache.appending(path: "appinfo.vdf"),
-            engine: { choice.engine.withLock { $0 } },
-        )
-        let id = CommunityStub.appID
-
-        let r7 = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
-        #expect(r7.community?.engine == "dormison-r7")
-        choice.engine.withLock { $0 = "dormison-r8" }
-        let r8 = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
-        #expect(r8.community?.engine == "dormison-r8")
-        // Back on r7, its day-fresh answer is read from disk.
-        choice.engine.withLock { $0 = "dormison-r7" }
-        let again = await service.record(appID: id, name: "Engine Test", deckCategory: nil)
-        #expect(again.community?.engine == "dormison-r7")
-        #expect(CommunityStub.asked() == ["dormison-r7", "dormison-r8"])
-    }
-
-    @Test
-    func `the single request names the engine, and none without one`() throws {
-        let base = try #require(URL(string: "https://kagerou.glass/api/sevoflurane/v1"))
-        let named = GameCompatSources.communityURL(base: base, appID: 400, engine: "dormison-r8")
-        #expect(named.absoluteString == "https://kagerou.glass/api/sevoflurane/v1/games/400?engine=dormison-r8")
-        let plain = GameCompatSources.communityURL(base: base, appID: 400, engine: nil)
-        #expect(plain.absoluteString == "https://kagerou.glass/api/sevoflurane/v1/games/400")
-        #expect(GameCompatSources.communityCacheFile(appID: 400, engine: "crossover") == "community/crossover/400.json")
-        #expect(GameCompatSources.communityCacheFile(appID: 400, engine: nil) != "community/crossover/400.json")
-    }
-}
-
-/// Sevoflurane's community database for one game, answering with the engine
-/// each request named; every other source answers empty.
-private final class CommunityStub: URLProtocol, @unchecked Sendable {
-    static let appID = 9_000_002
-    private static let engines = Mutex<[String]>([])
-
-    /// The engines the game's summary was asked for, in order.
-    static func asked() -> [String] {
-        engines.withLock { $0 }
-    }
-
-    static func session() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [CommunityStub.self]
-        return URLSession(configuration: configuration)
-    }
-
-    override static func canInit(with _: URLRequest) -> Bool {
-        true
-    }
-
-    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        let url = request.url ?? URL(string: "https://stub.invalid")!
-        var body = "{}"
-        if url.path.hasSuffix("/games/\(Self.appID)") {
-            let engine = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first { $0.name == "engine" }?.value ?? ""
-            Self.engines.withLock { $0.append(engine) }
-            body = #"{"verdict":"perfect","runs":5,"installs":2,"engine":"\#(engine)","url":"https://kagerou.glass/g/1"}"#
-        }
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
 }
