@@ -30,10 +30,14 @@ struct GameCompatTests {
         )
     }
 
-    private func community(_ verdict: String, runs: Int = 12, installs: Int = 4) -> GameCompatRecord.Community {
+    private func community(
+        _ verdict: String, runs: Int = 12, installs: Int = 4, leftOut: Int = 0,
+        reachedFrame: Double? = nil, played: Double? = nil, crashed: Double? = nil,
+    ) -> GameCompatRecord.Community {
         GameCompatRecord.Community(
             verdict: verdict, runs: runs, installs: installs, engine: "dormison-b1", medianFPS: 58,
             pageURL: URL(string: "https://kagerou.glass/sevoflurane/games/1-x")!,
+            leftOut: leftOut, reachedFrame: reachedFrame, played: played, crashed: crashed,
         )
     }
 
@@ -127,6 +131,52 @@ struct GameCompatTests {
         #expect(crashes.state == .unsupported)
         let glitches = GameCompatVerdict.mac(antiCheat: nil, wiki: nil, proton: nil, community: community("runs"))
         #expect(glitches.state == .playable)
+    }
+
+    @Test
+    func `the community sentence tells one Mac's runs as runs`() {
+        // Portal: three runs on one Mac, two of which never drew a frame.
+        let portal = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("unplayable", runs: 3, installs: 1, reachedFrame: 0.333, played: 0.333, crashed: 0),
+        )
+        #expect(portal.tier == .borked)
+        #expect(portal.reason == "Sevoflurane players: it reached a frame in 1 of 3 runs on 1 Mac.")
+        #expect(!portal.reason.contains("crashing"))
+        // 9-nine-: it draws, but one session in four lasted.
+        let nine = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 4, installs: 1, reachedFrame: 1, played: 0.25, crashed: 0),
+        )
+        #expect(nine.tier == .bronze)
+        #expect(nine.reason
+            == "Sevoflurane players: it starts, but only 1 of 4 runs on 1 Mac was played past five minutes and ended by the player.")
+        #expect(!nine.reason.contains("glitches"))
+        let crashes = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 4, installs: 1, reachedFrame: 1, played: 0.75, crashed: 0.25),
+        )
+        #expect(crashes.reason == "Sevoflurane players: it plays, but 1 of 4 runs on 1 Mac crashed.")
+        let dark = GameCompatVerdict.describe(community("unplayable", runs: 3, installs: 1, reachedFrame: 0, played: 0, crashed: 0))
+        #expect(dark == "Sevoflurane players: it reached no frame in 3 runs on 1 Mac.")
+    }
+
+    @Test
+    func `the community sentence counts the judged runs and tells several Macs' shares as shares`() {
+        // Two runs a tool stopped: the sentence counts the three the verdict
+        // was taken over, and a frame share that includes stopped runs is no
+        // count of them.
+        let stopped = GameCompatVerdict.describe(
+            community("unplayable", runs: 5, installs: 1, leftOut: 2, reachedFrame: 0.4, played: 0, crashed: 0),
+        )
+        #expect(stopped == "Sevoflurane players: it reached a frame in fewer than half the runs, across 3 runs on 1 Mac.")
+        let short = GameCompatVerdict.describe(
+            community("runs", runs: 12, installs: 4, reachedFrame: 0.9, played: 0.4, crashed: 0),
+        )
+        #expect(short == "Sevoflurane players: it starts, but fewer than half the runs on a typical Mac were played past five minutes and ended by the player, across 12 runs on 4 Macs.")
+        #expect(GameCompatVerdict.describe(community("playable")) == "Sevoflurane players: playable across 12 runs on 4 Macs.")
+        // A summary from a server that sends no figures keeps to the verdict.
+        #expect(GameCompatVerdict.describe(community("unplayable")) == "Sevoflurane players rate it Borked across 12 runs on 4 Macs.")
     }
 
     @Test
@@ -324,7 +374,25 @@ struct GameCompatTests {
         #expect(summary.runs == 3)
         #expect(summary.medianFPS == 57.6)
         #expect(summary.pageURL.absoluteString == "https://kagerou.glass/sevoflurane/games/1962700-subnautica-2")
+        // A summary without the figures reads as one with none left out.
+        #expect(summary.leftOut == 0)
+        #expect(summary.reachedFrame == nil)
         #expect(GameCompatSources.community(data: Data("{}".utf8)) == nil)
+    }
+
+    @Test
+    func `the community summary carries the figures its verdict was taken from`() throws {
+        let json = """
+        {"appid":400,"engine":"dormison-r8","runs":5,"installs":1,"left_out":2,"reached_frame":0.333,
+         "played":0.333,"crashed":0,"verdict":"unplayable","total_runs":5,
+         "url":"https://kagerou.glass/sevoflurane/games/400-portal","game":{"appid":400}}
+        """
+        let summary = try #require(GameCompatSources.community(data: Data(json.utf8)))
+        #expect(summary.leftOut == 2)
+        #expect(summary.judged == 3)
+        #expect(summary.reachedFrame == 0.333)
+        #expect(summary.played == 0.333)
+        #expect(summary.crashed == 0)
     }
 
     @Test

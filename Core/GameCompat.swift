@@ -57,6 +57,21 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
         /// The median frame rate across installs, when runs measured one.
         let medianFPS: Double?
         let pageURL: URL
+        /// The runs the verdict leaves out: the ones a tool stopped.
+        var leftOut = 0
+        /// The share of runs that drew a frame, taken over the judged runs
+        /// and the left-out ones that drew; the median across installs (0–1).
+        var reachedFrame: Double? = nil
+        /// The share of judged runs played past five minutes and ended by the
+        /// player, the median across installs.
+        var played: Double? = nil
+        /// The share of judged runs that crashed, the median across installs.
+        var crashed: Double? = nil
+
+        /// The runs the verdict is taken over.
+        var judged: Int {
+            max(runs - leftOut, 0)
+        }
     }
 
     let community: Community?
@@ -299,9 +314,7 @@ nonisolated enum GameCompatVerdict {
         let blocker = antiCheatBlocker(antiCheat)
         let caveat = blocker == nil ? "" : " Online play stays blocked. See Anti-cheat."
         if let community, rank(community.verdict) != nil {
-            let source = "Sevoflurane players rate it \(describe(community.verdict)) across "
-                + "\(community.runs.formatted()) runs on \(macs(community.installs))."
-            return badge(tier: community.verdict, blocker: blocker, reason: source, caveat: caveat)
+            return badge(tier: community.verdict, blocker: blocker, reason: describe(community), caveat: caveat)
         }
         if let wiki, let evidence = wikiEvidence(wiki) {
             if evidence.capped {
@@ -470,6 +483,61 @@ nonisolated enum GameCompatVerdict {
 
     static func macs(_ count: Int) -> String {
         count == 1 ? "1 Mac" : "\(count.formatted()) Macs"
+    }
+
+    static func runs(_ count: Int) -> String {
+        count == 1 ? "1 run" : "\(count.formatted()) runs"
+    }
+
+    /// What Sevoflurane players' runs show, from the figures the server took
+    /// the verdict from: a frame reached, five minutes played, a crash. One
+    /// Mac's shares are its own, so they are told as runs; across several Macs
+    /// each share is the median Mac's, so it is told as one.
+    static func describe(_ community: GameCompatRecord.Community) -> String {
+        let one = community.installs == 1
+        let tally = "\(runs(community.judged)) on \(macs(community.installs))"
+        let typical = one ? "" : " on a typical Mac"
+        /// The judged runs a share stands for, when it is one Mac's.
+        func count(_ share: Double?) -> Int? {
+            guard one, let share else { return nil }
+            return Int((share * Double(community.judged)).rounded())
+        }
+        let played = "played past five minutes and ended by the player"
+        let finding: String? = switch community.verdict {
+        case "unplayable", "menu":
+            // The share of frames also counts the left-out runs that drew, so
+            // it is a count of judged runs only when none was left out.
+            if community.leftOut == 0, let drew = count(community.reachedFrame) {
+                drew == 0 ? "it reached no frame in \(tally)" : "it reached a frame in \(drew) of \(tally)"
+            } else if community.reachedFrame != nil {
+                "it reached a frame in fewer than half the runs\(typical), across \(tally)"
+            } else {
+                nil
+            }
+        case "runs":
+            if let share = community.played, share < 0.5 {
+                if let kept = count(share) {
+                    kept == 0 ? "it starts, but none of \(tally) was \(played)"
+                        : "it starts, but only \(kept) of \(tally) \(kept == 1 ? "was" : "were") \(played)"
+                } else {
+                    "it starts, but fewer than half the runs\(typical) were \(played), across \(tally)"
+                }
+            } else if let share = community.crashed, share > 0.1 {
+                if let crashes = count(share) {
+                    "it plays, but \(crashes) of \(tally) crashed"
+                } else {
+                    "it plays, but more than one run in ten\(typical) crashed, across \(tally)"
+                }
+            } else {
+                nil
+            }
+        case "playable": "playable across \(tally)"
+        case "perfect": "perfect across \(tally)"
+        default: nil
+        }
+        if let finding { return "Sevoflurane players: \(finding)." }
+        let tier = GameCompatBadge.Tier(wiki: community.verdict)?.label ?? community.verdict
+        return "Sevoflurane players rate it \(tier) across \(tally)."
     }
 
     /// A macOS version keeps AppleGamingWiki's own word. ProtonDB's medals
@@ -686,11 +754,17 @@ nonisolated enum GameCompatSources {
             let engine: String?
             let fps: FPS?
             let url: URL
+            let left_out: Int?
+            let reached_frame: Double?
+            let played: Double?
+            let crashed: Double?
         }
         guard let summary = try? JSONDecoder().decode(Summary.self, from: data) else { return nil }
         return GameCompatRecord.Community(
             verdict: summary.verdict, runs: summary.runs, installs: summary.installs,
             engine: summary.engine, medianFPS: summary.fps?.median_avg, pageURL: summary.url,
+            leftOut: summary.left_out ?? 0, reachedFrame: summary.reached_frame,
+            played: summary.played, crashed: summary.crashed,
         )
     }
 

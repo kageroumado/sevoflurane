@@ -195,7 +195,9 @@ enum SteamCompatBadge {
             if (c) {
               var verdict = tierWord(c.verdict) ? c.verdict : "not rated yet";
               var fps = typeof c.medianFPS === "number" ? ", " + Math.round(c.medianFPS) + " fps median" : "";
-              rows.push(row(null, "<b>Sevoflurane players:</b> " + esc(verdict) + " (" + Number(c.runs).toLocaleString() + " runs on " + (c.installs === 1 ? "1 Mac" : Number(c.installs).toLocaleString() + " Macs") + esc(fps) + ")", link(c.pageURL, "Game database")));
+              /* The runs the verdict is taken over: a run a tool stopped is left out. */
+              var judged = Math.max(Number(c.runs) - Number(c.leftOut || 0), 0);
+              rows.push(row(null, "<b>Sevoflurane players:</b> " + esc(verdict) + " (" + judged.toLocaleString() + (judged === 1 ? " run on " : " runs on ") + (c.installs === 1 ? "1 Mac" : Number(c.installs).toLocaleString() + " Macs") + esc(fps) + ")", link(c.pageURL, "Game database")));
             }
             if (record.wiki) {
               var tiers = [];
