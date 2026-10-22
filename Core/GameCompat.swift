@@ -176,6 +176,11 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
         init?(proton word: String) {
             self.init(rawValue: word)
         }
+
+        /// Whether this tier ranks above `other`; the cases run best first.
+        func isBetter(than other: Tier) -> Bool {
+            Self.allCases.firstIndex(of: self)! < Self.allCases.firstIndex(of: other)!
+        }
     }
 
     let state: State
@@ -301,10 +306,13 @@ nonisolated enum GameCompatVerdict {
     }
 
     /// The Mac badge for the Windows build the bottle runs. Sevoflurane's own
-    /// runs come first, being this engine on real Macs; then a structural
-    /// anti-cheat failure; then the wiki's Wine-family columns; then the
-    /// Linux prior, which keeps ProtonDB's medal but can only ever say
-    /// "untested here", so its state stops at Playable.
+    /// runs come first, being this engine on real Macs, except that one Mac
+    /// rating it below the wiki's Wine-family columns leaves the wiki's tier
+    /// capped at Silver: one Mac can be the outlier, and its result is still
+    /// the reason to withhold Verified. Then a structural anti-cheat failure;
+    /// then the wiki's columns; then the Linux prior, which keeps ProtonDB's
+    /// medal but can only ever say "untested here", so its state stops at
+    /// Playable.
     static func mac(
         antiCheat: GameCompatRecord.AntiCheat?,
         wiki: GameCompatRecord.WikiTiers?,
@@ -313,7 +321,13 @@ nonisolated enum GameCompatVerdict {
     ) -> GameCompatBadge {
         let blocker = antiCheatBlocker(antiCheat)
         let caveat = blocker == nil ? "" : " Online play stays blocked. See Anti-cheat."
-        if let community, rank(community.verdict) != nil {
+        if let community, let players = GameCompatBadge.Tier(wiki: community.verdict) {
+            if community.installs == 1, let wiki, let evidence = wikiEvidence(wiki),
+               let rated = GameCompatBadge.Tier(wiki: evidence.tier), rated.isBetter(than: players) {
+                let capped = rank(evidence.tier)! > rank("playable")! ? "playable" : evidence.tier
+                let reason = evidence.reason + " " + describe(community)
+                return badge(tier: capped, blocker: blocker, reason: reason, caveat: caveat)
+            }
             return badge(tier: community.verdict, blocker: blocker, reason: describe(community), caveat: caveat)
         }
         if let wiki, let evidence = wikiEvidence(wiki) {

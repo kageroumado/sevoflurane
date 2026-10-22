@@ -180,6 +180,54 @@ struct GameCompatTests {
     }
 
     @Test
+    func `one Mac below the wiki gives the wiki's tier capped at Silver, and names both`() {
+        // Portal: one Mac drew a frame in one run of three; the wiki rates
+        // Wine playable and CrossOver perfect.
+        let oneMac = community("unplayable", runs: 3, installs: 1, reachedFrame: 0.333, played: 0.333, crashed: 0)
+        let portal = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: proton("platinum", total: 267),
+            community: oneMac,
+        )
+        #expect(portal.tier == .silver)
+        #expect(portal.state == .playable)
+        #expect(portal.reason == "AppleGamingWiki rates Wine playable, with minor glitches and CrossOver perfect. "
+            + "Sevoflurane players: it reached a frame in 1 of 3 runs on 1 Mac.")
+        let record = GameCompatRecord(
+            appID: 400, name: "Portal", antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: nil,
+            community: oneMac, hasMacBuild: false, macArchitectures: nil, deckCategory: nil, mac: portal, nativeBadge: nil,
+            antiCheatBadge: GameCompatVerdict.antiCheat(nil), fetchedAt: .now,
+        )
+        #expect(GameCompatVerdict.installRisk(record) == nil)
+        // A wiki tier below Silver stays where it is.
+        let bronze = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(wine: "runs"), proton: nil, community: oneMac)
+        #expect(bronze.tier == .bronze)
+        // One Mac that rates it at least as well as the wiki keeps its own verdict.
+        let better = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(wine: "unplayable"), proton: nil,
+            community: community("perfect", runs: 3, installs: 1),
+        )
+        #expect(better.tier == .platinum)
+        #expect(!better.reason.contains("AppleGamingWiki"))
+        // The anti-cheat caveat is kept as it is on the wiki's own path.
+        let guarded = GameCompatVerdict.mac(
+            antiCheat: antiCheat(["BattlEye"], status: "Denied"), wiki: wiki(crossover: "perfect", wine: "playable"),
+            proton: nil, community: oneMac,
+        )
+        #expect(guarded.tier == .silver)
+        #expect(guarded.reason.contains("Online play"))
+    }
+
+    @Test
+    func `two Macs below the wiki keep the community's verdict`() {
+        let badge = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: wiki(crossover: "perfect", wine: "playable"), proton: nil,
+            community: community("unplayable", runs: 6, installs: 2, reachedFrame: 0.25, played: 0, crashed: 0),
+        )
+        #expect(badge.tier == .borked)
+        #expect(badge.reason == "Sevoflurane players: it reached a frame in fewer than half the runs on a typical Mac, across 6 runs on 2 Macs.")
+    }
+
+    @Test
     func `the community's own runs still leave anti-cheat its caveat`() {
         let badge = GameCompatVerdict.mac(
             antiCheat: antiCheat(["Easy Anti-Cheat"]), wiki: nil, proton: nil, community: community("perfect"),
