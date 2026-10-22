@@ -651,6 +651,26 @@ nonisolated enum GameCompatSources {
         )
     }
 
+    /// One game's summary from Sevoflurane's community database, with that
+    /// engine's figures when one is named (`GET /v1/games/<appid>?engine=…`).
+    static func communityURL(base: URL, appID: Int, engine: String?) -> URL {
+        let url = base.appendingPathComponent("games/\(appID)")
+        guard engine != nil, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.queryItems = engineQuery(engine)
+        return components.url ?? url
+    }
+
+    /// The `engine` query item the community database's reads take.
+    static func engineQuery(_ engine: String?) -> [URLQueryItem] {
+        engine.map { [URLQueryItem(name: "engine", value: $0)] } ?? []
+    }
+
+    /// Where one game's community summary is cached: a folder per engine, so
+    /// a switch of engine asks again.
+    static func communityCacheFile(appID: Int, engine: String?) -> String {
+        "community/\(engine ?? "any")/\(appID).json"
+    }
+
     /// One game's summary from Sevoflurane's community database
     /// (`GET /v1/games/<appid>`). A game with no runs answers 404, cached as
     /// `{}`, which reads as absent like anything else off the shape.
