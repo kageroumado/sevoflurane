@@ -34,9 +34,9 @@ enum SteamFileDialogs {
         }
     }
 
-    /// Presents the panel the options describe, as a sheet on `window` when
-    /// the call came from one on screen, and answers the choice as a Windows
-    /// path, or `nil` for a dismissed panel.
+    /// Presents the panel the options describe, as a sheet on the calling
+    /// window or the one the user is working in, and answers the choice as a
+    /// Windows path, or `nil` for a dismissed panel.
     static func choose(_ options: Options, over window: NSWindow? = nil) async -> String? {
         let panel: NSSavePanel
         let types = contentTypes(patterns: options.patterns)

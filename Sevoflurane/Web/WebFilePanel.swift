@@ -26,17 +26,38 @@ enum WebFilePanel {
         return response == .OK ? panel.urls : nil
     }
 
-    /// Runs `panel` as a sheet on `window` while it is on screen, and on its
-    /// own otherwise. Never `runModal`: a modal session holds every main-actor
-    /// job, the control endpoint and the helper's heartbeat among them, for
-    /// as long as the panel is up.
+    /// Runs `panel` as a sheet on the window it belongs to, and on its own
+    /// when no window can take one. Never `runModal`: a modal session holds
+    /// every main-actor job, the control endpoint and the helper's heartbeat
+    /// among them, for as long as the panel is up.
     static func present(_ panel: NSSavePanel, over window: NSWindow?) async -> NSApplication.ModalResponse {
-        if let window, window.isVisible, window.attachedSheet == nil {
-            return await panel.beginSheetModal(for: window)
+        if let host = sheetHost(caller: window) {
+            return await panel.beginSheetModal(for: host)
         }
+        // On its own the panel is a sibling of Steam's windows, and a click on
+        // one of them buries it while the page still waits on its answer. It
+        // floats over them instead, under Steam's menus, and steps aside while
+        // another app is frontmost.
+        panel.level = .modalPanel
+        panel.hidesOnDeactivate = true
         NSApp.activate()
         return await withCheckedContinuation { continuation in
             panel.begin { continuation.resume(returning: $0) }
+        }
+    }
+
+    /// The window a sheet can hang from: the caller's own when the user can
+    /// see it, else the one they are working in. Steam's UI code runs in the
+    /// SharedJSContext window, which is ordered in at 0×0 and never seen, so
+    /// most of its pickers arrive from there; a sheet on it is a panel stranded
+    /// in the corner of the screen. Menus and the game overlay sit ordered in
+    /// at alpha 0 between uses and are passed over the same way, and so is a
+    /// panel already up as a sheet, which is the key window while it is.
+    private static func sheetHost(caller: NSWindow?) -> NSWindow? {
+        [caller, NSApp.keyWindow, NSApp.mainWindow].lazy.compactMap(\.self).first { window in
+            window.isVisible && !window.isSheet && window.alphaValue > 0 && !window.ignoresMouseEvents
+                && window.frame.width > 0 && window.frame.height > 0
+                && window.attachedSheet == nil
         }
     }
 
