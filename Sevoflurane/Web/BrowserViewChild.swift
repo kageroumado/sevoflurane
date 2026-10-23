@@ -305,6 +305,17 @@ extension BrowserViewChild: WKUIDelegate {
         }
         return nil
     }
+
+    /// A file input on a community or store page: Upload your avatar, a
+    /// profile background, a screenshot or workshop upload. In the async
+    /// form, for the reason ``SteamWebCoordinator`` gives.
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame _: WKFrameInfo,
+    ) async -> [URL]? {
+        await WebFilePanel.choose(parameters, for: webView)
+    }
 }
 
 /// Answers the store page's Mac compatibility strip: the record for a game

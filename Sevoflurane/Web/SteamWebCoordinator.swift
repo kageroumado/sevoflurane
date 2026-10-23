@@ -57,27 +57,13 @@ extension SteamWebCoordinator: WKUIDelegate {
     /// The async form of the requirement: the completion-handler form takes
     /// a `@MainActor` block, and a method declared with a plain closure
     /// binds to no selector at all, so WebKit finds no delegate and the
-    /// click does nothing, 2026-10-18.
+    /// click does nothing.
     func webView(
         _ webView: WKWebView,
         runOpenPanelWith parameters: WKOpenPanelParameters,
         initiatedByFrame _: WKFrameInfo,
     ) async -> [URL]? {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        panel.canChooseDirectories = parameters.allowsDirectories
-        panel.canChooseFiles = true
-        panel.prompt = String(localized: "Choose")
-        let response: NSApplication.ModalResponse
-        if let window = webView.window, window.isVisible {
-            response = await panel.beginSheetModal(for: window)
-        } else {
-            NSApp.activate()
-            response = await withCheckedContinuation { continuation in
-                panel.begin { continuation.resume(returning: $0) }
-            }
-        }
-        return response == .OK ? panel.urls : nil
+        await WebFilePanel.choose(parameters, for: webView)
     }
 
     /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
@@ -172,7 +158,24 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
               let window = host?.window(for: webView) else {
             return (nil, nil)
         }
-        return (window.perform(function, body["args"] as? [Any] ?? []), nil)
+        let args = body["args"] as? [Any] ?? []
+        if function == "__openFileDialog" {
+            return (await Self.openFileDialog(args, over: webView.window), nil)
+        }
+        return (window.perform(function, args), nil)
+    }
+
+    /// `SteamClient.System.OpenFileDialog`, which the shim routes here: the
+    /// chosen path, or a rejection carrying `EResult` Cancelled for a
+    /// dismissed panel, which the pickers catch and ignore. Any other
+    /// rejection reaches the page as an error, and Add Library Folder shows
+    /// it in a dialog.
+    private static func openFileDialog(_ args: [Any], over window: NSWindow?) async -> Any {
+        let options = SteamFileDialogs.Options(args.first as? [String: Any] ?? [:])
+        guard let chosen = await SteamFileDialogs.choose(options, over: window) else {
+            return ["__sevoReject": ["result": SteamFileDialogs.cancelledResult, "message": "cancelled"]]
+        }
+        return chosen
     }
 
     /// Whether a message comes from Steam's UI: the top document of one of

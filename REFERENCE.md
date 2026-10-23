@@ -508,8 +508,9 @@ runs on CrossOver.
 - Quick Launch programs play like Steam games: per-game settings, Dock tile,
   run records and reports.
 - Steam's own file pickers — Browse… in Add a Non-Steam Game, Set Custom
-  Artwork, a custom icon — open the Mac's panel. Add desktop shortcut puts an
-  alias of the game's own bundle on the Desktop.
+  Artwork, a custom icon, a library or backup folder — and the community's
+  uploads (your avatar, a profile background) open the Mac's panel. Add
+  desktop shortcut puts an alias of the game's own bundle on the Desktop.
 - Quick Launch programs are listed in Steam's library as non-Steam games, so
   Big Picture, Steam Input and the overlay reach them, and a start from there
   keeps their settings, Dock tile and run records. Show in Steam's Library, in

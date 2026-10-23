@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 /// the client's native windows, so Add a Non-Steam Game's Browse and every
 /// other picker in Steam's UI showed nothing. The call is taken on its way
 /// to the client and answered with the Mac panel's choice as a Windows path
-/// on the bottle's `Z:` drive, which is the whole filesystem.
+/// on the bottle's drives: `C:` inside the bottle, `Z:` (the whole
+/// filesystem) everywhere else.
 @MainActor
 enum SteamFileDialogs {
     /// Steam's `EResult` for a dialog the user dismissed; the page reads it
@@ -33,57 +34,75 @@ enum SteamFileDialogs {
         }
     }
 
-    /// Presents the panel the options describe and answers the choice as a
-    /// Windows path, or `nil` for a dismissed panel.
-    static func choose(_ options: Options) async -> String? {
-        let title = options.title
-        let initial = options.initialFile
-        let extensions = options.patterns.compactMap { pattern -> String? in
-            guard pattern.hasPrefix("*."), !pattern.hasSuffix("*") else { return nil }
-            return String(pattern.dropFirst(2))
-        }
+    /// Presents the panel the options describe, as a sheet on `window` when
+    /// the call came from one on screen, and answers the choice as a Windows
+    /// path, or `nil` for a dismissed panel.
+    static func choose(_ options: Options, over window: NSWindow? = nil) async -> String? {
         let panel: NSSavePanel
+        let types = contentTypes(patterns: options.patterns)
+        let initial = initialLocation(options.initialFile)
         if options.saveMode {
             panel = NSSavePanel()
-            panel.nameFieldStringValue = unixPath(initial).map { URL(fileURLWithPath: $0).lastPathComponent } ?? initial
-            if !extensions.isEmpty {
-                panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) }
+            panel.nameFieldStringValue = fileName(options.initialFile)
+            if !types.isEmpty {
+                panel.allowedContentTypes = types
             }
         } else {
             let open = NSOpenPanel()
             open.canChooseFiles = !options.chooseDirectory
             open.canChooseDirectories = options.chooseDirectory
             open.allowsMultipleSelection = false
-            if !extensions.isEmpty, !extensions.contains("*") {
-                open.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) }
-                open.allowsOtherFileTypes = true
-            }
-            if let initial = unixPath(initial) {
-                open.directoryURL = URL(fileURLWithPath: initial).deletingLastPathComponent()
+            if !types.isEmpty {
+                open.allowedContentTypes = types
             }
             panel = open
         }
-        panel.title = title ?? ""
-        NSApp.activate()
-        // A modal session here would hold every main-actor job — the control
-        // endpoint, the helper's heartbeat — for as long as the panel is up.
-        let response = await withCheckedContinuation { continuation in
-            panel.begin { continuation.resume(returning: $0) }
+        panel.directoryURL = initial
+        if let title = options.title, !title.isEmpty {
+            panel.title = title
+            panel.message = title
         }
-        guard response == .OK, let chosen = panel.url else { return nil }
+        guard await WebFilePanel.present(panel, over: window) == .OK, let chosen = panel.url else { return nil }
         EventLog.shared.log(.client, "Steam's file dialog: chose \(chosen.lastPathComponent)")
-        return windowsPath(chosen.path)
+        return SteamBottle.windowsPath(for: chosen)
     }
 
-    /// `Z:\Users\…` for a Mac path.
-    static func windowsPath(_ path: String) -> String {
-        "Z:" + path.replacingOccurrences(of: "/", with: "\\")
+    /// The panel's filter for Steam's `*.ext` patterns; empty, which lets
+    /// any file through, when one of them is `*.*` — Steam's "All files",
+    /// which its own dialog offers beside the default filter and an open
+    /// panel has no menu to switch to.
+    nonisolated static func contentTypes(patterns: [String]) -> [UTType] {
+        var extensions: [String] = []
+        for pattern in patterns {
+            guard pattern.hasPrefix("*.") else { continue }
+            let name = String(pattern.dropFirst(2))
+            if name.contains("*") { return [] }
+            extensions.append(name)
+        }
+        return WebFilePanel.contentTypes(extensions: extensions)
     }
 
-    /// The Mac path behind a `Z:` path, or `nil` for anything else.
-    static func unixPath(_ windows: String) -> String? {
-        guard windows.lowercased().hasPrefix("z:") else { return nil }
-        return windows.dropFirst(2).replacingOccurrences(of: "\\", with: "/")
+    /// The folder the panel opens in: the initial file's own folder, or the
+    /// initial path itself when it names a folder (a directory picker's
+    /// current choice). `nil` for a path the bottle cannot resolve.
+    private static func initialLocation(_ windowsPath: String) -> URL? {
+        guard !windowsPath.isEmpty else { return nil }
+        let trimmed = windowsPath.hasPrefix("\"") && windowsPath.hasSuffix("\"") && windowsPath.count > 1
+            ? String(windowsPath.dropFirst().dropLast()) : windowsPath
+        if let url = SteamBottle.macURL(fromWindowsPath: trimmed) {
+            var isDirectory: ObjCBool = false
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            return isDirectory.boolValue ? url : url.deletingLastPathComponent()
+        }
+        // A save dialog's suggested file does not exist yet; its folder may.
+        let folder = trimmed.split(whereSeparator: { $0 == "\\" || $0 == "/" }).dropLast().joined(separator: "\\")
+        return folder.isEmpty ? nil : SteamBottle.macURL(fromWindowsPath: folder)
+    }
+
+    /// The last component of a Windows path, which is all a save panel's
+    /// name field takes.
+    nonisolated static func fileName(_ windowsPath: String) -> String {
+        windowsPath.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init) ?? ""
     }
 }
 
