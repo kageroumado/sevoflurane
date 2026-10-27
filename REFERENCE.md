@@ -493,9 +493,10 @@ runs on CrossOver.
 - When your account signs in on another computer or in Steam for Mac, Steam
   here signs out: a notification and the menu bar say so and offer
   Reconnect, and a session Steam for Mac took comes back when it quits.
-- Discord shows "Playing <game>" under the game's own Discord entry. Games
-  with their own Discord support publish their own status through a relay in
-  the bottle **(Dormison)**. Two switches in Settings › General.
+- Discord shows "Playing <game>" under the game's own Discord entry, or, for
+  a game Discord's database lacks, under its own name with its Steam box art.
+  Games with their own Discord support publish their own status through a
+  relay in the bottle **(Dormison)**. Two switches in Settings › General.
 
 ### Windows programs outside Steam
 

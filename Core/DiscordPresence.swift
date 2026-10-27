@@ -11,8 +11,10 @@ import Synchronization
 /// ``DiscordApplications`` resolves the id.
 ///
 /// A game Discord's database does not name is published under Sevoflurane's
-/// own application, ``fallbackApplicationID``, with the game's name as the
-/// activity's details, so the status still reads "Playing <game>".
+/// own application, ``fallbackApplicationID``, carrying the game's own name
+/// and its Steam box art: Discord shows the activity's name over the
+/// application's and the art over the application's icon, so the card reads
+/// "Playing <game>" with the game's cover and never names Sevoflurane.
 ///
 /// Most Windows games ship no Discord support at all, and Discord's own game
 /// scanner sees `wine64-preloader` rather than a game, so nothing appears in a
@@ -43,23 +45,30 @@ actor DiscordPresence {
         /// The game's name, as Discord's database spells it, or as the app
         /// knows it for a game published under ``fallbackApplicationID``.
         var name: String
-        /// The line Discord shows in place of the application's name: the
-        /// game's, for a game published under ``fallbackApplicationID``.
-        var details: String?
+        /// The game's box art, shown in place of the application's icon.
+        /// Only a game published under ``fallbackApplicationID`` carries one;
+        /// Discord has its own picture of a game its database names.
+        var cover: URL?
         /// When play began.
         var started: Date
 
-        init(applicationID: String, name: String, details: String? = nil, started: Date = .now) {
+        init(applicationID: String, name: String, cover: URL? = nil, started: Date = .now) {
             self.applicationID = applicationID
             self.name = name
-            self.details = details
+            self.cover = cover
             self.started = started
         }
 
+        /// Whether the activity is published under Sevoflurane's application,
+        /// where it has to say what it is itself.
+        var isFallback: Bool {
+            applicationID == fallbackApplicationID
+        }
+
         /// A game Discord's database does not name, under Sevoflurane's
-        /// application.
-        static func fallback(named name: String, started: Date = .now) -> Activity {
-            Activity(applicationID: fallbackApplicationID, name: name, details: name, started: started)
+        /// application, pictured by `cover` when Steam has art for it.
+        static func fallback(named name: String, cover: URL? = nil, started: Date = .now) -> Activity {
+            Activity(applicationID: fallbackApplicationID, name: name, cover: cover, started: started)
         }
     }
 
@@ -191,19 +200,22 @@ actor DiscordPresence {
     ///
     /// The handshake already named the game, and Discord fills the name, the
     /// icon and the store links in from that application, so the activity
-    /// carries only its type and when play began. An activity with details
-    /// carries them too, with `status_display_type` 2, which has the member
-    /// list read "Playing <details>" in place of the application's name; its
-    /// image is the application's own. `pid` is the app's own, which is the
+    /// carries only its type and when play began. A fallback activity names
+    /// the game itself: Discord shows an activity's `name` over the
+    /// application's, and fetches an `https` `large_image` through its media
+    /// proxy and shows it over the application's icon, so the game's own
+    /// name and cover are what appears. `pid` is the app's own, which is the
     /// process Discord watches to clear the activity.
     static func setActivity(_ activity: Activity) -> Data {
         var payload: [String: Any] = [
             "type": 0,
             "timestamps": ["start": Int(activity.started.timeIntervalSince1970 * 1000)],
         ]
-        if let details = activity.details {
-            payload["details"] = details
-            payload["status_display_type"] = 2
+        if activity.isFallback {
+            payload["name"] = activity.name
+            if let cover = activity.cover {
+                payload["assets"] = ["large_image": cover.absoluteString, "large_text": activity.name]
+            }
         }
         return command("SET_ACTIVITY", activity: payload)
     }
