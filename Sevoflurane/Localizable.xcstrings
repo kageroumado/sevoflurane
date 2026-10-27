@@ -4859,12 +4859,12 @@
         }
       }
     },
-    "Games in Discord's database show as what you play.": {
+    "Games show as what you play, with their own name and box art.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Discord 数据库中的游戏会显示为你正在玩的游戏。"
+            "value": "游戏会以自己的名称和封面显示为你正在玩的游戏。"
           }
         }
       }

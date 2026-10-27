@@ -660,7 +660,7 @@ private struct GeneralDiscordSection: View {
                     .onChange(of: discordPresence) { _, enabled in
                         Preferences.discordPresence = enabled
                     }
-                Text("Games in Discord's database show as what you play.")
+                Text("Games show as what you play, with their own name and box art.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

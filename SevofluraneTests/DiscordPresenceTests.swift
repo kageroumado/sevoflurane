@@ -66,14 +66,15 @@ struct DiscordPresenceTests {
     }
 
     @Test
-    func `a game Discord does not name is published under the fallback with its name as details`() async throws {
+    func `a game Discord does not name is published under the fallback as itself, name and cover`() async throws {
         let discord = try FakeDiscord(replyingWith: .ready)
         defer { discord.stop() }
 
         let started = Date(timeIntervalSince1970: 1_700_000_000)
-        let activity = DiscordPresence.Activity.fallback(named: "Yandere Simulator", started: started)
+        let cover = URL(string: "https://shared.steamstatic.com/store_item_assets/steam/apps/3263330/980d59d2/library_600x900.jpg")!
+        let activity = DiscordPresence.Activity.fallback(named: "Landmine Princess", cover: cover, started: started)
         let presence = DiscordPresence(directory: discord.directory)
-        try await presence.show(activity, forGame: 2_000_000_001, ticket: 0)
+        try await presence.show(activity, forGame: 3_263_330, ticket: 0)
         try await Self.wait(for: 2, on: discord)
 
         #expect(String(decoding: discord.frames[0].payload, as: UTF8.self)
@@ -81,24 +82,42 @@ struct DiscordPresenceTests {
         let body = try Self.object(discord.frames[1].payload)
         let arguments = try #require(body["args"] as? [String: Any])
         let published = try #require(arguments["activity"] as? [String: Any])
-        #expect(published.keys.sorted() == ["details", "status_display_type", "timestamps", "type"])
+        #expect(published.keys.sorted() == ["assets", "name", "timestamps", "type"])
         #expect(published["type"] as? Int == 0)
-        #expect(published["details"] as? String == "Yandere Simulator")
-        #expect(published["status_display_type"] as? Int == 2)
+        #expect(published["name"] as? String == "Landmine Princess")
+        let assets = try #require(published["assets"] as? [String: Any])
+        #expect(assets["large_image"] as? String == cover.absoluteString)
+        #expect(assets["large_text"] as? String == "Landmine Princess")
         #expect((published["timestamps"] as? [String: Any])?["start"] as? Int == 1_700_000_000_000)
 
         // The game's stop takes it away the way it takes any game's.
-        await presence.clear(forGame: 2_000_000_001)
+        await presence.clear(forGame: 3_263_330)
         try await Self.wait(for: 3, on: discord)
         let cleared = try Self.object(discord.frames[2].payload)
         #expect((cleared["args"] as? [String: Any])?["activity"] is NSNull)
     }
 
     @Test
-    func `the fallback activity is Sevoflurane's, with the game's name as its details`() {
-        let activity = DiscordPresence.Activity.fallback(named: "Yandere Simulator")
+    func `a fallback game without art is still named, and a named game says nothing of itself`() throws {
+        let published = try Self.activity(in: DiscordPresence.setActivity(.fallback(named: "Yandere Simulator")))
+        #expect(published.keys.sorted() == ["name", "timestamps", "type"])
+        #expect(published["name"] as? String == "Yandere Simulator")
+
+        let own = try Self.activity(in: DiscordPresence.setActivity(
+            .init(applicationID: "1505320535268261888", name: "Subnautica 2"),
+        ))
+        #expect(own.keys.sorted() == ["timestamps", "type"])
+    }
+
+    @Test
+    func `the fallback activity is Sevoflurane's, carrying the game's name and cover`() {
+        let cover = URL(string: "https://shared.steamstatic.com/store_item_assets/steam/apps/42/library_600x900.jpg")!
+        let activity = DiscordPresence.Activity.fallback(named: "Yandere Simulator", cover: cover)
         #expect(activity.applicationID == DiscordPresence.fallbackApplicationID)
-        #expect(activity.details == "Yandere Simulator")
+        #expect(activity.isFallback)
+        #expect(activity.name == "Yandere Simulator")
+        #expect(activity.cover == cover)
+        #expect(!DiscordPresence.Activity(applicationID: "1", name: "Other").isFallback)
     }
 
     @Test
@@ -242,6 +261,12 @@ struct DiscordPresenceTests {
 
     private static func object(_ payload: Data) throws -> [String: Any] {
         try #require(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
+    }
+
+    /// The activity inside a `SET_ACTIVITY` payload.
+    private static func activity(in payload: Data) throws -> [String: Any] {
+        let arguments = try #require(try object(payload)["args"] as? [String: Any])
+        return try #require(arguments["activity"] as? [String: Any])
     }
 
     private static func wait(for count: Int, on discord: FakeDiscord) async throws {

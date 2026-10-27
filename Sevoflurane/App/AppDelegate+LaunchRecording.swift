@@ -218,9 +218,10 @@ extension AppDelegate {
     /// Tells Discord which game is on screen, under that game's own Discord
     /// application: a game Discord's database names shows the way its native
     /// build would, and one it does not name shows under Sevoflurane's
-    /// application with its own name as the details. The database is asked
-    /// by Steam app id, then by an adopted program's executable, which is what
-    /// Discord's own scanner goes by, then by name.
+    /// application with its own name and, for a Steam game, its box art from
+    /// Steam's CDN. The database is asked by Steam app id, then by an adopted
+    /// program's executable, which is what Discord's own scanner goes by,
+    /// then by name.
     ///
     /// Detached, because the name comes off disk and the socket is the Discord
     /// client's to answer at its own pace. A game that ships its own Discord
@@ -245,8 +246,13 @@ extension AppDelegate {
             if let application = resolved {
                 activity = .init(applicationID: application.id, name: application.name)
             } else {
-                EventLog.enqueue(.client, "\(name) is not in Discord's game list, so it is published under Sevoflurane's")
-                activity = .fallback(named: name)
+                let cover = appID < AdoptedPrograms.firstID ? await SteamArtwork.cover(appID: appID) : nil
+                EventLog.enqueue(
+                    .client,
+                    "\(name) is not in Discord's game list, so it is published under Sevoflurane's application as itself"
+                        + (cover.map { ", pictured by \($0.lastPathComponent)" } ?? ", without art"),
+                )
+                activity = .fallback(named: name, cover: cover)
             }
             try? await DiscordPresence.shared.show(activity, forGame: appID, ticket: ticket)
         }
