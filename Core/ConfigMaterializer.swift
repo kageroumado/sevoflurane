@@ -69,11 +69,10 @@ nonisolated enum ConfigMaterializer {
             if !game.runner.isEmpty { native.insert(appID) }
             games.append(game)
         }
-        let files = withClientFile(
-            appFiles(games, launching: launching.withLock { $0 }), steamPlay: engine.supportsSteamPlayMacOS,
-        )
+        let inFlight = launching.withLock { $0 }
+        let files = withClientFile(appFiles(games, launching: inFlight), steamPlay: engine.supportsSteamPlayMacOS)
         for (exe, claimants) in sharedExecutables(games) {
-            noteShared(exe, by: claimants)
+            noteShared(exe, by: claimants, launching: inFlight)
         }
         writeFiles(files, in: appsDir)
         // Debug mode's file folds the bottle's wine-debug channels in, so a
@@ -287,15 +286,27 @@ nonisolated enum ConfigMaterializer {
             .sorted { $0.exe < $1.exe }
     }
 
-    /// Shared executables already narrated, so each is said once per process.
+    /// Shared executables already narrated, so each state of each is said
+    /// once per process: once as shared, once per claimant whose launch took
+    /// the file.
     private static let narratedShares = Mutex<Set<String>>([])
 
-    private static func noteShared(_ exe: String, by appIDs: [Int]) {
-        let key = "\(exe) \(appIDs)"
-        let isNew = narratedShares.withLock { $0.insert(key).inserted }
+    private static func noteShared(_ exe: String, by appIDs: [Int], launching: Int?) {
+        let note = shareNote(exe, by: appIDs, launching: launching)
+        let isNew = narratedShares.withLock { $0.insert(note).inserted }
         guard isNew else { return }
+        GameExecutables.log(note)
+    }
+
+    /// What the log says of an exe several games ship: whose lines its file
+    /// carries, which is the launching claimant's while one is in flight and
+    /// otherwise only what the claimants agree on.
+    static func shareNote(_ exe: String, by appIDs: [Int], launching: Int?) -> String {
         let apps = appIDs.map(String.init).joined(separator: ", ")
-        GameExecutables.log("apps \(apps) all ship \(exe): its env file carries only the settings they share")
+        if let launching, appIDs.contains(launching) {
+            return "apps \(apps) all ship \(exe): its env file carries app \(launching)'s lines, for its launch"
+        }
+        return "apps \(apps) all ship \(exe): its env file carries only the settings they share"
     }
 
     /// Writes ``DebugMode``'s own file, which the engine reads after the

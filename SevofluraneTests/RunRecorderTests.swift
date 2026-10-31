@@ -29,6 +29,41 @@ struct RunRecorderTests {
     }
 
     @Test
+    func `a native-runner game whose process loaded winemac.drv is recorded as a Wine run`() async throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("run-recorder-tests-\(UUID().uuidString)")
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let wine = root.appendingPathComponent("wine.log")
+        try Data().write(to: wine)
+        let appID = 1_933_660
+        let previous = RunRecorder.gameValues
+        RunRecorder.gameValues = { id in
+            guard id == appID else { return previous(id) }
+            var values = ConfigValues()
+            values.runner = GameRunner.nwjs
+            return values
+        }
+        defer { RunRecorder.gameValues = previous }
+        let recorder = RunRecorder(
+            runs: root, wineLog: wine, processLog: root.appendingPathComponent("gameprocess_log.txt"),
+        )
+        recorder.arm(appID: appID)
+        recorder.noteExecutable("game.exe", pid: getpid(), forApp: appID)
+        recorder.close(appID: appID)
+        var records: [RunRecord] = []
+        for _ in 0 ..< 100 {
+            records = RunLog.records(inMonth: .now, in: root)
+            if !records.isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        let record = try #require(records.first)
+        #expect(record.runner == GameRunner.wine)
+        #expect(record.renderer != GameRunner.nwjs)
+        #expect(record.exe == "game.exe")
+    }
+
+    @Test
     func `the record's keys are the ones the diagnostics plan names`() throws {
         let encoded = try JSONEncoder().encode(Self.record())
         let json = try #require(

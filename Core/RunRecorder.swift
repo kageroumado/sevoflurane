@@ -219,6 +219,10 @@ final nonisolated class RunRecorder {
     /// whether the ending deserves a word with the user.
     nonisolated(unsafe) static var didClose: @Sendable (RunRecord) -> Void = { _ in }
 
+    /// A game's own settings as a run is armed; a test hands in a game's
+    /// runner without a store.
+    nonisolated(unsafe) static var gameValues: @Sendable (Int) -> ConfigValues = { GameConfig.game($0) }
+
     /// Called when an open run's video decoder is found to have produced
     /// nothing (``RunRecord/video``), on whatever thread read the log: the
     /// app offers the other decoder while the game still waits on the picture.
@@ -311,7 +315,7 @@ final nonisolated class RunRecorder {
             handovers[appID] = .now
         }
         confirmedRunning.remove(appID)
-        let values = GameConfig.game(appID)
+        let values = Self.gameValues(appID)
         let booted = BottleGraphics.bootedSelection()
         let selection = booted.map {
             (renderer: $0.renderer, msync: $0.msync, d3dMetalVersion: $0.d3dMetalVersion)
@@ -396,6 +400,18 @@ final nonisolated class RunRecorder {
             // process is how its frames are found.
             if AdoptedPrograms.program(appID) != nil { presentStats.claim(pid: pid, forApp: appID) }
         }
+        // A process that loaded winemac.drv runs in the bottle. A game set to
+        // the native NW.js runner whose process arrives this way was started
+        // under Wine after all (an exe it shares with another game, on an
+        // engine that keys env files by name alone), and the record says what
+        // ran rather than what was set: its renderer is the bottle's, to be
+        // confirmed from the Wine log like any Wine run's.
+        if pid != nil, open[appID]?.record.runner == GameRunner.nwjs {
+            open[appID]?.record.runner = GameRunner.wine
+            open[appID]?.record.renderer = Self.bottleRenderer()
+            open[appID]?.record.rendererConfirmed = nil
+            Self.log("run \(appID): set to the native NW.js runner, but \(exe) started under Wine — recorded as a Wine run")
+        }
         guard open[appID]?.record.exe == nil || takesOver else { return }
         open[appID]?.record.exe = exe
         open[appID]?.record.product = nil
@@ -405,6 +421,12 @@ final nonisolated class RunRecorder {
             open[appID]?.record.product = info.productName ?? info.fileDescription
         }
         persist(appID: appID)
+    }
+
+    /// The renderer the bottle's client booted on, or the one chosen for its
+    /// next boot: what a Wine run renders through until its log confirms one.
+    private static func bottleRenderer() -> String {
+        (BottleGraphics.bootedSelection()?.renderer ?? BottleGraphics.currentSelection().renderer).rawValue
     }
 
     /// Reads the meters that only exist while a run is up: what the kernel

@@ -119,6 +119,17 @@ struct ConfigMaterializerTests {
     }
 
     @Test
+    func `the log says whose lines a shared exe's file carries`() {
+        #expect(ConfigMaterializer.shareNote("game.exe", by: [400, 4000], launching: nil)
+            == "apps 400, 4000 all ship game.exe: its env file carries only the settings they share")
+        #expect(ConfigMaterializer.shareNote("game.exe", by: [400, 4000], launching: 4000)
+            == "apps 400, 4000 all ship game.exe: its env file carries app 4000's lines, for its launch")
+        // A launch of a game that does not ship the exe changes nothing about it.
+        #expect(ConfigMaterializer.shareNote("game.exe", by: [400, 4000], launching: 9)
+            == ConfigMaterializer.shareNote("game.exe", by: [400, 4000], launching: nil))
+    }
+
+    @Test
     func `a Steam game with no manifest is not written for; an adopted program always is`() {
         var installedGame = ConfigValues.empty
         installedGame.exes = ["game.exe"]
