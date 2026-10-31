@@ -122,6 +122,7 @@ final class GameLaunchWatch {
         let chronicle: WineChronicleTail
         let appID: Int?
         var programs = ProgramCache()
+        var attributions = ProcessAttributions()
         var reported: Set<String> = []
 
         init(chronicle: WineChronicleTail, appID: Int?) {
@@ -146,7 +147,9 @@ final class GameLaunchWatch {
     private nonisolated static func tick(_ scan: Scan) async -> Tick {
         let entries = scan.chronicle.newEntries()
         var passedOver: [String] = []
-        let sighting = firstGameWindow(launching: scan.appID, programs: &scan.programs) { line in
+        let sighting = firstGameWindow(
+            launching: scan.appID, programs: &scan.programs, attributions: &scan.attributions,
+        ) { line in
             if scan.reported.insert(line).inserted { passedOver.append(line) }
         }
         return Tick(entries: entries, passedOver: passedOver, sighting: sighting)
@@ -238,24 +241,89 @@ final class GameLaunchWatch {
         }
     }
 
+    /// Which app the engine says each bottle process is, from the `sevo:run`
+    /// line winemac.drv writes to the Wine log as a process loads it
+    /// (``WineProvenance``). Read per pid and kept for the watch: the line is
+    /// written before the process can own a window, and a process's app id
+    /// cannot change while it lives.
+    nonisolated struct ProcessAttributions {
+        /// How many lines of the log's end are read for a pid's line. The
+        /// line is written as the driver loads, so what the process logs
+        /// between that and its first window is all that comes after it.
+        private static let linesRead = 10_000
+        private var known: [pid_t: Int?] = [:]
+        private let log: URL
+
+        init(log: URL = WineLog.fileURL) {
+            self.log = log
+        }
+
+        /// The app id the engine attributed `pid` to, or `nil` without one.
+        mutating func appID(of pid: pid_t) -> Int? {
+            if let answer = known[pid] { return answer }
+            let lines = LogTail.lastLines(of: log, count: Self.linesRead) ?? []
+            let answer = WineProvenance.appID(forProcess: Int(pid), in: lines.joined(separator: "\n"))
+            known[pid] = .some(answer)
+            return answer
+        }
+    }
+
+    /// Whose a bottle process's window is, for a launch, and which test
+    /// said so.
+    nonisolated enum WindowOwnership: Equatable, Sendable {
+        /// The launch's own.
+        case launch
+        /// Another game's: its app id, and the test that named it.
+        case other(appID: Int, decidedBy: String)
+    }
+
+    /// Whose the window of `exe` (lowercased) running as `pid` is, for a
+    /// launch of `appID`.
+    ///
+    /// The engine's own attribution of the process (`attributed`, from its
+    /// `sevo:run` line) decides when there is one. Without one, the exe name
+    /// does: the launching game's when its own recorded exes carry the name,
+    /// else the game among `games` that recorded it, else nobody's, which is
+    /// to say the launch's.
+    nonisolated static func ownership(
+        ofWindowFrom exe: String, pid: pid_t, launching appID: Int, attributed: Int?, games: [Int: ConfigValues],
+    ) -> WindowOwnership {
+        if let attributed {
+            return attributed == appID
+                ? .launch
+                : .other(appID: attributed, decidedBy: "the engine attributed pid \(pid) to app \(attributed)")
+        }
+        if games[appID]?.exes?.contains(exe) == true { return .launch }
+        guard let recorded = GameConfig.app(claiming: exe, in: games) else { return .launch }
+        return .other(
+            appID: recorded,
+            decidedBy: "app \(recorded) recorded \(exe), and the engine wrote no app id for pid \(pid)",
+        )
+    }
+
     /// Whether a game's window is on screen — the updater's gate reads it
     /// that way.
     nonisolated static func firstGameWindow() -> (owner: String, pid: pid_t)? {
         var programs = ProgramCache()
-        return firstGameWindow(launching: nil, programs: &programs).map { ($0.owner, $0.pid) }
+        var attributions = ProcessAttributions()
+        return firstGameWindow(launching: nil, programs: &programs, attributions: &attributions)
+            .map { ($0.owner, $0.pid) }
     }
 
     /// The first window on screen that this launch may claim.
     ///
-    /// A window whose program another game has already recorded is that
-    /// game's — a launch that never draws must not adopt a bystander's
-    /// window, and the caller keeps polling for its own. Every window that is
-    /// not this launch's is handed to `report` with the reason it was passed
-    /// over: which of the tests refuses a window that the shim did put on
-    /// screen is otherwise unknowable after the fact.
+    /// A window whose process the engine attributed to another game, or
+    /// whose program another game has recorded, is that game's
+    /// (``ownership(ofWindowFrom:pid:launching:attributed:games:)``) — a
+    /// launch that never draws must not adopt a bystander's window, and the
+    /// caller keeps polling for its own. Every window that is not this
+    /// launch's is handed to `report` with the reason it was passed over:
+    /// which of the tests refuses a window that the shim did put on screen
+    /// is otherwise unknowable after the fact.
     nonisolated static func firstGameWindow(
         launching appID: Int?,
         programs: inout ProgramCache,
+        attributions: inout ProcessAttributions,
         report: (String) -> Void = { _ in },
     ) -> Sighting? {
         // Read once per pass, at the first window that needs it: which game
@@ -288,17 +356,22 @@ final class GameLaunchWatch {
                 continue
             }
             if let appID {
-                let claimant: Int?
+                let claim: WindowOwnership
                 if program.source == .macOSBuild {
-                    claimant = program.appID
+                    claim = program.appID.map { session -> WindowOwnership in
+                        session == appID
+                            ? .launch : .other(appID: session, decidedBy: "its native session is app \(session)'s")
+                    } ?? .launch
                 } else {
-                    let known = games ?? GameConfig.games()
+                    let known = games ?? GameConfig.claimingGames()
                     games = known
-                    let exe = program.name.lowercased()
-                    claimant = known.first(where: { $0.value.exes?.contains(exe) == true })?.key
+                    claim = ownership(
+                        ofWindowFrom: program.name.lowercased(), pid: pid, launching: appID,
+                        attributed: attributions.appID(of: pid), games: known,
+                    )
                 }
-                if let claimant, claimant != appID {
-                    report("game window (\(program.name)) belongs to app \(claimant) — still waiting")
+                if case let .other(claimant, decidedBy) = claim {
+                    report("game window (\(program.name)) belongs to app \(claimant): \(decidedBy) — still waiting")
                     continue
                 }
             }

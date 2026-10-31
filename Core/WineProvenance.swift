@@ -44,6 +44,18 @@ nonisolated enum WineProvenance {
         return pids
     }
 
+    /// The app id the engine attributed the unix process `pid` to, from the
+    /// last `sevo:run` line about it; `nil` for a process without one, or
+    /// with `appid=none`, which is what a program Steam did not start writes.
+    static func appID(forProcess pid: Int, in text: String) -> Int? {
+        let own = "sevo:run pid=\(pid) "
+        var appID: Int?
+        for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix(own) {
+            appID = line.firstMatch(of: run).flatMap { Int($0.output.3) }
+        }
+        return appID
+    }
+
     /// The Wine pids of every process the engine attributed to the app id,
     /// from the `wpid=` its `sevo:run` lines end with.
     static func winePIDs(forApp appID: Int, in text: String) -> Set<Int> {
