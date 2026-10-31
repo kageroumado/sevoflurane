@@ -35,6 +35,9 @@ extension AppDelegate {
             // there by its first window at the latest; its first-launch fixes
             // wait for a launch that is prepared before it starts.
             Task.detached(name: "Record app \(appID)'s executables") {
+                // First, because Steam starts the process within moments: an
+                // exe this game shares with another gets this game's lines.
+                ConfigMaterializer.noteLaunch(of: appID, bottle: SteamBottle.name, prefix: SteamBottle.root)
                 let linked = ReparseLinks.restoreInstalledMacOSVersion(appID: appID)
                 if linked > 0 {
                     EventLog.enqueue(.client, "launch \(appID): made \(linked) symlinks of its macOS version real for macOS")

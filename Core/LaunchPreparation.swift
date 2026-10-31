@@ -30,6 +30,9 @@ nonisolated enum LaunchPreparation {
             if fixes == nil, recorded {
                 ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
             }
+            // An exe this game shares with another gets this game's lines
+            // before any process of it reads the file.
+            ConfigMaterializer.noteLaunch(of: appID, bottle: SteamBottle.name, prefix: SteamBottle.root)
             return fixes
         }
         switch outcome {

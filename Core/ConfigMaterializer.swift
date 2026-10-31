@@ -58,33 +58,18 @@ nonisolated enum ConfigMaterializer {
         var native: Set<Int> = []
         var launchers: Set<Int> = []
         for (appID, values) in materializedGames(GameConfig.games(), installed: SharedGames.installedAppIDs) {
-            // A tool recorded as a game's before the filter knew it would start
-            // through the game's bundle, with its settings, from any launch.
-            let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
-            var game = GameFiles(appID: appID, settings: gameLines(appID, values, bottle: name), exes: exes)
-            if let title = values.name, !values.runsNatively,
-               let loader = GameLaunchers.materialize(
-                   appID: appID, title: title, engine: engine,
-               ) {
-                launchers.insert(appID)
-                game.loader = "SEVO_LOADER=\(loader.path)"
-            }
-            if values.runsNatively, let info = values.nwjs,
-               let environment = NWJSRunner.environment(
-                   appID: appID, info: info, runtimeVersion: values.nwjsRuntime, prefix: prefix,
-               ) {
-                native.insert(appID)
-                game.runner = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-            }
+            let game = gameFiles(appID: appID, values: values, bottle: name, prefix: prefix, engine: engine)
+            if game.loader != nil { launchers.insert(appID) }
+            if !game.runner.isEmpty { native.insert(appID) }
             games.append(game)
         }
-        let files = withClientFile(appFiles(games), steamPlay: engine.supportsSteamPlayMacOS)
+        let files = withClientFile(
+            appFiles(games, launching: launching.withLock { $0 }), steamPlay: engine.supportsSteamPlayMacOS,
+        )
         for (exe, claimants) in sharedExecutables(games) {
             noteShared(exe, by: claimants)
         }
-        for (file, lines) in files {
-            write(lines, to: appsDir.appendingPathComponent(file))
-        }
+        writeFiles(files, in: appsDir)
         // Debug mode's file folds the bottle's wine-debug channels in, so a
         // change to them has to reach the file the engine reads after
         // bottle.env; without this a new `+d3d` set while the mode is on would
@@ -125,6 +110,73 @@ nonisolated enum ConfigMaterializer {
             .map { (appID: $0.key, values: $0.value) }
     }
 
+    /// One game's lines, its loader bundle built or refreshed and its native
+    /// runner's variables resolved.
+    private static func gameFiles(
+        appID: Int, values: ConfigValues, bottle name: String, prefix: URL, engine: Engine,
+    ) -> GameFiles {
+        // A tool recorded as a game's before the filter knew it would start
+        // through the game's bundle, with its settings, from any launch.
+        let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
+        var game = GameFiles(appID: appID, settings: gameLines(appID, values, bottle: name), exes: exes)
+        if let title = values.name, !values.runsNatively,
+           let loader = GameLaunchers.materialize(
+               appID: appID, title: title, engine: engine,
+           ) {
+            game.loader = "SEVO_LOADER=\(loader.path)"
+        }
+        if values.runsNatively, let info = values.nwjs,
+           let environment = NWJSRunner.environment(
+               appID: appID, info: info, runtimeVersion: values.nwjsRuntime, prefix: prefix,
+           ) {
+            game.runner = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        }
+        return game
+    }
+
+    // MARK: - The launch in flight
+
+    /// The app whose launch last began in this process. Its lines fill the
+    /// file of every executable it shares with another game
+    /// (``appFiles(_:launching:)``) until another claimant launches.
+    private static let launching = Mutex<Int?>(nil)
+
+    /// A launch of `appID` is about to start its process: the env file of
+    /// every executable it shares with another game is rewritten with its own
+    /// lines, so the process starts as this game, with its loader and its
+    /// settings. The engine finds the file by exe name alone, and a shared
+    /// file otherwise carries only what its claimants agree on. Passes from
+    /// here on keep this game's lines in those files, until another claimant
+    /// launches and takes them.
+    ///
+    /// Written here, ahead of the next pass, because Steam starts the process
+    /// within moments of the launch beginning, and a pass signs loader
+    /// bundles first.
+    static func noteLaunch(of appID: Int, bottle name: String, prefix: URL) {
+        launching.withLock { $0 = appID }
+        let games = materializedGames(GameConfig.games(), installed: SharedGames.installedAppIDs)
+        guard let own = games.first(where: { $0.appID == appID }) else { return }
+        let engine = engine()
+        let launched = gameFiles(appID: appID, values: own.values, bottle: name, prefix: prefix, engine: engine)
+        let others = games.filter { $0.appID != appID }.map { other in
+            GameFiles(appID: other.appID, settings: [], exes: (other.values.exes ?? []).filter(GameExecutables.isRecordable))
+        }
+        let files = withClientFile(launchFiles(for: launched, among: others), steamPlay: engine.supportsSteamPlayMacOS)
+        guard !files.isEmpty else { return }
+        writeFiles(files, in: prefix.appendingPathComponent(".sevo/apps"))
+        GameExecutables.log("launch \(appID): \(files.keys.sorted().joined(separator: ", ")) written with its lines, for its launch")
+    }
+
+    /// The files of the executables `game` shares with `others`, each with
+    /// `game`'s lines, by file name. Empty when it shares none.
+    static func launchFiles(for game: GameFiles, among others: [GameFiles]) -> [String: [String]] {
+        let shared = sharedExecutables(others + [game]).filter { $0.appIDs.contains(game.appID) }.map(\.exe)
+        let files = appFiles(others + [game], launching: game.appID)
+        return Dictionary(uniqueKeysWithValues: shared.compactMap { exe in
+            files["\(exe).env"].map { ("\(exe).env", $0) }
+        })
+    }
+
     // MARK: - One file per executable
 
     /// What one game puts in the env file of each executable it owns.
@@ -147,9 +199,11 @@ nonisolated enum ConfigMaterializer {
     /// `launcher.exe`. A file claimed by one game carries its settings, its
     /// runner and its Dock identity. A file claimed by several carries only
     /// the settings every one of them agrees on: another game's loader or
-    /// runner would start the exe as that other game. The result is the same
-    /// whatever order `games` comes in.
-    static func appFiles(_ games: [GameFiles]) -> [String: [String]] {
+    /// runner would start the exe as that other game. The exception is the
+    /// claimant whose launch is in flight (`launching`): its process is the
+    /// one about to read the file, so the file carries its full lines. The
+    /// result is the same whatever order `games` comes in.
+    static func appFiles(_ games: [GameFiles], launching: Int? = nil) -> [String: [String]] {
         let ordered = games.sorted { $0.appID < $1.appID }
         var claimants: [String: [GameFiles]] = [:]
         for game in ordered {
@@ -159,19 +213,28 @@ nonisolated enum ConfigMaterializer {
         for (exe, owners) in claimants {
             let file = "\(exe).env"
             guard owners.count > 1 else {
-                let game = owners[0]
-                // The loader is the game's Dock identity, which a companion
-                // program never takes (``GameConfig/isCompanionExecutable(_:)``).
-                let identity = GameConfig.isCompanionExecutable(exe) ? [] : [game.loader].compactMap(\.self)
-                files[file] = game.settings + game.runner + identity
+                files[file] = ownLines(of: owners[0], for: exe)
+                continue
+            }
+            let apps = owners.map { String($0.appID) }.joined(separator: ", ")
+            if let launching, let owner = owners.first(where: { $0.appID == launching }) {
+                files[file] = ["# apps \(apps) all ship \(exe); written for app \(launching)'s launch"]
+                    + ownLines(of: owner, for: exe)
                 continue
             }
             let settings = owners.map { $0.settings.filter { !$0.hasPrefix("#") } }
             let agreed = settings[0].filter { line in settings.allSatisfy { $0.contains(line) } }
-            let apps = owners.map { String($0.appID) }.joined(separator: ", ")
             files[file] = ["# apps \(apps) all ship \(exe)"] + agreed
         }
         return files
+    }
+
+    /// A file that is one game's alone: its settings, its runner and its
+    /// Dock identity. The loader is that identity, which a companion program
+    /// never takes (``GameConfig/isCompanionExecutable(_:)``).
+    private static func ownLines(of game: GameFiles, for exe: String) -> [String] {
+        let identity = GameConfig.isCompanionExecutable(exe) ? [] : [game.loader].compactMap(\.self)
+        return game.settings + game.runner + identity
     }
 
     /// `steam.exe`'s own file, with Steam Play switched on for an engine that
@@ -432,6 +495,15 @@ nonisolated enum ConfigMaterializer {
             lines.append("D3DM_WINE_UNIX_CALL=1")
         }
         return lines
+    }
+
+    /// Writes every file of `files` into `dir`, each under the header
+    /// ``removeStale(in:keeping:)`` knows the app's files by.
+    static func writeFiles(_ files: [String: [String]], in dir: URL) {
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (file, lines) in files {
+            write(lines, to: dir.appendingPathComponent(file))
+        }
     }
 
     private static func write(_ lines: [String], to url: URL) {

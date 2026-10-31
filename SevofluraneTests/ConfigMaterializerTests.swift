@@ -47,6 +47,38 @@ struct ConfigMaterializerTests {
     }
 
     @Test
+    func `a shared exe carries the full lines of the game whose launch is in flight`() throws {
+        let files = ConfigMaterializer.appFiles([Self.rpgMakerA, Self.rpgMakerB], launching: 4000)
+        let shared = try #require(files["game.exe.env"])
+        #expect(shared.first == "# apps 400, 4000 all ship game.exe; written for app 4000's launch")
+        #expect(shared.contains("# app 4000 Second"))
+        #expect(shared.contains("SEVO_LOADER=/launchers/4000.app"))
+        #expect(!shared.contains("SEVO_LOADER=/launchers/400.app"))
+        #expect(!shared.contains("SEVO_UPSCALER=fsr"))
+        // The other claimant's own exe is untouched by the launch.
+        #expect(files["first.exe.env"] == ConfigMaterializer.appFiles([Self.rpgMakerA, Self.rpgMakerB])["first.exe.env"])
+        // A launch of a game that shares nothing changes nothing.
+        let alone = ConfigMaterializer.GameFiles(appID: 9, settings: ["# app 9"], exes: ["nine.exe"])
+        #expect(ConfigMaterializer.appFiles([Self.rpgMakerA, alone], launching: 9)
+            == ConfigMaterializer.appFiles([Self.rpgMakerA, alone]))
+    }
+
+    @Test
+    func `a launch writes only the files of the exes it shares, under the app's header`() throws {
+        let files = ConfigMaterializer.launchFiles(for: Self.rpgMakerB, among: [Self.rpgMakerA])
+        #expect(Set(files.keys) == ["game.exe.env"])
+        #expect(files["game.exe.env"]?.contains("SEVO_LOADER=/launchers/4000.app") == true)
+        #expect(ConfigMaterializer.launchFiles(for: Self.rpgMakerA, among: []).isEmpty)
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("apps-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        ConfigMaterializer.writeFiles(files, in: dir)
+        let written = try String(contentsOf: dir.appendingPathComponent("game.exe.env"), encoding: .utf8)
+        #expect(written.hasPrefix("# written by Sevoflurane; edits are overwritten\n"))
+        #expect(written.contains("\nSEVO_LOADER=/launchers/4000.app\n"))
+    }
+
+    @Test
     func `a Steam game with no manifest is not written for; an adopted program always is`() {
         var installedGame = ConfigValues.empty
         installedGame.exes = ["game.exe"]
