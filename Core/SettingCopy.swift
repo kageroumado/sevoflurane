@@ -336,6 +336,30 @@ nonisolated extension SettingCopy {
         ),
     )
 
+    static let videoDecoding = SettingCopy(
+        title: "Video decoding",
+        caption: "Title and cut-scene videos through the Mac's video hardware, or through software when they stay blank.",
+        help: SettingHelp(
+            title: "Video decoding",
+            summary: "Windows games play their videos through Media Foundation, which the engine answers "
+                + "with GStreamer. The Mac's video hardware decodes them (VideoToolbox), which costs "
+                + "almost nothing. A video that stays blank while the game waits for it is one that "
+                + "path could not decode, and Sevoflurane offers the other when a game's decoder "
+                + "produced nothing.",
+            entries: [
+                .init(
+                    name: "Hardware (VideoToolbox)",
+                    text: "The Mac's own decoder. The default, and the right choice for nearly every game.",
+                ),
+                .init(
+                    name: "Software",
+                    text: "GStreamer's own decoders, on the CPU. For a game whose videos stay blank, white "
+                        + "or black while its sound plays on.",
+                ),
+            ],
+        ),
+    )
+
     static let avx = SettingCopy(
         title: "Report AVX to games",
         caption: "Games that check for AVX at launch find it.",

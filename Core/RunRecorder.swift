@@ -98,6 +98,7 @@ nonisolated struct RunInProgress: Sendable {
         )
         let notes = WineExceptionTrail.notes(in: wineTail)
         record.notes = notes.isEmpty ? nil : notes
+        if record.video == nil { record.video = VideoStarvation.video(forApp: record.appid, in: lines) }
         let endedNotResponding = wineTail.contains("ended by the user while not responding")
         let ended = kind ?? Self.kind(
             code: code, ending: ending, endedNotResponding: endedNotResponding,
@@ -217,6 +218,11 @@ final nonisolated class RunRecorder {
     /// the closing queue; the app hops to the main actor from here to decide
     /// whether the ending deserves a word with the user.
     nonisolated(unsafe) static var didClose: @Sendable (RunRecord) -> Void = { _ in }
+
+    /// Called when an open run's video decoder is found to have produced
+    /// nothing (``RunRecord/video``), on whatever thread read the log: the
+    /// app offers the other decoder while the game still waits on the picture.
+    nonisolated(unsafe) static var didStarveVideo: (@Sendable (RunRecord) -> Void)?
 
     /// A run that has just been written, with what the Wine log gained while
     /// it ran. The app hangs report collection off it (``CrashCollector``);
@@ -495,12 +501,20 @@ final nonisolated class RunRecorder {
             run.record.renderer = answered
             run.record.rendererConfirmed = true
         }
+        let starved = run.record.video == nil
+            ? VideoStarvation.video(forApp: read.appID, in: run.provenance) : nil
+        if let starved { run.record.video = starved }
         open[read.appID] = run
-        if changed { persist(appID: read.appID) }
+        if changed || starved != nil { persist(appID: read.appID) }
+        if let starved {
+            Self.log("run \(read.appID): \(starved.summary)")
+            Self.didStarveVideo?(run.record)
+        }
     }
 
-    /// The `sevo:run` and `sevo:gfx` renderer lines the Wine log gained from
-    /// `offset`, and where the read stopped: after the last whole line, so a
+    /// The `sevo:run` and `sevo:gfx` renderer lines, and the engine's
+    /// decoded-nothing lines, that the Wine log gained from `offset`, and
+    /// where the read stopped: after the last whole line, so a
     /// line the engine is still writing is read whole the next time. A log
     /// shorter than `offset` was replaced and is read from its start; growth
     /// past ``maximumTailBytes`` is skipped to its last stretch.
@@ -520,7 +534,10 @@ final nonisolated class RunRecorder {
         if skipped, !lines.isEmpty { lines.removeFirst() }
         let kept = lines.lazy
             .map { String(decoding: $0, as: UTF8.self) }
-            .filter { $0.contains("sevo:run pid=") || ($0.contains("sevo:gfx pid=") && $0.contains("renderer=")) }
+            .filter {
+                $0.contains("sevo:run pid=") || ($0.contains("sevo:gfx pid=") && $0.contains("renderer="))
+                    || $0.contains(VideoStarvation.marker)
+            }
         return (kept.joined(separator: "\n"), start + UInt64(whole.count))
     }
 

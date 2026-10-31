@@ -291,6 +291,28 @@ nonisolated enum OverlayDetail: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// Which decoders play a game's videos (`GST_PLUGIN_FEATURE_RANK`): the Mac's
+/// video hardware through VideoToolbox, or GStreamer's own software decoders.
+nonisolated enum VideoDecoding: String, Codable, CaseIterable, Sendable {
+    /// VideoToolbox (`vtdec_hw`, `vtdec`) ranks first, as the engine ships.
+    case hardware
+    /// VideoToolbox is ranked out, so `avdec_h264` and its kin decode on the CPU.
+    case software
+
+    var label: String {
+        let value = switch self {
+        case .hardware: "Hardware (VideoToolbox)"
+        case .software: "Software"
+        }
+        return InterfaceCopy.localized(value)
+    }
+
+    /// The other one: what a game whose video decoded nothing is offered.
+    var other: VideoDecoding {
+        self == .hardware ? .software : .hardware
+    }
+}
+
 /// One level of the settings hierarchy: the keys a game's launch reads, each
 /// optional so an absent one inherits from the level above. Game files also
 /// carry the executables the game is known to run under, which is what a
@@ -391,6 +413,9 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// only when no other worker is looking for work, so under Rosetta every
     /// one of them spins; a game told of fewer processors starts fewer.
     var processors: Int?
+    /// Which decoders play the game's videos (``VideoDecoding``,
+    /// `GST_PLUGIN_FEATURE_RANK`).
+    var videoDecoding: VideoDecoding?
     /// Game level only: which runtime the game runs on — the bottle's engine
     /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
     /// ``NWJSGames`` detects). Stored as text so a file written by a later
@@ -427,7 +452,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
             || dllOverrides?.isEmpty == false || environment?.isEmpty == false
             || hud != nil || fps != nil || overlayDetail != nil || frameRateLimit != nil || nativeMenuBar != nil
             || largeAddressAware != nil || avx != nil || cursorConfine != nil
-            || unifiedMemory != nil || tuning != nil || processors != nil || build != nil
+            || unifiedMemory != nil || tuning != nil || processors != nil || videoDecoding != nil || build != nil
     }
 
     /// Whether this game runs natively rather than through the bottle.
@@ -555,7 +580,7 @@ nonisolated enum GameConfig {
         // and refuse to start without it. A game that misbehaves with the
         // advertisement turns it off for itself.
         hud: false, fps: false, overlayDetail: .frameRate, frameRateLimit: .off, nativeMenuBar: false, largeAddressAware: true, avx: true, unifiedMemory: false,
-        cursorConfine: false, processors: 0,
+        cursorConfine: false, processors: 0, videoDecoding: .hardware,
     )
 
     // MARK: - Levels
@@ -701,6 +726,12 @@ nonisolated enum GameConfig {
     /// own value.
     static func processors(bottle: String, game appID: Int? = nil) -> Resolved<Int> {
         resolve(\.processors, bottle: bottle, game: appID)
+    }
+
+    /// Which decoders a launch in this bottle plays its videos through: for a
+    /// specific game when its id is known, otherwise the bottle's own value.
+    static func videoDecoding(bottle: String, game appID: Int? = nil) -> Resolved<VideoDecoding> {
+        resolve(\.videoDecoding, bottle: bottle, game: appID)
     }
 
     /// The renderer a launch gets: the game's own choice when it has one,

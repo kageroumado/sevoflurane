@@ -24,7 +24,7 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 - **Compatibility:** per-version ratings from Sevoflurane runs, AppleGamingWiki, and ProtonDB; anti-cheat information; library medals, native-Mac markers, and a playable-on-this-Mac filter. Linux ratings are displayed separately from the Mac filter.
 - **Launchers:** recent and installed games in the menu bar and Dock menu; Keep in Dock and a Games folder in the Dock; per-launch or persistent renderer choices; Quick Launch for external programs.
 - **Game windows (Dormison):** independent Dock icons, Game Mode, resizable fixed-resolution windows, Lanczos/MetalFX/Anime4K/CuNNy upscaling, live filters, frame-rate limits, and CPU/GPU/frame-time overlays.
-- **Input and media:** Xbox/PlayStation controller input with rumble; DLSS through MetalFX on D3DMetal. Dormison adds raw mouse input, cursor confinement, native Win32 menus, CPU caps, and hardware H.264/HEVC decoding.
+- **Input and media:** Xbox/PlayStation controller input with rumble; DLSS through MetalFX on D3DMetal. Dormison adds raw mouse input, cursor confinement, native Win32 menus, CPU caps, and hardware H.264/HEVC decoding with a per-game software switch.
 - **Native games:** macOS game installs and per-game version switching on supported engines; a game Steam for Mac already has installs from its copy without a download; optional handoff to Steam for Mac. Native NW.js games retain Steam playtime and achievements.
 - **Game sessions:** display-awake holds, stuck-game termination, complete process cleanup, Steam reconnection, and Discord activity; Dormison also relays games’ own Discord integration.
 - **External games:** Finder `.exe` launch and thumbnails, installer tracking, Quick Launch, non-Steam library entries, Steam Input, overlay, and run reports. Kernel-driver dependencies are reported.
@@ -33,7 +33,7 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 - **Storage:** per-game and category sizes, cache/engine cleanup, external libraries, and sharing installed games across bottles with separate saves.
 - **Recovery:** client watchdog, crash-loop detection, lost-wake recovery, orphan cleanup, helper/bottle repair, cache resets, and recovery guides. A running game survives a Sevoflurane crash; reopening reattaches.
 - **Community:** opt-in run statistics with a payload preview, per-game verdicts and notes, engine/chip comparisons, and deletion of shared data.
-- **Diagnostics:** run records, frame-time traces, logs, crash reports, per-game recording levels, redacted report sharing, Process Monitor, CPU-cap suggestions, and `sevo perf compare`.
+- **Diagnostics:** run records, frame-time traces, logs, crash reports, per-game recording levels, redacted report sharing, Process Monitor, CPU-cap and video-decoding suggestions, and `sevo perf compare`.
 - **Automation and updates:** CLI/MCP, idle-time app updates, engine/renderer update notices, and engine switching.
 - [Detailed feature reference](REFERENCE.md#full-feature-list). Dormison-specific features require that engine.
 

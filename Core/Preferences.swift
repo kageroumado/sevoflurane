@@ -194,6 +194,23 @@ nonisolated extension Preferences {
         defaults.set(quiet + [appID], forKey: quietThreadSpinAppsKey)
     }
 
+    /// The games whose blank videos the app keeps quiet about: "Don't Ask for
+    /// This Game" on the video-decoding offer (``VideoDecodingDiagnosis``).
+    static let quietVideoDecodingAppsKey = "quietVideoDecodingApps"
+
+    /// Whether a run of `appID` whose video decoded nothing opens the offer of
+    /// the other decoder.
+    static func asksAboutVideoDecoding(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
+        !(defaults.array(forKey: quietVideoDecodingAppsKey) as? [Int] ?? []).contains(appID)
+    }
+
+    /// Keeps the video-decoding offer from opening for `appID` again.
+    static func stopAskingAboutVideoDecoding(forApp appID: Int, in defaults: UserDefaults = shared) {
+        let quiet = defaults.array(forKey: quietVideoDecodingAppsKey) as? [Int] ?? []
+        guard !quiet.contains(appID) else { return }
+        defaults.set(quiet + [appID], forKey: quietVideoDecodingAppsKey)
+    }
+
     /// The token a sent report carries so two reports from one installation
     /// can be told apart on the receiving end. Random the first time it is
     /// asked for, then kept; it names nothing about the machine or the account.

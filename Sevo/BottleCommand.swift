@@ -82,6 +82,17 @@ enum ConfigKeyParsing {
     /// The counter's level as View › Overlay Detail stores it: 1 for the
     /// number, 2 for the frame-time card, 3 for the card with the Mac's load,
     /// power and temperature.
+    /// `hardware` (VideoToolbox) or `software` (GStreamer's own decoders).
+    static func videoDecoding(_ value: String) throws -> VideoDecoding? {
+        if value == "inherit" { return nil }
+        guard let decoding = VideoDecoding(rawValue: value) else {
+            Sevo.printError("video-decoding must be hardware (VideoToolbox), software (GStreamer's own decoders) "
+                + "or inherit")
+            throw SevoExit.badInvocation
+        }
+        return decoding
+    }
+
     static func overlayDetail(_ value: String) throws -> OverlayDetail? {
         if value == "inherit" { return nil }
         guard let detail = OverlayDetail(rawValue: value) else {
@@ -298,6 +309,7 @@ struct BottleCommand: AsyncParsableCommand {
             }
             print("overlay \(Self.overlaySummary)")
             print("fps-limit \(Self.frameRateLimitSummary)")
+            print("video-decoding \(Self.videoDecodingSummary)")
             print("wine-debug \(WineLog.summary(debugMode: debugMode))")
             return
         }
@@ -318,6 +330,7 @@ struct BottleCommand: AsyncParsableCommand {
             }),
             "overlay": GameConfig.overlayDetail(bottle: SteamBottle.name).value.level,
             "fps-limit": GameConfig.frameRateLimit(bottle: SteamBottle.name).value.framesPerSecond,
+            "video-decoding": GameConfig.videoDecoding(bottle: SteamBottle.name).value.rawValue,
             "wine-debug": debugMode || WineLog.isDiagnosing,
             "wine-debug-channels": WineLog.channels,
             "wine-debug-effective": WineLog.effectiveChannels(debugMode: debugMode),
@@ -337,6 +350,7 @@ struct BottleCommand: AsyncParsableCommand {
         case "processors": print(Self.processorsSummary)
         case "overlay": print(Self.overlaySummary)
         case "fps-limit": print(Self.frameRateLimitSummary)
+        case "video-decoding": print(Self.videoDecodingSummary)
         case "fps-graph":
             let resolved = GameConfig.overlayDetail(bottle: SteamBottle.name)
             print("\(resolved.value.showsFrameGraph) (\(resolved.source))")
@@ -411,6 +425,10 @@ struct BottleCommand: AsyncParsableCommand {
             let limit = try ConfigKeyParsing.frameRateLimit(value)
             updateBottle { $0.frameRateLimit = limit }
             print("fps-limit \(Self.frameRateLimitSummary) — \(Self.gameReach)")
+        case "video-decoding":
+            let decoding = try ConfigKeyParsing.videoDecoding(value)
+            updateBottle { $0.videoDecoding = decoding }
+            print("video-decoding \(Self.videoDecodingSummary) — \(Self.gameReach)")
         case "fps-graph":
             let on = try ConfigKeyParsing.flag(value, key: key)
             let shown = GameConfig.fps(bottle: SteamBottle.name).value
@@ -492,7 +510,7 @@ struct BottleCommand: AsyncParsableCommand {
 
     private static let keys = "(renderer | msync | windows | upscaler | filter | mouse | "
         + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | "
-        + "wine-debug)"
+        + "video-decoding | wine-debug)"
 
     /// The key a setting is stored and scripted under. The listing labels the
     /// sync switch `msync+`, its name everywhere a person reads it, so that
@@ -537,6 +555,12 @@ struct BottleCommand: AsyncParsableCommand {
     /// The bottle's frame rate limit, and where that comes from.
     static var frameRateLimitSummary: String {
         let resolved = GameConfig.frameRateLimit(bottle: SteamBottle.name)
+        return "\(resolved.value.rawValue) (\(resolved.source))"
+    }
+
+    /// The bottle's video decoding, and where that comes from.
+    static var videoDecodingSummary: String {
+        let resolved = GameConfig.videoDecoding(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 

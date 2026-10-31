@@ -17,6 +17,7 @@ nonisolated enum SettingID: String, CaseIterable, Sendable {
     case overlayDetail
     case frameRateLimit
     case hud
+    case videoDecoding
     case mouse
     case cursorConfine
     case tuning
@@ -274,6 +275,10 @@ nonisolated enum SettingCatalog {
             carrier: .environment(["SEVO_FPS_LIMIT"]),
         ),
         .flag(.hud, in: .picture, key: \.hud, copy: .hud, carrier: .environment(["MTL_HUD_ENABLED"])),
+        .choice(
+            .videoDecoding, in: .picture, key: \.videoDecoding, label: \.label, copy: .videoDecoding,
+            carrier: .environment(["GST_PLUGIN_FEATURE_RANK"]),
+        ),
         .choice(
             .mouse, in: .mouse, key: \.mouse, label: \.label, copy: .mouse,
             carrier: .environment(["SEVO_LINEAR_MOUSE"]),

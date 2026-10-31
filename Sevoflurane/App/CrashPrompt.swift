@@ -66,21 +66,30 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
     }
 
     /// Points the recorder's closing hook at this prompt, and past it at the
-    /// processor-limit offer. The hook fires on the recorder's closing queue;
-    /// the decision belongs on the main actor.
-    func install(spin: ThreadSpinPrompt = .shared) {
+    /// video-decoding and processor-limit offers; and the recorder's
+    /// decoded-nothing hook at the video-decoding offer, which opens while the
+    /// game still waits on its picture. The hooks fire on the recorder's
+    /// queues; the decisions belong on the main actor.
+    func install(spin: ThreadSpinPrompt = .shared, video: VideoDecodingPrompt = .shared) {
         RunRecorder.didClose = { [weak self] record in
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.offerAfterClose(record, spin: spin) }
+                MainActor.assumeIsolated { self?.offerAfterClose(record, spin: spin, video: video) }
+            }
+        }
+        RunRecorder.didStarveVideo = { record in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { video.offer(record, crashShown: false) }
             }
         }
     }
 
     /// A closed run gets one panel: the crash prompt when the run earns it,
-    /// otherwise the processor-limit offer when that one does.
-    func offerAfterClose(_ record: RunRecord, spin: ThreadSpinPrompt) {
+    /// otherwise the video-decoding offer, otherwise the processor-limit
+    /// offer. A run's video offer that opened while it ran counts as its one.
+    func offerAfterClose(_ record: RunRecord, spin: ThreadSpinPrompt, video: VideoDecodingPrompt = .shared) {
         let crashShown = offer(record)
-        spin.offer(record, crashShown: crashShown)
+        let videoShown = video.offer(record, crashShown: crashShown)
+        spin.offer(record, crashShown: crashShown || videoShown)
     }
 
     /// Considers a closed run, and answers whether it opened the prompt.

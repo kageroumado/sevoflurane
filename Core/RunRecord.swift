@@ -89,6 +89,8 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     /// (``ThreadActivity``). Kept on this Mac: ``SharedRun`` carries no part of it.
     /// Absent for a run with too few focused samples to say.
     var threads: Threads? = nil
+    /// A video decoder the game fed and got nothing from, when the run had one.
+    var video: Video? = nil
     var host: Host
 
     enum CodingKeys: String, CodingKey {
@@ -125,6 +127,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         case gameMode = "game_mode"
         case energy
         case threads
+        case video
         case host
     }
 
@@ -375,6 +378,22 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
+    /// A decoder transform the game gave ``buffers`` buffers and got no sample
+    /// from, as the engine's `decoded none of` line says (``VideoStarvation``):
+    /// what a game stuck on a blank video looks like from outside.
+    struct Video: Codable, Equatable, Sendable {
+        /// Buffers the game fed the decoder before the engine said so.
+        var buffers: Int
+        /// The stream's type as GStreamer names it, `video/x-h264`.
+        var stream: String
+        /// Which decoders were in force, ``VideoDecoding``'s raw value.
+        var decoding: String
+
+        var summary: String {
+            "video decoded nothing (\(stream), \(buffers) buffers, \(decoding))"
+        }
+    }
+
     /// The record's identity: the moment it began and the app, which no two
     /// runs share. What a report's ledger entry and `sevo report` name a run by.
     var id: String {
@@ -423,6 +442,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         if let upscaler, upscaler != UpscalerChoice.off.rawValue {
             parts.append(String(localized: "upscaler \(upscaler)"))
         }
+        if video != nil { parts.append(String(localized: "video decoded nothing")) }
         if let durationSeconds {
             let seconds = Int(durationSeconds.rounded())
             let minutes = Int((durationSeconds / 60).rounded())
@@ -464,6 +484,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         var parts = [engine, rendererLabel]
         if let tuning, tuning != PerformanceTuning.standard.rawValue { parts.append("\(tuning) tuning") }
         if let upscaler, upscaler != UpscalerChoice.off.rawValue { parts.append("upscaler \(upscaler)") }
+        if let video { parts.append(video.summary) }
         if let durationSeconds { parts.append(Self.duration(durationSeconds)) }
         parts.append(exitSummary)
         return parts

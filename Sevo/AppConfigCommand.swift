@@ -26,6 +26,9 @@ extension AppCommand {
             inherit — the counter shows the frame rate, adds the frame-time \
             card, or adds CPU, GPU, power and temperature), fps-graph (on | \
             off | inherit — overlay 2 with the counter shown, or overlay 1), \
+            video-decoding (hardware | software | inherit — the Mac's \
+            VideoToolbox or GStreamer's own decoders for the game's videos; \
+            software for a video that stays blank), \
             recommended to print what the fix table knows about \
             this game, windows (the values below), upscaler (off | \
             lanczos | metalfx | a shader package's name | inherit — sevo \
@@ -47,7 +50,7 @@ extension AppCommand {
             """,
         )
         @Argument var appid: Int
-        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | runner | build | recommended | detect | exe. Omit to print every setting.")
+        @Argument(help: "renderer | windows | upscaler | filter | mouse | emulate-modeset | processors | dll | env | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | video-decoding | runner | build | recommended | detect | exe. Omit to print every setting.")
         var key: String?
         @Argument(help: "New value; for windows: \(WindowTreatment.rungs). Omit to read the key.")
         var value: String?
@@ -100,6 +103,9 @@ extension AppCommand {
                 print("\(resolved.value.rawValue) (\(resolved.source))")
             case "fps-limit":
                 let resolved = GameConfig.frameRateLimit(bottle: bottle, game: appid)
+                print("\(resolved.value.rawValue) (\(resolved.source))")
+            case "video-decoding":
+                let resolved = GameConfig.videoDecoding(bottle: bottle, game: appid)
                 print("\(resolved.value.rawValue) (\(resolved.source))")
             case "fps-graph":
                 let resolved = GameConfig.overlayDetail(bottle: bottle, game: appid)
@@ -158,6 +164,9 @@ extension AppCommand {
             case "fps-limit":
                 let limit = try ConfigKeyParsing.frameRateLimit(value)
                 updateGame(bottle: bottle) { $0.frameRateLimit = limit }
+            case "video-decoding":
+                let decoding = try ConfigKeyParsing.videoDecoding(value)
+                updateGame(bottle: bottle) { $0.videoDecoding = decoding }
             case "fps-graph":
                 let on = try ConfigKeyParsing.flag(value, key: key)
                 let shown = GameConfig.fps(bottle: bottle, game: appid).value
@@ -374,6 +383,8 @@ extension AppCommand {
             print("overlay \(overlay.value.rawValue) (\(overlay.source))")
             let limit = GameConfig.frameRateLimit(bottle: bottle, game: appid)
             print("fps-limit \(limit.value.rawValue) (\(limit.source))")
+            let decoding = GameConfig.videoDecoding(bottle: bottle, game: appid)
+            print("video-decoding \(decoding.value.rawValue) (\(decoding.source))")
             print("runner \(values.runner ?? GameRunner.wine)")
             if let info = values.nwjs {
                 print(info.summary)
@@ -404,6 +415,7 @@ extension AppCommand {
             let processors = GameConfig.processors(bottle: bottle, game: appid)
             let overlay = GameConfig.overlayDetail(bottle: bottle, game: appid)
             let limit = GameConfig.frameRateLimit(bottle: bottle, game: appid)
+            let decoding = GameConfig.videoDecoding(bottle: bottle, game: appid)
             let values = GameConfig.game(appid)
             var payload: [String: Any] = [
                 "appid": appid,
@@ -434,6 +446,9 @@ extension AppCommand {
                 ],
                 "fps-limit": [
                     "value": limit.value.framesPerSecond, "source": limit.source.description,
+                ],
+                "video-decoding": [
+                    "value": decoding.value.rawValue, "source": decoding.source.description,
                 ],
                 "dll-overrides": values.dllOverrides ?? [:],
                 "switches": Dictionary(uniqueKeysWithValues: ConfigSwitches.all.map {

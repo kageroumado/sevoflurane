@@ -272,6 +272,7 @@ nonisolated enum ConfigMaterializer {
             GameConfig.overlayDetail(bottle: name).value, counterShown: GameConfig.fps(bottle: name).value,
         ))
         lines.append("SEVO_FPS_LIMIT=\(GameConfig.frameRateLimit(bottle: name).value.framesPerSecond)")
+        lines.append(videoDecodingLine(GameConfig.videoDecoding(bottle: name).value))
         lines += GameConfig.tuningParameters(bottle: name).environment.map { "\($0.key)=\($0.value)" }
         // What a running game's View menu needs: the engine's name for its
         // readout, and the `sevo` that stores a choice made there.
@@ -363,6 +364,9 @@ nonisolated enum ConfigMaterializer {
         if let limit = values.frameRateLimit {
             lines.append("SEVO_FPS_LIMIT=\(limit.framesPerSecond)")
         }
+        if let decoding = values.videoDecoding {
+            lines.append(videoDecodingLine(decoding))
+        }
         if let tuning = values.tuning {
             lines += tuning.parameters(custom: values.tuningParameters).environment
                 .map { "\($0.key)=\($0.value)" }
@@ -376,6 +380,18 @@ nonisolated enum ConfigMaterializer {
     /// already is. An engine that reads the level takes it from that line.
     static func frameGraphLine(_ detail: OverlayDetail, counterShown: Bool) -> String {
         "SEVO_FPS_GRAPH=\(detail.showsFrameGraph && counterShown ? "1" : "0")"
+    }
+
+    /// The decoder ranks GStreamer reads at start-up. Hardware is the
+    /// engine's own order, written as an empty value: the engine unsets a
+    /// variable given none, so a game asking for hardware overrides a bottle
+    /// on software. Software ranks VideoToolbox out, and `avdec_h264` and its
+    /// kin take the stream.
+    static func videoDecodingLine(_ decoding: VideoDecoding) -> String {
+        switch decoding {
+        case .hardware: "GST_PLUGIN_FEATURE_RANK="
+        case .software: "GST_PLUGIN_FEATURE_RANK=vtdec_hw:NONE,vtdec:NONE"
+        }
     }
 
     /// What gives one game a renderer of its own: the payload's own directory
