@@ -47,6 +47,25 @@ struct ConfigMaterializerTests {
     }
 
     @Test
+    func `a Steam game with no manifest is not written for; an adopted program always is`() {
+        var installedGame = ConfigValues.empty
+        installedGame.exes = ["game.exe"]
+        var uninstalledGame = ConfigValues.empty
+        uninstalledGame.exes = ["game.exe"]
+        uninstalledGame.fps = true
+        var adopted = ConfigValues.empty
+        adopted.exes = ["tool.exe"]
+        var installedWithoutRecords = ConfigValues.empty
+        installedWithoutRecords.name = "Unplayed"
+        let games = [
+            1_234_567: installedGame, 603_750: uninstalledGame,
+            2_000_000_001: adopted, 99: installedWithoutRecords,
+        ]
+        let written = ConfigMaterializer.materializedGames(games, installed: [1_234_567, 99])
+        #expect(written.map(\.appID) == [1_234_567, 2_000_000_001])
+    }
+
+    @Test
     func `seven calls made during a pass are answered by one more pass`() {
         let gate = CoalescingGate()
         let passes = Mutex(0)

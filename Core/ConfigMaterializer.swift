@@ -57,11 +57,7 @@ nonisolated enum ConfigMaterializer {
         var games: [GameFiles] = []
         var native: Set<Int> = []
         var launchers: Set<Int> = []
-        // Every game with an executable on record, not only one with settings:
-        // the loader bundle is what gives a game its own name, icon and Game
-        // Mode, and a game nobody has configured wants those too.
-        for (appID, values) in GameConfig.games().sorted(by: { $0.key < $1.key })
-            where values.hasSettings || values.exes != nil {
+        for (appID, values) in materializedGames(GameConfig.games(), installed: SharedGames.installedAppIDs) {
             // A tool recorded as a game's before the filter knew it would start
             // through the game's bundle, with its settings, from any launch.
             let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
@@ -110,6 +106,23 @@ nonisolated enum ConfigMaterializer {
         // runners share one store by design) and loses the wrapper package,
         // which describes a run that is no longer arranged.
         NWJSRunner.removeWrappers(keeping: native)
+    }
+
+    /// The games a pass writes for, in app id order: every game with a
+    /// setting or an executable on record whose records claim executables
+    /// (``GameConfig/claims(_:installed:)``). Every game with an executable
+    /// on record is written, not only one with settings: the loader bundle
+    /// is what gives a game its own name, icon and Game Mode, and a game
+    /// nobody has configured wants those too. A Steam game with no manifest
+    /// is left out: it cannot start, and its exes would otherwise take the
+    /// env file, and the loader, from a game that can.
+    static func materializedGames(
+        _ games: [Int: ConfigValues], installed: Set<Int>,
+    ) -> [(appID: Int, values: ConfigValues)] {
+        GameConfig.claimants(in: games, installed: installed)
+            .filter { $0.value.hasSettings || $0.value.exes != nil }
+            .sorted { $0.key < $1.key }
+            .map { (appID: $0.key, values: $0.value) }
     }
 
     // MARK: - One file per executable
