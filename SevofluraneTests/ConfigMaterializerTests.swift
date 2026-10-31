@@ -79,6 +79,46 @@ struct ConfigMaterializerTests {
     }
 
     @Test
+    func `a game's install folder gets files of its own, with its full lines, whoever else ships the exe`() throws {
+        var first = Self.rpgMakerA
+        first.folder = ConfigMaterializer.folderKey("First Game")
+        var second = Self.rpgMakerB
+        second.folder = "second"
+        let files = ConfigMaterializer.appFiles([first, second])
+        #expect(files["game.exe.env"]?.contains { $0.hasPrefix("SEVO_LOADER=") } == false)
+        let firstOwn = try #require(files["first game/game.exe.env"])
+        #expect(firstOwn.contains("SEVO_LOADER=/launchers/400.app"))
+        #expect(firstOwn.contains("SEVO_RUNNER=nwjs"))
+        #expect(firstOwn.contains("SEVO_UPSCALER=fsr"))
+        #expect(files["first game/first.exe.env"] == files["first.exe.env"])
+        #expect(files["second/game.exe.env"]?.contains("SEVO_LOADER=/launchers/4000.app") == true)
+        // The launch rewrite touches the shared file alone; the folder files already say it all.
+        #expect(Set(ConfigMaterializer.launchFiles(for: second, among: [first]).keys) == ["game.exe.env"])
+        #expect(ConfigMaterializer.folderKey("Éclair Ω Deluxe") == "Éclair Ω deluxe")
+    }
+
+    @Test
+    func `folder files are written in their folder and swept with it when the game goes`() throws {
+        let manager = FileManager.default
+        let dir = manager.temporaryDirectory.appendingPathComponent("apps-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        ConfigMaterializer.writeFiles(
+            ["game.exe.env": ["# app 400"], "first game/game.exe.env": ["# app 400", "SEVO_LOADER=/l/400.app"]], in: dir,
+        )
+        let written = try String(contentsOf: dir.appendingPathComponent("first game/game.exe.env"), encoding: .utf8)
+        #expect(written.hasSuffix("\nSEVO_LOADER=/l/400.app\n"))
+        // Someone else's file in a folder of theirs is left alone, and so is their folder.
+        let theirs = dir.appendingPathComponent("mine/notes.env")
+        try manager.createDirectory(at: theirs.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "KEEP=1\n".write(to: theirs, atomically: true, encoding: .utf8)
+
+        ConfigMaterializer.removeStale(in: dir, keeping: ["game.exe.env"])
+        #expect(manager.fileExists(atPath: dir.appendingPathComponent("game.exe.env").path))
+        #expect(!manager.fileExists(atPath: dir.appendingPathComponent("first game").path))
+        #expect(manager.fileExists(atPath: theirs.path))
+    }
+
+    @Test
     func `a Steam game with no manifest is not written for; an adopted program always is`() {
         var installedGame = ConfigValues.empty
         installedGame.exes = ["game.exe"]

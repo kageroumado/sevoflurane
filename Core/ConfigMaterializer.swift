@@ -2,8 +2,10 @@ import Foundation
 import Synchronization
 
 /// Turns the settings hierarchy into what the engine reads at process start:
-/// `<prefix>/.sevo/bottle.env` for the bottle's resolved values and
-/// `<prefix>/.sevo/apps/<exe>.env` for every game with a value of its own
+/// `<prefix>/.sevo/bottle.env` for the bottle's resolved values,
+/// `<prefix>/.sevo/apps/<exe>.env` for every game with a value of its own,
+/// and `<prefix>/.sevo/apps/<install folder>/<exe>.env` for a game whose
+/// install folder is known, which an engine from r9 reads after the exe's own
 /// (dormison ntdll, `load_sevo_env`). Whole-file rewrites, idempotent;
 /// run after every store change and at every client start. ``DebugMode``'s
 /// `debug.env` is read between those two and is written here as well, so one
@@ -57,8 +59,12 @@ nonisolated enum ConfigMaterializer {
         var games: [GameFiles] = []
         var native: Set<Int> = []
         var launchers: Set<Int> = []
-        for (appID, values) in materializedGames(GameConfig.games(), installed: SharedGames.installedAppIDs) {
-            let game = gameFiles(appID: appID, values: values, bottle: name, prefix: prefix, engine: engine)
+        let installed = Dictionary(
+            SharedGames.installedGames().map { ($0.appID, $0) }, uniquingKeysWith: { first, _ in first },
+        )
+        for (appID, values) in materializedGames(GameConfig.games(), installed: Set(installed.keys)) {
+            var game = gameFiles(appID: appID, values: values, bottle: name, prefix: prefix, engine: engine)
+            game.folder = installed[appID].map { folderKey($0.directory.lastPathComponent) }
             if game.loader != nil { launchers.insert(appID) }
             if !game.runner.isEmpty { native.insert(appID) }
             games.append(game)
@@ -190,9 +196,14 @@ nonisolated enum ConfigMaterializer {
         var loader: String?
         /// The native runner's variables, which run the exe as this game.
         var runner: [String] = []
+        /// The game's install folder under `steamapps/common`, as
+        /// ``ConfigMaterializer/folderKey(_:)`` spells it, when the game is a
+        /// Steam game on disk. It is one game's, so the files under it are
+        /// the game's alone whatever other game ships the exe.
+        var folder: String?
     }
 
-    /// The env file of every executable, by file name.
+    /// The env file of every executable, by path under the apps directory.
     ///
     /// The engine finds a file by exe name alone, and games do share names:
     /// every RPG Maker MV/MZ game ships `game.exe`, and many a game ships
@@ -203,6 +214,10 @@ nonisolated enum ConfigMaterializer {
     /// claimant whose launch is in flight (`launching`): its process is the
     /// one about to read the file, so the file carries its full lines. The
     /// result is the same whatever order `games` comes in.
+    ///
+    /// A game with an install folder gets `<folder>/<exe>.env` as well, with
+    /// its full lines: an engine from r9 reads it after the exe's own file
+    /// and finds the game's identity there without the launch rewrite.
     static func appFiles(_ games: [GameFiles], launching: Int? = nil) -> [String: [String]] {
         let ordered = games.sorted { $0.appID < $1.appID }
         var claimants: [String: [GameFiles]] = [:]
@@ -210,6 +225,10 @@ nonisolated enum ConfigMaterializer {
             for exe in Set(game.exes) { claimants[exe, default: []].append(game) }
         }
         var files: [String: [String]] = [:]
+        for game in ordered {
+            guard let folder = game.folder else { continue }
+            for exe in Set(game.exes) { files["\(folder)/\(exe).env"] = ownLines(of: game, for: exe) }
+        }
         for (exe, owners) in claimants {
             let file = "\(exe).env"
             guard owners.count > 1 else {
@@ -235,6 +254,13 @@ nonisolated enum ConfigMaterializer {
     private static func ownLines(of game: GameFiles, for exe: String) -> [String] {
         let identity = GameConfig.isCompanionExecutable(exe) ? [] : [game.loader].compactMap(\.self)
         return game.settings + game.runner + identity
+    }
+
+    /// An install folder's name as the engine keys a file on it: the folder
+    /// names of the program's path with ASCII letters lowered, which is what
+    /// `tolower` does byte by byte on the engine's side.
+    static func folderKey(_ folder: String) -> String {
+        String(folder.map { $0.isASCII ? Character($0.lowercased()) : $0 })
     }
 
     /// `steam.exe`'s own file, with Steam Play switched on for an engine that
@@ -499,10 +525,18 @@ nonisolated enum ConfigMaterializer {
 
     /// Writes every file of `files` into `dir`, each under the header
     /// ``removeStale(in:keeping:)`` knows the app's files by.
+    /// Writes each file at its path under `dir`, making the folder of a
+    /// folder-keyed one.
     static func writeFiles(_ files: [String: [String]], in dir: URL) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         for (file, lines) in files {
-            write(lines, to: dir.appendingPathComponent(file))
+            let url = dir.appendingPathComponent(file)
+            if file.contains("/") {
+                try? FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                )
+            }
+            write(lines, to: url)
         }
     }
 
@@ -512,13 +546,28 @@ nonisolated enum ConfigMaterializer {
         try? text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private static func removeStale(in dir: URL, keeping wanted: Set<String>) {
+    /// Removes every file of ours under `dir`, folders included, whose path
+    /// under it is not in `wanted`, and a folder left empty by that.
+    static func removeStale(in dir: URL, keeping wanted: Set<String>) {
         let manager = FileManager.default
         guard let entries = try? manager.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil,
+            at: dir, includingPropertiesForKeys: [.isDirectoryKey],
         ) else { return }
-        for url in entries where !wanted.contains(url.lastPathComponent) {
-            guard let text = try? String(contentsOf: url, encoding: .utf8),
+        for url in entries {
+            let name = url.lastPathComponent
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                let inside = Set(wanted.compactMap { path -> String? in
+                    guard path.hasPrefix(name + "/") else { return nil }
+                    return String(path.dropFirst(name.count + 1))
+                })
+                removeStale(in: url, keeping: inside)
+                if inside.isEmpty, (try? manager.contentsOfDirectory(atPath: url.path))?.isEmpty == true {
+                    try? manager.removeItem(at: url)
+                }
+                continue
+            }
+            guard !wanted.contains(name),
+                  let text = try? String(contentsOf: url, encoding: .utf8),
                   text.hasPrefix(header) else { continue }
             try? manager.removeItem(at: url)
         }
