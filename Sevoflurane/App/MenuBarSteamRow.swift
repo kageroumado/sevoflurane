@@ -11,8 +11,9 @@ private enum ZoneMetrics {
 }
 
 /// The client in one row of glass: the way to its window, the friends list,
-/// and how it is. The last two rest as icons and say their word on hover, so
-/// Open Steam, the row's one accent, keeps most of it.
+/// the app's Discord, and how the client is. The last three rest as icons and
+/// say their word on hover, so Open Steam, the row's one accent, keeps most
+/// of it.
 struct SteamRow: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
@@ -22,6 +23,7 @@ struct SteamRow: View {
             HStack(spacing: Theme.Space.xs) {
                 OpenSteamButton(host: host, supervisor: supervisor)
                 FriendsButton(host: host)
+                DiscordButton()
                 StatusChip(host: host, supervisor: supervisor)
             }
         }
@@ -31,18 +33,45 @@ struct SteamRow: View {
 /// A glass capsule holding a symbol, and a word beside it while the pointer
 /// is over it.
 private struct HoverLabel: View {
-    let symbol: String
+    /// An SF Symbol by name, or an asset drawn as a template at symbol size.
+    enum Glyph {
+        case symbol(String)
+        case asset(String)
+    }
+
+    let glyph: Glyph
     let word: LocalizedStringResource
     /// Shown whatever the hover: a count that is news.
     var badge: String?
     let isHovered: Bool
 
+    init(symbol: String, word: LocalizedStringResource, badge: String? = nil, isHovered: Bool) {
+        self.init(glyph: .symbol(symbol), word: word, badge: badge, isHovered: isHovered)
+    }
+
+    init(glyph: Glyph, word: LocalizedStringResource, badge: String? = nil, isHovered: Bool) {
+        self.glyph = glyph
+        self.word = word
+        self.badge = badge
+        self.isHovered = isHovered
+    }
+
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .contentTransition(.symbolEffect(.replace))
-                .accessibilityHidden(true)
+            switch glyph {
+            case let .symbol(symbol):
+                Image(systemName: symbol)
+                    .font(.system(size: 12))
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityHidden(true)
+            case let .asset(name):
+                Image(name)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 13, height: 13)
+                    .accessibilityHidden(true)
+            }
             if isHovered {
                 Text(word)
                     .font(.system(size: 11))
@@ -145,6 +174,29 @@ private struct FriendsButton: View {
         .keyboardShortcut("f")
         .accessibilityLabel(MenuBarView.friendsLabel(unreadChats: unreadChats))
         .help(MenuBarView.friendsLabel(unreadChats: unreadChats))
+    }
+}
+
+/// The app's Discord server, where playtests and questions go. The mark is
+/// Discord's own (the Simple Icons tracing, CC0), drawn as a template so it
+/// takes the row's secondary color like the symbols beside it.
+private struct DiscordButton: View {
+    static let inviteURL = URL(string: "https://discord.gg/BJYJvZGqHX")!
+    @State private var isHovered = false
+
+    var body: some View {
+        Button { NSWorkspace.shared.open(Self.inviteURL) } label: {
+            HoverLabel(glyph: .asset("DiscordMark"), word: "Discord", isHovered: isHovered)
+                .foregroundStyle(.secondary)
+                .contentShape(Capsule())
+                .glassEffect(.regular.interactive(), in: Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { isHovered = hovering }
+        }
+        .accessibilityLabel(String(localized: "Join the Sevoflurane Discord"))
+        .help("Join the Sevoflurane Discord server")
     }
 }
 
