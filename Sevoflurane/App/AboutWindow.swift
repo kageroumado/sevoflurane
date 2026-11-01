@@ -178,6 +178,7 @@ enum Acknowledgements {
         "anime4k", "cunny",
         "propofol", "tiptoe", "appupdater", "version", "swift-argument-parser", "zstd", "hdiffpatch",
         "areweanticheatyet", "applegamingwiki", "protondb",
+        "simple-icons",
         "apache-2.0",
     ]
 

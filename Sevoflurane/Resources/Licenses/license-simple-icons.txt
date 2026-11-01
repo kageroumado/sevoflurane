@@ -1,0 +1,13 @@
+Simple Icons (the Discord mark on the Steam row)
+================================================
+
+https://simpleicons.org · https://github.com/simple-icons/simple-icons
+
+The Discord glyph on the menu bar's Steam row is Simple Icons' tracing of
+Discord's logo. Simple Icons is released under CC0 1.0 Universal: the icon
+data is dedicated to the public domain. Discord's logo itself remains a
+trademark of Discord Inc.; Sevoflurane uses it only to link to its own
+Discord server and is not affiliated with Discord.
+
+CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
