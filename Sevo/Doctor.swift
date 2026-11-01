@@ -87,10 +87,13 @@ nonisolated enum Doctor {
     /// Rosetta, the engine, the bottles and the Steam client installed in one.
     private static func provisioningChecks(from d: SetupDetection) -> [Check] {
         var checks: [Check] = []
-        checks.append(Check(
-            id: "rosetta", ok: d.rosetta, label: "Rosetta 2",
-            hint: "softwareupdate --install-rosetta", provisioning: true,
-        ))
+        // An Intel Mac runs the x86_64 stack natively and has no Rosetta to check.
+        if MacHardware.isAppleSilicon {
+            checks.append(Check(
+                id: "rosetta", ok: d.rosetta, label: "Rosetta 2",
+                hint: "softwareupdate --install-rosetta", provisioning: true,
+            ))
+        }
 
         checks.append(engineCheck(from: d))
 

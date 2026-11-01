@@ -218,10 +218,10 @@ nonisolated enum SettingCatalog {
         // own renderer is Settings › Graphics', which is what a game inherits.
         .choice(
             .renderer, in: .picture, levels: [.game], key: \.renderer, label: \.label,
-            offering: Renderer.allCases.filter { $0 != .auto },
+            offering: Renderer.hostable().filter { $0 != .auto },
             copy: SettingCopy(
                 title: "Renderer",
-                help: SettingCopy.renderers(Renderer.allCases.filter { $0 != .auto }),
+                help: SettingCopy.renderers(Renderer.hostable().filter { $0 != .auto }),
             ),
             carrier: .rendererPayload,
             resolved: { _, _ in .choice(BottleGraphics.currentSelection().renderer.rawValue) },

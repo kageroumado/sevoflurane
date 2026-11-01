@@ -3,6 +3,12 @@ import Foundation
 /// The graphics translation layer games render through. Steam's own UI never
 /// touches Direct3D, so switching takes effect at the next game launch.
 nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
+    /// The renderers a Mac can run at all: every one on Apple silicon, and
+    /// every one but D3DMetal on Intel, where Apple's toolkit does not run.
+    static func hostable(onAppleSilicon appleSilicon: Bool = MacHardware.isAppleSilicon) -> [Renderer] {
+        allCases.filter { appleSilicon || $0 != .d3dmetal }
+    }
+
     /// The engine picks per game from CrossOver's own database, falling
     /// back to wined3d for a game it does not list.
     case auto

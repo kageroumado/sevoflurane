@@ -389,9 +389,10 @@ struct SetupView: View {
     }
 
     /// After provisioning: the managed engine needs D3DMetal added for DX12,
-    /// so offer it; CrossOver brings its own, so go straight to preferences.
+    /// so offer it; CrossOver brings its own, and an Intel Mac cannot run it,
+    /// so both go straight to preferences.
     private func advanceFromSteam() {
-        guard usesManagedEngine, makeGraphics != nil || !provisioner.isDryRun else {
+        guard usesManagedEngine, MacHardware.isAppleSilicon, makeGraphics != nil || !provisioner.isDryRun else {
             step = .options
             return
         }

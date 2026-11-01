@@ -155,20 +155,21 @@ final class GraphicsStore {
     /// load. The bottle's current renderer is always among them, so a surface
     /// that lists these never shows a choice other than the one in force.
     var availableRenderers: [Renderer] {
-        guard !engineHasOwnD3DMetal else { return Renderer.allCases }
+        guard !engineHasOwnD3DMetal || !MacHardware.isAppleSilicon else { return Renderer.allCases }
         let hosted = Set(environment.hostedRenderers())
         let current = selection.renderer
-        return Renderer.allCases.filter { renderer in
+        return Renderer.hostable().filter { renderer in
             renderer == current
                 || hosted.contains(renderer) && (renderer != .d3dmetal || activeD3DMetal != nil)
         }
     }
 
     /// Whether an installed engine can run D3DMetal at all: CrossOver with its
-    /// own copy, or a managed engine that declares it. Whether a toolkit is
-    /// there to run is a separate question, which ``availableRenderers`` asks.
+    /// own copy, or a managed engine that declares it, on an Apple silicon Mac;
+    /// an Intel Mac cannot, whatever the engine. Whether a toolkit is there to
+    /// run is a separate question, which ``availableRenderers`` asks.
     var canHostD3DMetal: Bool {
-        engineHasOwnD3DMetal || environment.hostedRenderers().contains(.d3dmetal)
+        MacHardware.isAppleSilicon && (engineHasOwnD3DMetal || environment.hostedRenderers().contains(.d3dmetal))
     }
 
     /// What a game's context menus offer to run with or to pin:

@@ -74,8 +74,10 @@ nonisolated enum SetupProbe {
         )
     }
 
-    /// The whole stack is x86_64; without Rosetta nothing below runs.
+    /// The whole stack is x86_64; without Rosetta nothing below runs on
+    /// Apple silicon. An Intel Mac runs it natively and answers true.
     static func rosettaWorks() async -> Bool {
+        guard MacHardware.isAppleSilicon else { return true }
         let result = await Subprocess.run(
             "/usr/bin/arch", ["-x86_64", "/usr/bin/true"], capture: .none, timeout: .seconds(10),
         )

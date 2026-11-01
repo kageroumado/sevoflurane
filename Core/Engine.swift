@@ -309,12 +309,13 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// and one that predates the field is the classic wine-staging build
     /// with the DXMT/DXVK payloads.
     var supportedRenderers: [Renderer] {
+        let hostable = Renderer.hostable()
         switch self {
         case .crossover, .crossoverPreview:
-            return Renderer.allCases
+            return hostable
         case .managed:
             if let declared = engineInfo?["renderers"] as? [String] {
-                return declared.compactMap(Renderer.init(rawValue:))
+                return declared.compactMap(Renderer.init(rawValue:)).filter(hostable.contains)
             }
             return [.auto, .dxmt, .dxvk, .wined3d]
         }

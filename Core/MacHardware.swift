@@ -12,6 +12,17 @@ nonisolated enum MacHardware {
     /// `hw.model`, like `Mac15,8`: one identifier per model, never per machine.
     static let model: String? = sysctlString("hw.model")
 
+    /// Whether this Mac's processor is Apple's, whichever slice of a universal
+    /// binary is running (`hw.optional.arm64` answers 1 under Rosetta too).
+    /// An Intel Mac runs the whole x86_64 stack natively, needs no Rosetta,
+    /// and cannot run D3DMetal, which is Apple's toolkit for Apple GPUs.
+    static let isAppleSilicon: Bool = {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 else { return false }
+        return value == 1
+    }()
+
     /// The GPU's core count, which splits configurations one chip name hides
     /// (an M3 Pro has 14 or 18). Read from the AGX accelerator's registry entry.
     static let gpuCores: Int? = {
