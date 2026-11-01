@@ -96,7 +96,15 @@ final nonisolated class WineChronicleTail {
         offset = Self.size(of: url)
     }
 
-    /// The entries appended since the last call.
+    /// The most one call reads. A launch appends a few lines, so a read is
+    /// ordinarily a few hundred bytes; a gap of megabytes is a Mac that was
+    /// asleep or an app that was not running, and parsing all of it at once
+    /// on the caller's actor held the app's main thread for a fifth of a
+    /// second at 3.7 MB. The rest comes in the following calls.
+    static let maximumBytesPerRead: UInt64 = 512 * 1024
+
+    /// The entries appended since the last call, up to
+    /// ``maximumBytesPerRead`` of them.
     func newEntries() -> [WineChronicle.Entry] {
         let size = Self.size(of: url)
         if size < offset {
@@ -107,7 +115,8 @@ final nonisolated class WineChronicleTail {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? handle.close() }
         guard (try? handle.seek(toOffset: offset)) != nil,
-              let data = try? handle.read(upToCount: Int(size - offset)), !data.isEmpty
+              let data = try? handle.read(upToCount: Int(min(size - offset, Self.maximumBytesPerRead))),
+              !data.isEmpty
         else { return [] }
         offset += UInt64(data.count)
         var text = partial + String(decoding: data, as: UTF8.self)

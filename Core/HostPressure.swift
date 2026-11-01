@@ -153,6 +153,13 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
         }
     }
 
+    /// ``sample()`` on the global concurrent pool, for a caller on an actor
+    /// that should not block for the walk.
+    @concurrent
+    func sampleOffActor() async -> HostPressure {
+        sample()
+    }
+
     func sample() -> HostPressure {
         lock.withLock {
             var pressure = HostPressure()

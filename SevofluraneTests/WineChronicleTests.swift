@@ -57,6 +57,37 @@ struct WineChronicleTests {
         #expect(tail.newEntries().isEmpty)
     }
 
+    /// A gap of megabytes comes in bounded reads, none of them losing a line.
+    @Test
+    func `a long gap is read in bounded pieces and arrives whole`() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WineChronicleTests-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try "".write(to: url, atomically: true, encoding: .utf8)
+        let tail = WineChronicleTail(url: url)
+        #expect(tail.newEntries().isEmpty)
+
+        let lines = 30_000
+        var text = ""
+        for n in 0 ..< lines { text += "00:00:01.000 armed pid=\(n) game\(n).exe  \"\" 0x0\n" }
+        try Self.append(text, to: url)
+        #expect(UInt64(text.utf8.count) > WineChronicleTail.maximumBytesPerRead)
+
+        var reads = 0
+        var seen: [WineChronicle.Entry] = []
+        while reads < 100 {
+            let batch = tail.newEntries()
+            if batch.isEmpty { break }
+            reads += 1
+            seen += batch
+        }
+        #expect(reads > 1)
+        #expect(seen.count == lines)
+        #expect(seen.first?.executable == "game0.exe")
+        #expect(seen.last?.executable == "game\(lines - 1).exe")
+        #expect(seen.map(\.pid) == Array(0 ..< pid_t(lines)))
+    }
+
     /// The shim writes a line per open, but a read can still land inside one.
     @Test
     func `a half-written line is held until its newline arrives`() throws {
