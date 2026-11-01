@@ -340,6 +340,8 @@ final nonisolated class RunRecorder {
             engine: (bootedEngine ?? Engine.active).recordIdentifier,
             renderer: native ? GameRunner.macos
                 : values.runner == GameRunner.nwjs ? GameRunner.nwjs : selection.renderer.rawValue,
+            rendererRequested: native || values.runner == GameRunner.nwjs
+                ? nil : (values.renderer ?? selection.renderer).rawValue,
             runner: native ? GameRunner.macos : values.runner ?? GameRunner.wine,
             windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
             tuning: Self.tuningLabel(forApp: appID),

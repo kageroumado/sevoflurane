@@ -14,6 +14,7 @@ struct RunRecorderTests {
             exe: "totallyaccuratebattlesimulator.exe",
             engine: "dormison-r4",
             renderer: "dxmt",
+            rendererRequested: "d3dmetal",
             runner: "wine",
             arch: 64,
             windows: "fixed",
@@ -73,6 +74,7 @@ struct RunRecorderTests {
         #expect(json["engine"] as? String == "dormison-r4")
         #expect(json["arch"] as? Int == 64)
         #expect(json["renderer"] as? String == "dxmt")
+        #expect(json["renderer_requested"] as? String == "d3dmetal")
         #expect(json["windows"] as? String == "fixed")
         #expect(json["msync"] as? Bool == true)
         #expect(json["d3dmetal"] as? String == "4.0 beta 2")

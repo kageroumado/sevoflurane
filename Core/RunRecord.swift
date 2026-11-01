@@ -29,6 +29,12 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     /// or OpenGL title. Absent on the native runner, and on records older
     /// than the field.
     var rendererConfirmed: Bool? = nil
+    /// The renderer the settings asked for at the launch — the game's own
+    /// pin, else the bottle's — kept apart from ``renderer``, which the
+    /// engine's line turns into what drew. The two differ when a pin did not
+    /// take, or when a title drew through wined3d whatever was staged. Absent
+    /// on the native runners and on records older than the field.
+    var rendererRequested: String? = nil
     /// `wine` or `nwjs` (``GameRunner``).
     var runner: String
     /// The executable's address width, 32 or 64, from its COFF header
@@ -101,6 +107,7 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         case engine
         case renderer
         case rendererConfirmed = "renderer_confirmed"
+        case rendererRequested = "renderer_requested"
         case runner
         case arch
         case windows
