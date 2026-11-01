@@ -158,8 +158,11 @@ final class BottleSupervisor {
     /// Rising pressure counts at once, because a clock must stretch before
     /// it runs out; falling pressure counts once it has held, because a
     /// build breathes between steps and the log should not breathe with it.
-    private func samplePressure() {
-        let reading = pressureSampler.sample()
+    private func samplePressure() async {
+        // Off the actor: a reading walks every process's CPU time and reads
+        // the SMC, 10 ms on an idle Mac and 60 ms at a loaded p95, and the
+        // actor has state transitions to serve meanwhile.
+        let reading = await pressureSampler.sampleOffActor()
         if reading.patience < pressure.patience || (!reading.isElevated && pressure.isElevated) {
             calmerReadings += 1
             guard calmerReadings >= Self.calmerReadingsToSettle else { return }
@@ -245,9 +248,10 @@ final class BottleSupervisor {
 
     private var loop: Task<Void, Never>?
     var clientFailures = 0
-    /// When the current run of consecutive client-probe failures began; the
-    /// restart decision needs a duration, not just a count.
-    private var firstClientFailure = Date.distantPast
+    /// The current run of consecutive client-probe failures, with the grace
+    /// it has earned (``ClientOutage``); the restart decision needs a
+    /// duration and the pressure met along it, not just a count.
+    private var outage: ClientOutage?
     /// A game window is on screen (from the probe's window scan).
     private var gameIsUp = false
     private var probeCycleCount = 0
@@ -481,6 +485,7 @@ final class BottleSupervisor {
         isPaused = paused
         if !paused {
             clientFailures = 0
+            outage = nil
             pageFailures = 0
             pageServicesUp = false
             fault = nil
@@ -493,7 +498,7 @@ final class BottleSupervisor {
     // MARK: - Probe cycle
 
     private func probe() async {
-        samplePressure()
+        await samplePressure()
         if !isQuitting { followConnectionLog() }
         if isPaused || isRestarting || isQuitting {
             // The display hold follows the game, whatever the client is
@@ -540,6 +545,7 @@ final class BottleSupervisor {
             return
         }
         clientFailures = 0
+        outage = nil
         hasSeenClientUp = true
         wantClient(because: "a client is already running")
         if case .gaveUp = fault {
@@ -791,7 +797,12 @@ final class BottleSupervisor {
         default: "CDP unreachable — client down"
         }
         clientFailures += 1
-        if clientFailures == 1 { firstClientFailure = .now }
+        if clientFailures == 1 || outage == nil {
+            outage = ClientOutage(patience: pressure.patience)
+        } else {
+            outage?.meet(patience: pressure.patience)
+        }
+        guard let outage else { return }
         if case .gaveUp = fault { return }
         if boot == .awaitingClient {
             advanceBootWait(wineWindows: wineWindows)
@@ -807,21 +818,25 @@ final class BottleSupervisor {
         // gone: the socket the bridge holds is the second opinion `/json`
         // alone cannot give.
         let clientSocketOpen = app.facts.isClientConnected
-        // That opinion holds for four mute windows; a client busy past them is
-        // wedged with its socket open. A game on screen keeps it holding,
-        // since the game is the load and a restart would take Steam from it.
-        let muteFor = Date.now.timeIntervalSince(firstClientFailure)
+        // That opinion holds for four mute windows at the worst pressure the
+        // outage has met, never fewer as the Mac calms down; a client busy
+        // past them is wedged with its socket open. A game on screen, or one
+        // launched in the last minutes, keeps it holding: the game is the
+        // load and a restart would take Steam from it.
+        let gameProtected = gameIsUp || ClientOutage.gameInFlight(
+            armedAt: RunLog.armedRuns().map(\.started), within: ClientOutage.launchWindow,
+        )
         let busyButConnected = client == .busy && clientSocketOpen
-            && (gameIsUp || muteFor < Double(patient(Timing.muteClient) * 4))
+            && (gameProtected || outage.busyGraceHolds(muteWindow: Timing.muteClient))
         let deadLongEnough = !busyButConnected && clientFailures >= 3
-            && muteFor >= Double(patient(Timing.muteClient))
+            && outage.muteLongEnough(muteWindow: Timing.muteClient)
         if !wineWindows.isEmpty, hasSeenClientUp {
             await restartClient(
                 reason: reason + " with a Wine dialog up — Steam's own watchdog likely fired",
             )
         } else if !processAlive || deadLongEnough {
             let cause = if processAlive {
-                withPressure(reason + " for \(Int(Date.now.timeIntervalSince(firstClientFailure)))s")
+                withPressure(reason + " for \(Int(outage.elapsed()))s")
             } else if hasSeenClientUp {
                 "the client process is gone"
             } else {
