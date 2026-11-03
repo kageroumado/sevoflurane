@@ -185,6 +185,7 @@ nonisolated enum ClientOps {
         _ engine: Engine, version: String, bottle: String?,
         noApp: Bool, progress: (String) -> Void,
     ) async throws -> Outcome {
+        guard engine.runsHere else { throw Failure.message(Engine.intelRefusal(version)) }
         let alreadyActive = Engine.active == engine
         if !noApp, await AppControl.status() == nil {
             progress("supervision is not running — starting the daemon")

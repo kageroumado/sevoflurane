@@ -121,6 +121,9 @@ nonisolated enum EngineInstaller {
         guard manager.fileExists(atPath: folder.appendingPathComponent("wine/bin").path) else {
             throw InstallError("\(version) is not an engine: no wine/bin inside")
         }
+        guard Engine.serverRuns(inEngineAt: folder) else {
+            throw InstallError(Engine.intelRefusal(version))
+        }
         let destination = root.appendingPathComponent(version)
         guard !manager.fileExists(atPath: destination.path) else {
             throw InstallError("engine \(version) is already installed")
@@ -254,6 +257,9 @@ nonisolated enum EngineInstaller {
         let tree = extracted.appendingPathComponent(version)
         guard manager.fileExists(atPath: tree.appendingPathComponent("wine/bin").path) else {
             throw InstallError("\(version) is not an engine: no wine/bin inside")
+        }
+        guard Engine.serverRuns(inEngineAt: tree) else {
+            throw InstallError(Engine.intelRefusal(version))
         }
         let destination = root.appendingPathComponent(version)
         guard !manager.fileExists(atPath: destination.path) else {

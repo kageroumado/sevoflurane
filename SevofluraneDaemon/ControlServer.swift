@@ -329,6 +329,9 @@ final class ControlServer {
         guard engine.existsOnDisk else {
             return .error(404, "engine \(version) is not installed")
         }
+        guard engine.runsHere else {
+            return .error(409, Engine.intelRefusal(version))
+        }
         let bottle = Self.value(of: "bottle", in: query)
         let targetBottle = bottle.isEmpty ? SteamBottle.name : bottle
         guard SetupProbe.bottles(for: engine)

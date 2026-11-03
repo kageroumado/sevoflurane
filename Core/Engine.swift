@@ -61,7 +61,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// fixes exist in no OSS binary — SPEC "Engine strategy"), then the
     /// newest managed engine.
     static func resolve(from detection: SetupDetection) -> Engine {
-        if let chosen = preferred(), chosen.existsOnDisk {
+        if let chosen = preferred(), chosen.existsOnDisk, chosen.runsHere {
             return chosen
         }
         if detection.usableCrossOver != nil {
@@ -79,7 +79,7 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// for the life of the process, and this is how a long-lived process sees
     /// an engine installed after it started.
     static func resolveFromDisk() -> Engine {
-        if let chosen = preferred(), chosen.existsOnDisk {
+        if let chosen = preferred(), chosen.existsOnDisk, chosen.runsHere {
             return chosen
         }
         let usableCrossOver = SetupProbe.crossoverInfo()
@@ -385,6 +385,30 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// them — a stored choice pointing at a deleted app must lose to policy.
     /// A managed engine exists only as a folder of ``managedRoot``
     /// (``managedDirectory(_:in:)``), whatever its name spells.
+    /// Whether this Mac can run the engine's wineserver. CrossOver installs
+    /// for the Mac it is on, so only a managed engine can be the wrong build.
+    var runsHere: Bool {
+        guard case let .managed(version) = self, let root = Self.managedDirectory(version) else { return true }
+        return Self.serverRuns(inEngineAt: root)
+    }
+
+    /// An Intel Mac runs only a wineserver with an x86_64 slice; Apple
+    /// silicon runs either slice, x86_64 through Rosetta. A server whose
+    /// header cannot be read counts as runnable, so its failure stays the
+    /// launch's own and names the file.
+    static func serverRuns(inEngineAt root: URL, appleSilicon: Bool = MacHardware.isAppleSilicon) -> Bool {
+        guard !appleSilicon else { return true }
+        guard let types = MachOIdentity.cpuTypes(ofFile: root.appendingPathComponent("wine/bin/wineserver"))
+        else { return true }
+        return types.contains(CPU_TYPE_X86_64)
+    }
+
+    /// What ``EngineInstaller`` and `engine use` say about an engine
+    /// ``runsHere`` refuses.
+    static func intelRefusal(_ version: String) -> String {
+        String(localized: "\(version) has an Apple silicon wineserver only, so it cannot run on this Intel Mac. Dormison r10 and later run on Intel.")
+    }
+
     var existsOnDisk: Bool {
         switch self {
         case .crossover, .crossoverPreview:

@@ -200,9 +200,11 @@ nonisolated enum SetupProbe {
     /// Oldest first, in ``Engine/isOlderVersion(_:than:)`` order:
     /// `dormison-r2` before `dormison-r10`, which a plain string sort gets
     /// backwards, and `dormison-b11` between `dormison-r10` and `dormison-r11`.
+    /// Only engines whose wineserver this Mac runs (``Engine/serverRuns(inEngineAt:appleSilicon:)``).
     static func managedEngineVersions() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: managedEngines.path)) ?? [])
             .filter { !$0.hasPrefix(".") }
+            .filter { Engine.serverRuns(inEngineAt: managedEngines.appendingPathComponent($0)) }
             .sorted(by: Engine.isOlderVersion)
     }
 }

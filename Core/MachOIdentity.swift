@@ -35,6 +35,28 @@ nonisolated enum MachOIdentity {
         }
     }
 
+    /// The CPU types a Mach-O file carries: one for a thin file, one per
+    /// slice for a universal one. Nil when the file is unreadable or is no
+    /// Mach-O. Reads only the header.
+    static func cpuTypes(ofFile url: URL) -> [cpu_type_t]? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 4096), data.count >= 8 else { return nil }
+        return data.withUnsafeBytes { buffer -> [cpu_type_t]? in
+            guard let base = buffer.baseAddress else { return nil }
+            let magic = base.loadUnaligned(as: UInt32.self)
+            if magic == MH_MAGIC_64 || magic == MH_MAGIC {
+                return [(base + 4).loadUnaligned(as: cpu_type_t.self)]
+            }
+            guard magic == FAT_CIGAM || magic == FAT_MAGIC else { return nil }
+            let count = Int(UInt32(bigEndian: (base + 4).loadUnaligned(as: UInt32.self)))
+            guard 8 + count * MemoryLayout<fat_arch>.size <= buffer.count else { return nil }
+            return (0 ..< count).map {
+                Int32(bigEndian: (base + 8 + $0 * MemoryLayout<fat_arch>.size).loadUnaligned(as: Int32.self))
+            }
+        }
+    }
+
     /// Where the 64-bit image starts: zero in a thin file, the matching
     /// architecture's offset in a universal one, whose table is big-endian.
     private static func sliceOffset(_ base: UnsafeRawPointer, size: Int) -> Int? {
