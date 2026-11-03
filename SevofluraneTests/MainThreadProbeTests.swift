@@ -29,6 +29,16 @@ struct MainThreadProbeTests {
         #expect(renamed?.stuck == false)
         #expect(MainThreadProbe.answer(from: nil) == nil)
         #expect(MainThreadProbe.answer(from: "silent") == nil)
+        #expect(MainThreadProbe.answer(from: #""silent""#) == nil)
+    }
+
+    @Test
+    func `the answer is read as the bridge sends it, a JSON string holding the object`() throws {
+        let verdicts = #"{"install":"answered","proxy":"silent","details":"silent"}"#
+        let wire = try #require(SteamBridge.jsonText(verdicts))
+        let parked = MainThreadProbe.answer(from: wire)
+        #expect(parked?.silent == ["proxy", "details"])
+        #expect(parked?.stuck == true)
     }
 
     @Test

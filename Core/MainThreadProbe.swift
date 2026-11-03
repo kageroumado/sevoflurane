@@ -77,12 +77,18 @@ nonisolated enum MainThreadProbe {
         var stuck: Bool { !silent.isEmpty }
     }
 
-    /// Reads the expression's JSON object. `nil` for anything else, which is
-    /// the page not answering rather than the client.
+    /// Reads the expression's JSON object from `/__eval`'s `v`, where the
+    /// bridge JSON-encodes the value once more: the expression resolves a
+    /// string, so the object arrives inside a JSON string literal. `nil` for
+    /// anything else, which is the page not answering rather than the client.
     static func answer(from value: String?) -> Answer? {
-        guard let value, let data = value.data(using: .utf8),
-              let verdicts = try? JSONSerialization.jsonObject(with: data) as? [String: String]
-        else { return nil }
+        guard let value, let decoded = try? JSONSerialization.jsonObject(
+            with: Data(value.utf8), options: [.fragmentsAllowed],
+        ) else { return nil }
+        let object = (decoded as? String).flatMap {
+            try? JSONSerialization.jsonObject(with: Data($0.utf8))
+        } ?? decoded
+        guard let verdicts = object as? [String: String] else { return nil }
         var answer = Answer()
         for name in questions {
             switch verdicts[name] {
