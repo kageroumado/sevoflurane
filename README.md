@@ -42,5 +42,6 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 ## Notes
 
 - [Game compatibility](https://kagerou.glass/sevoflurane/games/) · [Renderer choices and limits](REFERENCE.md#renderers).
+- **Intel Macs** have limited support: DirectX 9–11 games run through DXMT, DXVK or wined3d; DirectX 12 needs Apple silicon.
 - **Settings → About → Save Diagnostics…** collects a report. [CLI/MCP reference](REFERENCE.md#command-line) · [Contributing](CONTRIBUTING.md).
 - Questions, playtests and release news: [Discord](https://discord.gg/BJYJvZGqHX) · [Issues](https://github.com/kageroumado/sevoflurane/issues).

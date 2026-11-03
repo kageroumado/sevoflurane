@@ -42,5 +42,6 @@ Sevoflurane 为 Mac 带来类似 Proton 的体验，在同一个 Steam 界面中
 ## 其他信息
 
 - [游戏兼容性](https://kagerou.glass/sevoflurane/games/?lang=zh-CN) · [渲染器、限制及命令行参考](REFERENCE.zh-CN.md)。
+- **Intel Mac** 的支持有限：DirectX 9–11 游戏可通过 DXMT、DXVK 或 wined3d 运行；DirectX 12 需要 Apple 芯片。
 - **设置 → 关于 → 保存诊断…**收集报告。[贡献指南](CONTRIBUTING.md)。
 - 提问、试玩与发布消息：[Discord](https://discord.gg/BJYJvZGqHX) · [问题反馈](https://github.com/kageroumado/sevoflurane/issues)。
