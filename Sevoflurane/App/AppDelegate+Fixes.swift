@@ -5,6 +5,12 @@ extension AppDelegate {
     /// (``LaunchPreparation``) and says what a first launch's fixes set.
     nonisolated static func prepareLaunch(appID: Int) async {
         let fixes = await LaunchPreparation.prepare(appID: appID) { EventLog.enqueue(.client, $0) }
+        // A game installed since the client started is detected here. Its
+        // runtime is fetched beside the launch, never ahead of it.
+        Task.detached(name: "Default app \(appID) to native NW.js") {
+            if GameConfig.game(appID).nwjs == nil { NWJSGames.record(appID: appID) }
+            await NWJSDefault.adopt(appID: appID) { EventLog.enqueue(.client, $0) }
+        }
         guard let fixes else { return }
         await announce(fixes, forApp: appID)
     }

@@ -315,7 +315,8 @@ extension AppCommand {
             var values = GameConfig.game(appid)
             switch value {
             case GameRunner.wine:
-                values.runner = nil
+                // Stored, so the native default (``NWJSDefault``) leaves the game here.
+                values.runner = GameRunner.wine
                 values.nwjsRuntime = nil
             case GameRunner.nwjs:
                 guard let info = values.nwjs ?? NWJSGames.record(appID: appid) else {

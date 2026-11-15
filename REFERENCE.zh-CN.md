@@ -280,6 +280,8 @@ msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量�
 - 游戏点击关闭按钮后没有响应时，可以选择继续等待或结束游戏。
 - 通过 Steam 的“停止”按钮或 `sevo app terminate` 停止游戏时，会先完整结束它的所有进程，再通知 Steam，因此主动停止不会留下“意外退出”对话框或崩溃报告。
 - NW.js 游戏（包括 RPG Maker MV 和 MZ）使用 macOS 运行时运行，保留 Steam 游戏时长和成就。
+  检测到的 NW.js 游戏默认原生运行；通过 greenworks 使用 Steam 云存档的游戏留在 Wine 中，
+  `sevo app config <id> runner wine` 可将游戏改回 Wine。
 - Steam 提供 macOS 版的游戏，可以把 Mac 版本交给 Valve 的 Steam for Mac；游戏尚未安装时，会打开它的安装页面。可在“设置 › 游戏”或菜单栏里的游戏菜单中按游戏设置；兼容性条的详情中可以单次以这种方式运行。在能自己运行 macOS 版本的引擎上，这是一个默认关闭的选项，位于“设置 › 通用 › Steam for Mac”。
 - 在支持 macOS 版本 Steam Play 的引擎上，这里的 Steam 会自己安装并运行游戏的 macOS 版本。点“安装”会询问要哪个版本，并列出每个版本的下载大小和兼容性评级；游戏栏里的“版本”可以切换已安装的游戏，并先说明要下载多少。Steam 拒绝切换时，菜单会说明并提供“重试”。
 - 有 macOS 版本的游戏在“属性 › 兼容性”中也可以设置，和 Linux 版 Steam 一样：“强制使用特定 Steam Play 兼容性工具”中列有 Native macOS version。游戏库会给设为它的游戏加上苹果标记。

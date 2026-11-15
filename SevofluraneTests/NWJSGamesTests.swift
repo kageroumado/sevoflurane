@@ -161,3 +161,39 @@ struct NWJSNativeProcessTests {
         #expect(fourThousand.helpers == [21])
     }
 }
+
+/// Which games take the native runner without being asked.
+struct NWJSDefaultTests {
+    private func values(runner: String? = nil, version: String = "0.88.0", cloud: Bool? = nil) -> ConfigValues {
+        var values = ConfigValues.empty
+        values.runner = runner
+        values.nwjs = NWJSInfo(
+            version: version, dir: "/games/demo", main: "/games/demo/www/index.html", flavor: "RPG Maker MV",
+            greenworks: cloud != nil, greenworksCloud: cloud, packageName: "demo",
+        )
+        return values
+    }
+
+    @Test
+    func `a detected NW_js game with no runner chosen runs natively`() {
+        #expect(NWJSDefault.isCandidate(values(), enabled: true))
+    }
+
+    @Test
+    func `a game sent back to the bottle stays there`() {
+        #expect(!NWJSDefault.isCandidate(values(runner: GameRunner.wine), enabled: true))
+    }
+
+    @Test
+    func `a game that keeps progress in Steam Cloud stays in the bottle`() {
+        #expect(!NWJSDefault.isCandidate(values(cloud: true), enabled: true))
+        #expect(NWJSDefault.isCandidate(values(cloud: false), enabled: true))
+    }
+
+    @Test
+    func `a game whose NW_js version could not be read, an ordinary game, and automatic fixes turned off are left alone`() {
+        #expect(!NWJSDefault.isCandidate(values(version: ""), enabled: true))
+        #expect(!NWJSDefault.isCandidate(ConfigValues.empty, enabled: true))
+        #expect(!NWJSDefault.isCandidate(values(), enabled: false))
+    }
+}

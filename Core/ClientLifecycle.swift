@@ -547,6 +547,7 @@ nonisolated enum ClientLifecycle {
             GameExecutables.recordLibrary()
             NWJSGames.recordLibrary()
             ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            await NWJSDefault.adoptLibrary { log($0) }
         }
         await startDiscordBridge()
     }

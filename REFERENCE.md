@@ -471,7 +471,10 @@ runs on CrossOver.
   processes whole before Steam is told, so a stop you asked for leaves no
   "quit unexpectedly" dialog or crash report behind.
 - NW.js games, including RPG Maker MV and MZ, run on a macOS runtime with
-  Steam playtime and achievements.
+  Steam playtime and achievements. A detected NW.js game runs this way by
+  default, from the launch after its runtime is fetched; a game that keeps
+  progress in Steam Cloud through greenworks stays in Wine, and
+  `sevo app config <id> runner wine` sends any game back.
 - A game Steam sells for macOS can hand its Mac version to Valve's Steam for
   Mac, which opens its install page where the game is not installed yet. Set
   per game in Settings › Games or the game's menu in the menu bar; the compat
