@@ -13,6 +13,62 @@
   if (window.__sevoInstalled) return;
   window.__sevoInstalled = true;
 
+  /* ---- Chromium surface ---------------------------------------------------
+     The bundle is written for CEF and calls some Chromium APIs without
+     feature-detecting them, so one WebKit lacks kills the whole UI behind
+     Steam's error boundary. Each such API is supplied here, on the page and
+     on every popup the page opens, because Steam renders its visible windows
+     into popups and calls these on the popup's own window object.
+
+     The app audits every new bundle for unguarded calls to Chromium-only
+     APIs (ChromiumSurface.swift) and logs the ones this function does not
+     supply; that list and the members below must agree. */
+  function supplyChromiumSurface(w) {
+    try {
+      /* requestIdleCallback: run after the next frame has been produced, or
+         at the deadline when no frame comes (a hidden window draws none).
+         Without a timeout the deadline is a second, so idle work in a
+         window that never paints still runs. */
+      if (typeof w.requestIdleCallback !== "function") {
+        var idle = {}, nextIdle = 1, BUDGET = 50, FALLBACK = 1000;
+        w.requestIdleCallback = function (callback, options) {
+          var id = nextIdle++;
+          var timeout = options && options.timeout > 0 ? Number(options.timeout) : 0;
+          var entry = idle[id] = {};
+          function run(didTimeout) {
+            if (idle[id] !== entry) return;
+            delete idle[id];
+            if (entry.frame) w.cancelAnimationFrame(entry.frame);
+            w.clearTimeout(entry.turn);
+            w.clearTimeout(entry.deadline);
+            var start = Date.now();
+            callback.call(w, {
+              didTimeout: didTimeout,
+              timeRemaining: function () { return Math.max(0, BUDGET - (Date.now() - start)); },
+            });
+          }
+          entry.frame = w.requestAnimationFrame(function () {
+            entry.frame = 0;
+            entry.turn = w.setTimeout(function () { run(false); }, 0);
+          });
+          entry.deadline = w.setTimeout(function () { run(timeout > 0); }, timeout || FALLBACK);
+          return id;
+        };
+        w.cancelIdleCallback = function (id) {
+          var entry = idle[id];
+          if (!entry) return;
+          delete idle[id];
+          if (entry.frame) w.cancelAnimationFrame(entry.frame);
+          w.clearTimeout(entry.turn);
+          w.clearTimeout(entry.deadline);
+        };
+      }
+    } catch (e) {
+      console.error("[sevo] Chromium surface failed", e);
+    }
+  }
+  supplyChromiumSurface(window);
+
   /* Which call a rejection came from. Steam rejects with objects the UI
      branches on, so the path is remembered beside the value rather than
      written into it: nothing the page can read changes, and a client-origin
@@ -981,6 +1037,7 @@
       if (browserIdWindows[id] !== window && browserIdWindows[id].closed) delete browserIdWindows[id];
     });
     if (win) {
+      supplyChromiumSurface(win);
       try {
         popupWindows.push(win);
         win.__sevoBrowserID = nextBrowserWindowId++;

@@ -13,12 +13,20 @@ nonisolated enum PageErrorTriage {
         case error
         /// An expected refusal, logged once per boot in plain words.
         case expected(String)
+        /// A call to a Chromium API WebKit lacks (``ChromiumSurface``),
+        /// named so the log says which one the shim must supply.
+        case missingChromiumAPI(String)
     }
 
     static func verdict(for detail: String) -> Verdict {
         let message = Self.message(in: detail)
         if message.contains("SteamClient.OpenVR."), message.contains("not found") {
             return .expected("the Steam UI asked for SteamVR, which this bottle does not have — the client refused the call")
+        }
+        if let api = ChromiumSurface.chromiumOnly.first(where: {
+            message.contains("\($0.token) is not a function") || message.contains("\($0.token) is not a constructor")
+        }) {
+            return .missingChromiumAPI(api.name)
         }
         if message.hasSuffix("rejected: closed") {
             return .expected("the Steam UI kept calling a client that is closing — the calls were refused")

@@ -87,6 +87,9 @@ actor SteamBridge {
     var loopbackMisses: Set<String> = []
     /// Whether the log already says the client is refusing calls as it closes.
     var saidClientIsClosing = false
+    /// The Steam UI bundle version last audited for Chromium-only calls
+    /// (``ChromiumSurface``), so each version is scanned once.
+    var auditedBundleVersion: String?
     let shim: String
 
     /// Fired on `SteamClient.Apps.RunGame` — the one choke point every game

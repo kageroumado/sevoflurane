@@ -71,6 +71,7 @@ extension SteamBridge {
             return .error(500, "index.html has no <head>")
         }
         let body = html.replacingCharacters(in: range, with: injected)
+        auditChromiumSurface()
         // The shim is injected here and edited constantly; a cached copy of
         // this document silently pins an old one.
         return .ok(
@@ -78,6 +79,31 @@ extension SteamBridge {
             type: "text/html; charset=utf-8",
             headers: [("Cache-Control", "no-store")],
         )
+    }
+
+    /// Scans a bundle version the bridge has not served before for calls to
+    /// Chromium-only APIs the shim does not supply, and logs each one. Steam
+    /// updates its UI on its own; this is where a new dependency on Chromium
+    /// shows up before the window that needs it breaks.
+    private func auditChromiumSurface() {
+        let bundle = SteamBottle.steamui
+        let main = bundle.appendingPathComponent("sp.js")
+        let attributes = try? FileManager.default.attributesOfItem(atPath: main.path)
+        let version = [
+            (attributes?[.modificationDate] as? Date).map { String($0.timeIntervalSince1970) } ?? "",
+            (attributes?[.size] as? NSNumber)?.stringValue ?? "",
+        ].joined(separator: "/")
+        guard version != auditedBundleVersion else { return }
+        auditedBundleVersion = version
+        Task(name: "Chromium surface audit", priority: .utility) { @concurrent [weak self] in
+            let findings = ChromiumSurface.audit(bundle: bundle)
+            if findings.isEmpty {
+                self?.log(.bridge, "Steam UI \(version): every Chromium-only call is guarded or supplied")
+            }
+            for finding in findings {
+                self?.log(.bridge, ChromiumSurface.sentence(for: finding))
+            }
+        }
     }
 
     // MARK: - Mac compatibility

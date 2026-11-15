@@ -344,6 +344,12 @@ final class SteamWebHost {
         switch PageErrorTriage.verdict(for: detail) {
         case .error:
             EventLog.shared.log(.window, "page error — \(detail)")
+        case let .missingChromiumAPI(name):
+            EventLog.shared.log(
+                .window,
+                "page error — Steam's UI called \(name), a Chromium API WebKit does not have; "
+                    + "supply it in supplyChromiumSurface (steamclient_shim.js) — \(detail)",
+            )
         case let .expected(sentence):
             if loggedRefusals.insert(sentence).inserted {
                 EventLog.shared.log(.page, "expected: \(sentence)")
