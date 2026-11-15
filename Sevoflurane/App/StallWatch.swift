@@ -238,7 +238,8 @@ final class StallWatch {
     }
 
     /// Ends a run whose process has been gone for ``Rules/clientStopGrace`` without the
-    /// client saying it stopped. A stop edge inside the grace closes the run the usual
+    /// client saying it stopped. A run whose process left a sibling behind follows the
+    /// sibling. A stop edge inside the grace closes the run the usual
     /// way and drops it from here; a process the client lost is ended in Steam through
     /// ``onGameProcessGone`` and the run closes as the user's ending, since no exit
     /// status exists for it.
@@ -247,6 +248,13 @@ final class StallWatch {
         goneSince = goneSince.filter { running[$0.key] != nil }
         for (appID, pid) in running {
             guard probes.usage(pid) == nil else {
+                goneSince[appID] = nil
+                continue
+            }
+            if let sibling = liveSibling(of: pid, followedBy: Set(running.values)) {
+                probes.log("run \(appID): its process (pid \(pid)) is gone and pid \(sibling) of the same program "
+                    + "is running — following that one")
+                recorder?.follow(pid: sibling, forApp: appID)
                 goneSince[appID] = nil
                 continue
             }
@@ -261,6 +269,17 @@ final class StallWatch {
             onGameProcessGone?(appID)
             recorder?.close(appID: appID, unrecorded: .user)
         }
+    }
+
+    /// The oldest live process running the same executable as `pid`, which is how a game
+    /// made of several processes (Chromium's browser, GPU and renderer processes all run
+    /// the game's exe) outlives the one a run was following. A process another run
+    /// follows belongs to that run.
+    private func liveSibling(of pid: pid_t, followedBy followed: Set<pid_t>) -> pid_t? {
+        guard let exe = exeByPID[pid] else { return nil }
+        return exeByPID
+            .filter { $0.value == exe && !followed.contains($0.key) && probes.usage($0.key) != nil }
+            .keys.min()
     }
 
     /// The pids the chronicle named that are still alive, plus whatever the

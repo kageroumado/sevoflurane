@@ -647,6 +647,12 @@ final nonisolated class RunRecorder {
         open.compactMapValues(\.gamePID)
     }
 
+    /// Moves an open run onto another process of the same game, for a game whose
+    /// followed process exited while the game plays on.
+    func follow(pid: pid_t, forApp appID: Int) {
+        open[appID]?.gamePID = pid
+    }
+
     /// An open run's record as it stands, for anything that wants to act on a
     /// game that is still playing — the process monitor collecting its report
     /// without waiting for it to end.

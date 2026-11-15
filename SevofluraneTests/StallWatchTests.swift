@@ -401,6 +401,41 @@ struct StallWatchTests {
     }
 
     @Test
+    func `a run whose process exited while another process of the game runs follows that one`() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0, 901: 0]
+        machine.names = [900: "game.exe", 901: "game.exe"]
+        let chronicle = try chronicle(in: root)
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle)
+        let recorder = try recorder(in: root, appID: 480, pid: 901)
+        watch.recorder = recorder
+        var ended: [Int] = []
+        watch.onGameProcessGone = { ended.append($0) }
+        try arm([(900, "Game.exe"), (901, "Game.exe")], in: chronicle)
+
+        watch.sample()
+        machine.cpuNanoseconds[901] = nil
+        machine.advance(2)
+        watch.sample()
+        #expect(recorder.runningPIDs[480] == 900)
+
+        machine.advance(StallWatch.Rules.clientStopGrace)
+        watch.sample()
+        #expect(ended.isEmpty)
+        #expect(recorder.isRecording)
+
+        // The last process going is the game going.
+        machine.cpuNanoseconds[900] = nil
+        machine.advance(2)
+        watch.sample()
+        machine.advance(StallWatch.Rules.clientStopGrace)
+        watch.sample()
+        #expect(ended == [480])
+    }
+
+    @Test
     func `a run the engine says was ended while not responding keeps that ending`() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
