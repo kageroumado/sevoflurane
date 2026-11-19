@@ -80,7 +80,7 @@ const channel = {
     });
     socket.on('error', () => this.drop());
     socket.on('close', () => this.drop());
-    // The stub outlives nothing: let the game exit whenever it likes.
+    // The open socket never keeps the game's process alive: it exits whenever it likes.
     socket.unref();
   },
 

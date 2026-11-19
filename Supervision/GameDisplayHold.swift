@@ -47,7 +47,7 @@ enum GameDisplayHold {
         EventLog.shared.log(.app, "display held awake for \(program)")
     }
 
-    /// No game remains. Idempotent.
+    /// No game remains; calling it again does nothing.
     static func gameDidExit() {
         guard assertion != IOPMAssertionID(kIOPMNullAssertionID) else { return }
         IOPMAssertionRelease(assertion)

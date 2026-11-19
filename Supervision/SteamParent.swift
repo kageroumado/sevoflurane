@@ -15,8 +15,8 @@ import Foundation
 ///
 /// A bottle cannot give them that: it always runs the real Steam client from
 /// `Program Files (x86)\Steam`, and that process alone sends the game down the
-/// driver path, whoever its parent is. Measured on Dormison r18, GenshinImpact
-/// 2026-09 (the pull request that added this has the trials):
+/// driver path, whoever its parent is. Measured on Dormison r18 with
+/// GenshinImpact, 2026-09:
 ///
 /// - parent `system32\steam.exe`, no other `steam.exe`: no driver, plays;
 /// - the same with a second `steam.exe` in system32: plays;

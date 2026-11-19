@@ -136,8 +136,8 @@ nonisolated enum WineWindowWatch {
     /// started with its own wrapper directory as the first argument, and that
     /// directory is named after the app id — so the command line says which
     /// game the window belongs to, whatever the process ended up being called.
-    /// It is called the game, in fact: a native run is exec'd through a bundle
-    /// named after it, which is the whole point of the bundle.
+    /// The process carries the game's name too: a native run is exec'd through
+    /// a bundle named after it.
     private static func nativeProgram(_ fields: [String]) -> String? {
         guard fields.count >= 3, fields[2].hasPrefix(NWJSRunner.root.path),
               let appID = Int(URL(fileURLWithPath: fields[2]).lastPathComponent),
@@ -167,7 +167,7 @@ nonisolated enum WineWindowWatch {
     /// probes it runs at boot and from Help ▸ System Information. Each probe
     /// loads the Mac driver and some order a window, so one that runs during
     /// a launch reads as the game's own process unless it is named here
-    /// (`steamsysinfo.exe` was recorded as a 166 s run, 2026-09-26). The
+    /// (unnamed, `steamsysinfo.exe` records as a 166 s run). The
     /// same list the engine's dock shim keeps off the screen (dormison
     /// `sevo_dock_shim.c`, `is_steam_infrastructure`).
     private static let clientOwners: Set<String> = [

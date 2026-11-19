@@ -116,7 +116,7 @@ nonisolated enum IconShaping {
     /// Whether the artwork is a picture that fills its square rather than a
     /// glyph with clear space around it. Read off the middle three fifths of
     /// each edge, one pixel in: a glyph leaves those pixels clear, a picture
-    /// paints them. Genshin's Paimon square is the case that named the rule.
+    /// paints them. Genshin's Paimon square is such a picture.
     static func fillsItsSquare(_ artwork: CGImage) -> Bool {
         let side = 32
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),

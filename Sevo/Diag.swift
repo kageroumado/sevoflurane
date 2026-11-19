@@ -41,8 +41,7 @@ struct DiagCommand: AsyncParsableCommand {
         defaultSubcommand: Save.self,
     )
 
-    /// `sevo diag` with no subcommand, which is what every script that
-    /// predates the levels calls.
+    /// The default subcommand: a bare `sevo diag` writes the zip.
     struct Save: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "save",

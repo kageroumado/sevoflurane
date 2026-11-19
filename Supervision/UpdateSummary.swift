@@ -4,10 +4,10 @@ import Observation
 /// What the release feed has that this Mac does not — the engine and the
 /// renderer components — in the one place someone looks every day.
 ///
-/// The app's own updater already speaks for itself in the footer's version
-/// chip. Everything underneath it was checked only by a Settings pane, which
-/// means it was checked only by someone who already suspected something. The
-/// popover's gear carries a dot instead, and says what is waiting.
+/// The app's own updater speaks for itself in the footer's version chip.
+/// Everything underneath it would otherwise be checked only by someone who
+/// opens a Settings pane already suspecting something, so the popover's gear
+/// carries a dot and says what is waiting.
 @MainActor
 @Observable
 final class UpdateSummary {

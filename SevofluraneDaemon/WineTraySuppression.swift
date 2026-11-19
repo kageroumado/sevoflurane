@@ -5,8 +5,8 @@ import Foundation
 /// one thing to be done about it.
 extension BottleSupervisor {
     /// The bottle processes winemac.drv promoted into the Dock — matched by
-    /// executable path under the managed engines or CrossOver, never by
-    /// name (a name match once caught Microsoft Teams).
+    /// executable path under the managed engines or CrossOver. Never match by
+    /// name: a name match catches unrelated apps such as Microsoft Teams.
     static func promotedBottlePIDs() -> [pid_t] {
         let roots = [Engine.managedRoot.path, SetupProbe.crossoverApp.path]
         return NSWorkspace.shared.runningApplications.filter { app in

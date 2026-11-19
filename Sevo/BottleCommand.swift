@@ -79,9 +79,6 @@ enum ConfigKeyParsing {
         return limit
     }
 
-    /// The counter's level as View › Overlay Detail stores it: 1 for the
-    /// number, 2 for the frame-time card, 3 for the card with the Mac's load,
-    /// power and temperature.
     /// `hardware` (VideoToolbox) or `software` (GStreamer's own decoders).
     static func videoDecoding(_ value: String) throws -> VideoDecoding? {
         if value == "inherit" { return nil }
@@ -93,6 +90,9 @@ enum ConfigKeyParsing {
         return decoding
     }
 
+    /// The counter's level as View › Overlay Detail stores it: 1 for the
+    /// number, 2 for the frame-time card, 3 for the card with the Mac's load,
+    /// power and temperature.
     static func overlayDetail(_ value: String) throws -> OverlayDetail? {
         if value == "inherit" { return nil }
         guard let detail = OverlayDetail(rawValue: value) else {

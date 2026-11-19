@@ -3,10 +3,9 @@ import Foundation
 import ImageIO
 
 /// What a Windows executable says about itself: the icons in its resource
-/// section, the strings in its version resource, and the privilege its
-/// embedded manifest asks Windows for.
+/// section and the strings in its version resource.
 ///
-/// A PE image keeps all three in one tree hanging off the optional header's
+/// A PE image keeps both in one tree hanging off the optional header's
 /// resource data directory, three levels deep — type, name, language — with a
 /// leaf that names a range by relative virtual address. Reading it takes no
 /// Wine and no bottle, so the app can describe a program before it has ever

@@ -53,7 +53,7 @@ extension BottleSupervisor {
         let name = program.url.lastPathComponent
         // Checked and marked before the first await: the main actor runs
         // another request between awaits, and five clicks during a first
-        // companion launch made five prefixes and five games, 2026-09-26.
+        // companion launch would make five prefixes and five games.
         guard programsStarting.insert(id).inserted else {
             note("\(name) is already starting; this request starts nothing")
             return .busy("\(name) is already starting")
@@ -155,8 +155,7 @@ extension BottleSupervisor {
     /// game is gone if it has not stopped by itself.
     ///
     /// Never before the game: an unlocker process that exists while the game
-    /// starts up makes it quit during its init (found with the launcher it
-    /// was measured with, 2026-08-05).
+    /// starts up makes it quit during its init.
     private func startUnlocker(
         _ unlocker: FPSUnlocker.Unlocker, beside program: AdoptedProgram, environment: [String: String],
     ) async {
@@ -188,9 +187,9 @@ extension BottleSupervisor {
             note("\(own) has no fps_config.json yet; it starts with its own frame rate")
         }
         // Its window must never reach the screen: shown the moment it
-        // starts, it took the foreground from the game, which minimized
+        // starts, it takes the foreground from the game, which then minimizes
         // itself into the Dock at its next display-mode change, entering the
-        // world (2026-09-26). The engine's dock shim keeps a process with
+        // world. The engine's dock shim keeps a process with
         // SEVO_QUIET=1 off the screen and out of the Dock (Dormison's
         // `sevo_dock_shim.c`); an engine without that knob shows the window.
         var quiet = environment

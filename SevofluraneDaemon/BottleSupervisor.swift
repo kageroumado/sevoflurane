@@ -41,7 +41,7 @@ final class BottleSupervisor {
     /// When each adopted program was last spawned. Until `pgrep` has seen it
     /// or a minute has passed, a request for it is the extra click: the
     /// process takes seconds to appear under Rosetta, and two launches in
-    /// that gap made two games and two frame-rate unlockers.
+    /// that gap would make two games and two frame-rate unlockers.
     var programsSpawnedAt: [Int: ContinuousClock.Instant] = [:]
     /// Seconds into a boot before Wine's log is read for "cannot connect":
     /// a launcher that cannot reach its server says so within a few seconds.
@@ -54,8 +54,8 @@ final class BottleSupervisor {
 
     /// Whether anyone wants a client at all.
     ///
-    /// The daemon outlives every app launch, so "the process is running" no
-    /// longer means "the user is here". Until something asks — an app
+    /// The daemon outlives every app launch, so "the process is running" does
+    /// not mean "the user is here". Until something asks — an app
     /// attaching, a control verb, or a client already running that this daemon
     /// is adopting — the cycle probes and reports but launches nothing.
     /// Without it, quitting Sevoflurane would bring the bottle down and the
@@ -437,8 +437,8 @@ final class BottleSupervisor {
         wake(.control(reason))
     }
 
-    /// Runs a cycle now. Coalescing is the stream's: a burst of wakes while a
-    /// cycle is running collapses into the one cycle that follows it.
+    /// Runs a cycle as soon as the current one ends. The stream keeps the
+    /// newest eight wakes, and each one it keeps runs a cycle of its own.
     func wake(_ reason: Wake) {
         wakeups?.yield(reason)
     }
@@ -915,8 +915,7 @@ final class BottleSupervisor {
     ///
     /// Refused while the page holds Steam's login window. The reload detaches
     /// that popup, Steam reads its document unloading as the user closing the
-    /// sign-in window, and closing it quits — the kill that turned five
-    /// signed-out boots into five dead clients.
+    /// sign-in window, and closing it quits the client.
     private func bootPage() async {
         lastPageRecovery = .now
         pageFailures = 0
@@ -1015,9 +1014,9 @@ final class BottleSupervisor {
             return
         }
         if !wineWindows.isEmpty {
-            // Services dead with a Wine dialog up is the known rescue-
-            // dialog wedge: the webhelper is gone, a
-            // reload would reattach to the same dead session.
+            // Services dead with a Wine dialog up is the rescue-dialog wedge:
+            // the webhelper is gone, and a reload would reattach to the same
+            // dead session.
             log.log(.client, "services dead with a Wine dialog up — restarting the client")
             await restartClient(reason: "client UI session dead, Steam's watchdog dialog visible")
         } else if serviceRecoveryTried {
