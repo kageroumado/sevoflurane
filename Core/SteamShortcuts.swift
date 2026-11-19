@@ -1,34 +1,29 @@
 import Foundation
 
 /// Adopted programs as non-Steam games in Steam's own library, so Big Picture,
-/// Steam Input and the overlay reach them the way they reach a game Steam
-/// sells.
+/// Steam Input and the overlay reach them as they reach a store game.
 ///
 /// The client owns `shortcuts.vdf` and rewrites it from memory, so the list is
-/// changed through the client's own calls (`SteamClient.Apps.AddShortcut` and
-/// its siblings) on the connection the bridge holds, and the file is never
-/// touched. Each shortcut's app id is kept in the program's record; Steam's
-/// launch and lifetime events name a shortcut by that id, and the app turns it
-/// back into the program's own id before anything else reads it, so a run
-/// Steam starts gets the run record, status line and Discord activity a Quick
-/// Launch start gets. The env file and the Dock tile need nothing: the engine
-/// finds both by the executable's name, whoever started it.
+/// changed only through the client's own calls (`SteamClient.Apps.AddShortcut`
+/// and its siblings) on the bridge's connection. Each shortcut's app id is
+/// kept in the program's record; Steam's launch and lifetime events name a
+/// shortcut by that id, and the app maps it back to the program's own id
+/// before anything else reads it, so a run Steam starts gets the run record,
+/// status line and Discord activity a Quick Launch start gets. The env file
+/// and the Dock tile need nothing: the engine finds both by the executable's
+/// name.
 nonisolated enum SteamShortcuts {
     // MARK: - Ids
 
-    /// The type a 64-bit game id carries in bits 24 to 31 for a non-Steam
-    /// shortcut (`k_EGameIDTypeShortcut`).
+    /// `k_EGameIDTypeShortcut`, in bits 24 to 31 of a 64-bit game id.
     private static let shortcutType: UInt64 = 2
 
     /// The bit Steam sets on every shortcut's 32-bit app id.
     private static let shortcutBit: UInt64 = 0x8000_0000
 
-    /// The shortcut app id a Steam event names, if it names one.
-    ///
-    /// A game action names its app by 64-bit game id: for a shortcut that is
-    /// the shortcut's app id in the high word and type 2 in bits 24 to 31. A
-    /// lifetime notification names it by the 32-bit app id itself, which
-    /// always has its high bit set.
+    /// The shortcut app id a Steam event names, if it names one: a game
+    /// action's 64-bit game id (app id in the high word, type 2 in bits 24 to
+    /// 31), or a lifetime notification's 32-bit app id (high bit set).
     static func shortcutID(in steamID: String) -> Int? {
         guard let value = UInt64(steamID) else { return nil }
         if value <= UInt64(UInt32.max) {
@@ -38,15 +33,14 @@ nonisolated enum SteamShortcuts {
         return Int(value >> 32)
     }
 
-    /// The 64-bit game id Steam's calls take for a shortcut, `TerminateApp`
-    /// among them.
+    /// The 64-bit game id Steam's calls (`TerminateApp` among them) take for
+    /// a shortcut.
     static func gameID(shortcutID: Int) -> String {
         String(UInt64(UInt32(truncatingIfNeeded: shortcutID)) << 32 | shortcutType << 24)
     }
 
-    /// The app id behind an id Steam's events carry: the adopted program's own
-    /// for a shortcut that is its entry in Steam's library, so a run Steam
-    /// starts there is recorded as the program's; the number itself otherwise.
+    /// The adopted program's id for a shortcut in `aliases`, else the id
+    /// itself.
     static func appID(fromSteam steamID: String, aliases: [Int: Int]) -> Int? {
         if let shortcut = shortcutID(in: steamID), let program = aliases[shortcut] {
             return program
@@ -54,7 +48,7 @@ nonisolated enum SteamShortcuts {
         return Int(steamID)
     }
 
-    /// Shortcut app id → adopted program id, for every program Steam lists.
+    /// Shortcut app id → adopted program id.
     static func aliases(_ entries: [AdoptedPrograms.Entry]) -> [Int: Int] {
         var aliases: [Int: Int] = [:]
         for entry in entries {
@@ -66,9 +60,7 @@ nonisolated enum SteamShortcuts {
 
     // MARK: - Matching
 
-    /// An executable path as the comparison sees it. Steam keeps a
-    /// shortcut's target in quotes and Windows paths ignore case, so neither
-    /// may decide whether two paths name one file.
+    /// An executable path for comparison, without Steam's quotes and case.
     static func exeKey(_ windowsPath: String) -> String {
         var path = windowsPath.trimmingCharacters(in: .whitespaces)
         if path.count >= 2, path.hasPrefix("\""), path.hasSuffix("\"") {
@@ -77,8 +69,7 @@ nonisolated enum SteamShortcuts {
         return path.replacingOccurrences(of: "/", with: #"\"#).lowercased()
     }
 
-    /// A start folder as the comparison sees it: ``exeKey(_:)`` with the
-    /// closing backslash Steam writes taken off.
+    /// ``exeKey(_:)`` without Steam's closing backslash.
     static func folderKey(_ windowsPath: String) -> String {
         var key = exeKey(windowsPath)
         while key.hasSuffix(#"\"#), key.count > 3 {
@@ -87,11 +78,8 @@ nonisolated enum SteamShortcuts {
         return key
     }
 
-    /// A program's arguments as one launch-option line, quoted the way a
-    /// Windows command line is split again (`CommandLineToArgvW`): a token
-    /// with a space, a tab or a quote in it, or an empty one, is wrapped in
-    /// quotes, a quote inside is escaped, and backslashes are doubled where
-    /// they come before a quote.
+    /// A program's arguments as one launch-option line, quoted for
+    /// `CommandLineToArgvW`.
     static func launchOptions(_ arguments: [String]) -> String {
         arguments.map(quoted).joined(separator: " ")
     }
@@ -119,21 +107,18 @@ nonisolated enum SteamShortcuts {
 
     // MARK: - The target
 
-    /// What a shortcut starts: its target, its start folder and its launch
-    /// options. Paths are plain Windows paths; the scripts quote them the way
-    /// Steam keeps a shortcut's own.
+    /// What a shortcut starts, as plain Windows paths; the scripts quote them
+    /// as Steam does.
     struct Target: Equatable, Sendable {
         let exe: String
         let startDir: String
         let launchOptions: String
 
-        /// The target as Steam keeps it, in quotes.
         var quotedExe: String {
             "\"\(exe)\""
         }
 
-        /// The start folder as Steam keeps it, in quotes and ending in a
-        /// backslash.
+        /// In quotes and ending in a backslash, as Steam keeps it.
         var quotedStartDir: String {
             var folder = startDir
             while folder.hasSuffix(#"\"#) {
@@ -143,8 +128,7 @@ nonisolated enum SteamShortcuts {
         }
     }
 
-    /// A program's target: its executable, the executable's own folder to
-    /// start in, and its arguments.
+    /// A program's target, starting in the executable's own folder.
     static func target(_ program: AdoptedProgram) -> Target {
         let folder = program.url.deletingLastPathComponent()
         return Target(
@@ -154,7 +138,6 @@ nonisolated enum SteamShortcuts {
         )
     }
 
-    /// Whether a listed shortcut already starts `target`.
     static func starts(_ listed: Listed, _ target: Target) -> Bool {
         exeKey(listed.exe) == exeKey(target.exe)
             && folderKey(listed.startDir) == folderKey(target.startDir)
@@ -164,7 +147,7 @@ nonisolated enum SteamShortcuts {
 
     // MARK: - The plan
 
-    /// One shortcut in Steam's list: its app id and what it starts.
+    /// One shortcut in Steam's list.
     struct Listed: Decodable, Equatable, Sendable {
         var appid: Int
         var exe: String
@@ -175,44 +158,39 @@ nonisolated enum SteamShortcuts {
     /// One adopted program as a pass weighs it.
     struct Program: Equatable, Sendable {
         let id: Int
-        /// What its shortcut starts.
         let target: Target
-        /// Whether it belongs in Steam's library: the user wants it there and
-        /// it can run under the Steam client.
+        /// The user wants it in Steam's library and it can run under the
+        /// client.
         let wanted: Bool
-        /// The shortcut its record names.
         let shortcutID: Int?
     }
 
     /// What one pass changes, in Steam's list and in the records.
     struct Plan: Equatable, Sendable {
-        /// Program id → the shortcut that is its entry, its record's own or
-        /// one already in Steam's list that starts the same executable.
+        /// Program id → its shortcut: the record's own, or a listed one that
+        /// starts the same executable.
         var kept: [Int: Int] = [:]
-        /// Programs that need a shortcut made, by id.
+        /// Program ids that need a shortcut made.
         var added: [Int] = []
-        /// Shortcut app ids to take out of Steam's list.
+        /// Shortcut app ids to remove.
         var removed: [Int] = []
-        /// Programs whose shortcut has left Steam's list: the user removed
-        /// it there, and the program stops being listed.
+        /// Programs whose shortcut the user removed in Steam; they stop being
+        /// listed.
         var withdrawn: [Int] = []
         /// Programs whose record names a shortcut it no longer wants.
         var forgotten: [Int] = []
-        /// Programs whose kept shortcut starts something other than the
-        /// program as recorded: another executable, folder or arguments.
+        /// Programs whose kept shortcut starts another executable, folder or
+        /// arguments than recorded.
         var retargeted: [Int] = []
     }
 
     /// Reconciles the programs with Steam's list.
     ///
-    /// A program keeps the shortcut its record names while Steam lists it. A
-    /// program with none takes a listed shortcut that starts its executable
-    /// before a new one is made, so a game the user added to Steam by hand is
-    /// never listed twice. A kept shortcut that Steam lists with another
-    /// target, start folder or launch options is pointed at the program as
-    /// recorded. A shortcut this app made or took (`owned`) that no
-    /// program wants any more is removed; the rest of the list is the user's
-    /// and stays as it is.
+    /// A program keeps its recorded shortcut while Steam lists it; one with
+    /// none takes a listed shortcut for its executable before a new one is
+    /// made, so a game added by hand is never listed twice. A kept shortcut
+    /// with another target is retargeted. An `owned` shortcut no program
+    /// wants is removed; the rest of the list is the user's.
     ///
     /// - Parameter fresh: Shortcuts made moments ago, which Steam's list can
     ///   lag behind: they are kept whether listed or not.
@@ -259,9 +237,9 @@ nonisolated enum SteamShortcuts {
 
     private static let ownedKey = "steamShortcuts"
 
-    /// The shortcuts this app made or took, which it may remove again. Kept
-    /// apart from the program records so a program removed while the client
-    /// was down, or by `sevo`, still has its shortcut taken away.
+    /// The shortcuts this app made or took, which it may remove. Kept apart
+    /// from the program records so a program removed while the client was
+    /// down, or by `sevo`, still loses its shortcut.
     static func owned(in defaults: UserDefaults = Preferences.shared) -> Set<Int> {
         Set((defaults.array(forKey: ownedKey) as? [Int]) ?? [])
     }
@@ -273,9 +251,8 @@ nonisolated enum SteamShortcuts {
     // MARK: - Scripts
 
     /// Steam's shortcuts as JSON `[{appid, exe, startDir, launchOptions}]`,
-    /// or null while the client's
-    /// stores are still loading: a list read then would be short, and a short
-    /// list would make every program look withdrawn.
+    /// or null while the client's stores are still loading: a short list
+    /// would make every program look withdrawn.
     static let listScript = """
     (async function () {
       if (!(window.App && App.GetServicesInitialized && App.GetServicesInitialized())
@@ -296,9 +273,8 @@ nonisolated enum SteamShortcuts {
     })()
     """
 
-    /// Makes a shortcut the way Steam's "Add a Non-Steam Game" dialog does,
-    /// names it, and gives it the program's start folder and arguments.
-    /// Answers the new app id, or null when the client made none.
+    /// Makes a shortcut as Steam's "Add a Non-Steam Game" dialog does, then
+    /// names and targets it. Answers the new app id, or null.
     static func addScript(name: String, target: Target) -> String {
         """
         (async function () {
@@ -324,7 +300,6 @@ nonisolated enum SteamShortcuts {
         """
     }
 
-    /// The calls that set a shortcut's start folder and launch options.
     private static func setTargetCalls(_ target: Target) -> String {
         """
         await SteamClient.Apps.SetShortcutStartDir(appid, \(JSLiteral.string(target.quotedStartDir)));
@@ -332,7 +307,6 @@ nonisolated enum SteamShortcuts {
         """
     }
 
-    /// Takes shortcuts out of Steam's list.
     static func removeScript(_ shortcutIDs: [Int]) -> String {
         let ids = shortcutIDs.map(String.init).joined(separator: ",")
         return """

@@ -3,46 +3,41 @@ import Foundation
 /// A game's macOS build, installed and played through the bottle's own Steam,
 /// the way Steam's Linux client hands a game to a compatibility tool.
 ///
-/// Steam's Windows client carries the whole Steam Play system. The engine
+/// Steam's Windows client carries the whole Steam Play system; the engine
 /// turns it on in `steam.exe` when `SEVO_STEAM_PLAY=1` is in its environment,
-/// which ``ConfigMaterializer`` writes into `steam.exe`'s own env file. One
-/// compatibility tool, registered here in `compatibilitytools.d`, declares
+/// which ``ConfigMaterializer`` writes into `steam.exe`'s env file. One
+/// compatibility tool, registered in `compatibilitytools.d`, declares
 /// `from_oslist macos` → `to_oslist windows`: Steam offers it for every game
 /// with a macOS build, and a game mapped to it (Properties › Compatibility,
 /// or the install chooser, both `SpecifyCompatTool`) gets its macOS depots and
 /// launches through the tool's command line, which the engine's dock shim
 /// turns into the native app.
 ///
-/// The mapping lives in Steam's own `config.vdf` (`CompatToolMapping`), so the
-/// choice survives a reinstall of Sevoflurane and is where a Linux user looks
-/// for it. Everything here is gated on the running engine declaring
-/// ``feature`` in its `engine-info.json`.
+/// The mapping lives in Steam's `config.vdf` (`CompatToolMapping`), so it
+/// survives a reinstall of Sevoflurane. Everything here is gated on the
+/// running engine declaring ``feature`` in its `engine-info.json`.
 nonisolated enum SteamPlayMacOS {
-    /// The `engine-info.json` feature that says the engine switches Steam Play
-    /// on and its dock shim runs a mapped game's `.app`.
+    /// The `engine-info.json` feature for Steam Play and the dock shim's
+    /// native launch.
     static let feature = "steam-play-macos"
 
-    /// The line in `steam.exe`'s env file that switches Steam Play on.
     static let environmentLine = "SEVO_STEAM_PLAY=1"
 
-    /// The env file the engine reads for `steam.exe` itself.
     static let clientEnvFile = "steam.exe.env"
 
     /// The tool's internal name, the value `CompatToolMapping` stores.
     static let toolName = "sevoflurane_macos"
 
-    /// What Steam shows for the tool in Properties › Compatibility.
+    /// Shown in Properties › Compatibility.
     static let displayName = "Native macOS version"
 
-    /// Tool directories earlier test builds registered; removed, and their
-    /// mappings moved to ``toolName``.
+    /// Retired tool names: their directories are removed and their mappings
+    /// moved to ``toolName``.
     static let legacyToolNames = ["sevo_macos"]
 
-    /// The engine's launcher that Steam runs as the tool's command line.
     static let launcherName = "sevo-native.exe"
 
-    /// The platform a mapped game installs, as `oslist` and `vecPlatforms`
-    /// spell it.
+    /// Spelled as in `oslist` and `vecPlatforms`.
     enum Platform: String, Codable, Sendable {
         case macos
         case windows
@@ -58,9 +53,8 @@ nonisolated enum SteamPlayMacOS {
         toolsDirectory(steamRoot: steamRoot).appendingPathComponent(toolName, isDirectory: true)
     }
 
-    /// `compatibilitytool.vdf`: the tool's name, where it lives relative to
-    /// this file, and the platform pair. `to_oslist` names the host Steam runs
-    /// on, which is Windows inside the bottle.
+    /// `compatibilitytool.vdf`. `to_oslist` names the host Steam runs on,
+    /// which is Windows inside the bottle.
     static var compatibilityToolVDF: String {
         """
         "compatibilitytools"
@@ -95,9 +89,9 @@ nonisolated enum SteamPlayMacOS {
 
     /// Writes the tool into the client's `compatibilitytools.d`, copies the
     /// engine's launcher beside it when the engine ships one, and removes the
-    /// tool directories earlier builds wrote. Idempotent: a file already as
-    /// wanted is left alone, so the client's own scan sees nothing change.
-    /// Answers what it did, one line each, for the client log.
+    /// ``legacyToolNames`` directories. A file already as wanted is left
+    /// alone, so the client's own scan sees nothing change. Answers what it
+    /// did, one line each, for the client log.
     @discardableResult
     static func register(steamRoot: URL, engineRoot: URL?) -> [String] {
         let manager = FileManager.default
@@ -141,13 +135,12 @@ nonisolated enum SteamPlayMacOS {
 
     // MARK: - Mappings in config.vdf
 
-    /// The client's `config.vdf`, which holds `CompatToolMapping`.
     static func configURL(steamRoot: URL) -> URL {
         steamRoot.appendingPathComponent("config/config.vdf")
     }
 
-    /// Every app `config.vdf` maps to a tool, with the tool's name. App id 0
-    /// is Steam Play's default for all titles, and is left out.
+    /// App id → tool name for every mapping in `config.vdf`, leaving out app
+    /// id 0 (Steam Play's default for all titles).
     static func mappings(inConfig text: String) -> [Int: String] {
         guard let root = TextKeyValues.parse(text),
               let table = mappingTable(in: root) else { return [:] }
@@ -159,7 +152,6 @@ nonisolated enum SteamPlayMacOS {
         return result
     }
 
-    /// The apps mapped to ``toolName``, read from the client's `config.vdf`.
     static func mappedApps(steamRoot: URL = SteamBottle.steamRoot) -> Set<Int> {
         let text = (try? String(contentsOf: configURL(steamRoot: steamRoot), encoding: .utf8)) ?? ""
         return Set(mappings(inConfig: text).filter { $0.value == toolName }.keys)
@@ -175,10 +167,10 @@ nonisolated enum SteamPlayMacOS {
         return nil
     }
 
-    /// `config.vdf` with every mapping to a ``legacyToolNames`` tool moved to
-    /// ``toolName``, the rest of the text exactly as it was; `nil` when no
-    /// mapping names an old tool. Only a `"name"` value directly inside an
-    /// app's block under `CompatToolMapping` is rewritten.
+    /// `config.vdf` with every ``legacyToolNames`` mapping moved to
+    /// ``toolName`` and the rest of the text untouched; `nil` when there is
+    /// none. Only a `"name"` directly in an app's block under
+    /// `CompatToolMapping` is rewritten.
     static func migratingMappings(inConfig text: String) -> String? {
         let tokens = TextKeyValues.tokens(text)
         var path: [String] = []
@@ -214,9 +206,9 @@ nonisolated enum SteamPlayMacOS {
         return result
     }
 
-    /// Moves mappings from an old tool to ``toolName`` in the client's
-    /// `config.vdf`. Run only while the client is down: Steam rewrites the
-    /// file from memory when it exits. Answers how many apps moved.
+    /// Rewrites legacy mappings in `config.vdf` and answers how many moved.
+    /// Run only while the client is down: Steam rewrites the file from memory
+    /// when it exits.
     @discardableResult
     static func migrateMappings(steamRoot: URL) -> Int {
         let url = configURL(steamRoot: steamRoot)
@@ -231,9 +223,8 @@ nonisolated enum SteamPlayMacOS {
         }
     }
 
-    /// Everything the client needs before `steam.exe` starts on an engine
-    /// with ``feature``: the tool registered and old mappings moved. The env
-    /// line is ``ConfigMaterializer``'s, written by the same start.
+    /// Registers the tool and migrates mappings before `steam.exe` starts on
+    /// an engine with ``feature``. ``ConfigMaterializer`` writes the env line.
     @discardableResult
     static func prepareClient(steamRoot: URL, engineRoot: URL?) -> [String] {
         var notes = register(steamRoot: steamRoot, engineRoot: engineRoot)
@@ -244,8 +235,7 @@ nonisolated enum SteamPlayMacOS {
 }
 
 nonisolated extension Engine {
-    /// Whether this engine switches Steam Play on in the client and runs a
-    /// game mapped to ``SteamPlayMacOS/toolName`` as its macOS app.
+    /// Whether this engine declares ``SteamPlayMacOS/feature``.
     var supportsSteamPlayMacOS: Bool {
         features.contains(SteamPlayMacOS.feature)
     }

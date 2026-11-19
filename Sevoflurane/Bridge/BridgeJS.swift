@@ -4,9 +4,8 @@ import Foundation
 /// mirroring, base64 envelopes carrying the view type, rejection objects
 /// never stringified, callbacks routed per page.
 nonisolated enum BridgeJS {
-    /// SharedConnection — the protobuf transport the UI gets its real data
-    /// from — passes ArrayBuffers, which JSON drops silently. Both sides
-    /// translate binary to base64 envelopes instead.
+    /// Base64 envelopes for binary: SharedConnection, the UI's protobuf
+    /// transport, passes ArrayBuffers, which JSON drops silently.
     static let binaryCodec = #"""
     (() => {
       const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -48,8 +47,8 @@ nonisolated enum BridgeJS {
     })()
     """#
 
-    /// Opens the relay socket from inside SharedJSContext. `%RELAY_PORT%` is
-    /// substituted before evaluation.
+    /// Opens the relay socket from inside SharedJSContext; `%RELAY_PORT%` is
+    /// substituted first.
     static let tunnel = #"""
     (() => {
       if (window.__sevoRelay && window.__sevoRelay.readyState <= 1) return 'relay live';

@@ -1,27 +1,24 @@
 import Foundation
 
-/// The client's own cache of every app's store data, `appcache/appinfo.vdf`,
+/// The client's cache of every app's store data, `appcache/appinfo.vdf`,
 /// read for what the client's API leaves out.
 ///
 /// `GetLaunchOptionsForApp` answers a generic token (`#Steam_LaunchOption_Game`)
-/// for options whose real names live here, under the app's `config/launch/<n>`:
-/// Megabonk's two options are "Megabonk (DX11 - Recommended)" and "Megabonk
-/// (DX12 - Use only if game crashes)" in this file and the same token twice
-/// from the client.
+/// for options whose real names live here under `config/launch/<n>`:
+/// Megabonk's "Megabonk (DX11 - Recommended)" and "Megabonk (DX12 - Use only
+/// if game crashes)" both come back as that token.
 ///
-/// The file is binary: a header, then one entry per app (id, size, a fixed
-/// block of hashes and stamps, then the app's key-values in Valve's binary
-/// KeyValues). Version 29 names keys by index into a string table at the end
-/// of the file; version 28 writes each key inline.
+/// Binary layout: a header, then per app its id, size, a fixed block of
+/// hashes and stamps, and its binary KeyValues. Version 29 names keys by
+/// index into a string table at the end of the file; version 28 writes each
+/// key inline.
 nonisolated enum SteamAppInfo {
-    /// The client's cache inside the Steam bottle.
     static var fileURL: URL {
         SteamBottle.steamRoot.appendingPathComponent("appcache/appinfo.vdf")
     }
 
-    /// Each launch option's own description, by its key under `config/launch`,
-    /// which is the `nIndex` the client numbers the option by. Empty when the
-    /// file, the app, or its launch section is missing.
+    /// Each launch option's description, keyed by its `config/launch` key,
+    /// which is the client's `nIndex` for the option.
     static func launchDescriptions(appID: Int, in url: URL = fileURL) -> [Int: String] {
         guard let data = try? Data(contentsOf: url, options: .alwaysMapped),
               let app = keyValues(appID: appID, in: data),
@@ -38,13 +35,12 @@ nonisolated enum SteamAppInfo {
     }
 
     /// The platforms Steam sells the game for (`common/oslist`: `windows`,
-    /// `macos`, `linux`). Empty when the file or the app is missing.
+    /// `macos`, `linux`).
     static func platforms(appID: Int, in url: URL = fileURL) -> Set<String> {
         platforms(appIDs: [appID], in: url)[appID] ?? []
     }
 
-    /// ``platforms(appID:in:)`` for many apps in one pass over the file, the
-    /// way a whole library asks. Apps the file lacks are absent.
+    /// ``platforms(appID:in:)`` for many apps in one pass over the file.
     static func platforms(appIDs: Set<Int>, in url: URL = fileURL) -> [Int: Set<String>] {
         guard let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return [:] }
         return keyValues(appIDs: appIDs, in: data).mapValues { app in
@@ -68,15 +64,13 @@ nonisolated enum SteamAppInfo {
     /// last update, PICS token, text SHA-1, change number, binary SHA-1.
     private static let entryPreamble = 4 + 4 + 8 + 20 + 4 + 20
 
-    /// One app's key-values, the `appinfo` table's contents, or `nil` when the
-    /// app is not in the file or the file is not one this reads.
+    /// One app's key-values (the `appinfo` table's contents).
     static func keyValues(appID: Int, in data: Data) -> [String: Value]? {
         keyValues(appIDs: [appID], in: data)[appID]
     }
 
-    /// The key-values of every app in `appIDs` the file holds, read in one
-    /// walk: the string table is parsed once and the walk stops when the last
-    /// wanted app is found.
+    /// The key-values of every app in `appIDs` the file holds, in one walk
+    /// that stops at the last wanted app.
     static func keyValues(appIDs: Set<Int>, in data: Data) -> [Int: [String: Value]] {
         var reader = Reader(data: data)
         guard let magic = reader.u32(), magic == version28 || magic == version29,
@@ -177,8 +171,8 @@ nonisolated enum SteamAppInfo {
             return strings[Int(index)]
         }
 
-        /// One value of `type`: 0 table, 1 string, 2 int32, 3 float, 7 uint64,
-        /// 10 int64. A float, which nothing here reads, is kept as its bits.
+        /// Types: 0 table, 1 string, 2 int32, 3 float (kept as its bits),
+        /// 7 uint64, 10 int64.
         private mutating func value(of type: UInt8, strings: [String]?) -> Value? {
             switch type {
             case 0: table(strings: strings).map(Value.table)

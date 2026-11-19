@@ -1,7 +1,6 @@
 import Foundation
 
-/// One cookie from the bottled client's jar, as CDP reports it — the typed
-/// form that crosses the bridge actor's boundary.
+/// One cookie from the bottled client's jar, as CDP reports it.
 nonisolated struct SteamWebCookie: Sendable, Equatable {
     let name: String
     let value: String
@@ -12,8 +11,8 @@ nonisolated struct SteamWebCookie: Sendable, Equatable {
     let httpOnly: Bool
     /// CDP's `Strict`, `Lax` or `None`, or nil when the client set none.
     let sameSite: String?
-    /// Seconds since the epoch, or nil for a session cookie — CDP reports
-    /// those as `-1`, which would otherwise become an expiry in 1969.
+    /// Seconds since the epoch; nil for a session cookie, which CDP reports
+    /// as `-1`.
     let expires: Double?
 
     init?(cdp: [String: Any]) {

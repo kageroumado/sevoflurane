@@ -1,24 +1,20 @@
 import Foundation
 
-/// Steam's own record of the processes it started for a game
-/// (`<Steam>/logs/gameprocess_log.txt`). It is where a game's exit status
-/// exists: games are `CreateProcess`ed by `Steam.exe` inside the bottle, so
-/// the app has no pid to wait on.
-///
-/// The pids in it are the bottle's Windows pids, which nothing on the macOS
-/// side shares, so a process is identified by the executable of the command
-/// line it was added with.
+/// Steam's record of the processes it started for a game
+/// (`<Steam>/logs/gameprocess_log.txt`), the only place a game's exit status
+/// exists: `Steam.exe` starts games inside the bottle, so the app has no pid
+/// to wait on. Its pids are Windows pids, so a process is identified by the
+/// executable of its command line.
 nonisolated enum SteamGameProcessLog {
     struct Exit: Equatable, Sendable {
         let pid: Int
         let code: Int
-        /// The executable Steam started, lower case, when the line named one.
+        /// Lower case.
         let executable: String?
     }
 
-    /// Crash handlers and reporters Steam tracks beside the game. They exit 0
-    /// after the game they were watching has already died, so an exit taken
-    /// from one of them says nothing about the run.
+    /// Crash handlers Steam tracks beside the game. They exit 0 after the
+    /// game died, so their exit says nothing about the run.
     static let helperExecutables = [
         "unitycrashhandler64.exe", "unitycrashhandler32.exe",
         "steamerrorreporter64.exe", "steamerrorreporter.exe",
@@ -37,16 +33,14 @@ nonisolated enum SteamGameProcessLog {
         return exits.last
     }
 
-    /// Whether the log has this app in it at all. Steam rewrites the file at
-    /// each client start, so an app with no line of its own belongs to a
-    /// client session that is over.
+    /// Whether the log mentions this app. Steam rewrites the file at each
+    /// client start, so an absent app belongs to an ended session.
     static func tracks(app appID: Int, in text: String) -> Bool {
         text.split(whereSeparator: \.isNewline)
             .contains { body(of: $0, forApp: appID) != nil }
     }
 
-    /// Every process Steam stopped tracking for this app, in order, named by
-    /// the command line it was added with.
+    /// Every process Steam stopped tracking for this app, in order.
     static func exits(forApp appID: Int, in text: String) -> [Exit] {
         var executables: [Int: String] = [:]
         var exits: [Exit] = []
@@ -64,8 +58,7 @@ nonisolated enum SteamGameProcessLog {
         return exits
     }
 
-    /// What the game is built on, told by the processes Steam tracked for it
-    /// and by the game's own executable.
+    /// The game's engine (`unity`, `unreal`), from its tracked executables.
     static func runtime(forApp appID: Int, in text: String, exe: String?) -> String? {
         var names = exits(forApp: appID, in: text).compactMap(\.executable)
         if let exe { names.append(exe.lowercased()) }
@@ -82,8 +75,7 @@ nonisolated enum SteamGameProcessLog {
         return line[start.upperBound...]
     }
 
-    /// The executable of a tracked process's command line, which Steam wraps
-    /// in quotes it also doubles.
+    /// The executable of a command line, which Steam wraps in doubled quotes.
     private static func executable(fromCommandLine command: Substring) -> String? {
         let unquoted = command.drop { $0 == "\"" }
         guard let end = unquoted.range(of: ".exe", options: .caseInsensitive) else { return nil }

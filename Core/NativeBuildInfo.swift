@@ -1,39 +1,33 @@
 import Foundation
 
 /// What a game page needs to offer the choice between a game's macOS and
-/// Windows builds (``SteamPlayMacOS``): whether the client can install the
-/// macOS one, how much each download is, which build is on disk, and which
-/// one the compatibility verdicts favor. Served to the page as JSON by the
-/// bridge's `GET /__native/<appid>`.
+/// Windows builds (``SteamPlayMacOS``), served as JSON by the bridge's
+/// `GET /__native/<appid>`.
 nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
     /// The running engine switches Steam Play on, so a mapped game installs
     /// and launches its macOS build.
     let enabled: Bool
     /// Steam sells a macOS build (`common/oslist`).
     let hasMacBuild: Bool
-    /// The macOS build runs on this Mac: it is more than 32-bit Intel code.
+    /// The macOS build is more than 32-bit Intel code.
     let runnable: Bool
-    /// What installing each build downloads, in bytes; `nil` when the app
-    /// cache lists no size.
+    /// Download sizes in bytes; `nil` when the app cache lists no size.
     let macDownload: Int64?
     let windowsDownload: Int64?
     /// Both builds are the same depots, so a switch downloads nothing.
     let sameFiles: Bool
-    /// The build on disk, read from the depots the manifest lists; `nil`
-    /// when the game is not installed or its depots serve both platforms.
+    /// The build on disk; `nil` when the game is not installed or its depots
+    /// serve both platforms.
     let installed: SteamPlayMacOS.Platform?
-    /// One short line under each choice.
     let macHint: String
     let windowsHint: String
     /// The tool to map the game to for its macOS build.
     let tool: String
-    /// Steam for Mac's copy of the game, which installing the macOS build
-    /// clones in place of a download (``SteamForMacCopy``); `nil` when there
-    /// is none to take: the game is installed here, Steam for Mac has no
-    /// complete copy at rest, or the copy cannot be cloned into the library.
+    /// Steam for Mac's copy, which installing the macOS build clones in place
+    /// of a download (``SteamForMacCopy``); `nil` when the game is installed
+    /// here or there is no cloneable complete copy.
     var steamForMacCopy: CopyOffer? = nil
 
-    /// What the page shows of Steam for Mac's copy.
     struct CopyOffer: Codable, Sendable, Equatable {
         /// What the copy occupies on disk, which the clone shares.
         let bytes: Int64
@@ -44,12 +38,12 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
     /// One depot of an app, as the client's app cache lists it.
     struct Depot: Equatable, Sendable {
         let id: Int
-        /// The platforms the depot serves; empty for every platform.
+        /// Empty for every platform.
         let platforms: Set<String>
         /// The compressed download, falling back to the size on disk.
         let download: Int64?
-        /// The depot belongs to a DLC, an extra language, or another app, so
-        /// installing the game alone leaves it out.
+        /// A DLC, extra-language or other app's depot, which installing the
+        /// game alone leaves out.
         let isOptional: Bool
 
         func serves(_ platform: SteamPlayMacOS.Platform) -> Bool {
@@ -57,7 +51,6 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
         }
     }
 
-    /// The depots under an app's `depots` table in the app cache.
     static func depots(inAppInfo app: [String: SteamAppInfo.Value]) -> [Depot] {
         guard case let .table(depots)? = app["depots"] else { return [] }
         return depots.compactMap { key, value -> Depot? in
@@ -89,21 +82,19 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
         }
     }
 
-    /// What installing the game for `platform` downloads: every required
-    /// depot that serves it. `nil` when none of them lists a size.
+    /// The summed download of every required depot serving `platform`;
+    /// `nil` when none of them lists a size.
     static func download(for platform: SteamPlayMacOS.Platform, depots: [Depot]) -> Int64? {
         let sizes = depots.filter { !$0.isOptional && $0.serves(platform) }.compactMap(\.download)
         return sizes.isEmpty ? nil : sizes.reduce(0, +)
     }
 
-    /// Whether every required depot serves both platforms.
     static func sameFiles(_ depots: [Depot]) -> Bool {
         depots.filter { !$0.isOptional }.allSatisfy { $0.serves(.macos) && $0.serves(.windows) }
     }
 
-    /// The build whose depots the manifest lists: macOS when one installed
-    /// depot is for macOS only, Windows when one is for Windows only, `nil`
-    /// when every installed depot serves both or the manifest lists none.
+    /// The installed build: macOS if an installed depot serves macOS only,
+    /// else Windows if one serves Windows only, else `nil`.
     static func installedBuild(manifest text: String, depots: [Depot]) -> SteamPlayMacOS.Platform? {
         guard let installed = TextKeyValues.parse(text)?.at(["AppState", "InstalledDepots"]) else { return nil }
         let ids = Set(installed.entries.compactMap { Int($0.key) })
@@ -129,9 +120,7 @@ nonisolated struct NativeBuildInfo: Codable, Sendable, Equatable {
 
     // MARK: - Assembly
 
-    /// The page's answer for one game, from the app cache, the game's
-    /// manifest, its compatibility record when one is at hand, and Steam for
-    /// Mac's copy when one could be cloned.
+    /// The page's answer for one game.
     static func make(
         appID _: Int, enabled: Bool, appInfo: [String: SteamAppInfo.Value]?, manifest: String?, record: GameCompatRecord?,
         steamForMacCopy: SteamForMacCopy.Copy? = nil,

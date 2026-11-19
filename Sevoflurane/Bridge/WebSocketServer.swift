@@ -1,9 +1,9 @@
 import Foundation
 import Network
 
-/// One accepted WebSocket client. `NWConnection` is internally thread-safe,
-/// so sends may come from any isolation; receive callbacks arrive on the
-/// server's queue and are forwarded to the handlers given to ``start``.
+/// One accepted WebSocket client. Sends may come from any isolation
+/// (`NWConnection` is thread-safe); receive callbacks arrive on the server's
+/// queue.
 final nonisolated class WSConnection: Sendable {
     private let connection: NWConnection
 
@@ -35,9 +35,9 @@ final nonisolated class WSConnection: Sendable {
         connection.cancel()
     }
 
-    /// Begins the receive loop. `onClose` fires exactly once, for any of
-    /// error, cancel, a close frame from the peer, or the peer finishing its
-    /// side; the connection is cancelled with it.
+    /// Begins the receive loop. `onClose` fires exactly once, for an error,
+    /// a cancel, a close frame or the peer finishing, and cancels the
+    /// connection.
     func start(
         queue: DispatchQueue,
         onText: @escaping @Sendable (String) -> Void,
@@ -46,8 +46,7 @@ final nonisolated class WSConnection: Sendable {
     ) {
         nonisolated(unsafe) var closed = false
         let finish: @Sendable () -> Void = { [connection] in
-            // Runs on `queue` from both stateUpdateHandler and the receive
-            // loop, which the serial queue serializes.
+            // Both callers run on the serial `queue`.
             if !closed {
                 closed = true
                 connection.cancel()
@@ -69,8 +68,8 @@ final nonisolated class WSConnection: Sendable {
     ) {
         connection.receiveMessage { [weak self] data, context, isComplete, error in
             guard let self else { return }
-            // A finished stream with nothing in it is the peer gone: a
-            // handshake the gate refused ends this way, with no error.
+            // A finished empty stream is the peer gone, as after a refused
+            // handshake.
             if error != nil || (isComplete && data == nil) {
                 onClose()
                 return
@@ -93,15 +92,13 @@ final nonisolated class WSConnection: Sendable {
     }
 }
 
-/// A loopback WebSocket server. Each accepted connection is handed to
-/// `onConnection` before its receive loop starts, so the owner can register
-/// it and then call ``WSConnection/start``.
+/// A loopback WebSocket server. Each accepted connection reaches
+/// `onConnection` before its receive loop starts.
 ///
-/// The handshake passes through the port's ``LoopbackGate``, and one it
-/// refuses is answered 400. The refused connection still reaches
-/// `onConnection` — Network.framework offers no way to tell it apart there —
-/// and closes as soon as its receive loop starts, so an owner must not treat
-/// a connection as its peer before the first message arrives.
+/// The handshake passes through the port's ``LoopbackGate``, which answers a
+/// refusal 400. A refused connection still reaches `onConnection` and closes
+/// once its loop starts, so an owner must not treat a connection as its peer
+/// before its first message.
 final nonisolated class WebSocketServer: Sendable {
     private let listener: NWListener
     let queue: DispatchQueue
@@ -124,9 +121,7 @@ final nonisolated class WebSocketServer: Sendable {
         listener = try NWListener(using: parameters)
     }
 
-    /// The gate's verdict on one handshake. Network.framework hands the
-    /// request's header fields over as `additionalHeaders`, `Host` and
-    /// `Origin` among them.
+    /// The gate's verdict on one handshake's header fields.
     static func handshakeStatus(
         _ fields: [(name: String, value: String)], gate: LoopbackGate,
     ) -> NWProtocolWebSocket.Response.Status {

@@ -2,16 +2,12 @@ import Foundation
 
 /// Valve's own Steam for Mac and the games it has installed.
 ///
-/// A game's macOS build runs against a running macOS Steam client: its
-/// `steam_api` talks to that client, and the Windows client in the bottle
-/// cannot serve it. So a game set to its Mac build is handed to Steam for Mac
-/// (``MacBuildRoute``), and what that client has installed is read from its
-/// own files, the same text KeyValues the bottle's client writes: the
-/// libraries in `steamapps/libraryfolders.vdf`, as POSIX paths, and one
-/// `appmanifest_<id>.acf` per game in each library.
+/// A game's macOS build talks to a running macOS Steam client through its
+/// `steam_api`, which the bottle's Windows client cannot serve, so a game set
+/// to its Mac build is handed to Steam for Mac (``MacBuildRoute``). Its
+/// installs are read from the same text KeyValues files the bottle's client
+/// writes, with POSIX library paths.
 nonisolated enum NativeSteam {
-    /// Steam for Mac's bundle identifier, by which its app is found wherever
-    /// it is installed.
     static let bundleIdentifier = "com.valvesoftware.steam"
 
     /// Steam for Mac's data folder, which holds its first library.
@@ -19,18 +15,16 @@ nonisolated enum NativeSteam {
         UserHome.url.appendingPathComponent("Library/Application Support/Steam", isDirectory: true)
     }
 
-    /// Steam for Mac's connection log, the same format as the bottle client's
-    /// (``SteamConnectionLog``).
+    /// Same format as the bottle client's (``SteamConnectionLog``).
     static var connectionLog: URL {
         root.appendingPathComponent("logs/connection_log.txt")
     }
 
-    /// One game Steam for Mac has a manifest for.
     struct Game: Equatable, Sendable {
         let appID: Int
         let name: String
-        /// Steam's `StateFlags`: bit 4 (`FullyInstalled`) is set once every
-        /// file is on disk, and stays set through an update.
+        /// Bit 4 (`FullyInstalled`) is set once every file is on disk, and
+        /// stays set through an update.
         let stateFlags: Int
 
         var isFullyInstalled: Bool { stateFlags & 4 != 0 }
@@ -46,8 +40,7 @@ nonisolated enum NativeSteam {
         )
     }
 
-    /// Every library's `steamapps` that exists on disk, the data folder's own
-    /// first.
+    /// Every existing library's `steamapps`, the data folder's own first.
     static func steamapps(root: URL = root) -> [URL] {
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("steamapps").path) else { return [] }
         return SteamLibraries.steamapps(steamRoot: root) { path in
@@ -55,10 +48,8 @@ nonisolated enum NativeSteam {
         }
     }
 
-    /// Whether Play can hand games to Steam for Mac. An engine that plays macOS
-    /// versions in Sevoflurane's own Steam makes it an option the person turns
-    /// on; on any other engine it is the only way to a macOS version, so it is
-    /// always offered.
+    /// Whether Play can hand games to Steam for Mac: opt-in on an engine that
+    /// plays macOS versions itself, always on any other engine.
     static var isOffered: Bool {
         isOffered(enginePlaysMacOS: Engine.running.supportsSteamPlayMacOS, optedIn: Preferences.offersSteamForMac)
     }
@@ -67,9 +58,9 @@ nonisolated enum NativeSteam {
         !enginePlaysMacOS || optedIn
     }
 
-    /// Turns the option on for anyone sending a game to Steam for Mac while it
-    /// is the only way to a macOS version, so moving to an engine that plays
-    /// macOS versions itself changes nothing for them. Runs at every launch.
+    /// Turns the option on for anyone already sending a game to Steam for Mac,
+    /// so a later engine that plays macOS versions changes nothing for them.
+    /// Runs at every launch.
     static func adoptEarlierChoices(games: [ConfigValues]) {
         guard !Engine.running.supportsSteamPlayMacOS else { return }
         if games.contains(where: { $0.build == .mac }) { Preferences.offersSteamForMac = true }
@@ -85,10 +76,9 @@ nonisolated enum NativeSteam {
     }
 }
 
-/// Where Play runs a game: Sevoflurane's own Steam, or Valve's Steam for Mac
-/// with the game's macOS version installed there. Which version Sevoflurane's
-/// Steam installs is Steam's own per-game choice (``SteamPlayMacOS``) where the
-/// engine plays macOS versions, and the Windows version otherwise.
+/// Where Play runs a game: Sevoflurane's own Steam, or Valve's Steam for Mac.
+/// Which version Sevoflurane's Steam installs is Steam's per-game choice
+/// (``SteamPlayMacOS``) where the engine plays macOS versions, else Windows.
 nonisolated enum GameBuild: String, Codable, CaseIterable, Sendable {
     case windows
     case mac
@@ -105,13 +95,12 @@ nonisolated enum GameBuild: String, Codable, CaseIterable, Sendable {
 /// Where one Play goes, decided from the game's build choice and what is on
 /// this Mac.
 nonisolated enum MacBuildRoute: Equatable, Sendable {
-    /// The bottle's client starts the Windows build.
     case windows
     /// Steam for Mac starts the installed macOS build.
     case play(Int)
     /// Steam for Mac opens its install dialog for the game.
     case install(Int)
-    /// The macOS build is chosen and Steam for Mac is not on this Mac.
+    /// The macOS build is chosen and Steam for Mac is not installed.
     case steamForMacMissing(Int)
 
     static func decide(appID: Int, build: GameBuild?, hasSteamForMac: Bool, installedThere: Bool) -> MacBuildRoute {
@@ -120,9 +109,8 @@ nonisolated enum MacBuildRoute: Equatable, Sendable {
         return installedThere ? .play(appID) : .install(appID)
     }
 
-    /// The link Steam for Mac is handed, opened by its app explicitly:
-    /// Sevoflurane claims `steam://` too, and a plain open would come back
-    /// here.
+    /// The link to open in Steam for Mac's app explicitly: Sevoflurane claims
+    /// `steam://` too, so a plain open would come back here.
     var link: URL? {
         switch self {
         case let .play(id): URL(string: "steam://rungameid/\(id)")

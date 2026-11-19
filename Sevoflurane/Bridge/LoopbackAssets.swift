@@ -6,26 +6,26 @@ import Synchronization
 /// address it.
 ///
 /// CEF serves Steam's UI from that origin and answers a handful of synthetic
-/// paths under it — window icons, overlay thumbnails, game recordings. WebKit
-/// resolves none of it: the host does not exist outside the client, and a
-/// `postMessage` whose `targetOrigin` does not match the receiver is a silent
-/// no-op, which is how the friends and chat channel goes quiet with nothing in
-/// any log. So the origin is rewritten out of the bundle as it is served.
+/// paths under it: window icons, overlay thumbnails, game recordings. In
+/// WebKit the host does not exist, and a `postMessage` whose `targetOrigin`
+/// does not match the receiver is silently dropped, which silences the
+/// friends and chat channel with nothing in any log. So the origin is
+/// rewritten out of the bundle as it is served.
 ///
-/// Two rewrites, told apart by the character after the literal. A literal that
-/// ends its string is an origin the bundle compares or posts to, and becomes
-/// this server's own. Anything else is the head of a URL, and moves under
+/// The character after the literal picks the rewrite. A literal that ends its
+/// string is an origin the bundle compares or posts to, and becomes this
+/// server's own. Anything else is the head of a URL, and moves under
 /// ``pathPrefix`` where the bridge can answer it.
 nonisolated enum LoopbackAssets {
-    /// The origin CEF gives the client's UI.
     static let clientOrigin = "https://steamloopback.host"
 
-    /// The path everything the client used to serve is reachable under.
+    /// The path under which the bridge answers what CEF serves at
+    /// ``clientOrigin``.
     static let pathPrefix = "/__loopback"
 
-    /// The endpoints only the client answers: synthesized in memory, or read
-    /// from the account's `userdata`, which the bridge withholds. They exist
-    /// only inside CEF, so the bridge asks the client for them.
+    /// Endpoints only the client answers (synthesized in memory, or read from
+    /// `userdata`, which the bridge withholds), so the bridge fetches them
+    /// inside CEF.
     static let clientSynthesized = [
         "/windows/icon", "/overlays/thumbnail", "/gamerecordings/", "/screenshots/",
     ]
@@ -33,9 +33,8 @@ nonisolated enum LoopbackAssets {
     /// A path under ``pathPrefix`` with the route's own URL stripped from its
     /// head, as often as it repeats. The bundle prefixes a value with the
     /// client's origin unless it starts with `https://` (sp.js `fu`), and the
-    /// rewritten prefix is this server's `http://` origin, so a URL that went
-    /// through two such helpers arrives as
-    /// `/http://127.0.0.1:<port>/__loopback/screenshots/…`.
+    /// rewritten origin is `http://`, so a URL that went through two such
+    /// helpers arrives as `/http://127.0.0.1:<port>/__loopback/screenshots/…`.
     static func unprefixed(_ path: String) -> String {
         let route = "/" + pageOrigin + pathPrefix
         var path = path
@@ -44,10 +43,9 @@ nonisolated enum LoopbackAssets {
     }
 
     /// Whether a path under ``pathPrefix`` is one of ``clientSynthesized``,
-    /// judged on its decoded spelling. The client resolves dot segments, the
-    /// percent-encoded ones included, before it answers, so a path that holds
-    /// one is refused rather than matched by its head: `/screenshots/../config`
-    /// would otherwise read the files ``privateDirectories`` withholds.
+    /// judged decoded. Any dot segment is refused: the client resolves them,
+    /// encoded ones included, so `/screenshots/../config` would read what
+    /// ``privateDirectories`` withholds.
     static func isClientSynthesized(_ path: String) -> Bool {
         guard let decoded = path.removingPercentEncoding, !decoded.contains("\\") else { return false }
         let segments = decoded.split(separator: "/", omittingEmptySubsequences: false)
@@ -57,16 +55,14 @@ nonisolated enum LoopbackAssets {
 
     static var pageOrigin: String { "http://127.0.0.1:\(BridgePorts.steamUI)" }
 
-    /// The Steam install's directories that hold the account rather than the
-    /// client: sign-in tokens and the account list, per-user data, logs, and
-    /// crash dumps with process memory in them.
+    /// Install directories holding the account: sign-in tokens and account
+    /// list, per-user data, logs, and dumps with process memory.
     static let privateDirectories: Set<String> = ["config", "userdata", "logs", "dumps"]
 
-    /// Whether a path under ``pathPrefix`` may be read from the Steam install.
-    /// Files at the install's root (`ssfn*`, `*.vdf`, the binaries) and the
-    /// ``privateDirectories`` are withheld; the UI's own assets live in
-    /// subdirectories. Judged on the decoded, normalized path, and without
-    /// case, as the file system resolves it.
+    /// Whether a path under ``pathPrefix`` may be read from the Steam install:
+    /// never a root file (`ssfn*`, `*.vdf`, binaries) or one under
+    /// ``privateDirectories``. Judged decoded, normalized and case-blind, as
+    /// the file system resolves it.
     static func isServable(_ path: String) -> Bool {
         guard let decoded = path.removingPercentEncoding else { return false }
         let components = URL(fileURLWithPath: "/" + decoded).standardizedFileURL.pathComponents.dropFirst()
@@ -95,10 +91,9 @@ nonisolated enum LoopbackAssets {
     /// or nil when the file is to be served as it sits on disk.
     ///
     /// Few files need this and some are large, so the rewritten copy is cached
-    /// under the app's caches directory and the source is read only when the
-    /// cache misses. A file found not to need it is remembered by revision
-    /// and not read again. Everything else keeps the mapped path
-    /// ``SteamBridge`` serves assets by.
+    /// under the app's caches directory and the source is read only on a
+    /// miss. A file found not to need it is remembered by revision and not
+    /// read again.
     static func rewrittenBytes(for target: URL) -> Data? {
         let ext = target.pathExtension.lowercased()
         guard ext == "js" || ext == "css" else { return nil }
@@ -121,7 +116,7 @@ nonisolated enum LoopbackAssets {
         return copy
     }
 
-    /// The revisions of files that hold no client origin, by cache name.
+    /// Cache names of file revisions that hold no client origin.
     private static let untouched = Mutex<Set<String>>([])
 
     private static var cacheDirectory: URL {
@@ -129,9 +124,8 @@ nonisolated enum LoopbackAssets {
             .appendingPathComponent("LoopbackRewrite")
     }
 
-    /// The cache entry for one revision of one file. `family` names the file
-    /// by its full path, so two bundles' `main.js` never share an entry, and
-    /// `name` adds everything the rewritten bytes depend on: the revision and
+    /// The cache entry for one file revision. `family` hashes the full path,
+    /// so two bundles' `main.js` never collide; `name` adds the revision and
     /// the port the rewrite points at.
     static func cacheKey(path: String, size: Int, modified: Date) -> (family: String, name: String) {
         let url = URL(fileURLWithPath: path)
@@ -142,8 +136,7 @@ nonisolated enum LoopbackAssets {
         return (family, "\(family)\(size)-\(stamp)-\(BridgePorts.steamUI).\(url.pathExtension)")
     }
 
-    /// Writes the rewritten copy and drops the ones a Steam update replaced,
-    /// so the cache holds one entry per asset rather than one per revision.
+    /// Writes the rewritten copy and drops older revisions of the same file.
     private static func store(_ copy: Data, at url: URL, replacing family: String) {
         let manager = FileManager.default
         try? manager.createDirectory(

@@ -3,28 +3,23 @@ import Foundation
 /// The chime Steam plays for an arriving message, refused in both copies of
 /// the friends UI so the Mac's notification is the only thing that sounds.
 ///
-/// Steam plays its own sound from the page, not from the toast:
+/// Steam plays the sound from the page, apart from the toast:
 /// `CFriendChat.PlayFriendMessageSound` and the chat room's
 /// `PlayChatRoomNotificationSound` / `PlayAtMentionSound` each call
 /// `AudioPlaybackManager.PlayAudioURL` with one file under
-/// `public/sounds/webui/`. All three are gated on the chat's visibility state
-/// being below active, which was never true here while Steam was auto-opening
-/// a popup for every message — so the sound was silent by accident, and
-/// refusing that auto-open (``SteamChatAutoOpen``) turned it on.
+/// `public/sounds/webui/`. All three play while the chat's visibility state
+/// is below active, which is always the case once ``SteamChatAutoOpen``
+/// refuses the auto-open popup.
 ///
-/// One sound per message is the right number, and on a Mac it belongs to the
-/// notification, where the volume, the Do Not Disturb schedule and the
-/// per-app switch are the system's. So the page is quieted here and
-/// ``SteamNotifications`` carries the sound instead, under Steam's own
-/// setting either way.
+/// On a Mac the one sound per message belongs to the notification, where the
+/// volume, Do Not Disturb and the per-app switch are the system's, so
+/// ``SteamNotifications`` carries it instead, under Steam's own setting.
 ///
-/// The wrap is on `PlayAudioURL` because that is where the three calls meet,
-/// and it drops only those three files: the friend-join and friend-online
-/// sounds go through the same method and are left alone, because nothing on
-/// this side has taken over what they announce.
+/// The wrap is on `PlayAudioURL`, where the three calls meet, and drops only
+/// those three files: the friend-join and friend-online sounds use the same
+/// method and still play, since nothing here announces those events.
 nonisolated enum SteamMessageSound {
-    /// The sounds Steam plays when a message arrives. Named by path so the
-    /// CDN host in front of them does not matter.
+    /// Matched by path, whatever CDN host serves them.
     static let refusedFiles = [
         "public/sounds/webui/ui_steam_message_old_smooth.m4a",
         "public/sounds/webui/steam_chatroom_notification.m4a",
@@ -55,7 +50,6 @@ nonisolated enum SteamMessageSound {
     })()
     """
 
-    /// The answers that mean the refusal is in place, so a caller retrying
-    /// across Steam's boot knows to stop.
+    /// The answers that tell a retrying caller to stop.
     static let settled: Set<String> = ["refused", "already refused"]
 }

@@ -1,32 +1,24 @@
 import Foundation
 
-/// `GET /__web?u=<absolute URL>`: the page's one route out to Steam's web
-/// properties.
+/// `GET /__web?u=<absolute URL>`: the page's route to Steam's web properties.
 ///
-/// Steam's store allows a cross-origin read from `https://steamloopback.host`
-/// — the origin CEF gives the client's own UI — and from nothing else. From
-/// `http://127.0.0.1:8762` WebKit blocks the reply before the caller sees a
-/// status, which is how a launch dialog's EULA arrives as axios's "Network
-/// Error" with no body and no code. The page asks this proxy instead: the
-/// request is same-origin, so no policy applies to it, and the session
-/// travels as the client's own cookies attached here rather than by the page.
+/// Steam's store allows cross-origin reads only from
+/// `https://steamloopback.host`, so from `http://127.0.0.1:8762` WebKit blocks
+/// the reply (a launch dialog's EULA fails as axios's "Network Error"). The
+/// proxied request is same-origin and carries the client's cookies.
 ///
-/// The allowlist is what keeps this from being an open relay: only
-/// ``WebSessionCookies/domains`` may be fetched, on the first request and on
-/// every redirect the upstream asks for.
+/// Only ``WebSessionCookies/domains`` may be fetched, on the first request
+/// and every redirect, so this is no open relay.
 nonisolated enum WebProxy {
-    /// The largest body handed back to the page. Steam's JSON and HTML
-    /// documents sit orders of magnitude under it; the cap is what stops a
+    /// The largest body handed back, far above Steam's documents, to stop a
     /// mistaken URL pulling a video through the bridge.
     static let maximumBodyBytes = 8 * 1024 * 1024
 
-    /// How long an upstream fetch may take before the page gets an error it
-    /// can retry. Longer than the store's own latency, shorter than the
-    /// spinner a user will sit through.
+    /// How long an upstream fetch may take before the page gets a retryable
+    /// error.
     static let budget: Duration = .seconds(20)
 
-    /// Why a request never left the app. Each carries the status the page
-    /// sees, so a rejected fetch is diagnosable from the network pane alone.
+    /// Why a request never left the app, with the status the page sees.
     enum Rejection: Error, Equatable {
         case badMethod(String)
         case missingURL
@@ -51,8 +43,8 @@ nonisolated enum WebProxy {
         }
     }
 
-    /// The URL a `/__web` request names, once its method, scheme, and host
-    /// have been checked.
+    /// The URL a `/__web` request names, after checking method, scheme and
+    /// host.
     static func target(method: String, query: String) -> Result<URL, Rejection> {
         guard method == "GET" || method == "HEAD" else {
             return .failure(.badMethod(method))
@@ -71,12 +63,9 @@ nonisolated enum WebProxy {
         return .success(url)
     }
 
-    /// Fetches `url` as the client would and answers what the page gets back.
-    ///
-    /// Cookies go into the session's own jar rather than a `Cookie` header, so
-    /// Foundation applies Steam's domain, path, and `Secure` scoping and a
-    /// redirect to another Steam property carries the right ones — and one to
-    /// a host outside the allowlist is refused before it is made.
+    /// Fetches `url` as the client would. Cookies go into the session's jar
+    /// rather than a `Cookie` header, so Foundation applies their domain,
+    /// path and `Secure` scoping across redirects.
     static func fetch(
         _ url: URL, method: String, cookies: [SteamWebCookie],
     ) async -> HTTPResponse {
@@ -151,10 +140,8 @@ nonisolated enum WebProxy {
         }
     }
 
-    /// Holds a redirect chain inside the allowlist. Steam's own properties
-    /// carry open redirects (`steamcommunity.com/linkfilter/?url=…`), so
-    /// following one blindly would let the page name any host on the internet
-    /// through a URL that passes the check at the door.
+    /// Holds a redirect chain inside the allowlist: Steam's own properties
+    /// carry open redirects (`steamcommunity.com/linkfilter/?url=…`).
     private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         func urlSession(
             _: URLSession,

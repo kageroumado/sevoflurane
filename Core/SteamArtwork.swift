@@ -4,28 +4,24 @@ import Foundation
 /// art cache.
 ///
 /// Discord fetches an activity's picture from a public URL through its media
-/// proxy, so a picture of the game on this Mac is no use to it, and Steam's
-/// CDN has one for every store game. Current clients keep each asset under
-/// its content hash, `librarycache/<appid>/<sha1>/library_600x900.jpg`, and
-/// the CDN serves a recent game's art under that same hash,
-/// `store_item_assets/steam/apps/<appid>/<sha1>/library_600x900.jpg`, while
-/// an older game's is also served at the path without the hash, which is all
-/// an older, flat cache can point at. A hashed asset keeps the name the cache
-/// gives it: a `library_capsule.jpg` is served as that, not as
-/// `library_600x900.jpg`. The vertical capsule is the box art; the store
-/// header stands in where a game has none.
+/// proxy, and Steam's CDN has one for every store game. Current clients cache
+/// each asset under its content hash,
+/// `librarycache/<appid>/<sha1>/library_600x900.jpg`, and the CDN serves a
+/// recent game's art under that hash,
+/// `store_item_assets/steam/apps/<appid>/<sha1>/library_600x900.jpg`; an
+/// older game's is also served without the hash, which is all a flat cache
+/// can point at. A hashed asset keeps its cached name on the CDN
+/// (`library_capsule.jpg` stays `library_capsule.jpg`). The vertical capsule
+/// is the box art; the store header stands in where a game has none.
 nonisolated enum SteamArtwork {
-    /// The root the store's per-app assets are served under.
     static let cdn = URL(string: "https://shared.steamstatic.com/store_item_assets/steam/apps/")!
 
-    /// The names the vertical capsule is cached under, in both layouts.
+    /// The vertical capsule's cached names, in both layouts.
     private static let capsuleNames = ["library_600x900.jpg", "library_capsule.jpg"]
 
     /// The URLs the game's box art may be served at, best first: the capsule
     /// under each hash the cache holds it under, by its cached name, the
-    /// capsule without a hash, then the header the same two ways. Which of
-    /// them the CDN answers for is ``cover(appID:cache:session:)``'s to find
-    /// out.
+    /// capsule without a hash, then the header the same two ways.
     static func coverCandidates(appID: Int, cache: URL = SteamBottle.libraryCache) -> [URL] {
         let app = cdn.appendingPathComponent(String(appID))
         let hashed = hashedAssets(appID: appID, cache: cache)
@@ -44,10 +40,8 @@ nonisolated enum SteamArtwork {
     }
 
     /// The first of the game's ``coverCandidates(appID:cache:)`` the CDN
-    /// serves, or `nil` when it serves none. Each is asked with a `HEAD`
-    /// that waits a few seconds at most: this runs between a game's window
-    /// coming up and its status appearing, and a slow network is not worth
-    /// holding the status for.
+    /// serves, or `nil` when it serves none. Each `HEAD` waits 4 s at most:
+    /// this runs between a game's window coming up and its status appearing.
     static func cover(
         appID: Int, cache: URL = SteamBottle.libraryCache, session: URLSession = .shared,
     ) async -> URL? {
@@ -61,8 +55,8 @@ nonisolated enum SteamArtwork {
         return nil
     }
 
-    /// The content-addressed directories in the game's cache, each with the
-    /// asset names it holds, in a stable order.
+    /// The game's content-addressed cache directories with their asset
+    /// names, sorted by hash.
     private static func hashedAssets(appID: Int, cache: URL) -> [(hash: String, names: Set<String>)] {
         let manager = FileManager.default
         let appDirectory = cache.appendingPathComponent(String(appID))

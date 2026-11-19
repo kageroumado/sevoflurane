@@ -3,44 +3,35 @@ import Foundation
 /// Steam's per-game launch options in the form Proton fixes are shared in:
 /// `DXVK_HUD=1 PROTON_USE_WINED3D=1 %command% -windowed`.
 ///
-/// Steam for Linux runs that line through a shell, with `%command%` standing
-/// for the game. The Windows client in the bottle substitutes `%command%` and
-/// starts the first word of the result as the program, so a line with
-/// anything ahead of `%command%` starts a program called `DXVK_HUD=1` and the
-/// game never runs. Sevoflurane takes the words ahead of `%command%` out of
-/// the line: the assignments become the game's own Environment (or the row
-/// that does the same thing here), and Steam keeps the line from `%command%`
-/// on, which it runs as written.
+/// Steam for Linux runs that line through a shell. The bottle's Windows client
+/// substitutes `%command%` and starts the first word as the program, so
+/// anything ahead of `%command%` (a program called `DXVK_HUD=1`) keeps the
+/// game from running. Sevoflurane moves the words ahead of `%command%` into
+/// the game's Environment (or the matching setting), and Steam keeps the line
+/// from `%command%` on.
 nonisolated struct SteamLaunchCommand: Equatable, Sendable {
-    /// One `NAME=value` word, unquoted.
     struct Assignment: Equatable, Sendable {
         let name: String
         let value: String
     }
 
-    /// The assignments ahead of `%command%`, in the order they were written.
+    /// The assignments ahead of `%command%`, in order.
     let assignments: [Assignment]
-    /// The other words ahead of `%command%`: the programs Linux runs the game
-    /// through (`gamemoderun`, `mangohud`, `taskset -c 0-3`), which have no
-    /// meaning in the bottle.
+    /// Linux wrapper programs ahead of `%command%` (`gamemoderun`,
+    /// `mangohud`, `taskset -c 0-3`), which mean nothing in the bottle.
     let wrappers: [String]
-    /// The text Steam keeps: the line from the first `%command%` on, as
-    /// written.
+    /// The line from the first `%command%` on, as written.
     let remainder: String
 
     static let placeholder = "%command%"
 
-    /// The line's words ahead of `%command%`, or `nil` when there is nothing
-    /// to take out: no `%command%`, or `%command%` is the first word. Steam
-    /// handles both of those itself.
+    /// The line's words ahead of `%command%`, or `nil` when there is no
+    /// `%command%` or it is the first word, which Steam handles itself.
     ///
-    /// Words are split the way a POSIX shell splits them: single quotes keep
-    /// everything, double quotes keep everything but `\"`, `\\`, `` \` `` and
-    /// `\$`, a backslash outside quotes keeps the next character, and an
-    /// unclosed quote runs to the end of the line. A word is an assignment
-    /// when its name and `=` stand unquoted ahead of everything else; after
-    /// the first word that is not one, assignments are that program's
-    /// arguments, except after `env`, whose arguments are assignments.
+    /// Words split as in a POSIX shell (an unclosed quote runs to the end of
+    /// the line). A word is an assignment when its name and `=` stand
+    /// unquoted at its start; after the first non-assignment other than
+    /// `env`, the rest are that program's arguments.
     static func parse(_ options: String) -> SteamLaunchCommand? {
         let words = split(options)
         guard let command = words.firstIndex(where: { $0.text == placeholder }), command > 0 else { return nil }
@@ -62,12 +53,11 @@ nonisolated struct SteamLaunchCommand: Equatable, Sendable {
     // MARK: - Words
 
     struct Word: Equatable {
-        /// The word with its quotes and escapes resolved.
+        /// Quotes and escapes resolved.
         var text: String
-        /// Where the word begins in the line.
         let start: String.Index
-        /// The characters ahead of the first quote or escape, which is where
-        /// an assignment's name and `=` have to be.
+        /// The characters ahead of the first quote or escape, where an
+        /// assignment's name and `=` have to be.
         var bare: String
 
         var assignment: Assignment? {
@@ -144,10 +134,10 @@ nonisolated struct SteamLaunchCommand: Equatable, Sendable {
 
     // MARK: - Applying
 
-    /// What the assignments make of a game's own values, and one line per
-    /// word saying where it went. Proton's switches that have a row here set
-    /// that row; every other valid name joins the game's Environment, Proton's
-    /// own names included, since a game or a layer can read them.
+    /// Writes the assignments into a game's values and answers one note per
+    /// word. Proton switches with a setting here set it; every other valid
+    /// name joins the game's Environment, Proton's own names included, since
+    /// a game or a layer can read them.
     func apply(to values: inout ConfigValues) -> [String] {
         var notes: [String] = []
         var table = values.environment ?? [:]
@@ -170,9 +160,9 @@ nonisolated struct SteamLaunchCommand: Equatable, Sendable {
         return notes
     }
 
-    /// Proton's switches with a setting of their own here. `nil` for any
-    /// other name; a switch set to `0` or nothing is off, which is every
-    /// row's default, so it is dropped.
+    /// Applies a Proton switch that has a setting here, or answers `nil`. A
+    /// switch set to `0` or empty is off, every setting's default, so it is
+    /// dropped.
     private static func applyProtonSwitch(_ assignment: Assignment, to values: inout ConfigValues) -> String? {
         let on = !assignment.value.isEmpty && assignment.value != "0"
         switch assignment.name {
@@ -193,10 +183,9 @@ nonisolated struct SteamLaunchCommand: Equatable, Sendable {
 // MARK: - Taking the line apart for Steam
 
 nonisolated extension SteamLaunchCommand {
-    /// The app id a `RunGame` or `SetAppLaunchOptions` call names, when it is
-    /// a Steam app's: the first argument, a number or its text. A non-Steam
-    /// shortcut's 64-bit game id and an adopted program's id name no launch
-    /// options this reads.
+    /// The Steam app id in a `RunGame` or `SetAppLaunchOptions` call's first
+    /// argument; `nil` for a shortcut's 64-bit game id or an adopted
+    /// program's id.
     static func appID(inArguments arguments: [Any]?) -> Int? {
         guard let first = arguments?.first else { return nil }
         let id = (first as? NSNumber)?.intValue ?? Int("\(first)")
@@ -204,9 +193,9 @@ nonisolated extension SteamLaunchCommand {
         return id
     }
 
-    /// Moves the words ahead of `%command%` into the game's own settings and
-    /// answers the line Steam keeps, with one note per word; `nil` when the
-    /// line is Steam's to run as it is.
+    /// Moves the words ahead of `%command%` into the game's settings and
+    /// answers the line Steam keeps with one note per word; `nil` when the
+    /// line needs no change.
     static func adopt(
         _ options: String, appID: Int, bottle: String, prefix: URL,
     ) -> (remainder: String, notes: [String])? {
@@ -218,9 +207,8 @@ nonisolated extension SteamLaunchCommand {
         return (command.remainder, notes)
     }
 
-    /// A script for the client's own context that answers an app's launch
-    /// options, or `null` when Steam has no details for it within five
-    /// seconds.
+    /// A client-context script answering an app's launch options, or `null`
+    /// after 5 s without details.
     static func readScript(appID: Int) -> String {
         """
         new Promise(function (resolve) {
@@ -239,8 +227,6 @@ nonisolated extension SteamLaunchCommand {
         """
     }
 
-    /// A script for the client's own context that stores an app's launch
-    /// options.
     static func storeScript(appID: Int, options: String) -> String {
         "SteamClient.Apps.SetAppLaunchOptions(\(appID), \(JSLiteral.string(options))); \"stored\""
     }

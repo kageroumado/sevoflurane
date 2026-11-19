@@ -1,13 +1,10 @@
 import Foundation
 
-/// Valve's text KeyValues, the format of `config.vdf`, `appmanifest_*.acf`
-/// and the compatibility tool files: quoted keys, quoted values, braces for
-/// tables, `//` comments.
-///
-/// Read into a tree for lookups, and as tokens with their ranges for an edit
-/// that must leave the rest of a file byte for byte as Steam wrote it.
+/// Valve's text KeyValues (`config.vdf`, `appmanifest_*.acf`, the compat tool
+/// files), read as a tree for lookups, or as ranged tokens for an edit that
+/// must leave the rest of the file byte for byte as Steam wrote it.
 nonisolated enum TextKeyValues {
-    /// A value: a string, or a table of keyed values in file order.
+    /// A string, or a table of keyed values in file order.
     indirect enum Node: Equatable {
         case string(String)
         case table([(key: String, value: Node)])
@@ -26,7 +23,6 @@ nonisolated enum TextKeyValues {
             return entries.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }?.value
         }
 
-        /// The value at a path of keys.
         func at(_ path: [String]) -> Node? {
             path.reduce(Optional(self)) { node, key in node?[key] }
         }
@@ -40,7 +36,6 @@ nonisolated enum TextKeyValues {
         }
     }
 
-    /// One token and where it sits in the text.
     struct Token: Equatable {
         enum Kind: Equatable {
             /// A quoted or bare string, unescaped.
@@ -50,7 +45,7 @@ nonisolated enum TextKeyValues {
         }
 
         let kind: Kind
-        /// The token's characters in the text, quotes included.
+        /// Quotes included.
         let range: Range<String.Index>
     }
 
@@ -103,8 +98,8 @@ nonisolated enum TextKeyValues {
         }
     }
 
-    /// The text as a tree: the root table holds the file's top-level keys.
-    /// `nil` for text whose braces do not balance.
+    /// The text as a tree rooted at the file's top-level keys; `nil` when
+    /// braces do not balance.
     static func parse(_ text: String) -> Node? {
         var stack: [[(key: String, value: Node)]] = [[]]
         var keys: [String] = []

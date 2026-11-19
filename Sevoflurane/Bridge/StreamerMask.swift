@@ -3,25 +3,24 @@ import Foundation
 /// The page half of ``StreamerMode``: a script that masks the signed-in
 /// account in every Steam window while the mode is on.
 ///
-/// It runs in the served `index.html`, where Steam's whole UI lives and every
-/// popup renders from, and as a user script in each store and community web
-/// view. It learns the account at runtime — the persona name, the account
-/// name and the avatar hash from Steam's own stores, and in a web page from
-/// its header — and rewrites text, attributes and avatar images to the chosen
-/// name and picture, keeping up with a `MutationObserver` and a short poll for
-/// what the stores learn later. Each friend and group-chat member becomes an
-/// AI model with a monogram picture; an in-game one plays that model's
-/// favorite game. The wallet balance, pending balance included, is removed in
-/// whatever currency the client formats it.
+/// It runs in the served `index.html`, where Steam's whole UI and every popup
+/// render, and as a user script in each store and community web view. It
+/// learns the account at runtime (persona name, account name and avatar hash
+/// from Steam's stores, or from a web page's header) and rewrites text,
+/// attributes and avatar images to the chosen name and picture, following
+/// changes with a `MutationObserver` and a 400 ms poll for what the stores
+/// learn later. Each friend and group-chat member becomes an AI model with a
+/// monogram picture; an in-game one plays that model's favorite game. The
+/// wallet balance, pending balance included, is removed in whatever currency
+/// the client formats it.
 nonisolated enum StreamerMask {
-    /// The `<script>` element for the served page's `<head>`, or nothing while
+    /// The `<script>` element for the served page's `<head>`, empty while
     /// the mode is off.
     static func headTag(for settings: StreamerMode.Settings) -> String {
         guard let script = script(for: settings) else { return "" }
         return "<script>\(script)</script>"
     }
 
-    /// The script for these settings, or `nil` while the mode is off.
     static func script(for settings: StreamerMode.Settings) -> String? {
         guard settings.isOn else { return nil }
         let known = settings.knownNames.map(JSLiteral.inlineString).joined(separator: ",")
@@ -32,10 +31,9 @@ nonisolated enum StreamerMask {
             + "})();\n"
     }
 
-    /// Everything after the settings. Each friend is named from `ROSTER` in
-    /// the order the friends list shows them — in game first, then online,
-    /// then offline, then group-chat members who are not friends — and a
-    /// roster that runs out starts again with a number after the name.
+    /// Everything after the settings. Friends take `ROSTER` names in the
+    /// friends list's order (in game, online, offline, then non-friend chat
+    /// members), with a number appended once the roster runs out.
     private static let body = #"""
     const ROSTER=["Claude","ChatGPT","Gemini","Grok","DeepSeek","Llama","Mistral","Qwen","Copilot","Kimi","Perplexity",
      "Claude Opus","Claude Sonnet","Claude Haiku","GPT-5","o3","Codex","Gemini Flash","Gemma","Meta AI","Le Chat",

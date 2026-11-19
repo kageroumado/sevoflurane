@@ -1,11 +1,10 @@
 import Foundation
 import os
 
-/// The page↔client bridge: serves Steam's own UI bundle with the
-/// `SteamClient` shim injected, replays shim calls into the real
-/// `SharedJSContext` over CDP, relays the protobuf transport around CDP, and
-/// answers `/__eval`. One instance, owned by the app, running for its
-/// lifetime.
+/// The page↔client bridge: serves Steam's UI bundle with the `SteamClient`
+/// shim injected, replays shim calls into the real `SharedJSContext` over
+/// CDP, relays the protobuf transport around CDP, and answers `/__eval`.
+/// One instance for the app's lifetime.
 actor SteamBridge {
     nonisolated enum WSMessage: Sendable {
         case text(String)
@@ -16,8 +15,7 @@ actor SteamBridge {
     final class PageSession {
         let ws: WSConnection
         let tunnel: AsyncStream<String>.Continuation
-        /// Distinguishes this page's call ids from another page's: every
-        /// shim counts from one.
+        /// Namespaces this page's call ids; every shim counts from one.
         let serial: Int
         var tasks: [Task<Void, Never>] = []
 
@@ -33,11 +31,9 @@ actor SteamBridge {
     private var pageServer: WebSocketServer?
     private var relayServer: WebSocketServer?
 
-    /// One `Register*` call's handle: the page that made it and the callback
-    /// ids minted for it, so both are released when the handle is used or
-    /// the page goes away. Pending from the moment the call is forwarded;
-    /// active once the client's reply says the handle is retained in
-    /// `__sevoRet`. Absent means unregistered.
+    /// One `Register*` call's owner and callback ids. Pending once forwarded,
+    /// active once the client retains the handle in `__sevoRet`; absent means
+    /// unregistered.
     struct Registration {
         enum State {
             case pending
@@ -50,79 +46,64 @@ actor SteamBridge {
     }
 
     var cdp: CDPClient?
-    /// The connection attempt in flight, owned here: every ``ensureCDP()``
-    /// caller waits on the same one, and a waiter's cancellation ends only
-    /// its own wait.
+    /// The connection attempt every ``ensureCDP()`` caller waits on; a
+    /// waiter's cancellation ends only its own wait.
     private var cdpTask: Task<Void, Never>?
     private var connectWaiters: [Int: CheckedContinuation<CDPClient, any Error>] = [:]
     private var connectWaiterSeq = 0
     var pages: [ObjectIdentifier: PageSession] = [:]
-    /// The transport socket owned by SharedJSContext.
     var relay: WSConnection?
-    /// Tunnel commands that arrived before the relay opened; resumed by
-    /// ``attachRelay(_:queue:)`` or expired by their own timeout task.
+    /// Tunnel commands waiting for the relay, resumed when it opens or by
+    /// their timeout.
     private var relayWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
     private var relayWaiterSeq = 0
-    /// Tunnel id → the page that opened it.
     var tunnelOwner: [String: ObjectIdentifier] = [:]
-    /// Callback id → the page that registered it.
     var callbackOwner: [String: ObjectIdentifier] = [:]
-    /// Registration handle (page serial and call id, the key in the client's
-    /// `__sevoRet`) → its ``Registration``.
+    /// Keyed by `<page serial>_<call id>`, the key in the client's
+    /// `__sevoRet`.
     var registrations: [String: Registration] = [:]
     var pageSerial = 0
     var evalPending: [String: CheckedContinuation<(ok: Bool, v: String), Never>] = [:]
     var evalTimeouts: [String: Task<Void, Never>] = [:]
-    /// The page each pending eval was sent to, so a page that goes away
-    /// answers its evals at once.
+    /// The page each pending eval went to, so its evals fail when it leaves.
     var evalPage: [String: ObjectIdentifier] = [:]
     private var evalSeq = 0
     /// The most recently attached page. A reload leaves the old session
-    /// registered until its socket closes, and dictionary order could hand
-    /// `/__eval` — and with it the supervisor's health verdict — to the
-    /// stale one.
+    /// registered until its socket closes, so dictionary order could hand
+    /// `/__eval` (and the supervisor's health verdict) to the stale one.
     var newestPage: ObjectIdentifier?
-    /// Loopback paths already reported unanswered, so one broken image does
-    /// not fill the log with the same line.
     var loopbackMisses: Set<String> = []
-    /// Whether the log already says the client is refusing calls as it closes.
     var saidClientIsClosing = false
-    /// The Steam UI bundle version last audited for Chromium-only calls
-    /// (``ChromiumSurface``), so each version is scanned once.
+    /// The Steam UI bundle version last audited (``ChromiumSurface``).
     var auditedBundleVersion: String?
     let shim: String
 
-    /// Fired on `SteamClient.Apps.RunGame` — the one choke point every game
-    /// launch passes through (menu bar, library Play, `steam://run`). The app
-    /// uses it to arm ``GameLaunchWatch``.
+    /// Fired on every `SteamClient.Apps.RunGame`, to arm ``GameLaunchWatch``.
     var onGameLaunch: (@Sendable () -> Void)?
 
     func setGameLaunchHandler(_ handler: @escaping @Sendable () -> Void) {
         onGameLaunch = handler
     }
 
-    /// Awaited before a `RunGame` call reaches the client, with the game id
-    /// the call names: the app readies the launch there
-    /// (``LaunchPreparation``), so the game's first process reads the
-    /// settings its first launch is given.
+    /// Awaited with the game id before a `RunGame` reaches the client
+    /// (``LaunchPreparation``), so the game's first process reads its
+    /// first-launch settings.
     var launchPreparation: (@Sendable (String) async -> Void)?
 
     func setLaunchPreparation(_ prepare: @escaping @Sendable (String) async -> Void) {
         launchPreparation = prepare
     }
 
-    /// Asked before the page opens Steam's install wizard for one game
-    /// (`SteamClient.Installs.OpenInstallWizard`, the library's Install
-    /// button): whether the install goes ahead. The app answers by warning
-    /// about a game known to fail here (``InstallWarning``).
+    /// Asked before `SteamClient.Installs.OpenInstallWizard` for one game
+    /// whether the install goes ahead (``InstallWarning``).
     var installGate: (@Sendable (Int) async -> Bool)?
 
     func setInstallGate(_ gate: @escaping @Sendable (Int) async -> Bool) {
         installGate = gate
     }
 
-    /// Told when the client's transport goes away — the earliest sign of a
-    /// dying client, seconds before the launcher exits.
+    /// Told when the relay drops: the earliest sign of a dying client,
+    /// seconds before the launcher exits.
     private var onClientConnectionLost: (@Sendable () -> Void)?
 
     func setClientConnectionLostHandler(_ handler: @escaping @Sendable () -> Void) {
@@ -132,9 +113,8 @@ actor SteamBridge {
     init() {
         if let url = Bundle.main.url(forResource: "steamclient_shim", withExtension: "js"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
-            // The page port and the proxy's allowlist are templated like the
-            // relay port below, so the shim, BridgePorts, and
-            // WebSessionCookies cannot drift apart.
+            // Templated, so the shim cannot drift from BridgePorts and
+            // WebSessionCookies.
             let hosts = Self.jsonText(WebSessionCookies.domains) ?? "[]"
             shim = text
                 .replacingOccurrences(of: "%PAGE_PORT%", with: String(BridgePorts.pageWS))
@@ -146,25 +126,21 @@ actor SteamBridge {
 
     // MARK: - Lifecycle
 
-    /// Answers whether the listeners came up — a bind failure almost
-    /// always means another copy of the app owns the ports, and the caller
-    /// must say so instead of running half-alive.
+    /// Answers whether the listeners came up; a bind failure almost always
+    /// means another copy of the app owns the ports.
     @discardableResult
     func start() async -> Bool {
         if shim.isEmpty {
             log(.bridge, "steamclient_shim.js missing from the app bundle — UI cannot boot")
         }
         do {
-            // Exclusive: this is the port that says whether another copy of
-            // Sevoflurane owns the app. Two listeners on it means the kernel
-            // decides which process serves Steam's bundle, request by request.
+            // Exclusive: this port decides whether another copy owns the app;
+            // with two listeners the kernel would pick one per request.
             let ui = try HTTPServer(
                 port: BridgePorts.steamUI, gate: .steamUI, exclusive: true,
             ) { [weak self] request in
-                // Static assets never enter the actor: reading Steam's bundle
-                // here would serialize every asset load against CDP dispatch
-                // and the health probe. `/__web`, `/__loopback/`, `/`,
-                // `/index.html` and `/__eval` need actor state.
+                // Static assets stay off the actor, which would serialize them
+                // against CDP dispatch and the health probe.
                 if request.method == "POST", request.path == "/__compat/batch" {
                     return await Self.handleCompatBatchRequest(request)
                 }
@@ -196,8 +172,8 @@ actor SteamBridge {
             }
             art.start()
             artServer = art
-            // Sized for Set Custom Artwork, whose one call carries the whole
-            // image as base64; a hero image runs to several megabytes.
+            // Sized for Set Custom Artwork's base64 image, several MB for a
+            // hero.
             let page = try WebSocketServer(
                 port: BridgePorts.pageWS,
                 label: "page",
@@ -234,7 +210,6 @@ actor SteamBridge {
         EventLog.enqueue(category, message)
     }
 
-    /// Wraps a connection's receive callbacks into one ordered stream.
     nonisolated static func messages(
         of connection: WSConnection, on queue: DispatchQueue,
     ) -> AsyncStream<WSMessage> {
@@ -253,9 +228,8 @@ actor SteamBridge {
 
     // MARK: - CDP
 
-    /// The bottled client's cookie jar, for mirroring its authenticated web
-    /// session into the app's web views (``WebSessionCookies``). Nil when the
-    /// client isn't reachable — the caller renders signed out.
+    /// The bottled client's cookie jar (``WebSessionCookies``); nil when the
+    /// client is unreachable.
     func clientCookies() async -> [SteamWebCookie]? {
         guard let cdp = try? await ensureCDP() else { return nil }
         do {
@@ -266,16 +240,15 @@ actor SteamBridge {
         }
     }
 
-    /// Brings the connection to the client up, and answers once it is — so a
-    /// page is never booted into a bridge that cannot yet reach the client.
+    /// Brings the connection to the client up and answers whether it is.
     @discardableResult
     func waitForClientConnection() async -> Bool {
         await (try? ensureCDP()) != nil
     }
 
-    /// Whether the connection to the client's `SharedJSContext` is open. A
-    /// DevTools server too busy to answer `/json` on a client whose socket is
-    /// still live is slow, not gone, and must not be restarted for it.
+    /// Whether the connection to `SharedJSContext` is open. A client too busy
+    /// to answer `/json` with this socket live is slow, and must not be
+    /// restarted for it.
     func isClientConnected() async -> Bool {
         guard let cdp else { return false }
         return await !cdp.isClosed
@@ -287,36 +260,27 @@ actor SteamBridge {
     /// `scope` decides which: `.everything` for the stop path and the
     /// supervisor's cycle, `.twins` for a sweep that came for one window and
     /// must leave the client's install dialogs, sign-in window and
-    /// game-named popups where they are (``SteamWindowRole/twinRoles``). The
-    /// names are matched in the page, so a narrowed sweep is still one round
-    /// trip.
-    ///
-    /// The client's CEF windows exist to keep Steam's JS running — rendering
-    /// is this app's job, and the page mirrors every popup natively
-    /// (``SteamWebHost/adoptPopup(configuration:features:)``). The client
-    /// still shows its own window when it decides UI is needed — the
-    /// first-run login window above all, which OSS Wine paints as a black
-    /// rectangle. Each visible popup is put away through its own
-    /// `SteamClient.Window` binding, the same call the client uses to keep
-    /// that window parked when signed in, so the popup's JS stays alive and
-    /// only the pixels go.
-    ///
-    /// The popups are reached the way the page reaches its own: through
-    /// `g_PopupManager.m_mapPopups`, a name → record map whose `m_popup` is
-    /// the window. Membership in that map is what makes a window a client
-    /// popup, and `SharedJSContext` is the page doing the walking, so it is
-    /// excluded by identity.
-    ///
-    /// The window's own URL is not the discriminator it looks like: measured
-    /// against the running client, every popup's `location.href` reads back
-    /// as its opener's `https://steamloopback.host/index.html?…`, never the
-    /// `about:blank` the DevTools target list shows.
-    ///
-    /// Answers the names it hid, or nil when the bridge holds no connection
-    /// — the caller's cue that no sweep happened.
-    ///
+    /// game-named popups where they are (``SteamWindowRole/twinRoles``).
     /// `sparing` names the popups a launch in flight is waiting on, which
-    /// stay where they are whatever the scope (``PopupSparing``).
+    /// stay whatever the scope (``PopupSparing``).
+    ///
+    /// The client's CEF windows exist to keep Steam's JS running; the page
+    /// mirrors every popup natively
+    /// (``SteamWebHost/adoptPopup(configuration:features:)``). The client
+    /// still shows its own window when it decides UI is needed, the first-run
+    /// login window above all, which OSS Wine paints as a black rectangle.
+    /// Each visible popup is put away through its own `SteamClient.Window`
+    /// binding, the call the client uses to keep that window parked when
+    /// signed in, so the popup's JS stays alive.
+    ///
+    /// Popups are found through `g_PopupManager.m_mapPopups`, a name → record
+    /// map whose `m_popup` is the window; `SharedJSContext` itself is excluded
+    /// by identity. A popup's URL cannot tell them apart: every popup's
+    /// `location.href` reads back as its opener's
+    /// `https://steamloopback.host/index.html?…`, never the `about:blank` the
+    /// DevTools target list shows.
+    ///
+    /// Answers the names it hid, or nil when the bridge holds no connection.
     func hideVisibleClientPopups(
         _ scope: PopupSweepScope = .everything, sparing: PopupSparing = .none,
     ) async -> [String]? {
@@ -328,20 +292,17 @@ actor SteamBridge {
         return (hidden ?? "").split(separator: "\n").map(String.init)
     }
 
-    /// Asks the client to end a game the way its own Stop button does, on the
-    /// connection the bridge already holds. Sent for a run whose process is gone
-    /// while Steam still lists it: the call clears the entry, and a later launch
-    /// is answered again rather than dropped.
+    /// Asks the client to end a game the way its own Stop button does, for a
+    /// run whose process is gone while Steam still lists it: the call clears
+    /// the entry, so a later launch is answered instead of dropped.
     ///
     /// `gameID` is Steam's game id: the app id for a Steam game, the 64-bit id
     /// for a shortcut (``SteamShortcuts/gameID(shortcutID:)``).
     ///
-    /// Straight over CDP rather than through the page's forward path, which
-    /// records a stop request and would turn the run's record into a stop the
-    /// user never asked for.
+    /// Sent straight over CDP: the page's forward path records a stop request,
+    /// which would label the run as stopped by the user.
     ///
-    /// Answers whether the client took the call. False when the bridge holds no
-    /// connection or the call did not return in time.
+    /// Answers whether the client took the call within the CDP call cap.
     func terminateApp(gameID: String) async -> Bool {
         guard let cdp, await !cdp.isClosed else { return false }
         let answer = try? await withDeadline(ClientLifecycle.cdpCallCap) {
@@ -352,24 +313,20 @@ actor SteamBridge {
         return answer != nil
     }
 
-    /// Runs a script in the client's `SharedJSContext` on the connection the
-    /// bridge already holds, and answers its value once a promise it returns
-    /// settles. Nil when the bridge holds no connection, the script threw or
-    /// answered null, or it ran past `cap`.
+    /// Runs a script in `SharedJSContext` and answers its settled value; nil
+    /// without a connection, on a throw or null, or past `cap`.
     func evaluateInClient(_ script: String, cap: Duration = ClientLifecycle.cdpCallCap) async -> String? {
         guard let cdp, await !cdp.isClosed else { return nil }
         let answer = try? await withDeadline(cap) { try await cdp.evaluate(script) }
         return answer ?? nil
     }
 
-    /// The sweep, with the names it may hide compiled in.
-    ///
-    /// A twin sweep carries ``SteamWindowRole``'s own table rather than a
-    /// second copy of it in JavaScript: `exact` names are whole bases and
-    /// `starts` are the families Steam numbers per instance, both matched
-    /// against the part of the name before its `_uid<pid>` suffix. The whole
-    /// table travels as `knownExact` and `knownStarts` for the sparing, which
-    /// keeps a desktop-UI popup the table cannot name.
+    /// The sweep, with the names it may hide compiled in from
+    /// ``SteamWindowRole``'s table: `exact` names are whole bases and `starts`
+    /// are the families Steam numbers per instance, both matched against the
+    /// part of the name before its `_uid<pid>` suffix. The whole table travels
+    /// as `knownExact` and `knownStarts` for the sparing, which keeps a
+    /// desktop-UI popup the table cannot name.
     nonisolated static func popupHideScript(_ scope: PopupSweepScope, sparing: PopupSparing = .none) -> String {
         let names = scope == .twins ? SteamWindowRole.twinNames : nil
         func list(_ names: [SteamWindowRole.NameMatch]?, _ keep: (SteamWindowRole.NameMatch) -> String?) -> String {
@@ -432,14 +389,12 @@ actor SteamBridge {
         """
     }
 
-    /// Asks the client's own SharedJSContext once whether
-    /// `GetServicesInitialized()` is true. Steam's UI checks services once at
-    /// boot, so a page booted before they are ready never picks them up and
-    /// the supervisor holds the page back until this answers true.
+    /// Asks the client's SharedJSContext whether `GetServicesInitialized()` is
+    /// true. Steam's UI checks services once at boot, so the supervisor holds
+    /// the page back until this answers true.
     ///
-    /// Nil when the client cannot be reached at all — a closed socket answers
-    /// immediately rather than burning a timeout, so the caller's own cycle
-    /// decides what a client that stopped answering means.
+    /// Nil when the client cannot be reached; a closed socket answers at once,
+    /// so the caller's own cycle decides what a silent client means.
     func clientServicesReady() async -> Bool? {
         guard let cdp = try? await ensureCDP(), await !cdp.isClosed else { return nil }
         let answer = try? await withDeadline(.seconds(10)) {
@@ -451,7 +406,7 @@ actor SteamBridge {
         return answer.contains("true")
     }
 
-    /// Discovery, the handshake, and the codec and tunnel installs together.
+    /// For discovery, the handshake, and the codec and tunnel installs.
     static let connectBudget: Duration = .seconds(30)
 
     func ensureCDP() async throws -> CDPClient {
@@ -464,8 +419,8 @@ actor SteamBridge {
         cdpTask = Task { [weak self] in
             let connect = PerfProbe.bridge.beginInterval("CDPConnect")
             defer { PerfProbe.bridge.endInterval("CDPConnect", connect) }
-            // Re-captured: the outer `weak self` is a mutable box, which a
-            // @Sendable closure may not reference; its own capture is a copy.
+            // Re-captured: a @Sendable closure may not reference the outer
+            // `weak self` box.
             let client = CDPClient(onPush: { [weak self] payload in
                 await self?.deliverCallback(payload)
             })
@@ -499,10 +454,9 @@ actor SteamBridge {
         }
     }
 
-    /// Waits for the attempt in flight. Cancelling the caller resumes only
-    /// its own continuation; the attempt runs on for the other waiters. Same
-    /// shape as `CDPClient.send`: the insertion runs synchronously on this
-    /// actor, so the cancellation task cannot find the key before it exists.
+    /// Waits for the attempt in flight; cancelling resumes only this waiter.
+    /// The insertion runs synchronously on this actor, so the cancellation
+    /// task cannot look for the key before it exists.
     private func awaitConnection() async throws -> CDPClient {
         connectWaiterSeq += 1
         let key = connectWaiterSeq
@@ -520,9 +474,8 @@ actor SteamBridge {
         connectWaiters.removeValue(forKey: key)?.resume(throwing: CancellationError())
     }
 
-    /// Routes one `__sevo` binding push: a callback names a function inside
-    /// one page, and delivering it anywhere else would run the wrong page's
-    /// handler on this page's data. A callback whose page is gone is dropped.
+    /// Routes one `__sevo` binding push to the page that owns its callback,
+    /// dropping it when that page is gone.
     private func deliverCallback(_ payload: String) {
         guard let message = Self.jsonObject(payload),
               message["type"] as? String == "sc_callback",
@@ -535,7 +488,7 @@ actor SteamBridge {
     // MARK: - Transport relay
 
     /// A connection becomes the relay on its first message, the tunnel
-    /// script's hello, the same way a page does (``attachPage(_:queue:)``).
+    /// script's hello.
     private func attachRelay(_ ws: WSConnection, queue: DispatchQueue) {
         let stream = Self.messages(of: ws, on: queue)
         Task { [weak self] in
@@ -560,8 +513,7 @@ actor SteamBridge {
         }
     }
 
-    /// Makes `ws` the relay. The one it replaces is closed: its tunnels are
-    /// owned by a socket nothing routes to any more.
+    /// Makes `ws` the relay and closes the one it replaces.
     private func promoteRelay(_ ws: WSConnection) {
         if let previous = relay, previous !== ws { previous.close() }
         relay = ws
@@ -572,7 +524,6 @@ actor SteamBridge {
         log(.bridge, "relay: SharedJSContext connected")
     }
 
-    /// Control messages are JSON; the tunnel id names the owning page.
     private func relayControl(_ raw: String) {
         guard let message = Self.jsonObject(raw),
               let tid = message["id"] as? String else { return }
@@ -588,7 +539,6 @@ actor SteamBridge {
         }
     }
 
-    /// Frames are the tunnel id length-prefixed onto the payload.
     private func relayFrame(_ data: Data) {
         guard let first = data.first else { return }
         let idLength = Int(first)
@@ -609,9 +559,7 @@ actor SteamBridge {
         }
     }
 
-    /// Waits for the relay (it opens moments after CDP): resumed exactly when
-    /// ``attachRelay(_:queue:)`` runs, or by the timeout for a client that
-    /// never opens one.
+    /// Waits for the relay, which opens moments after CDP, up to `timeout`.
     private func awaitRelay(timeout: Duration = .seconds(10)) async -> WSConnection? {
         if let relay { return relay }
         relayWaiterSeq += 1
@@ -629,7 +577,6 @@ actor SteamBridge {
         relayWaiters.removeValue(forKey: id)?.resume()
     }
 
-    /// Forwards one tunnel command from a page to the relay.
     func relaySend(_ raw: String, from id: ObjectIdentifier) async {
         guard let relay = await awaitRelay(), let request = Self.jsonObject(raw) else {
             log(.bridge, "tunnel: no relay; dropping command")
@@ -639,7 +586,6 @@ actor SteamBridge {
         guard let tid = request["id"] as? String else { return }
         switch cmd {
         case "ws_open":
-            // A binary frame carries the id behind a one-byte length.
             guard tid.utf8.count <= Int(UInt8.max) else {
                 log(.bridge, "tunnel: refused an id longer than \(UInt8.max) bytes")
                 pages[id]?.ws.send(text: #"{"type":"ws_event","id":\#(Self.jsonText(tid) ?? "\"?\""),"#
@@ -667,8 +613,8 @@ actor SteamBridge {
         }
     }
 
-    /// One binary relay frame: the tunnel id behind its one-byte length, then
-    /// the payload. Nil for an id too long to prefix.
+    /// One binary relay frame: a one-byte id length, the tunnel id, then the
+    /// payload. Nil for an id over 255 bytes.
     nonisolated static func frame(tid: String, payload: Data) -> Data? {
         guard let length = UInt8(exactly: tid.utf8.count) else { return nil }
         var frame = Data([length])
@@ -679,9 +625,8 @@ actor SteamBridge {
 
     // MARK: - /__eval
 
-    /// Evaluates an expression in the (one) connected page — the app's
-    /// context page. This is the programmatic Web Inspector: the only other
-    /// channel into the app's DOM is Safari's, by hand.
+    /// Evaluates an expression in the app's context page: the programmatic
+    /// Web Inspector.
     func evaluateInPage(_ expr: String) async -> (ok: Bool, v: String) {
         guard let pageID = newestPage.flatMap({ pages[$0] == nil ? nil : $0 }) ?? pages.keys.first,
               let session = pages[pageID] else {
@@ -714,7 +659,6 @@ actor SteamBridge {
         finishEval(eid, with: (false, "\"eval timed out\""))
     }
 
-    /// Answers a pending eval without its page, and forgets it.
     func finishEval(_ eid: String, with outcome: (ok: Bool, v: String)) {
         evalTimeouts.removeValue(forKey: eid)?.cancel()
         evalPage.removeValue(forKey: eid)
@@ -727,7 +671,7 @@ actor SteamBridge {
         try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
     }
 
-    /// JSON-encodes any JSON-representable value (fragments included).
+    /// JSON text for any JSON-representable value, fragments included.
     nonisolated static func jsonText(_ value: Any?) -> String? {
         guard let value, !(value is NSNull) else { return "null" }
         guard let data = try? JSONSerialization.data(

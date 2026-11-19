@@ -16,10 +16,9 @@ extension SteamBridge {
         if request.path == "/" || request.path == "/index.html" {
             if !request.query.contains("IN_CLIENT") {
                 // The bundle configures itself from location.search: without
-                // IN_CLIENT=true its own WebSocket transport Init() bails
-                // before SetDefaultTransport, every service call queues
-                // forever, and without USE_POPUPS=true no window is ever
-                // opened. Mirror the real SharedJSContext's params verbatim.
+                // IN_CLIENT=true every service call queues forever, and
+                // without USE_POPUPS=true no window opens. Mirror the real
+                // SharedJSContext's params verbatim.
                 do {
                     return try await .redirect(to: "/index.html" + liveSearch())
                 } catch {
@@ -31,15 +30,10 @@ extension SteamBridge {
         return Self.serveFile(under: SteamBottle.steamui, path: request.path)
     }
 
-    /// The real SharedJSContext's query string (IN_CLIENT, USE_POPUPS,
-    /// CLIENT_SESSION, …), fetched live because CLIENT_SESSION and the
-    /// transport ports change on every client restart.
-    ///
-    /// SILENT_STARTUP is kept — the bottle client is launched with `-silent`
-    /// and the page is told the same, so Steam's UI creates its desktop
-    /// window Hidden and leaves it that way. This app is a menu-bar app: the
-    /// window belongs on screen when someone asks for it, and `showSteam`
-    /// routes and shows it then.
+    /// The real SharedJSContext's query string, fetched live because
+    /// CLIENT_SESSION and the transport ports change on every client restart.
+    /// SILENT_STARTUP stays, matching the client's `-silent` launch, so Steam's
+    /// UI creates its desktop window hidden until `showSteam` shows it.
     private func liveSearch() async throws -> String {
         let cdp = try await ensureCDP()
         let search = try await cdp.evaluate("location.search") ?? ""
@@ -54,10 +48,9 @@ extension SteamBridge {
         guard let html = try? String(contentsOf: indexURL, encoding: .utf8) else {
             return .error(404, "steamui/index.html not found in the bottle")
         }
-        // The shim must mirror the real client's shape: the desktop client
-        // lacks whole namespaces the Deck has (System.Audio, …) and the UI
-        // feature-detects them. A Proxy that answers every property makes the
-        // UI call methods that do not exist.
+        // The shim mirrors the real client's shape: the UI feature-detects
+        // Deck-only namespaces (System.Audio, …), so a Proxy answering every
+        // property makes it call methods that do not exist.
         var shape = "{}"
         if let cdp = try? await ensureCDP(),
            let snapshot = try? await cdp.evaluate(BridgeJS.shape) {
@@ -72,8 +65,7 @@ extension SteamBridge {
         }
         let body = html.replacingCharacters(in: range, with: injected)
         auditChromiumSurface()
-        // The shim is injected here and edited constantly; a cached copy of
-        // this document silently pins an old one.
+        // A cached copy of this document would pin an old shim.
         return .ok(
             Data(body.utf8),
             type: "text/html; charset=utf-8",
@@ -81,10 +73,8 @@ extension SteamBridge {
         )
     }
 
-    /// Scans a bundle version the bridge has not served before for calls to
-    /// Chromium-only APIs the shim does not supply, and logs each one. Steam
-    /// updates its UI on its own; this is where a new dependency on Chromium
-    /// shows up before the window that needs it breaks.
+    /// Logs each unguarded call to a Chromium-only API the shim does not
+    /// supply, once per Steam UI bundle version.
     private func auditChromiumSurface() {
         let bundle = SteamBottle.steamui
         let main = bundle.appendingPathComponent("sp.js")
@@ -109,10 +99,8 @@ extension SteamBridge {
     // MARK: - Mac compatibility
 
     /// `GET /__compat/<appid>?name=<display name>&deck=<category>`: the
-    /// community databases' verdicts for one game, as the page's strip reads
-    /// them (``SteamCompatBadge``). Name and Deck category come from the
-    /// page because the client already holds both; the sources are keyed on
-    /// the app id and, for the wiki, on the title.
+    /// community databases' verdicts for one game (``SteamCompatBadge``).
+    /// The page supplies name and Deck category, which the client holds.
     nonisolated static func handleCompatRequest(_ request: HTTPRequest) async -> HTTPResponse {
         let id = String(request.path.dropFirst("/__compat/".count)).prefix(while: { $0 != "." })
         guard let appID = Int(id) else { return .error(404, "Not Found") }
@@ -123,10 +111,9 @@ extension SteamBridge {
         return .ok(body, type: "application/json", headers: [("Cache-Control", "no-store")])
     }
 
-    /// `POST /__compat/batch` with `{"apps": [[appid, "name"], …]}`: the
-    /// library's verdicts for every game in it at once, compact
-    /// (``GameCompatBatch/answer(_:pending:macBuilds:)``), for the badges on its rows
-    /// and tiles and the "Plays on Mac" filter (``SteamLibraryCompat``).
+    /// `POST /__compat/batch` with `{"apps": [[appid, "name"], …]}`: compact
+    /// verdicts for the whole library
+    /// (``GameCompatBatch/answer(_:pending:macBuilds:)``, ``SteamLibraryCompat``).
     nonisolated static func handleCompatBatchRequest(_ request: HTTPRequest) async -> HTTPResponse {
         let games = GameCompatBatch.games(fromRequest: request.body)
         let (summaries, pending) = await GameCompatService.shared.summaries(for: games)
@@ -138,13 +125,11 @@ extension SteamBridge {
     }
 
     /// How long the native-build answer waits for the compatibility record
-    /// its hints come from. The game page asked for the record already, so
-    /// it is usually on disk; past this the hints read as unrated.
+    /// (usually on disk already); past this the hints read as unrated.
     private static let nativeRecordPatience: Duration = .seconds(3)
 
-    /// `GET /__native/<appid>?name=<display name>`: the choice between the
-    /// game's macOS and Windows builds as the game page offers it
-    /// (``NativeBuildInfo``, ``SteamNativeBuilds``).
+    /// `GET /__native/<appid>?name=<display name>`: ``NativeBuildInfo`` for
+    /// the game page (``SteamNativeBuilds``).
     nonisolated static func handleNativeBuildRequest(_ request: HTTPRequest) async -> HTTPResponse {
         let id = String(request.path.dropFirst("/__native/".count)).prefix(while: { $0 != "." })
         guard let appID = Int(id) else { return .error(404, "Not Found") }
@@ -166,8 +151,7 @@ extension SteamBridge {
 
     // MARK: - Steam's web properties
 
-    /// `GET /__web?u=<absolute URL>`: one Steam web page or document, fetched
-    /// here so the page reads it same-origin. See ``WebProxy``.
+    /// `GET /__web?u=<absolute URL>` (``WebProxy``).
     func handleWebRequest(_ request: HTTPRequest) async -> HTTPResponse {
         switch WebProxy.target(method: request.method, query: request.query) {
         case let .failure(rejection):
@@ -181,9 +165,8 @@ extension SteamBridge {
 
     // MARK: - The client's own origin
 
-    /// `GET /__loopback/<path>`: what the client's own origin used to serve.
-    /// Static assets come out of the Steam install; the paths CEF synthesizes
-    /// exist only inside the client, so they are fetched there.
+    /// `GET /__loopback/<path>`: static assets from the Steam install, and
+    /// the paths CEF synthesizes fetched from inside the client.
     func handleLoopbackRequest(_ request: HTTPRequest) async -> HTTPResponse {
         guard request.method == "GET" || request.method == "HEAD" else {
             return .error(405, "Method \(request.method) Not Allowed")
@@ -202,10 +185,8 @@ extension SteamBridge {
         return response
     }
 
-    /// One synthetic client path, read inside SharedJSContext and handed back
-    /// as bytes. The client answers these from memory — a window's icon, an
-    /// overlay's thumbnail, a recording's timeline — so there is nothing on
-    /// disk to serve and no second origin to fetch them from.
+    /// One synthetic client path, fetched inside SharedJSContext and handed
+    /// back as bytes: the client answers these from memory.
     private func fetchFromClient(_ target: String) async -> HTTPResponse {
         guard let cdp = try? await ensureCDP() else {
             noteLoopbackMiss(target, "the client is not reachable")
@@ -237,12 +218,10 @@ extension SteamBridge {
         return .ok(asset.body, type: asset.type, headers: [("Cache-Control", "no-store")])
     }
 
-    /// The largest asset read back out of the client. A data URL crosses CDP
-    /// as one JSON string, so a recording's video segments land well over it
-    /// and take the logged 404 — which is the point: the log then names what a
-    /// playtest actually asked for. A screenshot is one image the page shows
-    /// whole, at the game's full resolution, so it gets the room for one:
-    /// 32 MB, which base64 grows to ~43 MB, inside CDPClient's 64 MB message.
+    /// The largest asset read back out of the client, since a data URL
+    /// crosses CDP as one JSON string; larger ones (a recording's video
+    /// segments) take a logged 404. A full-resolution screenshot gets 32 MB,
+    /// ~43 MB as base64, inside CDPClient's 64 MB message.
     private static func clientAssetCap(for target: String) -> Int {
         target.hasPrefix("/screenshots/") ? 32 * 1024 * 1024 : 4 * 1024 * 1024
     }
@@ -257,9 +236,8 @@ extension SteamBridge {
         return (type.isEmpty ? "application/octet-stream" : type, body)
     }
 
-    /// Names each loopback path the bridge could not answer, once. The set of
-    /// endpoints Steam's UI reaches for is only observable by watching it run,
-    /// and a repeat of the same miss says nothing the first line did not.
+    /// Logs each loopback path the bridge could not answer, once, up to
+    /// ``loopbackMissCap``.
     private func noteLoopbackMiss(_ path: String, _ why: String) {
         guard loopbackMisses.count < Self.loopbackMissCap,
               loopbackMisses.insert(path).inserted else { return }
@@ -270,14 +248,12 @@ extension SteamBridge {
 
     // MARK: - Custom art
 
-    /// Where Steam's UI asks for the art a person set on a game: a path
-    /// relative to its own origin, `/customimages/<appid><suffix>.<ext>`,
-    /// plus `<appid>.json` for the logo's placement.
+    /// Where Steam's UI asks for a game's custom art,
+    /// `/customimages/<appid><suffix>.<ext>`, plus `<appid>.json` for the
+    /// logo's placement.
     nonisolated static let customImagesPrefix = "/customimages/"
 
-    /// `GET /customimages/<file>`: what CEF serves from the signed-in
-    /// account's grid folder. Unanswered, the library's image falls through
-    /// to Steam's stock art and a custom logo or hero never shows.
+    /// `GET /customimages/<file>`, from the signed-in account's grid folder.
     nonisolated static func handleCustomImageRequest(_ request: HTTPRequest) -> HTTPResponse {
         guard let grid = SteamBottle.customArtwork else { return .error(404, "Not Found") }
         return serveFile(under: grid, path: String(request.path.dropFirst(customImagesPrefix.count)))
@@ -305,22 +281,16 @@ extension SteamBridge {
             + "steam/apps/\(appid)/library_600x900.jpg")
     }
 
-    /// The names the vertical capsule is written under: clients write either
-    /// `library_600x900.jpg` or `library_capsule.jpg`. Both hold the same 2:3
-    /// art and one library mixes them freely.
+    /// The vertical capsule's names; both hold the same 2:3 art and one
+    /// library mixes them.
     private nonisolated static let capsuleNames = [
         "library_600x900.jpg", "library_capsule.jpg",
     ]
 
-    /// The vertical capsule from the client's own library cache.
-    ///
-    /// Two layouts coexist: the flat `<appid>/<name>` older clients wrote, and
-    /// the content-addressed `<appid>/<sha1>/<name>` current ones write. The
-    /// asset keeps its name inside the hash directory, so one level of
-    /// enumeration finds it without a name→asset index. Both ``capsuleNames``
-    /// are tried in each layout. Worth the lookup because the CDN serves no
-    /// capsule at all for age-gated titles — an adult game shows a blank tile
-    /// if this misses.
+    /// The vertical capsule from the client's library cache, flat
+    /// (`<appid>/<name>`) or content-addressed (`<appid>/<sha1>/<name>`). The
+    /// CDN serves no capsule for age-gated titles, so a miss here is a blank
+    /// tile for them.
     private nonisolated static func cachedCapsule(appid: String) -> Data? {
         let appDirectory = SteamBottle.libraryCache.appendingPathComponent(appid)
         for name in capsuleNames {
@@ -358,15 +328,12 @@ extension SteamBridge {
             return .error(403, "Forbidden")
         }
         let type = ContentType.forExtension(target.pathExtension)
-        // A script or stylesheet that addresses the client's own origin is
-        // served from its rewritten copy (``LoopbackAssets``); the copy is
-        // cached, so this costs one read of the source per Steam update.
+        // A script or stylesheet that addresses the client's origin is served
+        // from its cached rewritten copy (``LoopbackAssets``).
         if let rewritten = LoopbackAssets.rewrittenBytes(for: target) {
             return .ok(rewritten, type: type)
         }
-        // Mapped, not copied: Steam's UI chunks run to megabytes and the boot
-        // waterfall requests dozens of them; the bytes go straight from the
-        // page cache to the socket.
+        // Mapped: Steam's UI chunks run to megabytes and boot requests dozens.
         guard let data = try? Data(contentsOf: target, options: [.mappedIfSafe]) else {
             return .error(404, "Not Found")
         }

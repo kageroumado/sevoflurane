@@ -1,10 +1,10 @@
 import Foundation
 
-/// The library/app/download verbs, all one-shot evals against
-/// `SharedJSContext` — the ~15 bound SteamClient methods plus the
-/// `appStore` MobX snapshot the bridge already relies on.
+/// The library, app and download verbs, each a one-shot eval in
+/// `SharedJSContext` against the bound `SteamClient` methods and the
+/// `appStore` MobX store.
 nonisolated enum SteamOps {
-    /// `appStore.allApps` projected to the stable fields the spec promises.
+    /// `appStore.allApps` projected to stable fields.
     static func libraryList(installedOnly: Bool) async throws -> String {
         let filter = installedOnly ? ".filter(here)" : ""
         let js = """
@@ -16,10 +16,9 @@ nonisolated enum SteamOps {
         return try await SteamJS.eval(js) ?? "[]"
     }
 
-    /// `here(a)`: whether an app is installed in this bottle. Steam's own
-    /// `installed` is also true for an app another of the account's clients
-    /// has installed (a native Mac Steam, another PC), which this bottle
-    /// cannot launch; `elsewhere(a)` names those clients.
+    /// `here(a)`: installed in this bottle. Steam's own `installed` is also
+    /// true for another of the account's clients (a native Mac Steam, another
+    /// PC); `elsewhere(a)` names those.
     static let installedHere = """
     const here = a => !!(a.local_per_client_data && a.local_per_client_data.installed);
     const elsewhere = a => (a.per_client_data || [])
@@ -28,7 +27,7 @@ nonisolated enum SteamOps {
 
     /// One app's overview, `null` when the appid is not in the library.
     /// `steam_deck_compat_category`: 0 unknown, 1 unsupported, 2 playable,
-    /// 3 verified — on every overview already.
+    /// 3 verified.
     static func appInfo(_ appid: Int) async throws -> String {
         let js = """
         (() => {
@@ -48,10 +47,10 @@ nonisolated enum SteamOps {
         return try await SteamJS.eval(js) ?? "null"
     }
 
-    /// What Steam's library shows under an app's name, by the client's own numbering.
+    /// What Steam's library shows under an app's name, by the client's numbering.
     nonisolated enum DisplayStatus {
-        /// A Steam Cloud sync is in progress. A game force-ended during its sync keeps this
-        /// status, and the client accepts and drops every later launch of it until it restarts.
+        /// A Steam Cloud sync. A game force-ended mid-sync keeps it, and the client
+        /// drops every later launch of it until the client restarts.
         static let synchronizing = 8
     }
 
@@ -67,16 +66,15 @@ nonisolated enum SteamOps {
         )
     }
 
-    /// Where a launch went: to Sevoflurane's page, whose chooser (or the
-    /// option given ahead) answers Steam's launch-option question, or straight
-    /// into the client, where only an option given ahead can.
+    /// Where a launch went: the app's page, whose chooser can answer Steam's
+    /// launch-option question, or the client, where only a given option can.
     enum LaunchRoute { case app, client }
 
-    /// Starts an app the way the menu does. With supervision running the
-    /// daemon's `/game/launch` takes it, so a game pinned to another renderer
-    /// is staged and the client restarted for it first; the daemon hands the
-    /// launch to the app when one is attached. Otherwise, and when no app took
-    /// it, the launch is made in the client's own context.
+    /// Starts an app the way the menu does. With supervision running, the
+    /// daemon's `/game/launch` takes it (staging a game pinned to another
+    /// renderer and restarting the client first) and hands it to the app when
+    /// one is attached. Otherwise, or when no app took it, the launch is made
+    /// in the client's own context.
     static func requestLaunch(_ appid: Int, option: Int?) async throws -> LaunchRoute {
         if await AppControl.status() != nil {
             var path = "/game/launch?appid=\(appid)"
@@ -84,7 +82,7 @@ nonisolated enum SteamOps {
             if let data = await AppControl.post(path, timeout: 300) {
                 let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 // A daemon that does not report delivery hands every launch
-                // to the app it has.
+                // to its app.
                 let delivered = if let answer = reply?["delivered"] as? Bool {
                     answer
                 } else {
@@ -101,13 +99,12 @@ nonisolated enum SteamOps {
         return .client
     }
 
-    /// Starts an app and answers Steam's launch-option question with `option`
-    /// from the client's own context, for a `sevo` with no app to ask the user.
+    /// Starts an app answering Steam's launch-option question with `option`,
+    /// for when no app can ask the user.
     static func launch(_ appid: Int, answering option: Int) async throws {
         _ = try await SteamJS.eval(LaunchOptions.runAnsweringScript(appID: appid, option: option))
     }
 
-    /// The ways Steam lists to start an app, as the client's JSON.
     /// The task Steam's pending game action for `appid` waits on the user
     /// for (`ShowLaunchOption`, a EULA, a CD key), or `nil` when none waits.
     static func pendingUserRequest(_ appid: Int) async -> String? {
@@ -125,13 +122,14 @@ nonisolated enum SteamOps {
         return task?.isEmpty == false ? task : nil
     }
 
+    /// The ways Steam lists to start an app, as the client's JSON.
     static func launchOptions(_ appid: Int) async throws -> String {
         try await SteamJS.eval(LaunchOptions.listScript(appID: appid)) ?? "[]"
     }
 
-    /// Asks the client to end `appid`. `notingStop` leaves the word that the
-    /// ending was asked for; a caller that already left it passes false, since
-    /// a second word outlives the run and labels the next one's ending.
+    /// Asks the client to end `appid`, noting the stop request unless the
+    /// caller already did: a second note would outlive the run and label the
+    /// next one's ending.
     static func terminate(_ appid: Int, notingStop: Bool = true) async throws {
         if notingStop { RunLog.noteStopRequest(forApp: appid, by: .tool) }
         _ = try await SteamJS.eval(
@@ -141,10 +139,10 @@ nonisolated enum SteamOps {
 
     /// The app ids Steam's own UI store believes are running.
     ///
-    /// The store is what `RunGame` consults: an app that kept its entry after
-    /// its process died makes every later launch — of any app — a silent
-    /// no-op, across a client restart too. So a launch reads this before it
-    /// asks, and a terminate waits on it afterwards.
+    /// `RunGame` consults this store: an app that kept its entry after its
+    /// process died makes every later launch of any app a silent no-op, even
+    /// across a client restart. A launch reads it first, and a terminate
+    /// waits on it.
     static func runningApps() async throws -> [Int] {
         let js = "(() => JSON.stringify((SteamUIStore.RunningApps || [])"
             + ".map(a => Number(a.appid)).filter(n => n > 0)))()"
@@ -152,9 +150,8 @@ nonisolated enum SteamOps {
         return Self.appIDs(inJSON: text)
     }
 
-    /// The ids in a `RunningApps` reply. Steam has spelled the id as a number
-    /// and as a string over the client's life, and the reply arrives as the
-    /// JSON text of whatever it holds.
+    /// The ids in a `RunningApps` reply, given as JSON text; each id may be
+    /// a number or a string, depending on the client version.
     static func appIDs(inJSON text: String) -> [Int] {
         guard let list = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [Any] else {
             return []
@@ -170,16 +167,15 @@ nonisolated enum SteamOps {
 
     /// The promptless install flow: open the wizard for the appid, wait until it
     /// holds the app, then continue with the defaults through each of its pages
-    /// (folder, shortcuts, license) until the wizard closes. Returns what the
-    /// wizard said when it stopped: `ok`, `no-wizard` when it never took the app
-    /// (an app the account holds no license for), `license` when Steam is showing
-    /// the game's license agreement and `acceptLicense` is off, `ok license-accepted`
-    /// when it was on and the agreement was accepted on the way, or
-    /// `error <code> <detail>`.
+    /// (folder, shortcuts, license) until the wizard closes. Returns `ok`,
+    /// `no-wizard` when it never took the app (no license on the account),
+    /// `license` when Steam shows the game's license agreement and
+    /// `acceptLicense` is off, `ok license-accepted` when it was on,
+    /// `stuck in state <n>`, or `error <code> <detail>`.
     ///
-    /// The agreement page is install state 8. Its dialog lives in one of the
-    /// client's popup documents and its Accept is that dialog's primary button;
-    /// the state is what identifies it, so the client's language does not matter.
+    /// The agreement page is install state 8, and its Accept is the primary
+    /// button of a dialog in one of the client's popup documents; matching on
+    /// the state keeps this independent of the client's language.
     @discardableResult
     static func install(_ appid: Int, acceptLicense: Bool = false) async throws -> String {
         let js = """
@@ -229,7 +225,7 @@ nonisolated enum SteamOps {
         )
     }
 
-    /// The install-name check for uninstall's echo guard.
+    /// The display name, for uninstall's echo guard.
     static func appName(_ appid: Int) async throws -> String? {
         let js = "(() => appStore.allApps.find(x => x.appid === \(appid))?.display_name ?? null)()"
         return try await SteamJS.eval(js)
@@ -237,7 +233,7 @@ nonisolated enum SteamOps {
 
     /// One `RegisterForDownloadOverview` snapshot: subscribe, take the first
     /// push, unregister. The overview's `progress[]` stage 3 (written to
-    /// disk) is the honest overall percentage.
+    /// disk) is the overall percentage.
     static func downloadsStatus() async throws -> String {
         let js = """
         (() => new Promise(resolve => {
@@ -273,24 +269,19 @@ nonisolated enum SteamOps {
     }
 }
 
-/// Whether a game has actually stopped, and what it took.
-///
-/// Steam's record and the bottle's processes disagree in both directions: a
-/// game that died can keep its `RunningApps` entry, and a game Steam has
-/// forgotten can still hold a core (Subnautica 2 sat 21 minutes at a full
-/// core with no window). Both are asked, and only a game neither can see is
-/// gone.
+/// Whether a game has actually stopped. Steam's record and the bottle's
+/// processes disagree both ways (a dead game can keep its `RunningApps`
+/// entry; Subnautica 2 held a full core for 21 minutes after Steam forgot
+/// it), so a game is gone only when neither sees it.
 nonisolated enum GameStop {
-    /// What a terminate ended up doing. `terminated`: the game went when
-    /// Steam asked. `killed`: it did not, and its processes were signaled.
-    /// `stillRunning`: something answered to the end.
+    /// `terminated`: it went when Steam asked. `killed`: its processes had
+    /// to be signaled. `stillRunning`: something survived both.
     enum Verdict: String, Sendable {
         case terminated
         case killed
         case stillRunning = "still running"
     }
 
-    /// What is still there: Steam's entry, the bottle's processes, or both.
     struct Sighting: Sendable, Equatable {
         let steamListsIt: Bool
         let processes: [pid_t]
@@ -317,7 +308,7 @@ nonisolated enum GameStop {
         return await Sighting(steamListsIt: listed, processes: GameEnding.processes(ofApp: appid))
     }
 
-    /// Polls until the game is gone or the seconds run out.
+    /// Polls once a second until the game is gone or `seconds` run out.
     static func waitUntilGone(appid: Int, seconds: Int) async -> Sighting {
         var last = await sighting(ofApp: appid)
         for _ in 0 ..< max(seconds, 0) {

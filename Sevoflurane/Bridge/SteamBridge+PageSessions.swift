@@ -4,9 +4,8 @@ import os
 extension SteamBridge {
     // MARK: - Page sessions
 
-    /// A connection becomes a page on its first message, the shim's hello.
-    /// A handshake the gate refused sends nothing and closes, so it never
-    /// takes ``newestPage`` from the live page.
+    /// A connection becomes a page on its first message, the shim's hello, so
+    /// a handshake the gate refused never takes ``newestPage``.
     func attachPage(_ ws: WSConnection, queue: DispatchQueue) {
         let id = ObjectIdentifier(ws)
         let stream = Self.messages(of: ws, on: queue)
@@ -43,30 +42,26 @@ extension SteamBridge {
         log(.bridge, "page connected (\(pages.count) total)")
 
         session.tasks.append(Task { [weak self] in
-            // Tunnel commands carry a byte stream, so they leave in arrival
-            // order on one worker rather than as free-floating tasks.
+            // Tunnel commands carry a byte stream, so one worker keeps order.
             for await raw in tunnelStream {
                 await self?.relaySend(raw, from: id)
             }
         })
     }
 
-    /// The first message a page or the relay sends once its socket opens.
     nonisolated static func isHello(_ raw: String) -> Bool {
         jsonObject(raw)?["type"] as? String == "hello"
     }
 
-    /// A page whose calls have nowhere to go is closed at once: the shim
-    /// reconnects a second after close, and by then the supervisor may have
-    /// the client back.
+    /// Closes a page whose calls have nowhere to go; the shim reconnects a
+    /// second later, when the client may be back.
     private func closeUnlessClientReachable(_ ws: WSConnection) async {
         guard await (try? ensureCDP()) == nil else { return }
         ws.close()
     }
 
-    /// The session is looked up rather than captured: `PageSession` lives in
-    /// the actor's region, and a consumer task may not carry a reference to
-    /// it across the isolation boundary.
+    /// Looks the session up by id: `PageSession` lives in the actor's region
+    /// and may not cross the isolation boundary.
     private func handlePageMessage(_ raw: String, id: ObjectIdentifier) {
         guard let session = pages[id], let request = Self.jsonObject(raw) else { return }
         let cmd = request["cmd"] as? String ?? ""
@@ -79,8 +74,7 @@ extension SteamBridge {
                let continuation = evalPending.removeValue(forKey: eid) {
                 evalTimeouts.removeValue(forKey: eid)?.cancel()
                 evalPage.removeValue(forKey: eid)
-                // The shim's `v` is already JSON text (it stringifies before
-                // sending); re-encoding it here would double-escape.
+                // `v` is already JSON text; re-encoding would double-escape.
                 continuation.resume(returning: (
                     ok: request["ok"] as? Bool ?? false,
                     v: request["v"] as? String ?? "null",
@@ -88,8 +82,7 @@ extension SteamBridge {
             }
             return
         }
-        // Every other command runs on its own task: a SteamClient call that
-        // never settles must not stall the ones behind it.
+        // Its own task, so a call that never settles stalls nothing else.
         Task { await self.dispatch(request, ws: session.ws, id: id) }
     }
 
@@ -108,8 +101,7 @@ extension SteamBridge {
                 return
             }
         } catch {
-            // A client on its way out refuses every call the page still
-            // makes, a dozen in a second: said once per closing.
+            // A closing client refuses a dozen calls a second: log it once.
             let closing = "\(error)" == "closed"
             if !closing || !saidClientIsClosing {
                 log(
@@ -121,8 +113,8 @@ extension SteamBridge {
             }
             saidClientIsClosing = closing
             if cmd == "sc", let rid = request["id"] as? Int {
-                // The shim's promise must settle: a call that timed out or
-                // lost its connection rejects there like a Steam error does.
+                // The shim's promise must settle, so it rejects like a Steam
+                // error.
                 ws.send(text: Self.resultReply(rid: rid, outcome: [
                     "ok": false, "e": ["__sevoErr": "Error", "message": "\(error)"],
                 ]))
@@ -141,18 +133,16 @@ extension SteamBridge {
         return reply
     }
 
-    /// How long a forwarded `SteamClient` call may wait for the client's
-    /// reply. Generous, because some calls settle only when Steam has
-    /// finished a job of its own; the page's promise rejects after this.
+    /// How long a forwarded `SteamClient` call may wait; some settle only
+    /// after a Steam job finishes.
     static let forwardBudget: Duration = .seconds(120)
 
     /// Replays one shim call against the real SharedJSContext.
     ///
-    /// Function arguments arrive as `{"__sevoCb": id}` markers; they are
-    /// rebuilt on the far side as real functions that push through the
-    /// `__sevo` binding, so Steam's own callbacks stream back to the page
-    /// that registered them. A registration's handle is retained in
-    /// `__sevoRet` so ``unregister(_:cdp:)`` can find it.
+    /// Function arguments arrive as `{"__sevoCb": id}` markers and are rebuilt
+    /// as functions that push through the `__sevo` binding to the page that
+    /// registered them. A registration's handle is retained in `__sevoRet`
+    /// for ``unregister(_:cdp:)``.
     private func forwardSteamClient(
         _ request: [String: Any],
         ws: WSConnection,
@@ -182,15 +172,11 @@ extension SteamBridge {
             return
         }
         if path == "SteamClient.Apps.RunGame" {
-            // The one choke point every launch funnels through — menu bar,
-            // the library's Play button, steam://run. Reconcile the renderer
-            // tree here, before the call reaches Steam, so a version or
-            // renderer change made in Settings takes effect on this launch
-            // whatever started it, with no race against the game's DLL load.
-            // A bounce (msync, engine) can't be applied inline and stays the
-            // launch path's job; only a restage is owed here. The launch is
-            // readied first, since a first launch's fixes can pick the
-            // renderer.
+            // Every launch passes here. Ready the launch first (a first
+            // launch's fixes can pick the renderer), then restage the renderer
+            // tree before Steam sees the call, so a Settings change applies to
+            // this launch without racing the game's DLL load. A bounce (msync,
+            // engine) stays the launch path's job.
             if let launchPreparation, let gameID = (request["args"] as? [Any])?.first {
                 await launchPreparation("\(gameID)")
             }
@@ -206,9 +192,8 @@ extension SteamBridge {
         if path == "SteamClient.Apps.SetAppLaunchOptions" {
             request = await adoptingLaunchCommand(in: request)
         }
-        // One game at a time: a wizard opened for a whole collection is a
-        // choice already made about many games, and one warning per game
-        // would stand between the user and all of them.
+        // Single-game wizards only: a collection install gets no per-game
+        // warnings.
         if path == "SteamClient.Installs.OpenInstallWizard", let installGate,
            let appIDs = (request["args"] as? [Any])?.first as? [Any], appIDs.count == 1,
            let appID = (appIDs[0] as? NSNumber)?.intValue,
@@ -219,13 +204,11 @@ extension SteamBridge {
         }
         if path == "SteamClient.Apps.TerminateApp",
            let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {
-            // Every stop asked for in the page — the library's Stop button, the
-            // menu bar — passes here. The run that ends next a person ended.
+            // Every stop asked for in the page passes here.
             RunLog.noteStopRequest(forApp: appID, by: .player)
-            // The game's own processes end before the call reaches Steam,
-            // whole, so its TerminateProcess finds nothing to tear down thread
-            // by thread and no crash report is filed for the stop
-            // (``GameEnding``). Bounded: a process that will not go is killed.
+            // Ending the processes first (bounded; a holdout is killed) leaves
+            // Steam's TerminateProcess nothing to tear down thread by thread,
+            // so no crash report is filed (``GameEnding``).
             if let ended = await GameEnding.end(appID: appID).summary {
                 log(.client, "stop \(appID): \(ended)")
             }
@@ -238,9 +221,8 @@ extension SteamBridge {
         defer { PerfProbe.bridge.endInterval("SteamClientCall", call) }
         let (argsJS, callbacks) = mintArguments(of: request, owner: id)
         let expr = Self.forwardExpression(path: path, handleJS: handleJS, argsJS: argsJS)
-        // The handle exists before the await: an unregister or a page close
-        // that arrives while the reply is pending finds it, and the reply
-        // then sees whether anyone still wants it.
+        // Registered before the await, so an unregister or page close during
+        // the call finds it.
         registrations[handle] = Registration(owner: id, callbacks: callbacks, state: .pending)
         let raw: String?
         do {
@@ -254,8 +236,7 @@ extension SteamBridge {
             if registrations[handle] != nil, pages[id] != nil {
                 registrations[handle]?.state = .active
             } else {
-                // Unregistered or orphaned while the reply was pending; the
-                // client retained the handle a moment ago, so release it.
+                // Unregistered or orphaned while pending: release it.
                 registrations.removeValue(forKey: handle)
                 _ = try? await cdp.evaluate(Self.remoteUnregister([handle]))
             }
@@ -265,12 +246,10 @@ extension SteamBridge {
         ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
     }
 
-    /// A call the Mac answers in the client's place, with the reply the page
-    /// gets: Steam's file dialog, which the client would open off screen
-    /// with the rest of its native windows, becomes the Mac's panel; Add
-    /// desktop shortcut, a `.url` on the bottle's Windows desktop that
-    /// reaches nobody, becomes an alias of the game's bundle on the Mac's.
-    /// `nil` for any other call, or a shortcut for a game with no bundle yet.
+    /// The reply for a call the Mac answers in the client's place: the file
+    /// dialog becomes the Mac's panel, and Add desktop shortcut becomes an
+    /// alias of the game's bundle on the Mac's desktop. `nil` for any other
+    /// call, or a game with no bundle yet.
     private static func answersOnTheMac(path: String, request: [String: Any]) async -> [String: Any]? {
         let argument = (request["args"] as? [Any])?.first
         switch path {
@@ -289,10 +268,8 @@ extension SteamBridge {
         }
     }
 
-    /// Whether a call is a `RunGame` this side takes instead of the client:
-    /// a game set to its macOS build goes to Steam for Mac
-    /// (``MacBuildHandoff``), a companion app to its partner
-    /// (``CompanionHandoff``).
+    /// Whether a `RunGame` goes to Steam for Mac (``MacBuildHandoff``) or a
+    /// companion's partner (``CompanionHandoff``) instead of the client.
     private static func handsOffToSteamForMac(path: String, request: [String: Any]) async -> Bool {
         guard path == "SteamClient.Apps.RunGame",
               let appID = (request["args"] as? [Any])?.first.flatMap({ Int("\($0)") }) else { return false }
@@ -300,9 +277,9 @@ extension SteamBridge {
         return await CompanionHandoff.takeRunGame(appID: appID)
     }
 
-    /// Whether `path` names a member of `SteamClient` by dotted identifiers
-    /// alone. The path is spliced into the evaluated expression as source,
-    /// so anything else would be code the page chose to run in the client.
+    /// Whether `path` is `SteamClient` followed by dotted identifiers only.
+    /// The path is spliced into evaluated source, so anything else would be
+    /// page-chosen code running in the client.
     nonisolated static func isSteamClientPath(_ path: String) -> Bool {
         let parts = path.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count >= 2, parts[0] == "SteamClient" else { return false }
@@ -317,8 +294,8 @@ extension SteamBridge {
         return isStart(first) && part.unicodeScalars.dropFirst().allSatisfy { isStart($0) || ("0" ... "9").contains($0) }
     }
 
-    /// The call's arguments as JS source, and the callback ids among them,
-    /// each now owned by `owner`.
+    /// The call's arguments as JS source, and its callback ids, now owned by
+    /// `owner`.
     private func mintArguments(
         of request: [String: Any], owner: ObjectIdentifier,
     ) -> (argsJS: [String], callbacks: [String]) {
@@ -339,8 +316,6 @@ extension SteamBridge {
         return (argsJS, callbacks)
     }
 
-    /// The expression that makes one call in SharedJSContext and reports
-    /// its outcome as JSON text.
     private static func forwardExpression(path: String, handleJS: String, argsJS: [String]) -> String {
         """
         (async () => {
@@ -371,10 +346,8 @@ extension SteamBridge {
         """
     }
 
-    /// Drops a forward that failed or timed out. The client's side of a
-    /// registration may still settle later, so a call that could have
-    /// produced one is marked dropped over there: the reply path releases
-    /// the handle itself when it finds the mark.
+    /// Drops a forward that failed or timed out, marking a possible
+    /// registration dropped in the client so its late reply releases it.
     private func abandonRegistration(_ handle: String, hadCallbacks: Bool, cdp: CDPClient) async {
         if let registration = registrations.removeValue(forKey: handle) {
             for cb in registration.callbacks {
@@ -385,21 +358,16 @@ extension SteamBridge {
         _ = try? await withDeadline(.seconds(5)) { try await cdp.evaluate(Self.remoteUnregister([handle])) }
     }
 
-    /// Releases the client's side of each handle: the retained object is
-    /// unregistered and dropped from `__sevoRet`. A handle the client has
-    /// not retained yet is marked dropped, for the registration's own reply
-    /// path to release.
+    /// Unregisters each retained handle in the client, or marks one not yet
+    /// retained as dropped for its reply path to release.
     private static func remoteUnregister(_ handles: [String]) -> String {
         "\(jsonText(handles) ?? "[]").forEach(r => { const h = (window.__sevoRet||{})[r]; "
             + "delete window.__sevoRet[r]; if (h) h.unregister?.(); "
             + "else (window.__sevoDropped = window.__sevoDropped || new Set()).add(r); }); 'ok'"
     }
 
-    /// Releases registrations on the far side and here: their handles are
-    /// used and dropped from `__sevoRet`, and their callback ids forgotten.
-    /// Without this a page that reloaded, or Steam's own popup that closed,
-    /// would leave its handlers firing into the client for the rest of the
-    /// session.
+    /// Releases registrations in the client and here, so a reloaded page or a
+    /// closed popup stops receiving callbacks.
     private func unregister(_ handles: [String], cdp: CDPClient) async throws {
         var active: [String] = []
         for handle in handles {
@@ -407,8 +375,7 @@ extension SteamBridge {
             for cb in registration.callbacks {
                 callbackOwner.removeValue(forKey: cb)
             }
-            // A pending handle has nothing on the far side yet; removing
-            // the entry is what makes its reply release the handle.
+            // A pending handle is released by its reply once the entry is gone.
             if registration.state == .active { active.append(handle) }
         }
         guard !active.isEmpty else { return }
