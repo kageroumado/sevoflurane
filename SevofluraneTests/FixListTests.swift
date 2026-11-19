@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Synchronization
 import Testing
 @testable import Sevoflurane
 
@@ -263,6 +264,20 @@ struct FixListTests {
     }
 
     @Test
+    func `a list the server serves unsigned is not fetched again until the list is due`() async {
+        try? FileManager.default.removeItem(at: FixList.cacheURL)
+        try? FileManager.default.removeItem(at: FixList.checkedURL)
+        let session = UnsignedFixListStub.session()
+
+        await FixList.refreshIfStale(session: session)
+        let afterFirst = UnsignedFixListStub.requests.withLock { $0 }
+        await FixList.refreshIfStale(session: session)
+
+        #expect(afterFirst == 2)
+        #expect(UnsignedFixListStub.requests.withLock { $0 } == 2)
+    }
+
+    @Test
     func `the record survives the disk`() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "fixlist-ledger-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -272,4 +287,35 @@ struct FixListTests {
         FixLedger.save(planned.record, for: 1, in: root)
         #expect(FixLedger.record(for: 1, in: root) == planned.record)
     }
+}
+
+/// Serves a list and no signature beside it, counting the requests.
+private final class UnsignedFixListStub: URLProtocol {
+    static let requests = Mutex(0)
+
+    static func session() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UnsignedFixListStub.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.requests.withLock { $0 += 1 }
+        let url = request.url ?? FixList.url
+        let signed = url.pathExtension == "sig"
+        let response = HTTPURLResponse(url: url, statusCode: signed ? 404 : 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data((signed ? "" : "{}").utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

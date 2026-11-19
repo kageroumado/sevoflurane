@@ -97,7 +97,7 @@ final class AppLinkServer {
             return await repairDaemon(force: Self.value(of: "force", in: request.query) == "1")
         case ("POST", "/perf/mark"):
             // `sevo perf mark`, straight to this port: the traces are written here.
-            let label = Self.value(of: "label", in: request.query).removingPercentEncoding ?? ""
+            let label = Self.value(of: "label", in: request.query)
             let marked = presentStats.mark(label.isEmpty ? "mark" : label)
             return Self.json(#"{"marked":\#(marked)}"#)
         case ("POST", "/streamer/apply"):
@@ -238,10 +238,14 @@ final class AppLinkServer {
         return .ok(data, type: "application/json")
     }
 
-    private nonisolated static func value(of name: String, in query: String) -> String {
-        for pair in query.components(separatedBy: "&") {
-            let parts = pair.components(separatedBy: "=")
-            if parts.count == 2, parts[0] == name { return parts[1] }
+    /// The first value `name` has in a query, percent-decoded; a value may
+    /// itself hold `=`. Empty when the query does not name it.
+    nonisolated static func value(of name: String, in query: String) -> String {
+        for pair in query.split(separator: "&", omittingEmptySubsequences: true) {
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2, parts[0] == name else { continue }
+            let raw = String(parts[1])
+            return raw.removingPercentEncoding ?? raw
         }
         return ""
     }

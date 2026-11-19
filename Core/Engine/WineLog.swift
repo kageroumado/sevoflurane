@@ -103,11 +103,20 @@ nonisolated enum WineLog {
         let descriptor = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o644)
         guard descriptor >= 0 else { return nil }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        let stamp = ISO8601DateFormatter().string(from: .now)
+        let line = header(
+            label: label, at: .now, debugMode: DebugMode.isWritten(prefix: SteamBottle.root),
+        )
         // The throwing write: `write(_:)` raises an Objective-C exception on a
         // full disk, which ends the process. A header that does not land is lost.
-        try? handle.write(contentsOf: Data("==== \(stamp) \(label) (WINEDEBUG=\(channels))\n".utf8))
+        try? handle.write(contentsOf: Data(line.utf8))
         return handle
+    }
+
+    /// The line a launch's output starts under: when, what, and the channels
+    /// in force, Debug mode's while its env file is written.
+    static func header(label: String, at date: Date, debugMode: Bool) -> String {
+        let stamp = ISO8601DateFormatter().string(from: date)
+        return "==== \(stamp) \(label) (WINEDEBUG=\(effectiveChannels(debugMode: debugMode)))\n"
     }
 
     private static let rotateOverBytes = 20_000_000

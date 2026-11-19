@@ -12,6 +12,15 @@ struct WineLogChannelCompositionTests {
     /// carries exactly what was set — ``WineLog/effectiveChannels(debugMode:)``
     /// returns the channels unchanged when the mode is off.
     @Test
+    func `a launch's header names the channels in force, Debug mode's while it is on`() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(WineLog.header(label: "client", at: date, debugMode: true)
+            .hasSuffix("client (WINEDEBUG=\(WineLog.debugModeChannels))\n"))
+        #expect(WineLog.header(label: "client", at: date, debugMode: false)
+            .hasSuffix("client (WINEDEBUG=\(WineLog.channels))\n"))
+    }
+
+    @Test
     func `debug off carries the custom channels unfolded`() {
         // The composition is Debug mode's alone; with the mode off the bottle
         // string is authoritative as written. The effective set is `channels`

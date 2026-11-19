@@ -211,6 +211,9 @@ final class SteamNotifications {
     }
 
     private static let maximumAvatarBytes = 4 << 20
+    /// The banner waits for the avatar, so a slow image host costs seconds,
+    /// never the minute a default request waits.
+    private static let avatarTimeout: TimeInterval = 5
 
     nonisolated static func isAvatarHost(_ host: String?) -> Bool {
         guard let host = host?.lowercased() else { return false }
@@ -226,7 +229,9 @@ final class SteamNotifications {
         // image's worth of bytes kept.
         guard let url = URL(string: notification.icon),
               url.scheme == "https", isAvatarHost(url.host()),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+              let (data, _) = try? await URLSession.shared.data(
+                  for: URLRequest(url: url, timeoutInterval: avatarTimeout),
+              ),
               data.count <= maximumAvatarBytes else { return nil }
         let file = FileManager.default.temporaryDirectory
             .appending(path: "sevo-avatar-\(notification.id)-\(UUID().uuidString).jpg")

@@ -496,6 +496,10 @@ extension GPTkDownload: WKDownloadDelegate {
     func download(_ download: WKDownload, didFailWithError error: any Error, resumeData _: Data?) {
         let key = ObjectIdentifier(download)
         observations.removeValue(forKey: key)?.invalidate()
+        // The partial file's folder goes with the failure; a retry gets its own.
+        if let destination = destinations.removeValue(forKey: key) {
+            try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
+        }
         if let id = itemIDs[key] {
             updatePhase(id: id, .failed(error.localizedDescription))
         }

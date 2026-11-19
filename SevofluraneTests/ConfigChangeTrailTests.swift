@@ -29,4 +29,13 @@ struct ConfigChangeTrailTests {
         after.name = "A Game"
         #expect(GameConfig.changes(from: .empty, to: after).isEmpty)
     }
+
+    @Test
+    func `what the NW.js scan found and the runtime it installed are records, not settings`() {
+        var after = ConfigValues.empty
+        after.nwjsRuntime = "0.77.0"
+        #expect(GameConfig.changes(from: .empty, to: after).isEmpty)
+        after.runner = "nwjs"
+        #expect(GameConfig.changes(from: .empty, to: after) == ["runner inherit → nwjs"])
+    }
 }

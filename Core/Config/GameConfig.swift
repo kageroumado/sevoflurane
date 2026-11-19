@@ -733,7 +733,7 @@ nonisolated enum GameConfig {
     }
 
     /// What a level records about a game rather than sets for it.
-    private static let bookkeepingKeys: Set<String> = ["exes", "name", "detected", "program"]
+    private static let bookkeepingKeys: Set<String> = ["exes", "name", "program", "nwjs", "nwjsRuntime"]
 
     private static func fields(of values: ConfigValues) -> [String: String] {
         guard let data = try? JSONEncoder().encode(values),

@@ -132,11 +132,34 @@ nonisolated enum NWJSRuntime {
     // MARK: - Installing
 
     /// The runtime for `version`, downloaded and unpacked when missing; answers the executable.
+    /// A second call for a version being installed waits for that install.
     static func ensure(
         version: String,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws -> URL {
         guard isReleaseNumber(version) else { throw RuntimeError("\(version) is not an NW.js release number") }
+        if isInstalled(version: version) { return executable(version: version) }
+        return try await installs.run(version) { try await fetchAndInstall(version: version, progress: progress) }
+    }
+
+    /// The installs under way in this process, one per version.
+    private static let installs = InstallsInFlight()
+
+    private actor InstallsInFlight {
+        private var running: [String: Task<URL, any Error>] = [:]
+
+        func run(_ version: String, _ work: @escaping @Sendable () async throws -> URL) async throws -> URL {
+            if let task = running[version] { return try await task.value }
+            let task = Task { try await work() }
+            running[version] = task
+            defer { running[version] = nil }
+            return try await task.value
+        }
+    }
+
+    private static func fetchAndInstall(
+        version: String, progress: @escaping @Sendable (String, Double?) -> Void,
+    ) async throws -> URL {
         let binary = executable(version: version)
         if isInstalled(version: version) { return binary }
         guard let digest = NWJSPins.archives[version]?[nativeFlavor] else {
@@ -184,14 +207,31 @@ nonisolated enum NWJSRuntime {
             capture: .combined, timeout: .seconds(120),
         )
 
-        let destination = directory(version: version)
-        try? manager.removeItem(at: destination)
-        try manager.createDirectory(at: destination, withIntermediateDirectories: true)
-        try manager.moveItem(at: app, to: destination.appendingPathComponent("nwjs.app"))
-        guard isInstalled(version: version) else {
-            throw RuntimeError("the NW.js \(version) tree has no runnable binary")
+        // The app and `sevo` can both install one version; the one that
+        // places it first wins, and the other keeps that copy.
+        return try withPlacementLock {
+            if isInstalled(version: version) { return binary }
+            let destination = directory(version: version)
+            try? manager.removeItem(at: destination)
+            try manager.createDirectory(at: destination, withIntermediateDirectories: true)
+            try manager.moveItem(at: app, to: destination.appendingPathComponent("nwjs.app"))
+            guard isInstalled(version: version) else {
+                throw RuntimeError("the NW.js \(version) tree has no runnable binary")
+            }
+            return binary
         }
-        return binary
+    }
+
+    /// Runs `body` holding an advisory lock beside the runtimes, which every
+    /// process that places one takes.
+    private static func withPlacementLock<T>(_ body: () throws -> T) throws -> T {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let descriptor = open(root.appendingPathComponent(".install.lock").path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { return try body() }
+        defer { close(descriptor) }
+        flock(descriptor, LOCK_EX)
+        defer { flock(descriptor, LOCK_UN) }
+        return try body()
     }
 
     /// Adds a runtime from a local folder: the unpacked `nwjs-v<version>-<flavor>` directory or its

@@ -77,8 +77,13 @@ final class ShaderStore {
             return await installSimulated(entry)
         }
         do {
+            let name = entry.name
             let package = try await ShaderPackages.install(entry) { fraction in
-                DispatchQueue.main.async { self.busy?.fraction = fraction }
+                // A tick that lands after this fetch ended is not the next fetch's.
+                DispatchQueue.main.async {
+                    guard self.busy?.name == name else { return }
+                    self.busy?.fraction = fraction
+                }
             }
             installed = ShaderPackages.installed()
             EventLog.shared.log(.setup, "shader package \(package.title) \(package.manifest.version) installed")

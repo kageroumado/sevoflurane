@@ -37,6 +37,11 @@ nonisolated enum FixList {
         GameCompatService.cacheRoot.appendingPathComponent("fixes.json.sig")
     }
 
+    /// Touched each time the server answers, whatever the list's verdict.
+    static var checkedURL: URL {
+        GameCompatService.cacheRoot.appendingPathComponent("fixes.checked")
+    }
+
     private static var tagURL: URL {
         GameCompatService.cacheRoot.appendingPathComponent("fixes.etag")
     }
@@ -158,7 +163,10 @@ nonisolated enum FixList {
     static func refreshIfStale(session: URLSession = .shared) async {
         let manager = FileManager.default
         let modified = (try? manager.attributesOfItem(atPath: cacheURL.path))?[.modificationDate] as? Date
-        if let modified, Date.now.timeIntervalSince(modified) < maxAge { return }
+        let checked = (try? manager.attributesOfItem(atPath: checkedURL.path))?[.modificationDate] as? Date
+        if let last = [modified, checked].compactMap(\.self).max(), Date.now.timeIntervalSince(last) < maxAge {
+            return
+        }
         var request = URLRequest(url: url, timeoutInterval: 15)
         if modified != nil, let tag = try? String(contentsOf: tagURL, encoding: .utf8),
            tag.wholeMatch(of: /"[0-9a-f]{1,64}"/) != nil {
@@ -166,6 +174,10 @@ nonisolated enum FixList {
         }
         guard let (body, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else { return }
+        // Any answer counts as the week's check: a refused or unsigned list is
+        // not fetched again until the list is due.
+        try? manager.createDirectory(at: GameCompatService.cacheRoot, withIntermediateDirectories: true)
+        try? Data().write(to: checkedURL, options: .atomic)
         switch http.statusCode {
         case 304:
             try? manager.setAttributes([.modificationDate: Date.now], ofItemAtPath: cacheURL.path)
