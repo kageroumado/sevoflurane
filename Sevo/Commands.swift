@@ -16,7 +16,7 @@ struct SevoCommand: AsyncParsableCommand {
             StorageCommand.self,
             ClientCommand.self, RecoverCommand.self, DaemonCommand.self,
             AppCommand.self, ProgramCommand.self, HoYoCommand.self, NWJSCommand.self, DownloadsCommand.self,
-            EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, LogsCommand.self,
+            EvalCommand.self, BenchmarkCommand.self, CDPCommand.self, ControlCommand.self, LogsCommand.self,
             RunsCommand.self, PerfCommand.self, StatsCommand.self, ReportCommand.self, OrphansCommand.self, HoldsCommand.self,
             DiagCommand.self, DebugCommand.self, StreamerCommand.self, SyncCommand.self,
             RunCommand.self,

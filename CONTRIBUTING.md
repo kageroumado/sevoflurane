@@ -187,12 +187,18 @@ session per ask is how this project has wedged CEF twice.
 Every listener binds `127.0.0.1` and refuses a foreign `Host` or a browser
 `Origin` (`Supervision/LoopbackGate.swift`). Headers are the sender's to
 choose, so that holds back web pages and nothing else. `:8764`, `:8766` and
-`/__eval` on `:8762` also answer 401 to any request without the
-`X-Sevo-Token` header holding this account's token (`Core/ControlToken.swift`):
-32 random bytes in `~/Library/Application Support/Sevoflurane/Control/token`,
-mode 0600 in a 0700 directory, made by whichever process asks first. Another
-account on the Mac cannot read it. A program of the same account can, and is
-admitted, as it could run `sevo` anyway. A Debug installation keeps its own
+`/__eval` on `:8762` also answer 401 to any request without an `X-Sevo-Auth`
+header: a time and an HMAC over the request, keyed by this account's token
+(`Core/Client/ControlToken.swift`). The token is 32 random bytes in
+`~/Library/Application Support/Sevoflurane/Control/token`, mode 0600 in a 0700
+directory, made by whichever process asks first, and it never travels: a
+process that takes a port while its owner is down receives signatures, each
+good for one request for a minute. Another account on the Mac cannot read the
+token. A program of the same account can, and is admitted, as it could run
+`sevo` anyway. The page's own ports (`:8760`–`:8762`) take a per-launch cookie
+only the app's web views hold, and the relay socket a key in its hello
+(`LoopbackSession`). Steam's DevTools port `:8765` is Chromium's own and takes
+no credential: another account on the Mac can reach it. A Debug installation keeps its own
 under `Sevoflurane Debug`.
 
 The sockets and pages Steam's UI uses (`:8761`, `:8763`, the `:8762` bundle,
@@ -351,9 +357,8 @@ the "quit unexpectedly" dialog for the game's bundle (`Core/GameEnding.swift`).
   `gameoverlay_renderer.txt` (one file, rewritten by every process that
   loads the overlay renderer — copy it at once).
 - **App status without the UI**: `sevo status --json`, or
-  `:8764/status` and `:8764/windows` (every window the app owns, role,
-  visibility) with the token, through the `sevocurl` function in
-  `PLAYTESTING.md`. CDP
+  `sevo control /status` and `sevo control /windows` (every window the app
+  owns, role, visibility). CDP
   liveness: `curl 127.0.0.1:8765/json/version`.
 - **Killing steam.exe for a test**: any `ps | grep <pattern>` where the
   pattern also appears in your own shell line matches and kills your own

@@ -70,6 +70,27 @@ nonisolated enum LoopbackAssets {
         return !privateDirectories.contains(top)
     }
 
+    /// Whether a servable path's top folder is one of ``privateDirectories``
+    /// on disk. Names are compared by what they open, never by spelling: APFS
+    /// folds `conﬁg` and `uſerdata` onto the real folders, and no string
+    /// comparison here matches its rules.
+    static func opensPrivateDirectory(_ path: String, under root: URL) -> Bool {
+        guard let decoded = path.removingPercentEncoding else { return true }
+        let components = URL(fileURLWithPath: "/" + decoded).standardizedFileURL.pathComponents.dropFirst()
+        guard let top = components.first, let asked = fileIdentity(root.appendingPathComponent(top)) else {
+            return false
+        }
+        return privateDirectories.contains { name in
+            fileIdentity(root.appendingPathComponent(name)).map { $0 == asked } ?? false
+        }
+    }
+
+    private static func fileIdentity(_ url: URL) -> [UInt64]? {
+        var info = stat()
+        guard stat(url.path, &info) == 0 else { return nil }
+        return [UInt64(bitPattern: Int64(info.st_dev)), UInt64(info.st_ino)]
+    }
+
     /// Rewrites every occurrence of the client's origin in a text asset.
     static func rewritten(_ text: String) -> String {
         let asOrigin = pageOrigin

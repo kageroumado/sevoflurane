@@ -18,7 +18,7 @@ Stdlib only. Drives `sevo` and the control port; reads the app log and the
 Wine log the way the report zip does. Run it from a terminal that is not the
 frontmost app if `game` needs the window in front (it does not).
 """
-import argparse, json, os, re, statistics, subprocess, sys, time, urllib.request
+import argparse, json, os, re, statistics, subprocess, sys, time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,9 +26,6 @@ SEVO = os.environ.get("SEVO", "/Applications/Sevoflurane.app/Contents/Helpers/se
 APP_LOG = Path.home() / "Library/Logs/Sevoflurane.log"
 WINE_LOG = Path.home() / "Library/Logs/Sevoflurane-wine.log"
 OUT_DIR = Path(os.environ.get("SEVOBENCH_OUT", Path.home() / "Library/Application Support/Sevoflurane/Bench"))
-CONTROL = "http://localhost:8764"
-# The control port answers 401 without this account's token (Core/ControlToken.swift).
-CONTROL_TOKEN = Path.home() / "Library/Application Support/Sevoflurane/Control/token"
 BOTTLE_PATH = re.compile(r"/(Sevoflurane|CrossOver)/Bottles/")
 BOTTLE_PATTERN = re.compile(r"Sevoflurane|SevofluraneDaemon|wineserver|\.exe|wine64-preloader|wine-preloader", re.I)
 
@@ -52,17 +49,11 @@ def health():
 
 
 def control(path, method="GET"):
-    # In a header, never on a command line: another account can read any
-    # process's arguments with ps.
+    # sevo signs the request with this account's token.
+    args = [SEVO, "control", path] + (["--post"] if method == "POST" else [])
     try:
-        token = CONTROL_TOKEN.read_text().strip()
-    except OSError:
-        token = ""
-    request = urllib.request.Request(CONTROL + path, method=method, headers={"X-Sevo-Token": token})
-    try:
-        with urllib.request.urlopen(request, timeout=3) as reply:
-            out = reply.read().decode()
-    except OSError:
+        out = sh(*args, timeout=5)
+    except subprocess.TimeoutExpired:
         out = ""
     try:
         return json.loads(out)

@@ -139,31 +139,10 @@ actor SteamBridge {
             let ui = try HTTPServer(
                 port: BridgePorts.steamUI, gate: .steamUI, exclusive: true,
             ) { [weak self] request in
-                // Static assets stay off the actor, which would serialize them
-                // against CDP dispatch and the health probe.
-                if request.method == "POST", request.path == "/__compat/batch" {
-                    return await Self.handleCompatBatchRequest(request)
+                guard request.path != "/", request.path != "/index.html", request.path != "/__eval" else {
+                    return await self?.handleUIRequest(request) ?? .error(500, "bridge gone")
                 }
-                if request.method == "GET", request.path.hasPrefix("/__compat/") {
-                    return await Self.handleCompatRequest(request)
-                }
-                if request.method == "GET", request.path.hasPrefix("/__native/") {
-                    return await Self.handleNativeBuildRequest(request)
-                }
-                if request.path == "/__web" {
-                    return await self?.handleWebRequest(request) ?? .error(500, "bridge gone")
-                }
-                if request.method == "GET", request.path.hasPrefix(Self.customImagesPrefix) {
-                    return Self.handleCustomImageRequest(request)
-                }
-                if request.path.hasPrefix(LoopbackAssets.pathPrefix + "/") {
-                    return await self?.handleLoopbackRequest(request) ?? .error(500, "bridge gone")
-                }
-                if request.method == "GET",
-                   request.path != "/", request.path != "/index.html" {
-                    return Self.serveFile(under: SteamBottle.steamui, path: request.path)
-                }
-                return await self?.handleUIRequest(request) ?? .error(500, "bridge gone")
+                return await Self.contained(self?.handleAssetRequest(request) ?? .error(500, "bridge gone"))
             }
             try await ui.startWaitingForThePort()
             uiServer = ui
@@ -204,6 +183,32 @@ actor SteamBridge {
             return false
         }
         return true
+    }
+
+    /// Every route of the UI port but the page itself and `/__eval`.
+    nonisolated func handleAssetRequest(_ request: HTTPRequest) async -> HTTPResponse {
+        // Static assets stay off the actor, which would serialize them
+        // against CDP dispatch and the health probe.
+        if request.method == "POST", request.path == "/__compat/batch" {
+            return await Self.handleCompatBatchRequest(request)
+        }
+        if request.method == "GET", request.path.hasPrefix("/__compat/") {
+            return await Self.handleCompatRequest(request)
+        }
+        if request.method == "GET", request.path.hasPrefix("/__native/") {
+            return await Self.handleNativeBuildRequest(request)
+        }
+        if request.path == "/__web" {
+            return await handleWebRequest(request)
+        }
+        if request.method == "GET", request.path.hasPrefix(Self.customImagesPrefix) {
+            return Self.handleCustomImageRequest(request)
+        }
+        if request.path.hasPrefix(LoopbackAssets.pathPrefix + "/") {
+            return await handleLoopbackRequest(request)
+        }
+        guard request.method == "GET" else { return .error(405, "Method Not Allowed") }
+        return Self.serveFile(under: SteamBottle.steamui, path: request.path)
     }
 
     nonisolated func log(_ category: EventLog.Category, _ message: String) {
@@ -429,9 +434,9 @@ actor SteamBridge {
                     try await client.connect(port: BridgePorts.cdp)
                     _ = try await client.evaluate(BridgeJS.binaryCodec)
                     return try await client.evaluate(
-                        BridgeJS.tunnel.replacingOccurrences(
-                            of: "%RELAY_PORT%", with: String(BridgePorts.relayWS),
-                        ),
+                        BridgeJS.tunnel
+                            .replacingOccurrences(of: "%RELAY_PORT%", with: String(BridgePorts.relayWS))
+                            .replacingOccurrences(of: "%RELAY_KEY%", with: LoopbackSession.relayKey),
                     )
                 }
                 self?.log(.bridge, "cdp connected — \(tunnel ?? "?")")
@@ -498,7 +503,7 @@ actor SteamBridge {
                 case let .text(raw) where isRelay:
                     await self?.relayControl(raw)
                 case let .text(raw):
-                    guard Self.isHello(raw) else {
+                    guard Self.isRelayHello(raw) else {
                         ws.close()
                         continue
                     }

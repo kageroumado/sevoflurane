@@ -148,6 +148,36 @@ struct EvalCommand: AsyncParsableCommand {
     }
 }
 
+struct ControlCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "control",
+        abstract: "One signed request to the control port, its reply on stdout (debug).",
+        discussion: "sevo control /windows · sevo control --post /steam/close. "
+            + "The port answers only requests signed with this account's token; this signs one.",
+    )
+    @Argument(help: "The path and query, as in /log/tail?n=50.")
+    var path: String
+    @Flag(help: "POST instead of GET.")
+    var post = false
+
+    func run() async throws {
+        guard path.hasPrefix("/") else {
+            Sevo.printError("the path starts with /")
+            throw SevoExit.badInvocation
+        }
+        let reply = post ? await AppControl.postReply(path) : await AppControl.getReply(path)
+        guard let reply else {
+            Sevo.printError("nothing answers on :\(BridgePorts.control) — is Sevoflurane running?")
+            throw SevoExit.unreachable
+        }
+        FileHandle.standardOutput.write(reply.body)
+        if !(200 ..< 300).contains(reply.status) {
+            Sevo.printError("HTTP \(reply.status)")
+            throw SevoExit.failed
+        }
+    }
+}
+
 struct CDPCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cdp",

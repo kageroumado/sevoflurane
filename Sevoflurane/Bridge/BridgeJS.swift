@@ -47,8 +47,8 @@ nonisolated enum BridgeJS {
     })()
     """#
 
-    /// Opens the relay socket from inside SharedJSContext; `%RELAY_PORT%` is
-    /// substituted first.
+    /// Opens the relay socket from inside SharedJSContext; `%RELAY_PORT%` and
+    /// `%RELAY_KEY%` are substituted first.
     static let tunnel = #"""
     (() => {
       if (window.__sevoRelay && window.__sevoRelay.readyState <= 1) return 'relay live';
@@ -58,8 +58,9 @@ nonisolated enum BridgeJS {
          with an evaluate per frame wedges steamwebhelper. */
       const relay = new WebSocket('ws://127.0.0.1:%RELAY_PORT%');
       relay.binaryType = 'arraybuffer';
-      /* The bridge takes a socket as its relay on this first message. */
-      relay.onopen = () => relay.send(JSON.stringify({ type: 'hello' }));
+      /* The bridge takes a socket as its relay on this first message, and
+         only with the key this launch of the app put here. */
+      relay.onopen = () => relay.send(JSON.stringify({ type: 'hello', key: '%RELAY_KEY%' }));
       window.__sevoRelay = relay;
       const socks = window.__sevoTunnels = {};
       const ctl = (o) => { if (relay.readyState === 1) relay.send(JSON.stringify(o)); };

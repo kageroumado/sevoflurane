@@ -133,7 +133,7 @@ final nonisolated class WebSocketServer: Sendable {
         for field in fields {
             headers[field.name.lowercased()] = field.value
         }
-        switch gate.verdict(method: "GET", path: "/", headers: headers) {
+        switch gate.verdict(method: "GET", target: "/", headers: headers) {
         case .admitted:
             return .accept
         case let .refused(reason), let .unauthorized(reason):

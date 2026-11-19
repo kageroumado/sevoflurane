@@ -450,7 +450,7 @@ final class SteamWebHost {
 
         let configuration = WKWebViewConfiguration()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        configuration.preferences.setValue(WebInspection.isAllowed, forKey: "developerExtrasEnabled")
         configuration.userContentController.addScriptMessageHandler(
             coordinator, contentWorld: .page, name: SteamWebCoordinator.handlerName,
         )
@@ -495,7 +495,16 @@ final class SteamWebHost {
         PerfProbe.poi.emitEvent("PageBoot")
         EventLog.shared.log(.page, "booting the Steam UI from \(Self.uiURL.absoluteString)")
         loggedRefusals = []
-        webView.load(URLRequest(url: Self.uiURL))
+        loadUI(in: webView)
+    }
+
+    /// Loads the UI once the bridge's session cookie is in the web views'
+    /// store: the bridge answers 401 without it.
+    private func loadUI(in webView: WKWebView) {
+        Task(name: "Load the Steam UI") {
+            await LoopbackSessionCookie.install()
+            webView.load(URLRequest(url: Self.uiURL))
+        }
     }
 
     func reload() {
@@ -507,7 +516,7 @@ final class SteamWebHost {
         desktopShowIsPending = wasShowingDesktop
         status = "reloading"
         loggedRefusals = []
-        context?.webView.load(URLRequest(url: Self.uiURL))
+        if let webView = context?.webView { loadUI(in: webView) }
     }
 
     /// Brings every Steam window in line with a changed ``StreamerMode`` by

@@ -65,11 +65,21 @@ final class EventLog {
     }
 
     func log(_ category: Category, _ message: String) {
-        logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
-        // A signpost too, to line up with Instruments recordings.
-        PerfProbe.events.emitEvent(
-            "Log", "[\(category.rawValue, privacy: .public)] \(message, privacy: .public)",
-        )
+        // Messages name paths, games and devices. The log file is this
+        // account's; the unified log is every admin's and every sysdiagnose's,
+        // so a release build keeps the text out of it.
+        #if DEBUG
+            logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
+            // A signpost too, to line up with Instruments recordings.
+            PerfProbe.events.emitEvent(
+                "Log", "[\(category.rawValue, privacy: .public)] \(message, privacy: .public)",
+            )
+        #else
+            logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .private)")
+            PerfProbe.events.emitEvent(
+                "Log", "[\(category.rawValue, privacy: .public)] \(message, privacy: .private)",
+            )
+        #endif
         let entry = Entry(id: nextID, date: .now, category: category, message: message)
         nextID += 1
         recent.append(entry)
@@ -135,7 +145,24 @@ final class EventLog {
     nonisolated static func line(
         _ category: Category, _ message: String, at date: Date = .now,
     ) -> String {
-        "\(stamp(date)) [\(category.rawValue)] \(message)\n"
+        "\(stamp(date)) [\(category.rawValue)] \(oneLine(message))\n"
+    }
+
+    /// `message` on one line. Messages quote request paths, game names and
+    /// program output; a line break in one would forge the entries after it
+    /// for whoever reads the log, an agent included.
+    nonisolated static func oneLine(_ message: String) -> String {
+        guard message.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) else { return message }
+        var scalars = String.UnicodeScalarView()
+        for scalar in message.unicodeScalars {
+            switch scalar.value {
+            case 0x0A, 0x0D: scalars.append(contentsOf: " ⏎ ".unicodeScalars)
+            case 0x09: scalars.append(" ")
+            case 0 ..< 0x20, 0x7F: continue
+            default: scalars.append(scalar)
+            }
+        }
+        return String(scalars)
     }
 
     /// The log's timestamp format, for the exception sidecar's field.

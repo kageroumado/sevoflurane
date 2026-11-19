@@ -33,12 +33,22 @@ nonisolated enum WebProxy {
             }
         }
 
+        /// The status line's reason, with nothing of the request in it.
         var reason: String {
             switch self {
-            case let .badMethod(method): "Method \(method) Not Allowed"
-            case .missingURL: "Bad Request — u must be an absolute URL"
-            case let .unsupportedScheme(scheme): "Bad Request — \(scheme) is not a web scheme"
-            case let .hostNotAllowed(host): "Forbidden — \(host) is not a Steam host"
+            case .badMethod: "Method Not Allowed"
+            case .missingURL, .unsupportedScheme: "Bad Request"
+            case .hostNotAllowed: "Forbidden"
+            }
+        }
+
+        /// What was refused, for the log.
+        var detail: String {
+            switch self {
+            case let .badMethod(method): "method \(method)"
+            case .missingURL: "u is not an absolute URL"
+            case let .unsupportedScheme(scheme): "\(scheme) is not a web scheme"
+            case let .hostNotAllowed(host): "\(host) is not a Steam host"
             }
         }
     }

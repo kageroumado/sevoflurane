@@ -166,6 +166,7 @@ sevo streamer on|off|status
 sevo sync sweep [--json]
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
+sevo control [--post] /PATH
 sevo benchmark
 sevo logs [--tail N] [-f] [--wine]
 ```
@@ -186,9 +187,13 @@ client. When the app is running, client lifecycle commands go through
 its supervisor.
 
 `sevo`, the app and its helper talk over loopback ports that answer only your
-macOS account: each request carries a token kept in
+macOS account: each request is signed with a token kept in
 `~/Library/Application Support/Sevoflurane/Control/token`, readable by you
-alone. Another account on the same Mac cannot drive the bottle.
+alone, and Steam's pages reach the app with a secret made at each launch.
+Another account on the same Mac cannot drive the app or its helper. The Steam
+client's own debugging port (`8765`) is Chromium's and takes no credential, so
+on a Mac shared with accounts you do not trust, Steam itself is reachable by
+them while it runs.
 `sevo engine use` and the MCP `engine_use` tool take CrossOver or the name of
 an engine folder inside Sevoflurane's `Engines` folder, nothing outside it.
 

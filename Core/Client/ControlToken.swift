@@ -1,16 +1,24 @@
+import CryptoKit
 import Foundation
 
-/// The capability a native caller presents to this installation's control
+/// The capability a native caller holds for this installation's control
 /// ports: the daemon's control endpoint, the app's link port, and the page's
 /// `/__eval`.
 ///
 /// The loopback bind keeps other machines out and ``LoopbackGate`` keeps web
 /// pages out; the token keeps other accounts out: 32 random bytes, hex, in a
-/// file only this account can read (0600 in a 0700 directory), sent as
-/// ``header``. Each installation keeps its own under
-/// ``AppIdentity/supportFolder``.
+/// file only this account can read (0600 in a 0700 directory). Each
+/// installation keeps its own under ``AppIdentity/supportFolder``.
+///
+/// The token itself never travels. A request carries ``header`` with a time
+/// and an HMAC over that time and the request, so a process that takes the
+/// port while its owner is down receives nothing it can use later.
 nonisolated enum ControlToken {
-    static let header = "X-Sevo-Token"
+    static let header = "X-Sevo-Auth"
+
+    /// How far a signature's time may be from the verifier's clock. Both ends
+    /// are one machine; the window covers a request that waits in a queue.
+    static let signatureLife: TimeInterval = 60
 
     /// `<support folder>/Control`, kept at 0700.
     static var directory: URL {
@@ -52,10 +60,54 @@ nonisolated enum ControlToken {
         try load(in: directory)
     }
 
-    /// Adds the token to `request`; without one the request gets a 401.
+    /// Signs `request` as it stands: set its method, URL and body first.
+    /// Without a token the request goes unsigned and gets a 401.
     static func authorize(_ request: inout URLRequest) {
-        guard let token = try? current() else { return }
-        request.setValue(token, forHTTPHeaderField: header)
+        guard let token = try? current(), let url = request.url else { return }
+        let value = signature(
+            token: token,
+            method: request.httpMethod ?? "GET",
+            target: target(of: url),
+            body: request.httpBody ?? Data(),
+        )
+        request.setValue(value, forHTTPHeaderField: header)
+    }
+
+    /// A URL's path and query as they go on the request line.
+    static func target(of url: URL) -> String {
+        let parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let path = parts?.percentEncodedPath ?? url.path
+        let query = parts?.percentEncodedQuery.map { "?" + $0 } ?? ""
+        return (path.isEmpty ? "/" : path) + query
+    }
+
+    /// `v1.<unix seconds>.<hex HMAC-SHA256>`, keyed by the token, over the
+    /// version, the time, the method, the target and the body's SHA-256.
+    static func signature(
+        token: String, method: String, target: String, body: Data, at date: Date = .now,
+    ) -> String {
+        let seconds = Int(date.timeIntervalSince1970)
+        return "v1.\(seconds).\(mac(token: token, seconds: seconds, method: method, target: target, body: body))"
+    }
+
+    /// Whether `presented` is a fresh signature of this request under `token`.
+    static func verifies(
+        _ presented: String?, token: String, method: String, target: String, body: Data, now: Date = .now,
+    ) -> Bool {
+        guard let presented else { return false }
+        let fields = presented.split(separator: ".", omittingEmptySubsequences: false)
+        guard fields.count == 3, fields[0] == "v1", let seconds = Int(fields[1]),
+              abs(now.timeIntervalSince1970 - TimeInterval(seconds)) <= signatureLife
+        else { return false }
+        let wanted = mac(token: token, seconds: seconds, method: method, target: target, body: body)
+        return matches(String(fields[2]), expected: wanted)
+    }
+
+    private static func mac(token: String, seconds: Int, method: String, target: String, body: Data) -> String {
+        let digest = SHA256.hash(data: body).map { String(format: "%02x", $0) }.joined()
+        let message = "v1\n\(seconds)\n\(method.uppercased())\n\(target)\n\(digest)"
+        let code = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: Data(token.utf8)))
+        return code.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Constant-time comparison; only the public length shows.
@@ -175,7 +227,9 @@ nonisolated enum ControlToken {
         return nil
     }
 
-    private static func generate() -> String {
+    /// Fresh random bytes as hex, the form of a token and of
+    /// ``LoopbackSession``'s keys.
+    static func generate() -> String {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         arc4random_buf(&bytes, byteCount)
         return bytes.map { String(format: "%02x", $0) }.joined()

@@ -67,8 +67,21 @@ actor CDPClient {
               let socketURL = (shared["webSocketDebuggerUrl"] as? String).flatMap(URL.init) else {
             throw Failure.unreachable("no \(targetTitle) target (half-wedged client?)")
         }
+        guard Self.isOwnEndpoint(socketURL, port: port) else {
+            throw Failure.unreachable("the DevTools port names a socket elsewhere: \(socketURL.absoluteString)")
+        }
         try await connect(socketURL: socketURL, consumingBindings: true)
         _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
+    }
+
+    /// Whether a target's socket is the DevTools port itself. The list is
+    /// whatever answered on that port, and a socket elsewhere would hand the
+    /// session to its author.
+    static func isOwnEndpoint(_ url: URL, port: Int) -> Bool {
+        guard url.scheme?.lowercased() == "ws", url.port == port, let host = url.host?.lowercased() else {
+            return false
+        }
+        return ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host)
     }
 
     /// The handshake's bound; every other call is bounded by its caller.

@@ -97,6 +97,19 @@ nonisolated enum AppControl {
         return (http.statusCode, data)
     }
 
+    /// A GET whose status matters; nil when the daemon did not answer at all.
+    static func getReply(_ path: String, timeout: TimeInterval = 10) async -> (status: Int, body: Data)? {
+        guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.control)\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        ControlToken.authorize(&request)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return nil }
+        return (http.statusCode, data)
+    }
+
     private static func request(
         _ path: String, method: String, timeout: TimeInterval,
     ) async -> Data? {

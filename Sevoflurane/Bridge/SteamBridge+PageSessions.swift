@@ -53,6 +53,14 @@ extension SteamBridge {
         jsonObject(raw)?["type"] as? String == "hello"
     }
 
+    /// The relay script's hello: it carries the key the bridge templated into
+    /// the script, since nothing else tells the client's socket from any
+    /// other local process's.
+    nonisolated static func isRelayHello(_ raw: String, key: String = LoopbackSession.relayKey) -> Bool {
+        guard let message = jsonObject(raw), message["type"] as? String == "hello" else { return false }
+        return ControlToken.matches(message["key"] as? String, expected: key)
+    }
+
     /// Closes a page whose calls have nowhere to go; the shim reconnects a
     /// second later, when the client may be back.
     private func closeUnlessClientReachable(_ ws: WSConnection) async {

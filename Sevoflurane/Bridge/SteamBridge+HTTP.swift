@@ -39,10 +39,41 @@ extension SteamBridge {
         let search = try await withDeadline(ClientLifecycle.cdpCallCap) {
             try await cdp.evaluate("location.search")
         } ?? ""
+        // The answer comes from whatever holds the DevTools port and goes
+        // into a `Location` header, so only query characters pass.
         let kept = search.trimmingCharacters(in: CharacterSet(charactersIn: "?"))
             .components(separatedBy: "&")
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && $0.unicodeScalars.allSatisfy(Self.queryCharacters.contains) }
         return "?" + kept.joined(separator: "&")
+    }
+
+    private nonisolated static let queryCharacters = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~%=+:,@/",
+    )
+
+    /// `text` re-serialized as a JSON object that cannot close the `<script>`
+    /// it is written into; nil when it is no object. The text is the DevTools
+    /// port's answer, and whoever holds that port chose it.
+    nonisolated static func scriptSafeJSON(_ text: String) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              let data = try? JSONSerialization.data(withJSONObject: object),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json.replacingOccurrences(of: "<", with: "\\u003c")
+    }
+
+    /// Takes the page's authority away from a response that is not the page.
+    /// A file from the Steam install or a proxied web page can be an HTML or
+    /// SVG document; opened as one it gets an opaque origin, so the session
+    /// cookie's requests and the page socket refuse it. Loaded as a script,
+    /// style or image by the real page it is unaffected.
+    nonisolated static func contained(_ response: HTTPResponse) -> HTTPResponse {
+        var response = response
+        response.headers.append(("X-Content-Type-Options", "nosniff"))
+        let type = response.headers.first { $0.0.lowercased() == "content-type" }?.1.lowercased() ?? ""
+        if ["html", "xml", "svg"].contains(where: type.contains) {
+            response.headers.append(("Content-Security-Policy", "sandbox allow-scripts"))
+        }
+        return response
     }
 
     private func injectedIndex() async -> HTTPResponse {
@@ -56,7 +87,7 @@ extension SteamBridge {
         var shape = "{}"
         if let cdp = try? await ensureCDP(),
            let snapshot = try? await withDeadline(ClientLifecycle.cdpCallCap, { try await cdp.evaluate(BridgeJS.shape) }) {
-            shape = snapshot
+            shape = Self.scriptSafeJSON(snapshot) ?? "{}"
         }
         let injected = "<head>"
             + "<script>window.__sevoShape=\(shape);</script>"
@@ -157,7 +188,7 @@ extension SteamBridge {
     func handleWebRequest(_ request: HTTPRequest) async -> HTTPResponse {
         switch WebProxy.target(method: request.method, query: request.query) {
         case let .failure(rejection):
-            log(.bridge, "web proxy refused a request: \(rejection.reason)")
+            log(.bridge, "web proxy refused a request: \(rejection.detail)")
             return .error(rejection.status, rejection.reason)
         case let .success(url):
             let cookies = await clientCookies() ?? []
@@ -178,7 +209,8 @@ extension SteamBridge {
             let target = request.query.isEmpty ? path : path + "?" + request.query
             return await fetchFromClient(target)
         }
-        guard LoopbackAssets.isServable(path) else {
+        guard LoopbackAssets.isServable(path),
+              !LoopbackAssets.opensPrivateDirectory(path, under: SteamBottle.steamRoot) else {
             noteLoopbackMiss(path, "the Steam install's private files are not served")
             return .error(404, "Not Found")
         }

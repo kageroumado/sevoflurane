@@ -261,7 +261,9 @@ final nonisolated class HTTPServer: Sendable {
         by gate: LoopbackGate,
     ) -> @Sendable (HTTPRequest) async -> HTTPResponse {
         { request in
-            switch gate.verdict(method: request.method, path: request.path, headers: request.headers) {
+            switch gate.verdict(
+                method: request.method, target: request.target, headers: request.headers, body: request.body,
+            ) {
             case .admitted:
                 return await handler(request)
             case let .refused(reason):
@@ -377,15 +379,25 @@ final nonisolated class HTTPServer: Sendable {
     /// `Content-Length` and the body. The answer to `HEAD` declares the
     /// length and stops at the headers.
     static func wire(_ response: HTTPResponse, isHead: Bool = false) -> Data {
-        var head = "HTTP/1.1 \(response.status) \(response.reason)\r\n"
+        var head = "HTTP/1.1 \(response.status) \(oneLine(response.reason))\r\n"
         for (name, value) in response.headers {
-            head += "\(name): \(value)\r\n"
+            head += "\(oneLine(name)): \(oneLine(value))\r\n"
         }
         let length = isHead ? response.headLength ?? response.body.count : response.body.count
         head += "Content-Length: \(length)\r\n\r\n"
         var data = Data(head.utf8)
         if !isHead { data.append(response.body) }
         return data
+    }
+
+    /// `text` without control characters. A reason or header value can carry
+    /// request text, and a CR LF in it would end the line and let the caller
+    /// write the rest of the response: its own headers and body, served from
+    /// this origin.
+    static func oneLine(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: text.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F })
+        return String(scalars)
     }
 
     /// The parser's verdict on the front of a receive buffer.
