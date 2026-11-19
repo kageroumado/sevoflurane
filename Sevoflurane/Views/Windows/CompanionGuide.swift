@@ -8,11 +8,9 @@ import SwiftUI
 final class CompanionGuide: NSObject, NSWindowDelegate {
     static let shared = CompanionGuide()
 
-    private var panel: NSPanel?
+    private let panel = DialogPanel(size: NSSize(width: 460, height: 300), title: "Sevoflurane")
 
     func show(_ companion: GameCompanion) {
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
         let view = CompanionGuideView(
             companion: companion,
             partnerInstalled: CompanionHandoff.isInstalled(companion),
@@ -22,34 +20,12 @@ final class CompanionGuide: NSObject, NSWindowDelegate {
             },
             onDone: { [weak self] in self?.close() },
         )
-        panel.contentView = NSHostingView(rootView: view)
-        panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 460, height: 300))
-        panel.center()
-        // The app has no activation of its own, so the panel would open behind
-        // Steam.
-        NSApp.activate()
-        panel.makeKeyAndOrderFront(nil)
+        panel.delegate = self
+        panel.show(view)
     }
 
     private func close() {
-        panel?.orderOut(nil)
-        panel?.contentView = nil
-    }
-
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
-            styleMask: [.titled, .closable, .fullSizeContentView, .utilityWindow],
-            backing: .buffered,
-            defer: false,
-        )
-        panel.delegate = self
-        panel.title = "Sevoflurane"
-        panel.titlebarAppearsTransparent = true
-        panel.isFloatingPanel = true
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        return panel
+        panel.dismiss()
     }
 
     func windowShouldClose(_: NSWindow) -> Bool {

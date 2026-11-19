@@ -60,14 +60,14 @@ final class AdoptionModel {
         return NSImage(cgImage: shaped, size: NSSize(width: 128, height: 128))
     }
 
-    /// The version resource's one line: product name and build.
-    var subtitle: String? {
-        let described = info?.productName ?? info?.fileDescription
-        let version = info?.fileVersion
-        return [described, version].compactMap(\.self)
-            .filter { !$0.isEmpty && $0 != name }
-            .joined(separator: " · ")
-            .nilWhenEmpty
+    /// The panel's heading: the name as the user has it now, or the file's.
+    var title: String {
+        trimmedName
+    }
+
+    /// The program's own version, shown beside the name.
+    var version: String? {
+        info?.fileVersion?.trimmingCharacters(in: .whitespacesAndNewlines).nilWhenEmpty
     }
 
     /// The file itself, which the name and icon above are not: both come

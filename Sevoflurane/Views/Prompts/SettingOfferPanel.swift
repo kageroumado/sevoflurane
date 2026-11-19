@@ -24,46 +24,21 @@ struct SettingOffer {
 /// menu-bar agent may have no other window. Each kind of offer keeps its own.
 @MainActor
 final class SettingOfferPanel: NSObject, NSWindowDelegate {
-    private var panel: NSPanel?
+    private let panel = DialogPanel(size: NSSize(width: 460, height: 200), title: "Sevoflurane")
     private var offer: SettingOffer?
 
     func present(_ offer: SettingOffer) {
         self.offer = offer
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        panel.contentView = NSHostingView(rootView: SettingOfferView(offer: offer))
-        panel.setContentSize(panel.contentView?.fittingSize ?? Self.panelSize)
-        panel.center()
-        // Otherwise the agent app's panel opens behind the front app.
-        NSApp.activate()
-        panel.makeKeyAndOrderFront(nil)
+        panel.delegate = self
+        panel.show(SettingOfferView(offer: offer))
     }
 
     func close() {
-        panel?.orderOut(nil)
-        panel?.contentView = nil
+        panel.dismiss()
         offer = nil
     }
 
-    private static let panelSize = NSSize(width: 460, height: 200)
-
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: Self.panelSize),
-            styleMask: [.titled, .closable, .fullSizeContentView, .utilityWindow],
-            backing: .buffered,
-            defer: false,
-        )
-        panel.delegate = self
-        panel.title = "Sevoflurane"
-        panel.titlebarAppearsTransparent = true
-        panel.isFloatingPanel = true
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        return panel
-    }
-
-    /// The close button is "Not Now".
+    /// Escape is "Not Now".
     func windowShouldClose(_: NSWindow) -> Bool {
         offer?.notNow()
         return false

@@ -8,41 +8,15 @@ import SwiftUI
 final class AdoptionPanel {
     static let shared = AdoptionPanel()
 
-    private var panel: NSPanel?
+    private let panel = DialogPanel(
+        size: NSSize(width: AdoptionView.width, height: 240), title: String(localized: "Open in Sevoflurane"),
+    )
 
     /// Shows the panel for one executable, replacing whatever it was showing.
     func present(_ url: URL) {
         let model = AdoptionModel(url: url)
-        model.onFinish = { [weak self] in self?.close() }
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        panel.contentView = NSHostingView(rootView: AdoptionView(model: model))
-        panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 420, height: 260))
-        panel.center()
-        // The app has no activation of its own, so the panel would open behind
-        // whatever the user was in.
-        NSApp.activate()
-        panel.makeKeyAndOrderFront(nil)
-    }
-
-    private func close() {
-        panel?.orderOut(nil)
-        panel?.contentView = nil
-    }
-
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
-            styleMask: [.titled, .closable, .fullSizeContentView, .utilityWindow],
-            backing: .buffered,
-            defer: false,
-        )
-        panel.title = String(localized: "Open in Sevoflurane")
-        panel.titlebarAppearsTransparent = true
-        panel.isFloatingPanel = true
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        return panel
+        model.onFinish = { [panel] in panel.dismiss() }
+        panel.show(AdoptionView(model: model))
     }
 }
 
@@ -51,19 +25,19 @@ final class AdoptionPanel {
 private struct AdoptionView: View {
     @Bindable var model: AdoptionModel
 
+    /// Wide enough for the three program actions on one row in English.
+    static let width: CGFloat = 500
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
             header
             switch model.stage {
             case .choosing:
+                verdict
+                if !model.isInstaller { nameField }
                 Text(model.destination)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                if model.isOverruled {
-                    Toggle("Remember for this file", isOn: $model.remembersOverrule)
-                        .toggleStyle(.checkbox)
-                        .font(.system(size: 11))
-                }
                 choices
             case .installing:
                 progress
@@ -78,12 +52,14 @@ private struct AdoptionView: View {
             }
         }
         .padding(Theme.Space.lg)
-        .frame(width: 420)
+        .frame(width: Self.width)
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// Which program this is: the name it gives itself, then the file, which
+    /// is the fact. A download can call itself anything.
     private var header: some View {
-        HStack(alignment: .top, spacing: Theme.Space.md) {
+        HStack(alignment: .center, spacing: Theme.Space.md) {
             Group {
                 if let icon = model.icon {
                     Image(nsImage: icon).resizable()
@@ -91,29 +67,74 @@ private struct AdoptionView: View {
                     Image(systemName: "app.dashed").resizable().foregroundStyle(.tertiary)
                 }
             }
-            .frame(width: 64, height: 64)
+            .frame(width: 56, height: 56)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                TextField("Name", text: $model.name)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 15, weight: .semibold))
-                if let subtitle = model.subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(model.title)
+                        .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
+                    if let version = model.version {
+                        Text(version)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(-1)
+                    }
                 }
                 Text(model.location)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(model.verdict.summary)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    /// What Sevoflurane takes the file for, when that is more than "a
+    /// program", with the way to say otherwise beside it: a correction, so
+    /// it sits with the claim and not among the actions.
+    @ViewBuilder private var verdict: some View {
+        if model.isOverruled {
+            Toggle("Remember that this file is not an installer", isOn: $model.remembersOverrule)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+        } else if model.verdict.kind != ProgramKind.program {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+                    verdictText
+                    correction
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    verdictText.fixedSize(horizontal: false, vertical: true)
+                    correction
+                }
+            }
+        }
+    }
+
+    private var verdictText: some View {
+        Text(model.verdict.summary).font(.system(size: 12))
+    }
+
+    @ViewBuilder private var correction: some View {
+        if model.isInstaller {
+            Button("Not an Installer") { model.overruleInstaller() }
+                .buttonStyle(.link)
+                .font(.system(size: 12))
+                .help("Choose whether to play it once or add it to Quick Launch.")
+        }
+    }
+
+    /// The name the program gets in Quick Launch.
+    private var nameField: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+            Text("Name").font(.system(size: 12))
+            TextField("Name", text: $model.name)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .labelsHidden()
         }
     }
 
@@ -126,23 +147,45 @@ private struct AdoptionView: View {
         }
     }
 
+    /// One row when every label fits whole, otherwise a column: a label is
+    /// never cut, in any language.
     private var choices: some View {
-        HStack(spacing: Theme.Space.sm) {
-            Button("Cancel") { model.cancel() }
-                .keyboardShortcut(.cancelAction)
-            Spacer()
-            if model.isInstaller {
-                Button("Not an Installer") { model.overruleInstaller() }
-                    .help("Choose whether to play it once or add it to Quick Launch.")
-                Button("Run Once") { model.playOnce() }
-                Button("Install into Bottle") { model.install() }
-                    .keyboardShortcut(.defaultAction)
-            } else {
-                Button("Play Once") { model.playOnce() }
-                Button("Add to Quick Launch") { model.adopt(andPlay: false) }
-                Button("Add and Play") { model.adopt(andPlay: true) }
-                    .keyboardShortcut(.defaultAction)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Space.sm) {
+                cancel
+                Spacer(minLength: Theme.Space.md)
+                actions
             }
+            VStack(spacing: Theme.Space.sm) {
+                actions
+                cancel
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var cancel: some View {
+        Button("Cancel") { model.cancel() }
+            .keyboardShortcut(.cancelAction)
+            .fixedSize()
+    }
+
+    /// The default action comes last, as in an alert.
+    @ViewBuilder private var actions: some View {
+        if model.isInstaller {
+            Button("Run Once") { model.playOnce() }
+                .fixedSize()
+            Button("Install into Bottle") { model.install() }
+                .keyboardShortcut(.defaultAction)
+                .fixedSize()
+        } else {
+            Button("Play Once") { model.playOnce() }
+                .fixedSize()
+            Button("Add to Quick Launch") { model.adopt(andPlay: false) }
+                .fixedSize()
+            Button("Add and Play") { model.adopt(andPlay: true) }
+                .keyboardShortcut(.defaultAction)
+                .fixedSize()
         }
     }
 }

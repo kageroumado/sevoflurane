@@ -7935,12 +7935,12 @@
         }
       }
     },
-    "Remember for this file": {
+    "Remember that this file is not an installer": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "记住对此文件的选择"
+            "value": "记住此文件不是安装程序"
           }
         }
       }

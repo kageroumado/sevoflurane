@@ -12,7 +12,7 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
     private let defaults: UserDefaults
     private let presenter: ((RunRecord) -> Void)?
     private var offered: Set<String> = []
-    private var panel: NSPanel?
+    private let panel = DialogPanel(size: NSSize(width: 460, height: 220), title: "Sevoflurane")
     private var model: CrashPromptModel?
 
     /// - Parameters:
@@ -72,40 +72,16 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
             self?.close()
         }
         self.model = model
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        panel.contentView = NSHostingView(rootView: CrashPromptView(model: model))
-        panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 460, height: 220))
-        panel.center()
-        // The app has no activation of its own, so the panel would open behind
-        // whatever the user was in.
-        NSApp.activate()
-        panel.makeKeyAndOrderFront(nil)
+        panel.delegate = self
+        panel.show(CrashPromptView(model: model))
     }
 
     private func close() {
-        panel?.orderOut(nil)
-        panel?.contentView = nil
+        panel.dismiss()
         model = nil
     }
 
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 220),
-            styleMask: [.titled, .closable, .fullSizeContentView, .utilityWindow],
-            backing: .buffered,
-            defer: false,
-        )
-        panel.delegate = self
-        panel.title = "Sevoflurane"
-        panel.titlebarAppearsTransparent = true
-        panel.isFloatingPanel = true
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        return panel
-    }
-
-    /// The close button is "Don't send".
+    /// Escape is "Don't send".
     func windowShouldClose(_: NSWindow) -> Bool {
         model?.decline()
         return false
