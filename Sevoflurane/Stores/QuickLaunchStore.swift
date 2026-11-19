@@ -1,5 +1,5 @@
 import AppKit
-import SwiftUI
+import Observation
 import UniformTypeIdentifiers
 
 /// What a program's launch reports to: the Steam host's status line, window

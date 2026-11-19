@@ -1,5 +1,5 @@
 import AppKit
-import SwiftUI
+import Foundation
 
 /// The diagnostics zip, written by the bundled `sevo diag` so a button's zip
 /// and a hand-run one are the same report.
@@ -26,21 +26,3 @@ enum DiagnosticsArchive {
     }
 }
 
-/// The button that saves the zip, with its own progress and its own error.
-struct SaveDiagnosticsButton: View {
-    let title: LocalizedStringKey
-    @Binding var error: String?
-    @State private var isSaving = false
-
-    var body: some View {
-        Button(isSaving ? "Saving…" : title) {
-            isSaving = true
-            error = nil
-            Task(name: "Save diagnostics") {
-                error = await DiagnosticsArchive.save()
-                isSaving = false
-            }
-        }
-        .disabled(isSaving)
-    }
-}

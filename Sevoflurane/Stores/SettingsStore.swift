@@ -1,4 +1,5 @@
-import SwiftUI
+import Foundation
+import Observation
 
 /// One level's settings as a pane sees them, and the one way a pane changes
 /// them.
@@ -67,39 +68,5 @@ final class SettingsStore {
     /// the fix list's undo.
     func reload() {
         values = environment.values(scope)
-    }
-
-    // MARK: - Bindings
-
-    /// A setting's own value, for a control that can say Inherit.
-    func binding(_ setting: Setting) -> Binding<SettingValue?> {
-        Binding(
-            get: { self.own(setting) },
-            set: { self.send(.set(setting.id, $0)) },
-        )
-    }
-
-    /// A switch at a level with no Inherit: it shows the value in force and
-    /// writes the level's own.
-    func flagBinding(_ setting: Setting) -> Binding<Bool> {
-        Binding(
-            get: { self.effective(setting).flag ?? false },
-            set: { self.send(.set(setting.id, .flag($0))) },
-        )
-    }
-
-    /// A choice at a level with no Inherit.
-    func choiceBinding(_ setting: Setting) -> Binding<String> {
-        Binding(
-            get: { self.effective(setting).choice ?? "" },
-            set: { self.send(.set(setting.id, .choice($0))) },
-        )
-    }
-
-    var tuningParametersBinding: Binding<TuningParameters> {
-        Binding(
-            get: { self.tuningParameters },
-            set: { self.send(.setTuningParameters($0)) },
-        )
     }
 }
