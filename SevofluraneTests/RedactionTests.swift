@@ -97,4 +97,17 @@ struct RedactionTests {
         #expect(redacted.hasPrefix(quiet))
         #expect(redacted.hasSuffix(quiet))
     }
+
+    @Test
+    func `a Steam account is taken out in each form Steam writes it`() {
+        let log = "[2026-11-19 10:00:00] [U:1:845470373] ConnectionCompleted\n"
+            + "saving C:\\Program Files (x86)\\Steam\\userdata\\845470373\\config\\localconfig.vdf\n"
+            + "reading steam/userdata/845470373/7/remote\n"
+        let redacted = Redaction.apply(to: log, personas: [])
+        #expect(!redacted.contains("845470373"))
+        #expect(redacted.contains("\(Redaction.steamID) ConnectionCompleted"))
+        #expect(redacted.contains("userdata/\(Redaction.steamID)/7/remote"))
+        // A number that is no account stays.
+        #expect(Redaction.apply(to: "appid 845470373", personas: []).contains("845470373"))
+    }
 }

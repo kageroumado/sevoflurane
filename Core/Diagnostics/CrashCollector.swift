@@ -146,7 +146,12 @@ nonisolated enum CrashCollector {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
         guard FileManager.default.isExecutableFile(atPath: helper.path) else { return false }
         let url = report.directory.appendingPathComponent("doctor.json")
-        return runBounded(helper, ["doctor", "--json"], into: url, timeout: doctorTimeout)
+        guard runBounded(helper, ["doctor", "--json"], into: url, timeout: doctorTimeout) else { return false }
+        // The doctor names paths and bottles; a report is shared.
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            try? Redaction.apply(to: text).write(to: url, atomically: true, encoding: .utf8)
+        }
+        return true
     }
 
     static let doctorTimeout: TimeInterval = 30

@@ -61,8 +61,7 @@ struct DiagCommand: AsyncParsableCommand {
             Every file passes through redaction on the way in: a path under a
             home directory becomes ~, the bottle's Windows user becomes ~, this
             Mac's names become <host>, the account's name <user>, Steam ids
-            <steamid>. Collected run reports also replace persona names with
-            <persona>.
+            <steamid>, and the names Steam has signed in here <persona>.
             """,
         )
 
@@ -75,6 +74,10 @@ struct DiagCommand: AsyncParsableCommand {
             inversion: .prefixedNo,
             help: "Steam's own bootstrap, connection, webhelper, game-process and console logs from the bottle.",
         ) var steamLogs = true
+        @Option(
+            name: .customLong("run"),
+            help: "Only this run: its record, its game's logs and settings. An appid (its newest run) or a run id.",
+        ) var onlyRun: String?
         @Flag(name: .customLong("json")) var asJSON = false
 
         func run() async throws {
@@ -82,7 +85,15 @@ struct DiagCommand: AsyncParsableCommand {
             let destination = output.map {
                 URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
             }
-            let zip = try await Diagnostics.bundle(to: destination, steamLogs: steamLogs)
+            var record: RunRecord?
+            if let onlyRun {
+                record = RunRecord.matching(onlyRun, in: RunLog.recent(1000))
+                guard record != nil else {
+                    Sevo.printError("no recorded run matches \(onlyRun)")
+                    throw SevoExit.failed
+                }
+            }
+            let zip = try await Diagnostics.bundle(to: destination, steamLogs: steamLogs, onlyRun: record)
             print(asJSON ? Sevo.json(["path": zip.path]) : zip.path)
         }
     }

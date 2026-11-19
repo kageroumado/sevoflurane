@@ -55,8 +55,9 @@ final class CrashPromptModel {
     static let reportsDirectory = AppIdentity.supportFolder
         .appendingPathComponent("Reports")
 
-    static let offer = "Send the report to the Sevoflurane developers? It contains: the run summary, "
-        + "Wine's exception record, the game's own crash log, with paths and account names removed."
+    static let offer = "Send the report to the Sevoflurane developers? It contains: this run's record and "
+        + "settings, the game's own crash logs, and the app's, Wine's and Steam's logs, with paths, "
+        + "account names and Steam ids removed."
 
     let record: RunRecord
     let known: KnownFailures.Entry?
@@ -76,18 +77,18 @@ final class CrashPromptModel {
 
     /// - Parameters:
     ///   - bundle: Builds the zip into a directory and answers its path. The
-    ///     app's is the same builder as `sevo diag`.
+    ///     app's is `sevo diag`'s builder narrowed to this run.
     ///   - upload: Where and as whom it is sent.
     ///   - report: The community report's model; the app's reads the sharing
     ///     preference and queues through ``StatsUploader``.
     init(
         record: RunRecord,
-        bundle: @escaping @Sendable (URL) async throws -> URL = { try await Diagnostics.bundle(to: $0, steamLogs: true) },
+        bundle: (@Sendable (URL) async throws -> URL)? = nil,
         upload: ReportUpload = .forThisApp(),
         report: RunReportModel? = nil,
     ) {
         self.record = record
-        self.bundle = bundle
+        self.bundle = bundle ?? { try await Diagnostics.bundle(to: $0, steamLogs: true, onlyRun: record) }
         self.upload = upload
         self.report = report ?? RunReportModel(record: record)
         known = KnownFailures.match(record)

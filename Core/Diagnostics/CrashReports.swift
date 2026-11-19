@@ -176,7 +176,8 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
 
     /// `nil` for a file that is not a minidump.
     static func read(_ url: URL) -> MinidumpMetadata? {
-        guard let data = try? Data(contentsOf: url), data.count >= headerBytes,
+        // Mapped: a dump is a process's memory, gigabytes of it, and only its header is read.
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), data.count >= headerBytes,
               data.prefix(4).elementsEqual(signature) else { return nil }
         let streamCount = Int(data.integer(UInt32.self, at: 8) ?? 0)
         let directory = Int(data.integer(UInt32.self, at: 12) ?? 0)

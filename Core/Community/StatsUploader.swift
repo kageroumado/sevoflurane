@@ -10,8 +10,20 @@ import Foundation
 actor StatsUploader {
     static let shared = StatsUploader()
 
-    static let baseURL = ProcessInfo.processInfo.environment["SEVO_STATS_URL"].flatMap(URL.init(string:))
-        ?? URL(string: "https://kagerou.glass/api/sevoflurane/v1")!
+    static let baseURL = endpoint(overriddenBy: ProcessInfo.processInfo.environment["SEVO_STATS_URL"])
+
+    /// The service, or a developer's own named in `SEVO_STATS_URL`: over
+    /// HTTPS, or on this Mac. Anything else is ignored, so no setting sends
+    /// run records in the clear.
+    static func endpoint(overriddenBy override: String?) -> URL {
+        let service = URL(string: "https://kagerou.glass/api/sevoflurane/v1")!
+        guard let override, let url = URL(string: override), let host = url.host()?.lowercased() else { return service }
+        let isLocal = ["127.0.0.1", "localhost", "::1"].contains(host)
+        return url.scheme?.lowercased() == "https" || (url.scheme?.lowercased() == "http" && isLocal) ? url : service
+    }
+
+    /// A reply is a few hundred bytes of JSON; past this it is not one.
+    static let maximumReplyBytes = 1 << 20
     static let installHeader = "Sevo-Install"
     static let signatureHeader = "Sevo-Signature"
     static let batchSize = 50
@@ -312,7 +324,7 @@ actor StatsUploader {
         if !rejected.isEmpty {
             Self.log("the server refused \(rejected.count) of \(runs.count) runs: \(rejected.map(\.why).joined(separator: "; "))")
         }
-        return runs.count - rejected.count
+        return max(0, runs.count - rejected.count)
     }
 
     /// Sends one batch of reports, records each one's standing in the ledger
@@ -336,7 +348,7 @@ actor StatsUploader {
             ))
         }
         StatsStore.writeReported(ledger)
-        return reports.count - rejected.count
+        return max(0, reports.count - rejected.count)
     }
 
     /// Adds the envelope version, next sequence number and time to `fields`.
@@ -373,6 +385,9 @@ actor StatsUploader {
             throw Failure.unreachable(error.localizedDescription)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard data.count <= Self.maximumReplyBytes else {
+            throw Failure.refused(status: status, reason: "the reply is \(data.count) bytes")
+        }
         guard (200 ..< 300).contains(status) else {
             let reason = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
             throw Failure.refused(status: status, reason: reason)

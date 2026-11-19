@@ -45,7 +45,12 @@ nonisolated enum Diagnostics {
 
     /// Writes the bundle into a directory, at a `.zip` path, or on the
     /// Desktop, and answers where.
-    static func bundle(to destination: URL?, steamLogs: Bool) async throws -> URL {
+    ///
+    /// `run` narrows it to one run, for a report about that run alone: its
+    /// record in place of the month's, its game's logs and settings in place
+    /// of every game's, crash reports from its start on, and no launcher
+    /// list. The app's, Wine's and Steam's logs are whole either way.
+    static func bundle(to destination: URL?, steamLogs: Bool, onlyRun run: RunRecord? = nil) async throws -> URL {
         let manager = FileManager.default
         let name = "Sevoflurane-report-\(stamp.string(from: Date()))"
         let zip: URL = if let destination, destination.pathExtension == "zip" {
@@ -66,11 +71,11 @@ nonisolated enum Diagnostics {
             staging.write(bottleState, as: "bottle/dependencies.json")
         }
         collectAppLogs(into: staging)
-        collectEngineAndBottle(into: staging)
-        collectLaunchers(into: staging)
-        collectCrashReports(into: staging)
+        collectEngineAndBottle(into: staging, onlyApp: run?.appid)
+        if run == nil { collectLaunchers(into: staging) }
+        collectCrashReports(into: staging, since: run.flatMap { ISO8601DateFormatter().date(from: $0.t) })
         if steamLogs { collectSteamLogs(into: staging) }
-        collectRuns(into: staging)
+        collectRuns(into: staging, only: run)
         staging.writeContents()
 
         try? manager.createDirectory(at: zip.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -97,7 +102,7 @@ nonisolated enum Diagnostics {
         }
     }
 
-    private static func collectEngineAndBottle(into staging: Staging) {
+    private static func collectEngineAndBottle(into staging: Staging, onlyApp appID: Int?) {
         staging.copy(Engine.active.root.appendingPathComponent("engine-info.json"), as: "engine/engine-info.json")
         let sevoDir = SteamBottle.root.appendingPathComponent(".sevo")
         staging.copy(sevoDir.appendingPathComponent("bottle.env"), as: "bottle/bottle.env")
@@ -105,7 +110,18 @@ nonisolated enum Diagnostics {
         staging.copy(sevoDir.appendingPathComponent("debug.env"), as: "bottle/debug.env")
         let apps = sevoDir.appendingPathComponent("apps")
         for app in (try? FileManager.default.contentsOfDirectory(atPath: apps.path)) ?? [] {
-            staging.copy(apps.appendingPathComponent(app), as: "bottle/apps/\(app)")
+            let file = apps.appendingPathComponent(app)
+            // Each game's file names it in `# app <id> <name>` (``ConfigMaterializer``).
+            if let appID, !isEnvFile(file, ofApp: appID) { continue }
+            staging.copy(file, as: "bottle/apps/\(app)")
+        }
+    }
+
+    static func isEnvFile(_ file: URL, ofApp appID: Int) -> Bool {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
+        // After the writer's own header line.
+        return text.split(whereSeparator: \.isNewline).prefix(3).contains { line in
+            line == "# app \(appID)" || line.hasPrefix("# app \(appID) ")
         }
     }
 
@@ -119,9 +135,9 @@ nonisolated enum Diagnostics {
     }
 
     /// Our crash reports, matched by the per-run collector's lists.
-    private static func collectCrashReports(into staging: Staging) {
+    private static func collectCrashReports(into staging: Staging, since: Date?) {
         let reports = logs.appendingPathComponent("DiagnosticReports")
-        for url in recentFiles(in: reports, where: { _ in true })
+        for url in recentFiles(in: reports, since: since, where: { _ in true })
             where CrashReportIPS.isOurs(
                 url, prefixes: CrashCollector.ourCrashReportPrefixes,
                 pathMarkers: CrashCollector.ourImageMarkers,
@@ -137,8 +153,17 @@ nonisolated enum Diagnostics {
         }
     }
 
-    /// The month's run records and their games' own logs.
-    private static func collectRuns(into staging: Staging) {
+    /// The month's run records and their games' own logs, or one run's.
+    private static func collectRuns(into staging: Staging, only run: RunRecord?) {
+        if let run {
+            if let line = try? JSONEncoder().encode(run) {
+                staging.write(String(decoding: line, as: UTF8.self) + "\n", as: "runs/run.jsonl")
+            }
+            for log in GameLogs.collect(for: [run]) {
+                staging.write(log.text, as: log.path)
+            }
+            return
+        }
         let runs = RunLog.records(inMonth: Date())
         let month = RunLog.url(forMonth: Date())
         staging.copy(month, as: "runs/\(month.lastPathComponent)")
@@ -186,8 +211,10 @@ nonisolated enum Diagnostics {
     }
 
     /// The files in a directory modified inside the crash report window.
-    private static func recentFiles(in directory: URL, where wanted: (String) -> Bool) -> [URL] {
-        let since = Date().addingTimeInterval(-crashReportWindow)
+    private static func recentFiles(
+        in directory: URL, since: Date? = nil, where wanted: (String) -> Bool,
+    ) -> [URL] {
+        let since = since ?? Date().addingTimeInterval(-crashReportWindow)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         return names.filter(wanted).map(directory.appendingPathComponent).filter { url in
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate

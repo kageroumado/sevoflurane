@@ -4,9 +4,11 @@ import SystemConfiguration
 /// Takes the person out of text that is meant to be shared.
 ///
 /// Home paths and the bottle's Windows user become `~`, this Mac's name and
-/// account become placeholders, Steam ids become `<steamid>`, and `uid=` or
-/// `UID:` numbers become `<uid>`. Persona names cannot be detected, so callers
-/// pass them in.
+/// account become placeholders, Steam ids in each of their forms (the
+/// seventeen digits, `[U:1:…]`, the `userdata` folder) become `<steamid>`,
+/// and `uid=` or `UID:` numbers become `<uid>`. Persona and account names
+/// cannot be detected, so they are the ones the bottle's Steam has signed in
+/// unless a caller passes its own.
 nonisolated enum Redaction {
     static let home = "~"
     static let steamID = "<steamid>"
@@ -16,7 +18,7 @@ nonisolated enum Redaction {
     static let gameAccount = "<uid>"
 
     /// `text` with the person taken out.
-    static func apply(to text: String, personas: [String] = []) -> String {
+    static func apply(to text: String, personas: [String] = SteamAccounts.names()) -> String {
         guard text.utf8.count > lineWiseThreshold else { return redact(text, personas: personas) }
         return redactingMatchingLines(of: text, personas: personas)
     }
@@ -30,6 +32,8 @@ nonisolated enum Redaction {
             "sers/",
             "sers\\",
             "7656119",
+            "U:1:",
+            "userdata",
             "uid",
             NSUserName(),
             NSFullUserName(),
@@ -78,6 +82,8 @@ nonisolated enum Redaction {
         result = result.replacing(macHome) { _ in home }
         result = result.replacing(windowsUser) { match in "\(match.output.1)~" }
         result = result.replacing(steamIDDigits) { _ in steamID }
+        result = result.replacing(steam3ID) { _ in steamID }
+        result = result.replacing(userdataFolder) { match in "\(match.output.1)\(steamID)" }
         result = result.replacing(gameAccountID) { match in "\(match.output.1)\(gameAccount)" }
         for name in machineNames {
             result = result.replacingOccurrences(of: name, with: host)
@@ -126,4 +132,11 @@ nonisolated enum Redaction {
 
     /// A seventeen-digit individual-account Steam id.
     private nonisolated(unsafe) static let steamIDDigits = /\b7656119\d{10}\b/
+
+    /// The same account as Steam's own logs write it, `[U:1:845470373]`: the
+    /// number added to 76561197960265728 is the seventeen-digit id.
+    private nonisolated(unsafe) static let steam3ID = /\[?U:1:\d+\]?/
+
+    /// The account's folder under `userdata`, keeping the prefix.
+    private nonisolated(unsafe) static let userdataFolder = /(?i)(userdata[\/\\])\d+/
 }

@@ -235,15 +235,22 @@ nonisolated enum GameLogs {
                     ?? (value.hasPrefix("/") ? URL(fileURLWithPath: value) : nil),
                     modified(url) != nil else { continue }
                 let entries = InstallDirectory.entries(in: url)
+                // The variable can name any folder, and what is found goes
+                // into a shared report: only files named as DXMT names its
+                // logs, `<program>_<library>.log`.
                 let logs = entries.isEmpty
-                    ? [url] : entries.filter { !$0.isDirectory && isText($0.name) }.map(\.url)
-                found += logs.filter { !found.contains($0) }
+                    ? [url] : entries.filter { !$0.isDirectory }.map(\.url)
+                found += logs.filter { isRendererLog($0.lastPathComponent) && !found.contains($0) }
             }
         }
         return found
     }
 
     private static let rendererLogKey = "DXMT_LOG_PATH="
+
+    static func isRendererLog(_ name: String) -> Bool {
+        name.wholeMatch(of: /.+_[A-Za-z0-9]+\.log/) != nil
+    }
 
     // MARK: - Files
 

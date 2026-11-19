@@ -58,11 +58,21 @@ nonisolated struct HostSnapshot: Encodable, Sendable {
         let sampleRate: Float64 = property(kAudioDevicePropertyNominalSampleRate, of: device) ?? 0
         let running: UInt32 = property(kAudioDevicePropertyDeviceIsRunningSomewhere, of: device) ?? 0
         return AudioOutput(
-            name: name.map { $0 as String } ?? "unnamed device",
+            name: reportName(name.map { $0 as String }, transport: transportWord(transport)),
             transport: transportWord(transport),
             sampleRateHz: sampleRate,
             running: running != 0,
         )
+    }
+
+    /// A device's name as a log and a report carry it. Headphones and
+    /// speakers reached over the air are named after their owner ("Ana's
+    /// AirPods Pro"), so those are known by how they are attached; a wired
+    /// or built-in device keeps its model name.
+    nonisolated static func reportName(_ name: String?, transport: String) -> String {
+        let overTheAir = ["bluetooth", "airplay"].contains { transport.lowercased().contains($0) }
+        guard !overTheAir else { return "\(transport) device" }
+        return name ?? "unnamed device"
     }
 
     /// A transport type as a word for a log; Bluetooth and Bluetooth LE share one.

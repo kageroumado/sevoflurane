@@ -21,7 +21,7 @@ nonisolated enum ReportStripper {
     ]
 
     /// A log as a report carries it.
-    static func strip(_ text: String, personas: [String] = []) -> String {
+    static func strip(_ text: String, personas: [String] = SteamAccounts.names()) -> String {
         let redacted = Redaction.apply(to: text, personas: personas)
         let kept = redacted.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !isAddressesOnly($0) }
@@ -67,7 +67,7 @@ nonisolated enum ReportStripper {
     }
 
     /// The stripped last `limit` bytes of a file, with a note of what was cut.
-    static func tail(of url: URL, limit: Int, personas: [String] = []) -> String? {
+    static func tail(of url: URL, limit: Int, personas: [String] = SteamAccounts.names()) -> String? {
         guard let (text, elided) = rawTail(of: url, limit: limit) else { return nil }
         return elided + strip(text, personas: personas)
     }

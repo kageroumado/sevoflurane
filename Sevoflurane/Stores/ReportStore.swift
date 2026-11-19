@@ -85,10 +85,12 @@ final class ReportStore {
         guard !writing else { return }
         writing = true
         note = nil
+        // The zip is this run's, as the card says: no other game's records.
+        let scope = run.map { ["--run", $0.id] } ?? []
         Task(name: "Write the report zip") {
             let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
             let result = await Subprocess.run(
-                helper.path, ["diag", "save", "--steam-logs"], capture: .combined,
+                helper.path, ["diag", "save", "--steam-logs"] + scope, capture: .combined,
                 timeout: .seconds(120),
             )
             writing = false
