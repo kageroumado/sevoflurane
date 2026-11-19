@@ -481,9 +481,78 @@ struct D3DMetalInstallTests {
         let preferences = try #require(UserDefaults(suiteName: suite))
         defer { preferences.removePersistentDomain(forName: suite) }
 
-        _ = try await D3DMetalInstaller.install(from: toolkit("4.0 beta 2", in: dir), intoEngine: engine)
-        _ = try await D3DMetalInstaller.install(from: toolkit("3.0", in: dir), intoEngine: engine)
+        // The fixtures hold no code, so there is nothing of Apple's to vet.
+        _ = try await D3DMetalInstaller.install(
+            from: toolkit("4.0 beta 2", in: dir), intoEngine: engine, vet: { _, _, _ in },
+        )
+        _ = try await D3DMetalInstaller.install(from: toolkit("3.0", in: dir), intoEngine: engine, vet: { _, _, _ in })
         #expect(D3DMetalInstaller.active(inEngine: engine, preferences: preferences)?.version == "4.0 beta 2")
+    }
+
+    /// A toolkit's `redist/lib` holding `files`, each with the given bytes.
+    private func lib(in dir: URL, _ files: [String: Data]) throws -> URL {
+        let lib = dir.appendingPathComponent("redist/lib")
+        for (path, bytes) in files {
+            let file = lib.appendingPathComponent(path)
+            try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try bytes.write(to: file)
+        }
+        try manager.createDirectory(at: lib, withIntermediateDirectories: true)
+        return lib
+    }
+
+    @Test
+    func `a toolkit image is vetted before any of it is copied`() throws {
+        let dir = manager.temporaryDirectory.appendingPathComponent("d3dmetal-vet-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: dir) }
+        let pe = Data([0x4D, 0x5A, 0x90, 0x00, 0x03])
+        let machO = Data([0xCF, 0xFA, 0xED, 0xFE, 0x07, 0x00, 0x00, 0x01])
+
+        // Native code that Apple did not sign, whatever it is called.
+        let trojan = try lib(in: dir.appendingPathComponent("a"), ["external/libd3dshared.dylib": machO])
+        #expect(throws: D3DMetalInstaller.InstallError.notApples("libd3dshared.dylib")) {
+            try D3DMetalInstaller.vet(lib: trojan, version: "9.9", origin: .chosen)
+        }
+        let renamed = try lib(in: dir.appendingPathComponent("b"), ["wine/x86_64-unix/notes.txt": machO])
+        #expect(throws: D3DMetalInstaller.InstallError.notApples("notes.txt")) {
+            try D3DMetalInstaller.vet(lib: renamed, version: "9.9", origin: .chosen)
+        }
+
+        // A link out of the image would be copied as a link and loaded.
+        let linked = try lib(in: dir.appendingPathComponent("c"), [:])
+        try manager.createDirectory(at: linked.appendingPathComponent("wine/x86_64-unix"), withIntermediateDirectories: true)
+        try manager.createSymbolicLink(
+            atPath: linked.appendingPathComponent("wine/x86_64-unix/d3d12.so").path,
+            withDestinationPath: "/usr/lib/dyld",
+        )
+        #expect(throws: D3DMetalInstaller.InstallError.notApples("d3d12.so")) {
+            try D3DMetalInstaller.vet(lib: linked, version: "9.9", origin: .chosen)
+        }
+
+        // A version on record with a DLL that is not that version's.
+        let swapped = try lib(in: dir.appendingPathComponent("d"), ["wine/x86_64-windows/dxgi.dll": pe])
+        #expect(throws: D3DMetalInstaller.InstallError.self) {
+            try D3DMetalInstaller.vet(lib: swapped, version: "3.0", origin: .chosen)
+        }
+
+        // A version with no record: the user's own pick installs, a file a
+        // folder watch found does not.
+        let new = try lib(in: dir.appendingPathComponent("e"), ["wine/x86_64-windows/dxgi.dll": pe])
+        try D3DMetalInstaller.vet(lib: new, version: "9.9", origin: .chosen)
+        #expect(throws: D3DMetalInstaller.InstallError.unknownVersionFound("9.9")) {
+            try D3DMetalInstaller.vet(lib: new, version: "9.9", origin: .foundInFolder)
+        }
+    }
+
+    @Test
+    func `a toolkit's version comes only from a name shaped like Apple's`() {
+        func version(_ name: String) -> String? {
+            D3DMetalInstaller.version(ofVolume: URL(fileURLWithPath: "/Volumes/\(name)"))
+        }
+        #expect(version("Evaluation environment for Windows games 4.0 beta 2") == "4.0 beta 2")
+        #expect(version("Game Porting Toolkit 3.0") == "3.0")
+        #expect(version("..") == nil)
+        #expect(version("Toolkit") == nil)
     }
 }
 

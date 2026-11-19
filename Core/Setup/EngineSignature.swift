@@ -11,16 +11,13 @@ import Foundation
 /// The keys are source constants because `sevo` shares these sources and
 /// runs from `Contents/Helpers` with no bundle of its own.
 nonisolated enum EngineSignature {
-    /// Raw 32-byte Ed25519 public keys, base64, under
-    /// `infrastructure/publish/keys/`. Releases stay signed with the old key
-    /// until enough installs pin the new one (never in a repository); the manifest's `minAppVersion`
-    /// keeps new-key releases from apps that pin only the old one.
+    /// Raw 32-byte Ed25519 public keys, base64. The private halves stay
+    /// outside every repository. A new key is pinned for a few releases
+    /// before anything is signed with it, and the manifest's `minAppVersion`
+    /// turns away an app that pins only the key before.
     static let pinnedPublicKeysBase64 = [
-        // dormison-ed25519-2026-10.pem
+        // dormison-ed25519-2026-10.pem, pinned since 1.8.0.
         "5sQ6cDQSthaMVF3fZEVs9hTvnn0j2WZ2OuKOeNvBmPM=",
-        // dormison-ed25519.pem, exposed in the infrastructure repository's
-        // history (security-audit-2026-10-13 S1): drop it once installs pin both.
-        "7uDuIZdCZyobjZcPL12zL+UNOCpHSvLXvVRFHA7bzzA=",
     ]
 
     /// Release assets are accepted only from these repositories, over HTTPS.

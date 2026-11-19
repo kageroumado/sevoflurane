@@ -143,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is not the killed session's verbose one.
         DebugModeSwitch.shared.clearStaleFile()
         applyEngineManifestOverride()
+        noteBuildWentBack()
         PerfProbe.poi.emitEvent("Launch")
         installLaunchHooks()
         // A game outlives the app that launched it, so a launch armed by a
@@ -174,12 +175,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if countsUse { UsageCounting.noteUse() }
     }
 
+    private func noteBuildWentBack() {
+        guard let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String).flatMap(Int.init),
+              let replaced = Preferences.noteBuild(build) else { return }
+        EventLog.enqueue(
+            .update,
+            "this is build \(build), older than build \(replaced) that ran here before — "
+                + "if nobody installed it by hand, get the current version from kagerou.glass",
+        )
+    }
+
     /// Points the engine manifest at the URL a developer named, from the
     /// environment or the defaults key.
     ///
-    /// An override manifest and its tarballs are trusted unsigned, so a release
-    /// build takes only a `file://` one and a defaults write cannot point it at
-    /// a remote engine.
+    /// An override manifest is read unsigned, so a release build takes only a
+    /// `file://` one. Whichever manifest names it, a tarball that is fetched
+    /// needs its signature (``EngineInstaller``); only a local file installs
+    /// on its hash.
     private func applyEngineManifestOverride() {
         // The defaults key exists because `open`, the only launch path with a
         // real Aqua session, strips the environment.

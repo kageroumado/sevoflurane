@@ -86,36 +86,23 @@ nonisolated enum NWJSRuntime {
 
     // MARK: - Choosing a version
 
-    /// The release a game should run on (see ``release(forGameVersion:in:flavor:)``), or the game's
-    /// exact version when NW.js' index is unreachable.
-    static func release(forGameVersion version: String) async -> String {
-        guard let url = URL(string: "https://nwjs.io/versions.json"),
-              let (data, response) = try? await URLSession.shared.data(from: url),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let chosen = release(
-                  forGameVersion: version, in: index(from: data), flavor: nativeFlavor,
-              )
-        else { return version }
-        return chosen
+    /// The release a game should run on (see ``release(forGameVersion:in:flavor:)``), from the
+    /// releases ``NWJSPins`` can verify; nil when the game's version names no series.
+    static func release(forGameVersion version: String) -> String? {
+        release(forGameVersion: version, in: NWJSPins.index, flavor: nativeFlavor)
     }
 
-    /// One release in NW.js' index, with the build flavors it shipped.
+    /// One release, with the build flavors it shipped.
     struct IndexEntry: Sendable, Equatable {
         let version: String
         let flavors: [String]
     }
 
-    /// `versions.json` reduced to its releases, prereleases ("0.29.0-beta1") dropped.
-    static func index(from data: Data) -> [IndexEntry] {
-        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let entries = object["versions"] as? [[String: Any]]
-        else { return [] }
-        return entries.compactMap { entry in
-            guard let raw = entry["version"] as? String else { return nil }
-            let number = raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
-            guard !number.contains("-") else { return nil }
-            return IndexEntry(version: number, flavors: entry["files"] as? [String] ?? [])
-        }
+    /// Whether `version` is three dot-separated numbers. A game's loader states its version, and
+    /// the string becomes a folder name and part of a URL.
+    static func isReleaseNumber(_ version: String) -> Bool {
+        let parts = version.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { !$0.isEmpty && $0.count <= 4 && $0.allSatisfy { ("0" ... "9").contains($0) } }
     }
 
     /// The newest patch of the game's series that ships `flavor`, else the oldest release that does
@@ -149,8 +136,15 @@ nonisolated enum NWJSRuntime {
         version: String,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws -> URL {
+        guard isReleaseNumber(version) else { throw RuntimeError("\(version) is not an NW.js release number") }
         let binary = executable(version: version)
         if isInstalled(version: version) { return binary }
+        guard let digest = NWJSPins.archives[version]?[nativeFlavor] else {
+            throw RuntimeError(
+                "NW.js \(version) is not a release this version of Sevoflurane can verify; "
+                    + "add it from a folder with sevo nwjs add",
+            )
+        }
         guard let url = URL(
             string: "https://dl.nwjs.io/v\(version)/nwjs-v\(version)-\(nativeFlavor).zip",
         ) else { throw RuntimeError("nwjs \(version) has no download address") }
@@ -163,6 +157,10 @@ nonisolated enum NWJSRuntime {
 
         let archive = staging.appendingPathComponent("nwjs.zip")
         try await download(url, to: archive, label: "Downloading NW.js \(version)…", progress: progress)
+        // NW.js is unsigned and runs outside Wine, as this account.
+        guard try FileDigest.sha256(of: archive) == digest else {
+            throw RuntimeError("the NW.js \(version) download is not the published release; nothing was installed")
+        }
 
         progress("Unpacking NW.js \(version)…", nil)
         let unpacked = staging.appendingPathComponent("unpacked")
@@ -179,8 +177,8 @@ nonisolated enum NWJSRuntime {
             throw RuntimeError("the NW.js \(version) archive holds no nwjs.app")
         }
 
-        // The quarantine flag would put the download in front of Gatekeeper; the notarized binary
-        // does not need it.
+        // The build is unsigned, so Gatekeeper would refuse it under quarantine; the digest above
+        // is what vouches for it.
         _ = await Subprocess.run(
             "/usr/bin/xattr", ["-dr", "com.apple.quarantine", app.path],
             capture: .combined, timeout: .seconds(120),
@@ -206,9 +204,9 @@ nonisolated enum NWJSRuntime {
         guard let app else {
             throw RuntimeError("no nwjs.app inside \(folder.lastPathComponent)")
         }
-        guard let number = version ?? versionName(ofFolder: folder) else {
+        guard let number = version ?? versionName(ofFolder: folder), isReleaseNumber(number) else {
             throw RuntimeError(
-                "could not tell the NW.js version from \(folder.lastPathComponent); pass one",
+                "could not tell the NW.js version from \(folder.lastPathComponent); pass one, as in 0.77.0",
             )
         }
         guard !isInstalled(version: number) else {

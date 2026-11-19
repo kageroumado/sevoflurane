@@ -195,7 +195,8 @@ nonisolated enum RendererVersions {
             throw InstallError("no \(component.label) DLLs (dxgi.dll, d3d11.dll) found in \(source.lastPathComponent)")
         }
         let name = version ?? component.version(from: local.lastPathComponent)
-        guard !name.isEmpty, !name.contains("/") else {
+        // The name becomes a folder that an existing copy is trashed from.
+        guard !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else {
             throw InstallError("could not tell the version from \(local.lastPathComponent); pass one")
         }
         let destination = root.appendingPathComponent(component.rawValue).appendingPathComponent(name)
@@ -279,9 +280,17 @@ nonisolated enum RendererVersions {
             guard let assets = release["assets"] as? [[String: Any]] else { return nil }
             for asset in assets {
                 guard let name = asset["name"] as? String, component.isPayloadAsset(name),
-                      let link = asset["browser_download_url"] as? String, let url = URL(string: link)
+                      let link = asset["browser_download_url"] as? String, let url = URL(string: link),
+                      url.scheme == "https", url.host()?.lowercased() == "github.com"
                 else { continue }
-                return Release(component: component, version: component.version(from: name), url: url, tested: false, sha256: nil)
+                // GitHub states each asset's digest; older uploads have none.
+                let digest = (asset["digest"] as? String).flatMap { stated -> String? in
+                    let hex = stated.lowercased().split(separator: ":", maxSplits: 1)
+                    return hex.count == 2 && hex[0] == "sha256" && hex[1].count == 64 ? String(hex[1]) : nil
+                }
+                return Release(
+                    component: component, version: component.version(from: name), url: url, tested: false, sha256: digest,
+                )
             }
             return nil
         }

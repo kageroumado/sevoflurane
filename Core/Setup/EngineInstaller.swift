@@ -27,7 +27,11 @@ nonisolated enum EngineInstaller {
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
     ) async throws {
         guard !isInstalled(release) else { return }
-        if release.fromVerifiedManifest, !EngineSignature.isAllowedAssetURL(release.url) {
+        // Only a tarball already on this disk, named by an override manifest,
+        // installs on its hash alone. Anything fetched is a release asset
+        // with a signature, whichever manifest named it.
+        let isOperatorsFile = !release.fromVerifiedManifest && release.url.isFileURL
+        if !isOperatorsFile, !EngineSignature.isAllowedAssetURL(release.url) {
             throw EngineSignature.Failure.urlNotAllowed(release.url)
         }
         let manager = FileManager.default
@@ -50,10 +54,10 @@ nonisolated enum EngineInstaller {
         guard digest == release.sha256.lowercased() else {
             throw InstallError("engine tarball hash mismatch: \(digest)")
         }
-        if release.fromVerifiedManifest {
-            try await EngineSignature.verify(file: tarball, asset: release.url)
+        if isOperatorsFile {
+            SetupLog.log("engine \(release.version) from a local override manifest: hash checked, signature skipped")
         } else {
-            SetupLog.log("engine \(release.version) from an override manifest: hash checked, signature skipped")
+            try await EngineSignature.verify(file: tarball, asset: release.url)
         }
 
         progress("Installing…", nil)
@@ -137,9 +141,11 @@ nonisolated enum EngineInstaller {
         }
         progress(String(localized: "Verifying \(tarball.lastPathComponent)…"), nil)
         let signatureURL = EngineSignature.signatureURL(for: tarball)
+        var isSigned = false
         if let signatureFile = try? Data(contentsOf: signatureURL) {
             try EngineSignature.verify(file: tarball, signatureFile: signatureFile)
             SetupLog.log("engine tarball \(tarball.lastPathComponent): signature verified")
+            isSigned = true
         } else if requiringSignature {
             throw EngineSignature.Failure.signatureMissing(signatureURL)
         } else {
@@ -148,7 +154,10 @@ nonisolated enum EngineInstaller {
         progress("Installing…", nil)
         let staging = try makeStaging()
         defer { try? manager.removeItem(at: staging) }
-        return try await unpack(tarball, expecting: nil, in: staging, into: root)
+        // A signature covers the bytes, never the file's name: a signed
+        // tarball must hold the engine it is named for, or an old release
+        // renamed to a newer number would install as the upgrade it claims.
+        return try await unpack(tarball, expecting: isSigned ? named : nil, in: staging, into: root)
     }
 
     /// The engine a tarball is named for: `dormison-b1.tar.xz` → `dormison-b1`.

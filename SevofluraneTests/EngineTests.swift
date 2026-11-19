@@ -132,6 +132,34 @@ struct EngineManifestTests {
     }
 
     @Test
+    func `a release for a later app is refused by the app it is not for`() throws {
+        let later = Self.entry("dormison-r14").replacingOccurrences(of: #""minAppVersion": "1.0""#, with: #""minAppVersion": "1.16.0""#)
+        let feed = try EngineManifest.decode(Data(#"{"schema": 2, "channels": {"stable": \#(later)}}"#.utf8))
+        #expect(throws: EngineManifest.NeedsNewerApp(engine: "dormison-r14", minimum: "1.16.0")) {
+            try feed.release(appVersion: "1.15.2")
+        }
+        #expect(try feed.release(appVersion: "1.16.0").version == "dormison-r14")
+        #expect(try feed.release(appVersion: "1.17.0-beta.1").version == "dormison-r14")
+        // A bare build has no version to hold against it.
+        #expect(try feed.release(appVersion: nil).version == "dormison-r14")
+    }
+
+    @Test
+    func `a manifest's serial never goes back`() throws {
+        let numbered = try EngineManifest.decode(Data(#"{"schema": 2, "serial": 1795100000, "channels": {}}"#.utf8))
+        #expect(numbered.serial == 1_795_100_000)
+        #expect(try Self.manifest(["stable": "dormison-r5"]).serial == nil)
+        // Before any serial was seen, a manifest without one is the only kind there is.
+        #expect(EngineManifest.follows(serial: nil, highest: 0))
+        #expect(EngineManifest.follows(serial: 10, highest: 0))
+        #expect(EngineManifest.follows(serial: 10, highest: 10))
+        #expect(EngineManifest.follows(serial: 11, highest: 10))
+        // An old signed manifest served again, with or without a serial.
+        #expect(!EngineManifest.follows(serial: 9, highest: 10))
+        #expect(!EngineManifest.follows(serial: nil, highest: 10))
+    }
+
+    @Test
     func `a beta entry alone is no engine`() throws {
         let feed = try Self.manifest(["beta": "dormison-r5"])
         #expect(throws: EngineManifest.NoRelease()) { try feed.release() }
@@ -200,7 +228,7 @@ struct EngineSignatureTests {
 
     @Test
     func `every pinned key is a usable Ed25519 public key`() throws {
-        #expect(try EngineSignature.pinnedKeys.count == 2)
+        #expect(try EngineSignature.pinnedKeys.count == 1)
     }
 
     @Test

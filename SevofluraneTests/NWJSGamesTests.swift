@@ -6,22 +6,32 @@ import Testing
 /// a game whose own series shipped only x86_64 runs on the oldest release
 /// with an arm64 build rather than under Rosetta, and that release is 0.77.
 struct NWJSReleaseChoiceTests {
-    /// The shape of `https://nwjs.io/versions.json`, trimmed to the releases
-    /// the choice turns on.
-    private let index = NWJSRuntime.index(from: Data("""
-    {"versions": [
-      {"version": "v0.104.1", "files": ["osx-x64", "osx-arm64", "win-x64"]},
-      {"version": "v0.77.0",  "files": ["osx-x64", "osx-arm64"]},
-      {"version": "v0.76.1",  "files": ["osx-x64"]},
-      {"version": "v0.29.4",  "files": ["osx-x64"]},
-      {"version": "v0.29.3",  "files": ["osx-x64"]},
-      {"version": "v0.29.0-beta1", "files": ["osx-x64", "osx-arm64"]}
-    ]}
-    """.utf8))
+    /// Releases trimmed to the ones the choice turns on.
+    private let index = [
+        NWJSRuntime.IndexEntry(version: "0.104.1", flavors: ["osx-x64", "osx-arm64", "win-x64"]),
+        NWJSRuntime.IndexEntry(version: "0.77.0", flavors: ["osx-x64", "osx-arm64"]),
+        NWJSRuntime.IndexEntry(version: "0.76.1", flavors: ["osx-x64"]),
+        NWJSRuntime.IndexEntry(version: "0.29.4", flavors: ["osx-x64"]),
+        NWJSRuntime.IndexEntry(version: "0.29.3", flavors: ["osx-x64"]),
+    ]
 
+    /// NW.js ships unsigned, so the listed digest is all that vouches for a
+    /// download: every release the chooser can name has one for each flavor
+    /// it claims, and a game cannot name its way past the list.
     @Test
-    func `the index drops prereleases and the v`() {
-        #expect(index.map(\.version) == ["0.104.1", "0.77.0", "0.76.1", "0.29.4", "0.29.3"])
+    func `every release the app may download has a digest, and only those download`() async {
+        #expect(NWJSPins.archives["0.77.0"]?["osx-arm64"]
+            == "e396177a7b895b2488fbfe6b17c35ba74fc30bd983fdc4edc47a9a2f6595b126")
+        for (version, flavors) in NWJSPins.archives {
+            #expect(NWJSRuntime.isReleaseNumber(version), "\(version)")
+            #expect(flavors.values.allSatisfy { $0.count == 64 }, "\(version)")
+        }
+        #expect(NWJSRuntime.release(forGameVersion: "0.29.0", in: NWJSPins.index, flavor: "osx-arm64") == "0.77.0")
+        for hostile in ["../../Documents", "0.77.0/../../x", "0.77", "0.77.0-beta1", "9.9.9"] {
+            await #expect(throws: NWJSRuntime.RuntimeError.self, "\(hostile)") {
+                try await NWJSRuntime.ensure(version: hostile)
+            }
+        }
     }
 
     @Test
@@ -88,7 +98,6 @@ struct NWJSReleaseChoiceTests {
     func `an unreadable version and an index with no build here choose nothing`() {
         #expect(NWJSRuntime.release(forGameVersion: "nightly", in: index, flavor: "osx-arm64") == nil)
         #expect(NWJSRuntime.release(forGameVersion: "0.29.0", in: index, flavor: "osx-arm777") == nil)
-        #expect(NWJSRuntime.index(from: Data("not json".utf8)).isEmpty)
     }
 }
 

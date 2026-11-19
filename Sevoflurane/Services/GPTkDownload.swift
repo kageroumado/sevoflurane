@@ -62,7 +62,7 @@ final class GPTkDownload: NSObject {
 
     /// Installs a downloaded DMG and answers a failure string, or `nil` on
     /// success; the panel wires it to `GraphicsStore.installD3DMetal`.
-    var install: (@MainActor (URL) async -> String?)?
+    var install: (@MainActor (URL, D3DMetalInstaller.Origin) async -> String?)?
     /// Called with each version as it finishes installing.
     var onInstalled: (@MainActor (String) -> Void)?
 
@@ -86,7 +86,7 @@ final class GPTkDownload: NSObject {
         nextID += 1
         let id = nextID
         items.append(Item(id: id, filename: filename, fraction: 1, phase: .installing))
-        Task { await finishInstall(id: id, from: url) }
+        Task { await finishInstall(id: id, from: url, origin: found ? .foundInFolder : .chosen) }
     }
 
     var isBusy: Bool {
@@ -481,8 +481,8 @@ extension GPTkDownload: WKDownloadDelegate {
         }
     }
 
-    private func finishInstall(id: Int, from source: URL) async {
-        let failure = await install?(source)
+    private func finishInstall(id: Int, from source: URL, origin: D3DMetalInstaller.Origin = .chosen) async {
+        let failure = await install?(source, origin)
         if let failure {
             updatePhase(id: id, .failed(failure))
         } else if let version = Self.version(inFilename: source.lastPathComponent) {

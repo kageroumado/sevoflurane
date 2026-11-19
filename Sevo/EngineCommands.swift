@@ -238,8 +238,10 @@ struct EngineCommand: AsyncParsableCommand {
                 throw SevoExit.badInvocation
             }
             return url
-        } ?? EngineManifest.url
+        }
         do {
+            // No URL means the release manifest, signature and all; naming
+            // one is the operator's own manifest, read as it is.
             let fetched = try await EngineManifest.fetch(from: manifestURL)
             let release: EngineManifest.Release
             do {

@@ -91,6 +91,26 @@ nonisolated extension Preferences {
         set { shared.set(newValue, forKey: "updateFailureLoggedAt") }
     }
 
+    /// The highest build number this installation has run, for
+    /// ``noteBuild(_:)``.
+    static var highestBuildRun: Int {
+        get { shared.integer(forKey: "highestBuildRun") }
+        set { shared.set(newValue, forKey: "highestBuildRun") }
+    }
+
+    /// Records the running build and answers the newer one it replaced, if
+    /// any. The updater checks who signed an update and never which build it
+    /// is, so an old signed build offered under a new tag would install; this
+    /// is where that shows.
+    static func noteBuild(_ build: Int) -> Int? {
+        let highest = highestBuildRun
+        guard build < highest else {
+            highestBuildRun = build
+            return nil
+        }
+        return highest
+    }
+
     /// Whether the person was told that Steam here signs out while Steam for
     /// Mac uses the same account.
     static var toldAboutSteamForMacSession: Bool {

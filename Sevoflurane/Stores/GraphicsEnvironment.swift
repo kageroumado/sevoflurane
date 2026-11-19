@@ -27,7 +27,7 @@ protocol GraphicsEnvironment: AnyObject {
     /// `nil` chooses the engine's own copy.
     func chooseToolkit(version: String?) throws
     func removeToolkit(_ entry: D3DMetalInstaller.Installed) throws
-    func installToolkit(from source: URL) async throws -> D3DMetalInstaller.Installed
+    func installToolkit(from source: URL, origin: D3DMetalInstaller.Origin) async throws -> D3DMetalInstaller.Installed
 
     /// The DXMT and DXVK versions beside the engine's own (``RendererVersions``).
     func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed]
@@ -104,8 +104,8 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
         try FileManager.default.trashItem(at: entry.root, resultingItemURL: nil)
     }
 
-    func installToolkit(from source: URL) async throws -> D3DMetalInstaller.Installed {
-        try await D3DMetalInstaller.install(from: source, intoEngine: toolkitStore)
+    func installToolkit(from source: URL, origin: D3DMetalInstaller.Origin) async throws -> D3DMetalInstaller.Installed {
+        try await D3DMetalInstaller.install(from: source, intoEngine: toolkitStore, origin: origin)
     }
 
     func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed] {

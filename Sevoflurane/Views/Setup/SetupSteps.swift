@@ -346,7 +346,7 @@ struct SetupGraphicsStep: View {
         ) {
             GPTkDownloadPanel(
                 download: download,
-                install: { url in await store?.installD3DMetal(from: url, choosing: false) },
+                install: { url, origin in await store?.installD3DMetal(from: url, origin: origin, choosing: false) },
                 isSimulated: isSimulated,
             )
             .frame(maxHeight: .infinity, alignment: .top)

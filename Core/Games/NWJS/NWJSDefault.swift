@@ -17,7 +17,10 @@ nonisolated enum NWJSDefault {
     static func adopt(appID: Int, log: (String) -> Void = { _ in }) async -> Bool {
         let values = GameConfig.game(appID)
         guard isCandidate(values), let info = values.nwjs else { return false }
-        let wanted = await NWJSRuntime.release(forGameVersion: info.version)
+        guard let wanted = NWJSRuntime.release(forGameVersion: info.version) else {
+            log("app \(appID): no NW.js release fits version \(info.version), so the game stays in the bottle")
+            return false
+        }
         do {
             _ = try await NWJSRuntime.ensure(version: wanted)
         } catch {

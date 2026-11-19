@@ -225,18 +225,27 @@ nonisolated enum BottleDependencies {
     private static func installCoreFonts(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
+        // Microsoft's 2002 archives, as the mirror holds them at one commit.
         let archives = [
-            "andale32.exe", "arial32.exe", "arialb32.exe", "comic32.exe",
-            "courie32.exe", "georgi32.exe", "impact32.exe", "times32.exe",
-            "trebuc32.exe", "verdan32.exe", "webdin32.exe",
+            ("andale32.exe", "0524fe42951adc3a7eb870e32f0920313c71f170c859b5f770d82b4ee111e970"),
+            ("arial32.exe", "85297a4d146e9c87ac6f74822734bdee5f4b2a722d7eaa584b7f2cbf76f478f6"),
+            ("arialb32.exe", "a425f0ffb6a1a5ede5b979ed6177f4f4f4fdef6ae7c302a7b7720ef332fec0a8"),
+            ("comic32.exe", "9c6df3feefde26d4e41d4a4fe5db2a89f9123a772594d7f59afd062625cd204e"),
+            ("courie32.exe", "bb511d861655dde879ae552eb86b134d6fae67cb58502e6ff73ec5d9151f3384"),
+            ("georgi32.exe", "2c2c7dcda6606ea5cf08918fb7cd3f3359e9e84338dc690013f20cd42e930301"),
+            ("impact32.exe", "6061ef3b7401d9642f5dfdb5f2b376aa14663f6275e60a51207ad4facf2fccfb"),
+            ("times32.exe", "db56595ec6ef5d3de5c24994f001f03b2a13e37cee27bc25c58f6f43e8f807ab"),
+            ("trebuc32.exe", "5a690d9bb8510be1b8b4fe49f1f2319651fe51bbe54775ddddd8ef0bd07fdac9"),
+            ("verdan32.exe", "c1cb61255e363166794e47664e2f21af8e3a26cb6346eb8d2ae2fa85dd5aad96"),
+            ("webdin32.exe", "64595b5abc1080fba8610c5c34fab5863408e806aafe84653ca8575bed17d75a"),
         ]
         let extracted = scratch.directory("fonts")
         try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: true)
-        for (index, archive) in archives.enumerated() {
+        for (index, (archive, digest)) in archives.enumerated() {
             phase(String(localized: "downloading fonts (\(index + 1) of \(archives.count))"))
             let file = try await download(
-                "https://github.com/pushcx/corefonts/raw/master/\(archive)",
-                as: archive, into: scratch,
+                "https://github.com/pushcx/corefonts/raw/8f8627b0004b5f1b952c09cf6390e4ae46475e59/\(archive)",
+                as: archive, into: scratch, sha256: digest,
             )
             let result = await Subprocess.run(
                 "/usr/bin/tar", ["-xf", file.path, "-C", extracted.path],
@@ -315,6 +324,7 @@ nonisolated enum BottleDependencies {
         let redist = try await download(
             "https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe",
             as: "directx_Jun2010_redist.exe", into: scratch,
+            sha256: "053f76dcbb28802e23341b6a787e3b0791c0fa5c8d4d011b1044172dbf89c73b",
         )
         phase(InterfaceCopy.localized("extracting"))
         let extract = await ClientLifecycle.runSupervisedInBottle([
@@ -338,12 +348,17 @@ nonisolated enum BottleDependencies {
     private static func installCJKFonts(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
-        let regions = ["J", "SC", "TC", "K"]
-        for (index, region) in regions.enumerated() {
+        let regions = [
+            ("J", "747734b49301784fed68440711a106de42714d3a7dbc79064a30bbb0cac3f986"),
+            ("SC", "2105cdb5a73a7d63fdfe8311312ad7f5c4d166e3c369a9cf737a35c90dee13a2"),
+            ("TC", "e075d87d245c4a195e46d0f52fe050efc22e48c8f0f286863f77f03265bb7e9e"),
+            ("K", "5390443fb4fee71af369858d99d3fb78e67bf661194f91a776fb2b5713ab8f44"),
+        ]
+        for (index, (region, digest)) in regions.enumerated() {
             phase(String(localized: "downloading fonts (\(index + 1) of \(regions.count))"))
             let zip = try await download(
                 "https://github.com/adobe-fonts/source-han-sans/releases/download/2.004R/SourceHanSans\(region).zip",
-                as: "SourceHanSans\(region).zip", into: scratch,
+                as: "SourceHanSans\(region).zip", into: scratch, sha256: digest,
             )
             phase(String(localized: "installing fonts (\(index + 1) of \(regions.count))"))
             let result = await Subprocess.run(

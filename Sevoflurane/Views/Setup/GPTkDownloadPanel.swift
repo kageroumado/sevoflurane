@@ -10,7 +10,7 @@ struct GPTkDownloadPanel: View {
     /// caller can see when one is in flight (`download.isBusy`).
     @Bindable var download: GPTkDownload
     /// Installs a DMG and answers a failure string; wired to `GraphicsStore`.
-    let install: @MainActor (URL) async -> String?
+    let install: @MainActor (URL, D3DMetalInstaller.Origin) async -> String?
     /// Called with each version as it lands, so the caller can refresh.
     var onInstalled: (@MainActor (String) -> Void)?
     /// Stands the web view down: a simulated run must never show Apple's

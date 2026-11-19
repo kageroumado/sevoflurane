@@ -230,7 +230,7 @@ struct GraphicsSettings: View {
         VStack(spacing: 0) {
             GPTkDownloadPanel(
                 download: gptk,
-                install: { url in await store.installD3DMetal(from: url, choosing: false) },
+                install: { url, origin in await store.installD3DMetal(from: url, origin: origin, choosing: false) },
                 isSimulated: store.isSimulated,
             )
             .padding(16)

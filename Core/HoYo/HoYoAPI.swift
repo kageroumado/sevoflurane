@@ -70,7 +70,12 @@ nonisolated struct HoYoAPI: Sendable {
 
         enum CodingKeys: String, CodingKey { case urlPrefix = "url_prefix", compression }
 
-        func url(_ name: String) -> URL? { URL(string: "\(urlPrefix)/\(name)") }
+        /// HTTPS only: the prefix is the server's word, and game files
+        /// come from it.
+        func url(_ name: String) -> URL? {
+            guard let url = URL(string: "\(urlPrefix)/\(name)"), url.scheme?.lowercased() == "https" else { return nil }
+            return url
+        }
     }
 
     /// A manifest's server name and the md5 of its decompressed bytes.

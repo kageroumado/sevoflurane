@@ -51,6 +51,9 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     }
 
     let schema: Int
+    /// Counts up with every publish; absent before the manifests that carry
+    /// one. An older signed manifest served again is refused by it.
+    let serial: Int?
     private(set) var channels: [String: Release]
     /// Keyed by component (`dxmt`, `dxvk`); absent in schema 1.
     let components: [String: [ComponentRelease]]?
@@ -61,6 +64,7 @@ nonisolated struct EngineManifest: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case schema
+        case serial
         case channels
         case components
         case shaders
@@ -73,10 +77,55 @@ nonisolated struct EngineManifest: Decodable, Sendable {
     /// or `SEVO_ENGINE_MANIFEST` in the app), like ``ClientLifecycle/log``.
     nonisolated(unsafe) static var overrideURL: URL?
 
-    /// The manifest's `stable` entry, or ``NoRelease``.
-    func release() throws -> Release {
+    /// The manifest's `stable` entry, or ``NoRelease``; ``NeedsNewerApp``
+    /// when it is for a later version of the app than `appVersion`.
+    func release(appVersion: String? = Self.runningAppVersion) throws -> Release {
         guard let release = channels[Self.releaseKey] else { throw NoRelease() }
+        if let appVersion, AppVersion.isOlder(appVersion, than: release.minAppVersion) {
+            throw NeedsNewerApp(engine: release.version, minimum: release.minAppVersion)
+        }
         return release
+    }
+
+    /// The app this process belongs to: its own bundle, or for `sevo` and the
+    /// helper the bundle they sit in. Nil in a bare build with no bundle.
+    static let runningAppVersion: String? = {
+        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String { return version }
+        var folder = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+            .resolvingSymlinksInPath().deletingLastPathComponent()
+        for _ in 0 ..< 4 {
+            let info = NSDictionary(contentsOf: folder.appendingPathComponent("Info.plist"))
+            if let version = info?["CFBundleShortVersionString"] as? String { return version }
+            folder = folder.deletingLastPathComponent()
+        }
+        return nil
+    }()
+
+    /// The release is for a later app, as when it is signed with a key this
+    /// one does not pin.
+    struct NeedsNewerApp: Error, CustomStringConvertible, Equatable {
+        let engine: String
+        let minimum: String
+        var description: String {
+            "Engine \(engine) needs Sevoflurane \(AppVersion.display(minimum)) or later. Update the app first."
+        }
+    }
+
+    /// An older signed manifest than one this Mac has already taken.
+    struct RolledBack: Error, CustomStringConvertible, Equatable {
+        let serial: Int?
+        let highest: Int
+        var description: String {
+            "The engine manifest is older than the one this Mac last read (serial "
+                + "\(serial.map(String.init) ?? "none") after \(highest)); it was not used."
+        }
+    }
+
+    /// Whether a verified manifest's serial follows the highest one taken. A
+    /// manifest with none passes only until the first that has one.
+    static func follows(serial: Int?, highest: Int) -> Bool {
+        guard let serial else { return highest == 0 }
+        return serial >= highest
     }
 
     /// The manifest key the app reads its engine from.
@@ -113,8 +162,18 @@ nonisolated struct EngineManifest: Decodable, Sendable {
         let data = try await fetchBytes(Self.url)
         let signatureFile = try await EngineSignature.fetchSignature(EngineSignature.signatureURL(for: Self.url))
         try EngineSignature.verify(data, signatureFile: signatureFile, subject: Self.url.lastPathComponent)
-        return try decode(data, verified: true)
+        let manifest = try decode(data, verified: true)
+        let highest = Preferences.shared.integer(forKey: serialKey)
+        guard follows(serial: manifest.serial, highest: highest) else {
+            throw RolledBack(serial: manifest.serial, highest: highest)
+        }
+        if let serial = manifest.serial, serial > highest {
+            Preferences.shared.set(serial, forKey: serialKey)
+        }
+        return manifest
     }
+
+    private static let serialKey = "engineManifestSerial"
 
     /// The manifest's bytes, or an error naming the HTTP status: a private
     /// feed answers 404, which a JSON error would hide.

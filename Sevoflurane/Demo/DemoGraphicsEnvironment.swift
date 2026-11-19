@@ -105,7 +105,7 @@
             log("would move D3DMetal \(entry.version) to the Trash")
         }
 
-        func installToolkit(from source: URL) async throws -> D3DMetalInstaller.Installed {
+        func installToolkit(from source: URL, origin _: D3DMetalInstaller.Origin) async throws -> D3DMetalInstaller.Installed {
             log("would mount \(source.lastPathComponent) and copy its libraries into the engine")
             try await Task.sleep(for: stepDelay)
             guard scenario != .installFails else {

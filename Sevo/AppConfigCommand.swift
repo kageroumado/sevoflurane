@@ -321,7 +321,10 @@ extension AppCommand {
                         + "\(info.dir)/nw.dll")
                     throw SevoExit.failed
                 }
-                let wanted = await NWJSRuntime.release(forGameVersion: info.version)
+                guard let wanted = NWJSRuntime.release(forGameVersion: info.version) else {
+                    Sevo.printError("app \(appid): no NW.js release fits version \(info.version)")
+                    throw SevoExit.failed
+                }
                 do {
                     _ = try await NWJSRuntime.ensure(version: wanted) { label, fraction in
                         let percent = fraction.map { " \(Int($0 * 100))%" } ?? ""

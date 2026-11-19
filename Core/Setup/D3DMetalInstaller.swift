@@ -1,5 +1,7 @@
 import AppKit
+import CryptoKit
 import Foundation
+import Security
 
 /// Adds Apple's D3DMetal to a managed engine from the user's own copy of the
 /// Game Porting Toolkit.
@@ -25,10 +27,16 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    enum InstallError: Error, CustomStringConvertible {
+    enum InstallError: Error, CustomStringConvertible, Equatable {
         case notAToolkit(String)
         case attachFailed(String)
         case copyFailed(String)
+        /// A file that is not Apple's: unsigned or re-signed native code, a
+        /// link that leaves the image, or a Windows DLL unlike the version's.
+        case notApples(String)
+        /// A version found in a watched folder that this build has no record
+        /// of, so nothing vouches for its Windows half.
+        case unknownVersionFound(String)
 
         var description: String {
             switch self {
@@ -37,9 +45,47 @@ nonisolated enum D3DMetalInstaller {
                     + "(no redist/lib/external/D3DMetal.framework inside)"
             case let .attachFailed(detail): "could not open the disk image: \(detail)"
             case let .copyFailed(detail): "could not install D3DMetal: \(detail)"
+            case let .notApples(file):
+                "\(file) in this disk image is not Apple's. Download the toolkit from developer.apple.com again."
+            case let .unknownVersionFound(version):
+                "Version \(version) is new to Sevoflurane, so it was not installed on its own. "
+                    + "If you downloaded it from Apple, add it with Choose the File."
             }
         }
     }
+
+    /// How a toolkit reached the installer.
+    enum Origin: Sendable {
+        /// The user picked this file, or the app downloaded it from Apple.
+        case chosen
+        /// A watched folder turned it up. Any site can put a file with the
+        /// right name in Downloads, so only a version whose Windows DLLs are
+        /// on record installs this way.
+        case foundInFolder
+    }
+
+    /// The Windows DLLs of the versions on record, by SHA-256. macOS checks
+    /// the image's native code against Apple's signature; nothing but this
+    /// table speaks for a PE file.
+    static let knownWindowsHalves: [String: [String: String]] = [
+        "3.0": [
+            "atidxx64.dll": "bd004dd9e41415b0e1395d51a2ded762a02c7731491e74ed6076f3648ae9ea7f",
+            "d3d10.dll": "d316848cc78301829e6031b60c6f558716cdc74c440df72935968160253c03a5",
+            "d3d11.dll": "05fa6f700fb5ee5561dc3a46d98f0aed845d4fa8ab274bff1dc604b0b3f6edd1",
+            "d3d12.dll": "27dcf69bedb20ed557a83953e356ab2477b688c2a2c631f880b7583f30ff0705",
+            "dxgi.dll": "249711d3d786a9b0bb7c3558f36e472ab07ee21b8dbf118e34c975046832f9a2",
+            "nvapi64.dll": "8e1e6cde85551360d7a061a09445500f3c38805651502f3be65049d937c6960c",
+            "nvngx-on-metalfx.dll": "d7c0df74d9bb4de5e2a3cc357b2309148fd3fdc824fe7941e4d789dbd072ff99",
+        ],
+        "4.0 beta 2": [
+            "d3d10.dll": "14c84a364a1260497f0a5117ef8efd6e228764ab139a67af1127e8bd013c48c7",
+            "d3d11.dll": "303b2bb41efa30c890e2e93d39c3d3c565c8557e069eee832f2cb8a37bd4ec26",
+            "d3d12.dll": "1b7a02cb37ec6b484e2aaa76b5ec9cbb47e63aeec29dbe087d5d1589a3347cfb",
+            "dxgi.dll": "522a8b37216afb09e614489d88a74118076f4d7e08d2b289df6a6eb6f3e817af",
+            "nvapi64.dll": "05eedf19e75c6b4c0dce918577aa6ca3fe5da79d04e42145cf66f498fad3556a",
+            "nvngx-on-metalfx.dll": "f6bc9d77fd1e898fec8c6339d367bd8e0f338992c9c0c66d59b30c6e9e0743e4",
+        ],
+    ]
 
     /// The one toolkit store for every engine, in an engine's layout
     /// (`d3dmetal/<version>`), so a newly installed engine finds the user's
@@ -274,8 +320,14 @@ nonisolated enum D3DMetalInstaller {
     /// volume, or an unpacked copy) into `engine` and answers the version.
     /// Installing chooses nothing; a caller records a pick with
     /// ``choose(version:)``.
+    ///
+    /// Nothing is copied before `vet` passes the image's `redist/lib`: these
+    /// files become code the engine loads.
     @concurrent
-    static func install(from source: URL, intoEngine engine: URL) async throws -> Installed {
+    static func install(
+        from source: URL, intoEngine engine: URL, origin: Origin = .chosen,
+        vet: @Sendable (URL, String, Origin) throws -> Void = D3DMetalInstaller.vet,
+    ) async throws -> Installed {
         var attached: [URL] = []
         defer { for volume in attached.reversed() {
             detach(volume)
@@ -298,7 +350,10 @@ nonisolated enum D3DMetalInstaller {
             throw InstallError.notAToolkit(source.path)
         }
 
-        let version = version(ofVolume: searchRoot)
+        guard let version = version(ofVolume: searchRoot) else {
+            throw InstallError.notAToolkit(source.path)
+        }
+        try vet(lib, version, origin)
         let destination = engine
             .appendingPathComponent("d3dmetal")
             .appendingPathComponent(version)
@@ -340,13 +395,86 @@ nonisolated enum D3DMetalInstaller {
     }
 
     /// Apple writes the version into the volume name — "Evaluation
-    /// environment for Windows games 4.0 beta 2".
-    private static func version(ofVolume volume: URL) -> String {
+    /// environment for Windows games 4.0 beta 2". Nil for any other name: the
+    /// version becomes a folder name, and the volume's author chose it.
+    static func version(ofVolume volume: URL) -> String? {
         let name = volume.lastPathComponent
         guard let range = name.range(
             of: #"[0-9]+\.[0-9]+( beta [0-9]+)?"#, options: .regularExpression,
-        ) else { return name }
+        ) else { return nil }
         return String(name[range])
+    }
+
+    // MARK: - Vetting
+
+    /// Throws unless everything executable under a toolkit's `redist/lib` is
+    /// Apple's: native code carries Apple's own signature, every link stays
+    /// inside the folder, and the Windows DLLs are the version's on record.
+    /// A version with no record passes on its native half alone when the user
+    /// chose the file, and not at all when a folder watch found it.
+    static func vet(lib: URL, version: String, origin: Origin) throws {
+        let root = lib.resolvingSymlinksInPath().path
+        var windows: [String: String] = [:]
+        let keys: [URLResourceKey] = [.isSymbolicLinkKey, .isRegularFileKey]
+        guard let walk = FileManager.default.enumerator(at: lib, includingPropertiesForKeys: keys) else {
+            throw InstallError.notAToolkit(lib.path)
+        }
+        for case let item as URL in walk {
+            let values = try? item.resourceValues(forKeys: Set(keys))
+            if values?.isSymbolicLink == true {
+                guard item.resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
+                    throw InstallError.notApples(item.lastPathComponent)
+                }
+                continue
+            }
+            if item.pathExtension == "framework" {
+                try requireAppleSignature(item)
+                walk.skipDescendants()
+            } else if values?.isRegularFile == true {
+                switch executableKind(of: item) {
+                case .machO: try requireAppleSignature(item)
+                case .windows: windows[item.lastPathComponent.lowercased()] = try FileDigest.sha256(of: item)
+                case nil: break
+                }
+            }
+        }
+        if let known = knownWindowsHalves[version] {
+            guard windows == known else {
+                let odd = Set(windows.keys).symmetricDifference(known.keys).sorted().first
+                    ?? windows.first { known[$0.key] != $0.value }?.key ?? "a Windows DLL"
+                throw InstallError.notApples(odd)
+            }
+        } else if origin == .foundInFolder {
+            throw InstallError.unknownVersionFound(version)
+        }
+    }
+
+    private enum ExecutableKind { case machO, windows }
+
+    /// Judged by the file's first bytes, never its name.
+    private static func executableKind(of file: URL) -> ExecutableKind? {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { try? handle.close() }
+        let head = [UInt8]((try? handle.read(upToCount: 4)) ?? Data())
+        guard head.count == 4 else { return nil }
+        if head[0] == 0x4D, head[1] == 0x5A { return .windows }
+        let magic = UInt32(head[0]) << 24 | UInt32(head[1]) << 16 | UInt32(head[2]) << 8 | UInt32(head[3])
+        // Thin, fat and their byte-swapped forms.
+        return [0xFEED_FACE, 0xFEED_FACF, 0xCEFA_EDFE, 0xCFFA_EDFE, 0xCAFE_BABE, 0xBEBA_FECA].contains(magic)
+            ? .machO : nil
+    }
+
+    /// `anchor apple`: signed by Apple as its own software, which a Developer
+    /// ID or an ad hoc signature never satisfies.
+    private static func requireAppleSignature(_ subject: URL) throws {
+        var requirement: SecRequirement?
+        var code: SecStaticCode?
+        let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate | kSecCSCheckNestedCode)
+        guard SecRequirementCreateWithString("anchor apple" as CFString, [], &requirement) == errSecSuccess,
+              SecStaticCodeCreateWithPath(subject as CFURL, [], &code) == errSecSuccess,
+              let requirement, let code,
+              SecStaticCodeCheckValidity(code, flags, requirement) == errSecSuccess
+        else { throw InstallError.notApples(subject.lastPathComponent) }
     }
 
     private static func attach(_ image: URL) async throws -> URL {
