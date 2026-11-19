@@ -122,6 +122,22 @@ final class SteamWindow: NSObject {
         }
     }
 
+    /// Builds the window again for `newRole`: the window class, level and
+    /// chrome all follow the role. The page stays loaded; the old window goes
+    /// without the close path, which would tell Steam the popup closed.
+    private func rebuild(as newRole: SteamWindowRole) {
+        role = newRole
+        applyOcclusionPolicy()
+        titleObservation = nil
+        if let old = window {
+            old.delegate = nil
+            old.orderOut(nil)
+            old.contentView = nil
+        }
+        window = nil
+        realize()
+    }
+
     /// The bare `NSWindow` for this popup's role, before any dressing.
     private func makeWindow(content: NSRect) -> NSWindow {
         if role != .gameOverlay, host?.isOverlayActive == true {
@@ -365,12 +381,19 @@ final class SteamWindow: NSObject {
     /// `about:blank?…` URL, carrying size limits and creation flags.
     func adopt(name: String, parameters: String) {
         guard window == nil else {
-            // The 400ms orphan fallback built the window first; the name
-            // still lands for `/windows` and menu parent lookups.
-            if self.name.isEmpty, !name.isEmpty {
-                self.name = name
-                EventLog.shared.log(.window, "late adoption: orphan popup is \(name)")
-            }
+            // The 400ms orphan fallback built the window first, as an
+            // auxiliary one; the name lands for `/windows` and menu parent
+            // lookups, and a name with a role of its own rebuilds the window
+            // for that role, so a late desktop still becomes the host's.
+            guard self.name.isEmpty, !name.isEmpty else { return }
+            self.name = name
+            let named = SteamWindowRole(popupName: name)
+            EventLog.shared.log(.window, "late adoption: orphan popup is \(name) (\(named))")
+            guard named != role else { return }
+            let wasVisible = window?.isVisible == true
+            rebuild(as: named)
+            host?.windowDidAdopt(self)
+            if wasVisible { show(activating: false) }
             return
         }
         if !name.isEmpty {

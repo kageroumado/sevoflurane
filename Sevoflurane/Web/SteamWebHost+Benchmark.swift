@@ -230,7 +230,24 @@ extension SteamWebHost {
     }
 
     private func benchmarkStore(iteration: Int) async throws -> BenchmarkSample {
-        try await benchmarkStep(target: .store, iteration: iteration) {
+        // Leave a Store that is already up, so the sample includes its load
+        // and not a wait that is satisfied before it starts.
+        if desktop?.hasSettledStoreBrowserView == true {
+            do {
+                let reply = await evaluateInContext(Self.libraryBenchmarkScript)
+                try requireBenchmarkCommand(reply)
+                try await waitForReadiness("the Store BrowserView to leave") { [weak self] in
+                    self?.desktop?.hasSettledStoreBrowserView != true
+                }
+            } catch let failure as BenchmarkFailure {
+                return BenchmarkSample(
+                    iteration: iteration, target: BenchmarkTarget.store.rawValue, milliseconds: 0,
+                    outcome: "failed", detail: "before the step: \(failure.localizedDescription)",
+                    mainThread: mainQueueLatency.snapshotAndReset(),
+                )
+            }
+        }
+        return try await benchmarkStep(target: .store, iteration: iteration) {
             let reply = await self.evaluateInContext(Self.storeBenchmarkScript)
             try self.requireBenchmarkCommand(reply)
             // The BrowserView's load state holds when Steam throttles rAF.

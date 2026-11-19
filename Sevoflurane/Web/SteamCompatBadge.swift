@@ -118,7 +118,7 @@ enum SteamCompatBadge {
             return '<span class="sevo-compat-icon sevo-compat-info"><svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">'
               + '<path fill-rule="evenodd" clip-rule="evenodd" d="' + PATHS.playable + '" fill="currentColor"></path></svg></span>';
           }
-
+        
           var STYLE_ID = "sevo-compat-style";
           var SLOT_ID = "sevo-compat-slot";
           var STRIP_ID = "sevo-compat";
@@ -503,6 +503,10 @@ enum SteamCompatBadge {
       }
     
       var asked = {};
+      /* An unreachable answer is shown, and asked again after a minute: a
+         lookup that failed while offline is no answer for the page's life. */
+      var failedAt = {};
+      var RETRY_AFTER = 60000;
     
       function handler() {
         try { return window.webkit.messageHandlers.\(storeHandler); } catch (e) { return null; }
@@ -551,10 +555,17 @@ enum SteamCompatBadge {
           .then(function (json) {
             var record = json ? JSON.parse(json) : null;
             if (record && record.off) { window.__sevoCompat.enabled = false; delete asked[appid]; }
-            else { records[appid] = record && record.mac ? record : UNREACHABLE; }
+            else if (record && record.mac) { records[appid] = record; delete failedAt[appid]; }
+            else { unreachable(appid); }
             apply();
           })
-          .catch(function () { records[appid] = UNREACHABLE; apply(); });
+          .catch(function () { unreachable(appid); apply(); });
+      }
+    
+      function unreachable(appid) {
+        records[appid] = UNREACHABLE;
+        failedAt[appid] = Date.now();
+        delete asked[appid];
       }
     
       function apply() {
@@ -571,6 +582,7 @@ enum SteamCompatBadge {
           return;
         }
         if (!records[appid]) { ask(appid); return; }
+        if (records[appid] === UNREACHABLE && Date.now() - (failedAt[appid] || 0) > RETRY_AFTER) ask(appid);
         if (slot && slot.dataset.appid === appid && slot.nextElementSibling === where.before) return;
         if (slot) slot.remove();
         slot = makeSlot(appid, "sevo-compat-store");

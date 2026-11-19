@@ -6,6 +6,9 @@ extension SteamWebHost {
         switch phase {
         case "start":
             lastLoggedLaunchTask = nil
+            // A new action's prompt is new even under a number used before:
+            // Steam numbers actions afresh after a restart.
+            launchOptionAction = nil
             EventLog.shared.log(.client, "launch \(appID): \(task.isEmpty ? "begun" : task)")
             let id = self.appID(fromSteam: appID) ?? 0
             setLaunch(GameLaunch(appID: id, detail: "Preparing…", actionID: Int(actionID)), clearAfter: 180)

@@ -28,13 +28,8 @@ final class JavaScriptEvaluator {
                 self.finishEvaluation(id, value: value as? String)
             }
             evaluationTimeouts[id] = Task(name: "WebKit evaluation timeout") { [weak self] in
-                do {
-                    try await Task.sleep(for: timeout)
-                } catch is CancellationError {
-                    return
-                } catch {
-                    return
-                }
+                // Cancelled when the page answers first.
+                guard await (try? Task.sleep(for: timeout)) != nil else { return }
                 self?.finishEvaluation(id, value: nil)
             }
         }

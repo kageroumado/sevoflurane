@@ -433,8 +433,11 @@ final class SteamWebHost {
         EventLog.shared.log(
             .page, "rebuilding the UI page from scratch (\(popups.count) popups detached)",
         )
+        // A desktop window on screen is shown again when the new page adopts it.
+        let wasShowingDesktop = desktop?.nsWindow?.isVisible == true || desktopShowIsPending
         detachPopups(reason: .pageTeardown)
         desktop = nil
+        desktopShowIsPending = wasShowingDesktop
         context?.webView.stopLoading()
         context?.webView.removeFromSuperview()
         context = nil
@@ -657,9 +660,11 @@ final class SteamWebHost {
             )
             reload()
             // Adoption clears the flag; this backstop covers a reload that
-            // never gets there.
-            Task(name: "Web process recovery backstop") {
+            // never gets there. Each recovery has its own, ended with it.
+            recoveryBackstop?.cancel()
+            recoveryBackstop = Task(name: "Web process recovery backstop") {
                 try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
                 isRecoveringFromWebProcessDeath = false
             }
         default:
@@ -667,7 +672,13 @@ final class SteamWebHost {
         }
     }
 
-    private var isRecoveringFromWebProcessDeath = false
+    private var isRecoveringFromWebProcessDeath = false {
+        didSet {
+            if !isRecoveringFromWebProcessDeath { recoveryBackstop?.cancel() }
+        }
+    }
+
+    @ObservationIgnored private var recoveryBackstop: Task<Void, Never>?
 
     /// Whether the desktop window existed and was closed, which separates
     /// "rebuild the page" from "the UI is still booting".
