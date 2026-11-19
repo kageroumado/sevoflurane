@@ -6,9 +6,9 @@ struct AboutSettings: View {
     let highlighted: SettingsAnchor?
     @State private var diagnosticsError: String?
 
-    /// A scroll view like every other pane: the split view hangs its title
-    /// bar and its sidebar on the detail's scroll view, and a detail without
-    /// one leaves the sidebar's rows above the top of the window.
+    /// In a scroll view like every other pane: the split view hangs its title
+    /// bar and sidebar on the detail's scroll view, and without one the
+    /// sidebar's rows sit above the window's top.
     var body: some View {
         ScrollView {
             card

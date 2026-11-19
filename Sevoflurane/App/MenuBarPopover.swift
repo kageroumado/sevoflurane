@@ -2,12 +2,9 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The menu-bar item and the panel it opens, on the AppKit lifecycle
-/// (`main.swift`).
-///
-/// The panel is a non-activating window so opening the popover never takes
-/// focus from Steam's own window, and it dismisses itself the moment
-/// something else takes key — the behavior every menu-bar popover has.
+/// The menu-bar item and the panel it opens. The panel is non-activating, so
+/// opening it never takes focus from Steam's window, and it closes when
+/// something else takes key.
 @MainActor
 final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let host: SteamWebHost
@@ -16,30 +13,26 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     private let setup: SetupWindow
     /// The adopted Windows programs the popover lists beside the library.
     let quickLaunch = QuickLaunchStore()
-    /// The renderer switch. Made with the panel, so a launch that never opens
+    /// The renderer switch, made with the panel so a session that never opens
     /// the popover never reads the bottle for it.
     private lazy var graphics = GraphicsStore()
     private let presentation = PopoverPresentation()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: PopoverPanel?
     private var escapeMonitor: Any?
-    /// Re-asks for the recent games while the popover is on screen.
     private var refreshLoop: Task<Void, Never>?
 
-    /// When the panel last closed. A click on the status item while the
-    /// popover is open resigns the panel's key state *before* the button's
-    /// action runs, so by the time the toggle asks, the popover it should be
-    /// closing is already gone — and it would reopen it. Clicks that land in
-    /// that window are the second half of a dismissal, not a request.
+    /// When the panel last closed. A click on the status item resigns the
+    /// panel's key state before the button's action runs, so a click just after
+    /// a close is the second half of that dismissal and must not reopen it.
     private var closedAt = ContinuousClock.now
     /// The menu bar's session for the open popover, which draws the item's
-    /// pill; held from its start until the popover closes.
+    /// pill.
     private var pillSession: NSObject?
-    /// Watches for a click on the item while the popover is up. The menu
-    /// bar's session keeps such a click from the button, and it reaches this
-    /// app only as a mouse event elsewhere in the system.
+    /// Watches for a click on the item while the popover is up: the session
+    /// keeps it from the button, so it arrives only as a global mouse event.
     private var itemClickMonitor: Any?
-    /// Runs on every open: the popover is where a menu-bar app is used.
+    /// Runs on every open.
     var onOpen: () -> Void = {}
 
     init(
@@ -63,12 +56,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         trackIcon()
     }
 
-    /// Draws the glyph, and redraws it whenever what it has to say changes —
-    /// the badge is the only thing the item says on its own.
-    ///
-    /// One dot, two reasons: the client needs a hand, or a conversation is
-    /// waiting. The dot means the same thing either way (open the popover,
-    /// something is in it), and the popover says which.
+    /// Draws the glyph and redraws it when the badge changes. One dot for two
+    /// reasons (the client needs a hand, or a conversation is waiting); the
+    /// popover says which.
     private func trackIcon() {
         withObservationTracking {
             statusItem.button?.image = MenuBarIcon.image(
@@ -93,20 +83,15 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     }
 
     private func open() {
-        // The panel and its SwiftUI view are made once and reused, so the
-        // view's `onAppear` fires only on the first open, when Steam's
-        // `appStore` is usually still empty, and an empty answer is
-        // indistinguishable from "unchanged" to the refresh's own guard.
-        // Asking on every open costs one page evaluation and reflects the
-        // library as it stands.
+        // The view's `onAppear` fires only on the first open, usually before
+        // Steam's `appStore` is filled, and an empty answer looks "unchanged"
+        // to the refresh's guard; so ask on every open (one page evaluation).
         presentation.opened()
         onOpen()
         host.refreshRecentGames()
         quickLaunch.refresh()
         graphics.refresh()
-        // And keep asking while the popover stays up, so a list left open
-        // across an install or a play session moves. One page evaluation per
-        // tick, cancelled when the popover closes.
+        // Keep asking while the popover stays up, one page evaluation per tick.
         refreshLoop?.cancel()
         refreshLoop = Task(name: "Popover games refresh") { [weak self] in
             while !Task.isCancelled {
@@ -120,11 +105,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         position(panel)
         panel.makeKeyAndOrderFront(nil)
-        // A click opens through a session the menu bar has already begun;
-        // an accessibility press reaches the button's action and asks for one.
-        // Deferred one turn, out of the button's own mouse tracking: the
-        // session watches the mouse, and the fallback highlight is cleared
-        // when that tracking ends.
+        // A click opens through a session the menu bar already began; an
+        // accessibility press asks for one here. Deferred one turn, out of the
+        // button's mouse tracking, which would clear the fallback highlight.
         if pillSession == nil {
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
@@ -160,7 +143,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         closedAt = .now
     }
 
-    /// A second click on the item closes the popover, as it does a system one.
+    /// A second click on the item closes the popover, as for a system item.
     private func closeIfItemClicked() {
         guard let item = statusItem.button?.window?.frame,
               item.contains(NSEvent.mouseLocation) else { return }
@@ -171,11 +154,10 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         close()
     }
 
-    /// The pill a system item wears while its popover is up, which the menu
-    /// bar draws out of process. It follows an expanded-interface session:
-    /// AppKit's private scene-item API that `MenuBarExtra` rides. A button's
-    /// `highlight(_:)` and the item's `setButtonHighlighted:` flag both leave
-    /// the pill off on macOS 27.
+    /// The pill a system item wears while its popover is up, drawn by the menu
+    /// bar out of process through an expanded-interface session (the private
+    /// API `MenuBarExtra` rides). On macOS 27, `highlight(_:)` and
+    /// `setButtonHighlighted:` leave the pill off.
     private func showsOpenPill(_ isOpen: Bool) {
         guard Pill.isSupported, statusItem.responds(to: Pill.request) else {
             statusItem.button?.highlight(isOpen)
@@ -190,9 +172,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         }
     }
 
-    /// The session has started, and the pill is up. With a delegate set, a
-    /// click on the item begins one instead of sending the button's action,
-    /// so a session arriving with the popover down is the click asking for it.
+    /// The session started and the pill is up. With a delegate set, a click
+    /// begins a session instead of sending the button's action, so a session
+    /// arriving with the popover down is the click asking for it.
     @objc(statusItem:didBeginExpandedInterfaceSession:)
     private func statusItem(_: NSStatusItem, didBeginExpandedInterfaceSession session: NSObject) {
         pillSession = session
@@ -200,25 +182,23 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         if closedAt.duration(to: .now) > .milliseconds(200) {
             open()
         } else {
-            // The popover closed as this began: the second half of the click
-            // that closed it, or a request it outlived.
+            // The popover closed as this began: the tail of the closing click,
+            // or an outlived request.
             showsOpenPill(false)
         }
     }
 
-    /// The menu bar ended the session — a click on the item, or elsewhere —
-    /// and the popover goes with it.
+    /// The menu bar ended the session, and the popover goes with it.
     @objc(statusItemDidEndExpandedInterfaceSession:animated:)
     private func statusItemDidEndExpandedInterfaceSession(_: NSStatusItem, animated _: Bool) {
         pillSession = nil
         if panel?.isVisible == true { close() }
     }
 
-    /// The private selectors, spelled once.
     private enum Pill {
-        /// The session is proven on macOS 27. Once the delegate is set, a click
-        /// begins a session in place of the button's action, so on a system
-        /// whose session differs the item would stop opening the popover.
+        /// Proven on macOS 27 only: with the delegate set, a click begins a
+        /// session in place of the button's action, so where the session
+        /// differs the item would stop opening the popover.
         static let isSupported = ProcessInfo.processInfo.isOperatingSystemAtLeast(
             OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0),
         )
@@ -246,13 +226,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         panel.hasShadow = true
         panel.animationBehavior = .utilityWindow
 
-        // The popover's own background: the view hierarchy inside draws cards
-        // on top of it and never a backing surface of its own.
-        //
-        // Glass rather than an `NSVisualEffectView`: the vibrancy materials
-        // blur what is behind the window into a gray wash, while glass carries
-        // the wallpaper's color and light through, as the system's menu-bar
-        // popovers on macOS 26 do.
+        // The popover's background; the views inside draw cards on it and no
+        // surface of their own. Glass rather than an `NSVisualEffectView`,
+        // whose vibrancy blurs what is behind into a gray wash.
         let background = NSGlassEffectView()
         background.cornerRadius = Theme.Radius.card
 
@@ -265,9 +241,9 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         )
         background.contentView = content
 
-        // The window server cuts the panel's shadow from the alpha it
-        // composites, and glass fills its whole rectangle there. A layer
-        // that clips to the card's shape gives the shadow the same corners.
+        // The window server cuts the shadow from the composited alpha, and
+        // glass fills the whole rectangle; a layer clipped to the card's shape
+        // gives the shadow its corners.
         let shape = NSView()
         shape.wantsLayer = true
         shape.layer?.cornerRadius = Theme.Radius.card
@@ -305,14 +281,13 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         panel.invalidateShadow()
     }
 
-    /// The drop below the menu bar, and the least the panel keeps from a
-    /// screen edge.
+    /// The drop below the menu bar, and the margin kept from a screen edge.
     private static let gap: CGFloat = 6
     private static let margin: CGFloat = 8
 }
 
-/// Key without activating: the popover's controls work while the app itself
-/// stays in the background, which is where a menu-bar app belongs.
+/// Key without activating: the controls work while the app stays in the
+/// background.
 private final class PopoverPanel: NSPanel {
     override var canBecomeKey: Bool {
         true

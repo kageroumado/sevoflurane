@@ -3,15 +3,12 @@
     import SwiftUI
     import UserNotifications
 
-    /// Every surface in every state, side by side, with no client and no
-    /// bottle behind any of it — the visual pass this app could otherwise
-    /// only do by provisioning a machine into each state in turn.
+    /// Every surface in every state, side by side, with no client and no bottle
+    /// behind it.
     ///
-    /// Opened with `-SEVO_GALLERY 1` (or `SEVO_GALLERY=1`), or from
-    /// Debug ▸ UI Gallery. Every tile runs the same simulated environments
-    /// ``DemoMode`` boots the app on, so what shows here is what a real
-    /// machine in that state would show — and `SEVO_DEMO=1` is how to walk
-    /// one of these states as the app rather than look at it.
+    /// Opened with `-SEVO_GALLERY 1` (or `SEVO_GALLERY=1`), or from Debug ▸ UI
+    /// Gallery. Tiles run on the simulated environments ``DemoMode`` uses;
+    /// `SEVO_DEMO=1` walks one of these states as the app.
     struct GalleryView: View {
         var body: some View {
             ScrollView {
@@ -20,8 +17,8 @@
             .frame(minWidth: 1200, minHeight: 900)
         }
 
-        /// Every tile at its full height, outside any scroll view: what the
-        /// window scrolls and what ``GalleryExport`` writes to disk.
+        /// Every tile at full height, outside any scroll view: what the window
+        /// scrolls and ``GalleryExport`` writes.
         var tiles: some View {
             VStack(alignment: .leading, spacing: Theme.Space.xl) {
                 Text(verbatim: "Sevoflurane UI Gallery")
@@ -71,9 +68,8 @@
                 section("Settings — Graphics", minimum: 480) {
                     ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
                         tile(pane.scenario.title) {
-                            // Tall enough for the toolkit section below
-                            // the fold: a tile that clips the state it
-                            // exists to show is worse than no tile.
+                            // Tall enough for the toolkit section below the
+                            // fold.
                             GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
                                 .frame(width: 460, height: 620)
                         }
@@ -89,10 +85,8 @@
                     }
                 }
 
-                // Each engine tile draws the whole pane, because the
-                // sections answer one question together — the switch at
-                // the top is what makes the ones below it apply to a
-                // different bottle.
+                // Each engine tile draws the whole pane: the switch at the top
+                // decides which bottle the sections below apply to.
                 section("Settings — Engine", minimum: 500) {
                     ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
                         tile(pane.scenario.title) {
@@ -172,9 +166,7 @@
                     }
                 }
 
-                // The wizard is a fixed-size window and is shown at that
-                // size: a scaled-down tile is a picture of the UI
-                // rather than the UI, and this gallery exists to be
+                // Shown at the wizard's fixed window size, so the tile can be
                 // clicked through.
                 section("First-run assistant — every step", minimum: 700) {
                     ForEach(Fixtures.wizardSteps, id: \.step) { entry in
@@ -234,8 +226,7 @@
         }
     }
 
-    /// The states the gallery draws. One place to add a case the design has
-    /// to answer for.
+    /// The states the gallery draws.
     enum Fixtures {
         /// Three installations: one current, one a patch behind, one updating.
         static let hoyo: HoYoStore = {
@@ -267,8 +258,7 @@
             let label: String
             let host: SteamWebHost
             let supervisor: ClientSupervisor
-            /// Notifications are a popover state too — nothing else in the
-            /// app draws the permission card.
+            /// Nothing else in the app draws the notification permission card.
             var notifications: SteamNotifications = .preview()
         }
 
@@ -337,8 +327,8 @@
         ]
 
         /// Built once and held: a fixture created inside a `body` is a new
-        /// object on every evaluation, and an observable one at that — the
-        /// gallery would rebuild itself forever.
+        /// observable object on every evaluation, and the gallery would rebuild
+        /// itself forever.
         static let popovers: [Popover] = [
             Popover(
                 label: "Healthy",
@@ -454,22 +444,20 @@
             ),
         ]
 
-        /// One wizard per fixture machine, each on its own provisioner so a
-        /// tile that advances leaves its neighbors where they were.
+        /// One wizard per fixture machine, each on its own provisioner so tiles
+        /// advance independently.
         static let wizards: [(scenario: SetupScenario, provisioner: Provisioner)] =
             SetupScenario.allCases.map { scenario in
-                // Paced, not instant: with no think time every stage
-                // completes between two frames and every scenario looks like
-                // a machine that was already provisioned.
+                // Paced: with no think time every stage completes between two
+                // frames and every scenario looks already provisioned.
                 (scenario, Provisioner(environment: DryRunSetupEnvironment(
                     scenario: scenario, stepDelay: .milliseconds(900),
                 )))
             }
 
-        /// Every step of the assistant at once, on the machine that reaches
-        /// each of them: the bottle question only exists where more than one
-        /// Steam was found, and the install step only reads as an install on
-        /// a machine that still has one to do.
+        /// Every step of the assistant at once, each on a machine that reaches
+        /// it: the bottle question needs more than one Steam, and the install
+        /// step needs one still to do.
         static let wizardSteps: [(step: SetupView.Step, provisioner: Provisioner)] =
             SetupView.Step.allCases.map { step in
                 let scenario: SetupScenario = switch step {
@@ -488,10 +476,9 @@
             }
 
         static let settings = provisioner(.idle)
-        /// The Recovery tiles' supervisor, held like every other fixture.
         static let healthySupervisor = ClientSupervisor(previewHealth: .healthy)
-        /// Fixed values in memory: the gallery draws the settings window, and
-        /// drawing it must not rewrite the machine's bottle.
+        /// In memory: drawing the settings window must not rewrite the
+        /// machine's bottle.
         static let graphics = GraphicsStore(
             environment: DemoGraphicsEnvironment(scenario: .builtInWithToolkit),
         )
@@ -514,9 +501,8 @@
                 ),
             )
         }
-        /// The wizard's own graphics step reads a store too — a separate one,
-        /// so a toolkit added in a wizard tile doesn't appear in the Graphics
-        /// pane tiles beside it.
+        /// The wizard's graphics step gets its own store, so a toolkit added in
+        /// a wizard tile stays out of the Graphics pane tiles.
         static let wizardGraphics = GraphicsStore(
             environment: DemoGraphicsEnvironment(scenario: .builtInNoToolkit),
         )
@@ -550,8 +536,7 @@
                 )
             }
 
-        /// One engine pane per fixture machine, each on its own provisioner
-        /// so a tile that starts a switch leaves its neighbors alone.
+        /// One engine pane per fixture machine, each on its own provisioner.
         static let enginePanes: [EnginePane] =
             DemoEngineEnvironment.Scenario.allCases.map { scenario in
                 let provisioner = Provisioner(

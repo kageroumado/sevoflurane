@@ -4,15 +4,12 @@ import os
 
 /// The app's view of supervision, which happens in `SevofluraneDaemon`.
 ///
-/// The daemon owns every bottle process — that is what makes a force-quit or a
-/// crash of this app survivable for a running game — so everything here is a
-/// verb sent to the control port and a verdict pushed back from it. The app
-/// keeps only what it alone can do: the page, Steam's popups, and the bridge.
-///
-/// No path supervises from inside this process, by design: a daemon that
-/// cannot be registered or reached is a terminal state the user is shown and
-/// asked to fix, because a fallback supervisor would be a second owner of the
-/// bottle.
+/// The daemon owns every bottle process, which is what lets a running game
+/// survive a crash of this app, so everything here is a verb sent to the
+/// control port and a verdict pushed back. No path supervises from inside this
+/// process, by design: a daemon that cannot be reached is a terminal state the
+/// user is asked to fix, because a fallback supervisor would be a second owner
+/// of the bottle.
 @MainActor
 @Observable
 final class ClientSupervisor {
@@ -20,32 +17,29 @@ final class ClientSupervisor {
     typealias Fault = SupervisorFault
     typealias HealthInputs = SupervisorHealthInputs
 
-    /// Gives the health rules one test suite and one implementation
-    /// whichever process derives them.
+    /// Gives the health rules one implementation whichever process derives
+    /// them.
     nonisolated static func evaluateHealth(_ inputs: HealthInputs) -> Health {
         Health.evaluate(inputs)
     }
 
     private(set) var health: Health = .starting
 
-    /// Told each time the client becomes healthy: signed in, its services
-    /// up, ready for calls that change what it stores.
+    /// Told each time the client becomes healthy: signed in, services up.
     @ObservationIgnored var onHealthy: (() -> Void)?
 
-    /// What the app does about a session the client lost to another sign-in
-    /// of its account, fed from every verdict the daemon pushes.
+    /// Acts on a session the client lost to another sign-in of its account, fed
+    /// from every pushed verdict.
     @ObservationIgnored var session: SteamSessionWatch?
 
-    /// Set while the daemon is unregistered, unapproved, or not answering. The
-    /// menu bar shows the way out — Login Items, then Retry — rather than a
-    /// state that looks like Steam's fault.
+    /// Set while the daemon is unregistered, unapproved, or not answering; the
+    /// menu bar then offers Login Items and Retry.
     private(set) var daemonIsUnreachable = false
 
-    /// Whether the restart ladder is mid-flight, as the daemon last reported —
-    /// control verbs that would race it refuse instead of interleaving.
+    /// Whether the restart ladder is mid-flight, as the daemon last reported.
     private(set) var isBusyRestarting = false
-    /// What else weighs on this Mac, while it is more than ordinary: the
-    /// daemon's reading, which is also what stretches its clocks.
+    /// The daemon's reading of unusual load on this Mac, which also stretches
+    /// its clocks.
     private(set) var hostPressure: HostPressure?
 
     var statusText: String {
@@ -53,7 +47,7 @@ final class ClientSupervisor {
     }
 
     /// Whether the menu-bar glyph carries the attention badge: a fault, or a
-    /// Steam that another sign-in of its account signed out.
+    /// Steam signed out by another sign-in.
     var needsAttention: Bool {
         daemonIsUnreachable || health.needsAttention || session?.loss != nil
     }
@@ -62,12 +56,11 @@ final class ClientSupervisor {
     private let bridge: SteamBridge?
     private let log = EventLog.shared
 
-    /// The facts last posted, so an unchanged second is not a second POST.
+    /// The facts last posted.
     @ObservationIgnored private var posted: PageFacts?
     @ObservationIgnored private var facts = Task<Void, Never>?.none
-    /// Set from the moment the user confirms a quit. The popover shows the
-    /// quit instead of the health the daemon reports while it tears the bottle
-    /// down — a client nobody wants any more reads as paused there.
+    /// Set once the user confirms a quit; the popover shows the quit instead of
+    /// the paused health the daemon reports while tearing down.
     private(set) var isQuitting = false
     @ObservationIgnored private var hasShutDown = false
 
@@ -77,8 +70,8 @@ final class ClientSupervisor {
     }
 
     #if DEBUG
-        /// A supervisor bound to no daemon, fixed in one state — the gallery
-        /// draws every state side by side and starts no client.
+        /// A supervisor bound to no daemon, fixed in one state, for the
+        /// gallery.
         convenience init(previewHealth: Health, hostPressure: HostPressure? = nil) {
             self.init(host: SteamWebHost())
             health = previewHealth
@@ -86,9 +79,9 @@ final class ClientSupervisor {
         }
     #endif
 
-    /// What the app saw that the daemon's probe cycle should not wait a tick
-    /// to notice. The bridge learns of a dead client four seconds before the
-    /// launcher exits, and a game window is the app's own observation.
+    /// What the app saw that the daemon's probe cycle should not wait a tick to
+    /// notice: the bridge learns of a dead client four seconds before the
+    /// launcher exits.
     nonisolated enum Wake: Equatable, Sendable {
         case clientConnectionLost
         case gameWindowChanged
@@ -101,10 +94,8 @@ final class ClientSupervisor {
     /// Verbs asked for before that, in order.
     @ObservationIgnored private var heldVerbs: [HeldVerb] = []
 
-    /// A verb waiting for the attach. One the user clicked goes stale: a
-    /// restart asked for while the daemon was waiting for approval in Login
-    /// Items means nothing minutes later. The launch's own wish to show the
-    /// library stays true however long the attach takes.
+    /// A verb waiting for the attach. One the user clicked goes stale after a
+    /// while; the launch's own wish to show the library does not expire.
     nonisolated struct HeldVerb: Sendable {
         let path: String
         let verb: String
@@ -113,7 +104,7 @@ final class ClientSupervisor {
     }
 
     /// What the attach replays: each verb once, in the order its newest ask
-    /// arrived, without the ones that went stale while it waited.
+    /// arrived, minus the stale ones.
     nonisolated static func replayable(
         _ held: [HeldVerb], at now: ContinuousClock.Instant, staleAfter: Duration = .seconds(30),
     ) -> [HeldVerb] {
@@ -132,9 +123,8 @@ final class ClientSupervisor {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
                 await postFacts()
-                // A daemon that stays silent is brought back by the attach —
-                // it registers, rebuilds, or restarts as the silence warrants
-                // — rather than by waiting for a human.
+                // A silent daemon is brought back by the attach, which
+                // registers, rebuilds or restarts as warranted.
                 missed = daemonIsUnreachable ? missed + 1 : 0
                 if missed >= Timing.reattachAfterMissedFacts {
                     missed = 0
@@ -145,11 +135,9 @@ final class ClientSupervisor {
     }
 
     /// The user-driven rebuild of the daemon's registration, from `sevo daemon
-    /// repair` and Settings › Recovery. A rebuild replaces the daemon process,
-    /// and the new one knows nothing of this app until it is greeted, so a
-    /// rebuild that came back is followed by the hello an attach makes, and
-    /// the repair answers only once the new helper reports the app attached,
-    /// or with the failure when it has not within
+    /// repair` and Settings › Recovery. The new daemon knows nothing of this
+    /// app until greeted, so the repair says hello and answers only once the
+    /// helper reports the app attached, or fails after
     /// ``DaemonHeal/repairAttachBudget`` seconds.
     func repairDaemon(force: Bool = false) async -> DaemonService.RepairResult {
         let result = await DaemonService.repair(force: force)
@@ -185,8 +173,8 @@ final class ClientSupervisor {
         }
     }
 
-    /// Brings the daemon up if it is not, then says hello. The registration is
-    /// idempotent, so this is also the Retry the terminal state offers.
+    /// Brings the daemon up if it is not, then says hello; also the terminal
+    /// state's Retry.
     func attach() async {
         let outcome = await DaemonService.ensureRunning()
         daemonIsUnreachable = !outcome.isReachable
@@ -208,8 +196,8 @@ final class ClientSupervisor {
         for held in verbs { send(held.path, called: held.verb) }
     }
 
-    /// Takes the verdict the daemon pushed. The app renders it and stores
-    /// nothing else — there is one state machine and it is not here.
+    /// Takes the verdict the daemon pushed; the state machine lives in the
+    /// daemon.
     func apply(_ snapshot: SupervisorSnapshot) {
         daemonIsUnreachable = false
         let wasHealthy = health == .healthy
@@ -220,9 +208,8 @@ final class ClientSupervisor {
         session?.update(snapshot.signedInElsewhere)
     }
 
-    /// Reads `/status` once. A push covers every change; this covers the two
-    /// moments a push cannot — the attach, and a daemon that restarted while
-    /// the app was mid-verb.
+    /// Reads `/status` once, for the two moments a push cannot cover: the
+    /// attach, and a daemon that restarted while the app was mid-verb.
     private func refreshFromDaemon() async {
         guard let data = await DaemonService.get("/status"),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -236,18 +223,16 @@ final class ClientSupervisor {
         ))
     }
 
-    /// One object of `/status`, decoded; nil when it is `null` or absent.
     private static func decode<Value: Decodable>(_: Value.Type, from field: Any?) -> Value? {
         (field as? [String: Any])
             .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
             .flatMap { try? JSONDecoder().decode(Value.self, from: $0) }
     }
 
-    /// Posts the facts every tick; the post is also the app's heartbeat. The
-    /// daemon answers `hello` for an app it had not seen, so a hello to an app
-    /// that believed itself attached means the daemon was rebuilt or
-    /// relaunched underneath it. Its verdict is read again then, since the new
-    /// daemon pushes nothing to an app it has only just met.
+    /// Posts the facts every tick, which is also the app's heartbeat. A `hello`
+    /// reply to an app that believed itself attached means the daemon was
+    /// replaced underneath it, so its verdict is read again; a new daemon
+    /// pushes nothing to an app it has just met.
     private func postFacts() async {
         guard !isQuitting else { return }
         let current = await PageFacts(
@@ -276,8 +261,8 @@ final class ClientSupervisor {
         }
     }
 
-    /// The daemon's probe cycle wakes on what this app saw. A wake is a hint;
-    /// the cycle decides what it means.
+    /// Wakes the daemon's probe cycle; a wake is a hint and the cycle decides
+    /// what it means.
     func wake(_: Wake) {
         Task(name: "Wake the daemon") { _ = await DaemonService.post("/supervisor/wake") }
     }
@@ -285,7 +270,7 @@ final class ClientSupervisor {
     // MARK: - Verbs
 
     /// Turns auto-restart on or off for the daemon's current run. Off, the
-    /// supervisor stands aside entirely: it neither restarts nor starts Steam.
+    /// supervisor neither restarts nor starts Steam.
     func setAutoRestart(_ isOn: Bool) {
         let path = isOn ? "/supervisor/resume" : "/supervisor/pause"
         Task(name: "Set auto-restart") {
@@ -309,17 +294,16 @@ final class ClientSupervisor {
         )
     }
 
-    /// Starts a game, restarting the client first when that game is pinned to
-    /// a renderer the running session does not have. The decision and the
-    /// restart are the daemon's; the launch itself comes back here, because
-    /// the call that starts a game is a line of JavaScript in the page.
+    /// Starts a game, restarting the client first when the game is pinned to a
+    /// renderer the running session lacks. The daemon decides; the launch
+    /// itself is a line of JavaScript in the page.
     func launch(_ game: SteamWebHost.RecentGame, renderer explicit: Renderer? = nil) async {
         await launch(appID: game.id, name: game.name, renderer: explicit)
     }
 
-    /// A game set to its macOS build goes to Steam for Mac instead
-    /// (``MacBuildHandoff``); one started on a chosen renderer is a Windows
-    /// launch whatever it is set to.
+    /// A game set to its macOS build goes to Steam for Mac
+    /// (``MacBuildHandoff``); a launch on a chosen renderer is always a Windows
+    /// launch.
     func launch(appID: Int, name: String, renderer explicit: Renderer? = nil) async {
         if explicit != nil {
             MacBuildHandoff.allowWindowsLaunch(appID: appID)
@@ -340,9 +324,8 @@ final class ClientSupervisor {
         _ = await DaemonService.post("/client/stop", timeout: 120)
     }
 
-    /// Trashes Steam's shader cache and brings the client back — the daemon
-    /// stops the bottle, clears the cache, and relaunches. Only
-    /// `steamapps/shadercache` is removed; saves and game files stay.
+    /// Trashes Steam's shader cache (`steamapps/shadercache` only) and brings
+    /// the client back.
     func clearShaderCache() {
         send("/bottle/clear-shader-cache", called: "clear the shader cache")
     }
@@ -351,11 +334,11 @@ final class ClientSupervisor {
         send("/client/start", called: "start")
     }
 
-    /// The stop before setup moves the choice to another bottle. A restart
-    /// under way refuses a stop, so this waits for it to finish, narrating
-    /// the wait, and asks again, for up to ``Timing/switchStopBudget``.
-    /// Answers `nil` once no client is left running under the old choice,
-    /// or why one still is, in which case the choice must not move.
+    /// The stop before setup moves to another bottle. A running restart refuses
+    /// a stop, so this waits and asks again for up to
+    /// ``Timing/switchStopBudget``. Answers `nil` once no client runs under the
+    /// old choice, or why one still does, in which case the choice must not
+    /// move.
     func stopBeforeBottleSwitch(narrate: (String) -> Void) async -> String? {
         let start = ContinuousClock.now
         while true {
@@ -385,8 +368,8 @@ final class ClientSupervisor {
         case stopped
         /// 409: a restart ladder is running.
         case busy
-        /// Any other refusal, or a stop that timed out on a daemon that
-        /// still answers.
+        /// Any other refusal, or a stop that timed out on a daemon that still
+        /// answers.
         case failed
         /// No daemon answers, so no client runs under it.
         case unreachable
@@ -418,16 +401,14 @@ final class ClientSupervisor {
         }
     }
 
-    /// The start that ends setup. It outlasts an attach of any length,
-    /// because the stop before a bottle switch paused supervision and only a
-    /// start resumes it.
+    /// The start that ends setup. It never expires, because the stop before a
+    /// bottle switch paused supervision and only a start resumes it.
     func startAfterSetup() {
         send("/client/start", called: "start after setup", expires: false)
     }
 
-    /// Puts Steam's window on screen as soon as the client is healthy. A
-    /// person who opened the app came for that window, and the daemon is the
-    /// one that knows when the client gets there.
+    /// Puts Steam's window on screen once the client is healthy, which the
+    /// daemon is the one to know.
     func showLibraryWhenHealthy() {
         send("/library/show-when-healthy", called: "show the library when healthy", expires: false)
     }
@@ -437,9 +418,8 @@ final class ClientSupervisor {
         isQuitting = true
     }
 
-    /// Quit teardown: quitting Sevoflurane quits Steam. The daemon holds the
-    /// bottle, so the contract is one verb, and a crash, which sends nothing,
-    /// leaves a running game alone.
+    /// Quitting Sevoflurane quits Steam with one verb to the daemon; a crash
+    /// sends nothing and leaves a running game alone.
     func shutdownForQuit() async {
         guard !hasShutDown else { return }
         hasShutDown = true
@@ -452,9 +432,8 @@ final class ClientSupervisor {
     }
 
     private func send(_ path: String, called verb: String, expires: Bool = true) {
-        // A verb sent before the attach has settled reaches whichever daemon
-        // is answering, and one of another build is about to be replaced: a
-        // client it starts dies with it, half booted. The attach sends it.
+        // Never send before the attach settles: a daemon of another build is
+        // about to be replaced, and a client it starts dies half booted.
         guard hasAttached else {
             heldVerbs.append(HeldVerb(path: path, verb: verb, heldAt: .now, expires: expires))
             return
@@ -465,8 +444,7 @@ final class ClientSupervisor {
                 if expires {
                     self.log.log(.supervisor, "the daemon did not answer \(verb); dropped")
                 } else {
-                    // The launch's own wish outlives a daemon that went away: the reattach
-                    // replays it.
+                    // The reattach replays the launch's own wish.
                     self.heldVerbs.append(HeldVerb(path: path, verb: verb, heldAt: .now, expires: false))
                     self.log.log(.supervisor, "the daemon did not answer \(verb); held for the reattach")
                 }
@@ -479,8 +457,7 @@ final class ClientSupervisor {
     private enum Timing {
         /// Seconds of unanswered facts before the app says hello again.
         static let reattachAfterMissedFacts = 10
-        /// How long setup waits for a restart to finish before a bottle
-        /// switch gives up.
+        /// How long setup waits for a restart before a bottle switch gives up.
         static let switchStopBudget: Duration = .seconds(60)
     }
 

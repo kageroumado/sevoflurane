@@ -1,22 +1,20 @@
 import AppKit
 
 extension AppDelegate {
-    /// `steam://` links from browsers and other apps, `sevoflurane://play`
-    /// and `sevoflurane://settings` from a game's Dock tile and its menu
-    /// (CFBundleURLTypes), and Windows executables opened with Sevoflurane
+    /// `steam://` links, `sevoflurane://play` and `sevoflurane://settings` from
+    /// a game's Dock tile (CFBundleURLTypes), and Windows executables opened
     /// from Finder (CFBundleDocumentTypes).
     ///
-    /// A link brings Steam's window up first, so the routed page has
-    /// somewhere to land; an executable opens the adoption panel instead,
-    /// which is the whole of what this app shows for a program of its own.
+    /// A link brings Steam's window up first so the routed page has somewhere
+    /// to land; an executable opens the adoption panel.
     func application(_: NSApplication, open urls: [URL]) {
         let programs = urls.filter(\.isFileURL)
         let links = urls.filter { $0.scheme?.lowercased() == "steam" }
         for url in urls where url.scheme?.lowercased() == "sevoflurane" {
             playFromDock(url)
         }
-        // Steam is held behind an unfinished setup; the link has nowhere to
-        // land yet, and the assistant is what gets it somewhere.
+        // Steam is held behind an unfinished setup, so the assistant comes up
+        // instead.
         if !links.isEmpty, setupWindow.show() {
             EventLog.shared.log(.window, "steam:// link while setup is unfinished — showing setup")
         } else if !links.isEmpty {
@@ -30,19 +28,16 @@ extension AppDelegate {
         }
     }
 
-    /// How long a Dock tile's launch waits for a client that is still coming
-    /// up: a cold boot, with Steam's stores, takes a minute or two.
+    /// How long a Dock tile's launch waits for a client still coming up: a cold
+    /// boot takes a minute or two.
     private static let dockLaunchBudget = Duration.seconds(300)
     /// How long it waits for the helper, which a tile that started this app
-    /// finds still registering: seconds, usually.
+    /// finds still registering.
     private static let dockHelperBudget = Duration.seconds(60)
 
-    /// A game's Dock tile, opened: its loader handed the open to
-    /// `sevoflurane://play/<id>`. A game already running comes forward, as a
-    /// Mac app's tile would bring it. Otherwise the game starts the way its
-    /// menu bar row starts it; a Steam game waits for a client that can take
-    /// the launch, a Quick Launch program for the helper alone, which is the
-    /// whole of the wait when the tile also started this app.
+    /// A game's Dock tile, opened through `sevoflurane://play/<id>`. A running
+    /// game comes forward; otherwise a Steam game waits for a healthy client
+    /// and a Quick Launch program waits for the helper alone.
     private func playFromDock(_ url: URL) {
         guard let id = Int(url.lastPathComponent) else { return }
         if url.host() == "settings" {
@@ -109,12 +104,9 @@ extension AppDelegate {
         }
     }
 
-    /// The Dock tile's menu (``DockMenu``), built anew each time the Dock
-    /// asks for it, which keeps every change to it inside the moment the Dock
-    /// reads it.
+    /// The Dock tile's menu (``DockMenu``), built anew each time the Dock asks.
     func applicationDockMenu(_: NSApplication) -> NSMenu? {
         guard isRuntimeStarted, !setupWindow.isUnfinished else { return nil }
-        // The next opening reads a list a game played since then has moved.
         host.refreshRecentGames()
         let entries = DockMenu.entries(
             recentGames: host.recentGames,
@@ -183,8 +175,7 @@ extension AppDelegate {
             host.openFriends()
             return
         }
-        // The page opens in Steam's window, which comes up first so the route
-        // has somewhere to land.
+        // Steam's window comes up first so the route has somewhere to land.
         host.showSteam()
         host.executeSteamURL(url)
     }
@@ -196,8 +187,7 @@ extension AppDelegate {
         host.menuMirror?.setFriendsStatus(status)
     }
 
-    /// Shows the adoption panel, or holds the program until the app is past
-    /// setup and has a bottle to offer it.
+    /// Shows the adoption panel, or holds the program until setup is finished.
     private func openWindowsProgram(_ url: URL) {
         guard isRuntimeStarted, !setupWindow.isUnfinished else {
             pendingPrograms.append(url)
@@ -216,19 +206,18 @@ extension AppDelegate {
     }
 
     /// The context page lives in a window of its own, so AppKit counts a
-    /// visible window and its own reopen logic would never fire. `host`
-    /// answers the question the user is actually asking.
+    /// visible window and its own reopen logic would never fire; `host` decides
+    /// instead.
     func applicationShouldHandleReopen(
         _: NSApplication,
         hasVisibleWindows appKitSeesWindows: Bool,
     ) -> Bool {
-        // AppKit's own count of visible windows is in the line because it is
-        // usually wrong here (parked pages and menus count) and its being
-        // wrong the other way is what would make a Dock click do nothing.
+        // AppKit's count is logged because it is usually wrong here (parked
+        // pages and menus count).
         let seen = "AppKit counts \(appKitSeesWindows ? "visible windows" : "no visible window"), "
             + "policy \(NSApp.activationPolicy() == .regular ? "regular" : "accessory")"
-        // Steam's windows are held behind an unfinished setup, so the window
-        // a reopen can actually bring up is the assistant's.
+        // Steam's windows are held behind an unfinished setup, so the assistant
+        // comes up.
         if setupWindow.show() {
             EventLog.shared.log(.window, "reopen request (Dock icon or Finder) — setup is unfinished; showing it (\(seen))")
             return true

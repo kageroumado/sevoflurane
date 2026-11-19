@@ -1,19 +1,16 @@
 import AppKit
 
-/// Play for a game set to its macOS build (``GameBuild/mac``): the game goes
-/// to Valve's Steam for Mac, opened by its app explicitly, and the bottle's
-/// client never hears of it.
-///
-/// Every Play reaches here before the Windows client: the bridge's
-/// `SteamClient.Apps.RunGame` for the library's Play button and `steam://`
-/// links, and ``ClientSupervisor/launch(appID:name:renderer:)`` for the menu
-/// bar, the Dock tile and its menu.
+/// Play for a game set to its macOS build (``GameBuild/mac``): the game goes to
+/// Valve's Steam for Mac and the bottle's client never hears of it. Every Play
+/// reaches here first: the bridge's `SteamClient.Apps.RunGame` (library Play,
+/// `steam://`) and ``ClientSupervisor/launch(appID:name:renderer:)`` (menu bar,
+/// Dock).
 @MainActor
 enum MacBuildHandoff {
-    /// Games the app itself is starting on Windows, by when it asked, whose
-    /// next Play reaches the Windows client whatever the game is set to.
+    /// Games the app itself is starting on Windows, by when it asked; their
+    /// next Play reaches the Windows client whatever they are set to.
     private static var windowsLaunches: [Int: ContinuousClock.Instant] = [:]
-    /// As long as the helper may take to bring a client up for a launch.
+    /// As long as the helper may take to bring a client up.
     private static let windowsLaunchLife = Duration.seconds(300)
 
     /// Steam for Mac's app, wherever it is installed.
@@ -21,17 +18,16 @@ enum MacBuildHandoff {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: NativeSteam.bundleIdentifier)
     }
 
-    /// Takes one of the app's own Plays where the game is set to its macOS
-    /// build. `true` when it did, and the Windows client must not start the
-    /// game. A Windows launch the app asked for passes, and stays allowed for
-    /// the `RunGame` it leads to.
+    /// Takes one of the app's own Plays of a game set to its macOS build;
+    /// `true` means the Windows client must not start it. An app-requested
+    /// Windows launch passes and stays allowed for its `RunGame`.
     static func take(appID: Int, name: String? = nil) -> Bool {
         if let asked = windowsLaunches[appID], .now - asked < windowsLaunchLife { return false }
         return perform(route(appID: appID, build: GameConfig.game(appID).build), name: name)
     }
 
-    /// Takes a `RunGame` on its way to the Windows client, as ``take(appID:name:)``
-    /// does; the Windows launch it was allowed for ends here.
+    /// Takes a `RunGame` as ``take(appID:name:)`` does; the Windows allowance ends
+    /// here.
     static func takeRunGame(appID: Int) -> Bool {
         if let asked = windowsLaunches.removeValue(forKey: appID), .now - asked < windowsLaunchLife {
             return false
@@ -39,21 +35,19 @@ enum MacBuildHandoff {
         return perform(route(appID: appID, build: GameConfig.game(appID).build), name: nil)
     }
 
-    /// Starts the macOS build whatever the game is set to: the compat strip's
-    /// action.
+    /// Starts the macOS build whatever the game is set to (the compat strip's
+    /// action).
     static func playMacBuild(appID: Int) {
         _ = perform(route(appID: appID, build: .mac), name: nil)
     }
 
-    /// Lets the game's next Play reach the Windows client: a launch on a
-    /// chosen renderer, or the Windows version picked when Steam for Mac is
-    /// missing.
+    /// Lets the game's next Play reach the Windows client.
     static func allowWindowsLaunch(appID: Int) {
         windowsLaunches[appID] = .now
     }
 
-    /// Looks for Steam for Mac and the game's install only for the macOS
-    /// build, so a Windows Play reads one file.
+    /// Checks Steam for Mac and the game's install only for the macOS build, so
+    /// a Windows Play reads one file.
     private static func route(appID: Int, build: GameBuild?) -> MacBuildRoute {
         guard build == .mac, NativeSteam.isOffered else { return .windows }
         return MacBuildRoute.decide(
@@ -101,9 +95,8 @@ enum MacBuildHandoff {
     }
 
     /// Said once, before the first game goes to Steam for Mac: one account
-    /// holds one Steam session, so Steam here signs out while Steam for Mac is
-    /// signed in, and ``SteamSessionWatch`` brings it back when Steam for Mac
-    /// quits.
+    /// holds one Steam session, so Steam here goes offline while Steam for Mac
+    /// is signed in, and ``SteamSessionWatch`` reconnects it.
     private static func tellAboutTheSession() {
         Preferences.toldAboutSteamForMacSession = true
         let alert = NSAlert()
@@ -117,7 +110,7 @@ enum MacBuildHandoff {
     }
 
     /// The macOS version is chosen and Steam for Mac is missing: get it, or
-    /// play the Windows version this once.
+    /// play the Windows version once.
     private static func askWithoutSteamForMac(appID: Int, name: String) {
         let alert = NSAlert()
         alert.messageText = String(localized: "Steam for Mac is not installed")

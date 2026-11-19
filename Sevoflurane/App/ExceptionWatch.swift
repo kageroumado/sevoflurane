@@ -3,35 +3,26 @@ import Foundation
 import ObjectiveC
 import os
 
-/// The preprocessor already installed by another library, if any. A C function
-/// pointer cannot capture, so the chain lives at file scope.
-///
-/// Both globals are file-scope rather than static members of ``ExceptionWatch``
-/// because the compiler's `SendNonSendable` SIL pass crashes on a
-/// `@convention(c)` closure assigned to a static member of a type in a module
-/// that defaults to `@MainActor`.
+/// The preprocessor another library installed, if any; a C function pointer
+/// cannot capture, so the chain lives at file scope. Never move these globals
+/// into ``ExceptionWatch``: the `SendNonSendable` SIL pass crashes on a
+/// `@convention(c)` closure assigned to a static member in a
+/// `@MainActor`-default module.
 private nonisolated(unsafe) var chainedPreprocessor: (@convention(c) (Any) -> Any)?
 
-/// How many throws have been written, and how many recently: a loop that
-/// raises on every pass would otherwise write a sidecar and forty log lines
-/// per iteration.
+/// Throttles reporting, so a loop that raises on every pass does not write a
+/// sidecar and forty log lines per iteration.
 private nonisolated let reporting = OSAllocatedUnfairLock(initialState: ExceptionThrottle())
 
-/// Records every Objective-C exception at the moment it is thrown, and lets it
-/// carry on.
+/// Records every Objective-C exception as it is thrown, and passes it on.
 ///
-/// The app hosts Steam's entire UI, so a client update can put WebKit, AppKit,
-/// or one of Steam's bridge calls somewhere that raises, and AppKit's event
-/// loop swallows it silently. Unwinding out of a Swift concurrency frame skips
-/// the pop of the thread-local `ExecutorTrackingInfo`, so the next
-/// `@MainActor` isolation check reads a dead stack frame and segfaults,
-/// possibly hours later; this exists to explain that crash.
-///
-/// It passes every throw on. By the time a preprocessor runs the unwind is
-/// going to happen, and returning something else would hide the damage rather
-/// than prevent it. What it adds is a record written while the stack still
-/// means something: lines in the event log, and a JSON sidecar carrying the
-/// whole stack and what the app had just been doing.
+/// AppKit's event loop swallows exceptions silently, and unwinding out of a
+/// Swift concurrency frame skips the pop of the thread-local
+/// `ExecutorTrackingInfo`, so the next `@MainActor` isolation check reads a
+/// dead stack frame and segfaults, possibly hours later. Returning anything
+/// else would hide that damage, so this only records, while the stack still
+/// means something: event-log lines and a JSON sidecar with the whole stack and
+/// recent activity.
 enum ExceptionWatch {
     nonisolated static func install() {
         chainedPreprocessor = objc_setExceptionPreprocessor { exception in
@@ -41,21 +32,18 @@ enum ExceptionWatch {
         }
     }
 
-    /// How many frames of the throwing stack reach the log file.
-    ///
-    /// Enough to cross the Swift/ObjC boundary and reach the AppKit frames
-    /// that say which pass raised — a layout pass and an event handler look
-    /// alike for the first twenty frames — and still fit in something a user
-    /// can paste into an issue. The sidecar carries the rest.
+    /// Frames of the throwing stack that reach the log file: enough to cross
+    /// the Swift/ObjC boundary into the AppKit frames that say which pass
+    /// raised (a layout pass and an event handler look alike for twenty
+    /// frames). The sidecar carries the rest.
     nonisolated static let loggedFrames = 40
 
-    /// How many sidecars stay beside the log; older ones are removed as new
-    /// ones land.
+    /// How many sidecars stay beside the log.
     nonisolated static let keptSidecars = 20
 }
 
-/// Admits at most ``limit`` reports per ``window``, and numbers each sidecar so
-/// two throws in one millisecond still get a file each.
+/// Admits at most ``limit`` reports per ``window``, numbering each sidecar so
+/// two throws in one millisecond get a file each.
 nonisolated struct ExceptionThrottle {
     static let limit = 10
     static let window: TimeInterval = 60
@@ -65,8 +53,8 @@ nonisolated struct ExceptionThrottle {
     /// Throws passed over since the last admitted one.
     private(set) var suppressed = 0
 
-    /// Whether a throw at `date` is written down. Answers the sequence number
-    /// its sidecar takes and how many throws were passed over before it.
+    /// Whether a throw at `date` is written down, with its sidecar's sequence
+    /// number and the throws passed over before it.
     mutating func admit(at date: Date) -> (sequence: Int, suppressedBefore: Int)? {
         admitted.removeAll { date.timeIntervalSince($0) >= Self.window }
         guard admitted.count < Self.limit else {
@@ -82,14 +70,12 @@ nonisolated struct ExceptionThrottle {
 
 /// One throw, as it is written down.
 nonisolated struct ExceptionReport: Codable {
-    /// The log's own moment format, so a reader can line the sidecar up
-    /// against the log file by eye.
+    /// The log's own timestamp format, to line the sidecar up with the log.
     let time: String
     let name: String
     let reason: String
     let thread: String
-    /// The key window's title and identifier — the app's answer to "what was
-    /// on screen", which a crash report cannot give.
+    /// The key window's title and identifier, which a crash report cannot give.
     let keyWindow: String?
     let stack: [String]
     /// The app's last words before the throw.
@@ -97,9 +83,8 @@ nonisolated struct ExceptionReport: Codable {
 
     static let filePrefix = "Sevoflurane-exception-"
 
-    /// Where a sidecar lands: beside the log file, one file per throw, named
-    /// by the millisecond and the throw's sequence number so `sevo diag` can
-    /// pick up every one of them.
+    /// A sidecar's path: beside the log file, named by millisecond and sequence
+    /// number so `sevo diag` picks up every one.
     static func fileURL(at date: Date, sequence: Int) -> URL {
         let milliseconds = Int64(date.timeIntervalSince1970 * 1000)
         return EventLog.fileURL
@@ -107,8 +92,8 @@ nonisolated struct ExceptionReport: Codable {
             .appending(path: "\(filePrefix)\(milliseconds)-\(sequence).json")
     }
 
-    /// The sidecar names past the newest `keeping`, oldest first. Names order
-    /// by their numbers; a name from a single-number scheme sorts as older.
+    /// The sidecar names past the newest `keeping`, oldest first; a name from
+    /// the single-number scheme sorts as older.
     static func staleSidecars(_ names: [String], keeping: Int) -> [String] {
         func key(_ name: String) -> [Int64] {
             name.dropFirst(filePrefix.count).dropLast(".json".count)
@@ -120,9 +105,8 @@ nonisolated struct ExceptionReport: Codable {
     }
 }
 
-/// Set on a thread while it writes a report, so a throw raised *by* the
-/// reporting returns at once instead of recursing until the stack runs out.
-/// Per thread: a throw on another thread at the same moment is its own.
+/// Set on a thread while it writes a report, so a throw raised by the reporting
+/// returns at once instead of recursing.
 private nonisolated let reportingKey = "glass.kagerou.sevoflurane.reportingException"
 
 private nonisolated func reportThrow(_ exception: Any) {
@@ -142,8 +126,7 @@ private nonisolated func reportThrow(_ exception: Any) {
         reason = String(describing: exception)
     }
     let thread = Thread.isMainThread ? "main thread" : "a background thread"
-    // The frames below the throw are the whole point; the ones above are this
-    // file.
+    // Drops this file's own two frames.
     let stack = Array(Thread.callStackSymbols.dropFirst(2))
     let window = keyWindowDescription()
     let report = ExceptionReport(
@@ -170,9 +153,8 @@ private nonisolated func reportThrow(_ exception: Any) {
     appendToLogFile(lines, at: now)
 }
 
-/// The window the user was working in. Read only from the main thread: a throw
-/// on a background thread has no safe way to ask AppKit anything, and a wrong
-/// answer here is worse than none.
+/// The key window, read only on the main thread: a background throw has no safe
+/// way to ask AppKit.
 private nonisolated func keyWindowDescription() -> String? {
     guard Thread.isMainThread, NSApp != nil else { return nil }
     return MainActor.assumeIsolated {
@@ -183,8 +165,7 @@ private nonisolated func keyWindowDescription() -> String? {
     }
 }
 
-/// The app's last ten lines, so the report says what it was doing rather than
-/// only where it stopped.
+/// The app's last ten log lines.
 private nonisolated func recentMessages() -> [String] {
     guard Thread.isMainThread else { return [] }
     return MainActor.assumeIsolated {
@@ -192,10 +173,8 @@ private nonisolated func recentMessages() -> [String] {
     }
 }
 
-/// Writes the sidecar and removes the ones past ``ExceptionWatch/keptSidecars``,
-/// returning where it landed. Synchronous, like the log lines: the throw may
-/// resume into a trap that ends the process, and nothing queued would be
-/// written then.
+/// Writes the sidecar and prunes past ``ExceptionWatch/keptSidecars``.
+/// Synchronous: the throw may resume into a trap that ends the process.
 private nonisolated func write(_ report: ExceptionReport, at date: Date, sequence: Int) -> URL? {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -210,14 +189,9 @@ private nonisolated func write(_ report: ExceptionReport, at date: Date, sequenc
     return url
 }
 
-/// Writes through ``EventLog``'s own file queue rather than the queue that
-/// feeds it.
-///
-/// That queue is drained by a main-actor task, and the exceptions worth
-/// recording are thrown *on* the main thread moments before AppKit ends the
-/// process — the queued lines never get written. Going through the file queue
-/// synchronously puts everything already waiting on disk first, then these,
-/// all before the throw resumes.
+/// Writes through ``EventLog``'s file queue synchronously, because the feeding
+/// queue is drained by a main-actor task and a main-thread throw usually ends
+/// the process before it runs.
 private nonisolated func appendToLogFile(_ lines: [String], at date: Date) {
     EventLog.writeThrough(lines.map { EventLog.line(.app, $0, at: date) }.joined())
 }

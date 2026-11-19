@@ -2,12 +2,9 @@ import AppKit
 import Foundation
 import Observation
 
-/// The HoYoverse installations Settings lists, what each needs, and the one
-/// install, update, check or repair running for each.
-///
-/// Shared by the app, so a download keeps going while Settings shows another
-/// pane or is closed. Quitting the app stops it; the next run of the same
-/// action keeps every file already in place.
+/// The HoYoverse installations Settings lists, what each needs, and the one job
+/// running for each. Shared by the app, so a download outlives the pane;
+/// quitting stops it, and the next run keeps every file in place.
 @MainActor
 @Observable
 final class HoYoStore {
@@ -23,7 +20,6 @@ final class HoYoStore {
         var id: String { installation.folder.path }
     }
 
-    /// Something running for one folder.
     struct Job {
         enum Kind { case install, update, verify, repair }
 
@@ -39,16 +35,15 @@ final class HoYoStore {
     private(set) var jobs: [String: Job] = [:] {
         didSet { publishTiles() }
     }
-    /// The last word on each folder: a finished update, the files a check
-    /// found, a failure.
+    /// The last word on each folder: a finished update, a check's findings, a
+    /// failure.
     private(set) var notes: [String: String] = [:]
     /// Files a check found missing or damaged, which Repair downloads.
     private(set) var problems: [String: [HoYoInstallation.Problem]] = [:]
-    /// The install in progress, whose folder has no game in it yet.
+    /// The install in progress, whose folder has no game yet.
     private(set) var installing: (game: HoYoGame, folder: URL)?
 
-    /// Fixed rows for the gallery, which neither reads the library nor asks
-    /// the servers.
+    /// Fixed rows for the gallery, which reads no library and asks no servers.
     private let isFixture: Bool
 
     private init() { isFixture = false }
@@ -129,8 +124,8 @@ final class HoYoStore {
         }
     }
 
-    /// Downloads a game into a new folder, then lists it and adds it to
-    /// Quick Launch when Sevoflurane can start it.
+    /// Downloads a game into a new folder, then lists it and adds it to Quick
+    /// Launch when Sevoflurane can start it.
     func startInstall(_ game: HoYoGame, into folder: URL, voices: [String]) {
         let id = folder.standardizedFileURL.path
         installing = (game, folder)
@@ -168,8 +163,8 @@ final class HoYoStore {
 
     // MARK: - Plumbing
 
-    /// Runs one job for a folder, logging its start and end, and leaves its
-    /// last word in `notes`.
+    /// Runs one job for a folder, logging it and leaving its last word in
+    /// `notes`.
     private func run(
         _ kind: Job.Kind, for id: String, label: String,
         _ body: @escaping @Sendable (@escaping SophonDownloader.ProgressHandler) async throws -> String,
@@ -206,15 +201,14 @@ final class HoYoStore {
 
     // MARK: - The Dock tiles
 
-    /// The Quick Launch program behind each row's folder, by row id, read
-    /// when the rows are and kept for the progress ticks between.
+    /// The Quick Launch program behind each row, by row id, kept between
+    /// progress ticks.
     private var tilePrograms: [String: Int] = [:]
     private var tileFolders: Set<String> = []
     private var tileStates: [Int: DockTileState.State] = [:]
 
-    /// Tells each game's Dock tile what the row knows (``DockTileState``):
-    /// "update" while a newer build is published, the download's progress
-    /// while a job runs.
+    /// Tells each game's Dock tile (``DockTileState``) "update" while a newer
+    /// build is out, and the progress while a job runs.
     private func publishTiles() {
         guard !isFixture else { return }
         let folders = Set(rows.map(\.id))

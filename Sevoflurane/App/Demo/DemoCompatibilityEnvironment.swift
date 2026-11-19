@@ -1,19 +1,16 @@
 #if DEBUG
     import Foundation
 
-    /// A ``CompatibilityEnvironment`` with no bottle behind it: the Engine
-    /// pane's dependency rows and DLL overrides read fixtures, an install
-    /// narrates its stages and lands in memory, and one scenario fails so the
-    /// error row can be seen without breaking a real prefix.
+    /// A ``CompatibilityEnvironment`` with no bottle behind it: fixtures for
+    /// the dependency rows and overrides, installs that narrate their stages in
+    /// memory, and a scenario that fails.
     @MainActor
     final class DemoCompatibilityEnvironment: CompatibilityEnvironment {
-        /// The dependency situations the pane has to answer for.
         enum Scenario: String, CaseIterable, Identifiable {
             /// A fresh bottle: nothing installed, no overrides.
             case fresh
-            /// The common middle — some pieces in, a couple of overrides set.
+            /// Some pieces installed, a couple of overrides set.
             case partlyInstalled = "partly-installed"
-            /// Everything present, so every row reads as installed.
             case complete
             /// An install that fails, and an override that is refused.
             case installFails = "install-fails"

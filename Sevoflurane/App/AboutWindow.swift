@@ -1,14 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// The About window and the two documents it opens: Acknowledgements (every
-/// third-party component and data source, with its license) and the app's
-/// own License. The standard About panel can carry neither, so it gets a
-/// window of its own: icon, version, links, two buttons.
+/// The About window and its two documents: Acknowledgements (every third-party
+/// component and data source, with its license) and the app's own License,
+/// which the standard About panel cannot carry.
 ///
-/// Windows are built when asked for and released when closed, the way
-/// ``SettingsWindow`` does it; a window on screen gives the menu-bar app a
-/// Dock tile for as long as it is up.
+/// Windows are built when asked for and released when closed; one on screen
+/// gives the menu-bar app a Dock tile.
 @MainActor
 final class AboutWindows {
     private enum Kind {
@@ -18,7 +16,6 @@ final class AboutWindows {
     }
 
     private var windows: [Kind: NSWindow] = [:]
-    /// Each open window's close observer, removed when it fires.
     private var closeObservers: [Kind: any NSObjectProtocol] = [:]
 
     func showAbout() {
@@ -86,8 +83,8 @@ final class AboutWindows {
     }
 }
 
-/// The About panel's layout: the system's proportions, with the two document
-/// buttons where the standard panel has none.
+/// The About panel's layout: the system's proportions, plus the two document
+/// buttons.
 struct AboutView: View {
     private static let version: String = {
         let info = Bundle.main.infoDictionary
@@ -166,11 +163,10 @@ struct LicenseTextView: View {
     }
 }
 
-/// The bundled license texts, one file per component, joined in the order
-/// they are listed here: the engine and its graphics layers first, then the
-/// shader packages the upscaler runs, then the Swift packages, then the data
-/// sources behind the game-page strip, and the Apache text the three
-/// Apache-licensed components share at the end.
+/// The bundled license texts, one file per component, joined in this order: the
+/// engine and its graphics layers, the upscaler's shader packages, the Swift
+/// packages, the game-page strip's data sources, then the Apache text the three
+/// Apache-licensed components share.
 enum Acknowledgements {
     static let components = [
         "wine", "liberation-fonts", "dxvk", "dxmt", "moltenvk", "d3dmetal", "nwjs",

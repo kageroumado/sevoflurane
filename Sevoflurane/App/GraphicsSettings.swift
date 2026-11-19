@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 // MARK: - Graphics
 
-/// The one sentence the pane, its notice and the renderer popover all say
-/// about a renderer change reaching a game.
+/// What the pane, its notice and the renderer popover all say about a renderer
+/// change reaching a game.
 private let applyRendererCopy =
     InterfaceCopy.localized("Launch a game from the menu bar to apply changes. Steam restarts if needed.")
 
@@ -20,13 +20,12 @@ struct GraphicsSettings: View {
     @State private var showingGPTkDownload = false
     @State private var gptk = GPTkDownload()
 
-    /// Edits go through the store, which decides whether they reach a bottle.
     private var graphics: Binding<BottleGraphics.Selection> {
         Binding(get: { store.selection }, set: { store.update($0) })
     }
 
-    /// The renderer the running Steam came up on, while it differs from the
-    /// one chosen here.
+    /// The renderer the running Steam booted on, while it differs from the
+    /// chosen one.
     private var bootedRenderer: Renderer? {
         guard let booted = BottleGraphics.bootedSelection()?.renderer,
               booted != store.selection.renderer else { return nil }
@@ -78,7 +77,8 @@ struct GraphicsSettings: View {
             } header: {
                 Text("Renderer")
             } footer: {
-                // The row above says it, with the button, while a change waits.
+                // While a change waits, the row above says this with its
+                // button.
                 if bootedRenderer == nil { Text(applyRendererCopy) }
             }
             rendererVersionsSection
@@ -91,9 +91,8 @@ struct GraphicsSettings: View {
         }
     }
 
-    /// Every renderer's versions in one place: Apple's D3DMetal from the
-    /// user's own download, and the DXMT and DXVK the engine shipped beside
-    /// any release added later. The engine's own is one click away again.
+    /// Every renderer's versions: Apple's D3DMetal from the user's download,
+    /// and the engine's DXMT and DXVK beside any added release.
     private var rendererVersionsSection: some View {
         Section {
             if !store.canHostD3DMetal {
@@ -125,11 +124,10 @@ struct GraphicsSettings: View {
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
-    /// The D3DMetal row in the same shape as the two below it: the picker,
-    /// then a menu for Apple's download, a disk image on hand, and removal.
-    /// An empty tag is CrossOver's own copy or, with nothing added, the
-    /// placeholder. Never make the selection `String?`: that crashes the
-    /// compiler's IRGen.
+    /// The D3DMetal row, shaped like the two below: the picker, then a menu for
+    /// Apple's download, a disk image, and removal. An empty tag is CrossOver's
+    /// own copy or the placeholder. Never make the selection `String?`: that
+    /// crashes the compiler's IRGen.
     private var d3dMetalRow: some View {
         let selection = Binding<String>(
             get: { store.activeD3DMetal ?? "" },
@@ -203,11 +201,10 @@ struct GraphicsSettings: View {
         }
     }
 
-    /// Shown when no installed engine declares D3DMetal. Apple's toolkit
-    /// calls pthread from PE code, so it needs a Wine that keeps GS on the
-    /// thread's own data while PE code runs: CrossOver's does, and Dormison
-    /// does (its GS base lives on the thread's TSD). Toolkits added meanwhile
-    /// are kept for the engine that gains them.
+    /// Shown when no installed engine declares D3DMetal. Apple's toolkit calls
+    /// pthread from PE code, so it needs a Wine that keeps GS on the thread's
+    /// own data (CrossOver, and Dormison, whose GS base lives in the thread's
+    /// TSD). Added toolkits are kept.
     private var dx12HostNotice: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Update the engine for DirectX 12")
@@ -219,8 +216,7 @@ struct GraphicsSettings: View {
         }
     }
 
-    /// The selected version, when it is one of ours to remove — the engine's
-    /// own CrossOver copy is not.
+    /// The selected version, when it is a user-added one that can be removed.
     private var removableD3DMetal: String? {
         guard let active = store.activeD3DMetal,
               store.d3dMetalVersions.contains(where: { $0.version == active })
@@ -228,8 +224,8 @@ struct GraphicsSettings: View {
         return active
     }
 
-    /// Apple's own download page, in-app: the user signs in and downloads the
-    /// release and beta toolkits, which install straight into the engine.
+    /// Apple's download page, in-app: the user signs in, and the toolkits
+    /// install straight into the engine.
     private var gptkDownloadSheet: some View {
         VStack(spacing: 0) {
             GPTkDownloadPanel(
@@ -265,10 +261,9 @@ struct GraphicsSettings: View {
     }
 }
 
-/// The upscaler packages: what is in the store, with its license and
-/// removal, and what the catalog can fetch. Its own view, because a
-/// download's progress rewrites `shaders.busy` many times a second and only
-/// this section reads it.
+/// The upscaler packages, installed and fetchable. Its own view because a
+/// download rewrites `shaders.busy` many times a second and only this section
+/// reads it.
 private struct ShaderPackagesSection: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
@@ -325,7 +320,6 @@ private struct ShaderPackagesSection: View {
     }
 }
 
-/// A package in the store: its version, license and content, and Remove.
 private struct InstalledShaderRow: View {
     let package: ShaderPackages.Package
     let isBusy: Bool
@@ -350,7 +344,6 @@ private struct InstalledShaderRow: View {
     }
 }
 
-/// A package the catalog can fetch, and Download with its size.
 private struct DownloadableShaderRow: View {
     let entry: ShaderPackages.Available
     let isBusy: Bool
@@ -372,8 +365,8 @@ private struct DownloadableShaderRow: View {
     }
 }
 
-/// A package's title, version and license, over what it does: its
-/// description, or what it contains when the description is empty.
+/// A package's title, version and license over its description (or its contents
+/// when the description is empty).
 private struct ShaderPackageSummary: View {
     let title: String
     let version: String
@@ -401,7 +394,6 @@ private struct ShaderPackageSummary: View {
     }
 }
 
-/// The package's project page, opened in the browser.
 private struct ShaderProjectLink: View {
     let source: URL
 
@@ -414,9 +406,8 @@ private struct ShaderProjectLink: View {
     }
 }
 
-/// One renderer: the version picker (the engine's own, then every added
-/// version), the fetch and folder menu, and Reset. Mirrors the D3DMetal
-/// picker above it.
+/// One renderer's version picker (the engine's own, then every added version),
+/// its fetch menu, and Reset.
 private struct RendererVersionRow: View {
     let store: GraphicsStore
     let component: RendererVersions.Component

@@ -2,12 +2,10 @@ import Foundation
 
 /// The app's half of the daemon link: the work only this process can do.
 ///
-/// The daemon owns the bottle and answers `sevo` on the control port; anything
-/// that needs the page, Steam's popups or a window inventory is passed through
-/// to here, and the daemon's own commands — reload, dismiss, open the library —
+/// The daemon answers `sevo` on the control port and passes through anything
+/// that needs the page, Steam's popups or a window inventory; its own commands
 /// arrive the same way. Loopback only, behind ``LoopbackGate/appLink``:
-/// programs of this account holding its ``ControlToken`` are admitted, web
-/// pages and other accounts are not.
+/// programs of this account holding its ``ControlToken`` are admitted.
 @MainActor
 final class AppLinkServer {
     private let supervisor: ClientSupervisor
@@ -16,8 +14,8 @@ final class AppLinkServer {
     /// The open runs' frame counters, which `sevo perf mark` writes into.
     private let presentStats: PresentStats
     private var server: HTTPServer?
-    /// The helper applied a first launch's fixes to this app id; the
-    /// notification with Undo is this app's to post.
+    /// Posts the notification with Undo after the helper applied a first
+    /// launch's fixes to this app id.
     var onFixesApplied: ((Int) -> Void)?
 
     init(supervisor: ClientSupervisor, host: SteamWebHost, bridge: SteamBridge, presentStats: PresentStats) {
@@ -27,9 +25,8 @@ final class AppLinkServer {
         self.presentStats = presentStats
     }
 
-    /// Takes the link port, exclusively: a second copy of the app answering
-    /// the daemon's commands would render Steam twice and reload each other's
-    /// pages. The caller stops the launch when this answers false.
+    /// Takes the link port exclusively: a second copy answering the daemon
+    /// would render Steam twice. The caller stops the launch on false.
     func start() async -> Bool {
         do {
             let server = try HTTPServer(
@@ -50,7 +47,6 @@ final class AppLinkServer {
         }
     }
 
-    /// The daemon's own traffic: its commands, its verdict, its log.
     private func handle(_ request: HTTPRequest) async -> HTTPResponse {
         switch (request.method, request.path) {
         case ("POST", "/command"):
@@ -95,10 +91,9 @@ final class AppLinkServer {
             EventLog.shared.ingest(category, line.message, at: line.date)
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/daemon/repair"):
-            // Only the app can rebuild the daemon's registration
-            // (`SMAppService` acts for the bundle that registered it), so
-            // `sevo daemon repair` asks this port rather than the control port,
-            // which is exactly what is down when the helper will not launch.
+            // Only the bundle that registered can rebuild the registration
+            // (`SMAppService`), so `sevo daemon repair` asks this port; the
+            // control port is what is down when the helper will not launch.
             return await repairDaemon(force: Self.value(of: "force", in: request.query) == "1")
         case ("POST", "/perf/mark"):
             // `sevo perf mark`, straight to this port: the traces are written here.
@@ -113,8 +108,8 @@ final class AppLinkServer {
         }
     }
 
-    /// The app's own verbs, proxied here from the control port so `sevo` asks
-    /// one port for everything.
+    /// The app's own verbs, proxied from the control port so `sevo` asks one
+    /// port for everything.
     private func pageVerb(_ request: HTTPRequest) async -> HTTPResponse {
         switch (request.method, request.path) {
         case ("GET", "/windows"):
@@ -131,9 +126,8 @@ final class AppLinkServer {
             host.showSteam()
             return Self.json(#"{"ok":true,"note":"showing Steam; poll /windows"}"#)
         case ("POST", "/chat/open"):
-            // The call a clicked notification makes, reachable from outside
-            // so `Tools/chat-scenarios.sh` can drive the asked path without
-            // a friend and a real banner to click.
+            // Reachable from outside so `Tools/chat-scenarios.sh` can drive a
+            // notification click without a friend or a banner.
             let accountID = Self.value(of: "accountid", in: request.query)
             guard let id = UInt32(accountID) else {
                 return .error(400, "pass ?accountid=<32-bit account id>")
@@ -146,9 +140,8 @@ final class AppLinkServer {
         case ("POST", "/menu/cancel"):
             return cancelMenuTracking()
         case ("GET", "/menu/session"):
-            // Which menu-bar impl is in use and whether a tracking session
-            // is live, with the two flags the watchdog's levers turn on —
-            // readable from outside while the main thread is stuck in it.
+            // The menu-bar impl, whether a tracking session is live, and the
+            // watchdog's two flags, readable while the main thread is stuck.
             guard let data = try? JSONSerialization.data(
                 withJSONObject: MenuTrackingWatchdog.diagnostics(), options: [.sortedKeys],
             ) else { return .error(500, "diagnostics failed") }
@@ -172,8 +165,8 @@ final class AppLinkServer {
         }
     }
 
-    /// `sevo streamer`: the switch arrives with the request, so the reload
-    /// reads it whether or not the shared suite has caught up in this process.
+    /// `sevo streamer`: the switch arrives with the request, so the reload sees
+    /// it even before the shared suite catches up here.
     private func applyStreamerMode(_ request: HTTPRequest) -> HTTPResponse {
         switch Self.value(of: "on", in: request.query) {
         case "1": StreamerMode.isOn = true
@@ -184,16 +177,15 @@ final class AppLinkServer {
         return Self.json(#"{"on":\#(StreamerMode.isOn)}"#)
     }
 
-    /// One command from the daemon's state machine.
     private func run(_ verb: String) async -> HTTPResponse {
         guard let command = PageCommand(rawValue: verb) else {
             return .error(400, "unknown command \(verb)")
         }
         switch command {
         case .connectToClient:
-            // The answer travels back as a fact, not as this reply: the
-            // connection can take the bridge's whole 30 s budget and the
-            // daemon has a boot cycle to run in the meantime.
+            // The answer travels back as a fact: the connection can take the
+            // bridge's whole 30 s budget, and the daemon has a boot cycle to
+            // run meanwhile.
             Task(name: "Connect the bridge to the client") {
                 await self.bridge.waitForClientConnection()
             }
@@ -208,9 +200,8 @@ final class AppLinkServer {
         return Self.json(#"{"ok":true}"#)
     }
 
-    /// Rebuilds the daemon's registration and reports the outcome, so a user
-    /// stuck on a helper that will not launch can recover from the terminal. A
-    /// daemon that is already answering is left running unless `force` is set.
+    /// Rebuilds the daemon's registration and reports the outcome; an answering
+    /// daemon is left running unless `force` is set.
     private func repairDaemon(force: Bool) async -> HTTPResponse {
         let (result, note): (String, String) = switch await supervisor.repairDaemon(force: force) {
         case .reachable:
@@ -230,9 +221,7 @@ final class AppLinkServer {
     }
 
     /// Ends every menu-bar tracking session, answering which root menus were
-    /// open. A stuck session leaves the app looking frozen while this listener
-    /// still answers, so it is both the tester's way out and the experiment
-    /// that says whether a session can be broken from outside.
+    /// open: the way out of a stuck session that leaves the app looking frozen.
     private func cancelMenuTracking() -> HTTPResponse {
         let payload: [String: Any] = ["ok": true, "open": host.menuMirror?.cancelTracking() ?? []]
         let data = (try? JSONSerialization.data(
@@ -241,8 +230,7 @@ final class AppLinkServer {
         return Self.json(String(decoding: data, as: UTF8.self))
     }
 
-    /// Every window the app owns — the diagnostic for "what is this window
-    /// Sevoflurane put on my screen".
+    /// Every window the app owns.
     private func windows() -> HTTPResponse {
         guard let data = try? JSONSerialization.data(
             withJSONObject: host.windowInventory(), options: [.sortedKeys],
@@ -250,7 +238,6 @@ final class AppLinkServer {
         return .ok(data, type: "application/json")
     }
 
-    /// One query parameter's value, or the empty string.
     private nonisolated static func value(of name: String, in query: String) -> String {
         for pair in query.components(separatedBy: "&") {
             let parts = pair.components(separatedBy: "=")

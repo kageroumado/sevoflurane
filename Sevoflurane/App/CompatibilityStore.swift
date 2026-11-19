@@ -1,10 +1,8 @@
 import Foundation
 
-/// What the Compatibility pane shows: the dependency catalog with live
-/// installed-state, the bottle's DLL overrides, and the Wine tool launchers.
-///
-/// Live or preview, the same shape: the gallery draws this pane too, through
-/// a simulated ``CompatibilityEnvironment``.
+/// What the Compatibility pane shows: the dependency catalog with installed
+/// state, the bottle's DLL overrides, and the Wine tool launchers. The gallery
+/// draws it on a simulated ``CompatibilityEnvironment``.
 @MainActor
 @Observable
 final class CompatibilityStore {
@@ -12,8 +10,7 @@ final class CompatibilityStore {
         let dependency: BottleDependencies.Dependency
         var installed: Bool
         var busy = false
-        /// What the install is doing right now — download counts, installer
-        /// stages — while `busy`.
+        /// The install's current stage while `busy`.
         var phase: String?
         var error: String?
         var id: String { dependency.id }
@@ -22,8 +19,8 @@ final class CompatibilityStore {
     private(set) var rows: [DependencyRow]
     private(set) var overrides: [BottleDependencies.Override] = []
     private(set) var overrideError: String?
-    /// Which required components the bottle is missing, said once for the
-    /// whole section; `nil` when it is complete.
+    /// The required components the bottle is missing, said once for the
+    /// section; `nil` when complete.
     private(set) var incompleteSummary: String?
     private let environment: any CompatibilityEnvironment
 
@@ -34,11 +31,8 @@ final class CompatibilityStore {
         self.environment = environment ?? LiveCompatibilityEnvironment()
     }
 
-    /// Re-reads the disk truth: what's installed, what failed to install, and
-    /// the current overrides.
-    ///
-    /// A failure is read back from the record rather than held here, so
-    /// leaving the pane and coming back still shows why the row is empty.
+    /// Re-reads what's installed, what failed, and the current overrides.
+    /// Failures come from the record, so they survive leaving the pane.
     func refresh() {
         for index in rows.indices where !rows[index].busy {
             rows[index].installed = environment.isInstalled(rows[index].dependency)
@@ -96,8 +90,8 @@ final class CompatibilityStore {
             let failure = await environment.setOverride(dll: trimmed, mode: mode)
             overrideError = failure
             guard failure == nil else { return }
-            // user.reg lags wineserver's flush by a few seconds, so show
-            // what was just written rather than re-reading a stale file.
+            // user.reg lags wineserver's flush by a few seconds, so show what
+            // was written rather than re-read a stale file.
             var updated = overrides.filter { $0.dll != trimmed }
             updated.append(.init(dll: trimmed, mode: mode))
             overrides = updated.sorted { $0.dll < $1.dll }

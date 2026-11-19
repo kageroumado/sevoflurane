@@ -1,12 +1,8 @@
 import Foundation
 
-/// Where the Graphics pane reads and writes.
-///
-/// Everything that reaches an engine or a bottle goes through
-/// ``GraphicsEnvironment`` rather than ``BottleGraphics`` directly: the gallery
-/// draws every surface, and a pane wired straight to the bottle would let a
-/// stray click rewrite the machine's real bottle. A simulated environment
-/// keeps the same shape in memory and touches nothing.
+/// Where the Graphics pane reads and writes. Everything reaching an engine or
+/// bottle goes through ``GraphicsEnvironment``, so the gallery's simulated
+/// panes cannot rewrite the machine's real bottle.
 @MainActor
 @Observable
 final class GraphicsStore {
@@ -32,15 +28,15 @@ final class GraphicsStore {
 
     // MARK: - Renderer versions
 
-    /// One component's versions as the pane shows them: what is on disk, what
-    /// is chosen, what the engine shipped, and what can be fetched.
+    /// One component's versions: on disk, chosen, shipped by the engine, and
+    /// fetchable.
     struct RendererVersionState: Equatable {
         var installed: [RendererVersions.Installed] = []
         var chosen: String?
         var defaultVersion: String?
         var releases: [RendererVersions.Release] = []
         var releasesLoaded = false
-        /// What is happening to it right now, for a progress line.
+        /// The current operation, for a progress line.
         var busy: String?
         var error: String?
 
@@ -60,8 +56,7 @@ final class GraphicsStore {
 
     private(set) var rendererVersions: [RendererVersions.Component: RendererVersionState] = [:]
 
-    /// Asks each project's releases once per store, the first time the pane
-    /// wants them.
+    /// Fetches each project's releases once per store.
     func loadRendererReleases() {
         for component in RendererVersions.Component.allCases
             where rendererVersions[component]?.releasesLoaded == false {
@@ -134,26 +129,24 @@ final class GraphicsStore {
         EventLog.shared.log(.setup, "\(component.label) \(version) moved to the Trash")
     }
 
-    /// Whether this store's effects are simulated. The pane reads it to stand
-    /// Apple's real download page down.
+    /// Whether this store's effects are simulated; the pane then stands Apple's
+    /// real download page down.
     var isSimulated: Bool {
         environment.isSimulation
     }
 
-    /// Whether the engine brings a D3DMetal of its own, which the user's copy
-    /// then replaces rather than supplies.
+    /// Whether the engine brings its own D3DMetal, which a user's copy
+    /// replaces.
     var engineHasOwnD3DMetal: Bool {
         environment.engineHasOwnD3DMetal
     }
 
     /// The renderers the machine can switch between. CrossOver carries
-    /// everything; managed engines pool what each declares in its
-    /// `engine-info.json`, and choosing a renderer boots an installed engine
-    /// that hosts it (D3DMetal needs the `__wine_unix_call` export that only
-    /// Sevoflurane's own engine carries). D3DMetal is Apple's to download, so
-    /// a managed engine offers it only once a toolkit is there for a game to
-    /// load. The bottle's current renderer is always among them, so a surface
-    /// that lists these never shows a choice other than the one in force.
+    /// everything; managed engines pool what each declares in
+    /// `engine-info.json`, and choosing a renderer boots an engine that hosts
+    /// it (D3DMetal needs the `__wine_unix_call` export only Sevoflurane's
+    /// engine carries). D3DMetal is offered only once a toolkit is installed.
+    /// The bottle's current renderer is always included.
     var availableRenderers: [Renderer] {
         guard !engineHasOwnD3DMetal || !MacHardware.isAppleSilicon else { return Renderer.allCases }
         let hosted = Set(environment.hostedRenderers())
@@ -164,23 +157,22 @@ final class GraphicsStore {
         }
     }
 
-    /// Whether an installed engine can run D3DMetal at all: CrossOver with its
-    /// own copy, or a managed engine that declares it, on an Apple silicon Mac;
-    /// an Intel Mac cannot, whatever the engine. Whether a toolkit is there to
-    /// run is a separate question, which ``availableRenderers`` asks.
+    /// Whether an installed engine can run D3DMetal at all, on Apple silicon
+    /// only; whether a toolkit is installed is ``availableRenderers``'s
+    /// question.
     var canHostD3DMetal: Bool {
         MacHardware.isAppleSilicon && (engineHasOwnD3DMetal || environment.hostedRenderers().contains(.d3dmetal))
     }
 
-    /// What a game's context menus offer to run with or to pin:
-    /// ``availableRenderers`` less Automatic, which defers to CrossOver's
-    /// per-game database and is chosen for the whole bottle in Settings.
+    /// What a game's context menus offer: ``availableRenderers`` less
+    /// Automatic, which defers to CrossOver's per-game database and is a
+    /// bottle-wide choice.
     var menuRenderers: [Renderer] {
         availableRenderers.filter { $0 != .auto }
     }
 
-    /// `offered` with `pinned` in its place among them, so a game pinned to a
-    /// renderer the machine does not offer right now still shows its pin.
+    /// `offered` with `pinned` included, so a pin to a renderer not offered
+    /// right now still shows.
     nonisolated static func pinChoices(_ offered: [Renderer], pinned: Renderer?) -> [Renderer] {
         Renderer.allCases.filter { offered.contains($0) || $0 == pinned }
     }
@@ -189,9 +181,8 @@ final class GraphicsStore {
         environment.engineName
     }
 
-    /// Reads the selection and the toolkits again, for a surface that
-    /// outlives the change — the popover stays built while Settings rewrites
-    /// the bottle or adds a D3DMetal.
+    /// Re-reads the selection and toolkits, for the popover, which stays built
+    /// while Settings changes them.
     func refresh() {
         let selection = environment.currentSelection()
         if selection != self.selection { self.selection = selection }
@@ -202,9 +193,8 @@ final class GraphicsStore {
         publishTileRenderers()
     }
 
-    /// Tells every game's Dock tile which renderers its Play with menu may
-    /// offer (``DockTileState``): the plug-in behind a kept tile reads the
-    /// file, having no store of its own.
+    /// Writes the renderers each Dock tile's Play with menu may offer
+    /// (``DockTileState``), for the tile plug-in, which has no store.
     private func publishTileRenderers() {
         let offered = menuRenderers.map { (id: $0.rawValue, label: $0.label) }
         Task.detached(name: "Publish the renderers to the Dock tiles") {
@@ -228,7 +218,7 @@ final class GraphicsStore {
         }
     }
 
-    /// `nil` means the engine's own — CrossOver's copy, with no shadow tree.
+    /// `nil` means the engine's own (CrossOver's copy, no shadow tree).
     func chooseD3DMetal(version: String?) {
         activeD3DMetal = version
         defer { publishTileRenderers() }
@@ -239,9 +229,8 @@ final class GraphicsStore {
         }
     }
 
-    /// Trashes an installed toolkit version. The newest remaining one (or
-    /// the engine's own copy, where the engine has one) takes over when the
-    /// removed version was active.
+    /// Trashes an installed toolkit version; when it was active, the newest
+    /// remaining one (or the engine's own) takes over.
     func removeD3DMetal(version: String) {
         guard let entry = d3dMetalVersions.first(where: { $0.version == version })
         else { return }
@@ -258,9 +247,8 @@ final class GraphicsStore {
         }
     }
 
-    /// Answers the failure, so the pane can show it. `choosing` is for the one
-    /// disk image the user picked, which becomes their choice; the downloads
-    /// from Apple's page leave the newest installed version active.
+    /// Answers the failure, if any. `choosing` makes a user-picked disk image
+    /// the choice; Apple-page downloads leave the newest version active.
     func installD3DMetal(from source: URL, choosing: Bool) async -> String? {
         do {
             let entry = try await environment.installToolkit(from: source)

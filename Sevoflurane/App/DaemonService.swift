@@ -1,20 +1,17 @@
 import Foundation
 import ServiceManagement
 
-/// Registering, reaching, and talking to `SevofluraneDaemon`.
-///
-/// The daemon is a `KeepAlive` LaunchAgent embedded in this bundle, registered
-/// with `SMAppService` on first launch. It owns the bottle, so an app that
-/// cannot reach it has no supervision and says so; there is no in-process
-/// supervisor to fall back to, by design.
+/// Registering, reaching, and talking to `SevofluraneDaemon`, a `KeepAlive`
+/// LaunchAgent embedded in this bundle and registered with `SMAppService` on
+/// first launch. It owns the bottle, and there is no in-process supervisor to
+/// fall back to, by design.
 @MainActor
 enum DaemonService {
     private static var service: SMAppService {
         SMAppService.agent(plistName: SupervisorLink.launchAgentPlistName)
     }
 
-    /// What the app knows about supervision, and what it can tell the user to
-    /// do about it.
+    /// What the app knows about supervision, and what to tell the user.
     struct Outcome: Equatable {
         let isReachable: Bool
         /// A sentence for the menu bar. Empty when everything is running.
@@ -23,14 +20,13 @@ enum DaemonService {
         let needsApproval: Bool
     }
 
-    /// The result of rebuilding the daemon's registration, for the caller —
-    /// the CLI, a Settings button, or the launch self-heal — to report.
+    /// The result of rebuilding the daemon's registration, for the CLI,
+    /// Settings or the launch self-heal to report.
     enum RepairResult: Equatable {
         /// Rebuilt, and the daemon answered.
         case reachable
-        /// The daemon was already answering, so nothing was rebuilt — the
-        /// common case for a `repair` run out of curiosity, which must not
-        /// tear a healthy helper down.
+        /// The daemon was already answering, so nothing was rebuilt: a `repair`
+        /// run must not tear a healthy helper down.
         case alreadyHealthy
         /// The daemon answered but had given up on the client; the client was restarted.
         case restartedClient
@@ -40,29 +36,24 @@ enum DaemonService {
         case failed(String)
     }
 
-    /// One automatic rebuild per launch: a rebuild that does not take surfaces
-    /// to the user rather than re-registering forever. A user-driven
-    /// ``repair()`` ignores this.
+    /// One automatic rebuild per launch, so a rebuild that does not take
+    /// surfaces instead of looping. A user-driven ``repair()`` ignores this.
     private static var healAttempted = false
-    /// One automatic restart of a stale helper per launch, for the same
-    /// reason a rebuild is capped: a restart that does not take must not spin.
+    /// One automatic restart of a stale helper per launch, so a restart that
+    /// does not take cannot spin.
     private static var staleRestartAttempted = false
 
-    /// Registers the daemon if it is not registered, then waits for it to
-    /// answer. Idempotent: this is both first-run setup and the Retry the
-    /// terminal state offers. A registered helper that stays silent is rebuilt
-    /// once (the poisoned Background Task Management record), and a helper
-    /// older than this app is restarted once (an app updated under it).
+    /// Registers the daemon if needed, then waits for it to answer; also the
+    /// terminal state's Retry. A registered helper that stays silent is rebuilt
+    /// once (the poisoned Background Task Management record), and one older
+    /// than this app is restarted once.
     static func ensureRunning() async -> Outcome {
-        // A test host carries the shipping app's bundle identifier and the
-        // same `AssociatedBundleIdentifiers`, so registering from one rewrites
-        // the live install's helper record and launchd boots the running
-        // daemon out with a SIGTERM, which brings the bottle down.
+        // Never register from a test host: it carries the shipping bundle
+        // identifier and `AssociatedBundleIdentifiers`, so launchd would boot
+        // the live daemon out with a SIGTERM, which brings the bottle down.
         if TestHost.isHosting { return reachable }
-        // A registration has to exist before launchd can bring the agent up:
-        // the never-registered machine registers now, an unapproved one is
-        // sent to Login Items, and an enabled-but-stopped one is given launchd
-        // its window below.
+        // launchd brings the agent up only once registered: an unregistered
+        // machine registers now, an unapproved one goes to Login Items.
         if await status() == nil {
             switch service.status {
             case .enabled:
@@ -101,8 +92,8 @@ enum DaemonService {
         case .none:
             return reachable
         case .rebuild:
-            // The decision above already found the daemon silent, so the
-            // rebuild runs directly rather than re-probing through `repair()`.
+            // Already found silent, so rebuild without re-probing through
+            // `repair()`.
             return await outcome(of: rebuild())
         case .restartStale:
             // A restart the helper does not come back from is the rebuild's to fix: the new
@@ -114,10 +105,8 @@ enum DaemonService {
     }
 
     /// The user-driven escape hatch, from `sevo daemon repair` and Settings.
-    /// A daemon that is already answering is left running — rebuilding it would
-    /// only detach the live app and force a relaunch — and only a silent one is
-    /// rebuilt. `force` rebuilds regardless, for a daemon that answers but is
-    /// still wrong.
+    /// Only a silent daemon is rebuilt, since rebuilding a live one detaches
+    /// the app; `force` rebuilds regardless.
     static func repair(force: Bool = false) async -> RepairResult {
         if TestHost.isHosting { return .alreadyHealthy }
         let current = await status()
@@ -137,17 +126,14 @@ enum DaemonService {
         }
     }
 
-    /// Rebuilds the registration from this bundle's identity: `unregister()`
-    /// then `register()`. This is the fix for a daemon that will not launch
-    /// because a stale record still carries a Development code requirement —
-    /// re-registering over an enabled record leaves that requirement in place,
-    /// so the record has to be torn down first. Reached from the launch
-    /// self-heal and from ``repair(force:)``.
+    /// Rebuilds the registration: `unregister()` then `register()`.
+    /// Re-registering over an enabled record keeps a stale Development code
+    /// requirement that stops the daemon launching, so the record is torn down
+    /// first.
     ///
-    /// A rebuild gets two attempts, each registering a pause after the
-    /// unregister returns. Registering again at once can leave launchd
-    /// refusing to spawn the new job (`EX_CONFIG`, `needs LWCR update`) where
-    /// a second rebuild takes.
+    /// Two attempts, each with a pause after the unregister: registering again
+    /// at once can leave launchd refusing the new job (`EX_CONFIG`, `needs LWCR
+    /// update`) where a second rebuild takes.
     private static func rebuild() async -> RepairResult {
         healAttempted = true
         var result = await rebuildOnce()
@@ -177,8 +163,7 @@ enum DaemonService {
             : .failed("the background helper was rebuilt but has not started yet")
     }
 
-    /// Removes the registration. The uninstall path, and the way a test run
-    /// leaves the machine as it found it.
+    /// Removes the registration, for the uninstall and for a test run.
     static func unregister() async {
         try? await service.unregister()
     }
@@ -189,7 +174,6 @@ enum DaemonService {
 
     // MARK: - Healing
 
-    /// Answers whether the helper answered after the restart.
     private static func restartStaleDaemonOnce() async -> Bool {
         guard !staleRestartAttempted else { return await isAnswering() }
         staleRestartAttempted = true
@@ -234,7 +218,7 @@ enum DaemonService {
         )
     }
 
-    /// The daemon this app ships, which is the one that should be running.
+    /// The daemon this app ships.
     private static var bundledDaemon: URL {
         Bundle.main.bundleURL.appending(path: "Contents/Library/LaunchAgents/SevofluraneDaemon")
     }
@@ -244,8 +228,6 @@ enum DaemonService {
     }
 
     private static func waitForAnswer() async -> Bool {
-        // launchd starts a freshly registered or restarted agent on its own
-        // schedule.
         for _ in 0 ..< Timing.startupPolls {
             try? await Task.sleep(for: .seconds(1))
             if await isAnswering() { return true }
@@ -260,7 +242,7 @@ enum DaemonService {
     }
 
     /// The daemon's `/status` as a dictionary, or nil when it is not answering.
-    /// Carries `version`, which the launch self-heal compares against the app.
+    /// Its `version` is what the self-heal compares.
     static func status() async -> [String: Any]? {
         guard let data = await get("/status", timeout: 2),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -279,15 +261,14 @@ enum DaemonService {
         await request(path, method: "POST", body: body, timeout: timeout)
     }
 
-    /// A POST whose answer is its HTTP status, for the verbs that refuse
-    /// with one (`/client/stop` answers 409 while a restart runs), or `nil`
-    /// when nothing answered.
+    /// A POST answered with its HTTP status (`/client/stop` answers 409 while a
+    /// restart runs), or `nil` when nothing answered.
     static func postStatus(_ path: String, timeout: TimeInterval = 15) async -> Int? {
         await exchange(path, method: "POST", body: nil, timeout: timeout)?.status
     }
 
-    /// A POST whose refusal carries a reason worth showing: the status and
-    /// the body together, or `nil` when nothing answered.
+    /// A POST's status and body, for a refusal worth showing, or `nil` when
+    /// nothing answered.
     static func postReply(
         _ path: String, timeout: TimeInterval = 15,
     ) async -> (data: Data, status: Int)? {

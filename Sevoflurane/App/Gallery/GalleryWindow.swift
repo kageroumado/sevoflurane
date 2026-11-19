@@ -7,9 +7,8 @@
     final class GalleryWindow: NSObject {
         private var window: NSWindow?
 
-        /// Whether the process was launched to be the gallery and nothing
-        /// else — `-SEVO_GALLERY 1` as a scheme argument, or `SEVO_GALLERY=1`
-        /// in the environment.
+        /// Whether the process was launched as the gallery alone:
+        /// `-SEVO_GALLERY 1` or `SEVO_GALLERY=1`.
         static var wasRequestedAtLaunch: Bool {
             ProcessInfo.processInfo.environment["SEVO_GALLERY"] == "1"
                 || UserDefaults.standard.bool(forKey: "SEVO_GALLERY")
@@ -34,9 +33,9 @@
             window.isRestorable = false
             window.center()
             self.window = window
-            // Promotion from `.accessory` lands a run loop turn later, and a
-            // window ordered front in the same pass is swallowed with it —
-            // the same trap `SteamWindow.show` documents.
+            // Promotion from `.accessory` lands a run-loop turn later and
+            // swallows a window ordered front in the same pass (the trap
+            // `SteamWindow.show` documents).
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.async {
                 window.makeKeyAndOrderFront(nil)
@@ -46,17 +45,15 @@
         }
     }
 
-    /// The gallery written to disk as PNG strips, for a visual pass that needs
-    /// no one to scroll a window: `SEVO_GALLERY_EXPORT=<directory>` beside
-    /// `SEVO_GALLERY=1`, in the dark appearance with
-    /// `SEVO_GALLERY_APPEARANCE=dark`. The process quits when the last strip
-    /// is written.
+    /// The gallery written to disk as PNG strips:
+    /// `SEVO_GALLERY_EXPORT=<directory>` beside `SEVO_GALLERY=1`, dark with
+    /// `SEVO_GALLERY_APPEARANCE=dark`. The process quits after the last strip.
     @MainActor
     enum GalleryExport {
         private static let width: CGFloat = 1320
         private static let stripHeight: CGFloat = 1100
         /// Long enough for the fixtures' artwork and the panes' first async
-        /// loads to land before the picture is taken.
+        /// loads to land.
         private static let settleDelay: Duration = .seconds(3)
         private static var window: NSWindow?
 

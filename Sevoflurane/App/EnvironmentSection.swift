@@ -1,9 +1,9 @@
 import Propofol
 import SwiftUI
 
-/// The variables a level sets by name (``UserEnvironment``): one row per
-/// variable with its value and a remove button, then a row that adds one.
-/// Settings › Engine shows the bottle's, Settings › Games a game's.
+/// The variables a level sets by name (``UserEnvironment``): one editable row
+/// each, then a row that adds one. Settings › Engine shows the bottle's,
+/// Settings › Games a game's.
 struct EnvironmentSection: View {
     let store: SettingsStore
 
@@ -38,8 +38,8 @@ struct EnvironmentSection: View {
     }
 }
 
-/// One variable: its name, its value to edit in place, the setting it
-/// overrides when a row also writes that name, and the button that removes it.
+/// One variable: its name, its value edited in place, the setting it overrides,
+/// and its remove button.
 private struct EnvironmentRow: View {
     let name: String
     let value: String
@@ -56,8 +56,8 @@ private struct EnvironmentRow: View {
                     .font(.body.monospaced())
                     .onSubmit(commit)
                 Button {
-                    // An unsaved edit would otherwise be stored by the
-                    // row's disappearance, bringing the variable back.
+                    // Reset the draft first, or the row's disappearance would
+                    // store the unsaved edit and bring the variable back.
                     draft = value
                     set(nil)
                 } label: {
@@ -86,7 +86,6 @@ private struct EnvironmentRow: View {
     }
 }
 
-/// The row that names a variable and its value and adds the pair.
 private struct AddEnvironmentRow: View {
     let existing: Set<String>
     let add: (_ name: String, _ value: String) -> Void

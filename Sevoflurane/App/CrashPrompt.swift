@@ -2,12 +2,11 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Which endings deserve a word with the user, and how one run is told from
-/// its neighbors. Pure, so the decision is testable without a window.
+/// Which endings deserve a word with the user, and how one run is told from its
+/// neighbors; pure, so it is testable without a window.
 nonisolated enum CrashPromptPolicy {
-    /// A crash, the stall watchdog's kill, or an error exit while the game
-    /// was starting. Everything else the user did themselves, or already saw
-    /// Steam do.
+    /// A crash, the stall watchdog's kill, or an error exit while the game was
+    /// starting.
     static func deserves(_ record: RunRecord) -> Bool {
         switch record.exit?.kind {
         case .crash, .watchdog: true
@@ -16,11 +15,10 @@ nonisolated enum CrashPromptPolicy {
         }
     }
 
-    /// An error exit before the game was up: it lasted under ``startingSeconds``,
-    /// or under ``windowlessSeconds`` (or for as long as nobody measured) without
-    /// ever showing a window. A game's own crash handler often ends
-    /// it this way, with a plain status. An error exit after the game was
-    /// played is how plenty of games quit, and stays unremarked.
+    /// An error exit before the game was up: under ``startingSeconds``, or under
+    /// ``windowlessSeconds`` (or unmeasured) without ever showing a window. A
+    /// game's own crash handler often ends this way; an error exit after play is
+    /// how plenty of games quit.
     static func quitWhileStarting(_ record: RunRecord) -> Bool {
         guard record.exit?.kind == .exitError else { return false }
         if let duration = record.durationSeconds, duration < startingSeconds { return true }
@@ -31,21 +29,16 @@ nonisolated enum CrashPromptPolicy {
     static let startingSeconds: Double = 30
     static let windowlessSeconds: Double = 120
 
-    /// A run's identity: its start and its app. The same run can close twice
-    /// (a reattach, then the client's own notification), and the second
-    /// closing is the same news.
+    /// A run's identity: its start and its app. The same run can close twice (a
+    /// reattach, then the client's notification).
     static func key(for record: RunRecord) -> String {
         "\(record.t)/\(record.appid)"
     }
 }
 
-/// The offer after a crash: one panel, once per
-/// run, naming what stopped and what this project knows about it, asking
-/// whether to send the report.
-///
-/// A floating panel rather than a sheet: the app is a menu-bar agent whose
-/// windows are Steam's, and the game that just died may have been its only
-/// one on screen.
+/// The offer after a crash: one panel per run, naming what stopped and what is
+/// known about it, asking whether to send the report. A floating panel, since
+/// the game that just died may have been the only window on screen.
 @MainActor
 final class CrashPrompt: NSObject, NSWindowDelegate {
     static let shared = CrashPrompt()
@@ -65,11 +58,10 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
         self.presenter = presenter
     }
 
-    /// Points the recorder's closing hook at this prompt, and past it at the
-    /// video-decoding and processor-limit offers; and the recorder's
-    /// decoded-nothing hook at the video-decoding offer, which opens while the
-    /// game still waits on its picture. The hooks fire on the recorder's
-    /// queues; the decisions belong on the main actor.
+    /// Points the recorder's closing hook at this prompt and, past it, the
+    /// video-decoding and processor-limit offers; and the decoded-nothing hook
+    /// at the video-decoding offer, which opens while the game still waits on
+    /// its picture. The hooks fire on the recorder's queues.
     func install(spin: ThreadSpinPrompt = .shared, video: VideoDecodingPrompt = .shared) {
         RunRecorder.didClose = { [weak self] record in
             DispatchQueue.main.async {
@@ -83,9 +75,9 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
         }
     }
 
-    /// A closed run gets one panel: the crash prompt when the run earns it,
-    /// otherwise the video-decoding offer, otherwise the processor-limit
-    /// offer. A run's video offer that opened while it ran counts as its one.
+    /// A closed run gets one panel: the crash prompt when it earns one, else
+    /// the video-decoding offer, else the processor-limit offer. A video offer
+    /// that opened during the run counts as its one.
     func offerAfterClose(_ record: RunRecord, spin: ThreadSpinPrompt, video: VideoDecodingPrompt = .shared) {
         let crashShown = offer(record)
         let videoShown = video.offer(record, crashShown: crashShown)
@@ -119,8 +111,8 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: CrashPromptView(model: model))
         panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 460, height: 220))
         panel.center()
-        // An agent app has no activation of its own, so the panel would open
-        // behind whatever the user was in.
+        // The app has no activation of its own, so the panel would open behind
+        // whatever the user was in.
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
@@ -154,17 +146,15 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
     }
 
     #if DEBUG
-        /// Whether this launch was asked to open the offer on a fixture run:
-        /// `SEVO_DEMO_CRASH=1` or `--demo-crash`, beside the demo switch. The
-        /// panel, the zip it builds and the upload it sends are the real ones
-        /// — only the run that prompted them is made up.
+        /// Whether this launch asked for the offer on a fixture run
+        /// (`SEVO_DEMO_CRASH=1` or `--demo-crash`). The panel, zip and upload
+        /// are real; only the run is made up.
         static var wasRequestedAtLaunch: Bool {
             ProcessInfo.processInfo.environment["SEVO_DEMO_CRASH"] != nil
                 || CommandLine.arguments.contains("--demo-crash")
         }
 
-        /// Opens the offer on a crashed run shaped like the ones the recorder
-        /// writes, so it can be walked without a game dying.
+        /// Opens the offer on a crashed fixture run shaped like the recorder's.
         func offerFixture() {
             offer(RunRecord(
                 t: ISO8601DateFormatter().string(from: Date()),
@@ -184,8 +174,8 @@ final class CrashPrompt: NSObject, NSWindowDelegate {
     #endif
 }
 
-/// What the prompt knows and does: the run, the known failure it matches,
-/// and the three answers.
+/// What the prompt knows and does: the run, its known failure, and the three
+/// answers.
 @MainActor
 @Observable
 final class CrashPromptModel {
@@ -199,8 +189,7 @@ final class CrashPromptModel {
         case failed(String)
     }
 
-    /// Where the prompt writes its zip. Out of the way, unlike the Desktop
-    /// `sevo diag` writes to: a sent report leaves nothing behind.
+    /// Where the prompt writes its zip; a sent report leaves nothing behind.
     static let reportsDirectory = AppIdentity.supportFolder
         .appendingPathComponent("Reports")
 
@@ -209,14 +198,13 @@ final class CrashPromptModel {
 
     let record: RunRecord
     let known: KnownFailures.Entry?
-    /// "How did it go?" beside the crash report, so the two are one gesture:
-    /// Send queues the community report too when a verdict was picked.
+    /// The community report beside the crash report: Send queues it too when a
+    /// verdict was picked.
     let report: RunReportModel
     var neverAskAgain = false
     private(set) var stage = Stage.asking
     private(set) var zip: URL?
-    /// Called with the "Never ask again" choice when the panel has nothing
-    /// left to ask.
+    /// Called with the "Never ask again" choice when the panel is done.
     var onFinish: ((Bool) -> Void)?
 
     @ObservationIgnored private var preparing: Task<URL?, Never>?
@@ -274,8 +262,8 @@ final class CrashPromptModel {
         }
     }
 
-    /// A zip built only to be shown goes to the Trash with the answer, so
-    /// declining leaves nothing behind in Reports.
+    /// Trashes a zip built only to be shown, so declining leaves nothing in
+    /// Reports.
     func decline() {
         let building = preparing
         Task(name: "Trash the declined crash report") {
@@ -286,9 +274,8 @@ final class CrashPromptModel {
         onFinish?(neverAskAgain)
     }
 
-    /// Sends once: a second press while the first is under way does nothing.
-    /// The community report, when a verdict was picked, is queued first, so
-    /// a zip that fails to build or to upload does not lose it.
+    /// Sends once. The community report is queued first, so a zip that fails to
+    /// build or upload does not lose it.
     func send() {
         guard sending == nil else { return }
         if report.send() {
@@ -322,8 +309,8 @@ final class CrashPromptModel {
         onFinish?(neverAskAgain)
     }
 
-    /// The zip, built on first use and once: every caller while it builds
-    /// waits on the same build. Off the main actor: it copies logs.
+    /// The zip, built once on first use; concurrent callers wait on the same
+    /// build, which runs off the main actor.
     private func prepared() async -> URL? {
         if let preparing { return await preparing.value }
         stage = .preparing

@@ -1,12 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The diagnostics zip, as Settings writes it.
-///
-/// The bundled CLI does the writing (`sevo diag`), so a zip saved from a
-/// button and one from a hand-run `sevo diag` are the same report.
+/// The diagnostics zip, written by the bundled `sevo diag` so a button's zip
+/// and a hand-run one are the same report.
 enum DiagnosticsArchive {
-    /// The `sevo` helper inside this bundle.
     static var helper: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
     }

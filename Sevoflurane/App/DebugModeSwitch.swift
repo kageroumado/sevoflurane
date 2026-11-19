@@ -1,13 +1,11 @@
 import Foundation
 import Observation
 
-/// Debug mode as the app holds it: a session that starts off at every launch,
-/// whatever the last one did.
+/// Debug mode as the app holds it: a session that starts off at every launch.
 ///
-/// The switch owns both halves. The app half — synchronous log flushing and a
-/// window inventory on every adoption and close — applies the moment it is
-/// turned on; the engine half is ``DebugMode``'s env file, which a program
-/// reads at its start, so Steam is restarted for it to reach anything.
+/// The app half (synchronous log flushing, a window inventory on every adoption
+/// and close) applies at once; the engine half is ``DebugMode``'s env file,
+/// read at a program's start, so it reaches Steam only after a restart.
 @MainActor
 @Observable
 final class DebugModeSwitch {
@@ -35,21 +33,21 @@ final class DebugModeSwitch {
         return true
     }
 
-    /// Deletes an env file the last session left behind, and says so. The
-    /// app calls it before anything can start a bottle process.
+    /// Deletes an env file the last session left behind. Called before anything
+    /// can start a bottle process.
     func clearStaleFile() {
         guard DebugMode.clearStale(prefix: SteamBottle.root) else { return }
         EventLog.shared.log(.app, "debug mode was left on last time — turned it off")
     }
 
-    /// Takes the engine half off on the way out, so a bottle process started
-    /// by anything else — a relaunch, `sevo run` — is not left verbose.
+    /// Takes the engine half off on the way out, so a relaunch or `sevo run` is
+    /// not left verbose.
     func endSession() {
         DebugMode.turnOff(prefix: SteamBottle.root)
     }
 
-    /// What the mode is doing and what it costs, for the footer chip's
-    /// tooltip: the three logs it makes grow, with what they weigh now.
+    /// The footer chip's tooltip: the three logs the mode grows and their
+    /// sizes.
     var summary: String {
         var lines = [InterfaceCopy.localized("Debug mode is on. Logs grow.")]
         lines += Self.logs.map { name, url in
@@ -63,7 +61,6 @@ final class DebugModeSwitch {
         return lines.joined(separator: "\n")
     }
 
-    /// The logs debug mode makes grow, in the order the report lists them.
     private static var logs: [(name: String, url: URL)] {
         [
             ("Sevoflurane.log", EventLog.fileURL),
@@ -79,9 +76,8 @@ final class DebugModeSwitch {
         return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
-    /// The control port's whole debug surface, in one function so that moving
-    /// the endpoint costs one line at the call site: `GET /debug` reports,
-    /// `POST /debug/on` and `POST /debug/off` set.
+    /// The control port's debug surface: `GET /debug` reports, `POST /debug/on`
+    /// and `POST /debug/off` set.
     func handleControl(_ request: HTTPRequest) -> HTTPResponse {
         if request.method == "POST" {
             set(request.path.hasSuffix("/on"))

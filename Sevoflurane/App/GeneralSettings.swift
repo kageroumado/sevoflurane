@@ -37,8 +37,6 @@ struct GeneralSettings: View {
 
 // MARK: - Startup and Steam
 
-/// Open at login, the door to Steam's own settings, and where `steam://`
-/// links go.
 private struct GeneralStartupSection: View {
     let provisioner: Provisioner
     let steam: SteamActions?
@@ -69,9 +67,8 @@ private struct GeneralStartupSection: View {
     }
 }
 
-/// The Games folder in the Dock (``GamesFolder``, ``DockTiles``): a stack of
-/// every game's own icon beside the Dock's other folders, the last played
-/// on top.
+/// The Games folder in the Dock (``GamesFolder``, ``DockTiles``): every game's
+/// own icon, the last played on top.
 private struct GeneralDockSection: View {
     /// The switch as last set here; the Dock's own record until then.
     @State private var kept: Bool?
@@ -110,8 +107,8 @@ private struct GeneralDockSection: View {
     }
 }
 
-/// Whether the supervisor keeps Steam running. The switch is the daemon's
-/// state, which holds until Sevoflurane's background helper restarts.
+/// Whether the supervisor keeps Steam running: the daemon's state, which holds
+/// until the background helper restarts.
 private struct AutoRestartRow: View {
     let supervisor: ClientSupervisor
 
@@ -131,7 +128,6 @@ private struct AutoRestartRow: View {
     }
 }
 
-/// The button that opens the Steam client's own settings.
 private struct SteamSettingsRow: View {
     let steam: SteamActions
 
@@ -149,7 +145,6 @@ private struct SteamSettingsRow: View {
     }
 }
 
-/// Which app `steam://` links open in, and the button that claims them.
 private struct SteamLinksRow: View {
     @State private var steamLinksComeHere = SteamLinks.comeHere
 
@@ -175,8 +170,6 @@ private struct SteamLinksRow: View {
 
 // MARK: - Automation
 
-/// One detected AI assistant: its registration state, and the in-flight
-/// and failure state of the last flip.
 private struct AgentRow: Identifiable {
     let harness: AgentIntegration.Harness
     var registered: Bool
@@ -187,8 +180,8 @@ private struct AgentRow: Identifiable {
     }
 }
 
-/// The command-line tool and, once it is installed, the assistants that can
-/// reach Steam through it.
+/// The command-line tool and, once installed, the assistants that can reach
+/// Steam through it.
 private struct GeneralAutomationSection: View {
     let highlighted: SettingsAnchor?
     @State private var cliInstalled = false
@@ -224,7 +217,6 @@ private struct GeneralAutomationSection: View {
         }
     }
 
-    /// Reads the assistants' configs.
     private func refreshAgents() async {
         var rows: [AgentRow] = []
         for harness in AgentIntegration.detectedHarnesses {
@@ -234,8 +226,6 @@ private struct GeneralAutomationSection: View {
     }
 }
 
-/// Installs and removes `sevo`, with the progress and the failure of the
-/// last attempt.
 private struct CommandLineToolRow: View {
     @Binding var installed: Bool
     /// Runs after an install or a removal, whatever its outcome.
@@ -279,7 +269,6 @@ private struct CommandLineToolRow: View {
     }
 }
 
-/// One assistant and the switch that registers Sevoflurane with it.
 private struct AgentToggleRow: View {
     @Binding var row: AgentRow
 
@@ -326,8 +315,7 @@ private struct AgentToggleRow: View {
     }
 }
 
-/// For every agent that speaks MCP but isn't in the list: the command,
-/// ready to paste.
+/// The command for any other MCP assistant, ready to paste.
 private struct ManualCommandRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -349,7 +337,6 @@ private struct ManualCommandRow: View {
 
 // MARK: - The Steam pages
 
-/// What Sevoflurane adds to Steam's own pages.
 private struct GeneralSteamPagesSection: View {
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
@@ -397,8 +384,7 @@ private struct GeneralSteamPagesSection: View {
 
 // MARK: - Custom style
 
-/// The user's own stylesheets for Steam, from the Styles folder, and the
-/// selectors in Steam's UI that hold across its updates.
+/// The user's own stylesheets for Steam, from the Styles folder.
 private struct GeneralCustomStyleSection: View {
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
@@ -463,8 +449,8 @@ private struct GeneralCustomStyleSection: View {
 
 // MARK: - Community database
 
-/// Whether closed runs go to the community database, what has gone, and the
-/// way to take it back.
+/// Whether closed runs go to the community database, what has gone, and the way
+/// to take it back.
 private struct GeneralCommunitySection: View {
     let highlighted: SettingsAnchor?
     @State private var shares = false
@@ -548,8 +534,8 @@ private struct GeneralCommunitySection: View {
 
 // MARK: - Usage count
 
-/// Whether this Mac is counted among Sevoflurane's users, what that sends,
-/// and whether Sevoflurane's own crashes are reported.
+/// Whether this Mac is counted among Sevoflurane's users, and whether
+/// Sevoflurane's own crashes are reported.
 private struct GeneralUsageSection: View {
     @State private var tier = ConsentTier.off
     @State private var status: DigoxinStatus = .off
@@ -620,8 +606,6 @@ private struct GeneralUsageSection: View {
 
 // MARK: - Discord
 
-/// A game's own Discord traffic, and the presence Sevoflurane publishes for
-/// games Discord knows.
 private struct GeneralDiscordSection: View {
     let highlighted: SettingsAnchor?
     @State private var discordBridge = false
@@ -672,11 +656,9 @@ private struct GeneralDiscordSection: View {
 
 // MARK: - Uninstall
 
-/// The uninstall button and the dialog that asks whether games go too.
 private struct GeneralUninstallSection: View {
     let provisioner: Provisioner
     let store: StorageStore
-    /// The supervisor to stand down before the uninstall; `nil` in previews.
     let supervisor: ClientSupervisor?
     let highlighted: SettingsAnchor?
     @State private var confirmingUninstall = false
@@ -732,8 +714,7 @@ private struct GeneralUninstallSection: View {
     }
 }
 
-/// A borderless copy button that flips to a checkmark for a moment after
-/// copying.
+/// A copy button that shows a checkmark for a moment after copying.
 private struct CopyButton: View {
     let text: String
     @State private var copied = false

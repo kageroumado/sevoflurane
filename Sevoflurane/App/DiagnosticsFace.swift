@@ -1,9 +1,8 @@
 import Foundation
 
 extension Diagnostics {
-    /// What the app knows that the shared builder cannot ask: the doctor's
-    /// verdicts, from the bundled `sevo` so the zip the app sends is the one
-    /// `sevo diag` writes; the daemon's status; the bottle's dependency state.
+    /// What the shared builder cannot ask: the bundled `sevo doctor`'s
+    /// verdicts, the daemon's status, and the bottle's dependency state.
     static func appFaceReport() async -> FaceReport {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
         let doctor = await Subprocess.run(helper.path, ["doctor", "--json"], timeout: .seconds(60))
@@ -13,7 +12,7 @@ extension Diagnostics {
             "provisioning": BottleReadiness.lastProvision.map(\.dictionary) ?? NSNull(),
         ]
         // `doctor` exits non-zero when a check fails, which is the run worth
-        // reporting: the report is kept whenever it is a JSON object.
+        // reporting, so any JSON object is kept.
         let verdicts = doctor.output.trimmingCharacters(in: .whitespacesAndNewlines)
         return FaceReport(
             doctor: verdicts.hasPrefix("{") ? verdicts : nil,

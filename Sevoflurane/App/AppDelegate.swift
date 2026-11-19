@@ -2,9 +2,8 @@ import AppKit
 import os
 import SwiftUI
 
-/// Application-level wiring: the menu bar, the menu-bar item, the activation
-/// policy, and the single ``SteamWebHost`` everything else reads. Created and
-/// installed by `main.swift`.
+/// Application-level wiring: the menus, the menu-bar item, the activation
+/// policy, and the single ``SteamWebHost`` everything else reads.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let host = SteamWebHost()
@@ -42,8 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return window
     }()
 
-    /// The settings window the gear and ⌘, open. A demo boot points this at
-    /// one built on simulated stores instead.
+    /// The settings window the gear and ⌘, open; a demo boot uses one on
+    /// simulated stores.
     private var settingsWindow: SettingsWindow {
         #if DEBUG
             demoSettingsWindow ?? liveSettingsWindow
@@ -52,18 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    // Launches that do something other than run the app: the
-    // helper-unregistering pass a worktree build ends with. Answers whether
-    // one of them took the launch.
+    // Launches that do something other than run the app. Answers whether one
+    // took the launch.
     #if DEBUG
         private func handledDebugLaunch() -> Bool {
-            // Leaves the machine as a test run found it: a build run from a
-            // worktree registers its own background helper, and a stale
-            // registration would start that build's daemon at the next login
-            // and give it the control port. `SMAppService` can only
-            // unregister from the bundle that registered, so the trigger has
-            // to live here. `open` strips the environment, so run the
-            // executable inside the bundle directly.
+            // A worktree build registers its own background helper, and a stale
+            // registration would start that build's daemon at the next login.
+            // `SMAppService` can only unregister from the bundle that
+            // registered, so the trigger lives here; `open` strips the
+            // environment, so run the bundle's executable directly.
             if ProcessInfo.processInfo.environment["SEVO_UNREGISTER_HELPER"] == "1" {
                 isSimulatedBoot = true
                 Task(name: "Unregister the background helper") {
@@ -77,9 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     #endif
 
-    /// Points the shared, process-agnostic code at this process's answers:
-    /// where its lines go, and the one live connection to the client. The
-    /// daemon installs its own set — the same seams, different answers.
+    /// Points the shared, process-agnostic code at this process's logging and
+    /// client connection; the daemon installs its own set.
     private func installSharedHooks() {
         ClientLifecycle.log = { EventLog.enqueue(.client, $0) }
         GameConfig.logChange = { EventLog.enqueue(.app, $0) }
@@ -108,11 +103,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// What a finished run leaves on disk beyond its record: a report at level
-    /// zero when it ended badly, after every run above that, with a doctor
-    /// pass and compression at level two.
-    ///
-    /// Runs on the recorder's closing queue, which is where the record was
-    /// just written and the Wine log just read.
+    /// zero when it ended badly, after every run above that, with a doctor pass
+    /// and compression at level two. Runs on the recorder's closing queue.
     private nonisolated static func collectReports(_ record: RunRecord, wineTail: String) {
         let level = DiagnosticLevel.current
         let report = CrashCollector.collectIfWanted(
@@ -128,17 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + "\(report.directory.lastPathComponent)",
             )
         }
-        // Level two is set to catch one crash; leaving it on is a gigabyte of
-        // logs nobody asked for.
+        // Level two is set to catch one crash; left on, it writes a gigabyte of
+        // logs.
         if DiagnosticLevel.expireAfterRun() {
             EventLog.enqueue(.app, "diagnostics back to \(DiagnosticLevel.current.summary)")
         }
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        // The unit tests link against this binary, so running them launches
-        // the app; anything started here would boot the bottle, take the ports
-        // off a running copy, and stage into the user's Steam install.
+        // The unit tests launch this binary; anything started here would boot
+        // the bottle, take the ports off a running copy, and stage into the
+        // user's Steam install.
         if TestHost.isHosting { return }
         #if DEBUG
             if handledDebugLaunch() { return }
@@ -147,16 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ExceptionWatch.install()
         installSharedHooks()
         NativeSteam.adoptEarlierChoices(games: Array(GameConfig.games().values))
-        // Before anything can start a bottle process, so the client this
-        // launch brings up is not the killed session's verbose one.
+        // Before anything can start a bottle process, so this launch's client
+        // is not the killed session's verbose one.
         DebugModeSwitch.shared.clearStaleFile()
         applyEngineManifestOverride()
         PerfProbe.poi.emitEvent("Launch")
         installLaunchHooks()
         // A game outlives the app that launched it, so a launch armed by a
-        // process that was force-quit is picked up here: one Steam is still
-        // running stays open under this recorder, one it has finished with is
-        // recorded now.
+        // force-quit process is picked up here.
         runRecorder.reattach()
         startRunMeter()
         startStallWatch()
@@ -164,10 +154,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
             if bootedOnFixtures() { return }
         #endif
-        // A person opened the app — the Dock, the Finder, `open` — rather
-        // than the system opening it as a login item or to handle a file.
-        // The window is what they came for, so it comes up as soon as the
-        // client is healthy; a login-item launch stays a menu-bar app.
+        // Opened by a person (Dock, Finder, `open`) rather than as a login item
+        // or to handle a file: Steam's window comes up once the client is
+        // healthy. A login-item launch stays a menu-bar app.
         if note.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
             EventLog.shared.log(.window, "opened by hand — Steam's window follows the client up")
             supervisor.showLibraryWhenHealthy()
@@ -186,14 +175,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Points the engine manifest at the URL a developer named, from the
-    /// environment or from the defaults key.
+    /// environment or the defaults key.
     ///
-    /// An override manifest is trusted unsigned, and so are the tarballs it
-    /// names. A release build takes only a `file://` one — a test rig on this
-    /// Mac — so a defaults write alone cannot point it at a remote engine.
+    /// An override manifest and its tarballs are trusted unsigned, so a release
+    /// build takes only a `file://` one and a defaults write cannot point it at
+    /// a remote engine.
     private func applyEngineManifestOverride() {
-        // The defaults key exists because `open` (the only launch path that
-        // gets a real Aqua session) strips the environment.
+        // The defaults key exists because `open`, the only launch path with a
+        // real Aqua session, strips the environment.
         guard let manifest = ProcessInfo.processInfo.environment["SEVO_ENGINE_MANIFEST"]
             ?? Preferences.shared.string(forKey: "engineManifestOverride"),
             let url = URL(string: manifest) else { return }
@@ -207,15 +196,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EventLog.enqueue(.setup, "engine manifest override: \(manifest)")
     }
 
-    /// The app's own menus, its notifications, and the menu bar popover.
     private func installMenuBar() {
         let mirror = SteamMenuMirror(host: host)
         menuMirror = mirror
         host.menuMirror = mirror
         SevofluraneMainMenu.install(mirror: mirror)
-        // Before the gallery and dry-run gates return: setting the delegate
-        // is what lets a click on a notification that woke the app be
-        // delivered at all, and reading the permission raises no prompt.
+        // Before the gallery and dry-run gates return: setting the delegate is
+        // what lets a click on a notification that woke the app be delivered.
+        // Reading the permission raises no prompt.
         notifications.host = host
         host.notifications = notifications
         notifications.start()
@@ -231,21 +219,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if DEBUG
-        /// Whether this launch asked for the gallery or the demo, both of
-        /// which run on fixtures and start nothing else.
+        /// Whether this launch asked for the gallery or the demo, which run on
+        /// fixtures and start nothing else.
         private func bootedOnFixtures() -> Bool {
             if GalleryWindow.wasRequestedAtLaunch {
-                // Nothing else starts: the gallery is fixtures all the way
-                // down, and a client coming up behind it would only compete
-                // for the ports.
+                // A client coming up behind the gallery would only compete for
+                // the ports.
                 isSimulatedBoot = true
                 galleryWindow.show()
                 return true
             }
             if DemoMode.isOn {
                 // No control server (a live instance may own the port), no
-                // bridge, no client — nothing on the machine moves, and the
-                // assistant and every Settings pane run against fixtures.
+                // bridge, no client.
                 isSimulatedBoot = true
                 EventLog.shared.log(
                     .setup,
@@ -260,19 +246,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     #endif
 
-    /// Takes the daemon link port, stocks the shader store, and then either
-    /// walks the user through setup or brings the client up.
+    /// Takes the daemon link port, stocks the shader store, then runs setup or
+    /// brings the client up.
     private func startServices() {
-        // Up before provisioning gates so the daemon can reach the page even
-        // while the setup wizard is waiting for the user.
+        // Up before provisioning, so the daemon can reach the page while the
+        // setup wizard waits.
         Task(name: "Take the daemon link port") {
             guard await self.appLinkServer.start() else {
                 self.reportAnotherCopyIsRunning()
                 return
             }
         }
-        // The bundle's shader packages are in the store before any game
-        // could be launched naming one. Detached: it copies files.
+        // Before any game could be launched naming one. Detached: it copies
+        // files.
         Task.detached(name: "Copy bundled shader packages") {
             ShaderPackages.ensureBundled()
         }
@@ -280,7 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             D3DMetalInstaller.adoptInstalledEnginesToolkits()
         }
         // Setup too: the assistant also opens for an existing Mac whose bottle is missing,
-        // and its own engine stage installs only onto a Mac with no managed engine.
+        // and its engine stage installs only onto a Mac with no managed engine.
         Self.installBundledEngineIfNewer()
         Task {
             await provisioner.refreshDetection()
@@ -296,8 +282,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         host.signInIsSkipped = true
                         setupWindow.finish()
                         finishOnboarding()
-                        // No window follows this finish: the app is a
-                        // menu-bar app from here.
+                        // No window follows this finish: the app is a menu-bar
+                        // app from here.
                         ActivationPolicy.recedeIfLastWindow(closing: nil)
                     },
                 ) { [weak self] in
@@ -310,9 +296,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// An app update that carries a newer engine installs it, off the main actor. The newest
-    /// managed engine is the active one unless the user chose another, so it takes over at
-    /// the client's next start.
+    /// Installs an engine newer than every managed one, off the main actor; it takes over at
+    /// the client's next start unless the user chose another.
     private static func installBundledEngineIfNewer() {
         Task.detached(name: "Install the engine this app carries") {
             guard let bundled = EngineInstaller.bundledUpgrade(installed: SetupProbe.managedEngineVersions())
@@ -330,10 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The wizard's finish button. The runtime usually started when
-    /// provisioning completed — the client booted behind the wizard, so the
-    /// window the button promises already exists: sign-in if Steam is
-    /// waiting for one, the library otherwise.
+    /// The wizard's finish button. The client usually booted behind the wizard,
+    /// so the window it promises (sign-in or the library) already exists.
     private func finishOnboarding() {
         guard isRuntimeStarted else {
             startRunning()
@@ -347,15 +330,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openPendingPrograms()
     }
 
-    /// Set once this process has found another copy holding the ports. The
-    /// bottle and the debug session belong to that copy, so this one's quit
-    /// sends nothing on its way out.
+    /// Set once another copy was found holding the ports. The bottle and the
+    /// debug session are that copy's, so this one's quit sends nothing.
     private var isDuplicate = false
 
-    /// Another copy of Sevoflurane holds the ports. A half-alive instance —
-    /// one that renders no Steam but answers the daemon's commands — is worse
-    /// than saying so and going away. The link port and the bridge ports both
-    /// find the other copy, and the alert shows once.
+    /// Another copy of Sevoflurane holds the ports. A half-alive instance that
+    /// renders no Steam but answers the daemon is worse than saying so and
+    /// quitting. Both the link port and the bridge ports find the other copy;
+    /// the alert shows once.
     private func reportAnotherCopyIsRunning() {
         guard !isDuplicate else { return }
         isDuplicate = true
@@ -402,25 +384,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     MainActor.assumeIsolated { self?.supervisor.wake(.clientConnectionLost) }
                 }
             }
-            // Steam's list of non-Steam games follows the adopted programs
-            // whenever a client is there to take the calls.
             SteamLibraryShortcuts.shared.bridge = bridge
             SteamLibraryShortcuts.shared.onAliases = { [host] in host.shortcutPrograms = $0 }
             supervisor.onHealthy = { SteamLibraryShortcuts.shared.sync() }
             host.bootstrap()
             supervisor.start()
-            // The client's own cookie jar is the app's web session;
-            // mirrored once at start, refreshed per browser view.
+            // The client's own cookie jar is the app's web session; mirrored
+            // once at start, refreshed per browser view.
             WebSessionCookies.bridge = bridge
             WebSessionCookies.refresh()
-            // Idempotent bottle config (tray suppression, …) — reasserted on
-            // every boot so a client update or registry rewrite can't
-            // silently bring the Wine tray icon back.
+            // Reasserted on every boot so a client update or registry rewrite
+            // cannot bring the Wine tray icon back.
             await provisioner.configureBottle(named: SteamBottle.name)
         }
-        // Past the setup gate, so a machine still being provisioned never
-        // has its app swapped mid-wizard — a preloading runtime defers this
-        // to the wizard's finish.
+        // Never swap the app mid-wizard: a preloading runtime defers this to
+        // the wizard's finish.
         if !holdingWindows {
             startSilentUpdates()
             openPendingPrograms()
@@ -436,9 +414,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// The window the assistant's finish button would bring up. Steam's own
-    /// windows, read directly: the supervisor's health reaches the app a probe
-    /// cycle later.
+    /// The window the assistant's finish button would bring up, read from
+    /// Steam's windows directly: the supervisor's health lags a probe cycle.
     private var setupSteamWindow: SetupSteamWindow {
         if supervisor.daemonIsUnreachable { return .helperDown(supervisor.statusText.sentenceCased) }
         if host.hasLoginWindow { return .signIn }
@@ -466,13 +443,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             onProvisioned: { [weak self] in
-                // A dry-run wizard "provisions" fixtures; nothing real may start.
+                // A dry-run wizard provisions fixtures; nothing real may start.
                 guard !provisioner.isDryRun else { return }
                 self?.startRunning(holdingWindows: true)
-                // Supervision may be paused by the stop that preceded a bottle
-                // switch. The start resumes it and boots the client in the
-                // bottle setup just finished; the daemon holds it while the
-                // provisioning lease stands.
+                // The stop before a bottle switch may have paused supervision;
+                // this start resumes it, and the daemon holds the client while
+                // the provisioning lease stands.
                 self?.supervisor.startAfterSetup()
             },
             stopClient: { [weak self] narrate in
@@ -488,26 +464,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #if DEBUG
         private lazy var galleryWindow = GalleryWindow()
 
-        /// Debug ▸ UI Gallery — every surface in every state, no client.
+        /// Debug ▸ UI Gallery: every surface in every state, no client.
         @objc
         func showGallery(_: Any?) {
             galleryWindow.show()
         }
 
         /// Whether this process booted simulated (``DemoMode``, a gallery
-        /// launch, or a test run) rather than as the real app.
+        /// launch, or a test run).
         private var isSimulatedBoot = false
 
-        /// Retains the harness provisioner for the wizard's lifetime; the app's
-        /// own `provisioner` keeps driving Settings › Repair untouched.
+        /// The harness provisioner, held for the wizard's lifetime.
         private var dryRunProvisioner: Provisioner?
 
-        /// Built once for a demo boot and kept, so what was changed in one
-        /// visit to Settings is still there on the next.
+        /// Kept, so changes in one visit to the demo's Settings survive to the
+        /// next.
         private var demoSettingsWindow: SettingsWindow?
 
         /// The whole app on fixtures: the assistant walks the chosen machine,
-        /// and finishing it opens Settings on the chosen panes.
+        /// and finishing it opens Settings.
         private func startDemo() {
             let provisioner = Provisioner(
                 environment: DryRunSetupEnvironment(scenario: DemoMode.setup),
@@ -519,9 +494,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let storage = StorageStore(
                 environment: DemoStorageEnvironment(scenario: DemoMode.storage),
             )
-            // Its own provisioner, on the engine scenario's machine: the pane
-            // builds its engine list from detection, and the assistant's
-            // machine is a different one.
+            // Its own provisioner: the Engine pane builds its list from
+            // detection, and the assistant's machine is a different one.
             let engineScenario = DemoMode.engine
             let engine = EngineStore(
                 provisioner: Provisioner(
@@ -535,9 +509,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let compatibility = CompatibilityStore(
                 environment: DemoCompatibilityEnvironment(scenario: DemoMode.compatibility),
             )
-            // No supervisor and no host: a demo boot started neither, and the
-            // Engine pane's switch must not reach for the client that a real
-            // instance alongside this one owns.
+            // No supervisor and no host: the Engine pane's switch must not
+            // reach for a real instance's client.
             let shaders = ShaderStore(simulated: true)
             demoSettingsWindow = SettingsWindow(
                 provisioner: provisioner,
@@ -553,8 +526,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        /// Debug ▸ Onboarding Dry Run — reopens the wizard against the chosen
-        /// scenario at any time, real machine untouched.
+        /// Debug ▸ Onboarding Dry Run: reopens the wizard against the chosen
+        /// scenario, real machine untouched.
         @objc
         func runOnboardingDryRun(_ sender: NSMenuItem) {
             guard let raw = sender.representedObject as? String,
@@ -585,9 +558,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// The log's queue is drained on the main actor, and nothing drains it
-    /// after this: the lines describing the shutdown are the ones a reader
-    /// wants most, so the process waits for them to reach the disk.
+    /// Nothing drains the log's main-actor queue after this, so the shutdown
+    /// lines are flushed to disk here.
     func applicationWillTerminate(_: Notification) {
         if !isDuplicate { DebugModeSwitch.shared.endSession() }
         EventLog.shared.log(.app, "the app is stopping")
@@ -600,16 +572,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the process to end as a failure.
     private(set) static var isQuitting = false
 
-    /// Set when a quit is reissued from the run loop (``applicationShouldTerminate(_:)``).
     private var isQuittingFromRunLoop = false
 
-    /// Quitting Sevoflurane quits Steam: the daemon that owns the bottle is
-    /// asked to bring it down, and the quit waits for its answer. This is the
-    /// only path that asks — a crash or a force-quit sends nothing, which is
-    /// why a game survives one.
+    /// Quitting Sevoflurane quits Steam: the daemon is asked to bring the
+    /// bottle down and the quit waits for its answer. A crash or force-quit
+    /// sends nothing, which is why a game survives one.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // A test host never started the client — and the bottle it would tear
-        // down belongs to whatever real instance is running alongside.
+        // A test host never started the client; the bottle belongs to a real
+        // instance alongside.
         if TestHost.isHosting { return .terminateNow }
         #if DEBUG
             // Same for a harness boot.
@@ -618,19 +588,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Steam this copy found running is the other copy's.
         if isDuplicate { return .terminateNow }
         guard quitTask == nil else { return .terminateCancel }
-        // `.terminateLater` waits for the teardown task below, whose jobs run on the main queue.
-        // A terminate issued from inside a main-queue job (AppUpdater's swap, any `Task` that
-        // quits) holds that queue for as long as AppKit's nested loop runs, so the teardown never
-        // starts and the app sits on "Quitting" forever. Such a quit is reissued from the run
-        // loop, where the main queue drains. A quit Apple event (logout, restart, `osascript`)
-        // is answered in place: cancelling it would cancel the logout.
+        // `.terminateLater` waits for a teardown whose jobs run on the main queue. A terminate
+        // issued from inside a main-queue job (AppUpdater's swap, any `Task` that quits) holds
+        // that queue while AppKit's nested loop runs, so the app would sit on "Quitting" forever;
+        // such a quit is reissued from the run loop. A quit Apple event (logout, restart,
+        // `osascript`) is answered in place, since cancelling it would cancel the logout.
         if !isQuittingFromRunLoop, NSAppleEventManager.shared().currentAppleEvent == nil {
             isQuittingFromRunLoop = true
             RunLoop.main.perform(inModes: [.default, .modalPanel]) { NSApp.terminate(nil) }
             return .terminateCancel
         }
-        // Before the bottle comes down: a game still up ends here, and after
-        // the teardown nothing is left that could say how.
+        // Before the bottle comes down: after the teardown nothing is left that
+        // could say how a running game ended.
         runMeter?.cancel()
         stallWatch.stop()
         runRecorder.closeAll()
@@ -645,19 +614,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    /// The store a program's Dock tile launches through when its URL arrives
-    /// before the menu bar is installed — a tile that started this app opens
-    /// it first. Wired like the popover's store, so the status line, the
-    /// window watch and the run record open for that launch as for any other.
+    /// The store a Dock tile launches through when its URL arrives before the
+    /// menu bar is installed. Wired like the popover's store, so the status
+    /// line, window watch and run record open as for any launch.
     lazy var dockQuickLaunch: QuickLaunchStore = {
         let store = QuickLaunchStore()
         store.launchHooks = QuickLaunchStore.LaunchHooks(reporting: host)
         return store
     }()
 
-    /// Windows programs handed to the app before it was ready to ask about
-    /// them. Finder can open a document at launch, which arrives while the
-    /// setup wizard may still own the screen.
+    /// Windows programs handed over before setup finished (Finder can open a
+    /// document at launch).
     var pendingPrograms: [URL] = []
 
     @objc
@@ -665,20 +632,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         host.reload()
     }
 
-    /// Flips Streamer Mode from the app menu, for the moment before a
-    /// recording starts.
+    /// Flips Streamer Mode from the app menu.
     @objc
     func toggleStreamerMode(_: Any?) {
         StreamerMode.isOn.toggle()
         host.applyStreamerMode()
     }
 
-    /// The app's own settings — open at login, the graphics knobs, Repair.
-    /// Steam's settings are its own, and keep ⌘, in the mirrored Steam menu.
+    /// The app's own settings. Steam's settings keep ⌘, in the mirrored Steam
+    /// menu.
     @objc
     func showSettings(_: Any?) {
-        // Settings edits a bottle and an engine the assistant is still
-        // choosing; it opens once setup is finished.
+        // Waits for setup: Settings edits a bottle and engine the assistant is
+        // still choosing.
         if setupWindow.show() { return }
         settingsWindow.show()
     }
@@ -688,36 +654,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.showRecovery()
     }
 
-    /// Settings › Diagnostics, open on the steps for a useful report. Waits
-    /// behind an unfinished setup, as ``showSettings(_:)`` does.
+    /// Settings › Diagnostics on the report steps; waits behind an unfinished
+    /// setup.
     func showReportGuide() {
         if setupWindow.show() { return }
         settingsWindow.showReportGuide()
     }
 
-    /// Settings › Games, open on one game's own settings. Waits behind an
-    /// unfinished setup, as ``showSettings(_:)`` does.
+    /// Settings › Games on one game; waits behind an unfinished setup.
     func showGameSettings(id: Int, name: String) {
         if setupWindow.show() { return }
         settingsWindow.showGame(id: id, name: name)
     }
 
-    /// The last runs, what each of them left behind, and the two ways to
-    /// share one. Settings › Recovery and the app menu both open it.
+    /// The last runs and what each left behind. Settings › Recovery and the app
+    /// menu both open it.
     @objc
     func showReports(_: Any?) {
         reportWindows.show()
     }
 
-    /// Every process the app owns, with what each is doing and what can be
-    /// done to it.
+    /// Every process the app owns, and what can be done to each.
     @objc
     func showProcesses(_: Any?) {
         processMonitorWindows.show()
     }
 
-    /// About, and the two documents its buttons open. The Settings About
-    /// pane reaches the same windows through the responder chain.
+    /// About and its two documents. The Settings About pane reaches them
+    /// through the responder chain.
     @objc
     func showAbout(_: Any?) {
         aboutWindows.showAbout()
@@ -740,8 +704,8 @@ extension AppDelegate: NSMenuItemValidation {
         SilentUpdates.shared.checkOrInstallFromMenu()
     }
 
-    /// Checks the Streamer Mode item while the mode is on and titles the update
-    /// item. Every item this delegate answers for stays enabled.
+    /// Checks the Streamer Mode item and titles the update item; every item
+    /// stays enabled.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleStreamerMode(_:)) {
             menuItem.state = StreamerMode.isOn ? .on : .off

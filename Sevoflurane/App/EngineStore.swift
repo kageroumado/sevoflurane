@@ -1,13 +1,13 @@
 import Foundation
 
 /// What the Engine pane shows and changes: which Wine runs the bottle, which
-/// bottle it runs, and the switch that applies both.
+/// bottle, and the switch that applies both.
 ///
-/// Selection is staged — the pickers edit `stagedEngine`/`stagedBottle`, and
-/// nothing on the machine moves until `apply()`, because a switch stops
-/// Steam, may provision a whole new bottle, and restarts. The active pair is
-/// always re-read from `Engine.active`/`SteamBottle.name`, so state written
-/// by the CLI or the wizard shows up on refresh.
+/// The pickers edit `stagedEngine`/`stagedBottle`, and nothing moves until
+/// `apply()`, because a switch stops Steam, may provision a bottle, and
+/// restarts. The active pair is re-read from
+/// `Engine.active`/`SteamBottle.name`, so the CLI's or wizard's changes show on
+/// refresh.
 @MainActor
 @Observable
 final class EngineStore {
@@ -33,15 +33,14 @@ final class EngineStore {
     private(set) var isSwitching = false
     private(set) var switchPhase: String?
     private(set) var switchError: String?
-    /// The release the feed offers: the engine a fresh install gets, so the
-    /// default the pane measures "newer" against and the one Reset returns
-    /// to. `nil` until the feed answers, on a Mac that cannot reach it, and
-    /// while the feed names no engine.
+    /// The release the feed offers, which a fresh install gets: what "newer" is
+    /// measured against and what Reset returns to. `nil` until the feed answers
+    /// or when it names no engine.
     private(set) var defaultRelease: EngineManifest.Release?
-    /// The download's progress while the pane is fetching the default engine.
+    /// The download's progress while the pane fetches the default engine.
     private(set) var engineFetchFraction: Double?
-    /// The failure the pane keeps showing: this session's switch error, or
-    /// the last provisioning pass's, which the pane is usually not open for.
+    /// The failure the pane keeps showing: this session's switch error, or the
+    /// last provisioning pass's.
     private(set) var standingFailure: String?
 
     private let provisioner: Provisioner
@@ -71,15 +70,13 @@ final class EngineStore {
         !bottles.contains { $0.name == stagedBottle }
     }
 
-    /// The managed engines on this Mac, oldest first.
     private var installedVersions: [String] {
         provisioner.detection?.managedEngineVersions ?? []
     }
 
-    /// The default release when it is newer than every engine installed here —
-    /// the pane's "a newer engine is available" line. A Mac with no managed
-    /// engine at all is not told: the picker's own Dormison entry already
-    /// offers to fetch one.
+    /// The default release when it is newer than every installed engine. A Mac
+    /// with no managed engine is not told: the picker's Dormison entry already
+    /// offers one.
     var newerEngine: EngineManifest.Release? {
         guard let defaultRelease, !installedVersions.isEmpty,
               UpdateSummary.isNewerEngine(defaultRelease.version, thanAll: installedVersions)
@@ -87,22 +84,19 @@ final class EngineStore {
         return defaultRelease
     }
 
-    /// Whether the staged engine is something other than the default, so
-    /// there is a default to go back to.
+    /// Whether the staged engine differs from the default.
     var canResetToDefault: Bool {
         guard let defaultRelease else { return false }
         return stagedEngine != .managed(version: defaultRelease.version)
     }
 
-    /// The name to say for the default engine, for the pane's Reset.
+    /// The default engine's name, for the pane's Reset.
     var defaultEngineLabel: String? {
         defaultRelease.map { Engine.managedDisplayName($0.version) }
     }
 
-    /// Stages the default engine, fetching it first when this Mac does not
-    /// have it. Reset and installing the newer release are the same move:
-    /// both land on the version the feed names.
-    /// Switch still decides when it runs.
+    /// Stages the default engine, fetching it first when missing; Reset and
+    /// Update both land here. Switch still decides when it runs.
     func useDefaultEngine() {
         guard let release = defaultRelease, !isSwitching else { return }
         isSwitching = true
@@ -126,9 +120,8 @@ final class EngineStore {
         }
     }
 
-    /// The installer reports from whatever thread its download landed on, and
-    /// a progress tick is synchronous work on main — no Task semantics are
-    /// wanted, so none are paid for.
+    /// The installer reports from any thread; a plain main-queue hop is enough
+    /// for a progress tick.
     private func fetchProgress() -> @Sendable (String, Double?) -> Void {
         { [weak self] phase, fraction in
             DispatchQueue.main.async {
@@ -142,10 +135,9 @@ final class EngineStore {
 
     private var isLookingUpDefault = false
 
-    /// The feed is asked until it names a release, and then left alone: it
-    /// is a signed fetch over the network, and the release does not move
-    /// while Settings is open. Off to the side of ``refresh()``, which a
-    /// switch awaits and which must not wait on a network that may be gone.
+    /// Asks the feed until it names a release, then stops: the release does not
+    /// move while Settings is open. Kept out of ``refresh()``, which a switch
+    /// awaits and which must not wait on the network.
     private func refreshDefaultRelease() {
         guard !environment.isSimulation, defaultRelease == nil, !isLookingUpDefault else { return }
         isLookingUpDefault = true
@@ -169,8 +161,8 @@ final class EngineStore {
         refreshDefaultRelease()
     }
 
-    /// Whether a failed pass is holding the client down — the pane's cue to
-    /// offer starting it anyway.
+    /// Whether a failed pass is holding the client down, so the pane offers
+    /// starting it anyway.
     private(set) var clientStartIsBlocked = false
 
     private func refreshStandingFailure() {
@@ -185,8 +177,8 @@ final class EngineStore {
         clientStartIsBlocked = BottleReadiness.clientStartBlock != nil
     }
 
-    /// Runs the failed pass again from wherever detection says it stopped,
-    /// then starts the client if the bottle is whole.
+    /// Re-runs the failed pass from where detection says it stopped, then
+    /// starts the client if the bottle is whole.
     func retryProvisioning() {
         guard !isSwitching else { return }
         isSwitching = true
@@ -203,7 +195,7 @@ final class EngineStore {
         }
     }
 
-    /// Starts the client over a provisioning failure, on the user's say-so.
+    /// Starts the client over a provisioning failure, at the user's say-so.
     func startClientAnyway() {
         BottleReadiness.allowClientStart()
         refreshStandingFailure()
@@ -242,7 +234,7 @@ final class EngineStore {
         }
         if detection.managedEngineVersions.isEmpty {
             // Not installed is still a choice: switching to it downloads the
-            // engine first, the same stage the wizard runs.
+            // engine first.
             built.append(EngineOption(
                 engine: .managed(version: ""),
                 label: "Dormison",
@@ -250,8 +242,8 @@ final class EngineStore {
             ))
         }
         options = built
-        // The active engine always appears, even when detection would hide
-        // it (an expired trial that is nonetheless running right now).
+        // The active engine always appears, even when detection would hide it
+        // (an expired trial still running).
         if !built.contains(where: { $0.engine == activeEngine }) {
             options.insert(EngineOption(
                 engine: activeEngine,
@@ -264,16 +256,15 @@ final class EngineStore {
     private func refreshBottles(resetChoice: Bool) {
         bottles = environment.bottles(for: stagedEngine)
         guard resetChoice else { return }
-        // Landing on a new engine, prefer its Steam bottle, then its first
-        // bottle, then the name a fresh provision would create.
+        // On a new engine, prefer its Steam bottle, then its first bottle, then
+        // the default name.
         stagedBottle = bottles.first(where: \.hasSteam)?.name
             ?? bottles.first?.name
             ?? SteamBottle.defaultName
     }
 
-    /// The switch itself: stop Steam, persist the pair, provision whatever
-    /// the new bottle is missing, start Steam again. Provisioning progress
-    /// narrates through `provisioner.activity`, same as Repair.
+    /// The switch: stop Steam, persist the pair, provision what the bottle
+    /// lacks, start Steam. Progress narrates through `provisioner.activity`.
     func apply() {
         guard hasChanges, !isSwitching else { return }
         let engine = stagedEngine
@@ -296,14 +287,12 @@ final class EngineStore {
                 switchPhase = InterfaceCopy.localized("Setting up the bottle…")
                 await provisioner.provisionAndConfigure()
                 if case let .failed(reason) = provisioner.activity {
-                    // The choice stays: detection drives everything, so
-                    // Repair (or Try Again here) continues from where this
-                    // stopped rather than unwinding to a half-old state.
+                    // The choice stays: detection drives everything, so Repair
+                    // or Try Again continues from here.
                     switchError = reason
-                    // What did land still gets the idempotent bottle
-                    // configuration — a half-provisioned bottle the client
-                    // can finish on its own must not also run with winebus
-                    // polling and no renderer staged.
+                    // A half-provisioned bottle still gets the idempotent
+                    // configuration, so it never runs with winebus polling and
+                    // no renderer staged.
                     await provisioner.configureBottle(named: bottle)
                 }
             } else {
@@ -311,9 +300,7 @@ final class EngineStore {
             }
             refreshStandingFailure()
             if clientStartIsBlocked {
-                // A prefix whose Steam installer failed has no client to
-                // start, and the switch stops here rather than supervise a
-                // bottle with no Steam in it.
+                // A prefix whose Steam installer failed has no client to start.
                 switchPhase = nil
                 isSwitching = false
                 await refresh()

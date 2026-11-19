@@ -1,13 +1,11 @@
 import Foundation
 
-/// The Dock tile's menu as data: which items it holds, in which order, and
-/// which of them can be chosen. ``AppDelegate`` turns it into an `NSMenu` each
-/// time the Dock asks.
+/// The Dock tile's menu as data, which ``AppDelegate`` turns into an `NSMenu`
+/// each time the Dock asks.
 ///
-/// The groups follow the menu Steam puts on its own tray and Dock icon: recent
-/// games; Store, Library, Community; Friends, Settings; Big Picture. Steam
-/// lists the persona states flat above its places; here they sit in a submenu
-/// at the end, where they cost the games and places one row instead of five.
+/// The groups follow Steam's own tray menu: recent games; Store, Library,
+/// Community; Friends, Settings; Big Picture. The persona states sit in a
+/// submenu at the end, one row instead of five.
 enum DockMenu {
     /// A place in Steam's window the menu opens.
     enum Destination: CaseIterable {
@@ -30,9 +28,8 @@ enum DockMenu {
             }
         }
 
-        /// The URL Steam's tray item runs, each one handled by a route Steam's
-        /// own UI registers. The friends list opens as its own window, with
-        /// no URL, through ``SteamWebHost/openFriends()``.
+        /// The URL Steam's tray item runs. The friends list has none and opens
+        /// through ``SteamWebHost/openFriends()``.
         var steamURL: URL? {
             switch self {
             case .store: URL(string: "steam://store")
@@ -45,7 +42,6 @@ enum DockMenu {
         }
     }
 
-    /// One row of the menu.
     enum Entry: Equatable {
         case game(SteamWebHost.RecentGame)
         case destination(Destination, isEnabled: Bool)
@@ -54,20 +50,16 @@ enum DockMenu {
         case separator
     }
 
-    /// Steam's tray groups, separated by rules.
     static let destinationGroups: [[Destination]] = [
         [.store, .library, .community],
         [.friends, .settings],
         [.bigPicture],
     ]
 
-    /// The menu's rows. A recent game starts through the supervisor, which
-    /// waits for a client of its own, so games stay live whatever the client
-    /// is doing. Everything else is a page in the client's UI: those rows
-    /// stay in place and go dim until the client is healthy, so the menu
-    /// keeps one shape and says Steam is not ready yet. The status submenu
-    /// appears once the Friends menu has been read, since its labels are
-    /// Steam's own.
+    /// The menu's rows. Recent games stay live, since the supervisor waits for
+    /// a client; the page rows go dim until the client is healthy, so the menu
+    /// keeps one shape. The status submenu appears once the Friends menu has
+    /// been read, since its labels are Steam's.
     static func entries(
         recentGames: [SteamWebHost.RecentGame],
         statuses: [SteamMenuMirror.StatusChoice],

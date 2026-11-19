@@ -1,11 +1,9 @@
 import Propofol
 import SwiftUI
 
-/// Settings › Engine: everything about the Wine underneath — which engine
-/// runs the bottle, which bottle, thread synchronization, the dependencies
-/// games commonly miss, DLL overrides, environment variables, Wine's own
-/// configuration window, and Repair. One pane, because these knobs all answer
-/// the same question: "what is the Windows machine my games run on?"
+/// Settings › Engine: the Wine underneath. Engine and bottle, thread
+/// synchronization, dependencies, DLL overrides, environment variables,
+/// winecfg, and Repair.
 struct EngineSettings: View {
     let store: EngineStore
     let graphics: GraphicsStore
@@ -14,8 +12,7 @@ struct EngineSettings: View {
     let provisioner: Provisioner
     let highlighted: SettingsAnchor?
 
-    /// The bottle picker's selection. The pane seeds it once the store has
-    /// refreshed; the selection section's rows read and write it.
+    /// The bottle picker's selection, seeded once the store has refreshed.
     @State private var bottleChoice = ""
     /// The bottle level of the settings hierarchy: every game's defaults.
     @State private var defaults = SettingsStore(scope: .bottle(SteamBottle.name))
@@ -61,8 +58,8 @@ struct EngineSettings: View {
 
 // MARK: - Engine & bottle
 
-/// "Where Steam runs": the engine and bottle pickers, the release feed's
-/// offer, an engine from disk, and the row that carries a staged change out.
+/// "Where Steam runs": the engine and bottle pickers, the feed's offer, an
+/// engine from disk, and the row that applies a staged change.
 private struct EngineSelectionSection: View {
     let store: EngineStore
     let provisioner: Provisioner
@@ -99,7 +96,7 @@ private struct EngineSelectionSection: View {
     }
 }
 
-/// The staged engine, with the chosen option's detail line under the picker.
+/// The staged engine, with the chosen option's detail line.
 private struct EnginePicker: View {
     let store: EngineStore
     @Binding var bottleChoice: String
@@ -131,8 +128,7 @@ private struct EnginePicker: View {
     }
 }
 
-/// The staged bottle: every bottle on disk, plus the entry that opens the
-/// new-name field.
+/// The staged bottle: every bottle on disk, plus the new-name entry.
 private struct BottlePicker: View {
     let store: EngineStore
     @Binding var bottleChoice: String
@@ -144,8 +140,8 @@ private struct BottlePicker: View {
                     .tag(bottle.name)
             }
             Text("New bottle…").tag(EngineSelectionSection.newBottleTag)
-            // A staged name that isn't on disk yet keeps its own row, so the
-            // picker never shows an empty selection.
+            // A staged name not on disk yet keeps its own row, so the picker
+            // never shows an empty selection.
             if store.stagedBottleIsNew, !store.stagedBottle.isEmpty,
                bottleChoice == store.stagedBottle {
                 Text("\(store.stagedBottle) (new)").tag(store.stagedBottle)
@@ -159,7 +155,6 @@ private struct BottlePicker: View {
     }
 }
 
-/// The name of a bottle to create, staged with Use.
 private struct NewBottleField: View {
     let store: EngineStore
     @Binding var bottleChoice: String
@@ -181,9 +176,8 @@ private struct NewBottleField: View {
     }
 }
 
-/// What the release feed has that this Mac does not, and the way back to
-/// it. Both buttons do the same thing — land on the version the feed
-/// names — so the row says whichever of the two is true.
+/// What the release feed has that this Mac does not, or the way back to it;
+/// both buttons land on the feed's version.
 private struct EngineUpdateRow: View {
     let store: EngineStore
 
@@ -218,10 +212,9 @@ private struct EngineUpdateRow: View {
     }
 }
 
-/// Dormison from a file or a folder — the route for a Mac the release
-/// feed does not reach, for adding a release by hand, or for running a
-/// tree built here. The engine lands beside the installed ones and is
-/// staged in the picker; Switch still decides when it runs.
+/// Dormison from a file or folder, for a Mac the feed does not reach or a tree
+/// built here. The engine is staged in the picker; Switch still decides when it
+/// runs.
 private struct EngineFileRow: View {
     let store: EngineStore
     let provisioner: Provisioner
@@ -269,8 +262,8 @@ private struct EngineFileRow: View {
     }
 }
 
-/// A staged change on its way out: what Switch will do with Cancel and
-/// Switch under it, or the running switch's phase and progress.
+/// A staged change: what Switch will do, with Cancel and Switch, or the running
+/// switch's progress.
 private struct EngineSwitchRow: View {
     let store: EngineStore
     let provisioner: Provisioner
@@ -285,8 +278,7 @@ private struct EngineSwitchRow: View {
                         .font(.callout)
                     Spacer()
                 }
-                // The engine download reports a real fraction, whether the
-                // provisioner or the pane's own Update started it; the other
+                // Only the engine download reports a real fraction; the other
                 // stages spin.
                 if let fraction = provisioner.stageFraction ?? store.engineFetchFraction {
                     ProgressView(value: fraction)
@@ -330,9 +322,9 @@ private struct EngineSwitchRow: View {
     }
 }
 
-/// A switch that failed after applying its choice has no pending change
-/// left to hang the message on — the error still has to be said, and it is
-/// read back from the record so leaving the pane does not lose it.
+/// A switch that failed after applying its choice has no pending change to hang
+/// the message on; it is read back from the record so it survives leaving the
+/// pane.
 private struct EngineStandingFailure: View {
     let store: EngineStore
     let error: String
@@ -361,8 +353,8 @@ private struct EngineStandingFailure: View {
     }
 }
 
-/// CrossOver knows its own bottles best — say so before someone reaches
-/// for the tools below on a bottle CrossOver manages.
+/// Says CrossOver manages this bottle, before someone reaches for the tools
+/// below.
 private struct CrossOverNotice: View {
     let engine: Engine
 
@@ -383,8 +375,8 @@ private struct CrossOverNotice: View {
 
 // MARK: - Synchronization
 
-/// The msync+ switch, a graphics selection like the renderer. Under CrossOver it
-/// switches CrossOver's own msync, and says so.
+/// The msync+ switch, a graphics selection like the renderer; under CrossOver it
+/// switches CrossOver's own msync.
 private struct MsyncSection: View {
     let graphics: GraphicsStore
     let crossOver: Bool
@@ -408,7 +400,6 @@ private struct MsyncSection: View {
         }
     }
 
-    /// Edits go through the store, which decides whether they reach a bottle.
     private var msyncBinding: Binding<Bool> {
         Binding(
             get: { graphics.selection.msync },
@@ -449,7 +440,7 @@ private struct KnownFixesSection: View {
 // MARK: - Dependencies
 
 /// "Game dependencies": what a new bottle downloads, and one row per
-/// dependency the current bottle can install.
+/// installable dependency.
 private struct DependenciesSection: View {
     let store: EngineStore
     let compatibility: CompatibilityStore
@@ -497,7 +488,6 @@ private struct DownloadEverythingToggle: View {
     }
 }
 
-/// One dependency: its state in the bottle, and the button that installs it.
 private struct DependencyInstallRow: View {
     let row: CompatibilityStore.DependencyRow
     let store: EngineStore
@@ -538,7 +528,6 @@ private struct DependencyInstallRow: View {
 
 // MARK: - DLL overrides
 
-/// "DLL overrides": the bottle's overrides, and the row that adds one.
 private struct DLLOverridesSection: View {
     let compatibility: CompatibilityStore
     let highlighted: SettingsAnchor?
@@ -564,7 +553,6 @@ private struct DLLOverridesSection: View {
     }
 }
 
-/// One override: the DLL, its mode, and the button that removes it.
 private struct DLLOverrideRow: View {
     let override: BottleDependencies.Override
     let compatibility: CompatibilityStore
@@ -589,7 +577,6 @@ private struct DLLOverrideRow: View {
     }
 }
 
-/// The draft of an override: a DLL name, a mode, and Add.
 private struct NewDLLOverrideRow: View {
     let compatibility: CompatibilityStore
 
@@ -619,7 +606,6 @@ private struct NewDLLOverrideRow: View {
 
 // MARK: - Advanced
 
-/// "Troubleshooting": Wine's configuration window, the verbose log, and Repair.
 private struct TroubleshootingSection: View {
     let store: EngineStore
     let compatibility: CompatibilityStore
@@ -642,7 +628,6 @@ private struct TroubleshootingSection: View {
     }
 }
 
-/// The way into winecfg for the current bottle.
 private struct WineConfigurationRow: View {
     let store: EngineStore
     let compatibility: CompatibilityStore
@@ -662,7 +647,6 @@ private struct WineConfigurationRow: View {
     }
 }
 
-/// The Wine log's verbose mode: every exception and every library load.
 private struct WineDiagnosticsToggle: View {
     @State private var wineDiagnostics = WineLog.isDiagnosing
 
@@ -683,8 +667,8 @@ private struct WineDiagnosticsToggle: View {
     }
 }
 
-/// The Repair control: the provisioner's current activity and the button
-/// that re-runs it. Lives here and in the gallery's Repair tiles.
+/// The Repair control: the provisioner's activity and the button that re-runs
+/// it. Also used by the gallery.
 struct RepairRow: View {
     let provisioner: Provisioner
     let highlighted: SettingsAnchor?

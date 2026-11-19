@@ -2,8 +2,7 @@ import Foundation
 
 /// The bottle-touching half of the Engine pane's dependency and override
 /// sections, split from ``CompatibilityStore`` so a simulated environment can
-/// pose any mix of installed pieces, run an install that narrates its stages,
-/// and fail one — without pouring 200 MB of fonts into a real bottle.
+/// pose any state without writing 200 MB of fonts into a real bottle.
 @MainActor
 protocol CompatibilityEnvironment: AnyObject {
     /// Whether the effects are simulated.
@@ -29,7 +28,7 @@ extension CompatibilityEnvironment {
     }
 }
 
-/// The real one: the bottle's own DLLs, fonts, registry and winecfg.
+/// The real one: the bottle's DLLs, fonts, registry and winecfg.
 @MainActor
 final class LiveCompatibilityEnvironment: CompatibilityEnvironment {
     func isInstalled(_ dependency: BottleDependencies.Dependency) -> Bool {
@@ -54,8 +53,7 @@ final class LiveCompatibilityEnvironment: CompatibilityEnvironment {
         await BottleDependencies.removeOverride(dll: dll)
     }
 
-    /// Through the daemon, because it owns every bottle process — a winecfg
-    /// started here would be a second owner's child in the prefix.
+    /// Through the daemon, which owns every bottle process.
     func openWineConfiguration() {
         Task(name: "Open winecfg") {
             await DaemonService.post("/bottle/launch", body: Data("winecfg\n".utf8))

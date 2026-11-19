@@ -1,15 +1,12 @@
 import AppKit
 
-/// The game's on-screen window, observed — what `sevo app launch` reports back
-/// so an agent's model holds a real window, not "launch requested".
+/// The game's on-screen window, which `sevo app launch` reports back.
 ///
-/// The frame is given twice: **points** (global display coordinates, origin
-/// top-left of the primary display, y down, the space
-/// `CGWindowListCopyWindowInfo` reports and a click or a move uses) and
-/// **pixels** (points × the display's backing scale, what a screenshot
-/// measures). A window on a display left of or above the primary has a
-/// negative origin; `off_primary` says so, and `display` names which screen it
-/// landed on.
+/// The frame is given in **points** (global display coordinates, origin
+/// top-left of the primary display, y down, as `CGWindowListCopyWindowInfo`
+/// reports and a click uses) and **pixels** (points × backing scale, what a
+/// screenshot measures). A window left of or above the primary has a negative
+/// origin; `off_primary` says so and `display` names its screen.
 enum GameWindow {
     private static func area(of entry: [String: Any]) -> CGFloat {
         guard let bounds = entry[kCGWindowBounds as String] as? [String: Any],
@@ -17,9 +14,8 @@ enum GameWindow {
         return rect.width * rect.height
     }
 
-    /// The largest on-screen, normal-level window owned by a game process — the
-    /// same test `GameLaunchWatch` uses to decide "a game is up", plus the
-    /// geometry. `nil` when no game window is on screen.
+    /// The largest on-screen, normal-level window of a game process, with its
+    /// geometry; `nil` when none is up.
     static func current() -> [String: Any]? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
@@ -42,8 +38,8 @@ enum GameWindow {
             let exe = program.name
 
             let (index, scale, displayTopLeft) = display(for: bounds)
-            // kCGWindowName needs the Screen Recording permission; the app
-            // holds it, so the title is usually here — empty when it is not.
+            // kCGWindowName needs Screen Recording permission; empty without
+            // it.
             let title = entry[kCGWindowName as String] as? String ?? ""
             return [
                 "window_id": id,
@@ -64,10 +60,8 @@ enum GameWindow {
         ["x": r.minX, "y": r.minY, "w": r.width, "h": r.height]
     }
 
-    /// The screen a top-left-origin window rect sits on, its backing scale,
-    /// and that screen's own frame back in top-left space. Matches the window
-    /// center so a window straddling an edge is attributed to where most of it
-    /// is; falls back to the primary display.
+    /// The screen a top-left-origin rect's center sits on, its backing scale,
+    /// and its frame in top-left space; the primary display otherwise.
     private static func display(for bounds: CGRect) -> (index: Int, scale: CGFloat, frameTopLeft: CGRect) {
         let flip = NSScreen.screens.first?.frame.maxY ?? 0
         let centreAppKit = CGPoint(x: bounds.midX, y: flip - bounds.midY)

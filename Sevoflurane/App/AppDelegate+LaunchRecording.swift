@@ -3,9 +3,8 @@ import AppKit
 extension AppDelegate {
     // MARK: - What a launch records
 
-    /// The moments a launch tells the app something: it began, one of its
-    /// processes reached the Mac driver, one of them put up a window, Steam
-    /// raised an error for it, and the game stopped running.
+    /// Wires the moments a launch reports: start, a process reaching the Mac
+    /// driver, a window, a Steam error, and the game stopping.
     func installLaunchHooks() {
         host.onProgramLaunchPressed = { [weak self] appID in
             guard let self else { return }
@@ -14,26 +13,23 @@ extension AppDelegate {
         }
         host.onGameLaunchStart = { [weak self] appID in
             guard let self else { return }
-            // Arms the window watch for launches the bridge did not carry
-            // (the CLI's, a steam:// URL the client handled itself).
+            // Arms the window watch for launches the bridge did not carry (the
+            // CLI's, a steam:// URL the client handled itself).
             gameLaunchWatch.noteLaunchRequested(appID: appID)
-            // Every launch path passes through here, so this is where the app
-            // takes the activation right it will spend on the game's window.
-            // A minute later, when that window finally arrives, there is no
-            // event left for the window server to attribute the request to.
+            // Every launch path passes here, so the activation right is taken
+            // now: when the game's window arrives a minute later, no event is
+            // left to attribute the request to.
             ActivationPolicy.claimRightForALaunch()
-            // The run record opens here rather than at the first window:
-            // a game that dies before it draws is the one worth recording.
+            // Opened here rather than at the first window: a game that dies
+            // before it draws is the one worth recording.
             runRecorder.arm(appID: appID)
             Task.detached(name: "Put app \(appID) first in the Games folder") {
                 GamesFolder.markPlayed(appID: appID)
             }
-            // A launch the app carries was prepared before it reached Steam
-            // or the helper (``LaunchPreparation``). One it did not carry
-            // gets its exes read and its macOS version's symlinks made here,
-            // so its env files, and the bundle that names it in the Dock, are
-            // there by its first window at the latest; its first-launch fixes
-            // wait for a launch that is prepared before it starts.
+            // A launch the app did not carry through ``LaunchPreparation`` gets
+            // its exes read and macOS symlinks made here, so its env files and
+            // Dock bundle exist by its first window; its first-launch fixes
+            // wait for a prepared launch.
             Task.detached(name: "Record app \(appID)'s executables") {
                 // First, because Steam starts the process within moments: an
                 // exe this game shares with another gets this game's lines.
@@ -47,8 +43,7 @@ extension AppDelegate {
                 }
             }
         }
-        // A process of the launch loaded winemac.drv. This is the attribution
-        // that survives a game which dies before it draws.
+        // The attribution that survives a game which dies before it draws.
         gameLaunchWatch.onGameProcessArmed = { [weak self] exe, pid in
             guard let self, let appID = host.activeLaunch?.appID else { return }
             runRecorder.noteExecutable(exe, pid: pid, forApp: appID)
@@ -56,14 +51,13 @@ extension AppDelegate {
         }
         gameLaunchWatch.onGameWindowUp = { [weak self] owner in
             guard let self else { return }
-            // Read before the host is told: the window's arrival is what ends
-            // the launch, and ending it clears the record of which app it was.
+            // Read before the host is told: ending the launch clears which app
+            // it was.
             let launchedAppID = host.activeLaunch?.appID
             host.gameWindowDidAppear()
             supervisor.wake(.gameWindowChanged)
-            // A game that has just run for the first time is also the first
-            // chance to read its files: what it is built on decides which
-            // runners it can be offered.
+            // A first run is the first chance to read the game's files, which
+            // decide the runners it can be offered.
             if let launchedAppID {
                 runRecorder.noteWindowUp(forApp: launchedAppID)
                 record(owner, forApp: launchedAppID, detectingRuntime: true)
@@ -73,8 +67,8 @@ extension AppDelegate {
         host.onGameActionError = { [weak self] appID, detail in
             self?.runRecorder.noteSteamError(detail, forApp: appID)
         }
-        // The client's own notification is the exit edge: a game Steam started
-        // is not a process this app can wait on.
+        // The client's notification is the exit edge: a game Steam started is
+        // not a process this app can wait on.
         host.onGameRunningChanged = { [weak self] appID, running in
             guard !running else {
                 self?.runRecorder.noteRunning(appID: appID)
@@ -82,8 +76,8 @@ extension AppDelegate {
             }
             self?.runRecorder.noteStopped(appID: appID)
         }
-        // A run's close is the exit edge for every game, a Quick Launch
-        // program's too, so the Discord activity goes with it.
+        // A run's close is the exit edge for every game, Quick Launch programs
+        // included.
         runRecorder.onClose = { appID in
             DiscordPresence.shared.gameStopped(appID)
             Task.detached(name: "Clear the Discord activity") {
@@ -92,15 +86,12 @@ extension AppDelegate {
         }
     }
 
-    /// Reads every open run's meters on a timer. Energy, retired instructions
-    /// and the Game Mode session exist only while the game's process does, so
-    /// they are sampled during the run rather than read at its close.
+    /// Samples every open run's meters on a timer: energy, retired instructions
+    /// and the Game Mode session exist only while the game's process does.
     ///
-    /// The same tick lets the display sleep again once no run is open, since
-    /// every way a run closes passes through the recorder. The daemon also
-    /// holds the display and lets it go when its probe cycle, a minute apart
-    /// while a game is up, finds the game window gone, so every run closing
-    /// wakes it.
+    /// The same tick releases the display once no run is open, and wakes the
+    /// daemon's probe cycle (a minute apart while a game is up) whenever a run
+    /// closes.
     func startRunMeter() {
         runMeter?.cancel()
         runMeter = Task(name: "Sample the open runs' meters") { [runRecorder, weak self] in
@@ -138,12 +129,12 @@ extension AppDelegate {
         }
     }
 
-    /// Every how many meter ticks the display holds are read: once a minute.
+    /// Meter ticks between display-hold reads: once a minute.
     private static let displayHoldCheckEvery = 30
 
-    /// The engine names the renderer that answered in the Wine log during the
-    /// run, and a long run's log outgrows what its close reads back, so the
-    /// line is gathered while the game plays. The reads run off the main actor.
+    /// Gathers the engine's renderer lines from the Wine log while the game
+    /// plays, since a long run's log outgrows what its close reads back. Reads
+    /// run off the main actor.
     private static func readProvenance(_ recorder: RunRecorder) async {
         for read in recorder.provenanceReads {
             let found = await Task.detached(name: "Read the engine's renderer lines") {
@@ -153,12 +144,10 @@ extension AppDelegate {
         }
     }
 
-    /// A game on the native NW.js runner is a macOS process, and on an engine
-    /// whose shim execs NW.js in place (r12 and earlier) Steam never tracks it
-    /// and the client sends no lifetime edge: the run ends when its processes
-    /// are gone. A newer engine gives Steam a waiter to track, and whichever of
-    /// its edge and this check comes first closes the run. `ps` runs off the
-    /// main actor.
+    /// A native NW.js game is a macOS process; on an engine whose shim execs
+    /// NW.js in place (r12 and earlier) Steam sends no lifetime edge, so the
+    /// run ends when its processes are gone. On a newer engine, whichever of
+    /// Steam's edge and this check comes first closes the run.
     private static func checkNativeRuns(_ recorder: RunRecorder) async {
         for appID in recorder.nativeRuns {
             let alive = await Task.detached(name: "Look for the native game's processes") {
@@ -167,8 +156,8 @@ extension AppDelegate {
             }.value
             recorder.noteNativeProcesses(alive: alive, forApp: appID)
         }
-        // A Quick Launch program is the same case in a Wine process: Steam
-        // never started it, so nothing but its process says it has ended.
+        // Steam never started a Quick Launch program either, so only its
+        // process says it has ended.
         let programs = recorder.programRuns.compactMap { appID in
             AdoptedPrograms.program(appID).map { (appID, $0.url.lastPathComponent) }
         }
@@ -183,9 +172,8 @@ extension AppDelegate {
     }
 
     /// Watches every process the app owns and unwedges a game that has stopped
-    /// doing anything. It is on at every level: a killed game is a session
-    /// lost either way, and the ladder is what turns a freeze into an ending
-    /// the record can name.
+    /// doing anything. On at every level: the ladder turns a freeze into an
+    /// ending the record can name.
     func startStallWatch() {
         stallWatch.recorder = runRecorder
         stallWatch.onNotAnswering = { [stallWatch] process in
@@ -206,9 +194,8 @@ extension AppDelegate {
         stallWatch.start()
     }
 
-    /// The machine while a game runs, at the level that asks for it. It goes
-    /// to the event log rather than into the run record: one line per ten
-    /// seconds is a trail, and the record holds the state at the start.
+    /// Logs the machine's state while a game runs, at the level that asks for
+    /// it; the run record keeps only the state at the start.
     private nonisolated static func logHostState() {
         let host = HostSnapshot.take()
         EventLog.enqueue(
@@ -219,17 +206,14 @@ extension AppDelegate {
         )
     }
 
-    /// Tells Discord which game is on screen, under that game's own Discord
-    /// application when Discord's database names it (asked by Steam app id,
-    /// then by an adopted program's executable, then by name), otherwise under
-    /// Sevoflurane's application with the game's name and, for a Steam game,
-    /// its box art from Steam's CDN.
+    /// Tells Discord which game is on screen, under the game's own Discord
+    /// application when Discord's database names it (by Steam app id, then
+    /// adopted executable, then name), otherwise under Sevoflurane's with the
+    /// game's name and, for a Steam game, its Steam box art.
     ///
-    /// Detached, because the name comes off disk and the Discord client
-    /// answers at its own pace. A game that ships its own Discord library
-    /// publishes through the in-bottle bridge, so the app leaves it alone. The
-    /// ticket is taken here on the main actor, so a stop that lands during the
-    /// lookup voids the publish.
+    /// A game that ships its own Discord library publishes through the
+    /// in-bottle bridge and is left alone. The ticket is taken on the main
+    /// actor, so a stop during the lookup voids the publish.
     private func publishToDiscord(appID: Int) {
         guard Preferences.discordPresence else { return }
         let configured = GameConfig.game(appID).name
@@ -260,12 +244,8 @@ extension AppDelegate {
         }
     }
 
-    /// Records the exe a launch of `appID` started, unless another game has
-    /// already claimed that exe — a window or a process another game owns is
-    /// that game's, whatever launch is in flight.
-    ///
-    /// Detached, because reading the game configs and a game's directory and
-    /// rewriting the env files is disk work and this is the main actor.
+    /// Records the exe a launch of `appID` started, unless another game already
+    /// claimed it. Detached: it reads configs and rewrites env files.
     private func record(_ exe: String, forApp appID: Int, detectingRuntime: Bool) {
         guard appID != 0 else { return }
         Task.detached(name: "Record app \(appID)'s \(exe)") {

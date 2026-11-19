@@ -1,25 +1,24 @@
 #if DEBUG
     import Foundation
 
-    /// A ``StorageEnvironment`` with nothing on disk behind it: fixture sizes,
-    /// a fixture library, and an uninstall that can be walked all the way to
-    /// the last dialog without taking anything to the Trash.
+    /// A ``StorageEnvironment`` with nothing on disk behind it: fixture sizes
+    /// and library, and an uninstall that walks to the last dialog without
+    /// trashing anything.
     @MainActor
     final class DemoStorageEnvironment: StorageEnvironment {
-        /// The libraries the pane has to lay out.
         enum Scenario: String, CaseIterable, Identifiable {
-            /// A large library — the numbers that make this pane's job plain.
+            /// A large library.
             case library
             /// Freshly provisioned: Steam is installed and no game is.
             case empty
-            /// Sizes that arrive slowly, one row at a time, so the header's
-            /// spinner and the filling rows can be seen.
+            /// Sizes that arrive slowly, one row at a time, so the spinner and
+            /// filling rows can be seen.
             case measuringSlowly = "measuring-slowly"
-            /// Games sitting in other bottles that this one could link to
-            /// instead of downloading again.
+            /// Games in other bottles that this one could link to instead of
+            /// downloading.
             case linkableGames = "linkable-games"
-            /// Two games already linked into another bottle, so the unlink
-            /// path and the restart notice have somewhere to happen.
+            /// Two games already linked from another bottle, for the unlink
+            /// path and the restart notice.
             case alreadyLinked = "already-linked"
 
             var id: String {
@@ -40,13 +39,12 @@
         let isSimulation = true
 
         private let scenario: Scenario
-        /// Held here rather than recomputed, so a row this environment has
-        /// already been asked to trash stays at zero.
+        /// Held, so a row already trashed stays at zero.
         private var sizes: [String: Int64]
         /// The app IDs this bottle holds as links into another one.
         private var linked: Set<Int> = []
-        /// Games another bottle has that this one does not, minus the ones
-        /// already linked in this session.
+        /// Games another bottle has that this one lacks, minus those linked
+        /// this session.
         private var candidates: [SharedGames.Candidate] = []
         /// Programs this session has been asked to forget.
         private var removedPrograms: Set<Int> = []
@@ -83,8 +81,8 @@
             )
         }
 
-        /// The bottle's own library, and one on an exFAT drive, which is the
-        /// state the pane has to warn about.
+        /// The bottle's own library and one on an exFAT drive, which the pane
+        /// warns about.
         func libraries() -> [StorageInventory.Library] {
             guard scenario != .empty else { return [] }
             return [
@@ -140,8 +138,8 @@
             log("would forget \(program.name) and trash what its installer wrote")
         }
 
-        /// One program installed into the bottle and one run from a folder of
-        /// the user's own, which are the two rows this list has to draw.
+        /// One program installed into the bottle and one run from the user's
+        /// own folder.
         private static let programs: [StorageInventory.Program] = [
             .init(
                 id: AdoptedPrograms.firstID, name: "Fate/stay night",

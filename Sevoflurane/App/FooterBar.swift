@@ -2,25 +2,18 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The popover's bottom bar: the app's own state on the left — debug mode, its version, the way
-/// back from a client that gave up — the renderer the games run on in the middle, and the app's
-/// controls on the right.
-///
-/// Every action that isn't a universal glyph carries its name: reload and restart live in the
-/// actions menu, as words. What stays iconic is the pair every menu-bar app draws the same way —
-/// the gear and the close box.
+/// The popover's bottom bar: the app's state on the left (debug mode, an update, the way back
+/// from a client that gave up), the renderer in the middle, and the controls on the right. Only
+/// the gear and the close box are glyphs; every other action is named in the actions menu.
 struct FooterBar: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
-    /// While the first-run assistant is unfinished there is no client to
-    /// report on or restart, and nothing configured for Settings to change:
-    /// the bar keeps the version and Quit.
+    /// While setup is unfinished the bar keeps only the version and Quit.
     var isSettingUp = false
-    /// The renderer switch, between the app's state and its controls; absent
-    /// while setup is unfinished.
+    /// The renderer switch; absent while setup is unfinished.
     var graphics: GraphicsStore?
-    /// The ✕: asks before quitting (``QuitConfirmation``), because quitting
-    /// takes Steam and a running game down with it.
+    /// The ✕: asks first (``QuitConfirmation``), because quitting takes Steam
+    /// and a running game down.
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
     @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
     @AppStorage(StreamerMode.isOnKey, store: Preferences.shared) private var streamerMode = false
@@ -30,10 +23,9 @@ struct FooterBar: View {
     }
 
     var body: some View {
-        // One `GlassEffectContainer` over the whole bar: glass sampled per control picks up
-        // whatever sits behind that spot, so the chips and the glyph buttons would look like
-        // different materials. Zero blend distance, because the controls sit closer together
-        // than any nonzero spacing allows before their glass pools into one shape.
+        // One `GlassEffectContainer` over the whole bar, so the chips and glyph buttons
+        // sample one material. Zero blend distance, because the controls sit closer than any
+        // nonzero spacing allows before their glass pools.
         GlassEffectContainer(spacing: 0) {
             HStack(spacing: Theme.Space.xs) {
                 if hasGivenUp, !isSettingUp {
@@ -65,9 +57,7 @@ struct FooterBar: View {
         if case .gaveUp = supervisor.health { true } else { false }
     }
 
-    /// The gear, wearing a dot when the release feed has an engine or a renderer version this Mac
-    /// does not — which is where the update check gets said out loud, since everything under the app
-    /// is fetched from Settings.
+    /// The gear, with a dot when the release feed has an engine or renderer version this Mac lacks.
     private var settingsButton: some View {
         let summary = UpdateSummary.shared.summary
         let label = summary.map { String(localized: "Settings — \($0)") } ?? String(localized: "Settings")
@@ -85,14 +75,12 @@ struct FooterBar: View {
         }
     }
 
-    /// `Menu` draws its own background and sizes to its label, so however it is styled it comes
-    /// out narrower and darker than the glass circles beside it. So it draws nothing: the visible
-    /// control is a real `FooterIconButton` — a sibling of the other two, identical by
-    /// construction — and the menu is a transparent layer over it that takes the click.
+    /// `Menu` comes out narrower and darker than the glass circles however it is styled, so the
+    /// visible control is a real `FooterIconButton` and the menu is a transparent layer over it
+    /// that takes the click.
     private var actionsMenu: some View {
         FooterIconButton(String(localized: "More actions"), systemImage: "ellipsis") {}
             .allowsHitTesting(false)
-            // The menu over it is the control; the drawing is not a second one.
             .accessibilityHidden(true)
             .overlay {
                 Menu {
@@ -100,16 +88,14 @@ struct FooterBar: View {
                     Button("Restart Steam Client", systemImage: "arrow.triangle.2.circlepath") {
                         supervisor.restartNow()
                     }
-                    // Steam restarts leave the fake Windows booted; this is
-                    // the full machine reboot for when Windows itself is
-                    // suspect.
+                    // Steam restarts leave the Windows session booted; this
+                    // reboots it too.
                     Button("Restart Windows", systemImage: "power.circle") {
                         supervisor.restartWindowsNow()
                     }
                     Divider()
-                    // The force rungs, for when a graceful restart is the
-                    // thing that is stuck: kill now, no waiting, then come
-                    // back clean.
+                    // The force rungs, for when a graceful restart is what is
+                    // stuck.
                     Button("Force-Quit Steam", systemImage: "xmark.octagon", role: .destructive) {
                         supervisor.forceQuit(.steam)
                     }
@@ -159,10 +145,9 @@ struct FooterBar: View {
             .help("Reload, restart, the event log, and updates")
     }
 
-    /// The playtest switch, and — while a client is already up under the old environment — the
-    /// restart that carries it to the client and its games. The app half is on the moment the
-    /// toggle is pressed; the engine half is read by a program at its start, so a running Steam
-    /// keeps the channels it booted with.
+    /// The playtest switch, and, while a client is up, the restart that carries it to the
+    /// client. The engine half is read at a program's start, so a running Steam keeps the
+    /// channels it booted with.
     @ViewBuilder private var debugModeItem: some View {
         let debug = DebugModeSwitch.shared
         Toggle(isOn: Binding(get: { debug.isOn }, set: { debug.set($0) })) {
@@ -179,7 +164,7 @@ struct FooterBar: View {
         }
     }
 
-    /// Whether a client is running under the environment debug mode has just changed.
+    /// Whether a client is running under the environment debug mode just changed.
     private var isClientUp: Bool {
         switch supervisor.health {
         case .healthy, .degraded, .waitingForSignIn: true
@@ -190,9 +175,7 @@ struct FooterBar: View {
 
 // MARK: - Debug chip
 
-/// Present only while debug mode is on, because that is the whole of what it says: the logs are
-/// growing and something turned them on. Its tooltip carries the sizes, so "how much" is a hover
-/// rather than a trip to the Finder.
+/// Shown only while debug mode is on; its tooltip carries the logs' sizes.
 private struct DebugChip: View {
     var body: some View {
         let debug = DebugModeSwitch.shared
@@ -209,9 +192,8 @@ private struct DebugChip: View {
 
 // MARK: - Update chip
 
-/// An update, while there is something to say about one: it announces an update (click installs),
-/// confirms one just landed (click acknowledges), and reports a failure. At rest it is absent; the
-/// version and the Auto Update switch live in the actions menu.
+/// An update, while there is something to say: one available (click installs), one just landed
+/// (click acknowledges), or a failure. Absent at rest.
 private struct UpdateChip: View {
     var body: some View {
         let updates = SilentUpdates.shared
@@ -260,9 +242,9 @@ private struct UpdateChip: View {
 
 // MARK: - Quit confirmation
 
-/// What the ✕ opens: a strip that grows out of it over the footer and says what quitting takes
-/// with it. The ✕ keeps its corner and turns red; Cancel takes the gear's place beside it. The
-/// shape is Adrafinil's, so every menu-bar app of ours quits the same way.
+/// What the ✕ opens: a strip over the footer that says what quitting takes with it. The ✕
+/// turns red and Cancel takes the gear's place, the shape every kageroumado menu-bar app quits
+/// with (Adrafinil's).
 struct QuitConfirmation: View {
     let onCancel: () -> Void
 

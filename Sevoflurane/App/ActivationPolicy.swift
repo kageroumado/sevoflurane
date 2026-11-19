@@ -1,10 +1,9 @@
 import AppKit
 
 /// The app is `.regular` while any of its real windows is on screen and a
-/// menu-bar accessory otherwise. Windows that close route through here
-/// instead of dropping the policy outright — the Steam window closing must
-/// not take the Dock icon out from under an open Settings window, nor the
-/// other way around.
+/// menu-bar accessory otherwise. Closing windows route through here, so the
+/// Steam window closing does not take the Dock icon from an open Settings
+/// window.
 @MainActor
 enum ActivationPolicy {
     static func becomeRegular() {
@@ -13,13 +12,12 @@ enum ActivationPolicy {
         }
     }
 
-    /// How long the Dock tile outlives a promotion made for a window that is
-    /// still being built — a request for Steam's window while its page boots.
+    /// How long the Dock tile outlives a promotion for a window still being
+    /// built, such as Steam's while its page boots.
     static let graceForAPromisedWindow = Duration.seconds(30)
 
-    /// The same for the activation right a launch takes: it is spent on the
-    /// game's first window, and shader precompilation or an update make that
-    /// minutes. ``GameLaunchWatch`` gives a launch three of them.
+    /// The same for a launch's activation right, which waits for the game's
+    /// first window: shader precompilation or an update make that minutes.
     static let graceForALaunch = Duration.seconds(210)
 
     private static var promisedWindowWatch: Task<Void, Never>?
@@ -27,12 +25,9 @@ enum ActivationPolicy {
     /// Becomes `.regular` for a window that does not exist yet, and hands the
     /// tile back if none arrives within `grace`.
     ///
-    /// A promotion has to come before the window it is for: cooperative
-    /// activation needs the user's click as the reason, and by the time a
-    /// rebuilt page or a game's first frame arrives there is no event left to
-    /// attribute the request to. Nothing else takes the tile away afterwards,
-    /// so this notices when the window never comes (a wedged client, a game
-    /// that dies before it draws).
+    /// The promotion must come first: cooperative activation needs the user's
+    /// click as its reason, and by the time a rebuilt page or a game's first
+    /// frame arrives no event is left to attribute it to.
     static func becomeRegular(forAWindowWithin grace: Duration) {
         becomeRegular()
         promisedWindowWatch?.cancel()
@@ -49,17 +44,15 @@ enum ActivationPolicy {
     }
 
     /// Takes the activation right a launch will spend on the game's first
-    /// window, and with it the Dock tile that comes with being `.regular`.
-    /// A game that dies before it draws leaves both behind, so the tile is
-    /// handed back once the launch has had its three minutes.
+    /// window, and the Dock tile with it; the tile goes back once the launch
+    /// has had its three minutes.
     static func claimRightForALaunch() {
         becomeRegular(forAWindowWithin: graceForALaunch)
         guard Activation().claimRight() else { return }
-        // Read once the run loop has turned, which is when the activation
-        // lands. A press in the popover, a non-activating panel, does take
-        // the right (measured); what loses it is the user activating another
-        // app before the game's window arrives, which then is declined with
-        // "this app inactive". This line tells the two apart in a report.
+        // Read a turn later, when the activation lands. A press in the popover
+        // does take the right (measured); it is lost when the user activates
+        // another app before the game's window arrives, which is then declined
+        // with "this app inactive". This line tells the two apart.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 let front = NSWorkspace.shared.frontmostApplication
@@ -72,28 +65,24 @@ enum ActivationPolicy {
         }
     }
 
-    /// Back to accessory when `closing` was the last window a person can
-    /// see and use.
+    /// Back to accessory when `closing` was the last window a person can use.
     static func recedeIfLastWindow(closing: NSWindow?) {
         if isTheLastWindow(closing: closing, among: NSApp.windows) {
             NSApp.setActivationPolicy(.accessory)
         }
     }
 
-    /// Whether nothing a person can see and use is left once `closing` goes.
+    /// Whether nothing a person can use is left once `closing` goes.
     static func isTheLastWindow(closing: NSWindow?, among windows: [NSWindow]) -> Bool {
         !windows.contains { $0 !== closing && keepsTheDockTile($0) }
     }
 
-    /// Whether this window is one whose presence earns the app a Dock tile.
+    /// Whether this window earns the app a Dock tile.
     ///
-    /// `NSApp.windows` is every window the app owns, most of which nobody can
-    /// point at: the menu-bar status item's own `NSStatusBarWindow` is in the
-    /// list and sits on a screen at full alpha, as are the popover and Steam's
-    /// menu mirrors, the parked context page and parked toasts, and the menus
-    /// that are ordered in at alpha 0. What separates the windows a person
-    /// works in from all of those is that they can become main: a status item,
-    /// a panel and a borderless parked page never do.
+    /// `NSApp.windows` also holds the status item's `NSStatusBarWindow` at full
+    /// alpha, the popover, Steam's menu mirrors, the parked context page and
+    /// toasts, and menus at alpha 0. A window a person works in can become
+    /// main; those never do.
     static func keepsTheDockTile(_ window: NSWindow) -> Bool {
         window.canBecomeMain && window.isVisible && window.alphaValue > 0
             && !(window is NSPanel) && SteamScreenSpace.isOnSomeScreen(window.frame)

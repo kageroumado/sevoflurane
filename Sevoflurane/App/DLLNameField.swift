@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The libraries the active engine ships, which are the names an override
-/// can change the load order of — the list winecfg's Libraries tab offers.
+/// The libraries the active engine ships: the names winecfg's Libraries tab
+/// offers for overrides.
 enum BuiltinLibraries {
     /// Names without `.dll`, sorted, read from the engine's 64-bit modules.
     static func names(engine: Engine = .active) -> [String] {
@@ -24,9 +24,8 @@ enum BuiltinLibraries {
     }
 }
 
-/// A combo box over the engine's libraries: type a name and it completes, or
-/// open the list and pick one. Any other name is accepted as typed, since a
-/// game can bring a library Wine has no copy of.
+/// A combo box over the engine's libraries that completes as you type. Any name
+/// is accepted, since a game can bring a library Wine has no copy of.
 struct DLLNameField: NSViewRepresentable {
     @Binding var name: String
     let names: [String]

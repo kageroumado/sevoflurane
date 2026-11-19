@@ -1,9 +1,8 @@
 import Propofol
 import SwiftUI
 
-// What the popover needs beyond Propofol: the pressed state every control shares, and the
-// full-width accent fill of the one hero action. Chips, section labels, headers, and the
-// radius/spacing ladder come from the package.
+// What the popover needs beyond Propofol, which supplies chips, section labels, headers
+// and the radius/spacing ladder.
 
 /// The uniform pressed state: content dims, nothing moves.
 struct PressableStyle: ButtonStyle {
@@ -13,17 +12,16 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// A notice card's symbol and the slot it sits in: the measure every
-/// kageroumado popover's status card uses, so a card reads the same from one
-/// menu-bar app to the next.
+/// A notice card's symbol size and slot, shared by every kageroumado popover's
+/// status card.
 private enum NoticeCardMetrics {
     static let symbolSize: CGFloat = 26
     static let symbolSlot: CGFloat = 30
 }
 
-/// A notice in the popover: what happened, one line on it, and what can be
-/// done, under the words. Buttons beside the words leave a column a word wide
-/// in a popover 320 points across.
+/// A notice in the popover: what happened, one line on it, and the actions
+/// under the words, since buttons beside them leave a one-word column in a
+/// 320-point popover.
 struct NoticeCard<Actions: View>: View {
     let symbol: String
     var tint: Color?
@@ -33,8 +31,7 @@ struct NoticeCard<Actions: View>: View {
     var level: Double?
     let title: LocalizedStringResource
     let detail: LocalizedStringResource
-    /// Makes the whole card the button, marked by a trailing chevron — the
-    /// compact form for a card with one way forward.
+    /// Makes the whole card the button, marked by a trailing chevron.
     var onTap: (() -> Void)?
     @ViewBuilder var actions: Actions
 
@@ -45,8 +42,7 @@ struct NoticeCard<Actions: View>: View {
             }
             .buttonStyle(.plain)
         } else {
-            // One element for the words, its buttons beside it: VoiceOver reads
-            // the notice whole, then offers what can be done about it.
+            // VoiceOver reads the notice whole, then offers its actions.
             card.accessibilityElement(children: .contain)
         }
     }
@@ -56,9 +52,8 @@ struct NoticeCard<Actions: View>: View {
             Image(systemName: symbol, variableValue: level)
                 .font(.system(size: NoticeCardMetrics.symbolSize))
                 .symbolRenderingMode(.hierarchical)
-                // A gauge fills by drawing its arc. The default mode, color,
-                // dims whole layers, and a gauge's arc is one layer: it shows
-                // full or empty and nothing between.
+                // A gauge's arc is one layer, which the default color mode dims
+                // whole (full or empty); draw mode fills it.
                 .symbolVariableValueMode(.draw)
                 .foregroundStyle(tint ?? Color.secondary)
                 .symbolEffect(.rotate, options: .repeat(.continuous), isActive: isSpinning)
@@ -116,8 +111,7 @@ extension NoticeCard where Actions == EmptyView {
 }
 
 extension String {
-    /// The supervisor's status phrases are written for a log line; a card
-    /// shows them as a sentence.
+    /// The supervisor's log-line status phrases, capitalized as a sentence.
     var sentenceCased: String {
         prefix(1).uppercased() + dropFirst()
     }

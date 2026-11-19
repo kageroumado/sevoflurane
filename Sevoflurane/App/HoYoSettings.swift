@@ -2,8 +2,8 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Settings › HoYoverse: the HoYoverse games Sevoflurane downloads and
-/// updates from HoYoPlay's own servers, and installing a new one.
+/// Settings › HoYoverse: the HoYoverse games Sevoflurane installs and updates
+/// from HoYoPlay's servers.
 struct HoYoSettings: View {
     let highlighted: SettingsAnchor?
     var store = HoYoStore.shared
@@ -57,7 +57,6 @@ struct HoYoSettings: View {
     }
 }
 
-/// One installation: its build, what it needs, and its actions.
 private struct HoYoGameRow: View {
     let row: HoYoStore.Row
     let store: HoYoStore
@@ -120,7 +119,6 @@ private struct HoYoGameRow: View {
     }
 }
 
-/// A running job's bar, what it is doing and how far it has come.
 private struct HoYoProgressRow: View {
     let job: HoYoStore.Job
     let cancel: () -> Void
@@ -155,7 +153,6 @@ private struct HoYoProgressRow: View {
     }
 }
 
-/// Installing a game into a new folder.
 private struct HoYoInstallSection: View {
     let store: HoYoStore
     @State private var game = HoYoGame.genshin

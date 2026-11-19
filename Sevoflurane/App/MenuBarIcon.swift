@@ -1,16 +1,13 @@
 import AppKit
 
-/// The menu-bar glyph: a vaporizer's dial that flows into its outlet — a ring
-/// with its pointer at the top right, its rim sweeping down and left into a
-/// hose that ends in a rounded foot. One continuous shape, so it reads at
-/// menu-bar size. Drawn programmatically as a template image so it stays
-/// sharp at any backing scale and follows the menu bar's tinting.
+/// The menu-bar glyph: a vaporizer's dial (a ring with its pointer at the top
+/// right) whose rim sweeps down and left into a hose ending in a rounded foot.
+/// Drawn as a template image, so it stays sharp and follows the menu bar's
+/// tinting.
 ///
-/// The badged variant carries a corner dot — punched out with a cleared disc
-/// so it reads at menu-bar size — for health states that need the user
-/// (degraded, gave up) and for waiting conversations. A Debug build adds a
-/// hammer in the empty top-left corner, so its menu-bar item is told apart
-/// from the installed app's beside it.
+/// The badged variant punches out a corner dot for health states that need the
+/// user and for waiting conversations. A Debug build adds a hammer top-left to
+/// tell it from the installed app's item.
 @MainActor
 enum MenuBarIcon {
     static func image(badged: Bool) -> NSImage {
@@ -29,7 +26,7 @@ enum MenuBarIcon {
         static let dialOuterRadius: CGFloat = 6.5
         static let dialInnerRadius: CGFloat = 4.5
         /// Where the hose's upper edge meets the dial's rim, and where the rim
-        /// hands over to the hose's lower edge.
+        /// meets the hose's lower edge.
         static let rimStart = CGPoint(x: 8.8, y: 10.45)
         static let rimEnd = CGPoint(x: 15, y: 15)
         /// The hose's rounded foot.
@@ -64,8 +61,8 @@ enum MenuBarIcon {
         return image
     }
 
-    /// The dial's rim and the hose as one outline, with the dial's opening as
-    /// a second subpath for the even-odd fill to leave clear.
+    /// The rim and hose as one outline, with the dial's opening as a second
+    /// subpath the even-odd fill leaves clear.
     private static var body: CGPath {
         let path = CGMutablePath()
         let top = Geometry.footCenter.y - Geometry.footRadius

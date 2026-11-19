@@ -4,45 +4,37 @@ import CoreGraphics
 /// Brings a freshly launched game's window to the front, and names the
 /// processes the launch started.
 ///
-/// Wine's processes are background apps to macOS, so a game window opens
-/// *behind* whatever is frontmost, where on Windows Steam foregrounds the
-/// game. `SteamClient.Apps.RunGame` on the bridge and the client's
-/// launch-start report both arm this watch; the first on-screen window owned
-/// by a bottle process that is neither client infrastructure nor another
-/// game's gets activated exactly once.
-///
-/// A window is the slower of the two supplies and the launches worth
-/// diagnosing are the ones that never draw, so the watch also reads the dock
-/// shim's chronicle (``WineChronicle``), which names every bottle process the
-/// moment winemac.drv loads it.
+/// Wine's processes are background apps to macOS, so a game window opens behind
+/// whatever is frontmost. `SteamClient.Apps.RunGame` on the bridge and the
+/// client's launch-start report arm this watch; the first on-screen window of a
+/// bottle process that is neither client infrastructure nor another game's is
+/// activated once. It also reads the dock shim's chronicle (``WineChronicle``),
+/// which names each bottle process as winemac.drv loads it, since the launches
+/// worth diagnosing never draw.
 @MainActor
 final class GameLaunchWatch {
-    /// How long a launch stays armed: game engines can take this long to put
-    /// up their first real window (shader precompilation, updates).
+    /// How long a launch stays armed: a first real window can take this long
+    /// (shader precompilation, updates).
     private static let armedFor: Duration = .seconds(180)
     private static let pollEvery: Duration = .seconds(1)
 
-    /// Windows programs that are the client's own plumbing, never the game.
-    /// Steam's dialogs surface under `steam.exe`/`steamwebhelper.exe`
-    /// (`WineWindowWatch`), and the game's window belongs to the game's own
-    /// exe.
+    /// Windows programs that are the client's own plumbing (`steam.exe`,
+    /// `steamwebhelper.exe`), never the game.
     private nonisolated static let infrastructureOwners = WineWindowWatch.gameInfrastructureOwners
 
-    /// How recent an arm's chronicle tail has to be for the next arm to read
-    /// on from it. The bridge's `RunGame` and the client's launch-start report
-    /// arm the same launch a moment apart, and a fresh tail for the second
-    /// would skip what the shim wrote between them.
+    /// How recent an arm's chronicle tail must be for the next arm to read on
+    /// from it. `RunGame` and the launch-start report arm one launch a moment
+    /// apart, and a fresh tail would skip what the shim wrote between them.
     private static let tailReuseWindow: Duration = .seconds(10)
-    /// How long a press's tail waits for the helper's reply: a first
-    /// companion launch takes about a quarter of a minute to answer.
+    /// How long a press's tail waits for the helper's reply; a first companion
+    /// launch takes about a quarter of a minute.
     private static let pressedTailLife: Duration = .seconds(300)
 
     private var watch: Task<Void, Never>?
     private var lastTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
-    /// The chronicle's end at the moment a program was pressed, for the watch
-    /// its launch arms once the helper has answered: the process can appear
-    /// before the reply is handled, and its lines would otherwise be behind
-    /// the tail.
+    /// The chronicle's end when a program was pressed, for the watch its launch
+    /// arms after the helper answers: the process can appear before the reply
+    /// arrives.
     private var pressedTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
 
     /// A program was pressed; the helper has not answered yet.
@@ -51,33 +43,29 @@ final class GameLaunchWatch {
     }
     private let activation = Activation()
 
-    /// A window of the launch's own game is up — the host clears the
-    /// launch-status line on it.
+    /// A window of the launch's own game is up.
     var onGameWindowUp: ((_ owner: String) -> Void)?
 
-    /// A bottle process the launch started reached winemac.drv, named by the
-    /// shim's chronicle with the macOS pid it runs under. Fires whether or
-    /// not that process ever draws.
+    /// A launch's bottle process reached winemac.drv, named by the chronicle
+    /// with its macOS pid, whether or not it ever draws.
     var onGameProcessArmed: ((_ exe: String, _ pid: pid_t) -> Void)?
 
     /// The window a launch may claim, and how its program was named.
     nonisolated struct Sighting: Sendable {
         let owner: String
         let pid: pid_t
-        /// Whether the game is running through its own launcher bundle,
-        /// which is what puts its name and icon in the Dock.
+        /// Whether the game runs through its own launcher bundle, which puts
+        /// its name and icon in the Dock.
         let viaBundle: Bool
     }
 
-    /// Arms (or re-arms) the watch; called when the bridge sees `RunGame` and
-    /// when the client reports a launch starting, which is the path that
-    /// knows which app it is.
+    /// Arms (or re-arms) the watch, from the bridge's `RunGame` and from the
+    /// client's launch-start report, which knows the app.
     func noteLaunchRequested(appID: Int? = nil) {
         let previous = watch
         previous?.cancel()
         EventLog.shared.log(.window, "game launch requested — watching for its window")
-        // From here on: what the shim wrote before this launch is another
-        // launch's story.
+        // What the shim wrote before this launch belongs to another launch.
         let now = ContinuousClock.now
         let chronicle: WineChronicleTail
         if let pressedTail, now - pressedTail.startedAt < Self.pressedTailLife {
@@ -110,14 +98,13 @@ final class GameLaunchWatch {
             }
             guard !Task.isCancelled else { return }
             EventLog.shared.log(.window, "no game window in three minutes — no longer watching")
-            // The right the launch took is spent or worthless by now, and the
-            // Dock tile it came with belongs to a window that never arrived.
+            // The launch's activation right and its Dock tile belong to a
+            // window that never arrived.
             ActivationPolicy.recedeIfLastWindow(closing: nil)
         }
     }
 
-    /// One watch's working state. Only that watch's loop holds it, and it
-    /// hands it to one tick at a time.
+    /// One watch's working state, handed to one tick at a time.
     private final nonisolated class Scan: @unchecked Sendable {
         let chronicle: WineChronicleTail
         let appID: Int?
@@ -131,18 +118,14 @@ final class GameLaunchWatch {
         }
     }
 
-    /// What one tick found: the chronicle's new lines, the windows passed
-    /// over for the first time and why, and the window the launch may claim.
     private nonisolated struct Tick: Sendable {
         let entries: [WineChronicle.Entry]
         let passedOver: [String]
         let sighting: Sighting?
     }
 
-    /// Reads the chronicle and the window list, and resolves each window's
-    /// program. Off the main actor: every tick copies the window list,
-    /// offscreen windows included, and a new pid costs a process-arguments
-    /// read.
+    /// Off the main actor: every tick copies the window list, offscreen windows
+    /// included, and a new pid costs a process-arguments read.
     @concurrent
     private nonisolated static func tick(_ scan: Scan) async -> Tick {
         let entries = scan.chronicle.newEntries()
@@ -155,9 +138,8 @@ final class GameLaunchWatch {
         return Tick(entries: entries, passedOver: passedOver, sighting: sighting)
     }
 
-    /// The chronicle's `armed` lines name a launch's processes before any of
-    /// them draws, which is the only record of a game that dies without a
-    /// window.
+    /// The chronicle's `armed` lines are the only record of a game that dies
+    /// without a window.
     private func noteArmedProcesses(_ entries: [WineChronicle.Entry]) {
         for entry in entries where entry.verb == .armed {
             guard let exe = Self.launchProcess(named: entry.executable) else { continue }
@@ -165,20 +147,18 @@ final class GameLaunchWatch {
         }
     }
 
-    /// The lowercased name of a bottle process that can be the launch's own,
-    /// or `nil` for one that never is: Steam's client and its probes, Wine's
-    /// services, and a game's crash handler or installer all load the driver
-    /// too, and a run record or a per-program env file named after one of
-    /// those is written against the wrong process.
+    /// The lowercased name of a bottle process that can be the launch's own, or
+    /// `nil`: Steam's client and probes, Wine's services, and a game's crash
+    /// handler or installer also load the driver, and must not get the run
+    /// record or env file.
     nonisolated static func launchProcess(named executable: String) -> String? {
         let exe = executable.lowercased()
         guard WineWindowWatch.isGameProgram(exe), GameExecutables.isGameLike(exe), !isHelper(exe) else { return nil }
         return exe
     }
 
-    /// A program the app itself runs beside a game: the frame-rate unlocker,
-    /// the engine's own or the one the user picked (``FPSUnlocker``). Its
-    /// process and window are never the game's.
+    /// A program the app runs beside a game, the frame-rate unlocker
+    /// (``FPSUnlocker``); never the game.
     nonisolated static func isHelper(_ exe: String) -> Bool {
         let name = exe.lowercased()
         if name == FPSUnlocker.ownName { return true }
@@ -186,20 +166,16 @@ final class GameLaunchWatch {
         return name == unlocker
     }
 
-    /// Spends the activation right the launch took on the window that just
-    /// arrived, then hands the policy back: an app whose last window is a
-    /// game's belongs in the menu bar, not the Dock.
-    ///
-    /// The launch's own story ends the moment the window is up, so the
-    /// callback fires before the activation, which can take five seconds.
+    /// Spends the launch's activation right on the window that just arrived,
+    /// then lets the app recede to the menu bar. The callback fires first,
+    /// since the activation can take five seconds.
     private func activate(_ game: Sighting) async {
         GameDisplayHold.gameDidAppear(for: "\(game.owner) (pid \(game.pid))")
         onGameWindowUp?(game.owner)
         let bundled = game.viaBundle ? ", via its own bundle" : ""
         EventLog.shared.log(.window, "game window up (\(game.owner))\(bundled)")
-        // The device the game's sound is about to open, named while the
-        // launch is still the subject, so a log that says the sound never
-        // started also says which device it was going to.
+        // Logged now, so a report that the sound never started names the
+        // device.
         EventLog.shared.log(
             .app,
             "audio out: \(HostSnapshot.defaultAudioOutput()?.summary ?? "no output device")",
@@ -216,16 +192,12 @@ final class GameLaunchWatch {
         ActivationPolicy.recedeIfLastWindow(closing: nil)
     }
 
-    /// What a pid is running, kept for as long as one launch is watched:
-    /// reading a process's command line costs a `KERN_ARGMAX` buffer, and the
-    /// answer cannot change while the process lives. A pid reused by another
-    /// process inside the same three minutes would be named after the dead
-    /// one, which costs a wrong name in a log line.
+    /// What a pid is running, cached for one watch: a command-line read costs a
+    /// `KERN_ARGMAX` buffer. A pid reused within the watch keeps the dead
+    /// process's name.
     ///
-    /// A macOS build is matched against the pass's sessions before the cache:
-    /// its window can be listed a moment before its supervisor's file is
-    /// written, and an answer cached in that moment would hold for the whole
-    /// watch.
+    /// A macOS build is matched against the sessions before the cache, since
+    /// its window can be listed before its supervisor's file is written.
     nonisolated struct ProgramCache {
         private var programs: [pid_t: WineWindowWatch.Program?] = [:]
 
@@ -242,14 +214,11 @@ final class GameLaunchWatch {
     }
 
     /// Which app the engine says each bottle process is, from the `sevo:run`
-    /// line winemac.drv writes to the Wine log as a process loads it
-    /// (``WineProvenance``). Read per pid and kept for the watch: the line is
-    /// written before the process can own a window, and a process's app id
-    /// cannot change while it lives.
+    /// line winemac.drv writes to the Wine log (``WineProvenance``). Cached per
+    /// pid: the line precedes any window, and a process's app id cannot change.
     nonisolated struct ProcessAttributions {
-        /// How many lines of the log's end are read for a pid's line. The
-        /// line is written as the driver loads, so what the process logs
-        /// between that and its first window is all that comes after it.
+        /// Lines of the log's end read for a pid's line, which is written as
+        /// the driver loads.
         private static let linesRead = 10_000
         private var known: [pid_t: Int?] = [:]
         private let log: URL
@@ -268,8 +237,8 @@ final class GameLaunchWatch {
         }
     }
 
-    /// Whose a bottle process's window is, for a launch, and which test
-    /// said so.
+    /// Whose a bottle process's window is, for a launch, and which test said
+    /// so.
     nonisolated enum WindowOwnership: Equatable, Sendable {
         /// The launch's own.
         case launch
@@ -277,14 +246,10 @@ final class GameLaunchWatch {
         case other(appID: Int, decidedBy: String)
     }
 
-    /// Whose the window of `exe` (lowercased) running as `pid` is, for a
-    /// launch of `appID`.
-    ///
-    /// The engine's own attribution of the process (`attributed`, from its
-    /// `sevo:run` line) decides when there is one. Without one, the exe name
-    /// does: the launching game's when its own recorded exes carry the name,
-    /// else the game among `games` that recorded it, else nobody's, which is
-    /// to say the launch's.
+    /// Whose the window of `exe` (lowercased) running as `pid` is, for a launch
+    /// of `appID`. The engine's attribution decides when there is one;
+    /// otherwise the launching game's recorded exes, then any game in `games`
+    /// that recorded it, else the launch.
     nonisolated static func ownership(
         ofWindowFrom exe: String, pid: pid_t, launching appID: Int, attributed: Int?, games: [Int: ConfigValues],
     ) -> WindowOwnership {
@@ -301,8 +266,7 @@ final class GameLaunchWatch {
         )
     }
 
-    /// Whether a game's window is on screen — the updater's gate reads it
-    /// that way.
+    /// Whether a game's window is on screen, for the updater's gate.
     nonisolated static func firstGameWindow() -> (owner: String, pid: pid_t)? {
         var programs = ProgramCache()
         var attributions = ProcessAttributions()
@@ -312,27 +276,21 @@ final class GameLaunchWatch {
 
     /// The first window on screen that this launch may claim.
     ///
-    /// A window whose process the engine attributed to another game, or
-    /// whose program another game has recorded, is that game's
-    /// (``ownership(ofWindowFrom:pid:launching:attributed:games:)``) — a
-    /// launch that never draws must not adopt a bystander's window, and the
-    /// caller keeps polling for its own. Every window that is not this
-    /// launch's is handed to `report` with the reason it was passed over:
-    /// which of the tests refuses a window that the shim did put on screen
-    /// is otherwise unknowable after the fact.
+    /// A window the engine attributed to another game, or whose program another
+    /// game recorded, is that game's: a launch that never draws must not adopt
+    /// a bystander's window. Every window passed over goes to `report` with the
+    /// reason.
     nonisolated static func firstGameWindow(
         launching appID: Int?,
         programs: inout ProgramCache,
         attributions: inout ProcessAttributions,
         report: (String) -> Void = { _ in },
     ) -> Sighting? {
-        // Read once per pass, at the first window that needs it: which game
-        // claims an exe is a directory of config files.
+        // Read once per pass, at the first window that needs it.
         var games: [Int: ConfigValues]?
         let sessions = NativeSessions.live()
-        // Windows the window server keeps but does not show are listed too,
-        // so a game that puts one up without ever showing it is reported
-        // rather than silently passed over.
+        // Hidden windows are listed too, so one never shown is reported rather
+        // than passed over.
         let options: CGWindowListOption = [.excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID)
             as? [[String: Any]] else { return nil }
@@ -340,8 +298,7 @@ final class GameLaunchWatch {
             guard let owner = entry[kCGWindowOwnerName as String] as? String,
                   let pid = entry[kCGWindowOwnerPID as String] as? pid_t,
                   let program = programs.program(owner: owner, pid: pid, sessions: sessions) else { continue }
-            // A window of some Mac application: there are dozens of those on
-            // any Mac, and none of them is a game.
+            // A Mac application's window.
             guard program.source != .owner || program.name.hasSuffix(".exe") else { continue }
             guard program.name.hasSuffix(".exe") || program.source == .macOSBuild else {
                 report("\(program.name) (pid \(pid)) is not an .exe — not a game window")

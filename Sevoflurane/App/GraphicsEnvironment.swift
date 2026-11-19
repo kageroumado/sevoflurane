@@ -1,24 +1,22 @@
 import Foundation
 
-/// The engine-and-disk half of the Graphics pane, split from ``GraphicsStore``
-/// the way ``SetupEnvironment`` is split from ``Provisioner``: the store keeps
-/// the policy, this keeps the effects. A simulated environment can then pose
-/// any engine, any set of installed toolkits, and an install that fails —
-/// with no bottle behind any of it.
+/// The engine-and-disk half of the Graphics pane: ``GraphicsStore`` keeps the
+/// policy, this keeps the effects, so a simulated environment can pose any
+/// engine, toolkits and failures with no bottle behind them.
 @MainActor
 protocol GraphicsEnvironment: AnyObject {
     /// Whether the effects are simulated.
     var isSimulation: Bool { get }
 
-    /// Whether the engine brings a D3DMetal of its own, which the user's copy
-    /// then replaces rather than supplies.
+    /// Whether the engine brings its own D3DMetal, which a user's copy
+    /// replaces.
     var engineHasOwnD3DMetal: Bool { get }
 
-    /// What the engine the bottle runs on is called, for the popover.
+    /// The engine's name, for the popover.
     var engineName: String { get }
 
-    /// What the installed engines between them can host, as each declares in
-    /// its `engine-info.json`; a renderer nothing hosts cannot be offered.
+    /// What the installed engines can host, per their `engine-info.json`;
+    /// nothing else can be offered.
     func hostedRenderers() -> [Renderer]
 
     func currentSelection() -> BottleGraphics.Selection
@@ -50,7 +48,7 @@ extension GraphicsEnvironment {
     }
 }
 
-/// The real one: the bottle's own graphics configuration, and the engines and
+/// The real one: the bottle's graphics configuration, and the engines and
 /// toolkits on disk.
 @MainActor
 final class LiveGraphicsEnvironment: GraphicsEnvironment {
@@ -129,8 +127,7 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
     func installRendererVersion(
         _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
     ) async throws -> RendererVersions.Installed {
-        // Detached: the unpack and the copies are disk work, and this is the
-        // main actor.
+        // Detached: unpacking and copying are disk work.
         try await Task.detached(name: "Install \(component.label) \(version ?? "")") {
             try await RendererVersions.install(component, from: source, version: version, sha256: sha256)
         }.value

@@ -2,9 +2,8 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The three steps a companion app's wallpapers take to a Mac, shown over
-/// Steam while the Workshop opens behind it: a floating panel, since the
-/// app is a menu-bar agent whose windows are Steam's.
+/// The three steps a companion app's wallpapers take to a Mac, shown in a
+/// floating panel over Steam while the Workshop opens behind it.
 @MainActor
 final class CompanionGuide: NSObject, NSWindowDelegate {
     static let shared = CompanionGuide()
@@ -26,8 +25,8 @@ final class CompanionGuide: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: view)
         panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 460, height: 300))
         panel.center()
-        // An agent app has no activation of its own, so the panel would open
-        // behind Steam.
+        // The app has no activation of its own, so the panel would open behind
+        // Steam.
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }

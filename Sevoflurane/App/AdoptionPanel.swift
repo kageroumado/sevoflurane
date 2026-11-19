@@ -2,12 +2,8 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The window that opens when a Windows program is handed to Sevoflurane —
-/// dropped on the app, opened with it from Finder, or picked from the menu
-/// bar.
-///
-/// A floating panel: the app is usually a menu-bar agent, and this is one
-/// question with three answers.
+/// The panel that opens when a Windows program is handed to Sevoflurane:
+/// dropped on the app, opened with it from Finder, or picked from the menu bar.
 @MainActor
 final class AdoptionPanel {
     static let shared = AdoptionPanel()
@@ -23,8 +19,8 @@ final class AdoptionPanel {
         panel.contentView = NSHostingView(rootView: AdoptionView(model: model))
         panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 420, height: 260))
         panel.center()
-        // An agent app has no activation of its own, so the panel would open
-        // behind whatever the user was in.
+        // The app has no activation of its own, so the panel would open behind
+        // whatever the user was in.
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
@@ -50,36 +46,32 @@ final class AdoptionPanel {
     }
 }
 
-/// What the adoption panel knows and does: the file's own description of
-/// itself, the verdict, and the four things that can be done with it.
+/// What the adoption panel knows and does: the file's own description, the
+/// verdict, and the actions on it.
 @MainActor
 @Observable
 final class AdoptionModel {
     /// Where the panel is in the two-step installer flow.
     enum Stage: Equatable {
-        /// Waiting for the user to pick what to do.
         case choosing
-        /// The installer is running in the bottle.
         case installing
-        /// It finished; these are the game-like executables it left behind.
+        /// Finished, with the game-like executables it left behind.
         case installed(root: URL?, executables: [URL])
-        /// It could not be started or it ended badly.
         case failed(String)
     }
 
     let url: URL
     let info: PEResources.Info?
-    /// The program's own icon, shaped the way macOS shapes an app's. Drawn
-    /// once: it is a PE resource read and a 256-pixel render.
+    /// The program's own icon, shaped as macOS shapes an app's. Drawn once: it
+    /// is a PE resource read and a 256-pixel render.
     let icon: NSImage?
     private(set) var verdict: ProgramDetection.Verdict
     private(set) var stage = Stage.choosing
     /// Whether the user overruled an installer verdict for this file.
     private(set) var isOverruled = false
-    /// Whether an overruled verdict is remembered for the next time this file
-    /// is opened.
+    /// Whether an overruled verdict is remembered for this file.
     var remembersOverrule = true
-    /// The name the record will carry, which the user may correct.
+    /// The record's name, which the user may correct.
     var name: String
     /// Executables from an install the user has chosen to keep.
     var chosen: Set<URL> = []
@@ -112,8 +104,7 @@ final class AdoptionModel {
         return NSImage(cgImage: shaped, size: NSSize(width: 128, height: 128))
     }
 
-    /// The version resource's one line: what the file calls itself, and which
-    /// build it is.
+    /// The version resource's one line: product name and build.
     var subtitle: String? {
         let described = info?.productName ?? info?.fileDescription
         let version = info?.fileVersion
@@ -123,7 +114,6 @@ final class AdoptionModel {
             .nilWhenEmpty
     }
 
-    /// Where a launch would happen.
     var destination: String {
         String(localized: "Runs in the \(SteamBottle.name) bottle on \(Engine.active.description).")
     }
@@ -134,16 +124,15 @@ final class AdoptionModel {
 
     // MARK: - What the panel does
 
-    /// The user's word that this file is a program: its launcher, or the game
-    /// itself. The verdict is read again without the installer signals, so a
-    /// game's own signals still name it a game.
+    /// The user's word that this file is a program rather than an installer.
+    /// The verdict is read again without the installer signals, so a game's own
+    /// signals still name it a game.
     func overruleInstaller() {
         isOverruled = true
         verdict = ProgramDetection.classify(url, notInstallers: [url.standardizedFileURL.path])
         EventLog.shared.log(.setup, "\(url.lastPathComponent): the user says it is not an installer")
     }
 
-    /// Stores the overrule once the user acts on it, as they asked.
     private func rememberOverrule() {
         guard isOverruled, remembersOverrule else { return }
         ProgramDetection.markNotInstaller(url)
@@ -222,17 +211,17 @@ final class AdoptionModel {
         }
     }
 
-    /// One run through the daemon, which is the only process that parents a
-    /// bottle process. An installer is waited for, because what it leaves on
-    /// disk is the answer; anything else is started and let go.
+    /// One run through the daemon, the only process that parents a bottle
+    /// process. An installer is waited for, because what it leaves on disk is
+    /// the answer.
     private static func runOnce(_ url: URL, wait: Bool) async -> Bool {
         let body = Data((url.standardizedFileURL.path + "\n").utf8)
         let route = wait ? "/program/run?timeout=3600" : "/program/run?wait=0"
         return await DaemonService.post(route, body: body, timeout: wait ? 3700 : 20) != nil
     }
 
-    /// The directories an installer could add to: the drive's own root, both
-    /// program folders, and the per-user application data.
+    /// The directories an installer could add to: the drive root, both program
+    /// folders, and per-user application data.
     static func installRoots() -> [URL] {
         let drive = SteamBottle.root.appendingPathComponent("drive_c")
         return [
@@ -243,8 +232,6 @@ final class AdoptionModel {
         ]
     }
 
-    /// Every directory directly inside the install roots, which is the
-    /// before-and-after an installer is judged by.
     private static func topLevelDirectories() -> Set<URL> {
         var result: Set<URL> = []
         for root in installRoots() {
@@ -264,8 +251,6 @@ private extension String {
 
 // MARK: - The view
 
-/// The panel's contents: what the file is, where it would run, and the
-/// choice.
 private struct AdoptionView: View {
     @Bindable var model: AdoptionModel
 
@@ -361,7 +346,7 @@ private struct AdoptionView: View {
 }
 
 /// The installer's second step: what it left in the bottle, and which of it
-/// is worth a Quick Launch entry.
+/// gets a Quick Launch entry.
 private struct InstalledStep: View {
     @Bindable var model: AdoptionModel
     let root: URL?

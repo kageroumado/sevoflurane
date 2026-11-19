@@ -1,19 +1,15 @@
 #if DEBUG
     import Foundation
 
-    /// A ``GraphicsEnvironment`` with no engine and no bottle behind it. The
-    /// pane reads the scenario's fixture and every change lands in memory, so
-    /// the gallery and the demo build can show each engine's Graphics pane —
-    /// including the install that fails, which a real machine reaches once
-    /// and then never again.
+    /// A ``GraphicsEnvironment`` with no engine and no bottle behind it:
+    /// fixture state, changes in memory, and a failing install.
     @MainActor
     final class DemoGraphicsEnvironment: GraphicsEnvironment {
-        /// The engine-and-toolkit situations the pane has to answer for.
         enum Scenario: String, CaseIterable, Identifiable {
             /// CrossOver: every renderer, and a D3DMetal the engine brings.
             case crossOver = "crossover"
-            /// The built-in engine with no toolkit yet — D3DMetal is absent
-            /// from the renderer list and the pane asks for Apple's image.
+            /// The built-in engine with no toolkit: D3DMetal is off the
+            /// renderer list and the pane asks for Apple's image.
             case builtInNoToolkit = "built-in-no-toolkit"
             /// The built-in engine with two toolkit versions added.
             case builtInWithToolkit = "built-in-with-toolkit"
@@ -38,8 +34,8 @@
         private let toolkitStore = URL(fileURLWithPath: "/demo/engine")
 
         private let scenario: Scenario
-        /// Per-action think time, so a progress state is on screen long enough
-        /// to be seen. Tests pass `.zero`.
+        /// Per-action think time, so a progress state stays visible. Tests pass
+        /// `.zero`.
         private let stepDelay: Duration
         private var selection: BottleGraphics.Selection
         private var toolkits: [D3DMetalInstaller.Installed]
@@ -75,8 +71,8 @@
             scenario == .crossOver ? "CrossOver" : "Dormison b1"
         }
 
-        /// A managed engine hosts what it was built for, D3DMetal included:
-        /// whether a toolkit is there to run is the store's question.
+        /// A managed engine hosts D3DMetal; whether a toolkit is installed is
+        /// the store's question.
         func hostedRenderers() -> [Renderer] {
             [.auto, .d3dmetal, .dxmt, .dxvk, .wined3d]
         }
@@ -181,8 +177,7 @@
         }
     }
 
-    /// A failure a simulated environment poses, worded the way the pane will
-    /// show it.
+    /// A simulated failure, worded as the pane shows it.
     struct DemoError: Error, CustomStringConvertible {
         let description: String
 

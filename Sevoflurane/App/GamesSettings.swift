@@ -1,20 +1,19 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings › Games: the installed games and adopted programs with a file in
-/// the settings hierarchy, and for the selected one the values it sets over
-/// the bottle's. A game gets a file at its first launch, when its executables
-/// are recorded, and keeps it through an uninstall, so its settings are there
-/// when it comes back. Writes take the path `sevo app config` takes.
+/// Settings › Games: the installed games and adopted programs with a settings
+/// file, and the values the selected one sets over the bottle's. A file is made
+/// at a game's first launch and kept through an uninstall; writes take the path
+/// `sevo app config` takes.
 struct GamesSettings: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
     @State private var games: [Entry] = []
     @State private var selected: Int?
-    /// Opens on the first game, for the gallery, which has nobody to pick one.
+    /// Opens on the first game, for the gallery.
     var selectsFirstGame = false
-    /// A game someone asked to see from elsewhere — a game's menu in the
-    /// popover. Taken and cleared.
+    /// A game requested from elsewhere (a game's menu in the popover); taken
+    /// and cleared.
     var requestedGame: Binding<SettingsNavigation.GameRequest?> = .constant(nil)
     /// What the fix table says about the selected game.
     @State private var recommendation = KnownFixes.Recommendation(fixes: [])
@@ -34,7 +33,7 @@ struct GamesSettings: View {
                     gameID: entry.id, name: entry.name, shaders: shaders, highlighted: highlighted,
                     recommendation: recommendation,
                 )
-                // A store belongs to one game: another game is another form.
+                // A store belongs to one game, so another game is another form.
                 .id(entry.id)
             } else {
                 GamesPlaceholder(hasGames: !games.isEmpty)
@@ -50,9 +49,8 @@ struct GamesSettings: View {
         }
     }
 
-    /// Selects the requested game. One that has never launched has no file
-    /// yet and is not in the list; it joins it, and its first setting
-    /// writes the file.
+    /// Selects the requested game. One never launched has no file and joins the
+    /// list; its first setting writes the file.
     private func takeRequest() {
         guard let request = requestedGame.wrappedValue else { return }
         requestedGame.wrappedValue = nil
@@ -63,14 +61,13 @@ struct GamesSettings: View {
         selected = request.id
     }
 
-    /// Loads what the fix table says about a game.
     private func select(_ id: Int?) {
         recommendation = id.map {
             KnownFixes.recommended(for: $0, exes: GameConfig.game($0).exes ?? [])
         } ?? KnownFixes.Recommendation(fixes: [])
     }
 
-    /// By name, then id, so two games without a name keep a stable order.
+    /// By name, then id, so unnamed games keep a stable order.
     private static func byName(_ a: Entry, _ b: Entry) -> Bool {
         let order = a.name.localizedStandardCompare(b.name)
         return order == .orderedSame ? a.id < b.id : order == .orderedAscending
@@ -94,7 +91,6 @@ struct GamesSettings: View {
 
 // MARK: - The list
 
-/// The sidebar: one row per game, the selection the form follows.
 private struct GameList: View {
     let games: [GamesSettings.Entry]
     @Binding var selected: Int?
@@ -110,7 +106,6 @@ private struct GameList: View {
     }
 }
 
-/// A game's name over the executables it is known to run under.
 private struct GameListRow: View {
     let name: String
     let exes: [String]
@@ -126,12 +121,11 @@ private struct GameListRow: View {
     }
 }
 
-/// What the form's side shows while no game is selected.
 private struct GamesPlaceholder: View {
     let hasGames: Bool
 
     /// In a scroll view, so the toolbar draws the same edge over this side as over the list
-    /// and the form.
+    /// and form.
     var body: some View {
         GeometryReader { pane in
             ScrollView {
@@ -158,8 +152,8 @@ private struct GamesPlaceholder: View {
 
 // MARK: - The form
 
-/// The selected game's form: the catalog's groups at the game level, then
-/// its DLL overrides and its environment. Everything it changes goes through one store.
+/// The selected game's form: the catalog's groups at the game level, then its DLL
+/// overrides and environment, all through one store.
 private struct GameForm: View {
     let gameID: Int
     let name: String
@@ -211,8 +205,8 @@ private struct GameForm: View {
         .highlightable(.gamesSettings, highlighted: highlighted)
     }
 
-    /// Puts `keys` (all of them when `nil`) back as they were before the fix
-    /// list, the way the notification's Undo does.
+    /// Puts `keys` (all when `nil`) back as they were before the fix list, as
+    /// the notification's Undo does.
     private func undoFixes(_ keys: Set<String>?) {
         appliedFixes = FixLedger.undo(appID: gameID, keys: keys, inBackground: true)
         store.reload()
@@ -221,9 +215,9 @@ private struct GameForm: View {
 
 // MARK: - The fix list
 
-/// What the fix list set on this game at its first launch and still holds,
-/// with the undo for all of it: the native runner and DLL overrides have no
-/// row of their own to carry the mark.
+/// What the fix list set at the first launch and still holds, with one undo:
+/// the native runner and DLL overrides have no row of their own to carry the
+/// mark.
 private struct FixListSection: View {
     let fixes: AppliedFixes
     /// The stored names of the keys the fix list still holds.
@@ -255,7 +249,6 @@ private struct FixListSection: View {
         }
     }
 
-    /// The settings still held, in Settings' words.
     private var remaining: [String] {
         var held = fixes
         held.applied = ConfigValues(fields: fixes.applied.fields.filter { settings.contains($0.key) }) ?? .empty
@@ -265,8 +258,8 @@ private struct FixListSection: View {
 
 // MARK: - Steam's library
 
-/// Whether an adopted program is listed in Steam's library as a non-Steam
-/// game (``SteamLibraryShortcuts``).
+/// Whether an adopted program is listed in Steam's library as a non-Steam game
+/// (``SteamLibraryShortcuts``).
 private struct SteamLibrarySection: View {
     let programID: Int
     /// The switch as last set here; the record until then.
@@ -292,9 +285,8 @@ private struct SteamLibrarySection: View {
 
 // MARK: - The Dock
 
-/// The game's own tile in the Dock (``DockTiles``), kept or not. The bundle
-/// the tile is made of exists once the game has been launched, so until
-/// then the section says that is what it is waiting for.
+/// The game's own Dock tile (``DockTiles``). Its bundle exists once the game
+/// has launched.
 private struct DockSection: View {
     let gameID: Int
     @State private var bundle: URL?
@@ -340,9 +332,8 @@ private struct DockSection: View {
 
 // MARK: - Frame-rate unlocker
 
-/// The unlocker Genshin Impact gets beside it (``FPSUnlocker``). One for
-/// every copy of the game, so it is set here and read by the helper at each
-/// launch.
+/// The unlocker Genshin Impact runs beside (``FPSUnlocker``): one for every
+/// copy of the game, read by the helper at each launch.
 private struct FPSUnlockerSection: View {
     @State private var executable = FPSUnlocker.executable
     @State private var isEnabled = FPSUnlocker.isEnabled
@@ -386,14 +377,13 @@ private struct FPSUnlockerSection: View {
         }
     }
 
-    /// Whether the active engine carries its own unlocker.
     private var hasOwn: Bool { Engine.active.fpsUnlocker != nil }
 
     private var ownLabel: String {
         hasOwn ? String(localized: "Sevoflurane's own") : String(localized: "None")
     }
 
-    /// The offered rates, and the stored one if it is not among them.
+    /// The offered rates, plus the stored one if missing.
     private var targets: [Int] {
         FPSUnlocker.targets.contains(target) ? FPSUnlocker.targets : (FPSUnlocker.targets + [target]).sorted()
     }
@@ -418,9 +408,8 @@ private struct FPSUnlockerSection: View {
 
 // MARK: - DLL overrides
 
-/// The load order this game gives named DLLs, over the bottle's own
-/// overrides. Written under `AppDefaults\<exe>\DllOverrides`, so a game
-/// can take a native runtime the rest of the bottle does not.
+/// This game's DLL load orders over the bottle's, written under
+/// `AppDefaults\<exe>\DllOverrides`.
 private struct GameDLLOverridesSection: View {
     let store: SettingsStore
 
@@ -446,8 +435,8 @@ private struct GameDLLOverridesSection: View {
     }
 }
 
-/// Wine's load orders in the spelling the registry holds, so the picker
-/// and `sevo app config <id> dll` name the same values.
+/// Wine's load orders as the registry spells them, so the picker and `sevo app
+/// config <id> dll` name the same values.
 private let dllOverrideModes: [(mode: String, label: LocalizedStringResource)] = [
     ("n,b", "Native, then built-in"),
     ("b,n", "Built-in, then native"),
@@ -456,8 +445,6 @@ private let dllOverrideModes: [(mode: String, label: LocalizedStringResource)] =
     ("", "Disabled"),
 ]
 
-/// One overridden DLL: its load order, and the button that takes the
-/// override away.
 private struct DLLOverrideRow: View {
     let dll: String
     let mode: String
@@ -487,7 +474,6 @@ private struct DLLOverrideRow: View {
     }
 }
 
-/// The row that names a DLL and a load order and adds the pair.
 private struct AddDLLOverrideRow: View {
     let add: (_ dll: String, _ mode: String) -> Void
     @State private var name = ""
@@ -495,8 +481,8 @@ private struct AddDLLOverrideRow: View {
     @State private var libraries: [String] = []
 
     var body: some View {
-        // Two lines: the form's column is too narrow for a library name, a
-        // load order and a button side by side.
+        // Two lines: the form's column is too narrow for name, load order and
+        // button side by side.
         VStack(alignment: .leading, spacing: 8) {
             DLLNameField(name: $name, names: libraries)
             HStack {

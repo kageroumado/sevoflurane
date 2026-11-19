@@ -2,16 +2,12 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Settings › Diagnostics: how much a run is asked to say about itself, where
-/// what it says is kept, and how much of the disk that is allowed to be.
-///
-/// The level reaches games at their next launch through the bottle's env
-/// files, so nothing here needs Steam restarted. Level two takes itself off
-/// after one game, which the pane says rather than leaving someone to
-/// discover it.
+/// Settings › Diagnostics: how much a run records, where it is kept, and the
+/// disk limits. The level reaches games at their next launch through the
+/// bottle's env files; level two takes itself off after one game.
 struct DiagnosticsSettings: View {
     let highlighted: SettingsAnchor?
-    /// Opens the report window. Absent in the gallery, where no window opens.
+    /// Opens the report window; absent in the gallery.
     var showReports: (() -> Void)?
 
     @State private var level = DiagnosticLevel.current
@@ -70,8 +66,8 @@ struct DiagnosticsSettings: View {
 
     // MARK: - The guide
 
-    /// How to make a run someone can act on, in the order it is done. The same
-    /// guide, longer, is `sevo diag --help`.
+    /// How to make a run someone can act on, in order; `sevo diag --help` has
+    /// the longer guide.
     private var guideSection: some View {
         Section {
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
@@ -152,7 +148,6 @@ struct DiagnosticsSettings: View {
         }
     }
 
-    /// What each store is allowed, in the plan's own terms.
     private static let caps: [(what: String, limit: String)] = [
         ("App log", "10 MB"),
         ("Wine log", "20 MB"),
@@ -177,8 +172,7 @@ struct DiagnosticsSettings: View {
     }
 }
 
-/// Debug mode beside the level it overrides: the playtest switch that turns
-/// everything on for one session.
+/// Debug mode beside the level it overrides: everything on, for one session.
 private struct DebugModeRow: View {
     private static let help = SettingHelp(
         title: "Debug mode",
@@ -210,7 +204,6 @@ private struct DebugModeRow: View {
     }
 }
 
-/// The zip for a bug report.
 private struct SaveDiagnosticsRow: View {
     @State private var error: String?
 
