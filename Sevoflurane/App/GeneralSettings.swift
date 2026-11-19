@@ -110,9 +110,8 @@ private struct GeneralDockSection: View {
     }
 }
 
-/// Whether the supervisor keeps Steam running. It holds until Sevoflurane's
-/// background helper restarts, so it says what off costs rather than
-/// pretending to be a stored preference.
+/// Whether the supervisor keeps Steam running. The switch is the daemon's
+/// state, which holds until Sevoflurane's background helper restarts.
 private struct AutoRestartRow: View {
     let supervisor: ClientSupervisor
 

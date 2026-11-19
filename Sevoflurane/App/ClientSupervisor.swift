@@ -9,10 +9,10 @@ import os
 /// verb sent to the control port and a verdict pushed back from it. The app
 /// keeps only what it alone can do: the page, Steam's popups, and the bridge.
 ///
-/// There is deliberately no path that supervises from inside this process. A
-/// daemon that cannot be registered or reached is a terminal state the user is
-/// shown and asked to fix, because a fallback supervisor would be a second
-/// owner of the bottle and the whole split exists to have one.
+/// No path supervises from inside this process, by design: a daemon that
+/// cannot be registered or reached is a terminal state the user is shown and
+/// asked to fix, because a fallback supervisor would be a second owner of the
+/// bottle.
 @MainActor
 @Observable
 final class ClientSupervisor {
@@ -20,7 +20,7 @@ final class ClientSupervisor {
     typealias Fault = SupervisorFault
     typealias HealthInputs = SupervisorHealthInputs
 
-    /// Kept so the health rules have one test suite and one implementation
+    /// Gives the health rules one test suite and one implementation
     /// whichever process derives them.
     nonisolated static func evaluateHealth(_ inputs: HealthInputs) -> Health {
         Health.evaluate(inputs)
@@ -243,13 +243,11 @@ final class ClientSupervisor {
             .flatMap { try? JSONDecoder().decode(Value.self, from: $0) }
     }
 
-    /// Posts the facts, every tick. The post is the app's heartbeat as much as
-    /// its news: the daemon answers `hello` for an app it had not seen, and a
-    /// hello to an app that believed itself attached means the daemon was
-    /// rebuilt or relaunched underneath it — a repair, or launchd bringing a
-    /// crashed helper back — and knows nothing of this app's page. Its
-    /// verdict is read again then, since the new daemon pushes nothing to an
-    /// app it has only just met.
+    /// Posts the facts every tick; the post is also the app's heartbeat. The
+    /// daemon answers `hello` for an app it had not seen, so a hello to an app
+    /// that believed itself attached means the daemon was rebuilt or
+    /// relaunched underneath it. Its verdict is read again then, since the new
+    /// daemon pushes nothing to an app it has only just met.
     private func postFacts() async {
         guard !isQuitting else { return }
         let current = await PageFacts(
@@ -278,8 +276,8 @@ final class ClientSupervisor {
         }
     }
 
-    /// The daemon's probe cycle wakes on what this app saw. A wake is a hint,
-    /// never a state: the cycle decides what it means.
+    /// The daemon's probe cycle wakes on what this app saw. A wake is a hint;
+    /// the cycle decides what it means.
     func wake(_: Wake) {
         Task(name: "Wake the daemon") { _ = await DaemonService.post("/supervisor/wake") }
     }
@@ -434,14 +432,14 @@ final class ClientSupervisor {
         send("/library/show-when-healthy", called: "show the library when healthy", expires: false)
     }
 
-    /// Quit teardown: quitting Sevoflurane quits Steam. The daemon holds the
-    /// bottle, so the contract is one verb — and a crash, which sends nothing,
-    /// is exactly why a crash leaves a running game alone.
     /// Marks the quit as under way, before anything is torn down.
     func beginQuit() {
         isQuitting = true
     }
 
+    /// Quit teardown: quitting Sevoflurane quits Steam. The daemon holds the
+    /// bottle, so the contract is one verb, and a crash, which sends nothing,
+    /// leaves a running game alone.
     func shutdownForQuit() async {
         guard !hasShutDown else { return }
         hasShutDown = true

@@ -105,8 +105,7 @@ struct GraphicsSettings: View {
             }
             if BottleGraphics.rendererVersionsChangedSinceBoot() {
                 // The renderer picker above says this for a renderer change;
-                // a version change is the same restage and was saying
-                // nothing at all.
+                // a version change is the same restage.
                 HStack {
                     Text(applyRendererCopy)
                         .font(.callout)
@@ -129,7 +128,8 @@ struct GraphicsSettings: View {
     /// The D3DMetal row in the same shape as the two below it: the picker,
     /// then a menu for Apple's download, a disk image on hand, and removal.
     /// An empty tag is CrossOver's own copy or, with nothing added, the
-    /// placeholder: a `String?` selection here crashed the compiler's IRGen.
+    /// placeholder. Never make the selection `String?`: that crashes the
+    /// compiler's IRGen.
     private var d3dMetalRow: some View {
         let selection = Binding<String>(
             get: { store.activeD3DMetal ?? "" },

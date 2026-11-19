@@ -4,11 +4,10 @@ import SwiftUI
 
 // MARK: - Games column
 
-/// What to play: the recent games and the Windows programs, the column the
-/// popover has always shown, at that column's own height. For a library
-/// bigger than the recent five, scrolling it brings every installed game up
-/// from below, under its letter; until then nothing hints at them, so the
-/// popover stands exactly as it did.
+/// What to play: the recent games and the Windows programs, at that column's
+/// own height. For a library bigger than the recent five, scrolling it brings
+/// every installed game up from below, under its letter; nothing hints at
+/// them until then.
 struct GamesColumn: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor

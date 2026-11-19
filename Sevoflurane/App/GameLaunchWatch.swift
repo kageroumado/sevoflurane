@@ -5,11 +5,11 @@ import CoreGraphics
 /// processes the launch started.
 ///
 /// Wine's processes are background apps to macOS, so a game window opens
-/// *behind* whatever is frontmost — on Windows, Steam foregrounds the game.
-/// Every launch path (menu bar, library Play button, `steam://run`) funnels
-/// through `SteamClient.Apps.RunGame` on the bridge, which arms this watch;
-/// the first on-screen window owned by a bottle process that is neither
-/// client infrastructure nor another game's gets activated exactly once.
+/// *behind* whatever is frontmost, where on Windows Steam foregrounds the
+/// game. `SteamClient.Apps.RunGame` on the bridge and the client's
+/// launch-start report both arm this watch; the first on-screen window owned
+/// by a bottle process that is neither client infrastructure nor another
+/// game's gets activated exactly once.
 ///
 /// A window is the slower of the two supplies and the launches worth
 /// diagnosing are the ones that never draw, so the watch also reads the dock

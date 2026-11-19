@@ -27,13 +27,12 @@ enum ActivationPolicy {
     /// Becomes `.regular` for a window that does not exist yet, and hands the
     /// tile back if none arrives within `grace`.
     ///
-    /// A promotion has to come before the window when the window is what the
-    /// promotion is for: cooperative activation needs the user's click as the
-    /// reason, and by the time a rebuilt page or a game's first frame arrives
-    /// there is no event left to attribute the request to. What the app owes
-    /// in return is noticing when the window never comes — a wedged client, a
-    /// game that dies before it draws — because nothing else takes the tile
-    /// away afterwards.
+    /// A promotion has to come before the window it is for: cooperative
+    /// activation needs the user's click as the reason, and by the time a
+    /// rebuilt page or a game's first frame arrives there is no event left to
+    /// attribute the request to. Nothing else takes the tile away afterwards,
+    /// so this notices when the window never comes (a wedged client, a game
+    /// that dies before it draws).
     static func becomeRegular(forAWindowWithin grace: Duration) {
         becomeRegular()
         promisedWindowWatch?.cancel()
@@ -58,10 +57,9 @@ enum ActivationPolicy {
         guard Activation().claimRight() else { return }
         // Read once the run loop has turned, which is when the activation
         // lands. A press in the popover, a non-activating panel, does take
-        // the right (measured 2026-09-26); what loses it is the user
-        // activating another app in the minute before the game's window
-        // arrives, and then the window is declined with "this app inactive".
-        // This line is what tells the two apart in a report.
+        // the right (measured); what loses it is the user activating another
+        // app before the game's window arrives, which then is declined with
+        // "this app inactive". This line tells the two apart in a report.
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 let front = NSWorkspace.shared.frontmostApplication

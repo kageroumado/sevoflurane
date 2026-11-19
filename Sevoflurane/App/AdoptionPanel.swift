@@ -6,8 +6,8 @@ import SwiftUI
 /// dropped on the app, opened with it from Finder, or picked from the menu
 /// bar.
 ///
-/// A floating panel rather than a window: the app is a menu-bar agent with no
-/// windows of its own, and this is one question with three answers.
+/// A floating panel: the app is usually a menu-bar agent, and this is one
+/// question with three answers.
 @MainActor
 final class AdoptionPanel {
     static let shared = AdoptionPanel()

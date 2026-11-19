@@ -137,10 +137,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         // The unit tests link against this binary, so running them launches
-        // the app. Anything started here would boot the bottle, take the ports
-        // off a copy the user is running, and stage into their Steam install —
-        // from a test that only wanted to call a function. Before everything,
-        // so a test run leaves nothing at all behind it.
+        // the app; anything started here would boot the bottle, take the ports
+        // off a running copy, and stage into the user's Steam install.
         if TestHost.isHosting { return }
         #if DEBUG
             if handledDebugLaunch() { return }
@@ -582,7 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     #endif
 
-    /// The app lives in the menu bar; closing Steam's window is not quitting.
+    /// The app lives in the menu bar, so closing Steam's window leaves it running.
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
     }

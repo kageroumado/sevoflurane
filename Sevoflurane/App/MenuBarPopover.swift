@@ -67,10 +67,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     /// the badge is the only thing the item says on its own.
     ///
     /// One dot, two reasons: the client needs a hand, or a conversation is
-    /// waiting. They do not compete, because the dot means the same thing
-    /// either way — open the popover, something is in it — and the popover
-    /// says which. A second badge for the second reason would be two marks on
-    /// an 18-point glyph saying one thing.
+    /// waiting. The dot means the same thing either way (open the popover,
+    /// something is in it), and the popover says which.
     private func trackIcon() {
         withObservationTracking {
             statusItem.button?.image = MenuBarIcon.image(
@@ -95,23 +93,20 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
     }
 
     private func open() {
-        // The panel — and the SwiftUI view inside it — is made once and then
-        // reused, so the view's `onAppear` fires only on the very first open.
-        // At that point Steam's `appStore` is usually still empty: services
-        // come up a few seconds after the desktop window is adopted, and an
-        // empty answer is indistinguishable from "unchanged" to the refresh's
-        // own guard. Left alone the popover reads "No games installed yet."
-        // for the rest of the session. Asking on every open costs one page
-        // evaluation and always reflects the library as it stands.
+        // The panel and its SwiftUI view are made once and reused, so the
+        // view's `onAppear` fires only on the first open, when Steam's
+        // `appStore` is usually still empty, and an empty answer is
+        // indistinguishable from "unchanged" to the refresh's own guard.
+        // Asking on every open costs one page evaluation and reflects the
+        // library as it stands.
         presentation.opened()
         onOpen()
         host.refreshRecentGames()
         quickLaunch.refresh()
         graphics.refresh()
-        // And keep asking while the popover stays up: someone who leaves it
-        // open across an install or a play session should watch the list
-        // move, not have to close and reopen it. One page evaluation per
-        // tick, cancelled the moment the popover closes.
+        // And keep asking while the popover stays up, so a list left open
+        // across an install or a play session moves. One page evaluation per
+        // tick, cancelled when the popover closes.
         refreshLoop?.cancel()
         refreshLoop = Task(name: "Popover games refresh") { [weak self] in
             while !Task.isCancelled {
@@ -256,8 +251,8 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         //
         // Glass rather than an `NSVisualEffectView`: the vibrancy materials
         // blur what is behind the window into a gray wash, while glass carries
-        // the wallpaper's color and light through — the ground every other
-        // menu-bar popover on macOS 26 stands on.
+        // the wallpaper's color and light through, as the system's menu-bar
+        // popovers on macOS 26 do.
         let background = NSGlassEffectView()
         background.cornerRadius = Theme.Radius.card
 

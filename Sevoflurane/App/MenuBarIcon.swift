@@ -3,9 +3,8 @@ import AppKit
 /// The menu-bar glyph: a vaporizer's dial that flows into its outlet — a ring
 /// with its pointer at the top right, its rim sweeping down and left into a
 /// hose that ends in a rounded foot. One continuous shape, so it reads at
-/// menu-bar size, and it resembles nothing else in a menu bar: the shape is
-/// learned once and then owned. Drawn programmatically as a template image so
-/// it stays sharp at any backing scale and follows the menu bar's tinting.
+/// menu-bar size. Drawn programmatically as a template image so it stays
+/// sharp at any backing scale and follows the menu bar's tinting.
 ///
 /// The badged variant carries a corner dot — punched out with a cleared disc
 /// so it reads at menu-bar size — for health states that need the user

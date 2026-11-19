@@ -20,21 +20,18 @@ private nonisolated let reporting = OSAllocatedUnfairLock(initialState: Exceptio
 /// Records every Objective-C exception at the moment it is thrown, and lets it
 /// carry on.
 ///
-/// The app raises none of its own, but it hosts Steam's entire UI: a client
-/// update can put WebKit, AppKit, or one of Steam's own bridge calls somewhere
-/// that raises, and AppKit's event loop swallows it without a word. A swallowed
-/// exception is not harmless here — unwinding out of a Swift concurrency frame
-/// skips the pop of the thread-local `ExecutorTrackingInfo`, so the next
-/// `@MainActor` isolation check to run reads a dead stack frame and segfaults,
-/// possibly hours later and with nothing left to say what caused it. That is
-/// the crash this exists to explain.
+/// The app hosts Steam's entire UI, so a client update can put WebKit, AppKit,
+/// or one of Steam's bridge calls somewhere that raises, and AppKit's event
+/// loop swallows it silently. Unwinding out of a Swift concurrency frame skips
+/// the pop of the thread-local `ExecutorTrackingInfo`, so the next
+/// `@MainActor` isolation check reads a dead stack frame and segfaults,
+/// possibly hours later; this exists to explain that crash.
 ///
-/// It deliberately does **not** swallow anything. By the time a preprocessor
-/// runs the throw is already in flight and the unwind is going to happen;
-/// returning something else would hide the damage rather than prevent it. The
-/// value is what it writes while the stack still means something: lines in the
-/// event log, and a JSON sidecar carrying the whole stack and what the app had
-/// just been doing.
+/// It passes every throw on. By the time a preprocessor runs the unwind is
+/// going to happen, and returning something else would hide the damage rather
+/// than prevent it. What it adds is a record written while the stack still
+/// means something: lines in the event log, and a JSON sidecar carrying the
+/// whole stack and what the app had just been doing.
 enum ExceptionWatch {
     nonisolated static func install() {
         chainedPreprocessor = objc_setExceptionPreprocessor { exception in

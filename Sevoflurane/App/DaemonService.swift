@@ -4,9 +4,9 @@ import ServiceManagement
 /// Registering, reaching, and talking to `SevofluraneDaemon`.
 ///
 /// The daemon is a `KeepAlive` LaunchAgent embedded in this bundle, registered
-/// with `SMAppService` on first launch. It is not optional: it owns the bottle,
-/// so an app that cannot reach it has no supervision at all and says so —
-/// there is no in-process supervisor to fall back to, by design.
+/// with `SMAppService` on first launch. It owns the bottle, so an app that
+/// cannot reach it has no supervision and says so; there is no in-process
+/// supervisor to fall back to, by design.
 @MainActor
 enum DaemonService {
     private static var service: SMAppService {
@@ -42,7 +42,7 @@ enum DaemonService {
 
     /// One automatic rebuild per launch: a rebuild that does not take surfaces
     /// to the user rather than re-registering forever. A user-driven
-    /// ``repair()`` ignores this — it is the escape hatch, not the loop guard.
+    /// ``repair()`` ignores this.
     private static var healAttempted = false
     /// One automatic restart of a stale helper per launch, for the same
     /// reason a rebuild is capped: a restart that does not take must not spin.
@@ -57,9 +57,7 @@ enum DaemonService {
         // A test host carries the shipping app's bundle identifier and the
         // same `AssociatedBundleIdentifiers`, so registering from one rewrites
         // the live install's helper record and launchd boots the running
-        // daemon out. That bootout is a SIGTERM, and the daemon's SIGTERM
-        // contract is to bring the bottle down — a unit test would close the
-        // Steam client somebody is playing on.
+        // daemon out with a SIGTERM, which brings the bottle down.
         if TestHost.isHosting { return reachable }
         // A registration has to exist before launchd can bring the agent up:
         // the never-registered machine registers now, an unapproved one is
@@ -149,9 +147,7 @@ enum DaemonService {
     /// A rebuild gets two attempts, each registering a pause after the
     /// unregister returns. Registering again at once can leave launchd
     /// refusing to spawn the new job (`EX_CONFIG`, `needs LWCR update`) where
-    /// a second rebuild takes: the launch self-heal on a wiped test Mac and
-    /// `sevo daemon repair` after another build's helper was booted out both
-    /// failed once that way and then worked.
+    /// a second rebuild takes.
     private static func rebuild() async -> RepairResult {
         healAttempted = true
         var result = await rebuildOnce()

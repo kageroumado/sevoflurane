@@ -96,9 +96,9 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
             return
         }
         // Record only: the tree is staged from this choice at the next spawn
-        // (``EngineRenderers/stage``), both halves together. Placing the macOS
-        // half here while the Windows half waits for a restart is what crossed
-        // 4.0's dylib with 3.0's DLLs.
+        // (``EngineRenderers/stage``), both halves together. Never place the
+        // macOS half here while the Windows half waits for a restart: that
+        // pairs one version's dylib with another's DLLs.
         D3DMetalInstaller.choose(version: entry.version)
     }
 

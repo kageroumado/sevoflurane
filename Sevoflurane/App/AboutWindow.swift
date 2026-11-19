@@ -3,8 +3,7 @@ import SwiftUI
 
 /// The About window and the two documents it opens: Acknowledgements (every
 /// third-party component and data source, with its license) and the app's
-/// own License. The standard About panel cannot carry either, and a Wine
-/// launcher carries more third-party work than most apps, so it gets a
+/// own License. The standard About panel can carry neither, so it gets a
 /// window of its own: icon, version, links, two buttons.
 ///
 /// Windows are built when asked for and released when closed, the way

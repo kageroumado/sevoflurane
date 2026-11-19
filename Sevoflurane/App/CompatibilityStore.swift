@@ -3,9 +3,8 @@ import Foundation
 /// What the Compatibility pane shows: the dependency catalog with live
 /// installed-state, the bottle's DLL overrides, and the Wine tool launchers.
 ///
-/// Live or preview, the same shape — the gallery draws this pane too, and a
-/// preview that could pour 200 MB of fonts into a bottle would be a poor
-/// kind of preview.
+/// Live or preview, the same shape: the gallery draws this pane too, through
+/// a simulated ``CompatibilityEnvironment``.
 @MainActor
 @Observable
 final class CompatibilityStore {

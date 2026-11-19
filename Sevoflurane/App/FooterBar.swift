@@ -31,8 +31,8 @@ struct FooterBar: View {
 
     var body: some View {
         // One `GlassEffectContainer` over the whole bar: glass sampled per control picks up
-        // whatever sits behind that spot, which is what made the chips and the glyph buttons look
-        // like different materials. Zero blend distance, because the controls sit closer together
+        // whatever sits behind that spot, so the chips and the glyph buttons would look like
+        // different materials. Zero blend distance, because the controls sit closer together
         // than any nonzero spacing allows before their glass pools into one shape.
         GlassEffectContainer(spacing: 0) {
             HStack(spacing: Theme.Space.xs) {

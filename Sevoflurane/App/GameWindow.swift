@@ -3,12 +3,13 @@ import AppKit
 /// The game's on-screen window, observed — what `sevo app launch` reports back
 /// so an agent's model holds a real window, not "launch requested".
 ///
-/// The frame is given twice on purpose: **points** (the Cocoa coordinate a
-/// click or a move uses — origin top-left of the primary display, y down, the
-/// same space `CGWindowListCopyWindowInfo` reports) and **pixels**
-/// (points × the display's backing scale — what a screenshot measures). A
-/// window on a display left of or above the primary has a negative origin;
-/// `offPrimary` says so, and `display` names which screen it landed on.
+/// The frame is given twice: **points** (global display coordinates, origin
+/// top-left of the primary display, y down, the space
+/// `CGWindowListCopyWindowInfo` reports and a click or a move uses) and
+/// **pixels** (points × the display's backing scale, what a screenshot
+/// measures). A window on a display left of or above the primary has a
+/// negative origin; `off_primary` says so, and `display` names which screen it
+/// landed on.
 enum GameWindow {
     private static func area(of entry: [String: Any]) -> CGFloat {
         guard let bounds = entry[kCGWindowBounds as String] as? [String: Any],

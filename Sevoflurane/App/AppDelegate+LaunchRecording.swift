@@ -96,13 +96,11 @@ extension AppDelegate {
     /// and the Game Mode session exist only while the game's process does, so
     /// they are sampled during the run rather than read at its close.
     ///
-    /// The same tick lets the display sleep again once no run is open: every
-    /// way a run closes — Steam's exit edge, a native runner's processes
-    /// going, the stall watch ending a game — passes through the recorder.
-    /// The daemon holds the display too, and lets it go when its probe cycle
-    /// finds the game window gone; that cycle is a minute apart while a game
-    /// is up, so every run closing wakes it, one followed at once by the next
-    /// game's launch included.
+    /// The same tick lets the display sleep again once no run is open, since
+    /// every way a run closes passes through the recorder. The daemon also
+    /// holds the display and lets it go when its probe cycle, a minute apart
+    /// while a game is up, finds the game window gone, so every run closing
+    /// wakes it.
     func startRunMeter() {
         runMeter?.cancel()
         runMeter = Task(name: "Sample the open runs' meters") { [runRecorder, weak self] in
@@ -222,18 +220,16 @@ extension AppDelegate {
     }
 
     /// Tells Discord which game is on screen, under that game's own Discord
-    /// application: a game Discord's database names shows the way its native
-    /// build would, and one it does not name shows under Sevoflurane's
-    /// application with its own name and, for a Steam game, its box art from
-    /// Steam's CDN. The database is asked by Steam app id, then by an adopted
-    /// program's executable, which is what Discord's own scanner goes by,
-    /// then by name.
+    /// application when Discord's database names it (asked by Steam app id,
+    /// then by an adopted program's executable, then by name), otherwise under
+    /// Sevoflurane's application with the game's name and, for a Steam game,
+    /// its box art from Steam's CDN.
     ///
-    /// Detached, because the name comes off disk and the socket is the Discord
-    /// client's to answer at its own pace. A game that ships its own Discord
-    /// library publishes a richer activity through the in-bottle bridge, so the
-    /// app leaves that one alone. The ticket is taken here on the main actor,
-    /// so a stop that lands during the lookup voids the publish.
+    /// Detached, because the name comes off disk and the Discord client
+    /// answers at its own pace. A game that ships its own Discord library
+    /// publishes through the in-bottle bridge, so the app leaves it alone. The
+    /// ticket is taken here on the main actor, so a stop that lands during the
+    /// lookup voids the publish.
     private func publishToDiscord(appID: Int) {
         guard Preferences.discordPresence else { return }
         let configured = GameConfig.game(appID).name
