@@ -133,6 +133,54 @@ struct NWJSDetectionTests {
         #expect(info.caution == nil)
     }
 
+    /// OMORI's layout: the binding four folders down, beside the stock
+    /// `greenworks.js` (which names `saveFilesToCloud` itself) and a plugin
+    /// whose cloud wrappers nothing calls.
+    @Test
+    func `a binding in www_js_libs is found, and unused cloud wrappers are not a cloud game`() throws {
+        let root = try makeGame()
+        defer { try? manager.removeItem(at: root) }
+        let libs = root.appendingPathComponent("www/js/libs")
+        let plugins = root.appendingPathComponent("www/js/plugins")
+        try manager.createDirectory(at: libs, withIntermediateDirectories: true)
+        try manager.createDirectory(at: plugins, withIntermediateDirectories: true)
+        try Data("native".utf8).write(to: libs.appendingPathComponent("greenworks-win32.node"))
+        try Data("greenworks.saveFilesToCloud([file_name], function() {});".utf8)
+            .write(to: libs.appendingPathComponent("greenworks.js"))
+        try Data("""
+        var steamworks = require("./js/libs/greenworks");
+        SteamManager.saveTextToCloud = function(file, contents, callback) {
+            steamworks.saveTextToFile(file, contents, function() { callback(); });
+        };
+        SteamManager.readTextFromCloud = function(file, callback) {
+            steamworks.readTextFromFile(file, function(contents) { callback(contents); });
+        };
+        """.utf8).write(to: plugins.appendingPathComponent("Archeia_Steamworks.js"))
+
+        let info = try #require(NWJSGames.detect(inDirectory: root))
+        #expect(info.greenworks)
+        #expect(info.greenworksCloud == false)
+
+        // The same wrapper, once a script calls it, makes it a cloud game.
+        try Data("SteamManager.saveTextToCloud('file1', DataManager.save());".utf8)
+            .write(to: plugins.appendingPathComponent("Saves.js"))
+        let calling = try #require(NWJSGames.detect(inDirectory: root))
+        #expect(calling.greenworksCloud == true)
+    }
+
+    @Test
+    func `a cloud call is attributed to the function it sits in`() {
+        let text = """
+        Store.save = function(file) { steamworks.saveTextToFile(file, '', function() {}); };
+        function load(file) { steamworks.readTextFromFile(file, function(c) {}); }
+        greenworks.saveFilesToCloud(['a']);
+        """
+        // Grouped by call name in `cloudCalls` order: save…, saveFilesToCloud, read….
+        #expect(NWJSGames.cloudCallers(in: text) == ["save", nil, "load"])
+        #expect(NWJSGames.isCalled("load", in: "function load(f) {}; load('x');"))
+        #expect(!NWJSGames.isCalled("load", in: "function load(f) {}; reload('x');"))
+    }
+
     @Test
     func `a directory with no loader is an ordinary Windows game`() throws {
         let root = try makeGame()

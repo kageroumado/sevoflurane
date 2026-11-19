@@ -119,8 +119,10 @@ nonisolated enum NWJSGames {
 
     /// Greenworks is a native node module, so a game that has one carries a
     /// `greenworks*.node` — under `node_modules`, beside a plugin, or at the
-    /// top. Three levels reaches every layout seen in the wild without
-    /// walking a multi-gigabyte asset tree.
+    /// top. Five levels reaches the deepest layout seen in the wild, an
+    /// unpacked `package.nw/www/js/libs/` (OMORI keeps its binding in
+    /// `www/js/libs/`, four down), while only listing the asset folders at
+    /// that depth, never reading them.
     private static func hasGreenworks(inDirectory directory: URL) -> Bool {
         func scan(_ url: URL, depth: Int) -> Bool {
             for entry in InstallDirectory.entries(in: url) {
@@ -131,7 +133,7 @@ nonisolated enum NWJSGames {
             }
             return false
         }
-        return scan(directory, depth: 3)
+        return scan(directory, depth: 5)
     }
 
     /// greenworks' Steam Cloud calls, the part of its surface the bridge to
@@ -142,21 +144,88 @@ nonisolated enum NWJSGames {
     /// asked of a game that bundles greenworks at all, and only of its
     /// scripts — a plugin directory is a few megabytes of text next to a
     /// multi-gigabyte asset tree.
+    ///
+    /// Two kinds of mention are not a call the game makes: greenworks' own
+    /// `greenworks.js`, which every game that vendors the module carries, and
+    /// a plugin's wrapper around a cloud call that no script ever calls (Archeia
+    /// Steamworks defines `saveTextToCloud`; OMORI never uses it).
     private static func usesSteamCloud(inDirectory directory: URL) -> Bool {
-        func scan(_ url: URL, depth: Int) -> Bool {
-            for entry in InstallDirectory.entries(in: url) {
-                if entry.isDirectory {
-                    if depth > 1, scan(entry.url, depth: depth - 1) { return true }
-                    continue
-                }
-                guard entry.name.lowercased().hasSuffix(".js"),
-                      let text = try? String(contentsOf: entry.url, encoding: .utf8)
-                else { continue }
-                if cloudCalls.contains(where: text.contains) { return true }
+        let scripts = scripts(inDirectory: directory, depth: 4)
+            .filter { !$0.name.lowercased().hasPrefix("greenworks") }
+        return scripts.contains { script in
+            cloudCallers(in: script.text).contains { caller in
+                guard let caller else { return true }
+                return scripts.contains { isCalled(caller, in: $0.text) }
             }
-            return false
         }
-        return scan(directory, depth: 4)
+    }
+
+    private static func scripts(
+        inDirectory directory: URL, depth: Int,
+    ) -> [(name: String, text: String)] {
+        var found: [(name: String, text: String)] = []
+        for entry in InstallDirectory.entries(in: directory) {
+            if entry.isDirectory {
+                if depth > 1 { found += scripts(inDirectory: entry.url, depth: depth - 1) }
+                continue
+            }
+            guard entry.name.lowercased().hasSuffix(".js"),
+                  let text = try? String(contentsOf: entry.url, encoding: .utf8)
+            else { continue }
+            found.append((entry.name, text))
+        }
+        return found
+    }
+
+    /// The function each cloud call in a script sits in, by name: the
+    /// innermost named definition (`name = function (`, `name: function (` or
+    /// `function name(`) whose body is still open at the call. `nil` for a
+    /// call outside any named function, which runs whenever the script does.
+    static func cloudCallers(in text: String) -> [String?] {
+        let definition = /([A-Za-z_$][\w$]*)\s*[=:]\s*function\s*\(|function\s+([A-Za-z_$][\w$]*)\s*\(/
+        var callers: [String?] = []
+        for call in cloudCalls {
+            for match in text.ranges(of: "\(call)(") {
+                let before = text[..<match.lowerBound]
+                let enclosing = before.matches(of: definition).reversed().first { found in
+                    isOpen(text[found.range.upperBound..<match.lowerBound])
+                }
+                let name = enclosing.map { String($0.output.1 ?? $0.output.2 ?? "") }
+                callers.append(name.flatMap { $0.isEmpty ? nil : $0 })
+            }
+        }
+        return callers
+    }
+
+    /// Whether the body that starts in `span` (just after a definition's
+    /// opening parenthesis) is still open at its end: its first `{` opened
+    /// and not yet matched.
+    private static func isOpen(_ span: Substring) -> Bool {
+        var depth = 0
+        var opened = false
+        for character in span {
+            if character == "{" {
+                depth += 1
+                opened = true
+            } else if character == "}" {
+                depth -= 1
+                if opened, depth == 0 { return false }
+            }
+        }
+        return opened && depth > 0
+    }
+
+    /// Whether `name` is called in `text` anywhere other than its own
+    /// definition: `name(` that is neither `function name(` nor a longer
+    /// identifier ending in `name`.
+    static func isCalled(_ name: String, in text: String) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        guard let call = try? NSRegularExpression(pattern: "(?<![\\w$])\(escaped)\\s*\\("),
+              let definition = try? NSRegularExpression(pattern: "function\\s+\(escaped)\\s*\\(")
+        else { return true }
+        let range = NSRange(text.startIndex..., in: text)
+        return call.numberOfMatches(in: text, range: range)
+            > definition.numberOfMatches(in: text, range: range)
     }
 
     // MARK: - The version a game was built against
