@@ -556,6 +556,18 @@ struct D3DMetalInstallTests {
     }
 
     @Test
+    func `a release is newer than its own betas, and a beta than the release before it`() {
+        let order = ["2.1", "3.0 beta 5", "3.0", "4.0 beta 1", "4.0 beta 2", "4.0 beta 10", "4.0", "4.0.1"]
+        let shuffled = ["4.0", "3.0", "4.0 beta 10", "2.1", "4.0.1", "4.0 beta 2", "3.0 beta 5", "4.0 beta 1"]
+        let sorted = shuffled
+            .map { D3DMetalInstaller.Installed(version: $0, root: URL(fileURLWithPath: "/\($0)")) }
+            .sorted().map(\.version)
+        #expect(sorted == order)
+        #expect(!D3DMetalInstaller.isOlder("4.0", than: "4.0 beta 2"))
+        #expect(!D3DMetalInstaller.isOlder("4.0", than: "4.0"))
+    }
+
+    @Test
     func `a toolkit's version comes only from a name shaped like Apple's`() {
         func version(_ name: String) -> String? {
             D3DMetalInstaller.version(ofVolume: URL(fileURLWithPath: "/Volumes/\(name)"))

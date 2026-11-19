@@ -183,7 +183,9 @@ final class GPTkDownload: NSObject {
           const y = b.version[i] || 0;
           if (x !== y) { return x > y; }
         }
-        return (a.beta || 0) > (b.beta || 0);
+        // A release follows its own betas: 4.0 is newer than 4.0 beta 2.
+        const rank = (c) => (c.beta === null ? Infinity : c.beta);
+        return rank(a) > rank(b);
       };
       const scan = () => {
         const found = [];

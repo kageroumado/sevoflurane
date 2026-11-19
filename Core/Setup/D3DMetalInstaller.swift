@@ -14,17 +14,43 @@ import Security
 /// Versions live side by side under `d3dmetal/<version>/` in Apple's own
 /// shape: the `.so` files are symlinks into `../../external/`, so splitting
 /// them from the framework leaves them dangling. The newest installed version
-/// is the default, because the betas are where the Direct3D 12 work lands.
+/// is the default, a beta of the next release included, because the betas
+/// are where the Direct3D 12 work lands.
 nonisolated enum D3DMetalInstaller {
     struct Installed: Equatable, Sendable, Comparable {
         /// As Apple names it: "3.0", "4.0 beta 2".
         let version: String
         let root: URL
 
-        /// Newest last; a beta sorts after its release of the same number.
+        /// Newest last, in the order Apple ships them: `3.0`, `4.0 beta 1`,
+        /// `4.0 beta 2`, `4.0`. A release follows its own betas.
         static func < (lhs: Installed, rhs: Installed) -> Bool {
-            lhs.version.compare(rhs.version, options: .numeric) == .orderedAscending
+            D3DMetalInstaller.isOlder(lhs.version, than: rhs.version)
         }
+    }
+
+    /// Whether toolkit version `lhs` shipped before `rhs`. A name that is no
+    /// version sorts by its text.
+    static func isOlder(_ lhs: String, than rhs: String) -> Bool {
+        guard let left = parts(of: lhs), let right = parts(of: rhs) else {
+            return lhs.compare(rhs, options: .numeric) == .orderedAscending
+        }
+        for index in 0 ..< max(left.numbers.count, right.numbers.count) {
+            let l = index < left.numbers.count ? left.numbers[index] : 0
+            let r = index < right.numbers.count ? right.numbers[index] : 0
+            if l != r { return l < r }
+        }
+        switch (left.beta, right.beta) {
+        case let (l?, r?): return l < r
+        case (.some, nil): return true
+        case (nil, _): return false
+        }
+    }
+
+    /// `4.0 beta 2` as its numbers and its beta; nil for any other shape.
+    private static func parts(of version: String) -> (numbers: [Int], beta: Int?)? {
+        guard let match = version.wholeMatch(of: /(\d+(?:\.\d+)*)(?: beta (\d+))?/) else { return nil }
+        return (match.1.split(separator: ".").compactMap { Int($0) }, match.2.flatMap { Int($0) })
     }
 
     enum InstallError: Error, CustomStringConvertible, Equatable {
@@ -165,7 +191,7 @@ nonisolated enum D3DMetalInstaller {
             if trashedHere { trashedFrom += 1 }
         }
         func ordered(_ versions: Set<String>) -> [String] {
-            versions.sorted { $0.compare($1, options: .numeric) == .orderedAscending }
+            versions.sorted { isOlder($0, than: $1) }
         }
         return Adoption(moved: ordered(moved), movedFrom: movedFrom, trashed: ordered(trashed), trashedFrom: trashedFrom)
     }
