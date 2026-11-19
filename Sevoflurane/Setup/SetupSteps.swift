@@ -1,9 +1,8 @@
 import Propofol
 import SwiftUI
 
-// The pages of the first-run assistant, one view each. ``SetupView`` owns the
-// step and the answers; a page draws them and reports a change through its
-// bindings.
+// The pages of the first-run assistant. ``SetupView`` owns the step and the
+// answers; a page reports changes through its bindings.
 
 /// The engine the assistant is asked to install.
 enum SetupEngineChoice {
@@ -12,8 +11,7 @@ enum SetupEngineChoice {
 }
 
 struct SetupWelcomeStep: View {
-    /// The website's feature highlights, word for word, so the first page and
-    /// the page that sent someone here promise the same things.
+    /// The website's feature highlights, word for word.
     private static let highlights: [SetupHighlight] = [
         SetupHighlight(
             icon: "arrow.up.left.and.arrow.down.right",
@@ -152,8 +150,7 @@ struct SetupEngineStep: View {
         }
     }
 
-    /// Where Dormison comes from: the download, the tarball this copy of the
-    /// app ships with, or a file someone chose.
+    /// Where Dormison comes from: a chosen file, the bundled tarball, or the download.
     private var dormisonCaption: String {
         if let tarball = provisioner.engineTarball {
             return String(localized: "Installs from \(tarball.lastPathComponent).")
@@ -164,8 +161,7 @@ struct SetupEngineStep: View {
         return "Sevoflurane's own engine: DirectX 12 through Apple's toolkit, and game upscaling."
     }
 
-    /// CodeWeavers sets the price; what is worth saying is the license state
-    /// of the copy on this Mac.
+    /// The license state of the CrossOver on this Mac.
     private var crossOverValue: String {
         guard let crossover else { return "14-day trial" }
         if crossover.licensed { return "Licensed" }
@@ -327,11 +323,9 @@ struct SetupInstallStep: View {
 }
 
 /// The managed engine cannot ship Apple's D3DMetal, so this step fetches it
-/// in the app, through Apple's own sign-in. CrossOver brings its own, and
-/// never sees this step.
-///
-/// While Apple's page is on it, the window is tall (``SetupView``) and the
-/// glyph gives its room to the page.
+/// through Apple's own sign-in; CrossOver brings its own and skips it. While
+/// Apple's page is on it, the window is tall (``SetupView``) and the glyph is
+/// hidden.
 struct SetupGraphicsStep: View {
     let download: GPTkDownload
     let store: GraphicsStore?
@@ -412,8 +406,7 @@ struct SetupDoneStep: View {
         }
     }
 
-    /// Where to find the app once setup closes, with the menu-bar glyph set
-    /// into the sentence so the eye has something to match against the menu bar.
+    /// Where to find the app once setup closes, with the menu-bar glyph inline.
     private var caption: Text {
         let icon = Image(nsImage: MenuBarIcon.image(badged: false))
         return switch window {

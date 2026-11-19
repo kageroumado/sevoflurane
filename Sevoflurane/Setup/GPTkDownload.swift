@@ -2,25 +2,15 @@ import Foundation
 import Observation
 import WebKit
 
-/// Drives the download of Apple's D3DMetal, by one of two routes: Apple's page
-/// hosted here, or the user's own browser with ``GPTkFolderWatch`` waiting for
-/// the file. A file the user already has is installed directly.
+/// Drives the download of Apple's D3DMetal: Apple's page hosted here, or the
+/// user's own browser with ``GPTkFolderWatch`` waiting for the file.
 ///
-/// D3DMetal lives in the "Evaluation environment for Windows games" disk image.
-/// The larger "Game Porting Toolkit" image carries that same image inside it,
-/// beside developer tools this app never uses; either installs, and one per
-/// version is enough.
-///
-/// The toolkit is behind Apple's own sign-in — `download.developer.apple.com`
-/// refuses anyone without an authenticated developer session, and that
-/// sign-in is where each user accepts Apple's license. So the flow is Apple's
-/// own web flow, hosted in a `WKWebView`: the user signs in as themselves
-/// (most Mac accounts already have an Apple ID; enrolling as a developer is
-/// free and happens in the same window), the page serves them the release and
-/// beta DMGs, and the download delegate here catches each one and installs it.
-/// Nothing is hosted or redistributed by us; this only removes the round trip
-/// to a browser and the `~/Downloads` hunt. The same pattern the Xcode version
-/// managers use for Xcode itself, on the same Apple infrastructure.
+/// D3DMetal lives in the "Evaluation environment for Windows games" disk
+/// image; the larger "Game Porting Toolkit" image carries it inside, and
+/// either installs. `download.developer.apple.com` serves only an
+/// authenticated developer session, where each user accepts Apple's license,
+/// so the user signs in to a free account in a `WKWebView` and the download
+/// delegate catches and installs each DMG. Nothing is redistributed.
 @MainActor
 @Observable
 final class GPTkDownload: NSObject {
@@ -71,8 +61,7 @@ final class GPTkDownload: NSObject {
     private(set) var pageLoaded = false
 
     /// Installs a downloaded DMG and answers a failure string, or `nil` on
-    /// success. Injected so this controller need not know about the engine —
-    /// the panel wires it to `GraphicsStore.installD3DMetal`.
+    /// success; the panel wires it to `GraphicsStore.installD3DMetal`.
     var install: (@MainActor (URL) async -> String?)?
     /// Called with each version as it finishes installing.
     var onInstalled: (@MainActor (String) -> Void)?
@@ -82,12 +71,10 @@ final class GPTkDownload: NSObject {
         folderWatch.onFound = { [weak self] url in self?.installLocal(url, found: true) }
     }
 
-    /// Installs a disk image already on this Mac: one the user chose, or one
-    /// the folder watch saw arrive. The file is left where it is.
-    ///
-    /// A version already installed, or already on its way, is passed over, so
-    /// both of Apple's images for one version install once. A file the user
-    /// chose installs whatever is there: choosing it is asking.
+    /// Installs a disk image already on this Mac and leaves the file in place.
+    /// A found image whose version is installed or on its way is skipped, so
+    /// both of Apple's images for one version install once; a chosen file
+    /// always installs.
     func installLocal(_ url: URL, found: Bool = false) {
         let filename = url.lastPathComponent
         if found, let version = Self.version(inFilename: filename) {
@@ -106,11 +93,9 @@ final class GPTkDownload: NSObject {
         items.contains { $0.phase == .downloading || $0.phase == .installing }
     }
 
-    /// Where the automatic pick-and-download stands, for the panel's
-    /// overlay: `searching` covers the page from sign-in until versions are
-    /// chosen, `downloading` keeps it covered while the picks download and
-    /// install, and `manual` is the fallback when nothing parseable
-    /// stabilized, the one phase that shows Apple's page itself.
+    /// Where the automatic pick-and-download stands, for the panel's overlay.
+    /// `manual`, the fallback when nothing parseable stabilized, is the one
+    /// phase that shows Apple's page itself.
     enum AutoPhase {
         case idle
         case searching
@@ -125,12 +110,10 @@ final class GPTkDownload: NSObject {
     /// The row the manual fallback outlined on Apple's page, as the page
     /// names it: "Evaluation environment for Windows games 4.0 beta 2".
     private(set) var manualCandidate: String?
-    /// Whether a link toward the paid Developer Program was stopped and
-    /// Apple's download page put back in its place.
+    /// Whether a link toward the paid Developer Program was stopped.
     private(set) var stoppedEnrollment = false
 
-    /// Uncovers Apple's page, for clicking a download by hand after an
-    /// automatic one failed.
+    /// Uncovers Apple's page after an automatic download failed.
     func showPage() {
         autoPhase = .manual
     }
@@ -143,11 +126,8 @@ final class GPTkDownload: NSObject {
 
     @ObservationIgnored private(set) lazy var webView: WKWebView = {
         let configuration = WKWebViewConfiguration()
-        // Sign-in is the flow's whole friction, so the moment the toolkit
-        // links exist (Apple's list renders after load, and only once the
-        // session is authenticated) they are clicked for the user. The
-        // duplicate guard in `decideDestinationUsing` keeps a re-render's
-        // re-click from downloading a file twice.
+        // Reports the toolkit links once Apple's authenticated list renders;
+        // `decideDestinationUsing` refuses a second copy of a file.
         configuration.userContentController.addUserScript(WKUserScript(
             source: Self.autoDownloadScript,
             injectionTime: .atDocumentEnd,
@@ -165,19 +145,14 @@ final class GPTkDownload: NSObject {
 
     /// Reports the newest release and newest beta toolkit DMGs to Swift,
     /// which downloads them directly: two links clicked in one tick let the
-    /// second navigation cancel the first before it becomes a download.
-    /// Parsing rules, from the live anchor list: versions parse from the
-    /// *filename* segment only (a row's path can say 1.1 while its file is
-    /// 2.1); "Evaluation environment for Windows games" is the same product
-    /// under Apple's alternate name; and the list renders incrementally, so
-    /// picks wait until the parsed candidate set has been stable for three
-    /// seconds.
-    /// "list" fires when the signed-in download table first exists, "none"
-    /// when it stabilizes with nothing parseable — the panel's overlay and
-    /// fallback hint key off those. With "none", the row whose text names the
-    /// newest version (a release over its own betas, the evaluation
-    /// environment over the toolkit) is outlined and scrolled to, and its
-    /// name travels as `candidate`.
+    /// second navigation cancel the first. Versions parse from the filename
+    /// segment only (a row's path can say 1.1 while its file is 2.1), and
+    /// picks wait until the parsed set has been stable for three seconds,
+    /// since the list renders incrementally.
+    ///
+    /// "list" fires when the signed-in table first exists; "none" when it
+    /// stabilizes with nothing parseable, outlining the row that names the
+    /// newest version and sending its name as `candidate`.
     private static let autoDownloadScript = """
     (function () {
       if (window.__sevoGPTkAutoDownload) { return; }

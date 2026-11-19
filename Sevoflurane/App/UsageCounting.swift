@@ -4,18 +4,14 @@ import Foundation
 /// How many people use Sevoflurane, and Sevoflurane's own crashes, through
 /// Digoxin at the tier the person chose (``Preferences/usageCounting``).
 ///
-/// Independent of the community database (``Preferences/sharesRunStats``):
-/// a check-in carries the versions, the chip family, the memory class, the
-/// language and the count of days used in the last week, and names no game
-/// or program. The server keeps no properties for this app, so none are
-/// sent. A game's crash stays on ``CrashPrompt``'s path, sent only when the
-/// player chooses.
+/// Independent of ``Preferences/sharesRunStats``. A check-in carries the
+/// versions, chip family, memory class, language and days used in the last
+/// week, and names no game or program. Game crashes go through ``CrashPrompt``.
 nonisolated enum UsageCounting {
     static let app = "sevoflurane"
 
-    /// Production for a release build. A Debug build is a second
-    /// installation (``AppIdentity``) and reports to a Digoxin on this Mac,
-    /// or to the one `SEVOFLURANE_DIGOXIN_URL` names.
+    /// Production for a release build; a Debug build reports to a local
+    /// Digoxin or `SEVOFLURANE_DIGOXIN_URL`.
     static let baseURL: URL = {
         #if DEBUG
             ProcessInfo.processInfo.environment["SEVOFLURANE_DIGOXIN_URL"].flatMap(URL.init(string:))
@@ -42,8 +38,7 @@ nonisolated enum UsageCounting {
         }
     }
 
-    /// The app came forward or its popover opened: counts the day, and
-    /// sends a helper crash that happened while the app stayed up.
+    /// On use: counts the day and sends helper crashes since the last look.
     static func noteUse() {
         Task.detached(name: "Usage counting on use") {
             await submitOwnCrashes()
@@ -55,7 +50,7 @@ nonisolated enum UsageCounting {
     static func choose(_ tier: ConsentTier) {
         let previous = Preferences.usageCounting
         Preferences.usageCounting = tier
-        // Crashes before the choice are not the choice's to send.
+        // Crashes from before the choice are never sent.
         if tier == .crashReports, previous != .crashReports {
             Preferences.ownCrashesCheckedAt = Date()
         }
@@ -66,9 +61,8 @@ nonisolated enum UsageCounting {
         }
     }
 
-    /// One report per crash of the app or its helper since the last look,
-    /// at the crash-reports tier; the look moves forward at every tier, so
-    /// turning reports on later sends nothing from before.
+    /// Sends one report per crash since the last look, at the crash-reports
+    /// tier. The look moves forward at every tier.
     private static func submitOwnCrashes() async {
         let now = Date()
         let since = Preferences.ownCrashesCheckedAt
@@ -85,14 +79,11 @@ nonisolated enum UsageCounting {
 
 /// Which of the crash reports macOS wrote belong to this copy of Sevoflurane.
 ///
-/// A Debug build and the installed app run under the same process names, and
-/// macOS writes `procPath` with the home folder and other volumes masked
-/// (`/Users/USER/*/…`), so the path cannot tell them apart. The header line
-/// can: the app's crash names its bundle identifier, which differs between
-/// the two, and every crash names the UUID of the image that crashed.
+/// Debug and installed builds share process names and macOS masks
+/// `procPath` (`/Users/USER/*/…`), so the header line's bundle identifier
+/// and image UUID tell them apart.
 nonisolated enum OwnCrashReports {
-    /// The app and the background helper inside it. Wine and game
-    /// processes are the games', never these.
+    /// The app and its background helper.
     static let processNames = ["Sevoflurane", "SevofluraneDaemon"]
 
     /// `bug_type` of a crash. A hang or a spin is written under other types.
@@ -100,11 +91,10 @@ nonisolated enum OwnCrashReports {
 
     /// What this copy's crashes carry in their header line.
     struct Identity: Equatable {
-        /// The app's bundle identifier: a crash of the app names it, whichever
-        /// build of this installation crashed.
+        /// The app's bundle identifier, which an app crash names.
         var bundleID: String?
-        /// The Mach-O UUIDs of the app and its helper, uppercase: the helper is
-        /// a tool, and its crashes are this build's when the UUID matches.
+        /// The Mach-O UUIDs of the app and its helper, uppercase; a helper
+        /// crash has no bundle identifier.
         var imageUUIDs: Set<String>
 
         static var running: Identity {
@@ -140,8 +130,7 @@ nonisolated enum OwnCrashReports {
 // MARK: - Preferences
 
 nonisolated extension Preferences {
-    /// The Digoxin tier the person chose; `nil` until they have been asked,
-    /// which is what makes the question appear once.
+    /// The Digoxin tier the person chose; `nil` until asked.
     static var usageCounting: ConsentTier? {
         get { shared.string(forKey: usageCountingKey).flatMap(ConsentTier.init(rawValue:)) }
         set { shared.set(newValue?.rawValue, forKey: usageCountingKey) }
@@ -149,8 +138,7 @@ nonisolated extension Preferences {
 
     static let usageCountingKey = "usageCounting"
 
-    /// When the crash reports of the app and its helper were last looked
-    /// for: reports written after it are the ones not yet sent.
+    /// When own crash reports were last looked for; later ones are unsent.
     static var ownCrashesCheckedAt: Date? {
         get { app.object(forKey: "ownCrashesCheckedAt") as? Date }
         set { app.set(newValue, forKey: "ownCrashesCheckedAt") }

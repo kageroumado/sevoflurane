@@ -4,16 +4,13 @@ import SwiftUI
 
 // MARK: - Steam
 
-/// Metrics the Steam row and the renderer switch share, so the two zones
-/// under the games stand the same height.
+/// Shared by the Steam row and the renderer switch so they match in height.
 private enum ZoneMetrics {
     static let controlHeight: CGFloat = 30
 }
 
-/// The client in one row of glass: the way to its window, the friends list,
-/// the app's Discord, and how the client is. The last three rest as icons and
-/// say their word on hover, so Open Steam, the row's one accent, keeps most
-/// of it.
+/// Open Steam, then the friends list, Discord and status as icons that show
+/// their word on hover.
 struct SteamRow: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
@@ -30,8 +27,7 @@ struct SteamRow: View {
     }
 }
 
-/// A glass capsule holding a symbol, and a word beside it while the pointer
-/// is over it.
+/// A glass capsule holding a symbol, with its word while hovered.
 private struct HoverLabel: View {
     /// An SF Symbol by name, or an asset drawn as a template at symbol size.
     enum Glyph {
@@ -89,20 +85,15 @@ private struct HoverLabel: View {
     }
 }
 
-/// The client's status atom. Its state is in the symbol's shape, never its
-/// color alone: a green dot and a red one are the same dot to a colorblind
-/// eye. Never give it a control: a status light that also toggles gets
-/// pressed as a light — the playtest's two unexplained pauses were exactly
-/// that. The auto-restart switch is in Settings › General.
+/// The client's status, told by the symbol's shape for colorblind eyes.
+/// Never give it a control: a status light that toggles gets pressed by
+/// accident and pauses the client.
 private struct StatusChip: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
     @State private var isHovered = false
 
-    /// Every word that reports the client's run state names Steam, because the symbol alone says
-    /// only how and nothing beside it says what about. The ones that skip the name report
-    /// something else: the Steam account (signed out, or signed in elsewhere), this app's own switch, and the restart it is in the
-    /// middle of.
+    /// Words about the client's run state name Steam; the symbol alone does not.
     private var status: (word: LocalizedStringResource, symbol: String) {
         switch supervisor.health {
         case .starting, .launching: ("Steam starting", "hourglass")
@@ -134,20 +125,15 @@ private struct StatusChip: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { isHovered = hovering }
             }
             .help(tooltip)
-            // Text to VoiceOver, where the glass would make it an unknown
-            // element: this reports, it does not act.
+            // Plain text to VoiceOver; the glass would read as an unknown element.
             .accessibilityRepresentation {
                 Text(status.word)
             }
     }
 }
 
-/// The friends list, with the number of waiting conversations beside the
-/// icon while there are any. The count is conversations, not messages — the
-/// number Steam posts to the client for its own tray badge, and a
-/// conversation is what a click opens. It opens the list, or the oldest
-/// waiting conversation, as its own window; Steam's desktop window is never
-/// involved.
+/// The friends list, badged with waiting conversations (Steam's own tray
+/// count). A click opens the list or the oldest waiting chat in its own window.
 private struct FriendsButton: View {
     let host: SteamWebHost
     @State private var isHovered = false
@@ -177,9 +163,8 @@ private struct FriendsButton: View {
     }
 }
 
-/// The app's Discord server, where playtests and questions go. The mark is
-/// Discord's own (the Simple Icons tracing, CC0), drawn as a template so it
-/// takes the row's secondary color like the symbols beside it.
+/// The app's Discord server. The mark is the Simple Icons tracing (CC0),
+/// drawn as a template.
 private struct DiscordButton: View {
     static let inviteURL = URL(string: "https://discord.gg/BJYJvZGqHX")!
     @State private var isHovered = false
@@ -226,10 +211,8 @@ private struct OpenSteamButton: View {
 
 // MARK: - Bottle completeness
 
-/// The one line the popover says about an unfinished bottle: that required
-/// components are missing, and where to install them. Games still launch —
-/// this is a note, not a gate — so it stays a chip rather than a card, and it
-/// is absent on a complete bottle.
+/// Says required components are missing and where to install them; absent
+/// on a complete bottle.
 struct BottleIncompleteChip: View {
     let summary: String?
 
@@ -253,10 +236,7 @@ struct BottleIncompleteChip: View {
 }
 
 private extension SupervisorHealth {
-    /// Whether a click on Open Steam would actually put Steam on screen.
-    /// While the client is coming up, restarting, or crash-looped, the
-    /// health card above already says what's happening — an enabled button
-    /// under it would promise a window that can't appear.
+    /// Whether a click on Open Steam would put Steam on screen.
     var canOpenSteam: Bool {
         switch self {
         case .starting, .launching, .restarting, .gaveUp: false

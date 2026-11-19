@@ -1,38 +1,26 @@
 import Propofol
 import SwiftUI
 
-/// What Settings can ask of the running Steam client — injected by the
-/// window so the panes stay host-free, and absent in the gallery, whose
-/// tiles must never uninstall anything.
+/// What Settings can ask of the running Steam client; absent in the gallery.
 @MainActor
 struct SteamActions {
     /// Brings Steam up and opens its own settings window.
     var openSteamSettings: () -> Void
-    /// The client's uninstall flow for one app; its confirmation dialog
-    /// arrives as a native window.
+    /// The client's uninstall flow for one app.
     var uninstall: (_ appID: Int) -> Void
     var restartClient: () -> Void
-    /// Ends a stuck menu-bar tracking session, answering which root menus were
-    /// open — the way out of the macOS 27 menu hang from Settings.
+    /// Ends a stuck menu-bar tracking session, answering which root menus were open.
     var cancelStuckMenus: () -> [String]
-    /// Draws or removes the Mac compatibility strip on the game page that is
-    /// already open, so the switch shows its result where it is about.
+    /// Applies the Mac compatibility strip switch to the open game page.
     var applyCompatibilityStrip: () -> Void
-    /// Puts the Styles folder's stylesheet on the open windows and pages, or
-    /// takes it off, to match the switches.
+    /// Applies the Styles folder's stylesheet switches to open windows and pages.
     var applyUserStyles: () -> Void
     /// Reloads Steam's pages so they carry the Streamer Mode mask, or lose it.
     var applyStreamerMode: () -> Void
 }
 
-/// Settings: General, Graphics, Engine, Games, Storage, About. The wizard
-/// covers first run; this is everything after it.
-///
-/// A searchable sidebar rather than a row of tabs, because the knobs that
-/// bring someone here are the ones they know by name — "msync", "renderer",
-/// "open at login" — and not by which pane happens to hold them. Searching
-/// lists the matching settings themselves; picking one opens its pane and
-/// flashes the row.
+/// Settings, one pane per ``SettingsCategory``. The sidebar search lists
+/// matching settings by name; picking one opens its pane and flashes the row.
 struct SettingsView: View {
     let provisioner: Provisioner
     let graphics: GraphicsStore
@@ -43,8 +31,7 @@ struct SettingsView: View {
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
-    /// Opens the report window, which lives beside Settings rather than in
-    /// it. Absent in the gallery, where no second window opens.
+    /// Opens the report window; absent in the gallery.
     var showReports: (() -> Void)?
     @Bindable var navigation = SettingsNavigation()
 
@@ -542,12 +529,10 @@ struct SearchableSetting: Identifiable, Equatable {
     }
 }
 
-/// Every row search can send someone to. A pane marks its row with the anchor
+/// Every row search can send someone to. A pane marks its row
 /// (``SwiftUI/View/highlightable(_:highlighted:)``) and
-/// ``SettingsCategory/searchableItems`` names it; the two sets are the same
-/// one, and `SettingsSearchTests` fails if they drift. A row with no anchor is
-/// a row search cannot reach, and an anchor with no searchable item is a flash
-/// nothing can ask for.
+/// ``SettingsCategory/searchableItems`` names it; `SettingsSearchTests`
+/// fails if the two sets drift.
 enum SettingsAnchor: String, CaseIterable {
     case generalOpenAtLogin = "general.openAtLogin"
     case generalSteamSettings = "general.steamSettings"
@@ -608,13 +593,10 @@ struct SettingsSidebar: View {
     @Binding var searchText: String
     @Binding var highlighted: SettingsAnchor?
 
-    /// One row per matching setting, each carrying the pane it lives in.
-    ///
-    /// Flat by design: the sidebar is a `List`, and a `Section` header row
-    /// beside content rows gives AppKit's table two kinds of row view to
-    /// constrain against each other when the results change under a live
-    /// selection — the layout exception that took the app down. Grouping by
-    /// pane belongs in the row, not in the list's structure.
+    /// One row per matching setting, with its pane. Never group the results
+    /// with `Section`: header rows beside content rows make AppKit's table
+    /// raise a layout exception, crashing the app, when results change under
+    /// a live selection.
     private var matches: [Match] {
         SettingsCategory.allCases.flatMap { category in
             category.searchableItems
@@ -635,9 +617,7 @@ struct SettingsSidebar: View {
     var body: some View {
         List(selection: $category) {
             if searchText.isEmpty {
-                // The sidebar tints a row's icon itself. On the selected row of a key
-                // window the fill is the gold accent, where the system's white label is
-                // hard to read; an inactive window's selection is gray and keeps its own.
+                // White on the gold selection of a key window is hard to read.
                 ForEach(SettingsCategory.allCases) { item in
                     Label(item.title, systemImage: item.icon)
                         .foregroundStyle(
@@ -649,8 +629,7 @@ struct SettingsSidebar: View {
             } else {
                 ForEach(matches) { match in
                     Button { reveal(match.item, in: match.category) } label: {
-                        // The pane under the setting's name: side by side, the
-                        // sidebar's width truncates both to a few letters.
+                        // Stacked: side by side, the sidebar truncates both.
                         Label {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(match.item.title)
@@ -673,9 +652,8 @@ struct SettingsSidebar: View {
         .frame(minWidth: 190)
     }
 
-    /// Opens the setting's pane and flashes its row, long enough to find with
-    /// the eye and short enough not to stay behind as decoration. A later
-    /// pick owns the light, so an earlier one's timer leaves it on.
+    /// Opens the setting's pane and flashes its row for 1.8 s; a later pick
+    /// owns the light.
     private func reveal(_ item: SearchableSetting, in category: SettingsCategory) {
         self.category = category
         highlighted = item.id
@@ -734,10 +712,9 @@ private struct SettingsPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The toolbar's safe area is sized for a title and a subtitle, and a
-        // pane has only the title. The form runs under the titlebar and this
-        // bar holds back just the title's height; it needs content to exist,
-        // and the soft edge effect needs a bar to fade under.
+        // The toolbar's safe area fits a title and subtitle; the form runs
+        // under the titlebar and this bar holds back only the title's height,
+        // giving the soft edge effect a bar to fade under.
         .safeAreaBar(edge: .top) {
             Text(" ").frame(width: 1, height: 42)
         }
@@ -747,9 +724,8 @@ private struct SettingsPane: View {
     }
 }
 
-/// A control with its caption under the whole row. A caption inside a
-/// picker's own label shares the row with the value, and a long value leaves
-/// it a column a few words wide.
+/// A control with its caption under the whole row; inside a picker's label a
+/// long value squeezes it.
 struct CaptionedRow<Control: View>: View {
     let caption: String
     /// Orange for a caption that reports a failure.
@@ -775,8 +751,7 @@ private struct HighlightModifier: ViewModifier {
     let highlighted: SettingsAnchor?
 
     func body(content: Content) -> some View {
-        // The light spreads past the row instead of the row making room for
-        // it, so a row search can reach lines up with one it cannot.
+        // Spreads past the row so lit and unlit rows stay aligned.
         content
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
@@ -794,8 +769,7 @@ private struct HighlightModifier: ViewModifier {
 }
 
 extension View {
-    /// Marks this row as the one search flashes for `anchor`. A `nil` anchor
-    /// gives it nothing to light up for.
+    /// Marks this row as the one search flashes for `anchor`.
     func highlightable(_ anchor: SettingsAnchor?, highlighted: SettingsAnchor?) -> some View {
         modifier(HighlightModifier(anchor: anchor, highlighted: highlighted))
     }

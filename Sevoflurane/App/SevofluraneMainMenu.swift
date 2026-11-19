@@ -3,10 +3,9 @@ import AppKit
 /// Builds the app's menu bar.
 ///
 /// A menu-bar-only app has no menu bar until one of Steam's windows promotes
-/// it to a regular app. This is also the load-bearing half of hosting a web
-/// view:
-/// WebKit routes ⌘C, ⌘V and friends through the responder chain, so text
-/// editing anywhere in Steam's UI only works if an Edit menu claims those keys.
+/// it to a regular app. WebKit routes ⌘C, ⌘V and the other editing keys
+/// through the responder chain, so text editing anywhere in Steam's UI works
+/// only if an Edit menu claims those keys.
 enum SevofluraneMainMenu {
     /// Steam's strip order (Steam, View, Friends, Games) sits between the app
     /// menu and Edit; Steam's Help becomes the macOS Help menu. The app's own

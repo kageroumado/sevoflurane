@@ -1,28 +1,21 @@
 import Foundation
 
-/// What the Storage pane shows, and the only thing that removes any of it.
-///
-/// Every reach for the disk goes through ``StorageEnvironment``: the gallery
-/// draws this pane too, and a preview that could empty a games library — or
-/// trash the app bundle, which the live uninstall ends by doing — would be a
-/// poor kind of preview.
+/// What the Storage pane shows and removes. All disk access goes through
+/// ``StorageEnvironment``, so the gallery's copy touches nothing.
 @MainActor
 @Observable
 final class StorageStore {
     private(set) var entries: [StorageInventory.Entry]
-    /// The disk all of it sits on, for the bar above the list.
     private(set) var volume: StorageInventory.Volume?
-    /// What is installed, largest first — the detail behind the Games row.
+    /// What is installed, largest first.
     private(set) var games: [StorageInventory.Game] = []
-    /// The Windows programs added by hand — the detail behind the Added
-    /// programs row.
+    /// The Windows programs added by hand.
     private(set) var programs: [StorageInventory.Program] = []
-    /// Steam's game libraries and the drives they are on.
     private(set) var libraries: [StorageInventory.Library] = []
-    /// The last thing this pane could not do, for the line under the list.
+    /// The last thing this pane could not do.
     private(set) var problem: String?
     private(set) var isMeasuring = false
-    /// Whether the client has to stop before an uninstall can take the bottle.
+    /// Whether an uninstall is running.
     private(set) var isUninstalling = false
     private let environment: any StorageEnvironment
 
@@ -33,8 +26,7 @@ final class StorageStore {
         volume = environment.volume()
     }
 
-    /// The volume divided between what is measured so far and everything
-    /// else, or `nil` when the volume could not be read.
+    /// The volume divided by what is measured so far; `nil` without a volume.
     var breakdown: StorageBreakdown? {
         volume.map {
             StorageBreakdown.make(entries: entries, volumeUsed: $0.used, volumeTotal: $0.capacity)
@@ -45,8 +37,8 @@ final class StorageStore {
         entries.map { max(0, $0.bytes) }.reduce(0, +)
     }
 
-    /// Sizes arrive one at a time: `du` over a games library takes seconds,
-    /// and a row that fills in is better than a pane that waits.
+    /// Sizes arrive one at a time, so rows fill in while `du` spends seconds
+    /// on a games library.
     func measure() async {
         guard !isMeasuring else { return }
         isMeasuring = true
@@ -80,14 +72,12 @@ final class StorageStore {
 
     /// Games in other bottles the active one could link.
     private(set) var linkable: [SharedGames.Candidate] = []
-    /// Links whose files are in place but whose manifest waits for the
-    /// restart — Steam's library watcher wobbles visibly at a manifest
-    /// landing mid-session, so it lands on the way down instead.
+    /// Links whose manifest waits for the restart: Steam's library watcher
+    /// wobbles visibly at a manifest landing mid-session.
     private(set) var pendingLinks: [SharedGames.Candidate] = []
     /// The installed games that are links into another bottle.
     private(set) var linkedGames: Set<Int> = []
-    /// A link or unlink landed; Steam reads manifests at startup, so the
-    /// change is invisible until the client restarts.
+    /// A link or unlink landed; Steam reads manifests only at startup.
     private(set) var needsClientRestart = false
 
     func link(_ candidate: SharedGames.Candidate) {
@@ -116,8 +106,7 @@ final class StorageStore {
         refreshSharing()
     }
 
-    /// Writes the pending manifests — called right before the restart that
-    /// makes Steam read them, so the mid-session watcher window is seconds.
+    /// Writes the pending manifests; call right before the restart.
     func applyPendingLinks() {
         for candidate in pendingLinks {
             do {
@@ -175,9 +164,8 @@ final class StorageStore {
         }
     }
 
-    /// Everything this app made, and optionally the bottle it made it in.
-    /// The caller quits the app when this returns — the bundle is already in
-    /// the Trash by then.
+    /// Trashes everything this app made, optionally with its bottle; the
+    /// caller then quits.
     func uninstall(
         includingBottle: Bool, provisioner: Provisioner, supervisor: ClientSupervisor?,
     ) async {
@@ -199,9 +187,7 @@ final class StorageStore {
         provisioner.setOpenAtLogin(false)
         environment.forgetSettings()
         entries = environment.entries()
-        // Last, so everything the app would need to run again is already
-        // gone: the bundle itself. The running process keeps its image; the
-        // caller's terminate ends it.
+        // Last: the running process keeps its image until terminate.
         environment.trashAppBundle()
     }
 }

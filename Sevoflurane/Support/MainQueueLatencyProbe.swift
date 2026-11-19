@@ -3,25 +3,20 @@ import Foundation
 import os
 import Synchronization
 
-/// A benchmark instrument: how long the main thread takes to answer a ping
-/// while one scenario step runs. A ping is a block posted to the main queue
-/// from a user-interactive thread every ``MainQueueLatencyProbe/pingInterval``;
-/// the time until it runs is the main thread's queueing delay at that moment.
-/// A delay above ``MainQueueLatencyProbe/stallThreshold`` is a stall — the
-/// main thread was busy, or blocked behind lower-priority work — and is
-/// also emitted as a `MainThreadStall` Point of Interest so Instruments can
-/// line it up with what every other thread was doing.
+/// A benchmark instrument for `runSmokeBenchmark`: the main queue's
+/// queueing delay, measured by a block posted from a user-interactive
+/// thread every ``MainQueueLatencyProbe/pingInterval``. A delay above
+/// ``MainQueueLatencyProbe/stallThreshold`` is a stall, also emitted as a
+/// `MainThreadStall` Point of Interest for Instruments.
 ///
-/// It runs only inside `runSmokeBenchmark`, and it measures queueing delay
-/// rather than responsiveness: a nested event loop that never ends still
-/// drains the main queue, so a frozen menu reads here as zero delay.
-/// ``MenuTrackingWatchdog`` is what watches for that.
+/// A nested event loop that never ends still drains the main queue, so a
+/// frozen menu reads here as zero delay; ``MenuTrackingWatchdog`` watches
+/// for that.
 final nonisolated class MainQueueLatencyProbe: Sendable {
     static let pingInterval: Duration = .milliseconds(16)
     static let stallThreshold: Duration = .milliseconds(50)
 
-    /// What one window of pings saw. `pings` is how many were delivered;
-    /// `maxDelayMilliseconds` the worst single queueing delay.
+    /// What one window of pings saw.
     struct Snapshot: Encodable, Equatable {
         var pings: Int
         var maxDelayMilliseconds: Double
@@ -63,8 +58,7 @@ final nonisolated class MainQueueLatencyProbe: Sendable {
         state.withLock { $0.running = false }
     }
 
-    /// The counters since the previous snapshot, which are then reset — one
-    /// call per scenario step gives per-step figures.
+    /// The counters since the previous snapshot, then reset.
     func snapshotAndReset() -> Snapshot {
         state.withLock { state in
             defer {
@@ -81,8 +75,7 @@ final nonisolated class MainQueueLatencyProbe: Sendable {
         state.withLock(\.running)
     }
 
-    /// Accounts one delivered ping. Internal so a test can feed delays
-    /// without a live main run loop.
+    /// Accounts one delivered ping; internal so a test can feed delays.
     func record(delay: Duration) {
         let milliseconds = delay.milliseconds
         let stalled = delay >= Self.stallThreshold

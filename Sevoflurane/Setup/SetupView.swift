@@ -1,37 +1,30 @@
 import Propofol
 import SwiftUI
 
-/// The first-run assistant. Zero questions on the happy path: every step has
-/// a detected default, and
-/// the user only chooses when the choice costs money (CrossOver) or is
-/// genuinely ambiguous.
+/// The first-run assistant. Every step has a detected default; the user
+/// chooses only when the choice costs money (CrossOver) or is ambiguous.
 struct SetupView: View {
     let provisioner: Provisioner
     let onFinished: () -> Void
-    /// Which of Steam's windows the finish button would show, and whether it
-    /// exists yet: the button waits for it, so pressing it swaps the assistant
-    /// for that window at once. A simulated run has no Steam and says library.
+    /// Which of Steam's windows the finish button would show; the button
+    /// waits until it exists. A simulated run says library.
     var steamWindow: () -> SetupSteamWindow = { .library }
     /// Rebuilds the background helper when it will not start.
     var onRepairHelper: (() -> Void)?
-    /// Fired once when provisioning completes, so the app can start the
-    /// client behind the wizard — by the last page the window is already
-    /// loaded and the finish button shows it instantly.
+    /// Fired once when provisioning completes, so the client starts behind
+    /// the wizard and is loaded by the last page.
     var onProvisioned: () -> Void = {}
-    /// Stops the running client through the daemon, before the wizard moves
-    /// the choice to another bottle.
-    /// Narrates through its argument, and answers why it could not stop.
+    /// Stops the running client before the wizard moves to another bottle,
+    /// narrating through its argument; answers why it could not stop.
     var stopClient: (_ narrate: (String) -> Void) async -> String? = { _ in nil }
     /// The finish that leaves Steam signed out: the app then runs Windows
     /// programs from Quick Launch, and Steam's sign-in waits until asked for.
     var onSkipSignIn: (() -> Void)?
-    /// Where the graphics step's store comes from. A simulated run supplies
-    /// one with no engine behind it, which is what lets that step be walked
-    /// at all: without it a dry run has to skip past it.
+    /// Where the graphics step's store comes from. A dry run without one
+    /// skips that step.
     var makeGraphics: (() -> GraphicsStore)?
-    /// Asks the window for its tall height (`true`) or its usual one, as a
-    /// step hosting Apple's sign-in page comes and goes. ``SetupWindow``
-    /// sets it; the view fills whatever height the window has.
+    /// Asks the window for its tall height (`true`) or its usual one, set by
+    /// ``SetupWindow``.
     var resizeWindow: (_ tall: Bool) -> Void = { _ in }
 
     enum Step: String, CaseIterable {
@@ -76,8 +69,7 @@ struct SetupView: View {
     /// Try Again switches again rather than provisioning the old bottle.
     @State private var unswitchedBottle: String?
 
-    /// A real run always opens on the welcome. The gallery draws every step at
-    /// once, and each tile starts on the one it is there to show.
+    /// `step` is for the gallery; a real run opens on the welcome.
     init(
         provisioner: Provisioner,
         startingAt step: Step = .welcome,
@@ -99,8 +91,7 @@ struct SetupView: View {
         self.onFinished = onFinished
         _step = State(initialValue: step)
         _engineChoice = State(initialValue: Engine.setupStartsOnCrossOver ? .crossover : .builtIn)
-        // Opening straight onto the graphics step skips the transition that
-        // would otherwise build the store, so build it here instead.
+        // Opening on the graphics step skips the transition that builds the store.
         _graphicsStore = State(initialValue: step == .graphics ? makeGraphics?() : nil)
     }
 
@@ -112,10 +103,8 @@ struct SetupView: View {
         }
         .frame(width: SetupMetrics.windowSize.width)
         .frame(maxHeight: .infinity)
-        // The page is the whole window, titlebar included: its own top inset
-        // clears the traffic lights. Inside the titlebar's safe area the
-        // page is pushed down by the titlebar's height and the footer is cut
-        // off at the bottom.
+        // The page fills the titlebar too and its top inset clears the traffic
+        // lights; inside the safe area the footer would be cut off.
         .ignoresSafeArea()
         .onChange(of: wantsTallWindow, initial: true) { _, tall in resizeWindow(tall) }
         .task {
@@ -132,8 +121,7 @@ struct SetupView: View {
         }
     }
 
-    /// Marks a simulated run (`SetupDryRun.swift`) so a screenshot can never
-    /// be mistaken for a real provisioning pass.
+    /// Marks a simulated run (`SetupDryRun.swift`).
     private var demoBadge: some View {
         Text("DEMO")
             .font(.caption2.bold())
@@ -275,9 +263,7 @@ struct SetupView: View {
         return true
     }
 
-    /// The Steam installations already on the machine. Only ever shown when
-    /// the answer is genuinely ambiguous — one bottle named the way we would
-    /// name it needs no question.
+    /// The Steam installations already on the machine.
     private var bottleCandidates: [SetupDetection.Bottle] {
         provisioner.ownBottles.filter(\.hasSteam)
     }
@@ -287,9 +273,8 @@ struct SetupView: View {
             || (bottleCandidates.first.map { $0.name != SteamBottle.defaultName } ?? false)
     }
 
-    /// Why the typed name cannot be used, if it cannot. A bottle is a
-    /// directory, and one that already exists belongs to whatever put it
-    /// there — installing Steam into it is not ours to decide.
+    /// Why the typed name cannot be used. An existing bottle directory
+    /// belongs to whatever made it, so its name is refused.
     private var newBottleObjection: String? {
         let name = newBottleName.trimmingCharacters(in: .whitespaces)
         if name.isEmpty { return String(localized: "Give the bottle a name.") }
@@ -302,10 +287,8 @@ struct SetupView: View {
         return nil
     }
 
-    /// Whether the bottle being set up already carries a Steam install —
-    /// adoption checks and updates a client instead of downloading one, and
-    /// telling someone their installed Steam is being downloaded is a lie
-    /// they will watch for minutes.
+    /// Whether the bottle being set up already carries a Steam install, which
+    /// is checked and updated rather than downloaded.
     private var isAdoptingSteam: Bool {
         bottleCandidates.contains { $0.name == SteamBottle.name }
     }
@@ -334,8 +317,7 @@ struct SetupView: View {
             beginProvisioning()
             return
         }
-        // The bottle this Mac is set to drive, and when it does not exist yet, a new one by
-        // that name: adopting a different bottle under it is never the default.
+        // Defaults to the stored bottle, or a new one by that name; never another bottle.
         let stored = SteamBottle.name
         if bottleCandidates.contains(where: { $0.name == stored }) {
             bottleChoice = stored
@@ -388,9 +370,8 @@ struct SetupView: View {
         }
     }
 
-    /// After provisioning: the managed engine needs D3DMetal added for DX12,
-    /// so offer it; CrossOver brings its own, and an Intel Mac cannot run it,
-    /// so both go straight to preferences.
+    /// Offers D3DMetal for the managed engine on Apple silicon; CrossOver and
+    /// Intel Macs go straight to preferences.
     private func advanceFromSteam() {
         guard usesManagedEngine, MacHardware.isAppleSilicon, makeGraphics != nil || !provisioner.isDryRun else {
             step = .options

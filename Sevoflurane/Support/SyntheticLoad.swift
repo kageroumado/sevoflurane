@@ -3,12 +3,9 @@ import Synchronization
 
 /// Busy threads that stand in for a running game while a scenario is timed.
 ///
-/// A Windows game under Wine keeps every core busy at the default scheduling
-/// class, so that is what the threads run at unless asked otherwise. Paths
-/// that hold up correctly under this load are scheduled above it (the main
-/// thread, the user-initiated bridge queues); anything that stalls was
-/// waiting on work that runs at or below the game's priority — a priority
-/// inversion, which is what the load exists to find.
+/// A game under Wine keeps every core busy at the default QoS, the threads'
+/// default. Anything that stalls under this load was waiting on work at or
+/// below the game's priority: the priority inversion the load exists to find.
 final nonisolated class SyntheticLoad: Sendable {
     enum QualityOfService: String, CaseIterable, Sendable {
         case background
@@ -58,8 +55,7 @@ final nonisolated class SyntheticLoad: Sendable {
         }
     }
 
-    /// Stops the threads and waits for them to exit, so a scenario's
-    /// "after" measurements are taken on a quiet machine.
+    /// Stops the threads and waits up to 2 s for them to exit.
     func stop() {
         stopped.withLock { $0 = true }
         _ = finished.wait(timeout: .now() + 2)

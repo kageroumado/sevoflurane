@@ -1,9 +1,7 @@
 import Foundation
 
-/// The disk-touching half of the Storage pane, split from ``StorageStore`` so
-/// a simulated environment can pose any library, any set of sizes, and any
-/// set of linkable games — and can be walked all the way through the
-/// uninstall, which on the live path ends by trashing the app itself.
+/// The disk-touching half of the Storage pane, so a simulated environment
+/// can pose any library and walk through the uninstall.
 @MainActor
 protocol StorageEnvironment: AnyObject {
     /// Whether the effects are simulated.
@@ -42,7 +40,7 @@ protocol StorageEnvironment: AnyObject {
     func trashAppCaches()
     func removeAgentIntegration() async
     func forgetSettings()
-    /// The app bundle itself, last — after this there is nothing left to run.
+    /// The app bundle itself, last.
     func trashAppBundle()
 }
 
@@ -116,10 +114,8 @@ final class LiveStorageEnvironment: StorageEnvironment {
         try SharedGames.unlink(appID: appID)
     }
 
-    /// Supervision stands down before anything stops: the restart ladder
-    /// reads a stopped client as a crash and relaunches Steam into the bottle
-    /// being trashed. The quit path already does the whole sequence — loop
-    /// down, then every bottle process.
+    /// Supervision stands down first, or the restart ladder relaunches Steam
+    /// into the bottle being trashed; the quit path does exactly that.
     func stopEverything(supervisor: ClientSupervisor?) async {
         if let supervisor {
             await supervisor.shutdownForQuit()

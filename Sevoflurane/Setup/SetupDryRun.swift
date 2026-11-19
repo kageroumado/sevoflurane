@@ -4,12 +4,10 @@
     /// The onboarding test harness: fixture machines for the wizard to run
     /// against without touching this one.
     ///
-    /// Boot straight into one with `SEVO_DEMO=<raw value>` (see ``DemoMode``),
-    /// or open one at any time from Debug ▸ Onboarding Dry Run in a debug
-    /// build. Every simulated action writes what the live environment would
-    /// have run to `~/Library/Logs/Sevoflurane.log` under the `setup`
-    /// category, prefixed `dry-run:` — the wizard's whole story is greppable
-    /// afterward.
+    /// Boot into one with `SEVO_DEMO=<raw value>` (see ``DemoMode``), or open
+    /// one from Debug ▸ Onboarding Dry Run. Every simulated action logs what
+    /// the live environment would have run to `~/Library/Logs/Sevoflurane.log`
+    /// under `setup`, prefixed `dry-run:`.
     enum SetupScenario: String, CaseIterable {
         /// Nothing installed: no Rosetta, no CrossOver, no bottles.
         case freshMachine = "fresh-machine"
@@ -21,8 +19,7 @@
         case licensedNoBottle = "licensed-no-bottle"
         /// The bottle exists but Steam was never installed into it.
         case bottleWithoutSteam = "bottle-without-steam"
-        /// Several bottles already carry a Steam install — the one case where
-        /// the wizard has to ask which one is ours.
+        /// Several bottles carry a Steam install, so the wizard asks which.
         case multipleBottles = "multiple-bottles"
         /// The NSIS installer fails — exercises the wizard's failure surface.
         case installerFails = "installer-fails"
@@ -49,10 +46,9 @@
             version: "26.3", licensed: false, expires: nil, trialExpired: true,
         )
 
-        /// Where the fixture machine keeps its bottles: a directory on no
-        /// Mac, never read and never written. The flow under test scopes its
-        /// bottle matching to the environment's root, so a dry run reaches the
-        /// same conclusions whatever this machine's engine store holds.
+        /// Where the fixture machine keeps its bottles: a directory that is
+        /// never read or written. Bottle matching is scoped to this root, so a
+        /// dry run ignores this machine's engine store.
         static let bottlesRoot = URL(fileURLWithPath: "/private/var/empty/Sevoflurane/Bottles")
 
         /// The bottle the fixture machine drives, until the wizard's bottle
@@ -122,10 +118,9 @@
         }
     }
 
-    /// A `SetupEnvironment` that never touches the machine: every action logs the
-    /// command the live environment would have run, waits long enough for the
-    /// wizard's progress states to be visible, and mutates the scenario fixture
-    /// the way the real action would mutate the machine.
+    /// A `SetupEnvironment` that never touches the machine: every action logs
+    /// the live command, pauses so progress states show, and mutates the
+    /// fixture as the real action would the machine.
     @MainActor
     final class DryRunSetupEnvironment: SetupEnvironment {
         let isSimulation = true
@@ -143,8 +138,7 @@
         private var detectCount = 0
         var installedDependencies: Set<String> = []
         var dependencyFailure: String?
-        /// Catalog ids whose install refuses, for the difference between a
-        /// package that is worth ending a setup over and one that is not.
+        /// Catalog ids whose install refuses.
         var failingDependencies: Set<String> = []
         private(set) var dependencyInstalls: [String] = []
         /// How many Steam installer runs fail before one succeeds: every run
@@ -164,10 +158,8 @@
             self.scenario = scenario
             self.stepDelay = stepDelay
             installerFailures = scenario == .installerFails ? .max : 0
-            // A caller that has its own machine in mind passes it: the Engine
-            // pane builds its list from detection and its bottles from
-            // ``DemoEngineEnvironment``, and a re-detect that reverted to the
-            // scenario's fixture would make those two disagree.
+            // The Engine pane passes its own detection so a re-detect agrees
+            // with the bottles ``DemoEngineEnvironment`` shows.
             state = detection ?? scenario.fixture
             log("scenario '\(scenario.rawValue)' — nothing on this machine will be touched")
         }
@@ -179,8 +171,7 @@
 
         func detect() async -> SetupDetection {
             detectCount += 1
-            // "Check again" on the engine step deserves a way forward: a few
-            // re-checks in, the simulated user has bought or installed CrossOver.
+            // From the fourth check on, a licensed CrossOver appears.
             if state.usableCrossOver == nil, detectCount >= 4 {
                 state = SetupDetection(
                     rosetta: state.rosetta,
@@ -196,8 +187,7 @@
             return state
         }
 
-        /// Renames the fixture's Steam-bearing bottle, so a test can pose the
-        /// "their Steam lives somewhere else" machine.
+        /// Renames the fixture's bottles, posing a Steam that lives elsewhere.
         func renameSteamBottle(to name: String) {
             state = SetupDetection(
                 rosetta: state.rosetta,

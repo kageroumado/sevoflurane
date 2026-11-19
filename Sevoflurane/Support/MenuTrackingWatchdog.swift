@@ -3,56 +3,31 @@ import ObjectiveC
 
 /// Ends a menu-bar tracking session that has stopped ending on its own.
 ///
-/// Opening a menu bar title runs a nested event loop inside
-/// `-[NSMenuTrackingSession startRunningMenuEventLoop:]`, in
-/// `NSEventTrackingRunLoopMode`. Main-queue blocks and `.common`-modes timers
-/// are still serviced there — a sampled freeze shows the app draining them at
-/// 0% CPU while the session refuses to end — so main-queue latency says
-/// nothing about it. A `.default`-mode timer is not serviced, and the gap
-/// between the two probes is therefore the length of the session.
+/// Opening a menu bar title runs a nested event loop in
+/// `NSEventTrackingRunLoopMode`, which still services main-queue blocks and
+/// `.common`-mode timers, so main-queue latency says nothing about it. A
+/// `.default`-mode timer is not serviced, so the gap between the two probes
+/// is the length of the session. One session covers every title the pointer
+/// crosses (`menuDidClose` arrives for menus still tracked), so the clock
+/// starts at a session's first menu and later titles change nothing.
+/// ``isTracking`` only says the default mode has been starved for over two
+/// probe intervals; never gate correctness on it.
 ///
-/// What the probes measure is the **session**, not the menu: one session
-/// covers every title the pointer crosses, and the run loop is the only thing
-/// that can say so, since `menuDidClose` arrives for a menu the menu bar goes
-/// on tracking. The clock therefore starts at the first menu of a session and
-/// a later title inside it changes nothing — neither the clock nor the levers
-/// already pulled.
+/// Past ``stallLimit`` the session is broken from inside, in order:
+/// 1. `cancelTrackingWithoutAnimation()` on the main menu, the synchronous
+///    `dismissAnimated:NO` on the current session;
+/// 2. on macOS 27 the dismissal ``Lever/repair``; elsewhere a synthetic
+///    Escape;
+/// 3. on macOS 27 ``Lever/stop``, which clears the loop's flag directly.
 ///
-/// The one thing this can honestly report is that the default mode has been
-/// starved for longer than two probe intervals. A session that began within
-/// the last two intervals reads exactly like an idle app, so ``isTracking``
-/// is an observation — for the log, and for the levers below — and never a
-/// gate another type's correctness rests on.
-///
-/// Past ``stallLimit`` the session is taken as stuck and broken from inside.
-/// The levers, in order:
-/// 1. `cancelTrackingWithoutAnimation()` on the *main* menu, which is
-///    `-[NSMenuTrackingSession dismissAnimated:NO]` on the current session:
-///    the one synchronous end, clearing the loop's flag and posting the
-///    wake-up the loop's `nextEventMatchingMask:` needs;
-/// 2. where the private path engages (macOS 27), the dismissal repair —
-///    see ``repairDismissal(_:)``; elsewhere a synthetic Escape, which the
-///    session's event handler turns into an animated dismissal;
-/// 3. on macOS 27, ``stopMonitoring(_:)``, the last resort that clears the
-///    loop's flag directly and wakes the loop.
-///
-/// The private levers exist because on macOS 27 the system menu bar became
-/// another process (`MenuBarClientCore`). A title's dropdown is still tracked
-/// *in this process*, by an `NSCocoaMenuImpl` session the agent's callback
-/// opens, and that session's loop exits only when its `_isRunningEventLoop`
-/// flag is cleared. Two things clear it: a dismissal's pre-dispatch actions,
-/// and `stopMonitoringEvents`. An animated dismissal that never completes —
-/// its completion arrives through the very run loop the session is parked in
-/// — leaves `_isDismissing` set, and every later dismissal, animated or not,
-/// is refused on that guard. The repair does what the stalled completion
-/// would have done. If even the last resort fails to free the loop within a
-/// further short window, the ``Stage/abandoned`` stage logs a distinct,
-/// greppable line so external recovery (daemon-driven relaunch) has something
-/// to key on: the in-app UI is frozen with the main thread and cannot help
-/// itself.
-///
-/// A menu the user has deliberately left open for that long is closed under
-/// them, which is the price of not leaving the app frozen.
+/// On macOS 27 the menu bar is another process (`MenuBarClientCore`), but a
+/// dropdown is still tracked in this process by an `NSCocoaMenuImpl` session
+/// whose loop exits only when `_isRunningEventLoop` is cleared. An animated
+/// dismissal whose completion never arrives (it comes through the parked run
+/// loop) leaves `_isDismissing` set, and every later dismissal is refused.
+/// If nothing frees the loop, ``Stage/abandoned`` logs the greppable
+/// `menu-freeze-unrecovered` line for external recovery. A menu deliberately
+/// held open that long is closed under the user.
 @MainActor
 final class MenuTrackingWatchdog {
     /// How long a tracking session may hold the default run-loop mode before
@@ -62,21 +37,16 @@ final class MenuTrackingWatchdog {
     static let dismissDelay: TimeInterval = 2
     /// How long the dismissal lever is given before the stop lever follows it.
     static let stopDelay: TimeInterval = 2
-    /// How long the stop lever is given to free the loop before the session
-    /// is logged as unrecovered for external recovery to act on.
+    /// How long the stop lever is given before the session is logged as unrecovered.
     static let abandonDelay: TimeInterval = 3
 
     /// Elapsed starvation at which the stop lever is pulled.
     static var stopThreshold: TimeInterval { stallLimit + dismissDelay + stopDelay }
-    /// Elapsed starvation at which a still-frozen session is declared
-    /// unrecovered.
+    /// Elapsed starvation at which a session is declared unrecovered.
     static var abandonThreshold: TimeInterval { stopThreshold + abandonDelay }
 
-    /// Whether the private levers engage at all. They run only where the
-    /// freeze happens: macOS 27 moved the system menu bar into another
-    /// process, where a dismissal can stall on a completion the parked loop
-    /// never delivers. On macOS 26 and earlier the session ends on its own and
-    /// the ladder stops at the Escape.
+    /// Whether the private levers engage: only on macOS 27, where the freeze
+    /// happens. Earlier, the ladder stops at the Escape.
     static var privateLeverEngages: Bool {
         if #available(macOS 27, *) { true } else { false }
     }
@@ -93,18 +63,14 @@ final class MenuTrackingWatchdog {
     enum Stage {
         case watching
         case cancelled
-        /// The session has been told to finish dismissing: the repair on
-        /// macOS 27, an Escape elsewhere.
+        /// The repair on macOS 27, an Escape elsewhere.
         case dismissed
-        /// The session's event monitoring has been stopped outright.
         case stopped
-        /// Even the last lever left the loop spinning; the freeze is logged
-        /// for external recovery.
+        /// The last lever left the loop spinning; logged for external recovery.
         case abandoned
     }
 
-    /// What the probes know about the session in progress. It is made fresh
-    /// when a session's clock starts and carried across every title inside it.
+    /// What the probes know about the session in progress, reset when its clock starts.
     struct State: Equatable {
         var healthyTicks = 0
         var stage = Stage.watching
@@ -114,10 +80,8 @@ final class MenuTrackingWatchdog {
     /// What one tick of the `.common`-mode probe concluded.
     struct Tick: Equatable {
         var state: State
-        /// The lever this tick earned.
         var lever: Stage?
-        /// Whether the default mode has been running freely long enough that
-        /// the probes can stand down until the next session.
+        /// Whether the probes can stand down until the next session.
         var standDown: Bool
     }
 
@@ -125,12 +89,10 @@ final class MenuTrackingWatchdog {
     struct StopOutcome: Equatable {
         /// Where a session was found, or `nil` when none was.
         var sessionSource: String?
-        /// The levers the session accepted, in order, or `nil` when a session
-        /// was found but none applied.
+        /// The levers the session accepted, in order, or `nil` when none applied.
         var enderSent: String?
 
-        /// The log line describing what the lever reached, shared by every
-        /// caller so a report reads the same words wherever it fired.
+        /// The log line describing what the lever reached.
         var summary: String {
             switch (sessionSource, enderSent) {
             case let (source?, ender?):
@@ -167,10 +129,8 @@ final class MenuTrackingWatchdog {
         return Tick(state: state, lever: lever, standDown: false)
     }
 
-    /// The lever a session that has starved the default mode for
-    /// `starvedSeconds` has earned, given how far it has been pushed already.
-    /// The `.stopped` and `.abandoned` stages are reached only where the
-    /// private levers engage; elsewhere the ladder ends at `.dismissed`.
+    /// The next lever a session starved for `starvedSeconds` has earned.
+    /// `.stopped` and `.abandoned` need the private levers.
     static func lever(starvedSeconds: Double, stage: Stage, privateLeverEngages: Bool) -> Stage? {
         switch stage {
         case .watching where starvedSeconds >= stallLimit: .cancelled
@@ -181,17 +141,14 @@ final class MenuTrackingWatchdog {
         }
     }
 
-    /// Whether a nested loop has been holding the default run-loop mode for
-    /// longer than two probe intervals. The menu delegate cannot answer this:
-    /// `menuDidClose` arrives for a menu the menu-bar agent went on to keep
-    /// tracking, so a menu is reported closed while its session is still live.
+    /// Whether a nested loop has held the default run-loop mode for longer
+    /// than two probe intervals.
     var isTracking: Bool {
         state.isTracking
     }
 
-    /// The menus whose private tracking session the levers may reach, besides
-    /// the app's main menu. The mirror supplies its open titles here; the
-    /// default supplies none.
+    /// Menus besides the main menu whose session the levers may reach: the
+    /// mirror's open titles.
     var trackedMenus: @MainActor () -> [NSMenu] = { [] }
 
     private var defaultProbe: Timer?
@@ -199,17 +156,14 @@ final class MenuTrackingWatchdog {
     private var lastDefaultTick = ContinuousClock.now
     private var state = State()
 
-    /// Whether a session is being timed. The probes stand down once the
-    /// default mode has been running freely again, so armed probes mean the
-    /// title the pointer has just crossed into belongs to the session already
-    /// on the clock.
+    /// Whether a session is being timed: the probes are armed until the
+    /// default mode runs freely again.
     var isTimingSession: Bool {
         commonProbe != nil
     }
 
-    /// Starts watching, from the moment a menu is about to open. A menu
-    /// opening inside a session already on the clock leaves that clock, and
-    /// the levers already pulled at it, exactly where they are.
+    /// Starts watching when a menu is about to open, unless a session is
+    /// already on the clock.
     func menuOpened() {
         guard !isTimingSession else { return }
         lastDefaultTick = .now
@@ -226,22 +180,17 @@ final class MenuTrackingWatchdog {
         commonProbe = inCommon
     }
 
-    /// Ends every menu-bar tracking session, synchronously. The submenu a
-    /// title owns is not the session's root — cancelling it leaves a menu-bar
-    /// session running — so the main menu is the one that has to be told.
-    /// The animated `cancelTracking()` is never used here: its completion
-    /// arrives through the run loop the stuck session is parked in.
+    /// Ends every menu-bar tracking session, synchronously, through the main
+    /// menu: cancelling a title's submenu leaves the session running. Never
+    /// use the animated `cancelTracking()`: its completion arrives through
+    /// the run loop the stuck session is parked in.
     static func cancelMenuBarTracking() {
         NSApp.mainMenu?.cancelTrackingWithoutAnimation()
     }
 
     private func evaluate() {
-        // A modal alert runs its own loop in the modal-panel mode, which
-        // starves the default mode exactly as a stuck menu does, and none of
-        // the levers can end it: the launch-option chooser and a kernel-driver
-        // alert each drew all four, down to `menu-freeze-unrecovered`, with
-        // the app answering throughout (2026-09-26). The clock holds until it
-        // closes.
+        // A modal alert starves the default mode like a stuck menu and no
+        // lever ends it, so the clock holds until it closes.
         if NSApp.modalWindow != nil {
             lastDefaultTick = .now
             return
@@ -259,8 +208,6 @@ final class MenuTrackingWatchdog {
         }
     }
 
-    /// The candidate menus the private levers inspect: the app's main menu
-    /// first, then the mirror's open titles.
     private func candidateMenus() -> [NSMenu] {
         [NSApp.mainMenu].compactMap(\.self) + trackedMenus()
     }
@@ -324,10 +271,9 @@ final class MenuTrackingWatchdog {
         NSApp.postEvent(escape, atStart: true)
     }
 
-    /// Posts the kind of event the session's own dismissal posts to wake its
-    /// `nextEventMatchingMask:`: an AppKit-defined event, which the loop's
-    /// mask takes and its handler ignores. The loop exits on the flag the
-    /// lever already cleared, not on this event.
+    /// Wakes the loop's `nextEventMatchingMask:` with an AppKit-defined event,
+    /// as the session's own dismissal does; the loop exits on the flag the
+    /// lever already cleared.
     private static func postWakeup() {
         guard let wake = NSEvent.otherEvent(
             with: .appKitDefined,
@@ -346,36 +292,23 @@ final class MenuTrackingWatchdog {
     // MARK: - The private levers
 
     /// What the private levers can do to a session. Each is a private
-    /// `NSMenuTrackingSession` surface reached by `responds(to:)`/`perform`,
-    /// so a selector renamed on a future macOS is a logged no-op rather than
-    /// a crash — this is a workaround for the macOS 27 out-of-process menu
-    /// bar, and the private surface is not a contract Apple keeps stable.
+    /// `NSMenuTrackingSession` selector reached through `responds(to:)` and
+    /// `perform`, so a selector renamed on a future macOS is a logged no-op.
     enum Lever: String, CaseIterable {
-        /// `dismissAnimated:NO` — the synchronous end, and what the public
-        /// `cancelTrackingWithoutAnimation()` sends.
+        /// The synchronous end that `cancelTrackingWithoutAnimation()` sends.
         case dismiss = "dismissAnimated:NO"
         /// What a stalled animated dismissal's completion would have done:
-        /// the pre-dispatch actions (which clear the loop's flag and post the
-        /// wake-up), then `_isDismissing` cleared so the session is not stuck
-        /// refusing every later dismissal.
+        /// the pre-dispatch actions, then `_isDismissing` cleared.
         case repair = "_performPreDispatchDismissalActions + isDismissing=NO"
-        /// `stopMonitoringEvents` — clears the loop's flag with no restore of
-        /// key window or input context, then a posted wake-up.
+        /// Clears the loop's flag with no restore of key window or input
+        /// context, then posts a wake-up.
         case stop = "stopMonitoringEvents + wake"
     }
 
-    /// Reaches the private tracking session and pulls `levers` on it, in
-    /// order, skipping a lever the session's state says would be refused.
-    ///
-    /// It must run where it can break the loop: the caller is the watchdog's
-    /// `.common`-mode probe, which fires on the main thread *inside* the
-    /// spinning nested loop, the same context the cancel fires from. It is
-    /// called directly, never dispatched onto the main queue — a
-    /// `DispatchQueue.main.async`/`MainActor.run` would enqueue behind the
-    /// blocked main queue and never run during the freeze.
-    ///
-    /// The session is the class's current session first — the object the
-    /// main menu's impl returns — then each candidate menu's own.
+    /// Pulls `levers` in order on the first tracking session found, skipping
+    /// one the session's state would refuse. Call it directly from the
+    /// `.common`-mode probe inside the nested loop; never dispatch it onto the
+    /// main queue, where it would not run during the freeze.
     @discardableResult
     static func stopPrivateSession(
         candidateMenus: [NSMenu], levers: [Lever] = Lever.allCases,
@@ -390,9 +323,8 @@ final class MenuTrackingWatchdog {
         return StopOutcome(sessionSource: source, enderSent: sent.isEmpty ? nil : sent.joined(separator: ", "))
     }
 
-    /// Sends one lever, answering whether the session took it. `repair` is
-    /// only for a session stuck mid-dismissal; on any other it would end a
-    /// session that is ending on its own.
+    /// Sends one lever, answering whether the session took it. `repair` runs
+    /// only on a session stuck mid-dismissal.
     private static func pull(_ lever: Lever, on session: NSObject) -> Bool {
         switch lever {
         case .dismiss:
@@ -423,8 +355,9 @@ final class MenuTrackingWatchdog {
 
     /// The menu-bar impl in use and the current session's flags, for the
     /// control port. `outOfProcess` is whether the main menu is mirrored into
-    /// the macOS 27 menu-bar agent, which is what the Info.plist key
-    /// `NSMenuDisableOutOfProcessMenusDueToIncompatibility` turns off.
+    /// the macOS 27 menu-bar agent, which the defaults key
+    /// `NSMenuDisableOutOfProcessMenusDueToIncompatibility` (set in
+    /// `main.swift`) turns off.
     static func diagnostics() -> [String: Any] {
         var result: [String: Any] = [:]
         if let menu = NSApp.mainMenu, let impl = menuImpl(of: menu) {
@@ -457,9 +390,8 @@ final class MenuTrackingWatchdog {
         session.setValue(value, forKey: "isDismissing")
     }
 
-    /// A BOOL ivar read through key-value coding, only when the ivar exists:
-    /// an undefined key raises an Objective-C exception nothing here could
-    /// catch.
+    /// A BOOL ivar read through KVC, only when the ivar exists: an undefined
+    /// key raises an Objective-C exception Swift cannot catch.
     private static func flag(_ session: NSObject, ivar: String, key: String) -> Bool? {
         guard class_getInstanceVariable(type(of: session), ivar) != nil else { return nil }
         return (session.value(forKey: key) as? NSNumber)?.boolValue
@@ -467,8 +399,8 @@ final class MenuTrackingWatchdog {
 
     // MARK: Finding the session
 
-    /// Every tracking session reachable now, newest source first: the class's
-    /// current session, then each candidate menu's impl's session.
+    /// Every tracking session reachable now: the class's current session,
+    /// then each candidate menu's.
     private static func trackingSessions(candidateMenus: [NSMenu]) -> [(String, NSObject)] {
         var found: [(String, NSObject)] = []
         if let current = currentTrackingSession() {
@@ -488,9 +420,7 @@ final class MenuTrackingWatchdog {
     }
 
     /// A menu's private impl. `_menuImplIfExists` comes first because it
-    /// never creates one; where AppKit lacks it, `_menuImpl` and
-    /// `_menuImplForCallbacks` answer instead, and those may create an impl
-    /// for a menu that had none.
+    /// never creates one; the fallbacks may.
     private static func menuImpl(of menu: NSMenu) -> NSObject? {
         for accessor in ["_menuImplIfExists", "_menuImpl", "_menuImplForCallbacks"] {
             if let impl = perform(menu, accessor) { return impl }
@@ -504,8 +434,8 @@ final class MenuTrackingWatchdog {
     }
 
     /// Sends a selector the session responds to, with a `BOOL` argument when
-    /// `flag` is given. The return value is discarded without dereferencing,
-    /// so a selector that returns `void` or `BOOL` is safe to send.
+    /// `flag` is given. The result is never dereferenced, so a `void` or
+    /// `BOOL` return is safe.
     private static func send(_ session: NSObject, _ name: String, flag: Bool? = nil) -> Bool {
         let selector = NSSelectorFromString(name)
         guard session.responds(to: selector) else { return false }
@@ -519,10 +449,8 @@ final class MenuTrackingWatchdog {
         return true
     }
 
-    /// Sends a zero-argument getter and returns its object result, or `nil`
-    /// when the target does not respond or the getter returned `nil`. The
-    /// getters used here (`currentSession`, `_menuImpl*`, `trackingSession`)
-    /// are `+0` returns, so the value is taken unretained.
+    /// Sends a zero-argument getter and returns its object result. The
+    /// getters used here are `+0` returns, so the value is taken unretained.
     private static func perform(_ target: AnyObject, _ name: String) -> NSObject? {
         let selector = NSSelectorFromString(name)
         guard target.responds(to: selector) else { return nil }

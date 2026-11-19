@@ -1,20 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// The setup assistant's window, from the moment it opens until its finish
-/// button runs.
-///
-/// Closing the window is putting setup aside, not abandoning it: the window
-/// and the wizard's place in it are kept, and the popover, the Dock icon and
-/// ``AppDelegate``'s reopen all bring the same window back. Until the finish,
-/// the client's windows are held behind it (``SteamWebHost/holdWindows()``),
-/// so this window is the only way forward and has to stay reachable.
+/// The setup assistant's window, until its finish button runs. Closing it
+/// keeps the wizard's place, and the popover, the Dock icon and
+/// ``AppDelegate``'s reopen bring it back; it must stay reachable, since the
+/// client's windows are held until the finish (``SteamWebHost/holdWindows()``).
 @MainActor
 @Observable
 final class SetupWindow {
-    /// Whether setup has been started and not finished — on screen or
-    /// closed. The popover shows the way back into it instead of Steam's
-    /// controls while this is true.
+    /// Whether setup has started and not finished, on screen or closed.
     private(set) var isUnfinished = false
 
     @ObservationIgnored private var window: NSWindow?
@@ -26,10 +20,8 @@ final class SetupWindow {
         var view = view
         view.resizeWindow = { [weak self] tall in self?.resize(tall: tall) }
         let controller = NSHostingController(rootView: view)
-        // The window's size is this controller's to set: ``SetupMetrics``
-        // for the flow, taller only for Apple's sign-in page. Left to the
-        // hosting controller, a step whose content asks for more grows the
-        // window mid-flow and it never shrinks back.
+        // Sized here from ``SetupMetrics``: left to the hosting controller, a
+        // tall step grows the window and it never shrinks back.
         controller.sizingOptions = []
         let window = NSWindow(contentViewController: controller)
         window.setContentSize(SetupMetrics.windowSize)
@@ -56,9 +48,8 @@ final class SetupWindow {
         show()
     }
 
-    /// Grows the window to ``SetupMetrics/tallWindowHeight`` (within the
-    /// screen) or returns it to ``SetupMetrics/windowSize``, keeping its top
-    /// edge where it is unless the screen's bottom pushes it up.
+    /// Switches between ``SetupMetrics/tallWindowHeight`` (within the screen)
+    /// and ``SetupMetrics/windowSize``, keeping the top edge in place.
     private func resize(tall: Bool) {
         guard let window else { return }
         let visible = (window.screen ?? NSScreen.main)?.visibleFrame
@@ -81,24 +72,19 @@ final class SetupWindow {
         )
     }
 
-    /// Brings the wizard back where it was left. Answers whether there was
-    /// one to bring back.
+    /// Brings the wizard back; answers whether there was one.
     @discardableResult
     func show() -> Bool {
         guard let window else { return false }
-        // The wizard is the app's only window during a first run, and an
-        // accessory app's window has no Dock tile to say anything is going on.
+        // An accessory app's only window would have no Dock tile.
         ActivationPolicy.becomeRegular()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         return true
     }
 
-    /// The wizard's finish: the window goes for good.
-    ///
-    /// The Dock tile stays through it. The finish button promises Steam's
-    /// window — sign-in or the library — and that window arrives a moment
-    /// later; receding now would drop the tile and put it straight back.
+    /// Closes the wizard for good. The Dock tile stays: Steam's promised
+    /// window arrives a moment later.
     func finish() {
         guard let window else { return }
         if let closeObserver {

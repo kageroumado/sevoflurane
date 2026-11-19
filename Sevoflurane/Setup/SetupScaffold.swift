@@ -17,9 +17,8 @@ enum SetupMetrics {
     static let footerPadding: CGFloat = 20
 }
 
-/// One step's page: a large glyph, a title with a gray subtitle under it, and
-/// the step's lists, all in one leading-aligned column. A page without a
-/// glyph gives its room to the content.
+/// One step's page: a glyph, a title and subtitle, and the step's lists in
+/// one leading-aligned column.
 struct SetupPage<Content: View>: View {
     let glyph: String?
     let title: String
@@ -107,8 +106,7 @@ struct SetupList<Content: View>: View {
     }
 }
 
-/// One row of a ``SetupList``: an icon, a title with an optional caption
-/// under it, and whatever the row carries at its trailing edge.
+/// One row of a ``SetupList``.
 struct SetupRow<Accessory: View>: View {
     let icon: String
     let title: String
@@ -183,8 +181,7 @@ struct SetupFootnote: View {
     }
 }
 
-/// The bar under every step: a hairline across the window, the step's lesser
-/// actions at the leading edge and its one primary action at the trailing one.
+/// The bar under every step: secondary actions leading, the primary trailing.
 struct SetupFooter<Secondary: View, Primary: View>: View {
     @ViewBuilder var secondary: Secondary
     @ViewBuilder var primary: Primary
@@ -207,9 +204,9 @@ struct SetupFooter<Secondary: View, Primary: View>: View {
     }
 }
 
-/// The one primary action of a step: the accent in a capsule, with the dark
-/// label the accent needs. The system's prominent style drops its fill in a
-/// window that is not key, which leaves that dark label on a dark button.
+/// A step's primary action: the accent in a capsule with a dark label. The
+/// system's prominent style drops its fill in a window that is not key,
+/// which would leave the dark label on a dark button.
 struct SetupPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Face(configuration: configuration)

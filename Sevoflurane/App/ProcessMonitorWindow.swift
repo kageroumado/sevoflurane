@@ -4,11 +4,8 @@ import SwiftUI
 
 /// Every process this app owns, in one table.
 ///
-/// It is the stall watchdog's own sampler with a window in front of it —
-/// ``StallWatch/processes`` is what the rows are, so what the watchdog decides
-/// and what a person sees can never disagree. It is a stats bar over a list,
-/// each row saying what the thing is and what it is doing, and the actions
-/// that apply to one row on that row.
+/// The rows are ``StallWatch/processes``, the stall watchdog's own sampler,
+/// so what the watchdog decides and what a person sees always agree.
 @MainActor
 final class ProcessMonitorWindows {
     private var window: NSWindow?

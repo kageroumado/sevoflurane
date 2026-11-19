@@ -1,35 +1,26 @@
 import Foundation
 
-/// Keeps Steam's list of non-Steam games in step with the adopted programs
-/// (``SteamShortcuts``): a pass reads the list from the client, plans, and
-/// makes the changes with the client's own calls.
-///
-/// A pass runs when the client becomes healthy, when a program is added or
-/// removed, and when its "Show in Steam's library" switch changes. With the
-/// client down a pass changes nothing and the next healthy client catches up,
-/// so a program added or removed meanwhile, by the app or by `sevo`, reaches
-/// Steam then.
+/// Keeps Steam's non-Steam games in step with the adopted programs
+/// (``SteamShortcuts``) through the client's own calls. A pass runs when the
+/// client becomes healthy and when a program or its library switch changes;
+/// with the client down it changes nothing.
 @MainActor
 final class SteamLibraryShortcuts {
     static let shared = SteamLibraryShortcuts()
 
-    /// The connection to the client. Set once the bridge is up.
+    /// Set once the bridge is up.
     var bridge: SteamBridge?
-    /// Told shortcut app id → program id whenever it may have changed, so
-    /// Steam's launch events resolve to the program (``SteamWebHost/shortcutPrograms``).
+    /// Told shortcut app id → program id, for ``SteamWebHost/shortcutPrograms``.
     var onAliases: (([Int: Int]) -> Void)?
 
     private var pass: Task<Void, Never>?
     private var wantsAnotherPass = false
-    /// Shortcuts made in this session, by when: Steam's list can lag a
-    /// moment behind the call that made one.
+    /// Shortcuts made in this session, by when: Steam's list lags the call.
     private var made: [Int: ContinuousClock.Instant] = [:]
     private static let freshFor: Duration = .seconds(60)
 
-    /// Whether a program can be listed at all: it lives in the bottle the
-    /// Steam client runs in, it is played rather than installed from, and it
-    /// does not need a `steam.exe` parent with no client beside it
-    /// (``SteamParent``), which a launch from Steam's library cannot give.
+    /// Whether a program can be listed: in the client's bottle, not an
+    /// installer, and not needing a lone `steam.exe` parent (``SteamParent``).
     static func canList(_ program: AdoptedProgram) -> Bool {
         program.bottle == SteamBottle.name && program.kind != ProgramKind.installer
             && !SteamParent.wants(program)
@@ -41,8 +32,7 @@ final class SteamLibraryShortcuts {
         sync()
     }
 
-    /// Brings Steam's list in step. Calls made while a pass runs are answered
-    /// by one more pass after it.
+    /// Brings Steam's list in step; calls during a pass get one more pass.
     func sync() {
         guard pass == nil else {
             wantsAnotherPass = true

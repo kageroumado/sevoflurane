@@ -2,9 +2,8 @@ import Propofol
 import SwiftUI
 
 /// The launch affordance every row of the games column shares: a filled
-/// accent disc big enough to read as the row's button, in place of the small
-/// tinted glyph a pointer had to hunt for. It appears on hover, and a spinner
-/// replaces it for the length of a launch.
+/// accent disc big enough to read as the row's button. It appears on hover,
+/// and a spinner replaces it for the length of a launch.
 struct PlayBadge: View {
     let isBusy: Bool
     let isHovered: Bool

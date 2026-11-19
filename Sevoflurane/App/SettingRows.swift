@@ -1,8 +1,7 @@
 import Propofol
 import SwiftUI
 
-/// The catalog's groups as form sections, for whichever level the store
-/// edits. The pane that hosts them names no setting.
+/// The catalog's groups as form sections for the store's level.
 struct SettingSections: View {
     let store: SettingsStore
     let shaders: ShaderStore
@@ -15,9 +14,8 @@ struct SettingSections: View {
     let appliedFixes: AppliedFixes?
     /// Puts one key the fix list set back, by its stored name.
     let undoFix: (String) -> Void
-    /// The groups with a row at this level, each with its rows, read once:
-    /// whether a row is offered for a game can take a read of Steam's app
-    /// cache.
+    /// Read once per init: whether a row is offered for a game can read
+    /// Steam's app cache.
     private let groups: [(group: SettingGroup, settings: [Setting])]
 
     init(
@@ -93,11 +91,8 @@ private struct SettingGroupHeader: View {
     }
 }
 
-/// One setting: its control with an (i), the line under it, what a change
-/// costs when that is more than the next launch, and the chip the fix table
-/// earns when it names a value this game does not have — or, where the fix
-/// list set the value at the game's first launch, the mark that says so
-/// with its undo.
+/// One setting: its control, caption, restart cost, and the fix table's
+/// recommendation or the fix list's mark with its undo.
 struct SettingRow: View {
     let setting: Setting
     let store: SettingsStore
@@ -114,8 +109,6 @@ struct SettingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             if setting.control == .upscaler {
-                // The shader store names the choices, fetches the ones that
-                // are downloads, and writes the line under the picker.
                 UpscalerPicker(
                     shaders: shaders,
                     inherited: store.level == .game ? store.inherited(setting).choice : nil,
@@ -145,8 +138,7 @@ struct SettingRow: View {
         }
     }
 
-    /// The line under the control: what Inherit stands for while the level
-    /// inherits, then what the setting — or the value in force — is.
+    /// The line under the control, led by the engine's value while inheriting.
     private var caption: String {
         let what = setting.detail?(store.effective(setting)) ?? setting.copy.caption
         guard store.level == .game, store.own(setting) == nil, setting.control != .toggle, setting.inherits
@@ -167,8 +159,7 @@ struct SettingRow: View {
     }
 }
 
-/// The control itself, by what the catalog says it is and whether its level
-/// can inherit.
+/// The control the catalog names, with Inherit at the game level.
 private struct SettingControlView: View {
     let setting: Setting
     let store: SettingsStore
@@ -180,8 +171,7 @@ private struct SettingControlView: View {
     var body: some View {
         switch (setting.control, store.level) {
         case (.toggle, .bottle):
-            // Said aloud: inside a row's stack the switch loses the title the
-            // form would have read for it.
+            // Inside the row's stack the switch loses the form's title for VoiceOver.
             Toggle(setting.title, isOn: store.flagBinding(setting))
                 .accessibilityLabel(setting.title)
         case (.toggle, .game):
@@ -193,8 +183,7 @@ private struct SettingControlView: View {
         case let (.choices(choices), level), let (.tuning(choices), level):
             let inherits = level == .game && setting.inherits
             Picker(setting.title, selection: inherits ? tag : store.choiceBinding(setting)) {
-                // A choice's label is too long to share the closed picker
-                // with "Inherit"; the row's line says what it stands for.
+                // Plain "Inherit": the caption says what it stands for.
                 if inherits { Text("Inherit").tag(Self.inheritTag) }
                 ForEach(choices) { choice in
                     Text(choice.label).tag(choice.value)
@@ -227,8 +216,7 @@ private struct SettingControlView: View {
     }
 }
 
-/// The mark a control wears when the fix table names a value this game does
-/// not have, with the measurement behind it as the tooltip.
+/// The fix table's recommendation, with its reason as the tooltip.
 private struct RecommendedChip: View {
     let reason: String
     let use: () -> Void
@@ -244,8 +232,7 @@ private struct RecommendedChip: View {
                 .buttonStyle(.link)
                 .font(.caption)
                 .accessibilityHint(InterfaceCopy.localized(reason))
-            // Marks the tooltip for the pointer; the button's hint carries it
-            // to VoiceOver.
+            // The button's hint carries the tooltip to VoiceOver.
             Image(systemName: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -256,8 +243,7 @@ private struct RecommendedChip: View {
     }
 }
 
-/// The mark a control wears when the fix list set its value at the game's
-/// first launch, with the reason as the tooltip and the undo beside it.
+/// Marks a value the fix list set at first launch, with its reason and undo.
 struct FixListMark: View {
     let reason: String
     let undo: () -> Void

@@ -1,19 +1,12 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// Steam's own file dialogs, answered by the Mac's.
-///
-/// The client's `SteamClient.System.OpenFileDialog` opens a Win32 dialog
-/// from `steam.exe`, which this app keeps off the screen with the rest of
-/// the client's native windows, so Add a Non-Steam Game's Browse and every
-/// other picker in Steam's UI showed nothing. The call is taken on its way
-/// to the client and answered with the Mac panel's choice as a Windows path
-/// on the bottle's drives: `C:` inside the bottle, `Z:` (the whole
-/// filesystem) everywhere else.
+/// Steam's file dialogs, answered by the Mac's. `SteamClient.System.OpenFileDialog`
+/// would open an off-screen Win32 dialog, so the call is answered with the
+/// panel's choice as a Windows path: `C:` inside the bottle, `Z:` elsewhere.
 @MainActor
 enum SteamFileDialogs {
-    /// Steam's `EResult` for a dialog the user dismissed; the page reads it
-    /// off the rejection and goes quiet.
+    /// Steam's `EResult` for a dismissed dialog.
     nonisolated static let cancelledResult = 52
 
     /// What the page asked for, read off the call's one argument.
@@ -34,9 +27,8 @@ enum SteamFileDialogs {
         }
     }
 
-    /// Presents the panel the options describe, as a sheet on the calling
-    /// window or the one the user is working in, and answers the choice as a
-    /// Windows path, or `nil` for a dismissed panel.
+    /// Presents the panel as a sheet and answers the choice as a Windows
+    /// path, or `nil` when dismissed.
     static func choose(_ options: Options, over window: NSWindow? = nil) async -> String? {
         let panel: NSSavePanel
         let types = contentTypes(patterns: options.patterns)
@@ -67,10 +59,8 @@ enum SteamFileDialogs {
         return SteamBottle.windowsPath(for: chosen)
     }
 
-    /// The panel's filter for Steam's `*.ext` patterns; empty, which lets
-    /// any file through, when one of them is `*.*` — Steam's "All files",
-    /// which its own dialog offers beside the default filter and an open
-    /// panel has no menu to switch to.
+    /// The panel's filter for Steam's `*.ext` patterns; empty (any file) when
+    /// one is `*.*`, since an open panel has no filter menu.
     nonisolated static func contentTypes(patterns: [String]) -> [UTType] {
         var extensions: [String] = []
         for pattern in patterns {
@@ -82,9 +72,8 @@ enum SteamFileDialogs {
         return WebFilePanel.contentTypes(extensions: extensions)
     }
 
-    /// The folder the panel opens in: the initial file's own folder, or the
-    /// initial path itself when it names a folder (a directory picker's
-    /// current choice). `nil` for a path the bottle cannot resolve.
+    /// The folder the panel opens in: the initial path's folder, or the path
+    /// itself when it is one.
     private static func initialLocation(_ windowsPath: String) -> URL? {
         guard !windowsPath.isEmpty else { return nil }
         let trimmed = windowsPath.hasPrefix("\"") && windowsPath.hasSuffix("\"") && windowsPath.count > 1
@@ -99,21 +88,17 @@ enum SteamFileDialogs {
         return folder.isEmpty ? nil : SteamBottle.macURL(fromWindowsPath: folder)
     }
 
-    /// The last component of a Windows path, which is all a save panel's
-    /// name field takes.
+    /// The last component of a Windows path.
     nonisolated static func fileName(_ windowsPath: String) -> String {
         windowsPath.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init) ?? ""
     }
 }
 
-/// Steam's Add desktop shortcut, as a Mac desktop understands it: an alias
-/// of the game's own bundle, which carries the game's icon and starts it
-/// through the app. The client would have written a `.url` file to the
-/// bottle's Windows desktop, where nobody looks.
+/// Steam's Add desktop shortcut as an alias of the game's bundle on the Mac
+/// Desktop, in place of a `.url` on the bottle's Windows desktop.
 @MainActor
 enum DesktopShortcuts {
-    /// Takes the call for the game, a Steam app or a non-Steam shortcut.
-    /// `false` when the game has no bundle to point at yet.
+    /// Takes the call for a Steam app or non-Steam shortcut; `false` without a bundle yet.
     static func take(appID steamID: Int) -> Bool {
         guard let delegate = NSApp.delegate as? AppDelegate else { return false }
         let appID = delegate.host.shortcutPrograms[steamID] ?? steamID

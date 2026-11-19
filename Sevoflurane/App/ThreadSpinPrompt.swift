@@ -2,15 +2,12 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Whether a closed run earns the processor-limit offer. Pure, so the decision
-/// is testable without a window.
+/// Whether a closed run earns the processor-limit offer.
 nonisolated enum ThreadSpinPromptPolicy {
-    /// The suggestion to offer for `record`: the diagnosis, when the crash
-    /// prompt left the run to it.
+    /// The suggestion to offer for `record`, unless the crash prompt opened.
     ///
     /// - Parameters:
-    ///   - crashShown: Whether the crash prompt opened for this run. A crash is
-    ///     the news, and one panel is what a run gets.
+    ///   - crashShown: Whether the crash prompt opened; a run gets one panel.
     ///   - currentCap: The game's processors setting as it resolves now.
     ///   - asks: Whether the offer is still wanted for this game.
     static func suggestion(
@@ -21,12 +18,9 @@ nonisolated enum ThreadSpinPromptPolicy {
     }
 }
 
-/// The offer after a run whose game kept a thread spinning on every processor:
-/// one panel, once per run, naming how many and offering the cap that lets
-/// them sleep.
-///
-/// A floating panel for the same reason as ``CrashPrompt``'s: the app is a
-/// menu-bar agent and the game that just closed may have been its only window.
+/// The offer after a run whose game kept a thread spinning on every
+/// processor, with the cap that lets them sleep. A floating panel, like
+/// ``CrashPrompt``'s, since a menu-bar agent may have no other window.
 @MainActor
 final class ThreadSpinPrompt: NSObject, NSWindowDelegate {
     static let shared = ThreadSpinPrompt()
@@ -41,8 +35,7 @@ final class ThreadSpinPrompt: NSObject, NSWindowDelegate {
     /// - Parameters:
     ///   - defaults: Where "Don't Ask for This Game" is read from and written to.
     ///   - settings: Where the game's processors setting is read and written.
-    ///   - presenter: What showing the prompt means. A test injects one; the
-    ///     app opens the panel.
+    ///   - presenter: A test's stand-in for opening the panel.
     init(
         defaults: UserDefaults = Preferences.shared,
         settings: any SettingsEnvironment = LiveSettingsEnvironment(),
@@ -53,9 +46,7 @@ final class ThreadSpinPrompt: NSObject, NSWindowDelegate {
         self.presenter = presenter
     }
 
-    /// Considers a closed run, and answers whether it opened the prompt. A run
-    /// is considered once: the second closing of a run whose first closing
-    /// showed the crash prompt stays with that answer.
+    /// Considers a closed run once, answering whether it opened the prompt.
     @discardableResult
     func offer(_ record: RunRecord, crashShown: Bool) -> Bool {
         let key = CrashPromptPolicy.key(for: record)
@@ -94,8 +85,7 @@ final class ThreadSpinPrompt: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: ThreadSpinPromptView(model: model))
         panel.setContentSize(panel.contentView?.fittingSize ?? Self.panelSize)
         panel.center()
-        // An agent app has no activation of its own, so the panel would open
-        // behind whatever the user was in.
+        // Otherwise the agent app's panel opens behind the front app.
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
@@ -167,8 +157,7 @@ final class ThreadSpinPromptModel {
         String(localized: "Limit to \(suggestion.cap) Processors")
     }
 
-    /// Sets the game's processors to the suggested cap through the store Settings
-    /// writes, which the next launch reads.
+    /// Sets the game's processors to the cap for its next launch.
     func limit() {
         let cap = suggestion.cap
         settings.update(.game(record.appid, bottle: SteamBottle.name)) { $0.processors = cap }

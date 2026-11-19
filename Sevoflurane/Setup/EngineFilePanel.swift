@@ -16,8 +16,8 @@ enum EngineFilePanel {
         panel.allowedContentTypes = [
             UTType(filenameExtension: "xz"), UTType(filenameExtension: "txz"), .archive,
         ].compactMap(\.self)
-        // A directory is a choice, not a place to descend into: the tree
-        // `package-engine.sh` assembles is what the tarball holds.
+        // A directory is itself a choice: the tree `package-engine.sh`
+        // assembles is what the tarball holds.
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         return panel.runModal() == .OK ? panel.url : nil

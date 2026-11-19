@@ -2,9 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// What a program's launch reports to, beat by beat: the Steam host, which
-/// carries the status line and opens the window watch and the run record
-/// (``SteamWebHost/beginProgramLaunch(appID:)``).
+/// What a program's launch reports to: the Steam host's status line, window
+/// watch and run record.
 @MainActor
 protocol ProgramLaunchReporting: AnyObject {
     /// The ticket of the status line this press opened, or nil when a
@@ -17,20 +16,14 @@ protocol ProgramLaunchReporting: AnyObject {
 
 extension SteamWebHost: ProgramLaunchReporting {}
 
-/// The adopted Windows programs as the menu bar reads them: the list, the
-/// icon for each row, and the four things a row can do.
-///
-/// The Steam library in the popover comes from the client's own page over
-/// CDP; this list comes from the settings store on disk, so it answers with
-/// no client running and survives a client that never comes up.
+/// The adopted Windows programs for the menu bar, read from the settings
+/// store on disk so the list works with no Steam client running.
 @MainActor
 @Observable
 final class QuickLaunchStore {
     private(set) var programs: [AdoptedPrograms.Entry] = []
-    /// Icons are read from disk, so each one is kept once it is drawn.
     @ObservationIgnored private var icons: [Int: NSImage] = [:]
-    /// A fixed list posed for the gallery, which draws every surface on a
-    /// machine that has none of them.
+    /// A fixed list for the gallery.
     @ObservationIgnored private let simulated: [AdoptedPrograms.Entry]?
 
     init(simulated: [AdoptedPrograms.Entry]? = nil) {
@@ -38,10 +31,8 @@ final class QuickLaunchStore {
         refresh()
     }
 
-    /// Re-reads the store. Cheap: one directory listing and a JSON file per
-    /// program.
-    /// A change found here came from outside the app (`sevo program`, the
-    /// MCP server), so Steam's library is brought in step with it too.
+    /// Re-reads the store. A change found here came from outside the app
+    /// (`sevo program`, the MCP server), so Steam's library is synced too.
     func refresh() {
         let next = simulated ?? AdoptedPrograms.all()
         guard next != programs else { return }
@@ -60,19 +51,14 @@ final class QuickLaunchStore {
         return image
     }
 
-    /// The launch story's beats, told to the Steam host
-    /// (``SteamWebHost/beginProgramLaunch(appID:)``): the row's status line,
-    /// then the window watch and the run record once the helper has spawned
-    /// the program, or the status cleared when it spawned nothing.
+    /// A launch's steps, told to the Steam host.
     struct LaunchHooks {
         let pressed: @MainActor (Int) -> UUID?
         let started: @MainActor (Int) -> Void
         let ended: @MainActor (Int, UUID?) -> Void
 
-        /// The beats told to `host`. Every store that starts a program is
-        /// wired this way — the popover's, and the one a Dock tile's launch
-        /// uses before the menu bar exists — so a launch from anywhere opens
-        /// the same status line, window watch and run record.
+        /// The steps told to `host`; every store that starts a program,
+        /// popover or Dock tile, is wired this way.
         init(reporting host: some ProgramLaunchReporting) {
             pressed = { host.beginProgramLaunch(appID: $0) }
             started = { host.programDidStart(appID: $0) }
@@ -83,14 +69,11 @@ final class QuickLaunchStore {
     @ObservationIgnored var launchHooks: LaunchHooks?
 
     /// The programs whose launch request is with the helper, from the press
-    /// to its reply. A second press on one of them is the same wish again,
-    /// not a second launch: five presses during a first companion launch
-    /// made five games, 2026-09-26.
+    /// to its reply. A second press on one of them is ignored: each press
+    /// during a slow first companion launch would otherwise start another game.
     private(set) var launching: Set<Int> = []
 
-    /// Where a launch was asked for, which decides where a refusal is heard:
-    /// the popover row carries its own status line, a Dock tile has nothing
-    /// but the notification.
+    /// Where a launch was asked for: a Dock tile hears a refusal only as a notification.
     enum Origin {
         case popover
         case dock
@@ -104,8 +87,7 @@ final class QuickLaunchStore {
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
             let logOffset = KernelDriverFailure.size()
-            // Long enough for a first launch that creates the companion
-            // prefix of a program that needs a steam.exe parent (SteamParent).
+            // Long enough for a first launch that creates a companion prefix (SteamParent).
             guard let reply = await DaemonService.postReply(
                 "/program/launch?id=\(entry.id)\(query)", timeout: 240,
             ) else {
@@ -122,13 +104,9 @@ final class QuickLaunchStore {
                 launchHooks?.ended(entry.id, ticket)
                 return
             }
-            // The request is answered; what follows is the program's own
-            // story, and a press now is a new wish the helper judges.
             launching.remove(entry.id)
             guard (200 ..< 300).contains(reply.status) else {
-                // 409 is the helper declining a program that is starting or
-                // running already, which its log line says; anything else is
-                // a failure, said here with the helper's reason.
+                // 409: already starting or running, which the helper logs itself.
                 if reply.status != 409 {
                     EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
                 }
@@ -145,8 +123,7 @@ final class QuickLaunchStore {
             EventLog.shared.log(
                 .client, "\(entry.name) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load",
             )
-            // One alert per program at a time: every launch that failed the
-            // same way while one is up says nothing the first does not.
+            // One alert per program at a time.
             guard Self.explaining.insert(entry.name).inserted else { return }
             ModalAlerts.present {
                 Self.explainKernelDriver(driver, program: entry.name)
@@ -165,13 +142,9 @@ final class QuickLaunchStore {
         return String(text[text.index(after: space)...])
     }
 
-    /// A program that drew nothing after its kernel driver failed has no
-    /// other way to say why, so the likely reason is said once.
-    ///
-    /// The app comes forward first. It runs as a menu bar app, so an alert
-    /// raised while another app is in front opened behind that app's
-    /// windows, and its modal session took every click and hover the popover
-    /// got until someone found it, 2026-09-26.
+    /// Explains a program that drew nothing after its kernel driver failed.
+    /// The app comes forward first: otherwise the alert opens behind the front
+    /// app's windows and its modal session swallows the popover's clicks.
     private static func explainKernelDriver(_ driver: String, program: String) {
         let alert = NSAlert()
         alert.messageText = String(localized: "\(program) showed no window")
@@ -185,9 +158,8 @@ final class QuickLaunchStore {
         alert.runModal()
     }
 
-    /// Forgets a program. The executable it points at is the user's and is
-    /// left where it is; what an installer put in the bottle is removed from
-    /// Settings › Storage, which can say how big it is first.
+    /// Forgets a program and leaves its executable in place; installed files
+    /// are removed from Settings › Storage.
     func remove(_ entry: AdoptedPrograms.Entry) {
         guard simulated == nil else { return }
         AdoptedPrograms.remove(entry.id)
@@ -208,14 +180,12 @@ final class QuickLaunchStore {
         NSWorkspace.shared.activateFileViewerSelecting([entry.program.url])
     }
 
-    /// Gives a program the name its row, its Steam shortcut and its Dock tile
-    /// show. The launcher bundle is rebuilt under the new title, and a tile
-    /// kept for the old one follows it.
+    /// Renames a program's row, Steam shortcut and launcher bundle; a kept
+    /// Dock tile follows the bundle.
     func rename(_ entry: AdoptedPrograms.Entry, to name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard simulated == nil, !name.isEmpty, name != entry.name else { return }
-        // Read before the record changes: the helper's next pass rebuilds
-        // the bundle under the new name on its own.
+        // Read before the record changes the bundle's name.
         let old = GameLaunchers.dockableBundle(appID: entry.id)
         var values = GameConfig.game(entry.id)
         values.name = name

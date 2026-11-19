@@ -4,18 +4,14 @@ import UserNotifications
 
 /// One notification Steam produced, as the context page reports it.
 ///
-/// Steam hands its UI a notification id, a type, and a protobuf body whose
-/// shape is chosen by that type. The page deserializes it with Steam's own
-/// per-type descriptor and resolves the identities only it can resolve — an
-/// account id to a persona, an app id to a game's name — so what arrives here
-/// is already a set of names. The words are written on this side.
+/// The page deserializes Steam's per-type protobuf body and resolves account
+/// and app ids to names, so what arrives here is already names; the words are
+/// written on this side.
 struct SteamNotification: Decodable, Equatable, Sendable {
-    /// Steam's `ENotificationType`. The client's table runs 1…64; the ones
-    /// this app can present are in ``SteamNotifications/Presentation``.
+    /// Steam's `ENotificationType`, 1…64; see ``SteamNotifications/Presentation``.
     var kind: Int
-    /// Steam's `ENotificationSource`: 1 is the client, 2 is the Steam
-    /// servers. Only the client's are presented — a server notification's
-    /// body is a JSON blob whose rendering is Steam's own web component.
+    /// Steam's `ENotificationSource`: 1 is the client, 2 the servers, whose
+    /// JSON bodies only Steam's web component renders.
     var source: Int
     var id: String
     /// The sender's persona for a message, the group's name for a group chat.
@@ -28,11 +24,8 @@ struct SteamNotification: Decodable, Equatable, Sendable {
     var accountID: String
     var appID: String
     var gameName: String
-    /// Steam's own sound setting for this notification, answered in the page
-    /// where it lives: the per-friend override over Friends & Chat's "play a
-    /// sound when I receive a message" for a message, the chat-room switch
-    /// for a group's. Absent from a payload an older page built, which reads
-    /// as the silence that was the behavior then.
+    /// Steam's own sound setting for this notification (the per-friend or
+    /// chat-room setting). Absent from an older page's payload: silent.
     var playsSound: Bool?
 
     private enum CodingKeys: String, CodingKey {
@@ -52,33 +45,21 @@ struct SteamNotification: Decodable, Equatable, Sendable {
 
 /// Steam's notifications, re-posted as the Mac's.
 ///
-/// Steam draws its own toasts into a borderless popup in the corner of the
-/// screen — a Windows toast over a Mac desktop, and one of the leaks this app
-/// exists to remove. ``SteamWindowRole/toast`` keeps that popup off screen
-/// while letting its page run, and what the user sees instead is posted here:
-/// a real notification, with the sender's avatar, that opens the chat it came
-/// from.
-///
-/// Nothing polls. The page subscribes to the same value Steam's own toast
-/// component reads (`NotificationStore.CurrentToastSubscribableValue`), so
-/// exactly the notifications Steam would have shown arrive here — the user's
-/// Steam notification settings are honored because they are applied upstream
-/// of that value.
+/// ``SteamWindowRole/toast`` keeps Steam's toast popup off screen while its
+/// page runs, and this posts a Mac notification in its place. The page
+/// subscribes to `NotificationStore.CurrentToastSubscribableValue`, so exactly
+/// the toasts Steam would show arrive, its settings applied.
 @MainActor
 @Observable
 final class SteamNotifications {
     /// What macOS says about our permission to post.
     private(set) var authorization: UNAuthorizationStatus = .notDetermined
 
-    /// Whether Steam has produced a notification that was dropped because
-    /// nobody has been asked for permission yet. This is what the popover's
-    /// prompt hangs on: an app with no window on first run has nowhere
-    /// honest to raise the system alert until the feature has something to
-    /// show for itself.
+    /// Whether a notification was dropped before permission was asked; the
+    /// popover's permission card shows while true.
     private(set) var hasUnaskedNotifications = false
 
-    /// Where a notification's click goes. Weak, because the host owns the
-    /// app and this is one of the things it owns.
+    /// Where a notification's click goes; weak, since the host owns this.
     @ObservationIgnored weak var host: SteamWebHost?
 
     @ObservationIgnored private let center: UNUserNotificationCenter?
@@ -91,9 +72,7 @@ final class SteamNotifications {
     }
 
     #if DEBUG
-        /// A relay in a fixed permission state, for the gallery. It has no
-        /// notification center behind it, so nothing it is asked to do
-        /// reaches the real one.
+        /// A relay in a fixed permission state with no notification center, for the gallery.
         static func preview(
             authorization: UNAuthorizationStatus = .authorized,
             unasked: Bool = false,
@@ -111,10 +90,8 @@ final class SteamNotifications {
 
     // MARK: - Authorization
 
-    /// Installs the delegate and reads the current permission. Called at
-    /// launch: reading the state raises no prompt, and the delegate has to be
-    /// set before the app finishes launching for a click on a notification
-    /// that woke the app to be delivered.
+    /// Installs the delegate and reads the permission without prompting. Must
+    /// run before launch finishes, or a click that woke the app is lost.
     func start() {
         guard let center else { return }
         let forwarder = Forwarder(relay: self)
@@ -129,8 +106,7 @@ final class SteamNotifications {
         authorization = await center.notificationSettings().authorizationStatus
     }
 
-    /// Raises the system permission alert. Only ever called from a control
-    /// the user clicked — see ``hasUnaskedNotifications``.
+    /// Raises the system permission alert; call only from a user's click.
     func requestAuthorization() async {
         guard let center else { return }
         do {
@@ -153,8 +129,7 @@ final class SteamNotifications {
 
     // MARK: - Posting
 
-    /// Posts one of Steam's notifications as the Mac's, or explains in the
-    /// log why it did not.
+    /// Posts one of Steam's notifications, or logs why not.
     func post(_ notification: SteamNotification) {
         guard notification.source == Self.clientSource else {
             EventLog.shared.log(
@@ -199,19 +174,11 @@ final class SteamNotifications {
         let content = UNMutableNotificationContent()
         content.title = presentation.title
         content.body = presentation.body
-        // A message makes one sound, and on a Mac it is the notification's:
-        // the volume, the Do Not Disturb schedule and the per-app switch are
-        // all the system's there. Steam plays its own chime from the page for
-        // exactly these, which ``SteamMessageSound`` refuses, and the setting
-        // behind it — Friends & Chat's "play a sound when I receive a
-        // message", and any per-friend override on top — is what decides here
-        // instead. Everything else stays silent: nothing on this side has
-        // taken over the sound for it.
+        // ``SteamMessageSound`` refuses Steam's chime for messages, so the
+        // sound is the notification's, under the system's volume and Do Not
+        // Disturb, decided by Steam's own sound setting.
         content.sound = presentation.isSounded ? .default : nil
         content.userInfo = presentation.route.userInfo
-        // Steam sends a new notification per message; grouping them by who
-        // they are from is what makes a conversation read as one thread in
-        // Notification Center rather than as n separate arrivals.
         content.threadIdentifier = presentation.route.threadIdentifier
         if let attachment = await Self.attachment(for: notification) {
             content.attachments = [attachment]
@@ -227,19 +194,13 @@ final class SteamNotifications {
             return
         }
         if presentation.isTransient {
-            // Presence is a moment, not a record: the banner shows, and
-            // nothing lingers in Notification Center saying who was online
-            // at 3pm. UserNotifications has no transient flag, so the
-            // delivered notification is withdrawn once the banner has had
-            // its time on screen.
+            // UserNotifications has no transient flag; withdrawn after the banner.
             try? await Task.sleep(for: .seconds(8))
             center.removeDeliveredNotifications(withIdentifiers: [notification.id])
         }
     }
 
-    /// The sender's avatar, fetched to a file so `UserNotifications` can take
-    /// it. The framework moves the file into its own store, so each post gets
-    /// its own copy and there is nothing here to clean up.
+    /// The sender's avatar as a file, which `UserNotifications` moves into its own store.
     private static func attachment(for notification: SteamNotification) async
         -> UNNotificationAttachment? {
         guard let url = URL(string: notification.icon),
@@ -262,9 +223,8 @@ final class SteamNotifications {
 
     private static let undoAction = "undo"
 
-    /// Says that a game's first launch took the fix list's `settings`, with
-    /// an Undo; a click opens the game in Settings › Games, which offers the
-    /// same undo. Without permission to post it is a line in the log.
+    /// Says a game's first launch took the fix list's `settings`, with Undo;
+    /// a click opens the game in Settings › Games.
     func postFixesApplied(appID: Int, name: String, settings: [String]) {
         guard let center, [.authorized, .provisional].contains(authorization) else {
             EventLog.shared.log(
@@ -291,9 +251,7 @@ final class SteamNotifications {
         }
     }
 
-    /// A Dock tile's launch the helper declined — the program is still
-    /// starting, or its executable is gone — said where a Dock press can hear
-    /// it. A row in the popover has its own status line for the same news.
+    /// A Dock tile's launch the helper declined; the popover has its own status line.
     func postLaunchDeclined(name: String, reason: String) {
         guard let center, [.authorized, .provisional].contains(authorization) else {
             EventLog.shared.log(.app, "Dock tile: no notification for \(name) (notifications \(authorization.name))")
@@ -333,10 +291,8 @@ final class SteamNotifications {
     private static let reconnectAction = "reconnect"
     private static let sessionIdentifier = "signed-in-elsewhere"
 
-    /// Says that the bottle's Steam was signed out because its account
-    /// signed in on another client, naming Steam for Mac when that is the
-    /// one. Without permission to post it is a line in the log, and the menu
-    /// bar says the same.
+    /// Says the bottle's Steam was signed out by another client, naming
+    /// Steam for Mac when it was that.
     func postSignedInElsewhere(bySteamForMac: Bool) {
         guard let center, [.authorized, .provisional].contains(authorization) else {
             EventLog.shared.log(
@@ -381,9 +337,7 @@ final class SteamNotifications {
         }
     }
 
-    /// Opens what a clicked notification was about. The friends list and a
-    /// chat are their own windows, so none of this shows Steam's desktop
-    /// window — the point of the feature.
+    /// Opens what a clicked notification was about.
     func handleClick(userInfo: [AnyHashable: Any]) {
         switch Route(userInfo: userInfo) {
         case let .chat(accountID):
@@ -403,14 +357,12 @@ final class SteamNotifications {
 
     /// Where clicking a notification takes the user.
     enum Route: Equatable {
-        /// One friend's chat window.
         case chat(accountID: String)
-        /// The friends list — the right landing for anything about a
-        /// conversation this app cannot address directly.
+        /// The friends list, for a conversation this app cannot address directly.
         case friends
-        /// Steam's own window, for the notifications that are about a game.
+        /// Steam's own window, for notifications about a game.
         case steam
-        /// Settings › Games on one game, for what the fix list set on it.
+        /// Settings › Games on one game.
         case fixes(appID: Int)
 
         var userInfo: [AnyHashable: Any] {
@@ -422,8 +374,7 @@ final class SteamNotifications {
             }
         }
 
-        /// Groups a conversation's notifications into one thread in
-        /// Notification Center.
+        /// One Notification Center thread per conversation.
         var threadIdentifier: String {
             switch self {
             case let .chat(accountID): "chat-\(accountID)"
@@ -449,12 +400,8 @@ final class SteamNotifications {
 
     /// One notification in the words this app uses for it.
     ///
-    /// Steam's table runs to 64 types, and most of them carry a payload that
-    /// only Steam's own React component knows how to render. These are the
-    /// ones whose payload names itself — a message carries its sender and its
-    /// text, a download carries its app id — so they can be written out here
-    /// without guessing. Everything else is logged and dropped: a banner that
-    /// can only say "Steam" is worse than no banner.
+    /// Only types whose payload names itself (a message's sender and text, a
+    /// download's app id) are presented; the rest are logged and dropped.
     ///
     /// To add a type, verify its fields against a live client first: fire
     /// `NotificationStore.GetNotificationTargets()[<type>].fnTest()` through
@@ -464,12 +411,9 @@ final class SteamNotifications {
         let title: String
         let body: String
         let route: Route
-        /// Shown as a banner, then withdrawn from Notification Center —
-        /// presence has no value as a record.
+        /// Shown as a banner, then withdrawn from Notification Center.
         var isTransient = false
-        /// Whether the banner makes a sound. True only where Steam's own
-        /// chime has been taken over — an arriving message — and only when
-        /// Steam's setting for that sender says so.
+        /// True only for a message whose sender's Steam setting plays a sound.
         var isSounded = false
 
         init?(_ notification: SteamNotification) {
@@ -502,10 +446,7 @@ final class SteamNotifications {
                 guard !person.isEmpty else { return nil }
                 title = person
                 body = notification.body
-                // A group chat is not one friend's window, and Steam's own
-                // group-chat route takes a pair of ids this app has not
-                // verified against a live client. The friends list is where
-                // every conversation is reachable from.
+                // Steam's group-chat route takes ids unverified against a live client.
                 route = .friends
                 isSounded = notification.playsSound ?? false
             default:
@@ -514,9 +455,7 @@ final class SteamNotifications {
         }
     }
 
-    /// The `UNUserNotificationCenterDelegate`, kept off the observable type
-    /// so the state the popover reads is not also an `NSObject` full of
-    /// protocol conformances.
+    /// The `UNUserNotificationCenterDelegate`, kept off the observable type.
     private final class Forwarder: NSObject, UNUserNotificationCenterDelegate {
         private weak var relay: SteamNotifications?
 
@@ -524,9 +463,7 @@ final class SteamNotifications {
             self.relay = relay
         }
 
-        /// This app has no window to be frontmost in, so a notification that
-        /// arrives while it is active is still the only thing that says a
-        /// message came in.
+        /// Shown even while the app is active: it has no window that would say so.
         func userNotificationCenter(
             _: UNUserNotificationCenter,
             willPresent _: UNNotification,

@@ -2,11 +2,9 @@ import AppKit
 import Foundation
 
 /// Puts the bundled `sevo` on PATH and registers its MCP server with the AI
-/// agents present on this machine. Always
-/// explicit opt-in — the wizard's Options toggle or Settings › General —
-/// and each agent is its own switch: nothing is written for an agent that
-/// isn't installed, and agents with no stable config surface get shown the
-/// command instead.
+/// agents on this machine, on explicit opt-in (the wizard or Settings ›
+/// General). Each agent is its own switch, and nothing is written for one
+/// that isn't installed.
 @MainActor
 enum AgentIntegration {
     nonisolated static let symlinkPath = "/usr/local/bin/\(AppIdentity.commandName)"
@@ -21,8 +19,7 @@ enum AgentIntegration {
         Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
     }
 
-    /// Installed means the symlink resolves to a binary that still exists —
-    /// a link left behind by a moved app counts as broken, not installed.
+    /// Whether the symlink resolves to a binary that still exists.
     static var isCLIInstalled: Bool {
         guard let destination = try? FileManager.default
             .destinationOfSymbolicLink(atPath: symlinkPath) else { return false }
@@ -31,11 +28,9 @@ enum AgentIntegration {
 
     // MARK: - The CLI symlink
 
-    /// Symlinks the CLI into `/usr/local/bin` (root-owned on a stock
-    /// machine, so this asks for an administrator password once). A symlink
-    /// rather than a copy so app updates never need the password again: the
-    /// link's target is the bundle path, which outlives any one version.
-    /// Answers a failure description, or `nil` when the link landed.
+    /// Symlinks the CLI into the root-owned `/usr/local/bin`, asking for an
+    /// administrator password once; the link targets the bundle path, so app
+    /// updates never ask again. Answers a failure description, or `nil`.
     static func installCLI() async -> String? {
         let cli = bundledCLI.path
         guard FileManager.default.fileExists(atPath: cli) else {
@@ -60,12 +55,9 @@ enum AgentIntegration {
         return nil
     }
 
-    /// Unregisters every agent and takes the symlink away. The uninstall
-    /// flow passes `allowAdminPrompt: false` — a second password dialog
-    /// mid-uninstall is worse than reporting a leftover link.
-    ///
-    /// Only a link into an app bundle's `Contents/Helpers/sevo` is taken: a
-    /// `sevo` someone put at that path themselves is theirs.
+    /// Unregisters every agent and removes the symlink when it points into an
+    /// app bundle's `Contents/Helpers/sevo`. The uninstall passes
+    /// `allowAdminPrompt: false` and leaves a root-owned link in place.
     static func remove(allowAdminPrompt: Bool = true) async {
         for harness in Harness.allCases {
             guard await isRegistered(harness) else { continue }
@@ -90,17 +82,15 @@ enum AgentIntegration {
         }
     }
 
-    /// Whether a link at ``symlinkPath`` pointing at `destination` is one
-    /// ``installCLI()`` made: into some copy of the app, whichever version.
-    /// `nil` is a file that is no link at all.
+    /// Whether a link at ``symlinkPath`` pointing at `destination` points into
+    /// some copy of the app. `nil` is a file that is no link.
     nonisolated static func isOurLink(destination: String?) -> Bool {
         destination?.hasSuffix(".app/Contents/Helpers/sevo") ?? false
     }
 
     // MARK: - Harnesses
 
-    /// The agents Sevoflurane can register its MCP server with — one row,
-    /// one switch each in Settings › General.
+    /// The agents Sevoflurane can register its MCP server with.
     enum Harness: String, CaseIterable, Identifiable {
         case claudeCode
         case claudeDesktop
@@ -146,10 +136,8 @@ enum AgentIntegration {
         Harness.allCases.filter(isDetected)
     }
 
-    /// Whether the agent's config carries the sevo server right now — read
-    /// from the config itself, so state written by an earlier run, another
-    /// copy of the app, or the user's own hand all count. Off the main actor:
-    /// `~/.claude.json` holds every project's history and runs to megabytes.
+    /// Whether the agent's config carries the sevo server, read from the
+    /// config itself. Off the main actor: `~/.claude.json` runs to megabytes.
     @concurrent
     nonisolated static func isRegistered(_ harness: Harness) async -> Bool {
         switch harness {
@@ -262,20 +250,15 @@ enum AgentIntegration {
         return String(result.output.suffix(120))
     }
 
-    /// Where Claude Code reads the skill that teaches it `sevo`: the commands,
-    /// how a diagnostic run is made, and where its files land. The installed
-    /// app's alone: a Debug build, a second installation with its own `sevo`,
-    /// neither writes nor removes it.
+    /// Where Claude Code reads the skill that teaches it `sevo`. Only the
+    /// release build writes or removes it.
     nonisolated static var claudeSkillDirectory: URL {
         UserHome.url.appendingPathComponent(".claude/skills/sevoflurane")
     }
 
-    /// Copies the bundled skill over whatever an earlier registration left, so
-    /// every registration carries the running version's guide. The skill is
-    /// `Resources/Agent/SKILL.md` in the source tree and
-    /// `Contents/Resources/SKILL.md` in the built app. One that fails to land
-    /// costs the agent its guide and leaves the server working, so it is
-    /// logged rather than failing the row.
+    /// Copies the bundled skill (`Resources/Agent/SKILL.md` in the source tree,
+    /// `Contents/Resources/SKILL.md` in the app) over any earlier one. A
+    /// failure is logged; the server works without it.
     private static func installClaudeSkill() {
         guard let source = BundledResources.url("SKILL.md") else {
             EventLog.enqueue(.app, "Claude Code skill not installed: the bundle carries no SKILL.md")
@@ -291,8 +274,7 @@ enum AgentIntegration {
         }
     }
 
-    /// Moves the skill's directory to the Trash, where anything a person added
-    /// to it can still be found.
+    /// Moves the skill's directory to the Trash.
     private static func removeClaudeSkill() {
         let directory = claudeSkillDirectory
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
@@ -323,9 +305,8 @@ enum AgentIntegration {
         }
     }
 
-    /// Merges an edit into a `{"mcpServers": {...}}` config, preserving every
-    /// key that isn't ours. A file that exists but doesn't parse is left
-    /// alone — writing would replace the user's whole config with ours.
+    /// Merges an edit into a `{"mcpServers": {...}}` config, keeping every
+    /// other key. A file that exists but doesn't parse is left alone.
     private static func editJSONServers(
         at config: URL,
         requireExisting: Bool,
@@ -364,9 +345,8 @@ enum AgentIntegration {
 
     // MARK: - Codex / ChatGPT
 
-    /// The Codex CLI and the ChatGPT desktop app share `~/.codex/config.toml`,
-    /// and the app bundles the CLI — so registration goes through
-    /// `codex mcp add`, which parses the TOML properly, whichever is present.
+    /// The Codex CLI and the ChatGPT app (which bundles it) share
+    /// `~/.codex/config.toml`, so registration goes through `codex mcp add`.
     private static var codexBinary: String? {
         let home = UserHome.path
         return [
@@ -403,12 +383,10 @@ enum AgentIntegration {
 
     // MARK: - Hermes
 
-    /// Hermes (NousResearch/hermes-agent) reads `~/.hermes/config.yaml`, and
-    /// its CLI has no verb for adding an arbitrary stdio server — so the
-    /// entry is spliced in as a marker-bounded block, with line-scoped
-    /// surgery rather than a parse/serialize round-trip (which would reorder
-    /// and reformat the user's whole file). Removal is recognizer-based, so
-    /// user content survives even a damaged marker block.
+    /// Hermes (NousResearch/hermes-agent) reads `~/.hermes/config.yaml` and
+    /// its CLI cannot add a stdio server, so the entry is spliced in as a
+    /// marker-bounded block by line edits; a YAML round-trip would reformat
+    /// the user's file.
     private nonisolated static var hermesDirectory: URL {
         UserHome.url.appendingPathComponent(".hermes")
     }
@@ -455,12 +433,10 @@ enum AgentIntegration {
     }
 
     /// The config with our server spliced in, or `nil` when there is no safe
-    /// place to put it. Pure text-in, text-out for testability.
+    /// place to put it.
     nonisolated static func addingHermesServer(to text: String) -> String? {
         if hermesHasServer(in: text) { return text }
-        // A stale block (the entry edited or half-removed) is taken out
-        // first, then reinstalled fresh through the same paths as a clean
-        // config.
+        // A stale block is taken out first, then reinstalled fresh.
         let cleaned = text.contains(hermesMarkerStart)
             ? removingHermesServer(from: text) : text
         var lines = cleaned.components(separatedBy: "\n")
@@ -468,16 +444,14 @@ enum AgentIntegration {
         if let empty = lines.firstIndex(where: {
             $0.trimmingCharacters(in: .whitespaces) == "mcp_servers: {}" && !$0.hasPrefix(" ")
         }) {
-            // Exact-line match only: a nested/indented `mcp_servers: {}`
-            // belongs to something else and must never be rewritten.
+            // Top level only: an indented `mcp_servers: {}` belongs to something else.
             lines[empty] = "mcp_servers:\n" + hermesBlock(indent: "  ")
             return lines.joined(separator: "\n")
         }
         if let key = lines.firstIndex(where: {
             $0.trimmingCharacters(in: .whitespaces) == "mcp_servers:" && !$0.hasPrefix(" ")
         }) {
-            // A populated map: our block joins it at whatever indent its
-            // existing children use.
+            // A populated map: our block takes its children's indent.
             let child = lines[(key + 1)...].first {
                 let trimmed = $0.trimmingCharacters(in: .whitespaces)
                 return !trimmed.isEmpty && !trimmed.hasPrefix("#")
@@ -487,16 +461,13 @@ enum AgentIntegration {
             lines.insert(hermesBlock(indent: indent), at: key + 1)
             return lines.joined(separator: "\n")
         }
-        // No top-level mcp_servers map yet: append one.
         let body = cleaned.isEmpty || cleaned == "\n" ? "" : cleaned.hasSuffix("\n") ? cleaned : cleaned + "\n"
         return body + "mcp_servers:\n" + hermesBlock(indent: "  ") + "\n"
     }
 
-    /// Removes our managed block. Bounded by both markers when they're
-    /// intact; when the end marker was deleted, only lines recognizably ours
-    /// are removed and removal stops at the first foreign line. An
-    /// `mcp_servers:` line left genuinely childless is restored to
-    /// `mcp_servers: {}` so the file stays valid YAML.
+    /// Removes our managed block. Without the end marker, only lines
+    /// recognizably ours go, up to the first foreign line. A childless
+    /// `mcp_servers:` becomes `mcp_servers: {}` so the file stays valid YAML.
     nonisolated static func removingHermesServer(from text: String) -> String {
         var kept: [String] = []
         var inBlock = false
@@ -527,9 +498,8 @@ enum AgentIntegration {
         try? String(contentsOf: url, encoding: .utf8)
     }
 
-    /// `do shell script … with administrator privileges` — the standard
-    /// "install command line tool" authorization dialog. Answers a failure
-    /// description ("canceled" included), or `nil` on success.
+    /// Runs `command` through `do shell script … with administrator
+    /// privileges`. Answers a failure description ("canceled" included), or `nil`.
     private static func runPrivileged(_ command: String) async -> String? {
         let script = "do shell script \"\(appleScriptEscaped(command))\" "
             + "with administrator privileges"

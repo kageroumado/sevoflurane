@@ -4,22 +4,17 @@ import Propofol
 import SwiftUI
 import UserNotifications
 
-/// The menu-bar extra, read top to bottom: what to play, the Steam client it
-/// plays through, and the app's own bar with the renderer the games run on.
-///
-/// The design is Propofol, the popover language the maintainer's menu-bar
-/// apps share (Adrafinil, Phosphene, Dantrolene): one radius/spacing ladder, one popover
-/// width, the same header and footer chips. Reinterpreted for Steam: the
-/// library leads, the supervisor speaks only when something needs attention,
-/// and each zone says what it is by what it holds rather than by a heading.
+/// The menu-bar popover, top to bottom: what to play, the Steam client, and
+/// the app's own bar with the renderer. Built on Propofol, the popover style
+/// the maintainer's menu-bar apps share; the supervisor card appears only
+/// when something needs attention.
 struct MenuBarView: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
     let notifications: SteamNotifications
     let quickLaunch: QuickLaunchStore
     let graphics: GraphicsStore
-    /// The first-run assistant, while one is open or set aside. The gallery
-    /// draws the popover of a finished setup and passes none.
+    /// The first-run assistant, while one is open or set aside.
     var setup: SetupWindow?
     var presentation = PopoverPresentation()
     @State private var confirmingQuit = false
@@ -52,13 +47,11 @@ struct MenuBarView: View {
                 FooterBar(host: host, supervisor: supervisor, graphics: graphics) { confirmingQuit = true }
             }
         }
-        // Tighter than Propofol's outer `lg`: this popover's rows carry their
-        // own inset, and at `lg` the two stack into a wide empty gutter.
+        // Tighter than Propofol's `lg`: the rows carry their own inset.
         .padding(Theme.Space.md)
         .frame(width: Theme.popoverWidth)
         .fixedSize(horizontal: false, vertical: true)
-        // Grows out of the ✕ over the footer rather than replacing the popover, which would jump
-        // its size.
+        // Grows out of the ✕ over the footer; replacing the popover would jump its size.
         .overlay(alignment: .bottom) {
             if confirmingQuit, !supervisor.isQuitting {
                 QuitConfirmation { confirmingQuit = false }
@@ -73,17 +66,15 @@ struct MenuBarView: View {
                 quickLaunch: quickLaunch,
             ),
         )
-        // What an open refreshes lands as the popover's first frame, not as
-        // rows sliding and fading in: nothing animates while it settles.
+        // Nothing animates while an open settles, so refreshed rows land as the first frame.
         .transaction { transaction in
             if presentation.isSettling {
                 transaction.disablesAnimations = true
                 transaction.animation = nil
             }
         }
-        // The test opens files inside the prefix, which is not something a
-        // view body may do. Held here because the chip is absent while the
-        // bottle is complete, and a modifier on an absent view never runs.
+        // Disk reads, kept off the body. Held here because a modifier on the
+        // chip, absent for a complete bottle, would never run.
         .task(id: presentation.isSettling) {
             bottleSummary = await BottleIncompleteChip.read()
         }
@@ -99,9 +90,8 @@ struct MenuBarView: View {
         }
     }
 
-    /// "Friends", or what is waiting in it. The count is conversations, not
-    /// messages — it is the number Steam itself posts to the client for its
-    /// own tray badge, and a conversation is what a click opens.
+    /// "Friends", or what is waiting in it. The count is conversations, the
+    /// number Steam posts for its own tray badge.
     static func friendsLabel(unreadChats: Int) -> String {
         switch unreadChats {
         case 0: String(localized: "Friends")
@@ -113,10 +103,7 @@ struct MenuBarView: View {
 
 // MARK: - Animation
 
-/// The moments after the popover goes on screen. An open refreshes the
-/// library, the programs and the renderer, and their answers arrive within
-/// its first half second; animated, they read as the popover assembling
-/// itself.
+/// The half second after the popover opens, while its refreshes answer.
 @MainActor
 @Observable
 final class PopoverPresentation {
@@ -136,10 +123,8 @@ final class PopoverPresentation {
     private static let settleTime = Duration.milliseconds(500)
 }
 
-/// The one curve every region of the popover moves on, keyed to each value
-/// whose change adds, removes or reorders something. The values are read
-/// here, so a change re-runs this modifier and leaves ``MenuBarView``'s body
-/// alone.
+/// The popover's one animation curve, keyed to each value that adds, removes
+/// or reorders rows. Read here so a change leaves ``MenuBarView``'s body alone.
 private struct PopoverAnimations: ViewModifier {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
@@ -161,9 +146,8 @@ private struct PopoverAnimations: ViewModifier {
 
 // MARK: - Quitting
 
-/// The whole popover while the app quits: the bottle takes several seconds to come down, and
-/// until it has, the daemon reports a client nobody wants — which reads as auto-restart being
-/// paused, not as a quit in progress.
+/// The whole popover while the app quits: the bottle takes seconds to come down, and the
+/// daemon's state meanwhile would read as auto-restart paused.
 private struct QuittingNotice: View {
     var body: some View {
         HStack(spacing: Theme.Space.md) {
@@ -185,9 +169,8 @@ private struct QuittingNotice: View {
 
 // MARK: - Unfinished setup
 
-/// Everything else the popover offers is Steam's, and Steam's windows are held
-/// behind the assistant until its finish button — so while setup is unfinished
-/// the way back into it is the whole popover.
+/// Steam's windows are held until setup finishes, so while it is unfinished
+/// the popover offers only the way back into it.
 private struct SetupUnfinishedNotice: View {
     let setup: SetupWindow
 
@@ -229,25 +212,19 @@ private struct SupervisorNotice: View {
         }
     }
 
-    /// What the supervisor card shows for the current health state, or `nil`
-    /// when the client is healthy and the card stays out of the way.
+    /// What the supervisor card shows for the current health state.
     private struct HealthCard {
         let symbol: String
         let title: LocalizedStringResource
         let detail: LocalizedStringResource
-        /// Severity color for the symbol. The card's glass stays neutral in
-        /// every state: a card that turns red carries the alarm twice, and the
-        /// popover is where the user comes to *fix* it.
+        /// Severity color for the symbol; the card's glass stays neutral.
         let tint: Color?
         let action: (label: LocalizedStringResource, run: () -> Void)?
-        /// A second, quieter button beside the first — the state where the
-        /// user has somewhere to go *and* something to try again.
+        /// A second, quieter button beside the first.
         var alternative: (label: LocalizedStringResource, run: () -> Void)?
     }
 
-    /// Supervision runs in a background helper macOS asks the user to approve,
-    /// so "it is not approved" is a state of its own with a way out, not a
-    /// Steam fault to restart out of.
+    /// An unapproved background helper, with Login Items as the way out.
     private var daemonCard: HealthCard {
         HealthCard(
             symbol: "gearshape.badge.exclamationmark",
@@ -275,9 +252,7 @@ private struct SupervisorNotice: View {
                 action: nil,
             )
         case let .launching(phase):
-            // The phase says which startup this is; the card must not, because
-            // it draws for a session's first launch and for the wait after a
-            // restart alike.
+            // Only the phase says which startup this is: the card serves both.
             HealthCard(
                 symbol: "hourglass",
                 title: "Starting Steam",
@@ -351,12 +326,9 @@ private struct SupervisorNotice: View {
 
 // MARK: - The Mac's load
 
-/// What else weighs on this Mac, shown only while it is more than ordinary:
-/// a game that starts slowly or stutters under someone else's work is this
-/// card's to explain, before the person blames the game or this app.
-///
-/// Reads the pressure itself: it moves with every sample the daemon sends,
-/// and read by ``MenuBarView`` it would re-run the whole popover each time.
+/// Heavy load from other work on this Mac, which explains a slow or
+/// stuttering game. Reads the pressure itself: it changes with every daemon
+/// sample, and read by ``MenuBarView`` it would re-run the whole popover.
 private struct HostPressureNotice: View {
     let supervisor: ClientSupervisor
 
@@ -375,8 +347,7 @@ private struct HostPressureNotice: View {
 // MARK: - The Steam session
 
 /// The bottle's Steam signed out because its account signed in on another
-/// client. The client is healthy, so the supervisor card stays away; this is
-/// what says why Steam reads "No connection", and the way back.
+/// client, with the way back. The supervisor card stays away: the client is healthy.
 private struct SessionNotice: View {
     let session: SteamSessionWatch
 
@@ -401,15 +372,8 @@ private struct SessionNotice: View {
 
 // MARK: - Notification permission
 
-/// Where the app asks to post notifications.
-///
-/// An app with no window on first run has nowhere honest to raise the
-/// system alert at launch, and asking before there is anything to show
-/// asks for a permission the user has no reason to weigh yet. So nothing
-/// is asked until Steam actually produces a notification: the first one
-/// is held, the menu-bar dot goes up for it, and this row is what the
-/// user finds when they open the popover to see why. The prompt is then
-/// raised by their click on it.
+/// Where the app asks to post notifications: after Steam's first
+/// notification is held, and only on a click.
 private struct NotificationPermissionCard: View {
     let notifications: SteamNotifications
 
@@ -442,8 +406,8 @@ private struct NotificationPermissionCard: View {
     }
 }
 
-/// The community database's question, for a player who set up before setup
-/// asked it: shown once a run exists to share, gone for good once answered.
+/// The community database's question for a player whose setup did not ask
+/// it, shown once a run exists and until answered.
 private struct SharingQuestionCard: View {
     @State private var isAsking = Preferences.sharesRunStats == nil && RunLog.hasRecords()
 
@@ -476,9 +440,8 @@ private struct SharingQuestionCard: View {
     }
 }
 
-/// Digoxin's question: whether this Mac is counted among Sevoflurane's
-/// users. Asked once, after the community database's question has its
-/// answer; Settings › General holds the choice from then on.
+/// Digoxin's question, whether this Mac is counted among users: asked once,
+/// after the community question is answered.
 private struct UsageQuestionCard: View {
     @State private var isAsking = Preferences.usageCounting == nil
         && !(Preferences.sharesRunStats == nil && RunLog.hasRecords())

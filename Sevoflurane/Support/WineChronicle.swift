@@ -3,16 +3,14 @@ import Foundation
 /// The dock shim's chronicle, read back.
 ///
 /// The engine's dock shim (dormison `build-macos/dock-shim`) appends a line to
-/// `~/Library/Logs/Sevoflurane-windows.log` for every bottle process the
-/// moment winemac.drv loads it, and again for each of its windows. The
-/// `armed` line names the process's executable before it has drawn anything,
-/// which is the only record of a game that dies without a window — three of
-/// the five failed launches of the 2026-09-08 playtest were exactly that.
+/// `~/Library/Logs/Sevoflurane-windows.log` for every bottle process when
+/// winemac.drv loads it, and for each of its windows. The `armed` line is the
+/// only record of a game that dies without a window.
 ///
-/// A line is `HH:mm:ss.SSS <verb> pid=<pid> <exe> <class> "<title>" <W>x<H>`,
-/// where the class, title and size are a window's and are empty for a process
-/// line. The executable may contain spaces (`The Cat Games.exe`), so it is
-/// read as what is left once the window's fields are taken off the end.
+/// A line is `HH:mm:ss.SSS <verb> pid=<pid> <exe> <class> "<title>" <W>x<H>`;
+/// the window fields are empty for a process line. The executable may
+/// contain spaces (`The Cat Games.exe`), so it is what remains once the
+/// window fields are taken off the end.
 nonisolated enum WineChronicle {
     /// What the shim was reporting.
     enum Verb: String, Sendable {
@@ -41,8 +39,7 @@ nonisolated enum WineChronicle {
     /// One line, or `nil` for anything that is not one.
     static func parse(_ line: some StringProtocol) -> Entry? {
         var rest = Substring(line)
-        // The timestamp, which the reader has no use for: the entries it
-        // hands out are the ones it has not seen before.
+        // Skips the timestamp.
         guard let afterTime = rest.firstIndex(of: " ") else { return nil }
         rest = rest[rest.index(after: afterTime)...]
         guard let afterVerb = rest.firstIndex(of: " "),
@@ -56,10 +53,8 @@ nonisolated enum WineChronicle {
         return Entry(verb: verb, pid: pid, executable: executable)
     }
 
-    /// The executable at the head of `<exe> <class> "<title>" <W>x<H>`, whose
-    /// three trailing fields are taken off the end because only the
-    /// executable can contain a space. A process line has no window, so its
-    /// class is empty and two spaces stand where it would be.
+    /// The executable at the head of `<exe> <class> "<title>" <W>x<H>`. A
+    /// process line's empty class leaves two spaces.
     private static func executable(fromTail tail: Substring) -> String? {
         guard let sizeStart = tail.lastIndex(of: " ") else { return nil }
         var head = tail[..<sizeStart]
@@ -78,33 +73,24 @@ nonisolated enum WineChronicle {
 
 /// Reads what the shim has appended since the last read.
 ///
-/// The chronicle is one file for every bottle process and the app is only
-/// interested in what happens after a launch is armed, so a tail starts at
-/// the file's current end. A file shorter than the offset has been replaced
-/// or truncated and is read from its start.
+/// A tail starts at the file's current end. A file shorter than the offset
+/// was replaced or truncated and is read from its start.
 final nonisolated class WineChronicleTail {
     private let url: URL
     private var offset: UInt64
-    /// What a read carried that had no newline yet — the shim writes a line
-    /// per `fopen`/`fprintf`/`fclose`, but nothing promises a read lands on a
-    /// boundary.
+    /// What a read carried that had no newline yet.
     private var partial = ""
 
-    /// Starts at the end of the file, so only what happens from here is read.
     init(url: URL = WineChronicle.url) {
         self.url = url
         offset = Self.size(of: url)
     }
 
-    /// The most one call reads. A launch appends a few lines, so a read is
-    /// ordinarily a few hundred bytes; a gap of megabytes is a Mac that was
-    /// asleep or an app that was not running, and parsing all of it at once
-    /// on the caller's actor held the app's main thread for a fifth of a
-    /// second at 3.7 MB. The rest comes in the following calls.
+    /// The most one call reads; the rest comes in later calls. Parsing a
+    /// 3.7 MB backlog at once held the main thread for 0.2 s.
     static let maximumBytesPerRead: UInt64 = 512 * 1024
 
-    /// The entries appended since the last call, up to
-    /// ``maximumBytesPerRead`` of them.
+    /// The entries appended since the last call, up to ``maximumBytesPerRead``.
     func newEntries() -> [WineChronicle.Entry] {
         let size = Self.size(of: url)
         if size < offset {

@@ -2,15 +2,12 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// Whether a run whose video decoded nothing earns the offer of the other
-/// decoder. Pure, so the decision is testable without a window.
+/// Whether a run whose video decoded nothing earns the offer of the other decoder.
 nonisolated enum VideoDecodingPromptPolicy {
-    /// The suggestion to offer for `record`: the diagnosis, when the crash
-    /// prompt left the run to it.
+    /// The suggestion to offer for `record`, unless the crash prompt opened.
     ///
     /// - Parameters:
-    ///   - crashShown: Whether the crash prompt opened for this run. A crash is
-    ///     the news, and one panel is what a run gets.
+    ///   - crashShown: Whether the crash prompt opened; a run gets one panel.
     ///   - current: The game's video decoding as it resolves now.
     ///   - asks: Whether the offer is still wanted for this game.
     static func suggestion(
@@ -21,13 +18,9 @@ nonisolated enum VideoDecodingPromptPolicy {
     }
 }
 
-/// The offer for a game whose video decoder was fed and produced nothing: one
-/// panel, once per run, opened while the game still waits on the blank
-/// picture when the engine's line arrives in time, otherwise at the run's
-/// close. It names the stream and offers the other decoder.
-///
-/// A floating panel for the same reason as ``CrashPrompt``'s: the app is a
-/// menu-bar agent and the game may be the only window on screen.
+/// The offer of the other decoder for a game whose video decoded nothing,
+/// once per run: mid-run when the engine's line arrives in time, otherwise at
+/// the close. A floating panel, like ``CrashPrompt``'s.
 @MainActor
 final class VideoDecodingPrompt: NSObject, NSWindowDelegate {
     static let shared = VideoDecodingPrompt()
@@ -42,8 +35,7 @@ final class VideoDecodingPrompt: NSObject, NSWindowDelegate {
     /// - Parameters:
     ///   - defaults: Where "Don't Ask for This Game" is read from and written to.
     ///   - settings: Where the game's video decoding is read and written.
-    ///   - presenter: What showing the prompt means. A test injects one; the
-    ///     app opens the panel.
+    ///   - presenter: A test's stand-in for opening the panel.
     init(
         defaults: UserDefaults = Preferences.shared,
         settings: any SettingsEnvironment = LiveSettingsEnvironment(),
@@ -54,9 +46,7 @@ final class VideoDecodingPrompt: NSObject, NSWindowDelegate {
         self.presenter = presenter
     }
 
-    /// Considers a run, open or closed, and answers whether it opened the
-    /// prompt. A run is considered once: the offer that opened while it ran
-    /// is its one, and its close brings no second.
+    /// Considers a run, open or closed, once; answers whether it opened the prompt.
     @discardableResult
     func offer(_ record: RunRecord, crashShown: Bool) -> Bool {
         let key = CrashPromptPolicy.key(for: record)
@@ -96,8 +86,7 @@ final class VideoDecodingPrompt: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(rootView: VideoDecodingPromptView(model: model))
         panel.setContentSize(panel.contentView?.fittingSize ?? Self.panelSize)
         panel.center()
-        // An agent app has no activation of its own, so the panel would open
-        // behind whatever the user was in.
+        // Otherwise the agent app's panel opens behind the front app.
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
@@ -179,8 +168,7 @@ final class VideoDecodingPromptModel {
         }
     }
 
-    /// Sets the game's video decoding to the offered one through the store
-    /// Settings writes, which the next launch reads.
+    /// Sets the game's video decoding to the offered one for its next launch.
     func switchDecoding() {
         let offered = suggestion.offered
         settings.update(.game(record.appid, bottle: SteamBottle.name)) { $0.videoDecoding = offered }

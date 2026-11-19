@@ -2,10 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// Gets D3DMetal onto this Mac by the user's choice of route — Apple's page
-/// signed in here, their own browser with the download folders watched, or a
-/// file they already have — and installs what arrives. Used by the onboarding
-/// graphics step and by Settings › Graphics.
+/// Gets D3DMetal onto this Mac through Apple's page signed in here, the
+/// user's own browser with the download folders watched, or a file they
+/// already have. Used by the onboarding graphics step and Settings › Graphics.
 struct GPTkDownloadPanel: View {
     /// Owned by the caller, so a download survives view re-renders and the
     /// caller can see when one is in flight (`download.isBusy`).
@@ -14,9 +13,8 @@ struct GPTkDownloadPanel: View {
     let install: @MainActor (URL) async -> String?
     /// Called with each version as it lands, so the caller can refresh.
     var onInstalled: (@MainActor (String) -> Void)?
-    /// Stands the web view down. A simulated run must not put Apple's real
-    /// sign-in page in front of anyone: it is a live page asking for real
-    /// credentials, and nothing about a demo makes that safe to show.
+    /// Stands the web view down: a simulated run must never show Apple's
+    /// live sign-in page, which asks for real credentials.
     var isSimulated = false
 
     var body: some View {
@@ -51,8 +49,8 @@ struct GPTkDownloadPanel: View {
         .onDisappear { download.folderWatch.stop() }
     }
 
-    /// The folders are watched only while their route is on screen. A
-    /// simulated run watches nothing: it has no engine to install into.
+    /// The folders are watched only while their route is on screen, and
+    /// never in a simulated run, which has no engine to install into.
     private func watch(_ route: GPTkDownload.Route) {
         if route == .browser, !isSimulated {
             download.folderWatch.start()
@@ -81,8 +79,7 @@ struct GPTkDownloadPanel: View {
         download.installLocal(url)
     }
 
-    /// What sits where Apple's page would be, so the step still reads as
-    /// itself in a screenshot without reaching Apple.
+    /// Stands in for Apple's page in a simulated run.
     private var simulatedStandIn: some View {
         VStack(spacing: 8) {
             Image(systemName: "person.badge.key")
@@ -158,8 +155,7 @@ struct GPTkDownloadPanel: View {
             }
     }
 
-    /// Covers the download table while versions are being chosen, so the
-    /// signed-in moment reads as "working", never "now what do I click".
+    /// Covers the download table while versions are being chosen.
     private var searchingOverlay: some View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial)
@@ -171,9 +167,8 @@ struct GPTkDownloadPanel: View {
         }
     }
 
-    /// Covers the page from the picks until the downloads have installed:
-    /// what was picked, and its progress. The page comes back only when a
-    /// download failed and the user asks for it.
+    /// Covers the page with the picks and their progress until they install.
+    /// The page comes back only when a download failed and the user asks.
     private var downloadCover: some View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial)

@@ -1,14 +1,11 @@
 import Foundation
 import Observation
 
-/// Watches the folders a browser saves into for Apple's toolkit disk image, for
-/// the route where the user downloads it in their own browser.
+/// Watches the folders a browser saves into for Apple's toolkit disk image.
 ///
-/// Downloads is always watched; other folders the user adds are remembered. A
-/// folder's direct children and one level below are read, which covers a
-/// browser set to ask where to save and a user who files downloads away. A
-/// file counts once its size has held still across two looks: browsers write
-/// the final name only at the end, but a copy into the folder does not.
+/// Downloads is always watched; added folders are remembered. Each folder and
+/// one level below it are read. A file counts once its size holds still
+/// across two looks: a copy into the folder writes its final name first.
 @MainActor
 @Observable
 final class GPTkFolderWatch {
@@ -87,9 +84,8 @@ final class GPTkFolderWatch {
         sizes = seen
     }
 
-    /// The toolkit images in the folders and one level below them, the
-    /// evaluation environment first: it is the one D3DMetal is in, and a
-    /// version found twice installs from whichever comes first.
+    /// The toolkit images in the folders and one level below, the evaluation
+    /// environment first, since a version found twice installs from the first.
     private nonisolated static func candidates(in folders: [URL]) -> [(url: URL, size: Int64)] {
         let manager = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey]

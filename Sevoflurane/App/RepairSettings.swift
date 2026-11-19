@@ -2,15 +2,15 @@ import Propofol
 import SwiftUI
 
 /// Settings › Recovery: the actions that get a stuck installation running
-/// again, gathered in one place. Steam and its menus, the background helper,
-/// the bottle and its Wine underneath, and the problems people meet with
-/// where each one's fix is. Every
-/// action here keeps your games and saves — the destructive-looking ones stop
-/// and restart Steam, and the resets touch only regenerable caches.
+/// again (Steam and its menus, the background helper, the bottle and its
+/// Wine), and common problems with where each one's fix is. Every action
+/// keeps games and saves: the destructive-looking ones stop and restart
+/// Steam, and the resets touch only regenerable caches.
 struct RecoverySettings: View {
     let provisioner: Provisioner
     let compatibility: CompatibilityStore
-    /// Absent in the gallery, where a pane must move nothing on a real bottle.
+    /// Optional so a pane can be drawn with nothing to act on; the gallery
+    /// passes a preview supervisor and no `steam`.
     var supervisor: ClientSupervisor?
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
@@ -327,8 +327,7 @@ struct RecoverySettings: View {
 
     // MARK: - A reusable action row
 
-    /// A titled row with a one-line description and a trailing button — the
-    /// shape every action in this pane shares.
+    /// A titled row with a one-line description and a trailing button.
     private func actionRow(
         _ title: String, detail: String, button: String, disabled: Bool = false,
         action: @escaping () -> Void,

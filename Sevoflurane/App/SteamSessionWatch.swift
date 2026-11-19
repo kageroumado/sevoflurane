@@ -2,13 +2,10 @@ import AppKit
 import Observation
 
 /// When the bottle's Steam takes its session back after another client of
-/// the same account signed it out.
-///
-/// Steam never reconnects after "Session Replaced", and reconnecting while
-/// the other client still runs signs that one out in turn: the two would take
-/// the account from each other for as long as both run. So a session Steam
-/// for Mac took on this Mac comes back once Steam for Mac quits, and a session
-/// taken anywhere else is the person's to take back.
+/// the same account signed it out. Steam never reconnects after "Session
+/// Replaced", and reconnecting while the other client runs signs that one
+/// out in turn, so only a session Steam for Mac took comes back on its own,
+/// once Steam for Mac quits.
 nonisolated enum SessionReconnect {
     /// Which client holds the session the bottle lost.
     enum Holder: Equatable, Sendable {
@@ -26,13 +23,12 @@ nonisolated enum SessionReconnect {
         case reconnect
     }
 
-    /// How long after a handoff to Steam for Mac a loss is put down to it:
-    /// Steam for Mac may update itself before it signs in.
+    /// How long after a handoff a loss is put down to Steam for Mac, which
+    /// may update itself before signing in.
     static let handoffWindow: TimeInterval = 600
 
-    /// Steam for Mac holds the session when its own log shows the account
-    /// signing in at the moment of the loss, or when the loss followed a game
-    /// handed to it.
+    /// Steam for Mac holds the session when its log shows the account signing
+    /// in at the loss, or the loss followed a handoff.
     static func holder(
         of loss: SteamSessionLoss, steamForMacSignIn: Date?, handedOffAt: Date?,
     ) -> Holder {
@@ -52,10 +48,8 @@ nonisolated enum SessionReconnect {
     }
 }
 
-/// The app's half of a lost Steam session: the daemon reads the client's
-/// connection log and reports the loss; this says so, offers Reconnect, and
-/// reconnects by itself when the client that took the session was Steam for
-/// Mac and it quits.
+/// The app's half of a lost Steam session reported by the daemon: says so,
+/// offers Reconnect, and reconnects once a Steam for Mac that took it quits.
 @MainActor
 @Observable
 final class SteamSessionWatch {
@@ -68,8 +62,7 @@ final class SteamSessionWatch {
     @ObservationIgnored weak var notifications: SteamNotifications?
     /// When a game was last handed to Steam for Mac.
     @ObservationIgnored private var handedOffAt: Date?
-    /// The loss this watch already reconnected for, so a reconnect that did
-    /// not take is never retried on its own.
+    /// The loss already reconnected for; a failed reconnect is never retried on its own.
     @ObservationIgnored private var reconnectedFor: SteamSessionLoss?
     @ObservationIgnored private var quitObserver: (any NSObjectProtocol)?
 
@@ -106,16 +99,12 @@ final class SteamSessionWatch {
     /// How much of Steam for Mac's log is searched for its sign-in.
     private static let steamForMacLogLines = 2000
 
-    /// A game is going to Steam for Mac, which signs the bottle's client out
-    /// when it signs in: that loss is put down to Steam for Mac, and the
-    /// session comes back when it quits.
+    /// A game is going to Steam for Mac, so a loss soon after is put down to it.
     func noteHandoff() {
         handedOffAt = .now
     }
 
-    /// Reconnects the bottle's client to Steam the way its own error dialog
-    /// does: from Reconnect in the notification or the menu bar, and by
-    /// itself once Steam for Mac quits.
+    /// Reconnects the bottle's client the way its own error dialog does.
     func reconnect(because reason: String) {
         guard let loss else { return }
         reconnectedFor = loss

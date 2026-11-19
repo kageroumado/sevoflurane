@@ -2,18 +2,8 @@ import AppKit
 import Propofol
 import SwiftUI
 
-/// The window a bug report is made from.
-///
-/// The last runs down one side, each one line: the game, what it ran on, how
-/// long it lasted, how it ended. Pick one and the other side says everything
-/// the app knows about it — the record, its frame rate when something counted
-/// the frames, the errors its collected report holds, and the sentence
-/// ``KnownFailures`` has for it when this project has seen that failure before.
-///
-/// Two buttons: one writes the zip to the Desktop and puts what is in it on
-/// the clipboard, the other opens a prefilled issue. Before either, one
-/// sentence says what the zip holds and what was taken out, with a button to
-/// go and look.
+/// The window a bug report is made from: recent runs, and the selected run's
+/// record, frame rate, findings and ``KnownFailures`` match.
 @MainActor
 final class ReportWindows {
     private var window: NSWindow?
@@ -60,8 +50,7 @@ final class ReportWindows {
 @MainActor
 @Observable
 final class ReportStore {
-    /// How many runs the list goes back over. A month of play is fewer than
-    /// this, and nobody reports a bug from further back than that.
+    /// How many runs the list goes back over, more than a month of play.
     static let recentRuns = 50
 
     private(set) var runs: [RunRecord] = []
@@ -87,14 +76,12 @@ final class ReportStore {
         reload()
     }
 
-    /// Rereads the ledger of reported runs, which a send from this window
-    /// or from `sevo report` changes.
+    /// Rereads the ledger of reported runs, which `sevo report` also writes.
     func reloadReported() {
         reported = Dictionary(StatsStore.readReported().map { ($0.runID, $0) }, uniquingKeysWith: { _, last in last })
     }
 
-    /// Reads what the selected run's report holds. Called when the selection
-    /// moves rather than per body evaluation: it is disk work.
+    /// Reads the selected run's report; disk work, so called on selection only.
     func reload() {
         guard let run else {
             findings = []
@@ -117,15 +104,13 @@ final class ReportStore {
 
     // MARK: - What the zip holds
 
-    /// The sentence shown before either button, so nobody sends a file
-    /// without being told what is in it.
+    /// Says what the zip holds, shown before either button.
     static let contentsSentence =
         "The zip holds this run's record, the app's and Wine's logs, the game's own "
             + "crash logs, Steam's logs and a doctor report. Paths, account names, "
             + "Steam ids and persona names are taken out of every one of them."
 
-    /// What goes on the clipboard beside the zip: what it is, what is in it,
-    /// and what was removed — the text a person pastes into an issue.
+    /// The clipboard text beside the zip, for pasting into an issue.
     func manifest(zip: URL?) -> String {
         var lines = ["Sevoflurane report"]
         if let run { lines.append(run.summary) }
@@ -138,8 +123,8 @@ final class ReportStore {
 
     // MARK: - Actions
 
-    /// Writes the zip through the bundled CLI, so the app and the terminal
-    /// produce the same report, then puts the manifest on the clipboard.
+    /// Writes the zip through the bundled CLI, the same report the terminal
+    /// makes, and copies the manifest.
     func copyAllLogs() {
         guard !writing else { return }
         writing = true
@@ -165,8 +150,7 @@ final class ReportStore {
         }
     }
 
-    /// Opens a new issue with the title and body already filled in. The zip
-    /// cannot ride in a URL, so the body names it and the person attaches it.
+    /// Opens a prefilled issue; the person attaches the zip.
     func openAnIssue() {
         guard let run, let url = Self.issueURL(for: run) else { return }
         EventLog.shared.log(.window, "report window: opening an issue for app \(run.appid)")
@@ -185,8 +169,7 @@ final class ReportStore {
 
     static let issuesURL = "https://github.com/kageroumado/sevoflurane/issues/new"
 
-    /// `Demons Roots: crashed in opengl32.dll+0xd7691 on r2/DXMT` — the game,
-    /// where it died, and what it was running on.
+    /// `Demons Roots: crashed in opengl32.dll+0xd7691 on r2/DXMT`.
     static func title(for run: RunRecord) -> String {
         let game = run.name ?? String(localized: "App \(String(run.appid))")
         let engine = "\(run.engine)/\(run.renderer)"
@@ -199,8 +182,7 @@ final class ReportStore {
         return "\(game): crashed in \(site) on \(engine)"
     }
 
-    /// The level-0 lines, which is everything the record says and nothing it
-    /// does not.
+    /// The issue body: the record's level-0 lines.
     static func body(for run: RunRecord) -> String {
         var lines = ["\(run.summary)", ""]
         lines.append("engine: \(run.engine) · renderer: \(run.rendererLabel) · runner: \(run.runner)")
@@ -240,8 +222,7 @@ final class ReportStore {
         return lines.joined(separator: "\n")
     }
 
-    /// Opens the collected report, or the directory reports live in when this
-    /// run has none.
+    /// Reveals the collected report, or the reports directory.
     func lookInside() {
         let target = reportPath ?? CrashCollector.root
         try? FileManager.default.createDirectory(
@@ -254,8 +235,7 @@ final class ReportStore {
 // MARK: - The view
 
 struct ReportView: View {
-    /// Opens the steps for a useful report. Absent in the gallery, where no
-    /// second window opens.
+    /// Opens the steps for a useful report; absent in the gallery.
     var showGuide: (() -> Void)?
     @State private var store = ReportStore()
 
@@ -426,8 +406,7 @@ private struct RunSummaryCard: View {
     }
 }
 
-/// The run's frame rate when something counted the frames, and a plain
-/// sentence when nothing did.
+/// The run's frame rate, when something counted the frames.
 private struct FrameRateCard: View {
     let fps: RunRecord.FrameRate?
 
@@ -460,8 +439,7 @@ private struct FrameRateCard: View {
         }
     }
 
-    /// The average against the one-per-cent low, which is the comparison that
-    /// says whether a run was smooth or merely fast on average.
+    /// The average against the 1 % low, which says whether a run was smooth.
     private func bars(_ fps: RunRecord.FrameRate) -> some View {
         let ceiling = max(fps.avg, fps.low1, 1)
         return VStack(alignment: .leading, spacing: 4) {
