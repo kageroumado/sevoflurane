@@ -221,11 +221,19 @@ private final nonisolated class LogFile: Sendable {
     }
 
     /// Rotates by copy and truncate: a rename would leave the open handle
-    /// writing to the moved file. Runs on `queue`.
+    /// writing to the moved file. The app and the helper share the file, so
+    /// one rotation runs at a time, under an advisory lock on the file, and
+    /// the size is read again inside it: the second process to cross the
+    /// threshold finds the file already rotated and leaves the copy alone.
+    /// Runs on `queue`.
     private func rotateIfLarge() {
         let manager = FileManager.default
         guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-              size > Self.rotateOverBytes else { return }
+              size > Self.rotateOverBytes,
+              let fd = handle?.fileDescriptor, flock(fd, LOCK_EX | LOCK_NB) == 0 else { return }
+        defer { flock(fd, LOCK_UN) }
+        var status = stat()
+        guard fstat(fd, &status) == 0, Int(status.st_size) > Self.rotateOverBytes else { return }
         let old = url.deletingPathExtension().appendingPathExtension("old.log")
         try? manager.removeItem(at: old)
         try? manager.copyItem(at: url, to: old)

@@ -176,6 +176,15 @@ struct SophonCodecTests {
     }
 
     @Test
+    func `a length past what an Int holds is refused, not trapped on`() {
+        // Field 1, length-delimited, with a ten-byte varint length of 2^63.
+        let corrupt = Data([0x0A, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01])
+        #expect(throws: ProtobufReader.Malformed.self) {
+            try ProtobufReader.fields(corrupt)
+        }
+    }
+
+    @Test
     func `a truncated manifest is refused`() {
         let file = Proto.message([Proto.field(1, "a.block"), Proto.field(4, 10)])
         let whole = Proto.message([Proto.field(1, file)])

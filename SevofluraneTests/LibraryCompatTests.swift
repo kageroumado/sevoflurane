@@ -322,6 +322,49 @@ struct LibraryCompatLookupTests {
     }
 }
 
+/// A refresh asked for while every source is unreachable.
+struct CompatRefreshTests {
+    @Test
+    func `a refresh with every source unreachable keeps the answers it had`() async throws {
+        let cache = FileManager.default.temporaryDirectory.appending(path: "compat-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let wiki = #"[{"Page":"Old Mac Game","native":"perfect","rosetta 2":"na","crossover":"unplayable","wine":"unplayable","parallels":"na"}]"#
+        try Data(wiki.utf8).write(to: cache.appending(path: "applegamingwiki.json"))
+        let service = GameCompatService(
+            session: OfflineStub.session(), cache: cache, appInfo: cache.appending(path: "appinfo.vdf"),
+        )
+
+        let record = await service.record(appID: 9_000_002, name: "Old Mac Game", deckCategory: nil, ignoringCache: true)
+
+        #expect(record.wiki != nil)
+        #expect(FileManager.default.fileExists(atPath: cache.appending(path: "applegamingwiki.json").path))
+    }
+}
+
+/// Every request fails as an offline Mac's would.
+private final class OfflineStub: URLProtocol {
+    static func session() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OfflineStub.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+
+    override func stopLoading() {}
+}
+
 /// The community sources as one game's answers: the wiki rates its macOS
 /// build perfect and its Windows build unplayable, and PCGamingWiki's page
 /// lists a 32-bit Intel build alone.

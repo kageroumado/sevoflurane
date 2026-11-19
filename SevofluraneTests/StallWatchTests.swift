@@ -325,6 +325,34 @@ struct StallWatchTests {
     }
 
     @Test
+    func `a stall behind a dialog that stays up is reported once, not on every sample`() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        var probes = machine.probes()
+        probes.dialogs = {
+            [WineWindowWatch.Window(owner: "steam.exe", pid: 77, title: "Steam", width: 400, height: 200)]
+        }
+        let watch = try StallWatch(probes: probes, chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+
+        watch.sample()
+        machine.advance(StallWatch.Rules.candidateAfter + 2)
+        // The first stalled pass starts the window scan the next ones read.
+        watch.sample()
+        try await Task.sleep(for: .milliseconds(200))
+        for _ in 0 ..< 10 {
+            machine.advance(2)
+            watch.sample()
+        }
+
+        #expect(machine.lines.count { $0.contains("— not a stall") } == 1)
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+    }
+
+    @Test
     func `a quiet client process is left alone`() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }

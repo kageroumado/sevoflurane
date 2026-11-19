@@ -105,6 +105,32 @@ struct SteamSessionTests {
         #expect(follower.loss == nil)
     }
 
+    @Test
+    func `a new file in the log's place is read from its start, however long it has grown`() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appending(path: "connection-log-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "connection_log.txt")
+        let signIn = "[2026-10-05 23:10:13] [Logging On, 4, 19] [U:1:845470373] RecvMsgClientLogOnResponse() : "
+            + "[U:1:845470373] 'OK'\n"
+        try Data(signIn.utf8).write(to: file)
+        var follower = SteamConnectionLog.Follower(file: file)
+        _ = follower.read()
+        #expect(follower.loss == nil)
+        // The client's next run writes a new file, longer than the old one,
+        // with the loss as its first line.
+        let replacement = folder.appending(path: "replacement.txt")
+        let filler = String(repeating: "[2026-10-05 22:52:00] [Logged Off, 0, 0] waiting for the next sign-in\n", count: 8)
+        try Data((Self.replaced + "\n" + filler).utf8).write(to: replacement)
+        _ = try FileManager.default.replaceItemAt(file, withItemAt: replacement)
+
+        let moved = follower.read()
+
+        #expect(moved)
+        #expect(follower.loss == Self.loss)
+    }
+
     // MARK: - Who holds the session
 
     @Test

@@ -16,6 +16,30 @@ struct AgentIntegrationTests {
         #expect(AgentIntegration.isOurLink(destination: "/Applications/Sevoflurane.app/Contents/Helpers/sevo"))
     }
 
+    @Test
+    func `the install writes over nothing but its own link`() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-integration-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let empty = folder.appendingPathComponent("empty").path
+        let ours = folder.appendingPathComponent("ours").path
+        let theirs = folder.appendingPathComponent("theirs").path
+        let file = folder.appendingPathComponent("file").path
+        try FileManager.default.createSymbolicLink(
+            atPath: ours, withDestinationPath: "/Applications/Sevoflurane.app/Contents/Helpers/sevo",
+        )
+        try FileManager.default.createSymbolicLink(
+            atPath: theirs, withDestinationPath: "/opt/homebrew/Cellar/sevo/1.0/bin/sevo",
+        )
+        try Data("#!/bin/sh\n".utf8).write(to: URL(fileURLWithPath: file))
+
+        #expect(AgentIntegration.mayReplace(at: empty))
+        #expect(AgentIntegration.mayReplace(at: ours))
+        #expect(!AgentIntegration.mayReplace(at: theirs))
+        #expect(!AgentIntegration.mayReplace(at: file))
+    }
+
     // MARK: - Hermes YAML
 
     @Test

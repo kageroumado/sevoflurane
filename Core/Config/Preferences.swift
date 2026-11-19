@@ -29,10 +29,26 @@ nonisolated enum Preferences {
             : suiteName
     }
 
+    /// The app's own domain: its bundle identifier, or its file in the test
+    /// home for a test run.
+    private static var appDomain: String {
+        UserHome.isTestRun
+            ? UserHome.url.appendingPathComponent("Library/Preferences/\(AppIdentity.identifierStem)").path
+            : Bundle.main.bundleIdentifier ?? AppIdentity.identifierStem
+    }
+
     /// Forgets every stored choice, so a reinstall starts as a first run.
     static func reset() {
-        shared.removePersistentDomain(forName: domain)
-        shared.synchronize()
+        reset(suite: shared, named: domain, app: app, named: appDomain)
+    }
+
+    /// Empties the suite and the app's own domain: left in place, the app's
+    /// domain is where ``adoptLegacyValues(into:)`` copies old keys back from.
+    static func reset(suite: UserDefaults, named suiteDomain: String, app: UserDefaults, named appDomain: String) {
+        suite.removePersistentDomain(forName: suiteDomain)
+        suite.synchronize()
+        app.removePersistentDomain(forName: appDomain)
+        app.synchronize()
     }
 
     /// Copies keys the suite lacks from the app's own domain, where older

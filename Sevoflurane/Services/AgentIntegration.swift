@@ -36,6 +36,10 @@ enum AgentIntegration {
         guard FileManager.default.fileExists(atPath: cli) else {
             return "the bundled sevo binary is missing"
         }
+        guard mayReplace(at: symlinkPath) else {
+            EventLog.enqueue(.app, "\(symlinkPath) is not a link to this app's sevo, so the CLI install leaves it")
+            return String(localized: "\(symlinkPath) belongs to another program, so Sevoflurane leaves it in place.")
+        }
         // -h: replace a link at that path, never follow one into whatever
         // directory it points at. This runs as root.
         let command = "mkdir -p /usr/local/bin && ln -sfh \(shellQuoted(cli)) \(symlinkPath)"
@@ -88,6 +92,14 @@ enum AgentIntegration {
     /// some copy of the app. `nil` is a file that is no link.
     nonisolated static func isOurLink(destination: String?) -> Bool {
         destination?.hasSuffix(".app/Contents/Helpers/sevo") ?? false
+    }
+
+    /// Whether the install may write its link at `path`: nothing is there, or
+    /// a link into a copy of this app is. A user's own file or link stays.
+    nonisolated static func mayReplace(at path: String) -> Bool {
+        let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: path)
+        guard destination != nil || FileManager.default.fileExists(atPath: path) else { return true }
+        return isOurLink(destination: destination)
     }
 
     // MARK: - Harnesses

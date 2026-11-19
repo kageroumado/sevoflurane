@@ -324,13 +324,26 @@ nonisolated enum StorageInventory {
     static func trash(_ entry: Entry) throws {
         let manager = FileManager.default
         if entry.id == "caches" {
-            for cache in cacheDirectories where manager.fileExists(atPath: cache.path) {
-                try? manager.trashItem(at: cache, resultingItemURL: nil)
-            }
+            try trashEach(cacheDirectories)
             return
         }
         guard manager.fileExists(atPath: entry.url.path) else { return }
         try manager.trashItem(at: entry.url, resultingItemURL: nil)
+    }
+
+    /// Moves each of `urls` that exists to the Trash, every one tried; throws
+    /// the first failure, so a reclaim that left something behind says so.
+    static func trashEach(_ urls: [URL]) throws {
+        let manager = FileManager.default
+        var failure: (any Error)?
+        for url in urls where manager.fileExists(atPath: url.path) {
+            do {
+                try manager.trashItem(at: url, resultingItemURL: nil)
+            } catch {
+                failure = failure ?? error
+            }
+        }
+        if let failure { throw failure }
     }
 
     /// Entries a running bottle has open.

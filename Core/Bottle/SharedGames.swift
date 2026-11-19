@@ -180,7 +180,10 @@ nonisolated enum SharedGames {
     private static func installed(manifest: URL, in steamapps: URL) -> Installed? {
         guard let fields = read(manifest: manifest) else { return nil }
         let directory = steamapps.appendingPathComponent("common/\(fields.installdir)")
-        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        // A link whose source bottle lost the game still counts, so it can be
+        // listed as linked and removed.
+        let isLink = (try? FileManager.default.destinationOfSymbolicLink(atPath: directory.path)) != nil
+        guard isLink || FileManager.default.fileExists(atPath: directory.path) else { return nil }
         return Installed(
             appID: fields.appID, name: fields.name, directory: directory,
             bytes: fields.bytes, steamapps: steamapps,

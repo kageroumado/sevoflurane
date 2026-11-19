@@ -60,12 +60,12 @@ actor GameCompatService {
         if ignoringCache {
             antiCheatIndex = nil
             wikiIndex = nil
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("proton/\(appID).json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw/\(appID).json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("community/\(appID).json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("pcgw-mac/\(appID).json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("awacy.json"))
-            try? FileManager.default.removeItem(at: cache.appendingPathComponent("applegamingwiki.json"))
+            for file in [
+                "proton/\(appID).json", "pcgw/\(appID).json", "community/\(appID).json", "pcgw-mac/\(appID).json",
+                "awacy.json", "applegamingwiki.json",
+            ] {
+                expire(file)
+            }
         }
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
@@ -348,6 +348,14 @@ actor GameCompatService {
         } catch {
             return Self.cached(at: path, maxAge: nil)
         }
+    }
+
+    /// Marks a cached answer stale: the next read fetches it again, and falls
+    /// back to it when the fetch fails.
+    private func expire(_ file: String) {
+        try? FileManager.default.setAttributes(
+            [.modificationDate: Date.distantPast], ofItemAtPath: cache.appendingPathComponent(file).path,
+        )
     }
 
     private static func cached(at path: URL, maxAge: TimeInterval?) -> Data? {

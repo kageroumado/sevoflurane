@@ -131,6 +131,8 @@ nonisolated extension SteamConnectionLog {
         let file: URL
         private(set) var loss: SteamSessionLoss?
         private var offset: UInt64?
+        /// The device and inode last read, which a replaced file changes.
+        private var identity: (device: dev_t, inode: ino_t)?
 
         init(file: URL) {
             self.file = file
@@ -141,10 +143,16 @@ nonisolated extension SteamConnectionLog {
         static let firstReadWindow: UInt64 = 256 * 1024
 
         /// Reads what was appended and answers whether the standing loss
-        /// changed. A file that shrank is read from its start.
+        /// changed. A file that shrank, or a new file in its place, is read
+        /// from its start.
         mutating func read() -> Bool {
             guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
             defer { try? handle.close() }
+            var status = stat()
+            guard fstat(handle.fileDescriptor, &status) == 0 else { return false }
+            let current = (device: status.st_dev, inode: status.st_ino)
+            if let identity, identity != current { offset = 0 }
+            identity = current
             guard let size = try? handle.seekToEnd() else { return false }
             let isFirstRead = offset == nil
             var start = offset ?? (size > Self.firstReadWindow ? size - Self.firstReadWindow : 0)

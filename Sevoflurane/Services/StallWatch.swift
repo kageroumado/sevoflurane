@@ -131,6 +131,8 @@ final class StallWatch {
             Double(DispatchTime.now().uptimeNanoseconds) / 1e9
         }
         var log: @Sendable (String) -> Void = { EventLog.enqueue(.app, $0) }
+        /// The client's Wine windows on screen, which the dialog rung reads.
+        var dialogs: @Sendable () async -> [WineWindowWatch.Window] = { await WineWindowWatch.scan().wineWindows }
     }
 
     /// Whether a game may be killed when nothing says whether it presented.
@@ -205,6 +207,7 @@ final class StallWatch {
         let stalled = Set(found.filter { $0.state == .stalled }.map(\.pid))
         laddersBegan = laddersBegan.filter { stalled.contains($0.key) }
         leftAlone.formIntersection(stalled)
+        reportedDialogs = reportedDialogs.filter { stalled.contains($0.key) }
         for process in found where process.state == .stalled {
             climb(for: process, at: now)
         }
@@ -380,6 +383,9 @@ final class StallWatch {
     private var laddersBegan: [pid_t: TimeInterval] = [:]
     /// Processes already reported as still and left alone.
     private var leftAlone: Set<pid_t> = []
+    /// The dialog each stalled process was last reported behind: a dialog
+    /// that stays up is written into the run once, not on every sample.
+    private var reportedDialogs: [pid_t: String] = [:]
 
     private func unwedge(_ process: Process, at now: TimeInterval) {
         let appID = process.appID ?? appIDOfTree(containing: process.pid)
@@ -389,11 +395,15 @@ final class StallWatch {
 
         // 1. A modal dialog means it waits for a person.
         if let dialog = modalDialog() {
-            note(appID: appID, for: stalledFor, unwedged: "dialog: \(dialog)")
-            probes.log("stall: \(process.name) is behind \(dialog) — not a stall")
+            if reportedDialogs[process.pid] != dialog {
+                reportedDialogs[process.pid] = dialog
+                note(appID: appID, for: stalledFor, unwedged: "dialog: \(dialog)")
+                probes.log("stall: \(process.name) is behind \(dialog) — not a stall")
+            }
             laddersBegan[process.pid] = nil
             return
         }
+        reportedDialogs[process.pid] = nil
 
         // 2. Wake a tree with a stopped process in it.
         let tree = tree(under: [process.pid])
@@ -441,9 +451,10 @@ final class StallWatch {
     private var dialogs: [WineWindowWatch.Window] = []
 
     private func refreshDialogs() {
+        let scan = probes.dialogs
         Task(name: "Scan for Wine dialogs") { [weak self] in
-            let scan = await WineWindowWatch.scan()
-            self?.dialogs = scan.wineWindows
+            let found = await scan()
+            self?.dialogs = found
         }
     }
 

@@ -133,15 +133,24 @@ nonisolated enum CrossOverShadow {
         try? FileManager.default.removeItem(at: root)
     }
 
+    /// How old a staging tree is before it counts as abandoned. A build
+    /// assembles its links in seconds; a younger tree is another process's
+    /// build in progress.
+    static let abandonedAfter: TimeInterval = 10 * 60
+
     /// Removes staging trees left by a killed process.
-    private static func discardAbandonedStaging() {
+    static func discardAbandonedStaging(
+        in parent: URL = root.deletingLastPathComponent(), now: Date = .now,
+    ) {
         let manager = FileManager.default
-        let parent = root.deletingLastPathComponent()
         let siblings = (try? manager.contentsOfDirectory(
-            at: parent, includingPropertiesForKeys: nil,
+            at: parent, includingPropertiesForKeys: [.contentModificationDateKey],
         )) ?? []
         for entry in siblings
             where entry.lastPathComponent.hasPrefix("CrossOverShadow-") {
+            let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            guard now.timeIntervalSince(modified) > abandonedAfter else { continue }
             try? manager.removeItem(at: entry)
         }
     }

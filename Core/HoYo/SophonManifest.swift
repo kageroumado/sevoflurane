@@ -238,8 +238,8 @@ nonisolated enum ProtobufReader {
                 guard index + 8 <= bytes.count else { throw Malformed(description: "truncated fixed64") }
                 index += 8
             case 2:
-                let length = try Int(varint(bytes, &index))
-                guard length >= 0, index + length <= bytes.count else {
+                // A corrupt length can exceed `Int`; it is a malformed field, never a trap.
+                guard let length = try Int(exactly: varint(bytes, &index)), length <= bytes.count - index else {
                     throw Malformed(description: "field \(number) runs past the end")
                 }
                 fields.append(Field(number: number, integer: 0, bytes: Data(bytes[index ..< index + length])))

@@ -140,3 +140,26 @@ struct StorageReclaimTests {
         #expect(!StorageInventory.isRefused(entry("shaders"), bottleRunning: true))
     }
 }
+
+/// Moving a reclaimed entry's folders to the Trash.
+struct StorageTrashTests {
+    @Test
+    func `a folder the Trash refuses fails the reclaim instead of reading as freed`() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("storage-trash-tests-\(UUID().uuidString)")
+        let locked = parent.appendingPathComponent("locked")
+        let cache = locked.appendingPathComponent("appcache")
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        // A folder whose parent cannot be written to cannot be moved out of it.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? FileManager.default.removeItem(at: parent)
+        }
+
+        #expect(throws: (any Error).self) {
+            try StorageInventory.trashEach([cache, parent.appendingPathComponent("absent")])
+        }
+        #expect(FileManager.default.fileExists(atPath: cache.path))
+    }
+}
