@@ -1,17 +1,11 @@
 import Foundation
 
-/// Versions of the two open-source renderers a managed engine can run other
-/// than the one it shipped with.
-///
-/// An engine tarball carries one DXMT and one DXVK, baked into `dxmt/` and
-/// `dxvk/` at its top; those are the defaults and are never touched. Every
-/// other version — downloaded from a release, or added from a folder — lives
-/// under `Renderers/<component>/<version>/` in the app's own store, in the
-/// layout the engine's payload directories use (the 64-bit DLLs flat at the
-/// top, the 32-bit ones in `i386-windows/`). A choice is one preference per
-/// component; `nil` is the default, so "reset" is forgetting the choice. The
-/// stager (``EngineRenderers``) reads the chosen directory on every boot,
-/// which is when a change takes effect.
+/// DXMT and DXVK versions a managed engine can run besides the ones baked
+/// into its `dxmt/` and `dxvk/`, which are never touched. Extra versions live
+/// under `Renderers/<component>/<version>/` in the payload layout (64-bit
+/// DLLs at the top, 32-bit in `i386-windows/`). A choice is one preference
+/// per component, `nil` meaning the engine's own; ``EngineRenderers`` reads
+/// it on every boot.
 nonisolated enum RendererVersions {
     enum Component: String, CaseIterable, Sendable, Identifiable, Codable {
         case dxmt
@@ -35,8 +29,7 @@ nonisolated enum RendererVersions {
             }
         }
 
-        /// The GitHub project whose releases carry the builtin-flavored
-        /// payload the engine loads.
+        /// The GitHub project whose releases carry the builtin payload.
         var repository: String {
             switch self {
             case .dxmt: "3Shain/dxmt"
@@ -44,14 +37,13 @@ nonisolated enum RendererVersions {
             }
         }
 
-        /// The release asset that is the payload: DXMT's `-builtin.tar.gz`,
-        /// DXVK-macOS's `…-builtin.tar.gz` (the plain tarballs carry DLLs
-        /// Wine would treat as native and refuse to load as builtins).
+        /// The `-builtin.tar.gz` asset: the plain tarballs carry DLLs Wine
+        /// treats as native and refuses to load as builtins.
         func isPayloadAsset(_ name: String) -> Bool {
             name.hasSuffix("-builtin.tar.gz")
         }
 
-        /// A release tag or asset name reduced to the version people say:
+        /// A release tag or asset name reduced to its version:
         /// `dxmt-v0.80-builtin.tar.gz` → `0.80`,
         /// `dxvk-macOS-async-v1.10.3-20230507-repack-builtin.tar.gz` →
         /// `1.10.3-20230507-repack`.
@@ -86,7 +78,7 @@ nonisolated enum RendererVersions {
         let component: Component
         let version: String
         let url: URL
-        /// Named in Sevoflurane's manifest as run with the current engine.
+        /// Named in the engine manifest as tested.
         let tested: Bool
         let sha256: String?
         var id: String {
@@ -110,9 +102,8 @@ nonisolated enum RendererVersions {
             .sorted { $0.version.localizedStandardCompare($1.version) == .orderedAscending }
     }
 
-    /// The version the engine shipped with, read from its `engine-info.json`
-    /// (the release URL `package-engine.sh` records), or `nil` for an engine
-    /// that does not say.
+    /// The version the engine shipped with, from the release URL in its
+    /// `engine-info.json`, or `nil`.
     static func defaultVersion(_ component: Component, engine: URL) -> String? {
         let info = engine.appendingPathComponent("engine-info.json")
         guard let data = try? Data(contentsOf: info),
@@ -139,8 +130,7 @@ nonisolated enum RendererVersions {
         }
     }
 
-    /// The payload directory the stager reads for this component: the chosen
-    /// version when it is installed, else the engine's own.
+    /// The chosen version's directory when installed, else the engine's own.
     static func directory(_ component: Component, engine: URL) -> URL {
         if let version = chosen(component),
            let match = installed(component).first(where: { $0.version == version }) {
@@ -149,8 +139,7 @@ nonisolated enum RendererVersions {
         return engine.appendingPathComponent(component.rawValue)
     }
 
-    /// Every version directory on disk, for the stager's bookkeeping of
-    /// which files in the Wine tree are payloads.
+    /// Every version directory on disk, for the stager's payload bookkeeping.
     static func allDirectories() -> [URL] {
         Component.allCases.flatMap { installed($0).map(\.root) }
     }
@@ -164,10 +153,8 @@ nonisolated enum RendererVersions {
         }
     }
 
-    /// Adds a version from a release URL, a downloaded tarball, or a folder
-    /// holding the DLLs, normalizing it into the payload layout. The version
-    /// names the directory; when not given it is read from the file or
-    /// folder name.
+    /// Adds a version from a URL, tarball or DLL folder in the payload
+    /// layout, named `version` or else from the file or folder name.
     static func install(
         _ component: Component, from source: URL, version: String? = nil,
         sha256: String? = nil,
@@ -232,10 +219,8 @@ nonisolated enum RendererVersions {
         }
     }
 
-    /// The directories holding each half's DLLs, found by the file every
-    /// renderer ships: `dxgi.dll`. A directory named for 32-bit (`x32`,
-    /// `i386-windows`) is that half; the other is the 64-bit one, the
-    /// shallowest first when several qualify.
+    /// The shallowest directories holding `dxgi.dll` for each half; a
+    /// directory named for 32-bit (`x32`, `i386-windows`) is the 32-bit half.
     static func locateHalves(under directory: URL) -> (x86_64: URL, i386: URL?)? {
         guard let enumerator = FileManager.default.enumerator(
             at: directory, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles],
@@ -264,10 +249,8 @@ nonisolated enum RendererVersions {
 
     // MARK: - What can be fetched
 
-    /// Versions available to download: the ones Sevoflurane's manifest names
-    /// as tested with the engine, and every builtin payload the project has
-    /// released, newest first. Either source may be unreachable; the answer
-    /// is whatever answered.
+    /// Versions to download, newest first: the manifest's tested ones plus
+    /// upstream releases, from whichever source answered.
     static func releases(_ component: Component, manifest: EngineManifest?) async -> [Release] {
         var byVersion: [String: Release] = [:]
         for entry in manifest?.components?[component.rawValue] ?? [] {
@@ -281,8 +264,7 @@ nonisolated enum RendererVersions {
         return byVersion.values.sorted { $0.version.localizedStandardCompare($1.version) == .orderedDescending }
     }
 
-    /// The GitHub releases API for the component's project: tags and their
-    /// payload assets.
+    /// The component project's releases with a payload asset.
     static func upstreamReleases(_ component: Component) async -> [Release] {
         var request = URLRequest(
             url: URL(string: "https://api.github.com/repos/\(component.repository)/releases?per_page=30")!,
@@ -305,8 +287,8 @@ nonisolated enum RendererVersions {
         }
     }
 
-    /// The newest release that is newer than what the engine shipped and than
-    /// anything installed — the "update available" a checker reports.
+    /// The newest release newer than the engine's default and every
+    /// installed version.
     static func newerRelease(
         than installedVersions: [String], default defaultVersion: String?, among releases: [Release],
     ) -> Release? {

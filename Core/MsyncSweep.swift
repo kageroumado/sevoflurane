@@ -2,13 +2,11 @@ import Foundation
 
 /// msync+'s lost-wake sweep, asked of a bottle's wineserver.
 ///
-/// A thread that dies between setting an object and waking its sleepers leaves them asleep
-/// on an object that reads available; a game exiting while it signals steam.exe can leave
-/// the client's main thread waiting forever. An msync+ wineserver answers `SIGUSR2` with two
-/// passes 100 ms apart over every object, wakes each thread still parked on an object that
-/// stayed available and unchanged between them, and writes what it found, with the processes
-/// that share each object, to `<prefix>/.sevo-msync-sweep.log`. Any other wineserver dies of
-/// the signal, so the sweep goes only to a server whose binary carries the sweep.
+/// A thread that dies between setting an object and waking its sleepers leaves them parked
+/// on an object that reads available, such as steam.exe's main thread after a game exits.
+/// An msync+ wineserver answers `SIGUSR2` with two passes 100 ms apart, wakes each thread
+/// parked on an object that stayed available and unchanged, and writes its findings to
+/// `<prefix>/.sevo-msync-sweep.log`. Any other wineserver dies of the signal.
 nonisolated enum MsyncSweep {
     struct Report: Sendable, Equatable {
         /// The `sevo:msync sweep …` summary line.
@@ -31,10 +29,9 @@ nonisolated enum MsyncSweep {
 
     static let reportName = ".sevo-msync-sweep.log"
 
-    /// The summary line's format string, which only a wineserver with the sweep carries.
+    /// Present only in the binary of a wineserver with the sweep.
     private static let marker = Data("sevo:msync sweep ".utf8)
 
-    /// Whether the engine's wineserver runs the sweep.
     static func supports(_ engine: Engine) -> Bool {
         guard let binary = try? Data(contentsOf: engine.wineserverURL, options: .mappedIfSafe) else { return false }
         return binary.range(of: marker) != nil
@@ -58,8 +55,8 @@ nonisolated enum MsyncSweep {
         return .noReport
     }
 
-    /// The report the server finished after `date`. It truncates the file at the first pass
-    /// and writes the summary last, so a file without a summary is still being written.
+    /// The report the server finished after `date`; the summary line is written
+    /// last, so a file without one is still being written.
     private static func read(_ url: URL, writtenSince date: Date) -> Report? {
         guard let written = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate,

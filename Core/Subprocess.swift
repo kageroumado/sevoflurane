@@ -4,15 +4,12 @@ import os
 /// The one subprocess runner: runs a tool to completion and SIGKILLs it at
 /// the deadline. A `nil` status means the process never launched.
 ///
-/// The termination handler is installed before `run()` — a process that
-/// exits first never fires a handler installed after the fact, and that
-/// lost exit would hang the caller forever.
+/// The termination handler must be installed before `run()`: a process that
+/// exits first never fires a later handler, and the caller hangs forever.
 enum Subprocess {
-    /// `capture` controls what comes back as output: `.stdout` for tools
-    /// whose output is parsed (pgrep, lsof — stderr noise would corrupt the
-    /// parse), `.combined` for tools quoted in error messages (installers,
-    /// where the failure text lands on stderr), `.none` for chatty tools
-    /// like wine whose output is not worth the pipe-buffer deadlock risk.
+    /// `.stdout` for tools whose output is parsed (pgrep, lsof), `.combined`
+    /// for tools quoted in error messages (installers write failures to
+    /// stderr), `.none` for chatty tools like wine.
     enum Capture {
         case stdout
         case combined
@@ -20,9 +17,8 @@ enum Subprocess {
     }
 
     /// `@concurrent` because the body blocks: a `nonisolated async` function
-    /// runs on the *caller's* executor (SE-0461), so without this every
-    /// subprocess the app starts from the main actor — the whole of
-    /// provisioning — would freeze the UI until the tool exited.
+    /// runs on the caller's executor (SE-0461), so a call from the main actor
+    /// would freeze the UI until the tool exited.
     @discardableResult
     @concurrent
     static func run(
@@ -44,11 +40,9 @@ enum Subprocess {
         if let environment { process.environment = environment }
         let pipe = attachStreams(of: process, for: capture)
 
-        // Drained while the process runs rather than read at the end: a tool
-        // that fills the pipe's buffer stalls until someone empties it, and
-        // wine's descendants inherit the write end and hold it open long
-        // after the launcher exits — a read that waits for EOF never returns.
-        // Without a pipe there is no end-of-file to wait for.
+        // Drained while the process runs: a tool that fills the pipe's buffer
+        // stalls, and wine's descendants hold the write end open long after
+        // the launcher exits, so a read that waits for EOF never returns.
         let collected = OutputBuffer(reachedEnd: pipe == nil)
         pipe?.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
@@ -60,14 +54,11 @@ enum Subprocess {
             }
         }
 
-        // `exited` is set once Foundation has reaped the child, which is the
-        // moment its PID becomes reusable; the watchdog reads it before
-        // signaling. `resumed` makes the one continuation safe to resume from
-        // either side: the handler, or the watchdog giving up on a child that
-        // `SIGKILL` cannot end — one blocked in an uninterruptible kernel wait
-        // dies only when that wait returns, which can be never, and a caller
-        // left waiting with it is the supervisor frozen (`lsof` on a wedged
-        // file system, 2026-10-14).
+        // `exited` is set once Foundation has reaped the child and its PID is
+        // reusable. `resumed` lets either the handler or the watchdog resume
+        // the continuation once: a child in an uninterruptible kernel wait
+        // (`lsof` on a wedged file system) survives `SIGKILL`, and waiting on
+        // it would freeze the supervisor.
         let exited = OSAllocatedUnfairLock(initialState: false)
         let resumed = OSAllocatedUnfairLock(initialState: false)
         var watchdog: Task<Void, Never>?
@@ -89,13 +80,9 @@ enum Subprocess {
                 let pid = process.processIdentifier
                 watchdog = Task.detached {
                     do { try await Task.sleep(for: timeout) } catch { return }
-                    // The check and the signal are two steps: a child reaped
-                    // between them, with its PID already handed to a new
-                    // process, puts the signal on that process, and a
-                    // scheduler pause between the steps makes the window as
-                    // wide as the pause. Closing it needs the signaling side
-                    // to own reaping, and Foundation.Process reaps in its own
-                    // handler.
+                    // A known race: a child reaped between this check and
+                    // the signal can have its PID reused. Closing it needs the
+                    // signaling side to own reaping, which Foundation.Process keeps.
                     if exited.withLock({ $0 }) { return }
                     kill(pid, SIGKILL)
                     do { try await Task.sleep(for: reapGrace) } catch { return }
@@ -109,11 +96,9 @@ enum Subprocess {
             }
         }
         watchdog?.cancel()
-        // A tool's last words can land after its exit, so the output is only
-        // complete at end-of-file — but that waits on every writer, and wine
-        // leaves descendants holding the write end for as long as they live.
-        // Tools whose output is parsed close it at once; the rest are quoted
-        // in error messages, where a missing last line costs nothing.
+        // Output is complete only at end-of-file, which wine's descendants can
+        // hold off indefinitely, so the wait is bounded. Parsed tools close the
+        // pipe at once; for the rest a missing last line costs nothing.
         if launchError == nil {
             await collected.waitForEnd(bound: .milliseconds(500))
         }
@@ -123,8 +108,7 @@ enum Subprocess {
         return (process.terminationStatus, collected.text)
     }
 
-    /// Points the child's stdout and stderr at the pipe `capture` reads or
-    /// at the null device, and returns that pipe when there is one.
+    /// Returns the pipe `capture` reads, if any.
     private nonisolated static func attachStreams(of process: Process, for capture: Capture) -> Pipe? {
         switch capture {
         case .stdout:
@@ -145,18 +129,16 @@ enum Subprocess {
     }
 }
 
-/// A subprocess's output, accumulated from readability callbacks — which
-/// arrive on Foundation's own queue while the caller waits for the exit.
+/// A subprocess's output, accumulated from readability callbacks on
+/// Foundation's own queue.
 private final nonisolated class OutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
     private var reachedEnd: Bool
-    /// The one task suspended in ``waitForEnd(bound:)``, held until
-    /// end-of-file, cancellation, or the bound takes it — whichever comes
-    /// first takes it under the lock, so it resumes exactly once.
+    /// Taken under the lock by whichever of end-of-file, cancellation or the
+    /// bound comes first, so it resumes exactly once.
     private var waiter: CheckedContinuation<Void, Never>?
-    /// Set when cancellation or the bound ends a wait, so a continuation
-    /// installed after that moment resumes at once.
+    /// Lets a continuation installed after cancellation or the bound resume at once.
     private var waitEnded = false
 
     init(reachedEnd: Bool) {
@@ -184,8 +166,7 @@ private final nonisolated class OutputBuffer: @unchecked Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
-    /// Suspends until end-of-file, cancellation of the calling task, or
-    /// `bound` elapses. Returns immediately when end-of-file is already seen.
+    /// Suspends until end-of-file, cancellation, or `bound` elapses.
     func waitForEnd(bound: Duration) async {
         if lock.withLock({ reachedEnd }) { return }
         let timer = Task {

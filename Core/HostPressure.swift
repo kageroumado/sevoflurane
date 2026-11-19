@@ -1,16 +1,14 @@
 import Darwin
 import Foundation
 
-/// What else is weighing on this Mac while Steam and a game run on it: a
-/// launch that crawls under someone else's build is a fact about the Mac, and
-/// both the person and the supervisor should read it that way.
+/// What else is weighing on this Mac while Steam and a game run on it, so the
+/// person and the supervisor read a slow launch as a fact about the Mac.
 nonisolated struct HostPressure: Codable, Equatable, Sendable {
     /// The part of the whole processor in use by everything outside the
     /// bottle and this app, 0 to 1.
     var otherProcessorShare = 0.0
     /// The outside process using the most of it, when one stands out.
     var busiestProcess: String?
-    /// The kernel's memory pressure level.
     var memory = MemoryLevel.normal
     /// The CPU's temperature in °C, averaged over its core sensors.
     var temperature: Double?
@@ -53,8 +51,7 @@ nonisolated struct HostPressure: Codable, Equatable, Sendable {
         return factor
     }
 
-    /// How loaded the Mac is on a scale of 0 to 1, for a gauge: the busiest
-    /// of its signals.
+    /// The busiest signal on a scale of 0 to 1, for a gauge.
     var level: Double {
         var level = otherProcessorShare
         if let temperature { level = max(level, (temperature - 50) / 50) }
@@ -98,8 +95,7 @@ nonisolated struct HostPressure: Codable, Equatable, Sendable {
         return text.prefix(1).uppercased() + text.dropFirst() + (isChinese ? "。" : ".")
     }
 
-    /// The reading with its numbers rounded to what a change of wording
-    /// needs, so two readings that say the same thing compare equal.
+    /// The reading rounded so two readings that say the same thing compare equal.
     var rounded: HostPressure {
         var copy = self
         copy.otherProcessorShare = (otherProcessorShare * 20).rounded() / 20
@@ -127,12 +123,10 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
         self.ownRoots = ownRoots
     }
 
-    /// Everything the app keeps in Application Support — engines, a game's
-    /// Dock launcher bundle, the NW.js runtimes and their wrapper bundles —
-    /// both CrossOver apps, and the app itself.
+    /// The app's Application Support folder (engines, Dock launchers, NW.js
+    /// runtimes and wrappers), both CrossOver apps, and the app itself.
     static var defaultOwnRoots: [String] {
-        // The daemon's bundle is a folder inside the app's; the app is ours
-        // whichever of the two asks.
+        // The daemon's bundle sits inside the app's, so walk up to the `.app`.
         var app = Bundle.main.bundleURL
         while app.pathComponents.count > 1, app.pathExtension != "app" { app.deleteLastPathComponent() }
         return [
@@ -174,8 +168,8 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
             if let ticks, let last = lastTicks, ticks.total > last.total, seconds > 0.5 {
                 let total = Double(ticks.busy - last.busy) / Double(ticks.total - last.total)
                 var ours = 0.0
-                // By name: a build is forty compilers, none of which stands
-                // out and all of which are the answer.
+                // Summed by name: a build is forty compilers, none of which
+                // stands out alone.
                 var byName: [String: Double] = [:]
                 for (pid, time) in processes {
                     guard let before = lastProcessTimes[pid], time >= before, let identity = names[pid] else { continue }
@@ -187,8 +181,7 @@ final nonisolated class HostPressureSampler: @unchecked Sendable {
                     }
                 }
                 let other = min(1, max(0, total - ours))
-                // Smoothed over a few readings: one compile step or one
-                // Spotlight burst is no state of the machine.
+                // Smoothed so one compile step or Spotlight burst does not count as load.
                 smoothedShare = smoothedShare.map { $0 * (1 - Self.smoothing) + other * Self.smoothing } ?? other
                 pressure.otherProcessorShare = smoothedShare ?? other
                 if let busiest = byName.max(by: { $0.value < $1.value }),

@@ -3,9 +3,9 @@ import Foundation
 /// Whether a closed run kept so many threads busy that telling the game of
 /// fewer processors would help, and to how many.
 ///
-/// A game that starts one worker per processor and keeps them all spinning
-/// under Rosetta starves its own frame thread: Higurashi Hou on a 16-core Mac
-/// ran 15 busy threads at 54 fps, and 117 fps when told of 8 processors.
+/// Workers spinning one per processor under Rosetta starve the frame thread:
+/// Higurashi Hou on a 16-core Mac ran 15 busy threads at 54 fps, and 117 fps
+/// when told of 8 processors.
 nonisolated enum ThreadSpinDiagnosis {
     /// What the run showed, and the cap that lets its workers sleep.
     struct Suggestion: Equatable, Sendable {
@@ -16,17 +16,13 @@ nonisolated enum ThreadSpinDiagnosis {
 
     /// The fewest busy threads that count as spinning workers.
     static let minimumBusy = 6
-    /// The share of the processors the busy threads must reach: one worker per
-    /// processor, less the ones that happened to rest.
+    /// The share of the processors the busy threads must reach.
     static let minimumShare = 0.4
-    /// The focused samples a run needs before its threads say anything: ten, two
-    /// seconds apart. The thread count is its own evidence, so it is measured over
-    /// the time the game was in front, which starts before the frame trace's
-    /// gameplay does.
+    /// Focused samples needed, two seconds apart, counted over the time the
+    /// game was in front rather than the frame trace's gameplay.
     static let minimumSamples = 10
-    /// The largest cap offered: what Higurashi Hou ran well at on a 16-core Mac.
+    /// What Higurashi Hou ran well at on a 16-core Mac.
     static let largestCap = 8
-    /// The smallest cap offered.
     static let smallestCap = 2
 
     /// The suggestion for `record`, or nil when its threads were quiet, the game

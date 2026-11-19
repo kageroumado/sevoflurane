@@ -1,14 +1,14 @@
 import Foundation
 
-/// What SevoKit can learn about this machine without touching anything —
-/// the facts the first-run assistant and `sevo doctor` both read.
+/// What can be learned about this machine without touching anything: the
+/// facts the first-run assistant and `sevo doctor` both read.
 nonisolated struct SetupDetection: Sendable, Equatable {
     struct CrossOver: Sendable, Equatable {
         let version: String
         let licensed: Bool
         let expires: String?
-        /// An installed CrossOver whose trial ran out cannot launch bottles;
-        /// the wizard must treat it as unavailable, not silently pick it.
+        /// An installed CrossOver whose trial ran out cannot launch bottles,
+        /// so the wizard treats it as unavailable.
         let trialExpired: Bool
     }
 
@@ -22,12 +22,10 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     let crossover: CrossOver?
     let bottles: [Bottle]
     let managedEngineVersions: [String]
-    /// CodeWeavers' preview app, when installed alongside stable. It shares
-    /// the license, so usability follows the same rule.
+    /// CodeWeavers' preview app, which shares the stable app's license.
     var crossoverPreview: CrossOver?
 
-    /// Every bottle with a Steam install; the wizard adopts one outright when
-    /// this has exactly one entry and asks otherwise.
+    /// Every bottle with a Steam install.
     var steamBottles: [Bottle] {
         bottles.filter(\.hasSteam)
     }
@@ -74,8 +72,7 @@ nonisolated enum SetupProbe {
         )
     }
 
-    /// The whole stack is x86_64; without Rosetta nothing below runs on
-    /// Apple silicon. An Intel Mac runs it natively and answers true.
+    /// Whether x86_64 code runs; always true on an Intel Mac.
     static func rosettaWorks() async -> Bool {
         guard MacHardware.isAppleSilicon else { return true }
         let result = await Subprocess.run(
@@ -84,11 +81,8 @@ nonisolated enum SetupProbe {
         return result.status == 0
     }
 
-    /// The license is a plain INI (`[crossmac] … expires=YYYY/MM/DD` +
-    /// `[license] id=…`); licensed = an id is present and any expiry is in
-    /// the future. Trial state comes from FirstRunDate in the preferences.
-    /// The Preview app carries its own version but shares the license and
-    /// first-run record, so both apps read the same two files.
+    /// Trial state comes from FirstRunDate; the Preview app shares the
+    /// license and first-run record with the stable one.
     static func crossoverInfo(
         at app: URL = crossoverApp,
     ) -> SetupDetection.CrossOver? {
@@ -117,8 +111,9 @@ nonisolated enum SetupProbe {
         )
     }
 
-    /// Parses the license INI: licensed = a `[license]` id is present and any
-    /// `expires=YYYY/MM/DD` is in the future.
+    /// Parses the license, a plain INI (`[crossmac] … expires=YYYY/MM/DD`,
+    /// `[license] id=…`): licensed = a `[license]` id is present and any
+    /// expiry is in the future.
     static func parseLicense(_ text: String, now: Date = .now) -> (licensed: Bool, expires: String?) {
         var licensed = text.contains("[license]") && text.contains("id=")
         var expires: String?
@@ -136,20 +131,17 @@ nonisolated enum SetupProbe {
         return (licensed, expires)
     }
 
-    /// CrossOver's bottles (a `cxbottle.conf` marks a real one) plus the
-    /// managed engine's prefixes (a `drive_c` marks those). One list — the
-    /// wizard and doctor don't care which engine owns a bottle, only the URL.
+    /// CrossOver's bottles (marked by `cxbottle.conf`) and the managed
+    /// engine's prefixes (marked by `system.reg`), in one list.
     static func bottles() -> [SetupDetection.Bottle] {
-        // system.reg marks a prefix whose boot got under way: wineserver
-        // saves it within seconds, even for a boot killed at once. Whether
-        // the boot finished is the bottle stage's question
-        // (`SetupEnvironment.bottleIsComplete`).
+        // wineserver saves system.reg within seconds even of a killed boot;
+        // `SetupEnvironment.bottleIsComplete` judges whether it finished.
         bottles(under: crossoverBottles, marker: "cxbottle.conf")
             + bottles(under: Engine.previewBottlesRoot, marker: "cxbottle.conf")
             + bottles(under: Engine.managedBottlesRoot, marker: "system.reg")
     }
 
-    /// The bottles the given engine can actually drive — its own root only.
+    /// The bottles under the engine's own root.
     static func bottles(for engine: Engine) -> [SetupDetection.Bottle] {
         bottles(
             under: engine.bottlesRoot,
@@ -164,7 +156,7 @@ nonisolated enum SetupProbe {
         }
         let current = SteamBottle.name
         return names.sorted().compactMap { name in
-            // The bottle the app is set to use is one whatever its name says.
+            // The configured bottle counts whatever its name.
             guard name == current || !isSetAside(name) else { return nil }
             let url = root.appendingPathComponent(name)
             guard manager.fileExists(atPath: url.appendingPathComponent(marker).path) else {
@@ -180,10 +172,9 @@ nonisolated enum SetupProbe {
         }
     }
 
-    /// Whether a folder's name marks a bottle set aside rather than one in
-    /// use: hidden, or ending in a suffix that retires a copy —
-    /// `Steam.discard`, `Steam.stub-1308`, `Steam.old`. Such a folder can
-    /// hold a whole prefix and a Steam install, so its contents cannot tell.
+    /// Whether a folder's name marks a set-aside bottle: hidden, or a
+    /// retiring suffix (`Steam.discard`, `Steam.stub-1308`, `Steam.old`).
+    /// Only the name can tell, since its contents may be a whole prefix.
     static func isSetAside(_ name: String) -> Bool {
         if name.hasPrefix(".") { return true }
         let suffix = (name as NSString).pathExtension.lowercased()
@@ -197,10 +188,9 @@ nonisolated enum SetupProbe {
         "orig", "tmp", "partial", "broken", "trash",
     ]
 
-    /// Oldest first, in ``Engine/isOlderVersion(_:than:)`` order:
-    /// `dormison-r2` before `dormison-r10`, which a plain string sort gets
-    /// backwards, and `dormison-b11` between `dormison-r10` and `dormison-r11`.
-    /// Only engines whose wineserver this Mac runs (``Engine/serverRuns(inEngineAt:appleSilicon:)``).
+    /// Installed engines whose wineserver this Mac runs, oldest first by
+    /// ``Engine/isOlderVersion(_:than:)`` (`dormison-r2` before `dormison-r10`,
+    /// `dormison-b11` between `dormison-r10` and `dormison-r11`).
     static func managedEngineVersions() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: managedEngines.path)) ?? [])
             .filter { !$0.hasPrefix(".") }

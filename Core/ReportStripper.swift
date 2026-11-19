@@ -2,17 +2,11 @@ import Foundation
 
 /// What a collected report keeps of a log, and what it takes out.
 ///
-/// ``Redaction`` takes the person out; this takes out what is left that is
-/// either useless or unbounded. A line that is nothing but addresses names no
-/// symbol and so tells a reader nothing they can act on, and a line a game
-/// prints forty thousand times is one line and a count. Both rules exist so
-/// that a report can be attached to an issue by someone on a phone.
+/// After ``Redaction``, drops lines that are only addresses and collapses
+/// repeated lines to one with a count, so a report stays small.
 nonisolated enum ReportStripper {
     /// A line repeated more than this many times is kept once with its count.
-    ///
-    /// Above three rather than above one: a backtrace through a recursing
-    /// frame is the same line several times over, and collapsing that would
-    /// take away the shape of the crash (`sevoflurane-unity-mono-stack-overflow`).
+    /// Three rather than one, so a recursing frame's few repeats keep the crash's shape.
     static let collapseOver = 3
 
     /// What the manifest says was taken out of every file in a report.
@@ -34,12 +28,8 @@ nonisolated enum ReportStripper {
         return collapsingRepeats(kept).joined(separator: "\n")
     }
 
-    /// Whether a line names nothing a person could look up: hex numbers,
-    /// punctuation and whitespace, and no word.
-    ///
-    /// A hex run that is also a word (`deadbeef`, `cafe`) reads as an address
-    /// here, which is what it is in the lines this drops — Wine's bare stack
-    /// dumps and the `0x…:  0x… 0x… 0x…` memory rows a crash handler prints.
+    /// Whether a line is only hex numbers and punctuation, like Wine's bare
+    /// stack dumps and `0x…:  0x… 0x…` memory rows. Hex words (`cafe`) count.
     static func isAddressesOnly(_ line: some StringProtocol) -> Bool {
         var sawHex = false
         for token in line.split(whereSeparator: { $0 == " " || $0 == "\t" }) {
@@ -55,8 +45,7 @@ nonisolated enum ReportStripper {
 
     private static let punctuation = CharacterSet(charactersIn: ":,;()[]<>+-|")
 
-    /// The lines in their first order, each one that ran away carrying how
-    /// many times it was printed.
+    /// Lines past ``collapseOver`` repeats kept once, at first position, with a count.
     private static func collapsingRepeats(
         _ lines: [some StringProtocol],
     ) -> [String] {
@@ -77,17 +66,14 @@ nonisolated enum ReportStripper {
         return kept
     }
 
-    /// The end of a file as a report carries it, with a line saying what was
-    /// cut when the file was longer than `limit`.
+    /// The stripped last `limit` bytes of a file, with a note of what was cut.
     static func tail(of url: URL, limit: Int, personas: [String] = []) -> String? {
         guard let (text, elided) = rawTail(of: url, limit: limit) else { return nil }
         return elided + strip(text, personas: personas)
     }
 
-    /// The last `limit` bytes of a file, read from where they start rather
-    /// than with the whole file, and the line that says what came before
-    /// them (empty when nothing did). `nil` when the file is not there or is
-    /// empty.
+    /// The last `limit` bytes of a file, read by seeking, and the elision
+    /// note (empty when nothing was cut). `nil` for a missing or empty file.
     static func rawTail(of url: URL, limit: Int) -> (text: String, elided: String)? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -103,9 +89,8 @@ nonisolated enum ReportStripper {
 /// The Steam accounts that have signed in inside the bottle, read from the
 /// client's own `config/loginusers.vdf`.
 ///
-/// The persona and account names there are exactly what a game's log, Steam's
-/// own log and an overlay screenshot print, and none of them is derivable from
-/// the text — so a report's redaction is given them rather than left to guess.
+/// Their persona and account names are what logs print, and redaction cannot
+/// detect them, so it is given them.
 nonisolated enum SteamAccounts {
     /// Every persona and account name the bottle knows, longest first so a
     /// name that contains another is replaced whole.
@@ -115,8 +100,7 @@ nonisolated enum SteamAccounts {
         return names(inLoginUsers: text)
     }
 
-    /// The names in a `loginusers.vdf`'s text. The file is Valve's key-value
-    /// format: a quoted key, whitespace, a quoted value, one pair per line.
+    /// The names in a `loginusers.vdf`: quoted key-value pairs, one per line.
     static func names(inLoginUsers text: String) -> [String] {
         var found: Set<String> = []
         for line in text.split(whereSeparator: \.isNewline) {

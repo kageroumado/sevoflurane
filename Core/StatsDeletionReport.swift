@@ -1,7 +1,6 @@
 import Foundation
 
-/// `sevo stats delete`'s answer: what ``StatsUploader/deleteShared()`` came
-/// to, in the words and fields the other `sevo stats` verbs use.
+/// `sevo stats delete`'s answer for ``StatsUploader/deleteShared()``.
 nonisolated struct StatsDeletionReport: Equatable {
     enum Result: String {
         case deleted
@@ -61,8 +60,7 @@ nonisolated struct StatsDeletionReport: Equatable {
         }
     }
 
-    /// Whether the command did what was asked: the database holds nothing
-    /// from this Mac.
+    /// Whether the database now holds nothing from this Mac.
     var succeeded: Bool {
         result == .deleted || result == .notRegistered
     }

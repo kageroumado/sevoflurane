@@ -1,14 +1,10 @@
 import Foundation
 
-/// Native NW.js as the runner of a detected NW.js game whose player has
-/// chosen none: Chromium inside the bottle is the slow path for a game that
-/// is already a Chromium app, and recent NW.js draws nothing there.
-///
-/// A game is taken when known fixes apply automatically
-/// (``Preferences/appliesKnownFixes``), it has no runner of its own, its
-/// NW.js version was read, and it keeps nothing in Steam Cloud through
-/// greenworks (``NWJSInfo/caution``). `sevo app config <id> runner wine`
-/// stores the choice, so a game sent back to the bottle stays there.
+/// Native NW.js as the default runner for a detected NW.js game: Chromium inside the bottle is
+/// slow, and recent NW.js draws nothing there. A game qualifies when known fixes apply
+/// automatically (``Preferences/appliesKnownFixes``), it has no runner chosen, its NW.js version is
+/// known, and it keeps nothing in Steam Cloud (``NWJSInfo/caution``). `sevo app config <id> runner
+/// wine` is stored, so a game sent back stays.
 nonisolated enum NWJSDefault {
     /// Whether a game with these values takes the native runner unasked.
     static func isCandidate(_ values: ConfigValues, enabled: Bool = Preferences.appliesKnownFixes) -> Bool {
@@ -16,8 +12,7 @@ nonisolated enum NWJSDefault {
         return !info.version.isEmpty && info.caution == nil
     }
 
-    /// Switches the game, fetching its runtime first when it is not on disk.
-    /// The switch reaches the game at its next launch.
+    /// Switches the game from its next launch, fetching its runtime first when missing.
     @discardableResult
     static func adopt(appID: Int, log: (String) -> Void = { _ in }) async -> Bool {
         let values = GameConfig.game(appID)
@@ -32,8 +27,8 @@ nonisolated enum NWJSDefault {
         return switchToNative(appID: appID, runtime: wanted, log: log)
     }
 
-    /// ``adopt(appID:log:)`` over the installed library, one game at a time
-    /// so two games of one series fetch their runtime once.
+    /// ``adopt(appID:log:)`` over the library, sequentially so games of one series fetch their
+    /// runtime once.
     static func adoptLibrary(log: (String) -> Void = { _ in }) async {
         for game in SharedGames.installedGames() {
             await adopt(appID: game.appID, log: log)
@@ -43,7 +38,7 @@ nonisolated enum NWJSDefault {
     private static func switchToNative(appID: Int, runtime: String, log: (String) -> Void) -> Bool {
         var switched = false
         GameConfig.update(game: appID, bottle: SteamBottle.name, prefix: SteamBottle.root) { values in
-            // Read again under the write: the player may have chosen since.
+            // Re-checked under the write: the player may have chosen since.
             guard isCandidate(values) else { return }
             values.runner = GameRunner.nwjs
             values.nwjsRuntime = runtime

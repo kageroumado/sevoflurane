@@ -1,7 +1,6 @@
 import Foundation
 
-/// JSON as text, the way every face of the project writes it: sorted keys,
-/// so two renderings of the same value diff clean.
+/// JSON as text with sorted keys, so two renderings of the same value diff clean.
 nonisolated enum JSONText {
     static func string(_ value: Any, pretty: Bool = false) -> String {
         var options: JSONSerialization.WritingOptions = [.fragmentsAllowed, .sortedKeys]

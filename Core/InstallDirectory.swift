@@ -1,19 +1,15 @@
 import Foundation
 
-/// Listing a game's install directory, which is often a link into another
-/// bottle.
+/// Listing a game's install directory, which is often a symlink into another
+/// bottle (``SharedGames/linkGameFiles(_:)``).
 ///
-/// A game shared from another bottle is a symlink to a directory
-/// (``SharedGames/linkGameFiles(_:)``), and Foundation's URL-based directory
-/// APIs refuse those: `contentsOfDirectory(at:)` throws `ENOTDIR` on a symlink
-/// URL and `URLResourceValues.isDirectory` reads `false` for one. Every scan
-/// of a game's files goes through here, so no scan can rediscover that by
-/// finding nothing.
+/// Foundation's URL-based directory APIs refuse a symlinked directory:
+/// `contentsOfDirectory(at:)` throws `ENOTDIR` and `URLResourceValues.isDirectory`
+/// reads `false`. Every scan of a game's files goes through here.
 nonisolated enum InstallDirectory {
     /// One entry of a listing, with its link followed.
     struct Entry: Sendable {
-        /// The entry's own path, symlinks resolved, so opening it works and
-        /// its kind is the kind of what it points at.
+        /// The entry's path with symlinks resolved.
         let url: URL
         /// The name as the directory spells it, case intact.
         let name: String

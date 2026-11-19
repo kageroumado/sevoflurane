@@ -1,14 +1,12 @@
 import Foundation
 
-/// Sends closed runs, and the reports people write about them, to the
-/// community database, when the user said yes.
+/// Sends closed runs and reports to the community database, when the user
+/// opted in.
 ///
-/// Runs wait in ``StatsStore/queueURL`` and reports in
-/// ``StatsStore/reportQueueURL`` until a batch goes through; an item the
-/// server has not taken within ``queueLife`` is dropped, so a Mac that is
-/// never online does not grow a file forever. Every request is signed by the
-/// install's ``StatsIdentity``, and carries a sequence number the server
-/// requires to grow, so a captured request cannot be replayed.
+/// Items wait in ``StatsStore/queueURL`` and ``StatsStore/reportQueueURL``
+/// and are dropped after ``queueLife``. Every request is signed by the
+/// install's ``StatsIdentity`` and carries a growing sequence number, so a
+/// captured request cannot be replayed.
 actor StatsUploader {
     static let shared = StatsUploader()
 
@@ -21,20 +19,17 @@ actor StatsUploader {
     static let queueLife: TimeInterval = 7 * 24 * 3600
     /// Waits between failed sends: a minute, then longer, up to six hours.
     static let backoff: [Duration] = [.seconds(60), .seconds(300), .seconds(1800), .seconds(7200), .seconds(21600)]
-    /// The wait after the server refused to register another install from
-    /// this address today: its cap is per day, so a shorter retry gets the
-    /// same answer.
+    /// The wait after the server's per-day registration cap refused us.
     static let registrationCapWait: Duration = .seconds(24 * 3600)
-    /// The server's word on a 429 that is its per-minute write limit rather
-    /// than the daily registration cap; both come from `POST /v1/installs`.
+    /// The reason a 429 from `POST /v1/installs` carries for the per-minute
+    /// limit, which tells it from the daily registration cap.
     static let perMinuteLimit = "too many requests"
 
     enum Failure: Error, Equatable {
         case noSecureEnclave
         case unreachable(String)
         case refused(status: Int, reason: String?)
-        /// `POST /v1/installs` answered 429: five new installs already
-        /// registered from this address today.
+        /// `POST /v1/installs` answered 429 for the daily per-address cap.
         case registrationCapped(reason: String?)
     }
 
@@ -46,8 +41,7 @@ actor StatsUploader {
 
     /// How a send failed, as far as what to do next is concerned.
     enum FailureClass: Equatable, Sendable {
-        /// Nothing answers these paths: the service is not deployed (404,
-        /// 410, 501). Asking again in this launch would get the same answer.
+        /// The service is not deployed (404, 410, 501); not retried this launch.
         case serviceAbsent
         case unreachable
         case serverError
@@ -87,19 +81,16 @@ actor StatsUploader {
     private var session = URLSession(configuration: .ephemeral)
     private var retry: Task<Void, Never>?
     private var isFlushing = false
-    /// The service answered that it is not there; nothing is sent again
-    /// until the app next launches.
+    /// Set by a ``FailureClass/serviceAbsent`` answer; cleared by relaunch.
     private var serviceAbsent = false
     /// The last failure's class, so a run of the same failure is logged once.
     private var lastFailure: FailureClass?
 
-    /// Where the uploader's lines go: the app points this at ``EventLog``;
-    /// `sevo` reports outcomes itself. Set once at process start, same
-    /// contract as ``ClientLifecycle/log``.
+    /// Where the uploader's lines go. Set once at process start, as
+    /// ``ClientLifecycle/log`` is.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
 
-    /// A run closed. Queued when sharing is on and the run says something
-    /// about the game; the send follows at once.
+    /// Queues a closed run when sharing is on, then sends.
     nonisolated static func submit(_ record: RunRecord) {
         guard Preferences.sharesRunStats == true,
               let run = SharedRun(record: record, appVersion: appVersion)
@@ -114,9 +105,8 @@ actor StatsUploader {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
     }
 
-    /// A person reported on a run. Queued when sharing is on; the send
-    /// follows at once. The run's standing in the ledger is the caller's to
-    /// write, so the caller's next read sees it.
+    /// Queues a report when sharing is on, then sends. The caller writes the
+    /// ledger entry, so its next read sees it.
     nonisolated static func submit(_ report: SharedReport, forRun runID: String) {
         guard Preferences.sharesRunStats == true else { return }
         Task.detached(name: "Queue a community report") {
@@ -137,12 +127,10 @@ actor StatsUploader {
         StatsStore.writeReportQueue(queue)
     }
 
-    /// Sends what is queued, runs then reports, a batch at a time,
-    /// registering first when the server does not know this install yet.
+    /// Sends the queues, runs then reports, registering first if needed.
     func flush() async {
         guard !isFlushing, !serviceAbsent, Preferences.sharesRunStats == true else { return }
-        // A backoff that outlived the last launch, or that a closing run
-        // arrived during, is waited out.
+        // A pending backoff, possibly from the last launch, is waited out.
         if let next = StatsStore.readState().nextTry, next > .now {
             if retry == nil { scheduleRetry(in: .seconds(next.timeIntervalSinceNow)) }
             return
@@ -171,11 +159,9 @@ actor StatsUploader {
         }
     }
 
-    /// Sends a queue a batch at a time, writing what is left after each and
-    /// counting what the server accepted. A batch the server calls too large
-    /// (413) goes again in halves, down to one item, which is dropped: an
-    /// item is capped at 4 KB by construction, so one the server still
-    /// refuses is not going to shrink.
+    /// Sends a queue a batch at a time, persisting the rest after each. A 413
+    /// halves the batch; a single item still refused is dropped, since items
+    /// are capped at 4 KB and cannot shrink.
     private func drain<Item>(
         _ queue: inout [Item], batchSize: Int, kind: String,
         persist: ([Item]) -> Void,
@@ -212,17 +198,15 @@ actor StatsUploader {
     enum DeleteOutcome: Equatable, Sendable {
         /// The server deleted every run `install` sent.
         case deleted(install: String)
-        /// The server never registered this Mac, so it holds nothing from it.
+        /// The server never registered this Mac.
         case notRegistered
-        /// The server registered `install`, but its key no longer opens on
-        /// this Mac (a backup restored onto another one), so nothing can sign
-        /// the request and the runs stay in the database.
+        /// `install` is registered, but its key does not open on this Mac (a
+        /// restored backup), so the runs stay in the database.
         case keyUnavailable(install: String)
     }
 
-    /// Asks the server to forget every run this install sent, then forgets
-    /// the install here: the next run shared, if any, comes from a new key.
-    /// A refused or unsent request throws and leaves the install in place.
+    /// Asks the server to delete this install's runs, then resets the local
+    /// identity. A failed request throws and keeps the install.
     @discardableResult
     func deleteShared() async throws -> DeleteOutcome {
         let outcome: DeleteOutcome
@@ -315,10 +299,8 @@ actor StatsUploader {
 
     // MARK: - Requests
 
-    /// Sends one batch of runs and answers how many the server accepted. A
-    /// batch is answered 202 even when the server refused some of its runs;
-    /// those are dropped with the batch, since resending an invalid run gets
-    /// the same answer, but the reasons are the only trace of them.
+    /// Sends one batch of runs and returns how many were accepted. Runs the
+    /// `202` reply rejects are dropped and their reasons logged.
     private func send(_ runs: [SharedRun], as identity: StatsIdentity) async throws -> Int {
         let encoded = try runs.map { try JSONSerialization.jsonObject(with: JSONEncoder.stats.encode($0)) }
         let body = try envelope(["install": identity.installID, "runs": encoded])
@@ -330,10 +312,8 @@ actor StatsUploader {
         return runs.count - rejected.count
     }
 
-    /// Sends one batch of reports, writes each one's standing to the ledger,
-    /// and answers how many the server accepted. Refused reports are dropped
-    /// with the batch, as runs are; each reason is logged and kept beside the
-    /// run so its row can say so.
+    /// Sends one batch of reports, records each one's standing in the ledger
+    /// (with any refusal reason), and returns how many were accepted.
     private func send(_ reports: [StatsStore.QueuedReport], as identity: StatsIdentity) async throws -> Int {
         let encoded = try reports.map { try JSONSerialization.jsonObject(with: JSONEncoder.stats.encode($0.report)) }
         let body = try envelope(["install": identity.installID, "reports": encoded])
@@ -356,8 +336,7 @@ actor StatsUploader {
         return reports.count - rejected.count
     }
 
-    /// The signed envelope's common fields: the version, the next sequence
-    /// number and the time, beside the request's own.
+    /// Adds the envelope version, next sequence number and time to `fields`.
     private func envelope(_ fields: [String: Any]) throws -> Data {
         var state = StatsStore.readState()
         state.seq += 1
@@ -409,8 +388,7 @@ actor StatsUploader {
         var state = StatsStore.readState()
         state.lastError = description
         StatsStore.writeState(state)
-        // A server that forgot this install (a deleted database, a revoked
-        // key) answers 401: register again on the next try.
+        // 401: the server forgot this install; register again next try.
         if case let .refused(status, _) = error as? Failure, status == 401 {
             state.registered = nil
             StatsStore.writeState(state)

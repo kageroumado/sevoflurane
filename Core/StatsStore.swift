@@ -1,7 +1,6 @@
 import Foundation
 
-/// Where the community database's local state lives: the key, the runs
-/// waiting to go, and what has been sent.
+/// The community database's local state: key, queues and send state.
 nonisolated enum StatsStore {
     static let root = ProcessInfo.processInfo.environment["SEVO_STATS_DIR"]
         .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
@@ -19,18 +18,16 @@ nonisolated enum StatsStore {
         var run: SharedRun
     }
 
-    /// A report waiting to be sent, since when, and the run it is about as
-    /// the run log names it (``RunRecord/id``), which is how the ledger's
-    /// entry is found when the server answers.
+    /// A report waiting to be sent; `runID` (``RunRecord/id``) finds its
+    /// ledger entry when the server answers.
     struct QueuedReport: Codable, Equatable, Sendable {
         var queued: Date
         var runID: String
         var report: SharedReport
     }
 
-    /// A report's standing, one per run reported: queued, sent, or refused
-    /// with the server's reason. What the run's row reads to say the run was
-    /// reported, and what `sevo stats reports` lists.
+    /// A report's standing, one per run: queued, sent, or refused with the
+    /// server's reason. Read by the run's row and `sevo stats reports`.
     struct Reported: Codable, Equatable, Sendable {
         var runID: String
         var verdict: SharedReport.Verdict
@@ -46,17 +43,15 @@ nonisolated enum StatsStore {
         /// The server's word on the evidence: `attested`, `device`,
         /// `reregistered` or `unverified`.
         var trust: String?
-        /// The last sequence number used; every signed request takes the next.
+        /// The last sequence number used.
         var seq: Int = 0
         var sentRuns: Int = 0
-        /// Optional so a state file written before reports existed still
-        /// decodes; a missing count is zero.
+        /// Optional so a state file without the field still decodes; a
+        /// missing count is zero.
         var sentReports: Int?
         var lastSent: Date?
         var lastError: String?
-        /// Sends that failed in a row, and when the next may go. Kept on disk
-        /// so a relaunch waits out the same backoff rather than starting it
-        /// over.
+        /// The backoff, on disk so a relaunch keeps waiting it out.
         var failures: Int?
         var nextTry: Date?
     }

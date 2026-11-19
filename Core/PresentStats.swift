@@ -1,60 +1,49 @@
 import Darwin
 import Foundation
 
-/// The frame rate of a running game, read out of the driver rather than out
-/// of the game.
+/// The frame rate of a running game, read from the driver.
 ///
-/// Every renderer presents through `winemac.drv`, which counts its presents
-/// into a 4 KB page per process at `<prefix>/.sevo/run/<pid>.stats`
-/// (`dlls/winemac.drv/sevo_stats.c`). Reading that page costs one `read` of
-/// 96 bytes a second and needs no hook, no overlay and no cooperation from
-/// the game, which is the whole point: a title that ships with its own
-/// anti-tamper still gets an fps number and a stall signal.
+/// Every renderer presents through `winemac.drv`, which counts presents into a
+/// 4 KB page per process at `<prefix>/.sevo/run/<pid>.stats`
+/// (`dlls/winemac.drv/sevo_stats.c`). Reading it needs no hook in the game, so
+/// a title with its own anti-tamper still gets an fps number and a stall signal.
 final nonisolated class PresentStats: @unchecked Sendable {
-    /// How often the pages are read. The per-second sample is also the
-    /// histogram the 1 % low comes out of, so this is the resolution of both.
+    /// How often the pages are read; also the resolution of the 1 % low.
     static let interval: TimeInterval = 1
 
-    /// How many per-second samples one run keeps. Four hours; a run longer
-    /// than that drops its oldest samples, and the average keeps counting
-    /// from the totals, which are not sampled.
+    /// Per-second samples one run keeps: four hours. The average comes from
+    /// totals, so it outlives dropped samples.
     static let samplesKept = 4 * 60 * 60
 
-    /// Where the pages are, asked at every sample: the bottle and its
-    /// companion follow a bottle switch without an app restart.
+    /// Asked at every sample, so a bottle switch needs no app restart.
     private let runDirectories: () -> [URL]
     private let lock = NSLock()
     private var armed: [Int: Run] = [:]
     private var timer: DispatchSourceTimer?
 
     /// - Parameters:
-    ///   - prefix: the bottle the games run in. Its `.sevo/run` is where the
-    ///     driver writes the pages.
-    ///   - companions: the other prefixes games run in, whose pages are read
-    ///     too: the bottle's companion, where HoYoverse's games run
-    ///     (``SteamParent``).
+    ///   - prefix: the bottle whose `.sevo/run` holds the pages.
+    ///   - companions: other prefixes whose pages are read too, such as the
+    ///     HoYoverse companion (``SteamParent``).
     init(prefix: URL, companions: [URL] = []) {
         let directories = ([prefix] + companions).map { $0.appendingPathComponent(".sevo/run") }
         runDirectories = { directories }
     }
 
-    /// The live bottle and its companion, whichever bottle is chosen when a
-    /// sample is taken.
+    /// The live bottle and its companion, as chosen at each sample.
     init() {
         runDirectories = { [SteamBottle.root, SteamBottle.companion].map { $0.appendingPathComponent(".sevo/run") } }
     }
 
-    /// Counts `pid`'s page toward `appID`'s run whatever app id the page
-    /// carries: a program Steam did not start has none (``RunRecorder``
-    /// learns its process when it reaches the Mac driver).
-    /// Whether `appID`'s run has counted a frame yet: the process that drew
-    /// it is the game, whatever arrives later.
+    /// Whether `appID`'s run has counted a frame yet.
     func hasCounted(forApp appID: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         return armed[appID]?.hasCounted ?? false
     }
 
+    /// Counts `pid`'s page toward `appID`'s run whatever app id the page
+    /// carries: a program Steam did not start has none.
     func claim(pid: pid_t, forApp appID: Int) {
         lock.lock()
         armed[appID]?.claimed.insert(pid)
@@ -65,24 +54,20 @@ final nonisolated class PresentStats: @unchecked Sendable {
 
     /// One armed run's counter as it stands right now.
     struct Reading: Equatable, Sendable {
-        /// The process whose page answered — the busiest presenter of the
-        /// app id's processes.
+        /// The busiest presenter among the run's processes.
         var pid: pid_t
-        /// The Cocoa window number the frames go into, 0 when no present
-        /// path has named one.
+        /// The Cocoa window number, 0 when no present path named one.
         var windowID: UInt64
         /// The last per-second sample, or 0 before the first one.
         var fps: Double
-        /// How long the process has gone without a present. The stall
-        /// watchdog's "no present for N seconds while alive": this is a
-        /// number only while the process is still there.
+        /// How long the process has gone without a present: the stall
+        /// watchdog's "no present for N seconds while alive".
         var silentFor: TimeInterval
         /// The run has a page and the process that wrote it is alive.
         var presenting: Bool
     }
 
-    /// A launch of `appID` has begun: its pages are sampled from now on, and its frames go
-    /// to `trace` when one is given.
+    /// Starts sampling `appID`'s pages, writing frames to `trace` when given.
     func arm(appID: Int, trace: FrameTrace.Writer? = nil) {
         lock.lock()
         armed[appID]?.trace?.close()
@@ -92,9 +77,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         if needsTimer { startTimer() }
     }
 
-    /// The launch is over. Returns what to put in the run record, or nil for
-    /// a run that never presented a frame — a game with no Metal layer at
-    /// all, and the record's `fps: null`.
+    /// Ends the run and returns its frame rate, or nil for a run that never
+    /// presented (the record's `fps: null`).
     @discardableResult
     func disarm(appID: Int) -> RunRecord.FrameRate? {
         lock.lock()
@@ -106,9 +90,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         return run?.frameRate
     }
 
-    /// Writes a mark into every armed run's trace, after reading the frames
-    /// presented so far, so the mark falls where it was asked for. Answers how
-    /// many traces took it.
+    /// Samples first, then writes a mark into every armed run's trace, so the
+    /// mark falls where it was asked for. Returns how many traces took it.
     @discardableResult
     func mark(_ label: String) -> Int {
         sample()
@@ -123,9 +106,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         return marked
     }
 
-    /// Writes what the app saw of an armed run's window into its trace, when it differs
-    /// from what the trace last said. Reads the frames presented so far first, so the
-    /// change falls after them.
+    /// Writes a change in the window's focus or display into the run's trace,
+    /// sampling first so the change falls after the frames before it.
     func note(focus: FrameTrace.Focus, display: RunRecord.Display?, forApp appID: Int) {
         lock.lock()
         let changed = armed[appID].map { run in
@@ -148,16 +130,14 @@ final nonisolated class PresentStats: @unchecked Sendable {
         armed[appID] = run
     }
 
-    /// What the counter says about an armed run right now, or nil when the
-    /// run is not armed or has no page yet.
+    /// The run's current reading, or nil when unarmed or without a page.
     func reading(forApp appID: Int) -> Reading? {
         lock.lock()
         defer { lock.unlock() }
         return armed[appID]?.reading
     }
 
-    /// Reads every page once and folds it into the armed runs. Called by the
-    /// timer; a test calls it directly.
+    /// Reads every page once and folds it into the armed runs.
     func sample() {
         let pages = runDirectories().flatMap(Self.pages(in:))
         let now = Self.uptime
@@ -173,29 +153,24 @@ final nonisolated class PresentStats: @unchecked Sendable {
 
     // MARK: - One run's samples
 
-    /// How many frame times one run keeps in memory for its summary: about fourteen hours
-    /// at 144 fps. The trace on disk has every frame either way.
+    /// Frame times one run keeps in memory: about fifteen hours at 144 fps.
+    /// The trace on disk has every frame.
     static let frameTimesKept = 8_000_000
 
-    /// The counters of one launch: the page it is following, the per-second
-    /// rates, the totals the average comes from, and every frame time the ring gave.
+    /// The counters of one launch.
     private struct Run {
         var trace: FrameTrace.Writer?
-        /// What the trace last said of the window, so it says each change once.
+        /// What the trace last said, so each change is written once.
         var focus: FrameTrace.Focus?
         var display: RunRecord.Display?
-        /// Processes counted for this run whatever app id their page carries
-        /// (``PresentStats/claim(pid:forApp:)``).
+        /// See ``PresentStats/claim(pid:forApp:)``.
         var claimed: Set<pid_t> = []
-        /// Processes whose page this run has seen while they were alive. A page whose
-        /// process is gone when the run first sees it is a dead launch's leftover — a
-        /// killed process cannot unlink its own page — and its ring holds that launch's
-        /// last frames, which are not this run's.
+        /// Processes whose page this run has seen alive. A page whose process is
+        /// already gone is a killed launch's leftover and is ignored.
         private var seenAlive: Set<pid_t> = []
         private var frameTimes: [Float] = []
         private var droppedFrames = 0
-        /// The process whose ring is being followed, the next ring index to read, and the
-        /// last frame's stamp, which the next frame's time is measured from.
+        /// The followed ring's process, next index, and last frame stamp.
         private var ringPID: pid_t?
         private var ringNext: UInt64 = 0
         private var lastStamp: UInt32?
@@ -207,9 +182,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         private var rates: [Double] = []
         var reading: Reading?
 
-        /// Folds this second's pages in. The run's rate is its busiest
-        /// page's: a launch is often several processes — a launcher, the
-        /// game, a crash handler — and only one of them draws.
+        /// Folds this second's pages in. The rate is the busiest page's: of a
+        /// launcher, the game and a crash handler, only one draws.
         mutating func absorb(_ pages: [PresentStats.Page], at now: TimeInterval) {
             for page in pages where page.alive {
                 seenAlive.insert(page.pid)
@@ -219,8 +193,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
                 reading = nil
                 return
             }
-            // A page that went backwards is a new process under the same app
-            // id — the count starts again, and so does the interval.
+            // A count that went backwards is a new process: start over.
             if let previous = lastCount, let then = lastSampledAt,
                page.count >= previous, now > then {
                 let seconds = now - then
@@ -240,14 +213,13 @@ final nonisolated class PresentStats: @unchecked Sendable {
             )
         }
 
-        /// Reads the frames the page's ring gained since the last sample. A new process starts
-        /// the ring over; a ring that turned more than once since the last read lost frames,
-        /// which are counted rather than guessed.
+        /// Reads the frames the ring gained since the last sample. Frames lost to
+        /// a ring that wrapped past the last read are counted as dropped.
         private mutating func follow(_ page: PresentStats.Page) {
             guard let ring = page.ring, page.ringCapacity > 8, page.ringHead > 1 else { return }
             let capacity = UInt64(page.ringCapacity)
-            // One short of the head, where a slot may still be being written, and a few short
-            // of a full ring at the tail, where the next frames overwrite the oldest.
+            // Stop one short of the head (a slot may be mid-write) and keep 8
+            // slots clear at the tail (about to be overwritten).
             let end = page.ringHead - 1
             let oldest = end > capacity - 8 ? end - (capacity - 8) : 0
             if ringPID != page.pid {
@@ -280,9 +252,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
             }
         }
 
-        /// The record's frame rate: the average over the whole run, the mean of the slowest
-        /// one per cent of the per-second samples, and when the engine has the ring, the
-        /// frame-time summary and the trace it came from.
+        /// The record's frame rate: whole-run average, mean of the slowest 1 %
+        /// of per-second samples, and the frame-time summary when there is a ring.
         var frameRate: RunRecord.FrameRate? {
             guard countedSeconds > 0, countedFrames > 0, !rates.isEmpty else { return nil }
             let slowest = rates.sorted().prefix(max(1, rates.count / 100))
@@ -304,8 +275,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         var pid: pid_t
         var appid: Int
         var exe: String
-        /// Presents that reached the screen. The D3DMetal path coalesces
-        /// these, so `drawables` is the frame rate wherever it is non-zero.
+        /// Presents that reached the screen. D3DMetal coalesces these, so
+        /// `drawables` is the rate wherever it is non-zero.
         var frames: UInt64
         /// Frames the renderer produced, one per Metal drawable.
         var drawables: UInt64
@@ -313,16 +284,14 @@ final nonisolated class PresentStats: @unchecked Sendable {
         var source: Source
         var lastPresentUptime: TimeInterval
         var startedUptime: TimeInterval
-        /// When the Cocoa main thread's run loop last turned; the engine writes it once a
-        /// second. `nil` on a page from an engine that does not. Presents keep counting from the
-        /// game's own threads while the main thread is blocked or gone, and the window then
-        /// answers nothing: this is the field that stops.
+        /// When the Cocoa main thread's run loop last turned, written once a
+        /// second; nil on engines without it. Presents keep counting while the
+        /// main thread is blocked, so this is the field that shows a hang.
         var mainBeatUptime: TimeInterval?
-        /// The process that wrote the page is still running. A killed
-        /// process cannot unlink its own page.
+        /// The writer is still running; a killed process leaves its page.
         var alive: Bool
-        /// The frame-time ring (`sevo_stats_page.ring`): frames written so far, the slots,
-        /// and each slot's stamp in wrapping microseconds. Nil ring on an engine without one.
+        /// The frame-time ring (`sevo_stats_page.ring`): frames written, slot
+        /// count, and stamps in wrapping microseconds. Nil on engines without one.
         var ringHead: UInt64 = 0
         var ringCapacity: Int = 0
         var ring: [UInt32]?
@@ -334,18 +303,16 @@ final nonisolated class PresentStats: @unchecked Sendable {
             case presenter = 2
         }
 
-        /// The frames to measure a rate from: the presenter counts one per
-        /// frame and owns the screen where it runs; otherwise the renderer's
-        /// own drawables when there are any, and the driver's presents when
-        /// there are not (Vulkan, OpenGL, a GDI window).
+        /// The frames to measure a rate from: the presenter's count where it
+        /// runs, else drawables, else the driver's presents (Vulkan, OpenGL, GDI).
         var count: UInt64 {
             if source == .presenter { return frames }
             return drawables > 0 ? drawables : frames
         }
     }
 
-    /// How long a process's main thread has gone without turning its run loop: `nil` when
-    /// the process has no page, is gone, or runs on an engine that writes no beat.
+    /// How long a process's main thread has gone without turning its run loop;
+    /// nil without a live page carrying a beat.
     static func mainThreadSilence(
         of pid: pid_t, in directory: URL = SteamBottle.root.appendingPathComponent(".sevo/run"),
     ) -> TimeInterval? {
@@ -366,9 +333,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         }
     }
 
-    /// Decodes one page. Fields are little-endian and naturally aligned, in
-    /// the order `struct sevo_stats_page` declares them; the magic is written
-    /// last, so a page without it is one being made right now.
+    /// Decodes one page: little-endian fields in `struct sevo_stats_page`
+    /// order. The magic is written last, so a page without it is mid-creation.
     static func page(from data: Data) -> Page? {
         guard data.count >= 96 else { return nil }
         let word = { (offset: Int) in
@@ -399,8 +365,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
         )
     }
 
-    /// The ring at offset 104: the head, the capacity, the slots from 120. Nil when the
-    /// page has none or claims more slots than it holds.
+    /// The ring: head at 104, capacity at 112, slots from 120. Nil when absent
+    /// or claiming more slots than the page holds.
     private static func ring(in data: Data) -> (head: UInt64, slots: [UInt32])? {
         guard data.count >= 120 else { return nil }
         return data.withUnsafeBytes { raw in
@@ -418,10 +384,8 @@ final nonisolated class PresentStats: @unchecked Sendable {
     private static let magic: UInt64 = 0x5345_564F_5354_5331
     private static let version: UInt32 = 1
 
-    /// The clock both sides share. The page is written by an x86_64 process
-    /// under Rosetta and read by this arm64 one, and a raw mach tick is a
-    /// different unit on each side; `CLOCK_UPTIME_RAW` is nanoseconds on
-    /// both.
+    /// The clock both sides share. Mach ticks differ between the Rosetta
+    /// writer and this arm64 reader; `CLOCK_UPTIME_RAW` is nanoseconds on both.
     static var uptime: TimeInterval {
         seconds(clock_gettime_nsec_np(CLOCK_UPTIME_RAW))
     }

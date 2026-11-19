@@ -1,26 +1,20 @@
 import CryptoKit
 import Foundation
 
-/// The trust anchor for everything the engine pipeline downloads: Ed25519
-/// public keys compiled into the app, whose private halves sign engine
-/// releases (`dormison/build-macos/publish-engine.sh`). A signature from any
-/// pinned key is accepted. A release asset's
-/// signature is the raw 64-byte Ed25519 signature over the asset's bytes,
-/// base64, in a sibling file named `<asset>.sig`; the manifest is signed the
-/// same way (`engine.json.sig`). Verification happens before a manifest is
-/// trusted and before a tarball is opened, so a compromised release feed or
-/// asset store cannot hand the app an engine it did not sign.
+/// The trust anchor for engine downloads: pinned Ed25519 public keys whose
+/// private halves sign releases (`dormison/build-macos/publish-engine.sh`).
+/// A signature from any pinned key is accepted. Each asset, and the manifest
+/// (`engine.json.sig`), has a sibling `<asset>.sig` holding the base64 raw
+/// 64-byte signature, verified before the manifest is trusted or a tarball
+/// opened.
 ///
-/// The key is a source constant rather than an Info.plist entry: `sevo`
-/// shares these sources and runs from `Contents/Helpers` with no bundle of its
-/// own, and one definition cannot drift.
+/// The keys are source constants because `sevo` shares these sources and
+/// runs from `Contents/Helpers` with no bundle of its own.
 nonisolated enum EngineSignature {
     /// Raw 32-byte Ed25519 public keys, base64, under
-    /// `infrastructure/publish/keys/`. Releases are signed with the key this
-    /// app shipped with until enough installs carry the one that replaces it,
-    /// whose private half was never in a repository; the manifest's
-    /// `minAppVersion` keeps a release signed with the new key from apps that
-    /// pin only the old one.
+    /// `infrastructure/publish/keys/`. Releases stay signed with the old key
+    /// until enough installs pin the new one (never in a repository); the manifest's `minAppVersion`
+    /// keeps new-key releases from apps that pin only the old one.
     static let pinnedPublicKeysBase64 = [
         // dormison-ed25519-2026-10.pem
         "5sQ6cDQSthaMVF3fZEVs9hTvnn0j2WZ2OuKOeNvBmPM=",
@@ -49,7 +43,7 @@ nonisolated enum EngineSignature {
         URL(string: asset.absoluteString + ".sig") ?? asset.appendingPathExtension("sig")
     }
 
-    /// HTTPS, on github.com, under one of the release-download paths we publish to.
+    /// HTTPS, github.com, under an allowed release-download path.
     static func isAllowedAssetURL(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https",
               url.host()?.lowercased() == "github.com",
@@ -69,8 +63,7 @@ nonisolated enum EngineSignature {
         return signature
     }
 
-    /// Verifies `signatureFile` over `message` with `key`, or with any of the
-    /// pinned keys.
+    /// Verifies with `key`, or with any pinned key.
     static func verify(
         _ message: some DataProtocol, signatureFile: Data, subject: String,
         key: Curve25519.Signing.PublicKey? = nil,
@@ -88,9 +81,7 @@ nonisolated enum EngineSignature {
         }
     }
 
-    /// Verifies a file on disk without reading it into memory twice: the
-    /// engine tarball is hundreds of MB, and a mapped read is what CryptoKit
-    /// hashes from.
+    /// Verifies a file through a mapped read: the tarball is hundreds of MB.
     static func verify(
         file: URL, signatureFile: Data, key: Curve25519.Signing.PublicKey? = nil,
     ) throws {

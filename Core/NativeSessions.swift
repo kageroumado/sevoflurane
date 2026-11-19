@@ -1,29 +1,22 @@
 import Darwin
 import Foundation
 
-/// The macOS builds running right now, as the engine's native supervisor
-/// records them.
-///
-/// The dock shim starts every macOS build a game is mapped to
-/// (``SteamPlayMacOS``) through `sevo-native-supervisor`, which runs the game
-/// as the leader of a new process group, holds the pipe Steam's waiter
-/// watches, and keeps one file per running game at
-/// `<bottle>/.sevo/native-sessions/<supervisor pid>.json`, written whole by a
-/// rename and removed when the supervisor exits. That file is the game's
-/// identity outside the bottle: which windows are a game's wherever its
-/// library is, and which processes a stop ends.
+/// The macOS builds running right now, as the engine's native supervisor records them. The dock
+/// shim starts every mapped macOS build (``SteamPlayMacOS``) through `sevo-native-supervisor`,
+/// which leads the game's new process group, holds the pipe Steam's waiter watches, and writes
+/// `<bottle>/.sevo/native-sessions/<supervisor pid>.json` by rename, removed at exit. That file
+/// tells which windows are a game's and which processes a stop ends.
 nonisolated enum NativeSessions {
     enum Constants {
         /// The sessions directory, relative to the bottle.
         static let directory = ".sevo/native-sessions"
         /// The file format this reader understands.
         static let version = 1
-        /// The supervisor's executable name, which a live session's pid runs.
+        /// The supervisor's executable name.
         static let supervisorName = "sevo-native-supervisor"
-        /// How long a supervisor gets to end its game and exit after `SIGTERM`:
-        /// its own ladder is ten seconds of grace, then `SIGKILL`.
+        /// How long a supervisor gets to end its game and exit after `SIGTERM`; its own ladder is
+        /// ten seconds, then `SIGKILL`.
         static let stopWait: Duration = .seconds(15)
-        /// How often a stop looks at the supervisors while it waits.
         static let poll: Duration = .milliseconds(100)
         /// The most process-group members read for one session.
         static let groupCapacity = 1024
@@ -42,31 +35,29 @@ nonisolated enum NativeSessions {
         let bundle: String
         let started: Date
 
-        /// The bundle's file name, lowercased like every program name the
-        /// window watch compares (``WineWindowWatch``).
+        /// The bundle's file name, lowercased like the window watch's program names
+        /// (``WineWindowWatch``).
         var name: String {
             URL(fileURLWithPath: bundle).lastPathComponent.lowercased()
         }
 
-        /// Whether the session is a native NW.js run (``NWJSRunner``) rather
-        /// than a macOS build: its bundle, or the runtime binary when it has
-        /// none, lives under the runner's own folders.
+        /// Whether the session is a native NW.js run (``NWJSRunner``): its bundle or runtime lives
+        /// under the runner's folders.
         var isNWJS: Bool {
             bundle.hasPrefix(NWJSRunner.root.path + "/")
                 || bundle.hasPrefix(NWJSRuntime.root.path + "/")
         }
 
-        /// Whether a process belongs to this game: the game itself, or any
-        /// process still in its group.
+        /// Whether a process is the game or still in its group.
         func owns(pid: pid_t, processGroup group: pid_t?) -> Bool {
             pid == game || (group.map { $0 == processGroup } ?? false)
         }
     }
 
-    /// What the reader needs from the machine, so a test can stand in for it.
+    /// The machine as the reader sees it, replaceable for tests.
     protocol Machine: Sendable {
-        /// Whether `pid` is a live native supervisor. A file whose supervisor
-        /// is gone, or whose pid now runs something else, is stale.
+        /// Whether `pid` is a live native supervisor; a file whose pid is gone or runs something
+        /// else is stale.
         func isSupervisor(_ pid: pid_t) -> Bool
         func processGroup(of pid: pid_t) -> pid_t?
         func members(ofProcessGroup group: pid_t) -> [pid_t]
@@ -95,8 +86,7 @@ nonisolated enum NativeSessions {
         bottle.appendingPathComponent(Constants.directory, isDirectory: true)
     }
 
-    /// One session file's contents, or `nil` for a file of another version
-    /// or off the shape.
+    /// One session file's contents, or `nil` for another version or shape.
     static func parse(_ data: Data) -> Session? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               (object["version"] as? NSNumber)?.intValue == Constants.version,
@@ -120,9 +110,8 @@ nonisolated enum NativeSessions {
         return pid_t(number)
     }
 
-    /// The sessions whose supervisor is running. Temporary files (dotfiles)
-    /// and stale files are skipped; `removingStale` also takes the stale ones
-    /// off the disk.
+    /// Sessions whose supervisor is running, skipping dotfiles (temporary) and stale files;
+    /// `removingStale` deletes the stale ones.
     static func live(
         inBottle bottle: URL = SteamBottle.root,
         machine: some Machine = LiveMachine(),
@@ -143,8 +132,7 @@ nonisolated enum NativeSessions {
         return sessions.sorted { $0.supervisor < $1.supervisor }
     }
 
-    /// The session a process belongs to, or `nil` for a process that is no
-    /// running macOS build's.
+    /// The running macOS build a process belongs to.
     static func session(
         owning pid: pid_t, in sessions: [Session], machine: some Machine = LiveMachine(),
     ) -> Session? {
@@ -153,8 +141,8 @@ nonisolated enum NativeSessions {
         return sessions.first { $0.owns(pid: pid, processGroup: group) }
     }
 
-    /// Every process of an app's running macOS builds: each supervisor, its
-    /// game, and whatever is left in the game's process group.
+    /// Every process of an app's macOS builds: supervisors, games, and what remains in each game's
+    /// group.
     static func processes(
         ofApp appID: Int, in sessions: [Session], machine: some Machine = LiveMachine(),
     ) -> [pid_t] {
@@ -168,17 +156,14 @@ nonisolated enum NativeSessions {
         return pids
     }
 
-    /// What a stop came to: the supervisors that exited, and those still
-    /// running when the wait ran out.
+    /// The supervisors that exited, and those still running at the deadline.
     struct StopOutcome: Equatable, Sendable {
         var stopped: [pid_t] = []
         var survivors: [pid_t] = []
     }
 
-    /// Stops an app's running macOS builds through their supervisors:
-    /// `SIGTERM` to each, which ends the game's whole process group, removes
-    /// its file and closes the pipe Steam's waiter watches, so Steam sees the
-    /// game stop. Answers once every supervisor has exited or
+    /// Stops an app's macOS builds with `SIGTERM` to each supervisor, which ends the game's process
+    /// group, removes its file and closes Steam's pipe. Answers once all have exited or
     /// ``Constants/stopWait`` has passed.
     static func stop(
         appID: Int,

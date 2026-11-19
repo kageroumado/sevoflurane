@@ -3,10 +3,9 @@ import Foundation
 /// Sorts what the Steam UI's error guard reports into the errors worth a
 /// reader's alarm and the refusals every session produces.
 ///
-/// The UI calls the client without checking what the client has, and leaves
-/// the promise unhandled: it sets a SteamVR path property at every boot, and
-/// keeps posting messages while the client is closing. The client refuses
-/// both, the same way it does on Windows.
+/// The UI leaves rejected promises unhandled: it sets a SteamVR path property
+/// at every boot and keeps posting messages while the client closes. The
+/// client refuses both, as it does on Windows.
 nonisolated enum PageErrorTriage {
     enum Verdict: Equatable {
         /// A real page error, logged as it arrived.

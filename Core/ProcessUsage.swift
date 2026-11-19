@@ -1,22 +1,18 @@
 import Darwin
 import Foundation
 
-/// One process's resource use as the kernel accounts it, read through
-/// `proc_pid_rusage` (`RUSAGE_INFO_V6`): CPU time, memory footprint, energy,
-/// retired instructions, and how much of its CPU time ran on performance
-/// cores.
+/// One process's resource use from `proc_pid_rusage` (`RUSAGE_INFO_V6`).
 ///
-/// The read is one system call and works on any process the caller can see,
-/// which is every bottle process: they run as the same user. It is what the
-/// stall watchdog samples every two seconds and what a run record's `energy`
-/// is taken from at the run's end.
+/// One system call, readable for any process of the same user, which every
+/// bottle process is. The stall watchdog samples it every two seconds, and a
+/// run record's `energy` comes from it.
 nonisolated struct ProcessUsage: Sendable, Equatable {
     let pid: pid_t
     /// User plus system time, nanoseconds.
     let cpuTimeNanoseconds: UInt64
     /// The part of ``cpuTimeNanoseconds`` spent on performance cores.
     let pCoreTimeNanoseconds: UInt64
-    /// Mach physical footprint, bytes — the number Activity Monitor shows.
+    /// Mach physical footprint in bytes, as Activity Monitor shows it.
     let footprintBytes: UInt64
     /// Energy billed to the process, nanojoules.
     let energyNanojoules: UInt64
@@ -24,21 +20,19 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
     /// When the process started, in `mach_absolute_time` units.
     let startAbsoluteTime: UInt64
 
-    /// CPU seconds.
     var cpuSeconds: Double {
         Double(cpuTimeNanoseconds) / 1e9
     }
 
-    /// The fraction of CPU time that ran on performance cores, 0 to 1.
+    /// 0 to 1.
     var pCoreShare: Double {
         guard cpuTimeNanoseconds > 0 else { return 0 }
         return min(1, Double(pCoreTimeNanoseconds) / Double(cpuTimeNanoseconds))
     }
 
-    /// The kernel reports these times in Mach time units, NOT nanoseconds —
-    /// the field names and headers say time and give no unit, and on Intel
-    /// the two are the same. On Apple silicon a unit is 125/3 ns, so a second
-    /// of work reads as 0.024 s untreated.
+    /// The rusage times are Mach time units, NOT nanoseconds as on Intel: on
+    /// Apple silicon a unit is 125/3 ns, so a second of work reads as 0.024 s
+    /// unconverted.
     private static let timebase: mach_timebase_info_data_t = {
         var info = mach_timebase_info_data_t()
         mach_timebase_info(&info)
@@ -70,13 +64,10 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         )
     }
 
-    /// The direct children of a process. A game's tree is found by asking
-    /// this of each pid in turn, starting from the ones the launch named.
+    /// The direct children of a process.
     ///
-    /// `proc_listpids(PROC_PPID_ONLY)` rather than `proc_listchildpids`: the
-    /// latter answers EPERM and one byte for a process that is not root, so
-    /// an unprivileged caller reads every tree as childless. Measured on
-    /// macOS 27, 2026-09-18.
+    /// Never use `proc_listchildpids`: for a caller that is not root it answers
+    /// EPERM and one byte, so every tree reads as childless (macOS 27).
     static func children(of pid: pid_t) -> [pid_t] {
         var buffer = [pid_t](repeating: 0, count: maximumChildren)
         let bytes = buffer.withUnsafeMutableBytes { raw in
@@ -87,9 +78,7 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         return buffer.prefix(count).filter { $0 > 0 }
     }
 
-    /// How many children of one process are read. A game's loader spawns a
-    /// handful; the cap is what keeps a runaway from being an unbounded
-    /// allocation on a sampling path.
+    /// Caps the allocation on a sampling path; a game's loader spawns a handful.
     private static let maximumChildren = 256
 
     /// Every process under `roots`, the roots included, each once.
@@ -106,8 +95,8 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         return order
     }
 
-    /// Whether the process is stopped (`SIGSTOP`, a debugger), which reads
-    /// as zero CPU to a sampler that does not ask.
+    /// Whether the process is stopped (`SIGSTOP`, a debugger), which a
+    /// sampler would otherwise read as zero CPU.
     static func isStopped(pid: pid_t) -> Bool {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -117,9 +106,8 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         return read == size && info.pbi_status == UInt32(SSTOP)
     }
 
-    /// The process's name as the kernel keeps it: the executable's file name,
-    /// which for a bottle process is the engine's loader rather than the
-    /// Windows program inside it.
+    /// The executable's file name, which for a bottle process is the engine's
+    /// loader rather than the Windows program inside it.
     static func name(of pid: pid_t) -> String? {
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
         let length = proc_name(pid, &buffer, UInt32(buffer.count))
@@ -137,7 +125,6 @@ nonisolated struct ProcessUsage: Sendable, Equatable {
         return read == size ? pid_t(info.pbi_ppid) : nil
     }
 
-    /// Whether a process with this pid exists.
     static func exists(pid: pid_t) -> Bool {
         kill(pid, 0) == 0 || errno == EPERM
     }

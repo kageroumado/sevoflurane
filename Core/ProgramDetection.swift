@@ -1,26 +1,18 @@
 import Foundation
 
-/// What kind of Windows program a file is, decided before it runs.
-///
-/// An installer and a game want opposite treatment — one is run once and
-/// judged by what it leaves on disk, the other is kept and started again — and
-/// asking the user to classify their own download is asking them to know how
-/// this app works. The file says enough by itself: its name, the strings in
-/// its version resource, the installer toolkits' own markers, and what lies
-/// beside it in its folder. The privilege a manifest asks for is no signal:
-/// games and their launchers ask for administrator as often as installers do.
-///
-/// The verdict can still be wrong, so the user can overrule it for one file,
-/// and that answer is remembered (``markNotInstaller(_:)``).
+/// What kind of Windows program a file is, decided before it runs: an installer runs once and is
+/// judged by what it leaves, a game is kept and relaunched. The verdict comes from the file's name,
+/// version strings, installer-toolkit markers and neighbors. A manifest's privilege request is no
+/// signal: games and launchers ask for administrator as often as installers do. The user can
+/// overrule a verdict per file (``markNotInstaller(_:)``).
 nonisolated enum ProgramDetection {
     /// A kind and the signals that chose it, so the panel can show its work.
     struct Verdict: Sendable, Equatable {
         /// One of ``ProgramKind``.
         let kind: String
-        /// Why, shortest first, for the line under the program's name.
+        /// Why, shortest first.
         let reasons: [String]
 
-        /// The verdict as one sentence.
         var summary: String {
             let what = switch kind {
             case ProgramKind.installer: InterfaceCopy.localized("Looks like an installer")
@@ -31,11 +23,8 @@ nonisolated enum ProgramDetection {
         }
     }
 
-    /// Classifies one executable. An installer's signals win: running a game
-    /// once costs a launch, while adopting an installer leaves a Quick Launch
-    /// entry that reinstalls something every time it is clicked.
-    ///
-    /// A file the user said is not an installer skips the installer signals.
+    /// Classifies one executable. Installer signals win, since an adopted installer reinstalls on
+    /// every click while a misjudged game costs one launch; a file the user overruled skips them.
     static func classify(_ url: URL, notInstallers: Set<String> = rememberedNotInstallers()) -> Verdict {
         let isOverruled = notInstallers.contains(url.standardizedFileURL.path)
         let installer = isOverruled ? [] : installerSignals(url, info: PEResources.read(url))
@@ -91,16 +80,14 @@ nonisolated enum ProgramDetection {
         Set(Preferences.shared.stringArray(forKey: notInstallersKey) ?? [])
     }
 
-    /// Remembers that this file is not an installer, so every later look at it
-    /// — the panel, `sevo program add` — offers it as a program.
+    /// Remembers that this file is not an installer, for the panel and `sevo program add`.
     static func markNotInstaller(_ url: URL) {
         var paths = rememberedNotInstallers()
         paths.insert(url.standardizedFileURL.path)
         Preferences.shared.set(paths.sorted(), forKey: notInstallersKey)
     }
 
-    /// The word in the version resource that names an installer, if one is
-    /// there.
+    /// The version-resource string that names an installer.
     private static func versionSaysInstaller(_ info: PEResources.Info?) -> String? {
         let strings = [info?.productName, info?.fileDescription].compactMap(\.self)
         for text in strings {
@@ -112,8 +99,7 @@ nonisolated enum ProgramDetection {
         return nil
     }
 
-    /// The installer toolkit whose marker sits in the file's own stub, which
-    /// is within the first megabytes of it.
+    /// The installer toolkit whose marker is in the first 2 MB of the file.
     private static func toolkit(in url: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -141,7 +127,7 @@ nonisolated enum ProgramDetection {
 
     // MARK: - Games
 
-    /// Files a game engine ships that nothing else does.
+    /// Files only a game engine ships.
     private static let engineFiles = [
         "unityplayer.dll": "Unity",
         "nw.dll": "NW.js",
@@ -172,8 +158,8 @@ nonisolated enum ProgramDetection {
         if files.contains(where: { $0.hasSuffix(".pak") }) {
             reasons.append(InterfaceCopy.localized("packed game data beside it"))
         }
-        // The tool-name exclusions the library scan uses: a crash reporter
-        // sitting in a game's folder inherits every signal above.
+        // The library scan's tool-name exclusions: a crash reporter in a game's folder shares every
+        // signal above.
         guard GameExecutables.isGameLike(url.lastPathComponent.lowercased()) else { return [] }
         return reasons
     }

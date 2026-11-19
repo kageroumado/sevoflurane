@@ -1,31 +1,26 @@
 import Foundation
 import ServiceManagement
 
-/// The machine-touching half of provisioning, split from the policy in
-/// ``Provisioner`` so the DEBUG onboarding harness (`SetupDryRun.swift`) can
-/// substitute simulated effects while the wizard flow, stage ordering, skip
-/// logic, and error handling stay the code under test.
+/// The machine-touching half of provisioning, split from ``Provisioner`` so
+/// the DEBUG onboarding harness (`SetupDryRun.swift`) can simulate effects.
 @MainActor
 protocol SetupEnvironment: AnyObject {
-    /// Whether effects are simulated (the dry-run harness) — the wizard shows
-    /// a badge so a screenshot can never be mistaken for a real run.
+    /// Whether effects are simulated (the dry-run harness).
     var isSimulation: Bool { get }
 
     /// The bottle every stage addresses: the stored choice on a live run, the
     /// fixture's own bottle in a dry run.
     var bottleName: String { get }
 
-    /// Names the bottle the remaining stages address — the wizard's answer to
-    /// "which of these Steam-bearing bottles is ours".
+    /// Names the bottle the remaining stages address.
     func chooseBottle(named name: String)
 
-    /// Where the engine behind this environment keeps its bottles. Detection's
-    /// bottle records are matched against it, so the two have to describe the
-    /// same machine — this one, or the simulated one.
+    /// Where the engine keeps its bottles; detection's bottle records are
+    /// matched against it, so both must describe the same machine.
     var bottlesRoot: URL { get }
 
-    /// Whether the engine choice asks for the built-in engine, installed or
-    /// not: the engine stage installs one even where CrossOver is usable.
+    /// Whether the engine choice asks for the built-in engine, which the
+    /// engine stage then installs even where CrossOver is usable.
     var wantsManagedEngine: Bool { get }
 
     /// Re-reads the machine facts every stage decision runs on.
@@ -34,11 +29,9 @@ protocol SetupEnvironment: AnyObject {
     /// `softwareupdate --install-rosetta --agree-to-license`.
     func installRosetta() async -> SetupCommandOutcome
 
-    /// Installs the managed engine — the path taken when no usable CrossOver
-    /// exists: from `tarball` when someone has the file, else the signed one
-    /// shipped with this copy of the app, else the release the manifest
-    /// names, downloaded. The outcome's output is the version installed. The
-    /// fraction is download progress, or `nil` where none is measurable.
+    /// Installs the managed engine from `tarball`, else the signed copy
+    /// shipped with the app, else the manifest's release. The outcome's output
+    /// is the version installed; the fraction is download progress or `nil`.
     func installEngine(
         from tarball: URL?,
         progress: @escaping @Sendable (String, Double?) -> Void,
@@ -51,48 +44,40 @@ protocol SetupEnvironment: AnyObject {
     /// Fetches SteamSetup.exe from the Steam CDN into the bottle's `drive_c`.
     func downloadSteamInstaller(intoBottle name: String) async throws
 
-    /// Waits for a freshly created prefix to finish booting. An installer
-    /// started while `wineboot` is still writing the registry exits nonzero
-    /// in under a second and says nothing about why.
+    /// Waits for a fresh prefix to finish booting: an installer started while
+    /// `wineboot` still writes the registry exits nonzero with no reason.
     func settleBottle(named name: String) async
 
-    /// Runs the NSIS bootstrapper installer silently (`SteamSetup.exe /S`),
-    /// with Wine's error channel on so a failure carries a reason.
+    /// Runs `SteamSetup.exe /S` with Wine's error channel on.
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome
 
-    /// Marks the bottle as one Steam's installer failed in, so the next
-    /// provisioning pass builds it again instead of running the installer
-    /// into it a second time.
+    /// Marks the bottle as one Steam's installer failed in, so the next pass
+    /// rebuilds it.
     func markSteamInstallerFailed(inBottle name: String)
 
     /// Whether Steam's installer failed in the bottle and setup made it, so
     /// it may be built again.
     func steamInstallerFailed(inBottle name: String) -> Bool
 
-    /// Whether the bottle's boot finished: its 32-bit system DLLs are in
-    /// place. `wineboot -u` exits 0 when its 32-bit half fails, and a boot
-    /// killed in its first seconds still leaves `system.reg`, so neither the
-    /// exit status nor detection's marker says so; such a bottle fails every
-    /// 32-bit program, Steam's installer first, with `could not load
+    /// Whether the bottle's 32-bit system DLLs are in place. Neither
+    /// `wineboot -u`'s exit status nor `system.reg` says so, and a bottle
+    /// without them fails every 32-bit program with `could not load
     /// kernel32.dll`.
     func bottleIsComplete(named name: String) -> Bool
 
     /// Ends the bottle's processes and renames it `<name>.broken-<time>`,
-    /// which detection passes over, so the bottle stage creates it anew.
-    /// Answers the name it was given.
+    /// which detection skips; answers the new name.
     func setAsideBottle(named name: String) async throws -> String
 
-    /// Bootstrapper → full client, the long headless download. Exit status is
-    /// deliberately unreported: the updater's exit code is unreliable, so the
-    /// caller re-detects and judges by what landed on disk.
+    /// Bootstrapper → full client, the long headless download. The updater's
+    /// exit code is unreliable, so the caller judges by what landed on disk.
     func updateSteamClient(inBottle name: String) async
 
-    /// The idempotent per-bottle registry configuration (tray suppression).
+    /// The idempotent per-bottle registry values (tray, SDL bus, GPU) and
+    /// graphics files.
     func configureBottle(named name: String) async
 
-    /// Ends every Wine process in the bottle (`wineserver -k`): what a timed
-    /// out stage, or a quit in the middle of setup, leaves behind has no
-    /// other owner.
+    /// Ends every Wine process in the bottle (`wineserver -k`).
     func endWineProcesses(inBottle name: String) async
 
     /// Whether the active bottle contains the dependency's installed payload.
@@ -110,8 +95,7 @@ extension SetupEnvironment {
         false
     }
 
-    /// The live machine's own answers: the stored bottle, the active engine's
-    /// bottle directory, the stored engine choice.
+    /// The live machine's answers.
     var bottleName: String {
         SteamBottle.name
     }
@@ -149,8 +133,7 @@ nonisolated struct SetupCommandOutcome: Sendable {
     }
 }
 
-/// The real executor: `softwareupdate`, `cxbottle`, `wine`, the Steam CDN,
-/// and the login item.
+/// The real executor.
 @MainActor
 final class LiveSetupEnvironment: SetupEnvironment {
     private static let steamSetupURL =
@@ -220,17 +203,15 @@ final class LiveSetupEnvironment: SetupEnvironment {
             }
             let boot = await runWine(bottle: name, args: ["wineboot", "-u"])
             guard boot.succeeded else { return boot }
-            // A fresh prefix reports a pre-Windows-10 version, and Steam
-            // then installs its legacy CEF build (`bin/cef/cef.win7x64`)
-            // instead of the modern `cef.win64`. This is the plain-Wine equivalent of the
-            // `win10_64` template CrossOver bottles are created from.
+            // A fresh prefix reports a pre-Windows-10 version, which makes
+            // Steam install its legacy CEF (`bin/cef/cef.win7x64`); this
+            // matches CrossOver's `win10_64` template.
             return await runWine(bottle: name, args: ["winecfg", "/v", "win10"])
         }
     }
 
-    /// Whether a registry file already carries the given `"name"=value`
-    /// line. A plain text scan: the hive files are flat `"key"="value"`
-    /// dumps, and a false negative only costs one redundant `reg add`.
+    /// Whether a hive file contains `needle`. A text scan suffices: a false
+    /// negative costs one redundant `reg add`.
     private nonisolated static func registry(
         of bottle: URL, file: String, contains needle: String,
     ) -> Bool {
@@ -247,10 +228,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
         try FileManager.default.moveItem(at: temp, to: setup)
     }
 
-    /// Polls the prefix's `system.reg` until it stops changing. `wineboot`
-    /// writes the registry as its last act, and the process that started it
-    /// returns before the writing is done, and a Steam installer started
-    /// into a registry still being written fails at once with no output.
+    /// Polls `system.reg` until it stops changing: `wineboot` returns before
+    /// its last registry write is done.
     func settleBottle(named name: String) async {
         let registry = Engine.active.bottlesRoot
             .appendingPathComponent(name)
@@ -280,9 +259,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
-        // The one invocation whose failure a user is asked to act on, so it
-        // is also the one that never runs silenced: under the default
-        // `WINEDEBUG=-all` a failure carries no reason at all.
+        // The user acts on this failure, and under the default
+        // `WINEDEBUG=-all` it would carry no reason.
         await runWine(
             bottle: name, args: [#"C:\SteamSetup.exe"#, "/S"],
             wineDebug: "err+all",
@@ -322,10 +300,9 @@ final class LiveSetupEnvironment: SetupEnvironment {
         return aside
     }
 
-    /// Whether setup made the bottle, which is what lets it be judged and
-    /// built again: a managed prefix always, a CrossOver bottle when it
-    /// carries ``crossOverDescription``. Any other CrossOver bottle is one the
-    /// person made, possibly holding their own programs.
+    /// Whether setup made the bottle and may rebuild it: a managed prefix
+    /// always, a CrossOver bottle only with ``crossOverDescription``, since
+    /// any other is the person's own.
     private static func setupMade(bottle name: String) -> Bool {
         guard Engine.active.isCrossOver else { return true }
         let conf = Engine.active.bottlesRoot.appendingPathComponent(name)
@@ -363,11 +340,9 @@ final class LiveSetupEnvironment: SetupEnvironment {
         await Self.stageBottleFiles(bottle, named: name)
     }
 
-    /// The `wine` invocations the bottle's registry still needs. Each write is
-    /// skipped when the value already sits in the hive: a `reg add` against a
-    /// booting client can hang on the registry for the whole subprocess
-    /// timeout, and every boot after the first has nothing to write anyway.
-    /// Off the main actor, because it reads the hive files.
+    /// The `wine` invocations the bottle's registry still needs. A value
+    /// already in the hive is skipped, because a `reg add` against a booting
+    /// client can hang for the whole subprocess timeout.
     @concurrent
     private nonisolated static func registryWrites(forBottle bottle: URL) async -> [[String]] {
         var writes: [[String]] = []
@@ -377,20 +352,18 @@ final class LiveSetupEnvironment: SetupEnvironment {
                 "/v", "ShowSystray", "/t", "REG_SZ", "/d", "N", "/f",
             ])
         }
-        // Dormison's Mac driver hands Steam's tray icon back to explorer
-        // instead of making it a menu-bar status item, from the client's
-        // first moment. Other engines ignore the value.
+        // Off, Dormison's Mac driver hands Steam's tray icon to explorer's
+        // hidden systray instead of a menu-bar status item; other engines
+        // ignore the value.
         if !registry(of: bottle, file: "user.reg", contains: #""StatusItems"="N""#) {
             writes.append([
                 "reg", "add", #"HKCU\Software\Wine\Mac Driver"#,
                 "/v", "StatusItems", "/t", "REG_SZ", "/d", "N", "/f",
             ])
         }
-        // The SDL bus is on or off by engine (`Engine.keepsSDLBus`): on, it is
-        // the backend that reaches a Bluetooth Xbox pad; off, an older engine's
-        // bus would wake winedevice.exe every millisecond. The value is only
-        // ever written or removed, so a bottle that moves between engines
-        // follows the engine it boots on.
+        // `Engine.keepsSDLBus`: on, the SDL bus reaches a Bluetooth Xbox pad;
+        // on an older engine it would wake winedevice.exe every millisecond.
+        // Written or removed each boot, so a bottle follows its engine.
         let sdlOff = registry(
             of: bottle, file: "system.reg", contains: #""Enable SDL"=dword:00000000"#,
         )
@@ -405,11 +378,9 @@ final class LiveSetupEnvironment: SetupEnvironment {
                 "/v", "Enable SDL", "/t", "REG_DWORD", "/d", "0", "/f",
             ])
         }
-        // Wine's own renderer reads the card from the registry rather than
-        // the environment, so the choice has to be written twice to be one
-        // choice. The picker carries it into the prefix as it moves; this is
-        // the pass that catches a bottle whose import never landed, and it
-        // imports the same file so both routes say the same thing.
+        // Wine's own renderer reads the card from the registry, not the
+        // environment. This catches a bottle whose picker import never
+        // landed, importing the same file the picker does.
         let gpu = BottleGraphics.currentSelection().gpu
         if !BottleGraphics.registryHolds(gpu, inBottle: bottle),
            GPUIdentity.writeWineD3DRegistry(gpu, intoBottle: bottle) != nil {
@@ -418,14 +389,12 @@ final class LiveSetupEnvironment: SetupEnvironment {
         return writes
     }
 
-    /// The graphics files the prefix carries beside its registry: the GPU
-    /// default, DXVK's config, and a managed engine's renderer DLLs. Off the
-    /// main actor, because staging copies DLLs.
+    /// Writes the GPU default, DXVK's config and a managed engine's renderer
+    /// DLLs into the prefix.
     @concurrent
     private nonisolated static func stageBottleFiles(_ bottle: URL, named name: String) async {
         BottleGraphics.adoptDefaultGPU(forBottle: bottle)
-        // A bottle nobody has opened the picker for still needs DXVK's file:
-        // the other layers read the launch environment, DXVK reads only this.
+        // DXVK reads only this file, never the launch environment.
         GPUIdentity.writeDXVKConfig(BottleGraphics.currentSelection().gpu, intoBottle: bottle)
         guard case let .managed(version) = Engine.active else {
             do {
@@ -435,8 +404,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
             }
             return
         }
-        // A managed engine keeps its renderers in the engine directory; the
-        // prefix needs the DLLs themselves for `n,b` to mean anything.
+        // `n,b` overrides need the renderer DLLs inside the prefix.
         let staged = EngineRenderers.stage(
             BottleGraphics.managedSelection().renderer,
             engine: Engine.managedRoot.appendingPathComponent(version),
@@ -470,8 +438,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
         SMAppService.mainApp.status == .enabled
     }
 
-    /// Wine's own chatter still comes back combined: provisioning quotes it
-    /// in failure messages, and these invocations are rare and bounded.
+    /// Captures stdout and stderr combined, which provisioning quotes in
+    /// failure messages.
     private nonisolated func runWine(
         bottle: String, args: [String], timeout: Duration = .seconds(600),
         wineDebug: String? = nil,
@@ -481,8 +449,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
         )
         var environment = invocation.environment
         if let wineDebug {
-            // CrossOver assembles its own environment and hands back none,
-            // so the channels ride on the process's own.
+            // CrossOver's invocation carries no environment of its own.
             var merged = invocation.environment ?? ProcessInfo.processInfo.environment
             merged["WINEDEBUG"] = wineDebug
             environment = merged
@@ -494,8 +461,7 @@ final class LiveSetupEnvironment: SetupEnvironment {
             environment: environment,
             timeout: timeout,
         )
-        // The deadline killed only the launcher; the programs it started
-        // live on in the prefix's wineserver.
+        // A timeout kills only the launcher, not the programs it started.
         if ContinuousClock.now - started >= timeout {
             SetupLog.log("provision: wine \(args.first ?? "") timed out — ending the bottle's processes")
             await endWineProcesses(inBottle: bottle)

@@ -1,26 +1,18 @@
 import Foundation
 
-/// The run records on disk: one JSON Lines file per month under
-/// `~/Library/Application Support/Sevoflurane/Runs`, months before the current
-/// one compressed, twelve kept, and `open/` beside them holding the launches
-/// that have been armed and not yet recorded.
-///
-/// JSON Lines rather than one document: a record is appended by a process
-/// that may be killed at any moment, and a truncated last line costs one
-/// record instead of the file.
-///
-/// Every entry point takes the directory to work in, defaulting to the one
-/// the app and the CLI share, so a test can drive a whole recorder without
-/// writing into it.
+/// The run records on disk: one JSON Lines file per month under `~/Library/Application
+/// Support/Sevoflurane/Runs`, past months compressed, twelve kept, and `open/` holding armed runs
+/// not yet recorded. JSON Lines because the appending process may be killed mid-write, and a
+/// truncated line then costs one record. Every entry point takes the directory, so tests write
+/// elsewhere.
 nonisolated enum RunLog {
-    /// `SEVO_RUNS_DIR` points a process somewhere else: a harness keeping its runs apart
-    /// from the ones played on the Mac, or `sevo perf` reading a copy.
+    /// `SEVO_RUNS_DIR` moves the directory, for a harness keeping its runs apart or `sevo perf`
+    /// reading a copy.
     static let root = ProcessInfo.processInfo.environment["SEVO_RUNS_DIR"]
         .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
         ?? AppIdentity.supportFolder
         .appendingPathComponent("Runs")
 
-    /// Whether any run was ever recorded here.
     static func hasRecords(in root: URL = root) -> Bool {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         return names.contains { $0.hasSuffix(".jsonl") }
@@ -33,15 +25,13 @@ nonisolated enum RunLog {
         }
     }
 
-    /// The one field ``hasRecord(forApp:in:)`` reads of a record.
     private struct AppOnly: Decodable {
         let appid: Int
     }
 
-    /// How many months are kept.
     static let monthsKept = 12
 
-    /// How long a stop request stands for the run that ends after it.
+    /// How long a stop request stands for the next run that ends.
     static let stopRequestLife: TimeInterval = 60
 
     private static func stopRequestURL(forApp appID: Int, in root: URL) -> URL {
@@ -50,24 +40,22 @@ nonisolated enum RunLog {
 
     /// Who asked for a game to stop.
     enum StopSource: String, Sendable {
-        /// A person: Steam's Stop button, Sevoflurane's menu or popover. Every one of
-        /// these reaches the client through the page's `TerminateApp`.
+        /// A person: Steam's Stop button, Sevoflurane's menu or popover, all through the page's
+        /// `TerminateApp`.
         case player
-        /// `sevo` or an agent speaking through it, whose stops come whenever a script
-        /// was done with the game.
+        /// `sevo` or an agent using it, stopping whenever a script is done.
         case tool
     }
 
-    /// Leaves word that this app is about to be stopped on purpose, and by whom, for
-    /// the recorder that will see its process exit without an exception. A file,
-    /// because the request can come from `sevo` and the recorder lives in the app.
+    /// Leaves word that this app is being stopped on purpose, and by whom, for the recorder; a
+    /// file, because `sevo` and the app are different processes.
     static func noteStopRequest(forApp appID: Int, by source: StopSource, in root: URL = root) {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try? Data(source.rawValue.utf8).write(to: stopRequestURL(forApp: appID, in: root))
     }
 
-    /// Who asked for a stop within ``stopRequestLife``, or nil; the word is taken,
-    /// so it answers for one ending.
+    /// Who asked for a stop within ``stopRequestLife``, or nil; the word is consumed, so it answers
+    /// one ending.
     static func takeStopRequest(forApp appID: Int, in root: URL = root) -> StopSource? {
         let url = stopRequestURL(forApp: appID, in: root)
         guard let written = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
@@ -78,14 +66,12 @@ nonisolated enum RunLog {
         return StopSource(rawValue: contents)
     }
 
-    /// A month's file, whether or not it exists.
     static func url(forMonth date: Date, in root: URL = root) -> URL {
         root.appendingPathComponent("\(month(of: date)).jsonl")
     }
 
-    /// Appends one record. Two games can end at the same moment, and a
-    /// seek-to-end followed by a write is not atomic against another one, so
-    /// every append goes through one queue.
+    /// Appends one record through one queue, since a seek-to-end and write is not atomic against
+    /// another append.
     static func append(_ record: RunRecord, in root: URL = root) {
         guard let line = try? encoder.encode(record) else { return }
         writes.sync {
@@ -106,34 +92,26 @@ nonisolated enum RunLog {
 
     // MARK: - Runs that are still open
 
-    /// A launch that has been armed and not yet closed, as it sits on disk.
-    ///
-    /// The in-memory recorder dies with its process, and a game does not: a
-    /// force-quit under a running game would otherwise leave nothing for the
-    /// next launch of the app to write. One file per app id, removed when the
-    /// run is recorded.
+    /// A launch armed and not yet closed, on disk so a game left running by a force-quit is
+    /// recorded at the app's next launch. One file per app id, removed when recorded.
     struct ArmedRun: Codable, Sendable {
         var record: RunRecord
-        /// When the run was armed, wall clock — the elapsed time of a run
-        /// that outlived the app cannot come off a monotonic clock.
+        /// When the run was armed, wall clock, since a run that outlived the app cannot be timed on
+        /// a monotonic clock.
         var started: Date
         var wineLogOffset: UInt64
         var steamLogOffset: UInt64
-        /// The client's error for this game action, when it showed one.
         var steamError: String?
-        /// Steam's process log for the engine that booted the client, so a
-        /// reattached run reads its exit from the same bottle it armed
-        /// against. Absent for a run armed before this was recorded.
+        /// Steam's process log for the booted engine, so a reattached run reads its exit from the
+        /// bottle it armed against. Absent in older files.
         var steamLog: String?
     }
 
-    /// Where armed runs are parked. A directory rather than a file, so one
-    /// game's arming never rewrites another's.
+    /// Where armed runs are parked, one file per app id so one arming never rewrites another.
     static func openRoot(in root: URL = root) -> URL {
         root.appendingPathComponent("open")
     }
 
-    /// Writes an armed run, replacing whatever this app id had.
     static func arm(_ run: ArmedRun, in root: URL = root) {
         guard let data = try? encoder.encode(run) else { return }
         writes.sync {
@@ -143,15 +121,14 @@ nonisolated enum RunLog {
         }
     }
 
-    /// Forgets an armed run — it has been recorded, or nothing is left that
-    /// could say more about it.
+    /// Forgets an armed run.
     static func disarm(appID: Int, in root: URL = root) {
         writes.sync {
             try? FileManager.default.removeItem(at: openURL(forApp: appID, in: root))
         }
     }
 
-    /// Every run left armed, oldest app id first.
+    /// Every run left armed, in file-name order.
     static func armedRuns(in root: URL = root) -> [ArmedRun] {
         let open = openRoot(in: root)
         let names = (try? FileManager.default.contentsOfDirectory(atPath: open.path)) ?? []
@@ -167,17 +144,12 @@ nonisolated enum RunLog {
         openRoot(in: root).appendingPathComponent("\(appID).json")
     }
 
-    /// Every record of a month, oldest first.
     static func records(inMonth date: Date, in root: URL = root) -> [RunRecord] {
         records(in: url(forMonth: date, in: root))
     }
 
-    /// The most recent records across as many months as it takes, oldest
-    /// first.
-    ///
-    /// By when each launch began, not by when its record was appended: a game
-    /// still up when the app quits is written after games that started and
-    /// ended while it ran.
+    /// The most recent records, oldest first by launch start rather than append order: a game still
+    /// up at quit is written after later games.
     static func recent(_ limit: Int, in root: URL = root) -> [RunRecord] {
         var found: [RunRecord] = []
         for url in monthFiles(in: root).reversed() {
@@ -187,9 +159,8 @@ nonisolated enum RunLog {
         return Array(found.sorted { $0.t < $1.t }.suffix(limit))
     }
 
-    /// Compresses every month before this one and drops all but the newest
-    /// ``monthsKept``. Cheap enough to run at each app start; it does nothing
-    /// on the second call of a month.
+    /// Compresses every month before this one and drops all but the newest ``monthsKept``; cheap to
+    /// run at each app start.
     static func groom(in root: URL = root) {
         let manager = FileManager.default
         let current = month(of: .now)
@@ -208,14 +179,11 @@ nonisolated enum RunLog {
         }
     }
 
-    /// A month's records, from its plain file or its compressed one. `url`
-    /// names either: a `.jsonl` whose month has been compressed is read from
-    /// the `.jsonl.z` beside it, and a `.jsonl.z` is decompressed.
+    /// A month's records; `url` may name the `.jsonl` or its `.jsonl.z`.
     private static func records(in url: URL) -> [RunRecord] {
         lines(in: url).compactMap { try? decoder.decode(RunRecord.self, from: Data($0)) }
     }
 
-    /// A month's lines, from its plain file or its compressed one.
     private static func lines(in url: URL) -> [Data.SubSequence] {
         let manager = FileManager.default
         let data: Data? = if url.pathExtension == compressedExtension {
@@ -233,7 +201,7 @@ nonisolated enum RunLog {
         (try? Data(contentsOf: url)).flatMap { try? ($0 as NSData).decompressed(using: .zlib) as Data }
     }
 
-    /// Every month's file, oldest first — the names sort chronologically.
+    /// Every month's file, oldest first; the names sort chronologically.
     private static func monthFiles(in root: URL) -> [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         return names.filter { $0.hasSuffix(".jsonl") || $0.hasSuffix(".jsonl.\(compressedExtension)") }
@@ -241,9 +209,7 @@ nonisolated enum RunLog {
             .map { root.appendingPathComponent($0) }
     }
 
-    /// Raw zlib, which `NSData` compresses and decompresses without a
-    /// subprocess. A month of records is small; the compression is what keeps
-    /// a year of them from being a year of files anyone has to think about.
+    /// Raw zlib, which `NSData` handles without a subprocess.
     private static let compressedExtension = "z"
 
     private static func month(of date: Date) -> String {
@@ -253,8 +219,7 @@ nonisolated enum RunLog {
     private static let encoder = JSONEncoder()
     private static let decoder = JSONDecoder()
 
-    /// The month a file is named for, in local time: a month boundary is the
-    /// one the person reading the directory lives in.
+    /// Month names use local time, the reader's month boundary.
     private static let monthStamp: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM"

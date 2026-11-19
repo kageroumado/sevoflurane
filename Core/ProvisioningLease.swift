@@ -2,21 +2,14 @@ import Darwin
 import Foundation
 
 /// Setup's hold on the bottle it is provisioning: no client starts there
-/// while it lasts.
-///
-/// Steam's installer drops `Steam.exe` into the prefix minutes before the
-/// headless update that follows it is done, so a bottle with `Steam.exe` in
-/// it is not yet a bottle a client may boot in. The provisioning pass takes
-/// the lease before its first stage, renews it while it runs and releases it
-/// when it ends. A pass that dies without releasing it — an app crash, a
-/// killed `sevo setup` — loses it when its process is gone, and a process that
-/// hangs loses it when it stops renewing.
+/// while it lasts, because `Steam.exe` lands minutes before the headless
+/// update finishes. A lease lapses when its owner process dies or stops
+/// renewing.
 nonisolated enum ProvisioningLease {
     struct Lease: Equatable, Sendable {
-        /// The prefix being provisioned, standardized and with links left
-        /// unresolved: the folder may not exist yet when the lease is taken.
+        /// The standardized prefix, links unresolved because the folder may
+        /// not exist yet.
         let prefix: String
-        /// The process running the pass.
         let owner: Int32
         let expires: Date
 
@@ -27,11 +20,10 @@ nonisolated enum ProvisioningLease {
 
     /// How long a lease stands without renewal.
     static let term: TimeInterval = 90
-    /// How often a running pass renews it; three renewals fit in one term.
+    /// How often a running pass renews it.
     static let renewal: Duration = .seconds(25)
 
-    /// The lease standing on `prefix` at `now`, if one does: it names that
-    /// prefix, has not expired, and its owner is alive.
+    /// The unexpired lease on `prefix` whose owner is alive, if any.
     static func holding(
         _ lease: Lease?, prefix: String, now: Date, ownerAlive: (Int32) -> Bool,
     ) -> Lease? {
@@ -53,8 +45,7 @@ nonisolated enum ProvisioningLease {
         Preferences.shared.set(stored(lease), forKey: storageKey)
     }
 
-    /// Gives the lease up, if this process holds it on `prefix`. A lease
-    /// another process took since stays where it is.
+    /// Gives the lease up, if this process holds it on `prefix`.
     static func release(_ prefix: URL) {
         guard let lease = stored, lease.owner == getpid(), lease.prefix == key(for: prefix)
         else { return }

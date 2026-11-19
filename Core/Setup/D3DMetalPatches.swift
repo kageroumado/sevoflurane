@@ -1,52 +1,44 @@
 import CryptoKit
 import Foundation
 
-/// Byte-for-byte corrections to a D3DMetal build that crashes a game, applied
-/// to the shared store's copy so the Wine tree, which ``D3DMetalInstaller``
-/// keeps equal to the store, gets it at the next staging.
+/// Byte-for-byte fixes to a D3DMetal build that crashes a game, applied to
+/// the shared store's copy; the Wine tree gets it at the next staging.
 ///
-/// Each patch is pinned to one build by the SHA-256 of the untouched binary
-/// and to the exact bytes it replaces, and does nothing to anything else: a
-/// release that fixes the bug has another hash and is left alone. The
-/// untouched binary is kept beside the version as `D3DMetal.unpatched`, and
-/// the framework is signed ad hoc, since a changed page no longer matches
-/// Apple's signature. Installing the toolkit again brings Apple's back.
+/// Each patch is pinned to one build's SHA-256 and to the exact bytes it
+/// replaces. The untouched binary is kept as `D3DMetal.unpatched`, the
+/// framework is re-signed ad hoc, and reinstalling the toolkit restores
+/// Apple's.
 nonisolated enum D3DMetalPatches {
     struct Patch: Sendable {
         /// What the log names it by.
         let name: String
         /// The SHA-256 of the build it applies to, before any patch.
         let build: String
-        /// The file offset of the first replaced byte. D3DMetal is a thin
-        /// x86_64 image whose `__TEXT` starts at file offset 0, so this is
-        /// also the address `otool` prints.
+        /// The file offset of the first replaced byte, which is also the
+        /// address `otool` prints (`__TEXT` starts at file offset 0).
         let offset: Int
         let original: [UInt8]
         let replacement: [UInt8]
     }
 
-    /// D3DMetal 4.0 beta 2 (Game Porting Toolkit 4.0 beta 2):
-    /// `D3D11Device::CheckMultisampleQualityLevels1`, which the plain
-    /// `CheckMultisampleQualityLevels` tail-calls, rejects only format 0 and
-    /// then reads `_dxgi_info[Format]`, 0x58 bytes an entry, with no upper
-    /// bound. The table has room for 191 entries. Unity asks with
-    /// `DXGI_FORMAT_FORCE_UINT` (0xFFFFFFFF) while it sets its device up, the
-    /// read lands 360 GB past the table, and the game dies before its first
-    /// frame: Genshin Impact, every launch. 3.0 answered `E_NOTIMPL` without
-    /// reading anything.
+    /// D3DMetal 4.0 beta 2: `D3D11Device::CheckMultisampleQualityLevels1`
+    /// (tail-called by `CheckMultisampleQualityLevels`) rejects only format 0,
+    /// then reads `_dxgi_info[Format]` (0x58 bytes an entry, 191 entries)
+    /// unbounded. Unity asks with `DXGI_FORMAT_FORCE_UINT` (0xFFFFFFFF), the
+    /// read lands 360 GB past the table, and Genshin Impact dies before its
+    /// first frame.
     ///
-    /// The patch replaces the flags check and the zero test, 18 bytes at
-    /// `0x1a4ea7`, with one unsigned range check that sends 0 and anything
-    /// from 191 up to the function's own `E_INVALIDARG` path:
+    /// The patch replaces the flags check and zero test (18 bytes at
+    /// `0x1a4ea7`) with an unsigned range check sending 0 and anything from
+    /// 191 up to the function's `E_INVALIDARG` path:
     ///
     ///     lea  eax, [rbp-1]    ; Format - 1, so 0 wraps to 0xFFFFFFFF
     ///     cmp  eax, 190
     ///     jae  0x1a4ef7        ; mov eax, E_INVALIDARG
     ///     nop  (8 bytes)
     ///
-    /// The prologue and epilogue are untouched, so the unwind info still
-    /// describes the function. What goes is a once-only log line for a
-    /// non-zero `Flags`, which changed nothing else.
+    /// The prologue and epilogue are untouched, so the unwind info holds;
+    /// only a once-only log line for non-zero `Flags` is lost.
     static let checkMultisampleQualityLevels = Patch(
         name: "D3D11Device::CheckMultisampleQualityLevels1 format bound",
         build: "f5b56df1b8fe8b364dd9530651a3769c8aed948bd343be3b4510604d503e2bad",
@@ -68,8 +60,7 @@ nonisolated enum D3DMetalPatches {
         installed.root.appendingPathComponent("lib/external/D3DMetal.framework/Versions/A/D3DMetal")
     }
 
-    /// The framework version directory the binary belongs to, which is
-    /// what a bundle signature covers.
+    /// The framework version directory a bundle signature covers.
     static func framework(of installed: D3DMetalInstaller.Installed) -> URL {
         installed.root.appendingPathComponent("lib/external/D3DMetal.framework/Versions/A")
     }
@@ -86,12 +77,8 @@ nonisolated enum D3DMetalPatches {
         case failed(String)
     }
 
-    /// Patches `installed`'s framework binary in place if a known patch is
-    /// for its build. Cheap when there is nothing to do: one read of the
-    /// binary, only once the bytes at a patch's offset match its original.
-    ///
-    /// `patches` and `sign` are the shipping list and the ad hoc signature
-    /// outside tests.
+    /// Patches `installed`'s binary in place when a known patch is for its
+    /// build. The binary is hashed only when a patch's original bytes match.
     static func apply(
         to installed: D3DMetalInstaller.Installed, patches: [Patch] = all,
         sign: (URL) -> Bool = D3DMetalPatches.sign,
@@ -120,12 +107,9 @@ nonisolated enum D3DMetalPatches {
             try bytes.write(to: staging)
             try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staging.path)
             _ = try manager.replaceItemAt(url, withItemAt: staging)
-            // The whole framework, not the binary alone: its seal lists the
-            // binary's hash, and a quarantined bundle whose seal does not
-            // match is what macOS calls damaged, in a dialog, the first time
-            // a process loads it (2026-09-26, the patched binary signed on
-            // its own). The quarantine flag goes too: it came with Apple's
-            // download, and what it vouches for is no longer this file.
+            // Never sign the binary alone: a quarantined bundle whose seal
+            // does not match is reported as damaged when first loaded. The
+            // quarantine flag goes too, since the file is no longer Apple's.
             let framework = framework(of: installed)
             guard sign(framework) else {
                 try? manager.removeItem(at: url)
@@ -152,9 +136,8 @@ nonisolated enum D3DMetalPatches {
         process.waitUntilExit()
     }
 
-    /// An ad hoc signature for a framework version: dyld maps a page only
-    /// while it matches the signature it was signed with, and the patched
-    /// page no longer matches Apple's.
+    /// Signs a framework version ad hoc: dyld maps a page only while it
+    /// matches its signature.
     static func sign(_ url: URL) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")

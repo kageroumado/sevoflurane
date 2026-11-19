@@ -1,27 +1,18 @@
 import Foundation
 import IOKit
 
-/// A minimal SMC client that reports the CPU's temperature in °C. No private
-/// headers and no entitlements. The same reader ships in Adrafinil.
+/// A minimal SMC client that reports the CPU's temperature in °C, with no
+/// private headers or entitlements. The same reader ships in Adrafinil.
 ///
-/// **The struct layout is load-bearing.** The SMC is driven through
-/// `IOConnectCallStructMethod` with an `SMCParamStruct` that must be exactly
-/// 80 bytes with C field offsets, or the kernel rejects the call. Swift packs
-/// a nested struct's trailing padding into the following field, which makes a
-/// 76-byte struct, so the one below is flat with explicit padding, and an
-/// `assert` guards its size.
-///
-/// **Apple Silicon has no single CPU sensor** (Intel's `TC0P`). It exposes
-/// dozens of per-core sensors named `Tp…` (performance cores) and `Te…`
-/// (efficiency cores) as IEEE floats (`flt `). They are enumerated once and
-/// their average is the reading: a package-like number that one core's spike
-/// does not move. Intel Macs fall back to `TC0P`/`TC0D` (`sp78`).
+/// Apple Silicon has no single CPU sensor (Intel's `TC0P`), so the reading is
+/// the average of its per-core `Tp…` and `Te…` sensors (`flt `), which one
+/// core's spike does not move. Intel Macs use `TC0P`/`TC0D` (`sp78`).
 final nonisolated class SMCReader: @unchecked Sendable {
     private var connection: io_connect_t = 0
     private var isOpen: Bool {
         connection != 0
     }
-    /// CPU temperature sensor keys, discovered once on first read and cached for the connection.
+    /// Discovered on first read.
     private var cpuSensorKeys: [String]?
 
     deinit { close() }
@@ -43,7 +34,7 @@ final nonisolated class SMCReader: @unchecked Sendable {
         }
     }
 
-    /// Average CPU temperature in °C across the discovered core sensors, or nil if none can be read.
+    /// Average across the discovered core sensors, or nil if none can be read.
     func readCPUTemperature() -> Double? {
         guard open() else { return nil }
         let keys = cpuSensorKeys ?? discoverCPUSensors()
@@ -59,7 +50,7 @@ final nonisolated class SMCReader: @unchecked Sendable {
         return n > 0 ? sum / Double(n) : nil
     }
 
-    /// Reads a four-character SMC key as a Double in °C (handles `sp78` and `flt ` formats).
+    /// Reads a four-character SMC key in °C (`sp78` or `flt `).
     func readTemperature(key: String) -> Double? {
         guard open(), key.utf8.count == 4 else { return nil }
         guard let (size, type) = keyInfo(key), let b = readKeyBytes(key, size: size) else { return nil }
@@ -68,9 +59,8 @@ final nonisolated class SMCReader: @unchecked Sendable {
 
     // MARK: - Sensor discovery
 
-    /// Finds the CPU temperature sensors once. Apple Silicon: every `Tp…`/`Te…` key reporting a
-    /// plausible `flt ` temperature. Intel: the first available classic proximity/die key. Cached on
-    /// the instance so the (one-time, ~2k-key) enumeration doesn't repeat on every poll.
+    /// Apple Silicon: every `Tp…`/`Te…` key reporting a plausible `flt `
+    /// temperature, found by walking ~2k keys. Intel: the classic proximity/die keys.
     private func discoverCPUSensors() -> [String] {
         var keys: [String] = []
         if let count = keyCount() {
@@ -88,8 +78,7 @@ final nonisolated class SMCReader: @unchecked Sendable {
                 keys.append(k)
             }
         }
-        // Only a successful discovery is cached: a transient SMC failure that finds
-        // no sensors is retried on the next read.
+        // Cache only a success, so a transient SMC failure is retried.
         if !keys.isEmpty { cpuSensorKeys = keys }
         return keys
     }
@@ -100,7 +89,7 @@ final nonisolated class SMCReader: @unchecked Sendable {
         return (UInt32(b.0) << 24) | (UInt32(b.1) << 16) | (UInt32(b.2) << 8) | UInt32(b.3)
     }
 
-    /// The key name at a given index, via `kSMCGetKeyFromIndex` — how the full key list is walked.
+    /// The key name at a given index, via `kSMCGetKeyFromIndex`.
     private func keyByIndex(_ index: UInt32) -> String? {
         var input = SMCParamStruct()
         var output = SMCParamStruct()
@@ -151,7 +140,6 @@ final nonisolated class SMCReader: @unchecked Sendable {
     }
 
     private func decodeTemperature(_ b0: UInt8, _ b1: UInt8, _ b2: UInt8, _ b3: UInt8, type: String) -> Double? {
-        // Only the temperature formats matter: "sp78" (Intel fixed-point) and "flt " (Apple Silicon).
         switch type {
         case "sp78":
             // 16-bit signed fixed-point, 8 integer + 8 fraction bits, big-endian.
@@ -172,10 +160,10 @@ final nonisolated class SMCReader: @unchecked Sendable {
 
 // MARK: - SMCParamStruct
 
-/// The SMC IOKit transport struct. Laid out **flat with explicit padding** to be exactly 80 bytes
-/// with the same field offsets as the C `SMCKeyData_t` — nesting the sub-structs lets Swift reuse
-/// their trailing padding and shifts `result`/`data32`, producing a 76-byte struct the kernel
-/// rejects. Offsets (verified): key@0, vers@4, pLimit@12, keyInfo@28, result@40, data32@44, bytes@48.
+/// The SMC IOKit transport struct: exactly 80 bytes with the C `SMCKeyData_t` offsets, or the
+/// kernel rejects every call. Keep it flat with explicit padding: nested sub-structs let Swift
+/// reuse their trailing padding, giving 76 bytes. Offsets: key@0, vers@4, pLimit@12,
+/// keyInfo@28, result@40, data32@44, bytes@48.
 private nonisolated struct SMCParamStruct {
     var key: UInt32 = 0
     var versMajor: UInt8 = 0, versMinor: UInt8 = 0, versBuild: UInt8 = 0, versReserved: UInt8 = 0

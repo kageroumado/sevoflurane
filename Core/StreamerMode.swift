@@ -3,9 +3,7 @@ import Foundation
 /// Streamer Mode: every Steam window shows a chosen name and picture in place
 /// of the signed-in account, friends as AI models, and no wallet balance.
 ///
-/// The choice lives in the shared suite, so `sevo streamer` and the app read
-/// one switch; the picture is a small image in the support folder
-/// (``avatarURL``), or a monogram of the name when none was chosen.
+/// Stored in the shared suite, read by the app and `sevo streamer`.
 nonisolated enum StreamerMode {
     /// The name shown when the field is left empty.
     static let defaultDisplayName = "Player"
@@ -29,8 +27,7 @@ nonisolated enum StreamerMode {
 
     static let displayNameKey = "streamerDisplayName"
 
-    /// A stored name with surrounding whitespace dropped, or the default when
-    /// nothing is left.
+    /// A stored name trimmed, or the default when empty.
     static func resolvedName(_ stored: String?) -> String {
         let trimmed = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? defaultDisplayName : trimmed
@@ -54,8 +51,8 @@ nonisolated enum StreamerMode {
         var isOn: Bool
         var displayName: String
         var avatarDataURI: String
-        /// Account and persona names the bottle's Steam has signed in with,
-        /// masked from the first frame rather than once the page reveals them.
+        /// The bottle's signed-in account and persona names, masked from the
+        /// first frame.
         var knownNames: [String] = []
 
         static var current: Settings {
@@ -72,15 +69,12 @@ nonisolated enum StreamerMode {
 
 // MARK: - Monogram
 
-/// A square picture of one or two letters on a color taken from the name, as
-/// an SVG `data:` URI. The mask script draws friends' pictures with the same
-/// letters and color rule (``StreamerMask``), so a name looks the same
-/// wherever it is drawn.
+/// One or two letters on a color taken from the name, as an SVG `data:` URI.
+/// Must match the mask script's rule (``StreamerMask``).
 nonisolated enum Monogram {
     /// The picture's viewBox edge.
     private static let edge = 64
-    /// Saturation and lightness of the background, in percent; the hue comes
-    /// from the name.
+    /// Background saturation and lightness, in percent.
     static let saturation = 45
     static let lightness = 42
     /// FNV-1a, 32-bit.
@@ -88,8 +82,8 @@ nonisolated enum Monogram {
     private static let fnvPrime: UInt32 = 16_777_619
     private static let hues: UInt32 = 360
 
-    /// The first letter of the first two words, or of one word the letter
-    /// after it that is a capital or a digit ("ChatGPT" → "CG", "o3" → "O3").
+    /// The first letters of two words, or of one word plus its next capital
+    /// or digit ("ChatGPT" → "CG", "o3" → "O3").
     static func letters(of name: String) -> String {
         let words = name.split { $0 == " " || $0 == "-" || $0 == "_" }
         guard let first = words.first?.first else { return "?" }
@@ -100,8 +94,7 @@ nonisolated enum Monogram {
         return (String(first) + (next.map(String.init) ?? "")).uppercased()
     }
 
-    /// The background's hue: FNV-1a over the name's UTF-16 code units, which
-    /// is what the page's JavaScript iterates, so both sides agree.
+    /// FNV-1a over UTF-16 code units, matching the page's JavaScript.
     static func hue(of name: String) -> Int {
         var hash = fnvOffset
         for unit in name.utf16 {

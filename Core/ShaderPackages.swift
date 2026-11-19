@@ -3,19 +3,12 @@ import Foundation
 /// Shader packages the built-in engine's presenter runs as the upscaler
 /// (dormison winemac.drv, `Upscaler` naming a package directory).
 ///
-/// A package is one directory under `~/Library/Application
-/// Support/Sevoflurane/Shaders/<name>/`: `package.json` (what it is),
-/// `graph.json` (its passes), `shaders.metallib` (the compiled kernels),
-/// `LICENSE`, and `source/` (the shaders it was compiled from). The engine
-/// finds it by name through `SEVO_SHADER_DIR`, which the app points at the
-/// store's root. Packages come from three places: the app bundle's
-/// `Resources/Shaders/`, copied into the store at first use; the engine
-/// manifest's `shaders` list; and ``builtInCatalog``, for the packages
-/// released before the manifest carried them.
-///
-/// A package chosen somewhere in the settings hierarchy and then removed
-/// stays chosen: the driver falls back to Lanczos and says so in its log,
-/// and putting the package back makes the choice good again.
+/// A package is a directory under `~/Library/Application
+/// Support/Sevoflurane/Shaders/<name>/` holding `package.json`, `graph.json`
+/// (its passes), `shaders.metallib`, `LICENSE` and `source/`; the engine
+/// finds it through `SEVO_SHADER_DIR`. Packages come from the app bundle,
+/// the engine manifest's `shaders` list, and ``builtInCatalog``. A removed
+/// package stays chosen, and the driver falls back to Lanczos.
 nonisolated enum ShaderPackages {
     /// `package.json`.
     struct Manifest: Codable, Equatable, Sendable {
@@ -27,7 +20,7 @@ nonisolated enum ShaderPackages {
         let version: String
         /// The upstream project.
         let source: URL?
-        /// One line: what it is trained on, or good at.
+        /// What it is trained on, or good at.
         let content: String
     }
 
@@ -80,7 +73,7 @@ nonisolated enum ShaderPackages {
     static let root = AppIdentity.supportFolder
         .appendingPathComponent("Shaders")
 
-    /// The files a directory needs to be a package the driver can run.
+    /// The files a package directory needs.
     static let requiredFiles = ["package.json", "graph.json", "shaders.metallib"]
 
     /// The packages released before the engine manifest listed them.
@@ -115,9 +108,7 @@ nonisolated enum ShaderPackages {
 
     // MARK: - What is in the store
 
-    /// Every package in the store, by title. A directory missing any of the
-    /// three required files, or whose `package.json` does not read, is
-    /// skipped.
+    /// Every valid package in the store, by title.
     static func installed() -> [Package] {
         directories(under: root)
             .compactMap(read)
@@ -147,10 +138,8 @@ nonisolated enum ShaderPackages {
         return directories(under: bundledRoot).compactMap(read)
     }
 
-    /// Copies every package the bundle ships into the store: one that is
-    /// absent, or older than the bundle's by version. A package of the same
-    /// or a newer version is left as it is. Run at app start and before a
-    /// picker lists packages.
+    /// Copies each bundled package into the store when absent there or older
+    /// by version. Run at app start and before a picker lists packages.
     static func ensureBundled() {
         let manager = FileManager.default
         for package in bundled() {
@@ -169,22 +158,20 @@ nonisolated enum ShaderPackages {
 
     // MARK: - What can be fetched
 
-    /// Everything that can be put in the store, installed or not: the bundle's
-    /// packages, the manifest's, and the built-in catalog, one entry per name.
+    /// Everything that can be put in the store, installed or not.
     static func catalog(manifest: EngineManifest?) -> [Available] {
         merge(
             bundled: bundled().map(available(bundled:)),
             manifest: manifest?.shaders?.map(available(release:)) ?? [],
             builtIn: builtInCatalog.filter { entry in
-                // A built-in entry that says "bundled" is only true of a
-                // build that carries it.
+                // A "bundled" built-in entry needs a build that carries it.
                 if case .bundled = entry.origin { bundled().contains { $0.name == entry.name } } else { true }
             },
         )
     }
 
-    /// One entry per name, by title. The bundle's description of a package
-    /// wins over the manifest's, which wins over the built-in catalog's.
+    /// One entry per name, by title; the bundle wins over the manifest, which
+    /// wins over the built-in catalog.
     static func merge(bundled: [Available], manifest: [Available], builtIn: [Available]) -> [Available] {
         var byName: [String: Available] = [:]
         for entry in builtIn + manifest + bundled {
@@ -248,9 +235,8 @@ nonisolated enum ShaderPackages {
         }
     }
 
-    /// What the upscaler picker offers, in order: the fixed choices, the
-    /// installed packages, then the catalog's packages that are not
-    /// installed.
+    /// The fixed choices, the installed packages, then the uninstalled
+    /// catalog packages.
     static func choices(installed: [Package], catalog: [Available]) -> [Choice] {
         let have = Set(installed.map(\.name))
         return UpscalerChoice.allCases.map(Choice.fixed)
@@ -258,8 +244,7 @@ nonisolated enum ShaderPackages {
             + catalog.filter { !have.contains($0.name) }.map(Choice.downloadable)
     }
 
-    /// What a token written as the upscaler names, or `nil` when nothing
-    /// installed or in the catalog answers to it.
+    /// The choice an upscaler token names, or `nil`.
     static func choice(for token: String, installed: [Package], catalog: [Available]) -> Choice? {
         choices(installed: installed, catalog: catalog).first { $0.token == token }
     }
@@ -273,10 +258,9 @@ nonisolated enum ShaderPackages {
         }
     }
 
-    /// Puts a package in the store: from the bundle by copy, or by download,
-    /// checksum when the catalog knows one, and unpack. A package of the same
-    /// name already there goes to the Trash first. `progress` is the
-    /// download's fraction, `nil` while its size is unknown.
+    /// Copies or downloads, verifies and unpacks a package into the store,
+    /// trashing one of the same name. `progress` is the download fraction,
+    /// `nil` while the size is unknown.
     @concurrent
     static func install(
         _ available: Available, progress: (@Sendable (Double?) -> Void)? = nil,
@@ -328,14 +312,12 @@ nonisolated enum ShaderPackages {
         return Package(manifest: package.manifest, root: destination)
     }
 
-    /// Moves a package to the Trash. Settings that name it are left as they
-    /// are.
+    /// Moves a package to the Trash; settings naming it stay.
     static func remove(_ package: Package) throws {
         try FileManager.default.trashItem(at: package.root, resultingItemURL: nil)
     }
 
-    /// The shallowest directory under `directory` holding a `package.json` —
-    /// a tarball may carry the package flat or under one top-level folder.
+    /// The shallowest directory holding a `package.json`.
     static func packageDirectory(under directory: URL) -> URL? {
         guard let enumerator = FileManager.default.enumerator(
             at: directory, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles],
@@ -347,8 +329,8 @@ nonisolated enum ShaderPackages {
         return candidates.min { $0.pathComponents.count < $1.pathComponents.count }
     }
 
-    /// Streams a download to a file, reporting the fraction received against
-    /// the server's length, then the catalog's, then nothing.
+    /// Streams a download to a file, reporting progress against the server's
+    /// length, else the catalog's.
     private static func download(
         _ url: URL, to file: URL, expectedSize: Int64?, progress: (@Sendable (Double?) -> Void)?,
     ) async throws {

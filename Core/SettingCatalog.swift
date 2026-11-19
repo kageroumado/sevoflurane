@@ -1,8 +1,7 @@
 import Foundation
 
-// The settings a bottle sets for every game and a game sets for itself:
-// one ``Setting`` each, holding everything a row, a command line or a test
-// needs to know about it. A pane draws the catalog; it names no key.
+// One ``Setting`` per bottle or game setting: everything a row, the CLI or
+// a test needs. Panes draw the catalog and name no key.
 
 nonisolated enum SettingID: String, CaseIterable, Sendable {
     case build
@@ -89,19 +88,16 @@ nonisolated enum SettingControl: Equatable, Sendable {
     case tuning([SettingChoice])
 }
 
-/// What takes a value to a running game — the thing a test looks at to see
-/// that a control is connected to anything.
+/// What takes a value to a running game; tests check every control has one.
 nonisolated enum SettingCarrier: Equatable, Sendable {
     /// Lines of the env files the engine reads at every process start.
     case environment([String])
     /// A value of the prefix's registry, by name.
     case registry(String)
-    /// A renderer's payload directory in the game's env file where the
-    /// engine can hand one game a renderer, and otherwise the client, which
-    /// restarts on that renderer around the game's launch.
+    /// The renderer payload in the game's env file, or a client restart on
+    /// that renderer where the engine cannot hand one game its own.
     case rendererPayload
-    /// The app, which reads the value at every Play and starts the game
-    /// through Steam for Mac where it says so (``MacBuildRoute``).
+    /// Read by the app at every Play (``MacBuildRoute``).
     case play
 }
 
@@ -121,13 +117,11 @@ nonisolated struct Setting: Identifiable, Sendable {
     let reach: @Sendable (_ own: SettingValue?) -> SettingReach
     /// The value the fix table names for this key, and why.
     let recommended: @Sendable (KnownFixes.Recommendation) -> (value: SettingValue, reason: String)?
-    /// The line under the row where it follows the value in force; the
-    /// copy's own caption stands elsewhere.
+    /// A row caption that depends on the value in force.
     var detail: (@Sendable (SettingValue) -> String?)?
     /// Whether the row is offered for a game; every game gets it when `nil`.
     var offered: (@Sendable (_ game: Int) -> Bool)?
-    /// Whether a game can leave the value to the level above. A setting
-    /// with no level above shows its default instead of Inherit.
+    /// Whether the row offers Inherit; otherwise it shows its default.
     var inherits = true
 
     var title: String { copy.title }
@@ -198,9 +192,8 @@ nonisolated extension Setting {
 nonisolated enum SettingCatalog {
     /// Every setting, in the order a pane shows them.
     static let all: [Setting] = [
-        // Offered where Steam sells a macOS build and Steam for Mac is offered
-        // (``NativeSteam/isOffered``). The bottle has no say: the choice is
-        // between two programs, made per game.
+        // Per game only, where Steam sells a macOS build and Steam for Mac is
+        // offered (``NativeSteam/isOffered``).
         Setting(
             id: .build, group: .build, levels: [.game], copy: .build,
             control: .choices(GameBuild.allCases.map { SettingChoice(value: $0.rawValue, label: $0.label) }),
@@ -213,9 +206,8 @@ nonisolated enum SettingCatalog {
             offered: { NativeSteam.isOffered && SteamAppInfo.platforms(appID: $0).contains("macos") },
             inherits: false,
         ),
-        // Automatic is the bottle's business — it consults CrossOver's own
-        // per-game database — so a game names a layer or inherits. The bottle's
-        // own renderer is Settings › Graphics', which is what a game inherits.
+        // Automatic is bottle-only (it consults CrossOver's per-game database);
+        // a game names a layer or inherits Settings › Graphics'.
         .choice(
             .renderer, in: .picture, levels: [.game], key: \.renderer, label: \.label,
             offering: Renderer.hostable().filter { $0 != .auto },
@@ -251,8 +243,8 @@ nonisolated enum SettingCatalog {
             carrier: .environment(["SEVO_FINAL_FILTER"]),
             detail: { $0.choice.flatMap(FinalFilter.init(rawValue:))?.detail },
         ),
-        // Bottle-wide alone: `winemac.drv` reads it with no app key, so that
-        // the DPI and the monitor sizes are one answer for every process.
+        // Bottle-only: `winemac.drv` reads it without an app key, so DPI and
+        // monitor sizes agree across processes.
         .flag(
             .retina, in: .picture, levels: [.bottle], key: \.retina, copy: .retina,
             carrier: .registry("RetinaMode"), reach: { _ in .registry },
@@ -316,8 +308,8 @@ nonisolated enum SettingCatalog {
         .flag(.avx, in: .performance, key: \.avx, copy: .avx, carrier: .environment(["ROSETTA_ADVERTISE_AVX"])),
     ]
 
-    /// Every processor, then the caps a game that runs one busy thread per
-    /// processor is offered, by the count `SEVO_CPU_COUNT` takes.
+    /// `SEVO_CPU_COUNT` values: all, then caps for games with a busy thread
+    /// per processor.
     static let processorChoices = [
         SettingChoice(value: "0", label: "All"),
         SettingChoice(value: "8", label: "8"),
@@ -329,8 +321,7 @@ nonisolated enum SettingCatalog {
         all.first { $0.id == id }!
     }
 
-    /// The rows a group shows at a level; for a game, the ones offered for
-    /// it.
+    /// The rows a group shows at a level, filtered by ``Setting/offered``.
     static func settings(in group: SettingGroup, at level: SettingLevel, game: Int? = nil) -> [Setting] {
         all.filter { setting in
             guard setting.group == group, setting.levels.contains(level) else { return false }

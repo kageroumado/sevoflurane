@@ -2,30 +2,25 @@ import Foundation
 
 /// A setting this app knows a particular game wants, and why.
 ///
-/// A fix is applied once, at the game's first launch under Sevoflurane and
-/// only to keys the game has no value of its own for (``FixLedger``), with an
-/// undo; after that it is a chip in Settings that someone presses. Every
-/// entry names what was measured, because the reason is what the user is
-/// being asked to judge.
+/// A fix is applied once, at the game's first launch, only to keys the game
+/// has no value for (``FixLedger``), with an undo; after that it is a chip in
+/// Settings. Every reason names what was measured, because the user judges it.
 nonisolated struct KnownFix: Equatable, Sendable, Identifiable {
     /// The Steam app this is about, for a fix that belongs to one game.
     let appID: Int?
-    /// A lower-cased executable name, `*` standing for any run of characters,
-    /// for a fix that belongs to a shape of game rather than to one.
+    /// A lower-cased executable name with `*` wildcards, for a fix that
+    /// belongs to a family of games.
     let exePattern: String?
-    /// The game or family, so a table can be read without looking up app ids.
     let title: String
-    /// What to set. Only the keys this fix is about are non-nil.
+    /// Only the keys this fix is about are non-nil.
     let values: ConfigValues
-    /// Why — the sentence the chip's tooltip shows.
+    /// The chip's tooltip.
     let reason: String
 
     var id: String {
         "\(appID.map(String.init) ?? exePattern ?? "?")/\(title)"
     }
 
-    /// Whether this fix is about `appID`, or about one of the executables the
-    /// game is known to run under.
     func matches(appID: Int, exes: [String]) -> Bool {
         if let own = self.appID, own == appID { return true }
         guard let exePattern else { return false }
@@ -47,13 +42,9 @@ nonisolated struct KnownFix: Equatable, Sendable, Identifiable {
     }
 }
 
-/// The per-game quirk table: app id or executable shape to the settings that
-/// game wants, with the measurement behind each one. ``all`` is the table
-/// this app ships; ``recommended(for:exes:)`` reads it together with the
-/// community database's list (``FixList``).
-///
-/// The report window reads the same table, so a run that ends badly and the
-/// fix for it are one entry.
+/// The per-game quirk table. ``all`` is the table this app ships;
+/// ``recommended(for:exes:)`` reads it together with the community database's
+/// list (``FixList``). The report window reads the same table.
 nonisolated enum KnownFixes {
     static let all: [KnownFix] = [
         KnownFix(
@@ -92,31 +83,24 @@ nonisolated enum KnownFixes {
 
     // MARK: - A missing DLL
 
-    /// What a named DLL is missing from, and what puts it back: the dependency
-    /// package that carries the file, and the load order the game needs so the
-    /// installed copy answers rather than Wine's stand-in.
+    /// The dependency package that carries a missing DLL, and the load order
+    /// that makes the installed copy win over Wine's stand-in.
     struct DLLRepair: Sendable {
         /// The ``BottleDependencies`` catalog id.
         let dependency: String
-        /// The DLL, lower case and without its extension — the name the
-        /// registry's `DllOverrides` takes.
+        /// Lower case without extension, as `DllOverrides` names it.
         let dll: String
-        /// Wine's load order for it: native first, so the installed file wins
-        /// over the prefix's stand-in, with the builtin still behind it.
+        /// Native first, with the builtin behind it.
         let mode = "n,b"
 
-        /// The package as Settings names it.
         var packageName: String {
             BottleDependencies.catalog.first { $0.id == dependency }?.name ?? dependency
         }
     }
 
-    /// What to offer for a DLL a run said was missing — `0xc0000135`, a
-    /// loader line naming the file, "X.dll was not found".
-    ///
-    /// Winetricks is the reference for which package carries which file; the
-    /// matching is the family a name belongs to, since these ship as numbered
-    /// series a game picks one member of.
+    /// What to offer for a DLL a run said was missing (`0xc0000135`, a loader
+    /// line, "X.dll was not found"). Matches by family, following Winetricks,
+    /// since these ship as numbered series.
     static func dllRepair(for missingDLL: String) -> DLLRepair? {
         let dll = missingDLL.lowercased()
             .replacingOccurrences(of: ".dll", with: "")
@@ -134,38 +118,31 @@ nonisolated enum KnownFixes {
         return nil
     }
 
-    /// The 140-family files the evergreen Visual C++ redistributable lays
-    /// down — the same list its install writes overrides for.
+    /// The files the Visual C++ 140 redistributable installs and writes overrides for.
     private static let vcRuntimeDLLs: Set<String> = [
         "concrt140", "msvcp140", "msvcp140_1", "msvcp140_2",
         "msvcp140_atomic_wait", "msvcp140_codecvt_ids", "vcamp140",
         "vccorlib140", "vcomp140", "vcruntime140", "vcruntime140_1",
     ]
 
-    /// The numbered families the June 2010 DirectX redistributable carries:
-    /// the D3DX helper libraries, the XInput pads, and the XACT and XAudio
-    /// sound engines.
+    /// The numbered families the June 2010 DirectX redistributable carries.
     private static let directXPrefixes = [
         "d3dx9_", "d3dx10_", "d3dx11_", "d3dcompiler_4",
         "xinput1_", "xaudio2_", "x3daudio1_", "xactengine",
     ]
 
-    /// Folds a repair into a game's own values: the load order for that one
-    /// DLL, over whatever the bottle says.
+    /// Sets the repair's load order in a game's own values, over the bottle's.
     static func apply(_ repair: DLLRepair, to values: inout ConfigValues) {
         var table = values.dllOverrides ?? [:]
         table[repair.dll] = repair.mode
         values.dllOverrides = table
     }
 
-    /// What the table says about this game: the keys every matching entry
-    /// sets, and the entries themselves so a control can show the reason
-    /// behind the key it is about.
+    /// Every matching entry, so a control can show the reason behind its key.
     static func recommended(for appID: Int, exes: [String] = []) -> Recommendation {
         recommended(for: appID, exes: exes, from: FixList.current)
     }
 
-    /// What `table` says about this game.
     static func recommended(for appID: Int, exes: [String] = [], from table: [KnownFix]) -> Recommendation {
         Recommendation(fixes: table.filter { $0.matches(appID: appID, exes: exes) })
     }
@@ -178,12 +155,10 @@ nonisolated enum KnownFixes {
             fixes.isEmpty
         }
 
-        /// The entry that recommends a value for `key`, if one does.
         func fix(setting key: KeyPath<ConfigValues, (some Any)?>) -> KnownFix? {
             fixes.first { $0.values[keyPath: key] != nil }
         }
 
-        /// The recommended value for `key`, if the table has one.
         func value<Value>(for key: KeyPath<ConfigValues, Value?>) -> Value? {
             fix(setting: key)?.values[keyPath: key]
         }

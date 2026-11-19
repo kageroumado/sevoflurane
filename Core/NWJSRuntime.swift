@@ -1,27 +1,19 @@
 import Foundation
 
-/// The macOS NW.js builds a native run needs, one directory per version under
-/// `Runtimes/`. NW.js publishes every release it ever made, so a game can have
-/// the Chromium and node its own code was written against.
+/// The macOS NW.js builds native runs use, one directory per version under `Runtimes/`.
 ///
-/// It gets them only when this Mac can run that release without translation.
-/// A game from 2018 asks for NW.js 0.29, whose macOS build is x86_64: under
-/// Rosetta, Chromium 65's stack sampling profiler walks a translated frame
-/// with libunwind and takes the browser process down with it — measured on
-/// macOS 26, a crash report per launch, four launches in five. NW.js has
-/// published arm64 builds since 0.77, and on an Apple Silicon Mac that is
-/// where an old game goes instead: a five-year jump in Chromium, against a
-/// runtime that cannot run at all.
+/// Only builds this Mac runs without translation are used: under Rosetta, the x86_64 NW.js 0.29 a
+/// 2018 game asks for crashes in Chromium 65's stack sampling profiler, which walks a translated
+/// frame with libunwind (measured on macOS 26: four launches in five). arm64 builds start at 0.77,
+/// so on Apple Silicon an old game takes a five-year jump in Chromium instead.
 nonisolated enum NWJSRuntime {
     static let root = AppIdentity.supportFolder
         .appendingPathComponent("Runtimes")
 
-    /// The version directory, whether or not it exists.
     static func directory(version: String) -> URL {
         root.appendingPathComponent("nwjs-v\(version)")
     }
 
-    /// The binary a game is exec'd into.
     static func executable(version: String) -> URL {
         directory(version: version).appendingPathComponent("nwjs.app/Contents/MacOS/nwjs")
     }
@@ -43,12 +35,9 @@ nonisolated enum NWJSRuntime {
             .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
     }
 
-    /// The installed runtime a game runs on: the release the switch recorded
-    /// for it, or — for a game switched on before that was recorded — the
-    /// newest installed patch of the game's own series that this Mac runs
-    /// natively. `nil` when nothing suitable is installed: a game whose runner
-    /// is set and whose runtime is gone is a state to report, not one to paper
-    /// over with a mismatched Chromium or an x86_64 build under Rosetta.
+    /// The installed runtime a game runs on: the release recorded at its switch, else the newest
+    /// installed native patch of its series. `nil` when nothing suitable is installed; never fall
+    /// back to a mismatched Chromium or an x86_64 build under Rosetta.
     static func installedRuntime(recorded: String?, gameVersion: String) -> URL? {
         if let recorded, isInstalled(version: recorded) {
             return executable(version: recorded)
@@ -61,9 +50,8 @@ nonisolated enum NWJSRuntime {
         return executable(version: match)
     }
 
-    /// Whether a Mach-O binary carries a slice for this Mac's architecture,
-    /// read from its header: a thin binary's CPU type, or any entry of a fat
-    /// one's table.
+    /// Whether a Mach-O binary has a slice for this Mac's architecture: a thin binary's CPU type,
+    /// or any fat-table entry.
     static func runsNatively(_ binary: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: binary) else { return false }
         defer { try? handle.close() }
@@ -88,8 +76,8 @@ nonisolated enum NWJSRuntime {
         }
     }
 
-    /// "0.29.0" → "0.29". The series is what decides compatibility: NW.js
-    /// changes Chromium and node between minors, never within one.
+    /// "0.29.0" → "0.29". NW.js changes Chromium and node between minors, never within one, so the
+    /// series decides compatibility.
     static func series(of version: String) -> String? {
         let parts = version.split(separator: ".")
         guard parts.count >= 2 else { return nil }
@@ -98,13 +86,8 @@ nonisolated enum NWJSRuntime {
 
     // MARK: - Choosing a version
 
-    /// The release a game should run on: the newest patch of its own series
-    /// when that series ships a build for this Mac's architecture, and
-    /// otherwise the oldest release that does — the closest native runtime to
-    /// the one the game was written against.
-    ///
-    /// Falls back to the game's exact version when NW.js' index cannot be
-    /// reached, which is also when nothing could be downloaded anyway.
+    /// The release a game should run on (see ``release(forGameVersion:in:flavor:)``), or the game's
+    /// exact version when NW.js' index is unreachable.
     static func release(forGameVersion version: String) async -> String {
         guard let url = URL(string: "https://nwjs.io/versions.json"),
               let (data, response) = try? await URLSession.shared.data(from: url),
@@ -116,16 +99,13 @@ nonisolated enum NWJSRuntime {
         return chosen
     }
 
-    /// One release as NW.js' published index names it: the version, and the
-    /// build flavors that release shipped.
+    /// One release in NW.js' index, with the build flavors it shipped.
     struct IndexEntry: Sendable, Equatable {
         let version: String
         let flavors: [String]
     }
 
-    /// `versions.json` reduced to the releases a game could be sent to.
-    /// Prereleases are dropped: a version carrying a suffix ("0.29.0-beta1")
-    /// is never what a shipped game was built against.
+    /// `versions.json` reduced to its releases, prereleases ("0.29.0-beta1") dropped.
     static func index(from data: Data) -> [IndexEntry] {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let entries = object["versions"] as? [[String: Any]]
@@ -138,12 +118,8 @@ nonisolated enum NWJSRuntime {
         }
     }
 
-    /// The release out of `index` a game should run on: the newest patch of
-    /// its own series when that series ships `flavor`, and otherwise the
-    /// oldest release that does — which on an Apple Silicon Mac is 0.77, the
-    /// first NW.js with an arm64 build. `nil` when the version names no series
-    /// or the index names no build of this flavor, and the caller then has
-    /// nothing better than the game's own version.
+    /// The newest patch of the game's series that ships `flavor`, else the oldest release that does
+    /// (0.77 for arm64). `nil` when the version has no series or no release ships `flavor`.
     static func release(
         forGameVersion version: String, in index: [IndexEntry], flavor: String,
     ) -> String? {
@@ -158,9 +134,7 @@ nonisolated enum NWJSRuntime {
         return native.min(by: ascending)
     }
 
-    /// The build flavor this Mac runs without translation. Rosetta would run
-    /// the x64 one, and running an old Chromium there is what this exists to
-    /// avoid.
+    /// The build flavor this Mac runs without translation.
     static var nativeFlavor: String {
         var isARM: Int32 = 0
         var size = MemoryLayout<Int32>.size
@@ -170,8 +144,7 @@ nonisolated enum NWJSRuntime {
 
     // MARK: - Installing
 
-    /// The runtime for `version`, downloading and unpacking it when it is not
-    /// already on disk. Answers the executable to exec.
+    /// The runtime for `version`, downloaded and unpacked when missing; answers the executable.
     static func ensure(
         version: String,
         progress: @escaping @Sendable (String, Double?) -> Void = { _, _ in },
@@ -193,8 +166,8 @@ nonisolated enum NWJSRuntime {
 
         progress("Unpacking NW.js \(version)…", nil)
         let unpacked = staging.appendingPathComponent("unpacked")
-        // ditto, not unzip: the app bundle is full of symlinks into its own
-        // Versions directory, and a copy that flattens them will not launch.
+        // Never unzip: the bundle's symlinks into its `Versions` directory must survive, or it will
+        // not launch.
         let extraction = await Subprocess.run(
             "/usr/bin/ditto", ["-x", "-k", archive.path, unpacked.path],
             capture: .combined, timeout: .seconds(600),
@@ -206,8 +179,8 @@ nonisolated enum NWJSRuntime {
             throw RuntimeError("the NW.js \(version) archive holds no nwjs.app")
         }
 
-        // Gatekeeper judges by the quarantine flag, which the download carries
-        // and the notarized binary inside does not need.
+        // The quarantine flag would put the download in front of Gatekeeper; the notarized binary
+        // does not need it.
         _ = await Subprocess.run(
             "/usr/bin/xattr", ["-dr", "com.apple.quarantine", app.path],
             capture: .combined, timeout: .seconds(120),
@@ -223,13 +196,9 @@ nonisolated enum NWJSRuntime {
         return binary
     }
 
-    /// Adds a runtime from a folder already on this Mac — the unpacked
-    /// `nwjs-v<version>-<flavor>` directory NW.js publishes, or the
-    /// `nwjs.app` inside one. The route for a Mac that cannot reach
-    /// `dl.nwjs.io`, and for a build someone made themselves.
-    ///
-    /// `ditto`, because the bundle is full of symlinks into its own
-    /// `Versions` directory and a copy that flattens them will not launch.
+    /// Adds a runtime from a local folder: the unpacked `nwjs-v<version>-<flavor>` directory or its
+    /// `nwjs.app`, for a Mac that cannot reach `dl.nwjs.io` or a self-made build. Copied with
+    /// `ditto` to keep the bundle's symlinks.
     @discardableResult
     static func install(fromFolder folder: URL, version: String? = nil) async throws -> String {
         let manager = FileManager.default
@@ -262,8 +231,8 @@ nonisolated enum NWJSRuntime {
         return number
     }
 
-    /// `nwjs-v0.77.0-osx-arm64` → `0.77.0`. A bundle's own Info.plist is no
-    /// help here: it carries Chromium's version, not NW.js'.
+    /// `nwjs-v0.77.0-osx-arm64` → `0.77.0`. The bundle's Info.plist carries Chromium's version, not
+    /// NW.js'.
     static func versionName(ofFolder folder: URL) -> String? {
         let name = folder.lastPathComponent
         guard name.hasPrefix("nwjs-v") else { return nil }
@@ -271,9 +240,7 @@ nonisolated enum NWJSRuntime {
         return number.isEmpty ? nil : String(number)
     }
 
-    /// The archive nests the bundle one directory down
-    /// (`nwjs-v0.29.4-osx-x64/nwjs.app`), and has changed shape between
-    /// releases, so the bundle is found rather than assumed.
+    /// Finds `nwjs.app` up to three levels down; archives nest it differently across releases.
     private static func findApp(under root: URL) -> URL? {
         let manager = FileManager.default
         var frontier = [root]
@@ -294,10 +261,8 @@ nonisolated enum NWJSRuntime {
         return nil
     }
 
-    /// A plain download task whose `Progress` is observed — the shape
-    /// ``EngineInstaller`` settled on. The temporary file has to be moved
-    /// inside the completion handler: URLSession deletes it when the handler
-    /// returns.
+    /// Downloads with progress, as ``EngineInstaller`` does. The temporary file must be moved
+    /// inside the completion handler, which deletes it on return.
     private static func download(
         _ url: URL, to file: URL,
         label: String, progress: @escaping @Sendable (String, Double?) -> Void,
@@ -315,8 +280,8 @@ nonisolated enum NWJSRuntime {
                     continuation.resume(throwing: error)
                     return
                 }
-                // A release with no build for this Mac answers 404 with a page
-                // that would otherwise reach the unzip step as the archive.
+                // A missing build answers 404 with a page that would otherwise reach the unzip
+                // step.
                 if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
                     continuation.resume(throwing: RuntimeError(
                         "\(url.lastPathComponent) is not published (HTTP \(status))",

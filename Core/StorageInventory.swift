@@ -2,16 +2,13 @@ import Foundation
 
 /// What Sevoflurane and its bottle occupy on disk, and what may be reclaimed.
 ///
-/// Sizes come from `du`, not from a directory walk: a Steam library is
-/// hundreds of thousands of files, and the C implementation is the difference
-/// between a pane that fills in and one that hangs.
+/// Sizes come from `du`: a directory walk over a Steam library's hundreds of
+/// thousands of files hangs the pane.
 nonisolated enum StorageInventory {
     struct Entry: Identifiable, Sendable, Equatable {
-        /// The one entry Settings' search can send someone to, and the one
-        /// that opens into a list of its own.
+        /// Opens into its own list; Settings' search can link to it.
         static let gamesID = "games"
-        /// The other entry that opens into a list: the Windows programs the
-        /// user added by hand.
+        /// Opens into the list of added Windows programs.
         static let programsID = "programs"
 
         let id: String
@@ -19,8 +16,7 @@ nonisolated enum StorageInventory {
         let detail: String
         let url: URL
         var bytes: Int64
-        /// Whether removing it is this app's business. Games are Steam's, and
-        /// the client reinstalls itself through Repair.
+        /// How removing it goes, or nil when it is not this app's to remove.
         let removal: Removal?
     }
 
@@ -38,8 +34,7 @@ nonisolated enum StorageInventory {
         }
     }
 
-    /// Everything worth showing, unsized. Sizing is the slow part and is done
-    /// separately so the list can be drawn immediately.
+    /// Every entry, unsized so the list draws at once.
     static func entries() -> [Entry] {
         bottleEntries() + supportEntries()
     }
@@ -61,8 +56,6 @@ nonisolated enum StorageInventory {
                 id: Entry.programsID,
                 name: "Added programs",
                 detail: "Windows programs you added, and what their installers wrote here.",
-                // The size is the sum of the directories the installers made,
-                // which all sit under this drive.
                 url: bottle.appendingPathComponent("drive_c"),
                 bytes: -1,
                 removal: nil,
@@ -172,9 +165,8 @@ nonisolated enum StorageInventory {
         }
     }
 
-    /// The volume that holds the Steam bottle, or the home directory's while
-    /// no bottle exists. Available space is the figure Finder reports, which
-    /// counts what the system would purge to make room.
+    /// The bottle's volume, or the home directory's without one. Available
+    /// space counts purgeable space, as Finder does.
     static func volume() -> Volume? {
         let manager = FileManager.default
         let root = manager.fileExists(atPath: SteamBottle.root.path)
@@ -198,14 +190,8 @@ nonisolated enum StorageInventory {
         let bytes: Int64
     }
 
-    /// What is installed in the library inside the bottle, largest first —
-    /// the games the Games row measures. Libraries elsewhere are listed on
-    /// their own (``libraries()``).
-    ///
-    /// Read from Steam's own `appmanifest_*.acf` files rather than measured:
-    /// the client already knows every game's size on disk, and asking the
-    /// filesystem the same question would walk a quarter of a million files
-    /// to reach the same number.
+    /// The games in the bottle's own library, largest first, sized from
+    /// Steam's `appmanifest_*.acf` files rather than by walking them.
     static func installedGames() -> [Game] {
         SharedGames.installedGames(in: SharedGames.activeSteamapps)
             .map { Game(id: $0.appID, name: $0.name, bytes: $0.bytes) }
@@ -231,12 +217,10 @@ nonisolated enum StorageInventory {
         }
     }
 
-    /// Every library Steam knows in the active bottle whose drive is here,
-    /// the one inside the bottle first.
+    /// Every library Steam knows in the active bottle whose drive is here.
     static func libraries() -> [Library] {
         let games = SharedGames.installedGames()
-        // By path: a URL made for a folder that exists carries a trailing
-        // slash, and one made for the same folder by name does not.
+        // Compare paths: URLs to one folder differ by a trailing slash.
         let inBottle = SharedGames.activeSteamapps.standardizedFileURL.path
         return SteamLibraries.steamapps().map { steamapps in
             let path = steamapps.standardizedFileURL.path
@@ -261,13 +245,12 @@ nonisolated enum StorageInventory {
         let name: String
         /// The executable, for the row's second line.
         let path: String
-        /// The directory an installer created inside the bottle, when there
-        /// is one — the only part of a program this app may remove.
+        /// The directory an installer created in the bottle, the only part
+        /// this app may remove.
         let installedRoot: URL?
         var bytes: Int64
 
-        /// Whether removing the entry also frees disk space. A program run
-        /// from a folder of the user's own leaves its files behind.
+        /// Whether removing the entry also frees disk space.
         var isInsideBottle: Bool {
             installedRoot != nil
         }
@@ -286,8 +269,7 @@ nonisolated enum StorageInventory {
         }
     }
 
-    /// What one added program occupies: the installer's directory, or nothing
-    /// when the program runs from files the user keeps elsewhere.
+    /// The size of a program's installed directory, 0 without one.
     @concurrent
     static func size(of program: Program) async -> Int64 {
         guard let root = program.installedRoot else { return 0 }
@@ -303,9 +285,8 @@ nonisolated enum StorageInventory {
         AdoptedPrograms.remove(program.id)
     }
 
-    /// The size of one entry, or 0 when it is not there. `steamapps` is
-    /// subtracted from the client, and the client and the added programs from
-    /// the bottle, so the numbers add up rather than nesting.
+    /// The size of one entry, or 0. Nested entries are subtracted from their
+    /// parents so the numbers add up.
     @concurrent
     static func size(of entry: Entry) async -> Int64 {
         let manager = FileManager.default
@@ -318,8 +299,6 @@ nonisolated enum StorageInventory {
             }
             return total
         case "client":
-            // `du` skips the games itself rather than walking them twice,
-            // once in the client and once to subtract them.
             return await bytes(at: entry.url, skipping: "steamapps")
         case "bottle":
             let whole = await bytes(at: entry.url)
@@ -340,9 +319,8 @@ nonisolated enum StorageInventory {
         }
     }
 
-    /// Moves an entry to the Trash. Never an unrecoverable delete: this pane
-    /// points at a games library, and a wrong click there costs a weekend of
-    /// downloading.
+    /// Moves an entry to the Trash. Never delete outright: a wrong click on a
+    /// games library costs a weekend of downloading.
     static func trash(_ entry: Entry) throws {
         let manager = FileManager.default
         if entry.id == "caches" {
@@ -360,16 +338,13 @@ nonisolated enum StorageInventory {
         Entry.gamesID, Entry.programsID, "client", "caches", "bottle", "engines", "renderers", "toolkits",
     ]
 
-    /// Whether reclaiming `entry` is refused: an entry the running bottle
-    /// reads from waits until the bottle stops, since the client writes its
-    /// caches as it runs and a running game has its engine, renderer and
-    /// toolkit files mapped. `bottleRunning` is ``isBottleRunning``.
+    /// Whether reclaiming `entry` waits for the bottle to stop: the client
+    /// writes its caches and games map engine and renderer files.
     static func isRefused(_ entry: Entry, bottleRunning: Bool) -> Bool {
         bottleRunning && usedWhileRunning.contains(entry.id)
     }
 
-    /// Whether the bottle's wineserver holds its lock, which is true from the
-    /// first Wine process to the last.
+    /// Whether the bottle's wineserver holds its lock.
     static var isBottleRunning: Bool {
         WineOrphans.isServerAlive(forPrefix: SteamBottle.root.path)
     }
@@ -387,8 +362,7 @@ nonisolated enum StorageInventory {
             + [SteamBottle.htmlcache]
     }
 
-    /// What `url` occupies, leaving out every directory or file named
-    /// `skipping` inside it.
+    /// What `url` occupies, leaving out everything named `skipping`.
     private static func bytes(at url: URL, skipping name: String? = nil) async -> Int64 {
         guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
         let result = await Subprocess.run(

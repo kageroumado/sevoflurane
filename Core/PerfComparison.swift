@@ -1,12 +1,7 @@
 import Foundation
 
-/// Runs with frame traces, grouped by what they ran on, and each group measured against the
-/// first.
-///
-/// A group is every run whose configuration is the same: engine, renderer, upscaler, tuning,
-/// msync+, D3DMetal, window treatment, and the label a person gave the run
-/// (``PerfLabels``). Repeating a configuration is what makes its difference from another
-/// one testable; ``FrameStats`` says how.
+/// Runs with frame traces, grouped by configuration (``configuration(of:)``,
+/// including the ``PerfLabels`` label), each group measured against the first.
 nonisolated enum PerfComparison {
     /// One run as the comparison sees it: its record and its frames.
     struct Run: Sendable {
@@ -16,12 +11,11 @@ nonisolated enum PerfComparison {
         /// The trace's file name, which is also the run's key for a label.
         var trace: String
         var label: String?
-        /// How long the whole trace runs, in seconds, and the stretch of it
-        /// ``frameTimes`` covers after trimming (``trim(_:skip:duration:)``).
+        /// The whole trace's length in seconds, and the stretch ``frameTimes``
+        /// covers after ``trim(_:skip:duration:)``.
         var traceSeconds: Double?
         var window: ClosedRange<Double>?
-        /// What the gameplay window left out inside ``window``, for a run measured over its
-        /// gameplay (``leftOut(_:)``).
+        /// See ``leftOut(_:)``.
         var leftOut: String?
 
         var summary: FrameStats.Summary? {
@@ -29,9 +23,8 @@ nonisolated enum PerfComparison {
         }
     }
 
-    /// The settings that decide a run's configuration, in the order a label names them. The
-    /// field names are the keys of `sevo perf report --json`'s `config`; ``label(for:)`` is how
-    /// a group's name says them.
+    /// The settings that decide a run's configuration. The field names are the
+    /// keys of `sevo perf report --json`'s `config`.
     static func configuration(of run: Run) -> [(field: String, value: String)] {
         let record = run.record
         return [
@@ -96,8 +89,7 @@ nonisolated enum PerfComparison {
         return parts.isEmpty ? run.record.engine : parts.joined(separator: " · ")
     }
 
-    /// A configuration field as a group's name says it: the sync switch is msync+, whatever
-    /// the key it is stored under.
+    /// A configuration field as a group's name says it.
     static func label(for field: String) -> String {
         field == "msync" ? "msync+" : field
     }
@@ -125,9 +117,8 @@ nonisolated enum PerfComparison {
         )
     }
 
-    /// The seconds to leave out of the run at `position` among the chosen ones:
-    /// its own value in `skips`, the last value for every run past the list,
-    /// and none when the list is empty.
+    /// The seconds to skip for the run at `position`; runs past the list take
+    /// its last value.
     static func skip(_ skips: [Double], forRun position: Int) -> Double {
         guard let last = skips.last else { return 0 }
         return skips.indices.contains(position) ? skips[position] : last
@@ -146,7 +137,7 @@ nonisolated enum PerfComparison {
     static func trim(_ times: [Float], skip: Double, duration: Double?) -> [Float] {
         var elapsed = 0.0
         var kept: [Float] = []
-        // A microsecond of slack, so a frame ending on the boundary is on its near side.
+        // Slack so a frame ending on the boundary counts as before it.
         let slack = 1e-6
         for time in times {
             elapsed += Double(time) / 1000
@@ -158,8 +149,8 @@ nonisolated enum PerfComparison {
     }
 }
 
-/// Names a person gives runs, kept beside the traces in `labels.json` (trace file name →
-/// label), so a comparison of two settings the record cannot tell apart still reads right.
+/// Names a person gives runs, in `labels.json` beside the traces (trace file
+/// name → label), for settings the record cannot tell apart.
 nonisolated enum PerfLabels {
     static func url(in runs: URL = RunLog.root) -> URL {
         FrameTrace.directory(in: runs).appendingPathComponent("labels.json")

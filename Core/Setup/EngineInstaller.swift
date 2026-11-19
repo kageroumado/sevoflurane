@@ -1,20 +1,12 @@
 import Foundation
 
 /// Downloads, verifies, and installs a managed engine release into
-/// `Engines/<version>/`. The download lands in a
-/// temporary directory and only an integrity-verified, fully extracted tree
-/// is moved into place — a version directory either exists complete or not
-/// at all, which is what lets ``SetupProbe/managedEngineVersions()`` treat
-/// presence as installed.
-///
-/// An engine can also come from this Mac, ``install(from:into:progress:)``:
-/// the release asset someone saved by hand on a Mac the release feed does
-/// not reach, the copy a disk image ships with the app
-/// (``bundledTarball(resources:beside:)``), or the tree `package-engine.sh`
-/// left behind for whoever built it.
+/// `Engines/<version>/`. Only a verified, fully extracted tree is moved into
+/// place, so ``SetupProbe/managedEngineVersions()`` can treat presence as
+/// installed. ``install(from:into:requiringSignature:progress:)`` installs a
+/// tarball or `package-engine.sh` tree already on this Mac.
 nonisolated enum EngineInstaller {
-    /// Fetches the release the feed offers, or reports that it names none
-    /// (``EngineManifest/NoRelease``).
+    /// The release the feed offers, or ``EngineManifest/NoRelease``.
     static func latestRelease() async throws -> EngineManifest.Release {
         try await EngineManifest.fetch().release()
     }
@@ -25,17 +17,10 @@ nonisolated enum EngineInstaller {
         )
     }
 
-    /// Download → verify → extract → atomic move into place.
-    /// Idempotent: an already-installed version returns immediately. The
-    /// fraction is the download's progress against the manifest's declared
-    /// size, or `nil` for the phases with no measurable whole.
-    ///
-    /// A release from the verified manifest is held to the whole policy
-    /// (``EngineSignature``): the tarball comes from a kageroumado release
-    /// asset over HTTPS, is exactly the declared size, hashes to the declared
-    /// sha256, and its `.sig` verifies against the pinned key — all before
-    /// `tar` sees a byte. A release from an override manifest is checked by
-    /// size and hash.
+    /// Download → verify → extract → atomic move; an installed version
+    /// returns at once. A verified-manifest release must come from an allowed
+    /// release URL and carry a valid `.sig` (``EngineSignature``) before `tar`
+    /// sees a byte; every release is checked for declared size and sha256.
     @concurrent
     static func install(
         _ release: EngineManifest.Release,
@@ -75,15 +60,10 @@ nonisolated enum EngineInstaller {
         _ = try await unpack(tarball, expecting: release.version, in: staging, into: Engine.managedRoot)
     }
 
-    /// Installs an engine already on this Mac and returns the version it
-    /// carried: `dormison-r<N>.tar.xz` as the release ships it, or the
-    /// directory `package-engine.sh` assembled, which is what is inside that
-    /// tarball. Either way the version has to be new — an installed engine is
-    /// never replaced.
-    ///
-    /// `requiringSignature` is for a file nobody chose: the copy found beside
-    /// the app is installed only with a `.sig` that verifies against the
-    /// pinned key. A file a person picked or named may go unsigned.
+    /// Installs a `dormison-r<N>.tar.xz` or a `package-engine.sh` directory
+    /// from this Mac and answers its version; an installed version is never
+    /// replaced. `requiringSignature` is for a file nobody chose, such as the
+    /// copy beside the app; a file a person picked may go unsigned.
     @concurrent
     static func install(
         from source: URL,
@@ -104,11 +84,10 @@ nonisolated enum EngineInstaller {
         )
     }
 
-    /// An engine tree built here: named for its version, holding `wine/bin`,
-    /// and left where its author put it — the copy is staged and moved in, so
-    /// an interrupted one never leaves a half tree that reads as installed.
-    /// `cp` rather than `rsync`, which maps each file it reads and so gets a
-    /// process running a signed Mach-O under Rosetta killed.
+    /// Copies an engine tree named for its version through staging, so an
+    /// interrupted copy never reads as installed. Never `rsync`: it maps each
+    /// file it reads, which gets a process running a signed Mach-O under
+    /// Rosetta killed.
     private static func install(
         fromFolder folder: URL, into root: URL,
         progress: @escaping @Sendable (String, Double?) -> Void,
@@ -145,11 +124,8 @@ nonisolated enum EngineInstaller {
         return version
     }
 
-    /// A `<name>.sig` beside the tarball is verified against the pinned key,
-    /// and one that fails refuses the install; a tarball with nothing beside
-    /// it is the operator's own choice and is installed as such, logged,
-    /// unless a signature is required. The tarball's single top-level
-    /// directory names the version.
+    /// Verifies a `<name>.sig` beside the tarball when there is one; an
+    /// unsigned tarball installs unless a signature is required.
     private static func install(
         fromTarball tarball: URL, into root: URL, requiringSignature: Bool,
         progress: @escaping @Sendable (String, Double?) -> Void,
@@ -185,13 +161,9 @@ nonisolated enum EngineInstaller {
         return name
     }
 
-    /// An engine tarball shipped with this copy of the app, so a disk image
-    /// can carry the engine and setup needs no download: in
-    /// `Contents/Resources/Engine/`, or beside the app bundle — the disk
-    /// image's root while the app runs from it. Only a tarball with its
-    /// `.sig` beside it counts: the folder beside the app is often Downloads
-    /// or /Applications, where any file can land. The newest release or beta
-    /// wins when there are several.
+    /// The newest engine tarball in `Contents/Resources/Engine/` or beside
+    /// the app bundle (a disk image's root). Only one with a `.sig` counts:
+    /// the folder beside the app is often Downloads, where any file lands.
     static func bundledTarball(
         resources: URL? = Bundle.main.resourceURL,
         beside bundle: URL = Bundle.main.bundleURL,
@@ -208,9 +180,8 @@ nonisolated enum EngineInstaller {
         return candidates.max { Engine.isOlderVersion(versionName(of: $0), than: versionName(of: $1)) }
     }
 
-    /// The engine this copy of the app carries, when it is newer than every managed engine
-    /// installed: an app update that brings a newer engine hands it over. Nil before setup
-    /// (setup installs the bundled one itself) and when the newest installed is as new.
+    /// The bundled engine when it is newer than every installed one; `nil`
+    /// before setup, which installs it itself.
     static func bundledUpgrade(bundled: URL? = bundledTarball(), installed: [String]) -> URL? {
         guard let bundled, let newest = installed.max(by: Engine.isOlderVersion) else { return nil }
         let version = versionName(of: bundled)
@@ -225,19 +196,17 @@ nonisolated enum EngineInstaller {
         return staging
     }
 
-    /// Extracts `tarball` under `staging` and moves its single top-level
-    /// directory — the engine version — into `root`. With `expected`, the
-    /// directory has to be that version; the tree has to carry `wine/bin`,
-    /// what ``Engine/existsOnDisk`` looks for, or it is not an engine.
+    /// Extracts `tarball` and moves its single top-level directory, named for
+    /// the version (`expected` when given), into `root`. The tree must carry
+    /// `wine/bin`, what ``Engine/existsOnDisk`` looks for.
     private static func unpack(
         _ tarball: URL, expecting expected: String?, in staging: URL, into root: URL,
     ) async throws -> String {
         let manager = FileManager.default
         let extracted = staging.appendingPathComponent("extracted")
         try manager.createDirectory(at: extracted, withIntermediateDirectories: true)
-        // Through a pipe: tar reading the file itself copies the archive's quarantine onto
-        // every file it writes, and an ad-hoc signed binary carrying it never gets past exec.
-        // A disk image that came by browser or AirDrop quarantines the tarball inside the app.
+        // Through a pipe: tar reading the file copies the archive's quarantine
+        // onto every file, and a quarantined ad-hoc signed binary never execs.
         let untar = await Subprocess.run(
             "/bin/sh", ["-c", #"/bin/cat -- "$0" | /usr/bin/tar -xf - -C "$1""#, tarball.path, extracted.path],
             capture: .combined, timeout: .seconds(600),
@@ -270,9 +239,8 @@ nonisolated enum EngineInstaller {
         return version
     }
 
-    /// Makes the extracted tree its owner's to change and leaves no file quarantined. Checked
-    /// before anything in it runs: Gatekeeper keeps the verdict it gave an executed binary, so
-    /// a flag removed afterwards no longer helps.
+    /// Makes the tree owner-writable and unquarantined. Must run before
+    /// anything in it executes: Gatekeeper keeps its first verdict.
     static func clearQuarantine(under root: URL) async throws {
         _ = await Subprocess.run("/bin/chmod", ["-R", "u+w", root.path])
         let stuck = removeQuarantine(under: root)
@@ -281,7 +249,7 @@ nonisolated enum EngineInstaller {
         }
     }
 
-    /// Strips the quarantine flag from every file under `root`, answering the ones it stayed on.
+    /// Strips quarantine under `root`, answering the files it stayed on.
     private static func removeQuarantine(under root: URL) -> [String] {
         guard let walk = FileManager.default.enumerator(atPath: root.path) else { return [] }
         var stuck: [String] = []
@@ -295,15 +263,10 @@ nonisolated enum EngineInstaller {
 
     private static let quarantineAttribute = "com.apple.quarantine"
 
-    /// Downloads the tarball with real progress: a plain download task whose
-    /// `Progress` is observed, the same shape the GPTk panel uses. Never an
-    /// `AsyncBytes` loop: it costs an await per byte, which turns seconds
-    /// into minutes. The temp file must be moved inside the completion
-    /// handler — URLSession deletes it when the handler returns.
-    ///
-    /// Cancelling the calling task cancels the transfer, and a response other
-    /// than 2xx fails the download with its status rather than handing an
-    /// error page to the size check.
+    /// Downloads the tarball through an observed download task. Never an
+    /// `AsyncBytes` loop: an await per byte turns seconds into minutes. The
+    /// temp file must be moved inside the completion handler, which deletes
+    /// it on return. Cancellation cancels the transfer; a non-2xx status fails.
     static func download(
         _ release: EngineManifest.Release, to tarball: URL,
         label: String, session: URLSession = .shared,
@@ -339,8 +302,7 @@ nonisolated enum EngineInstaller {
                 }
                 nonisolated(unsafe) var lastReported = 0.0
                 let observation = task.progress.observe(\.fractionCompleted) { taskProgress, _ in
-                    // The response may not carry a length; the manifest's
-                    // declared size stands in.
+                    // Without a response length, the declared size stands in.
                     let fraction = taskProgress.totalUnitCount > 0
                         ? taskProgress.fractionCompleted
                         : Double(taskProgress.completedUnitCount) / Double(declaredBytes)
@@ -355,9 +317,8 @@ nonisolated enum EngineInstaller {
         }
     }
 
-    /// One download's task and progress observation, held until the
-    /// completion handler runs. A cancel that arrives before the task exists
-    /// is remembered, and the task is cancelled the moment it starts.
+    /// One download's task and observation. A cancel before the task exists
+    /// is remembered and applied when it starts.
     private final class Transfer: @unchecked Sendable {
         private let lock = NSLock()
         private var task: URLSessionDownloadTask?

@@ -3,17 +3,10 @@ import SystemConfiguration
 
 /// Takes the person out of text that is meant to be shared.
 ///
-/// Everything a report carries — a run record, a game's own log, an env file —
-/// was written by software with no reason to keep the account out of it: a
-/// Unity player logs its data path, Wine logs `C:\users\<you>`, Steam logs the
-/// signed-in id. The rewrites below are the ones that can be made without
-/// reading the text: a path under a home directory becomes `~`, the bottle's
-/// Windows user becomes `~`, this Mac's name and account become placeholders,
-/// anything shaped like a Steam id becomes `<steamid>`, and a game account's
-/// `uid=` or `UID:` number becomes `<uid>`.
-///
-/// A persona name is not derivable from a string, so a caller that knows one
-/// passes it in.
+/// Home paths and the bottle's Windows user become `~`, this Mac's name and
+/// account become placeholders, Steam ids become `<steamid>`, and `uid=` or
+/// `UID:` numbers become `<uid>`. Persona names cannot be detected, so callers
+/// pass them in.
 nonisolated enum Redaction {
     static let home = "~"
     static let steamID = "<steamid>"
@@ -22,17 +15,14 @@ nonisolated enum Redaction {
     static let user = "<user>"
     static let gameAccount = "<uid>"
 
-    /// `text` with this Mac's account, any home directory, the bottle's
-    /// Windows user, the machine's name and every Steam id taken out.
+    /// `text` with the person taken out.
     static func apply(to text: String, personas: [String] = []) -> String {
         guard text.utf8.count > lineWiseThreshold else { return redact(text, personas: personas) }
         return redactingMatchingLines(of: text, personas: personas)
     }
 
-    /// Texts past this size are redacted line by line, and only the lines a
-    /// cheap search says can carry something: a bug report's logs run to tens
-    /// of megabytes, nearly all of it lines with nothing to take out, and the
-    /// patterns below cost seconds per megabyte.
+    /// Past this size only lines a cheap search flags are redacted: the
+    /// patterns cost seconds per megabyte, and logs run to tens of megabytes.
     private static let lineWiseThreshold = 64 * 1024
 
     private static func redactingMatchingLines(of text: String, personas: [String]) -> String {
@@ -64,12 +54,9 @@ nonisolated enum Redaction {
         return result as String
     }
 
-    /// What this Mac is called: the kernel's host name, and the computer and
-    /// Bonjour names from Sharing settings, longest first so a name that
-    /// contains another is replaced whole. All three are local reads.
-    /// `ProcessInfo.hostName` and `Host.current()` resolve the name over the
-    /// network, and hold the caller for half a minute where the resolver
-    /// does not answer.
+    /// The kernel, computer and Bonjour names, longest first so a name that
+    /// contains another is replaced whole. Never use `ProcessInfo.hostName` or
+    /// `Host.current()`: they resolve over the network and can block 30 s.
     private static let machineNames: [String] = {
         var kernelName = [CChar](repeating: 0, count: Int(MAXHOSTNAMELEN) + 1)
         let names = [
@@ -86,8 +73,7 @@ nonisolated enum Redaction {
         for name in personas where name.count > 2 {
             result = result.replacingOccurrences(of: name, with: persona)
         }
-        // The account's own home first: it is the longest match and the one
-        // whose replacement is a plain `~` rather than a rewritten prefix.
+        // The account's own home first: the longest match, replaced by plain `~`.
         result = result.replacingOccurrences(of: UserHome.path, with: home)
         result = result.replacing(macHome) { _ in home }
         result = result.replacing(windowsUser) { match in "\(match.output.1)~" }
@@ -103,10 +89,8 @@ nonisolated enum Redaction {
         return removingAccountName(from: result)
     }
 
-    /// The account's short name standing on its own, once every path that
-    /// contains it has already become `~`. Unreal writes `LogInit: User:
-    /// <name>` with nothing around it, and a name is what a report may not
-    /// carry however it is spelled.
+    /// The account's short name standing alone, after paths are gone, as in
+    /// Unreal's `LogInit: User: <name>`.
     private static func removingAccountName(from text: String) -> String {
         let name = NSUserName()
         guard name.count > 2 else { return text }
@@ -124,28 +108,22 @@ nonisolated enum Redaction {
         apply(to: url.path)
     }
 
-    // The three patterns are `nonisolated(unsafe)` because `Regex` is not
-    // `Sendable`: a regex built from a literal carries no transform that could
-    // hold state, and matching never mutates it.
+    // `nonisolated(unsafe)`: `Regex` is not `Sendable`, but a literal regex
+    // holds no state.
 
-    /// `/Users/<someone>`, which is the whole of what a macOS path says about
-    /// a person. `/Users/Shared` names no one and is left alone.
+    /// `/Users/<someone>`, except `/Users/Shared`.
     private nonisolated(unsafe) static let macHome =
         /\/Users\/(?!Shared(?:\/|$))[^\/\s"':;,\)\]]+/
 
-    /// The user directory of a Windows prefix, on either side of the
-    /// translation: `C:\users\<someone>` as Wine prints it and
-    /// `drive_c/users/<someone>` as the file system holds it. The prefix is
-    /// kept so a reader can still tell which directory it was. `Shared` and
-    /// `Public` are the accounts macOS and Windows create for everyone.
+    /// `C:\users\<someone>` or `drive_c/users/<someone>`, keeping the prefix;
+    /// `Shared` and `Public` are left alone.
     private nonisolated(unsafe) static let windowsUser =
         /(?i)(users[\/\\])(?!(?:Shared|Public)(?:[\/\\]|$))[^\/\\"'\s]+/
 
-    /// A game account's number after `uid=` or `UID:`: HoYoverse's player
-    /// writes it into every SDK URL it logs, and its games print it on screen.
+    /// A game account's number after `uid=` or `UID:`, as HoYoverse logs it.
     private nonisolated(unsafe) static let gameAccountID =
         /(?i)(\buid\s*[=:]\s*)\d{5,}/
 
-    /// A Steam id: the individual-account block, seventeen digits.
+    /// A seventeen-digit individual-account Steam id.
     private nonisolated(unsafe) static let steamIDDigits = /\b7656119\d{10}\b/
 }

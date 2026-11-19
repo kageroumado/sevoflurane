@@ -1,11 +1,8 @@
 import Foundation
 
-/// What a person says about one run, as the community database receives it
-/// (`infrastructure/sevostats/reports_ingest.go`): a verdict on ProtonDB's
-/// ladder in four steps, a note, and the configuration of the run it is
-/// about, copied from the ``RunRecord`` rather than typed. Like ``SharedRun``
-/// it carries no title, path, renderer note or anything naming the player;
-/// the note is the one field a person writes, and it is public.
+/// A person's report on one run, as the community database receives it
+/// (`infrastructure/sevostats/reports_ingest.go`): a four-step verdict, a
+/// public note, and the run's configuration copied from its ``RunRecord``.
 ///
 /// The keys are the wire format, version ``version``; changing one is a
 /// version bump on both ends.
@@ -13,10 +10,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
     static let version = 1
     /// The note's cap in Unicode scalars, the server's `maxNoteRunes`.
     static let noteLimit = 600
-    /// The server's cap on one item as sent. A report whose note is
-    /// ``noteLimit`` four-byte characters long, on the longest configuration
-    /// values the server accepts, encodes well under it, so nothing is trimmed
-    /// at send time.
+    /// The server's cap on one item. A maximal report encodes well under it.
     static let itemLimit = 4096
 
     enum Verdict: String, Codable, CaseIterable, Sendable {
@@ -73,7 +67,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
         case runRef = "run_ref"
     }
 
-    /// A report on `record`, with `note` tidied and cut to ``noteLimit``.
+    /// A report on `record`, with `note` tidied and clipped.
     init(record: RunRecord, verdict: Verdict, note: String) {
         let adopted = AdoptedPrograms.isAdopted(record.appid)
         v = Self.version
@@ -103,10 +97,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
 
     // MARK: - The configuration as the page shows it
 
-    /// The run's configuration as small chips, in the order the game's page
-    /// shows them: engine, renderer with its D3DMetal version, the runner when
-    /// it is NW.js, the upscaler when one was on, msync+ and experimental
-    /// tuning when on, then macOS and the chip.
+    /// The run's configuration as chips, in the game page's order.
     static func chips(for record: RunRecord) -> [String] {
         var chips = [record.engine]
         var renderer = record.renderer
@@ -127,8 +118,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
 
     // MARK: - The note
 
-    /// Why the server would refuse a note, checked here so the person hears
-    /// it before the report leaves rather than in a log line after.
+    /// Why the server would refuse a note, checked before sending.
     enum NoteProblem: Equatable, Sendable {
         case tooLong
         case namesPath
@@ -148,10 +138,9 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
         }
     }
 
-    /// The server's own checks on a note, in its order: URLs stripped, the
-    /// text tidied, then length, plain text, an e-mail address and a file
-    /// path, the last two on the NFKC form so fullwidth punctuation reads as
-    /// ASCII (`scrubNote` and `checkNote` in `reports.go`).
+    /// The server's note checks in its order (`scrubNote` and `checkNote` in
+    /// `reports.go`); e-mail and path run on the NFKC form so fullwidth
+    /// punctuation reads as ASCII.
     static func noteProblem(_ note: String, verdict: Verdict) -> NoteProblem? {
         let tidied = tidy(urlPattern.stringByReplacingMatches(
             in: note, range: NSRange(note.startIndex..., in: note), withTemplate: "",
@@ -168,8 +157,7 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
         return nil
     }
 
-    /// Trims a note and folds runs of spaces and of blank lines, as the
-    /// server does before it checks the length.
+    /// Trims a note and folds runs of spaces and blank lines, as the server does.
     static func tidy(_ note: String) -> String {
         var lines: [String] = []
         var blank = false
@@ -197,18 +185,15 @@ nonisolated struct SharedReport: Codable, Equatable, Sendable {
 
     private static let emailPattern = pattern(#"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#)
 
-    /// A file path: a `file:` URL, a home folder, a root folder of macOS or
-    /// Unix after either separator, a home folder's child at the start of a
-    /// word, two segments under either separator, or a Windows drive or UNC
-    /// prefix.
+    /// A file path: a `file:` URL, `~/`, a macOS or Unix root folder, a
+    /// home folder's child, two segments under either separator, or a
+    /// Windows drive or UNC prefix.
     private static let pathPattern = pattern(
         #"(?i)(?:file:/+|~[/\\]|[/\\](?:Users|Applications|Volumes|Library|System|home|tmp|var|private|opt|etc)\b"#
             + #"|(?:^|[\s"'(\[<])(?:Users|home)[/\\][^\s/\\]+|/[^\s/]+/[^\s/]+|\\[^\s\\]+\\[^\s\\]+|[A-Za-z]:\\|\\\\)"#,
     )
 
-    /// The server's patterns, copied from `reports_ingest.go`; each is a
-    /// literal the tests above exercise, so one that fails to compile is a
-    /// typo in this file.
+    /// Compiles one of the patterns copied from `reports_ingest.go`.
     private static func pattern(_ source: String) -> NSRegularExpression {
         guard let expression = try? NSRegularExpression(pattern: source) else {
             preconditionFailure("the pattern \(source) does not compile")

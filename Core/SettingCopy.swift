@@ -1,7 +1,7 @@
 import Foundation
 
-/// The words Settings › Engine and Settings › Games share for a setting both
-/// can set: its title, the one line under its row, and what its (i) says.
+/// A setting's title, caption and (i) text, shared by Settings › Engine and
+/// Settings › Games.
 nonisolated struct SettingCopy: Sendable {
     let title: String
     var caption = ""
@@ -15,8 +15,7 @@ nonisolated struct SettingCopy: Sendable {
 }
 
 nonisolated extension SettingCopy {
-    /// What each renderer is for, in the words ``Renderer/guidance`` holds:
-    /// the popover Settings › Graphics and a game's Renderer row both open.
+    /// The renderer popover, from ``Renderer/guidance``.
     static func renderers(_ available: [Renderer], footnote: String? = nil) -> SettingHelp {
         SettingHelp(
             title: "Choosing a renderer",

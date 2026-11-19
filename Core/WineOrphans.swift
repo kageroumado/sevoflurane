@@ -3,20 +3,16 @@ import Foundation
 
 /// Wine processes whose wineserver is gone.
 ///
-/// A Wine process cannot outlive its wineserver usefully: every handle, window and object it
-/// holds lives in the server. An engine that notices the death ends the process itself
-/// (dormison's dead-name watch on the msync port); an engine that does not leaves it parked
-/// forever, and a crashed server, a killed harness or an older engine can leave hundreds of
-/// them. This finds them and ends them.
+/// Every handle, window and object a Wine process holds lives in its server, so without one
+/// it is parked forever unless its engine ends it (dormison's dead-name watch on the msync
+/// port). A crashed server or a killed harness can leave hundreds.
 ///
-/// A process counts as Wine's when its executable lies under one of the engine roots. Its
-/// prefix is read from its working directory, which Wine keeps inside the prefix's `drive_c`
-/// (or `dosdevices`) tree; a process whose prefix cannot be named is left alone. The prefix's
-/// wineserver is alive while it holds the write lock on `lock` in its server directory,
-/// `/tmp/.wine-<uid>/server-<dev>-<inode>`, which is the same test the loader makes before
-/// starting a server of its own.
+/// A process counts as Wine's when its executable lies under an engine root. Its prefix is
+/// read from its working directory, which Wine keeps inside the prefix's `drive_c` (or
+/// `dosdevices`) tree; a process whose prefix cannot be named is left alone. The server is
+/// alive while it holds the write lock on `lock` in `/tmp/.wine-<uid>/server-<dev>-<inode>`,
+/// the loader's own test.
 nonisolated enum WineOrphans {
-    /// One process running an engine binary with no server behind it.
     struct Orphan: Sendable, Equatable, Codable {
         var pid: pid_t
         var executable: String
@@ -25,10 +21,9 @@ nonisolated enum WineOrphans {
         var command: String
     }
 
-    /// Where engine binaries live: every managed engine.
     static let defaultRoots = [Engine.managedRoot.path]
 
-    /// Every process under `roots` whose prefix has no live wineserver, found in one pass.
+    /// Every process under `roots` whose prefix has no live wineserver.
     static func find(roots: [String] = defaultRoots) -> [Orphan] {
         var serverAlive: [String: Bool] = [:]
         return allProcessIDs().compactMap { pid -> Orphan? in
@@ -48,8 +43,8 @@ nonisolated enum WineOrphans {
         }
     }
 
-    /// Ends the orphans. There is no server to ask for an orderly exit, so it is `SIGKILL`.
-    /// Returns the ones that were still there to end.
+    /// `SIGKILL`s the orphans, since no server can ask for an orderly exit, and returns the
+    /// ones that were still there.
     @discardableResult
     static func end(_ orphans: [Orphan]) -> [Orphan] {
         orphans.filter { kill($0.pid, SIGKILL) == 0 }
@@ -73,8 +68,8 @@ nonisolated enum WineOrphans {
         return nil
     }
 
-    /// The directory the prefix's wineserver works in: `server-<dev>-<inode>` of the prefix,
-    /// lowercase hex without padding, under `/tmp/.wine-<uid>` (`init_server_dir` in ntdll).
+    /// `/tmp/.wine-<uid>/server-<dev>-<inode>` of the prefix, lowercase unpadded hex
+    /// (`init_server_dir` in ntdll).
     static func serverDirectory(forPrefix prefix: String, uid: uid_t = getuid()) -> String? {
         var info = stat()
         guard stat(prefix, &info) == 0 else { return nil }
@@ -86,15 +81,12 @@ nonisolated enum WineOrphans {
         "/tmp/.wine-\(uid)/server-\(String(device, radix: 16))-\(String(inode, radix: 16))"
     }
 
-    /// Whether a wineserver holds the prefix's lock. A prefix that no longer exists has no
-    /// server either.
     static func isServerAlive(forPrefix prefix: String) -> Bool {
         guard let directory = serverDirectory(forPrefix: prefix) else { return false }
         return isLockHeld(at: directory + "/lock")
     }
 
-    /// Whether another process holds a write lock on the file. Asking takes no lock: `F_GETLK`
-    /// only reports.
+    /// Whether another process holds a write lock on the file; `F_GETLK` takes none.
     static func isLockHeld(at path: String) -> Bool {
         let descriptor = open(path, O_RDWR)
         guard descriptor >= 0 else { return false }
@@ -145,11 +137,8 @@ nonisolated enum WineOrphans {
         return line.isEmpty ? nil : line
     }
 
-    /// The paths of the process's open files, read through `libproc` one
-    /// descriptor at a time. Only vnodes are named; sockets, pipes and kqueues
-    /// are skipped. Never `lsof`: it walks every mount and process on the Mac
-    /// and blocks uninterruptibly on a wedged file system, where this asks
-    /// the kernel only about this process's own descriptors.
+    /// The vnode paths of the process's open files, read through `libproc`. Never `lsof`: it
+    /// walks every mount and blocks uninterruptibly on a wedged file system.
     static func openFilePaths(of pid: pid_t) -> [String] {
         let bufferSize = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
         guard bufferSize > 0 else { return [] }
@@ -182,15 +171,14 @@ nonisolated enum WineOrphans {
     }
 }
 
-/// Ends orphans seen on two passes in a row, so a client caught in the moment between its
-/// start and its server's lock is never one of them.
+/// Ends orphans seen on two passes in a row, so a client caught between its start and its
+/// server's lock is spared.
 nonisolated struct WineOrphanReaper: Sendable {
     private var suspects: Set<pid_t> = []
 
     init() {}
 
-    /// One pass over `found`: returns the orphans to end now, the ones the previous pass
-    /// saw too, and remembers the rest for the next pass.
+    /// Returns the orphans the previous pass also saw, and remembers `found` for the next.
     mutating func confirm(_ found: [WineOrphans.Orphan]) -> [WineOrphans.Orphan] {
         let confirmed = found.filter { suspects.contains($0.pid) }
         suspects = Set(found.map(\.pid))

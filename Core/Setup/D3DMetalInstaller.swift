@@ -4,31 +4,22 @@ import Foundation
 /// Adds Apple's D3DMetal to a managed engine from the user's own copy of the
 /// Game Porting Toolkit.
 ///
-/// Apple's evaluation environment is not ours to redistribute, so the managed
-/// engine ships without it and the user points the app at the disk image they
-/// downloaded — the same arrangement Whisky uses. What lands on disk is what
-/// Apple's own Read Me says to install: `redist/lib/` copied over the engine's
-/// `lib/`, which is the framework, the Windows DLLs, and the Wine unix
-/// libraries that bind them.
+/// Apple's evaluation environment is not redistributable, so the user points
+/// the app at the disk image they downloaded, as with Whisky. What lands is
+/// what Apple's Read Me installs: `redist/lib/` (the framework, the Windows
+/// DLLs and the Wine unix libraries that bind them).
 ///
-/// More than one version can be installed at once. They live side by side
-/// under `d3dmetal/<version>/`, keeping Apple's own directory shape — the
-/// `.so` files there are symlinks into `../../external/`, so a layout that
-/// splits them from the framework leaves them dangling. Activating a version
-/// copies those two directories into the Wine tree, where the links resolve
-/// exactly as Apple intends.
-///
-/// The newest installed version is the one a game gets unless the user says
-/// otherwise: Apple ships releases and betas in parallel, and the beta is
-/// where the Direct3D 12 work lands.
+/// Versions live side by side under `d3dmetal/<version>/` in Apple's own
+/// shape: the `.so` files are symlinks into `../../external/`, so splitting
+/// them from the framework leaves them dangling. The newest installed version
+/// is the default, because the betas are where the Direct3D 12 work lands.
 nonisolated enum D3DMetalInstaller {
     struct Installed: Equatable, Sendable, Comparable {
         /// As Apple names it: "3.0", "4.0 beta 2".
         let version: String
         let root: URL
 
-        /// Newest last. A beta of the same number sorts *after* its release,
-        /// because that is the order the work lands in.
+        /// Newest last; a beta sorts after its release of the same number.
         static func < (lhs: Installed, rhs: Installed) -> Bool {
             lhs.version.compare(rhs.version, options: .numeric) == .orderedAscending
         }
@@ -50,11 +41,9 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// Where toolkits live: one store for every engine, in an engine's layout
-    /// (`d3dmetal/<version>`), and the versions CrossOver is pointed at through
-    /// ``CrossOverShadow``. A managed engine holds only the version staging places in its
-    /// Wine tree, so an engine that arrives new — an update, the copy an app carries — finds
-    /// the user's toolkits already there, and none ships with an engine.
+    /// The one toolkit store for every engine, in an engine's layout
+    /// (`d3dmetal/<version>`), so a newly installed engine finds the user's
+    /// toolkits; CrossOver reaches it through ``CrossOverShadow``.
     static let sharedRoot = AppIdentity.supportFolder
         .appendingPathComponent("D3DMetal")
 
@@ -78,8 +67,7 @@ nonisolated enum D3DMetalInstaller {
         /// How many engines' copies went to the Trash.
         var trashedFrom = 0
 
-        /// One line for what moved and one for what went to the Trash, each
-        /// version named once however many engines carried it.
+        /// One line for what moved and one for what went to the Trash.
         var logLines: [String] {
             var lines: [String] = []
             if !moved.isEmpty {
@@ -102,10 +90,8 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// Empties the toolkits engines carry in their own `d3dmetal/` into the store: engines
-    /// installed before the store was shared, and releases that shipped one. A version the
-    /// store lacks is moved into it; the engine's copy of one it already has goes to the
-    /// Trash, since the store's is the one every lookup reads.
+    /// Moves the toolkits engines carry in their own `d3dmetal/` into the
+    /// store, trashing an engine's copy of a version the store already has.
     @discardableResult
     static func adoptEngineToolkits(from engines: [URL], into store: URL = store) -> Adoption {
         let manager = FileManager.default
@@ -161,17 +147,13 @@ nonisolated enum D3DMetalInstaller {
         installed.root.appendingPathComponent("lib/wine/x86_64-windows")
     }
 
-    /// Puts a version's macOS side into the Wine tree that loads it: the
-    /// framework beside the `.so` stubs that link to it, at the relative
-    /// paths Apple's own instructions assume (`ditto redist/lib/ .`).
-    ///
-    /// The stubs are symlinks to `lib/external/libd3dshared.dylib`, so the
-    /// copy in the tree is the D3DMetal a game runs whatever the picker
-    /// says — every boot re-asserts it through ``EngineRenderers/stage``.
+    /// Copies a version's macOS side (the framework and the `.so` stubs that
+    /// link to it) into the Wine tree at Apple's relative paths. The tree's
+    /// copy is what a game runs; every boot re-asserts it through
+    /// ``EngineRenderers/stage``.
     static func place(_ installed: Installed, inEngine engine: URL) throws {
         let wineLib = engine.appendingPathComponent("wine/lib")
-        // A store that is not an engine has no Wine tree to populate: the
-        // shadow tree points at the version's own directory instead.
+        // The store has no Wine tree; its shadow tree points at the version.
         guard FileManager.default.fileExists(
             atPath: engine.appendingPathComponent("wine").path,
         ) else { return }
@@ -189,10 +171,8 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// Whether the Wine tree holds this version: the bridge dylib and the
-    /// framework binary are the two files that differ between versions, and
-    /// both are compared byte for byte. A tree swapped by hand answers false
-    /// and is put right at the next boot.
+    /// Whether the Wine tree holds this version, comparing byte for byte the
+    /// two files that differ between versions.
     static func isPlaced(_ installed: Installed, inEngine engine: URL) -> Bool {
         let manager = FileManager.default
         let tree = engine.appendingPathComponent("wine/lib/external")
@@ -213,15 +193,13 @@ nonisolated enum D3DMetalInstaller {
 
     // MARK: - On-disk truth
 
-    /// The version whose **macOS half** is in the Wine tree right now, matched
-    /// by content — the truth the picker's record is checked against.
+    /// The version whose **macOS half** is in the Wine tree, matched by content.
     static func placedMacOSVersion(inEngine engine: URL) -> Installed? {
         placementCandidates(inEngine: engine).first { isPlaced($0, inEngine: engine) }
     }
 
     /// The version whose **Windows half** (the PE DLLs) fills the engine's
-    /// canonical tree, matched by content. `nil` when nothing matches — a
-    /// crossed tree, or one a non-D3DMetal renderer staged.
+    /// tree, matched by content, or `nil` when none matches.
     static func placedWindowsVersion(inEngine engine: URL) -> Installed? {
         let canonical = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
         let manager = FileManager.default
@@ -240,9 +218,7 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// The versions a Wine tree's contents are matched against: any the
-    /// engine carries in its own `d3dmetal/`, then the shared store's, which
-    /// is where an engine's toolkits are moved to.
+    /// The engine's own `d3dmetal/` versions, then the shared store's.
     private static func placementCandidates(inEngine engine: URL) -> [Installed] {
         let own = installed(inEngine: engine)
         return own + installed(inEngine: store).filter { shared in
@@ -250,8 +226,8 @@ nonisolated enum D3DMetalInstaller {
         }
     }
 
-    /// What is actually in the tree, both halves. `halvesAgree` false is the
-    /// crossed state that silently kills the client 14 s into boot.
+    /// Both halves in the tree. `halvesAgree` false is the crossed state that
+    /// silently kills the client 14 s into boot.
     struct Placement: Equatable {
         let macOS: String?
         let windows: String?
@@ -265,15 +241,13 @@ nonisolated enum D3DMetalInstaller {
         )
     }
 
-    /// The bridge dylib inside a managed engine's Wine tree — the file the
-    /// `.so` stubs resolve to, and the one ntdll opens by path.
+    /// The bridge dylib the `.so` stubs resolve to and ntdll opens by path.
     static func bridgeLibrary(inEngine engine: URL) -> URL {
         engine.appendingPathComponent("wine/lib/external/libd3dshared.dylib")
     }
 
-    /// The version a game gets: the user's choice when it is still
-    /// installed, otherwise the newest — unless they have asked for the
-    /// engine's own, which is a choice and not an absence.
+    /// The version a game gets: the user's choice when still installed,
+    /// otherwise the newest, or `nil` when they chose the engine's own.
     static func active(inEngine engine: URL, preferences: UserDefaults = Preferences.shared) -> Installed? {
         let chosen = preferences.string(forKey: versionKey)
         if chosen == engineOwn { return nil }
@@ -296,13 +270,9 @@ nonisolated enum D3DMetalInstaller {
 
     // MARK: - Installing
 
-    /// Copies D3DMetal out of `source` — a Game Porting Toolkit disk image, a
-    /// mounted volume, or an unpacked copy of either — into `engine`.
-    /// Answers the version it installed.
-    ///
-    /// Installing chooses nothing: with no choice recorded the newest version
-    /// is the active one, whichever of two parallel downloads lands last. A
-    /// caller installing one file the user picked records it with
+    /// Copies D3DMetal out of `source` (a toolkit disk image, a mounted
+    /// volume, or an unpacked copy) into `engine` and answers the version.
+    /// Installing chooses nothing; a caller records a pick with
     /// ``choose(version:)``.
     @concurrent
     static func install(from source: URL, intoEngine engine: URL) async throws -> Installed {
@@ -317,8 +287,7 @@ nonisolated enum D3DMetalInstaller {
             attached.append(volume)
             searchRoot = volume
         }
-        // The download nests one image inside another: the toolkit carries
-        // "Evaluation environment for Windows games <version>.dmg".
+        // The toolkit nests "Evaluation environment for Windows games <version>.dmg".
         if redistLib(under: searchRoot) == nil,
            let inner = innerImage(under: searchRoot) {
             let volume = try await attach(inner)
@@ -339,23 +308,21 @@ nonisolated enum D3DMetalInstaller {
                 try manager.removeItem(at: destination)
             }
             try manager.createDirectory(at: destination, withIntermediateDirectories: true)
-            // Apple's own instruction is `ditto redist/lib/ .`, so the tree is
-            // kept whole rather than sorted into pieces.
+            // Kept whole, per Apple's `ditto redist/lib/ .`.
             try manager.copyItem(at: lib, to: destination.appendingPathComponent("lib"))
         } catch {
             try? manager.removeItem(at: destination)
             throw InstallError.copyFailed(error.localizedDescription)
         }
-        // Staging both halves is the next spawn's job (``EngineRenderers/stage``),
-        // so an install that lands mid-session cannot cross this version's
-        // dylib with the running tree's DLLs.
+        // Never stage here: the next spawn stages both halves
+        // (``EngineRenderers/stage``), so a mid-session install cannot cross
+        // this dylib with the running tree's DLLs.
         return Installed(version: version, root: destination)
     }
 
     // MARK: - Reading the image
 
-    /// `redist/lib` inside a mounted toolkit, identified by the framework
-    /// rather than by a path Apple could rename.
+    /// `redist/lib` inside a mounted toolkit, identified by the framework.
     private static func redistLib(under root: URL) -> URL? {
         let candidate = root.appendingPathComponent("redist/lib")
         let framework = candidate.appendingPathComponent("external/D3DMetal.framework")
@@ -399,9 +366,7 @@ nonisolated enum D3DMetalInstaller {
         return URL(fileURLWithPath: mount)
     }
 
-    /// Waits: the images are nested, so the outer one cannot come down until
-    /// the inner one has, and an unmounted image left behind is a volume in
-    /// the user's Finder that this app put there.
+    /// Waits, because the outer image cannot detach until the inner one has.
     private static func detach(_ volume: URL) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
@@ -418,8 +383,8 @@ nonisolated enum D3DMetalInstaller {
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
         for item in items {
             let target = destination.appendingPathComponent(item.lastPathComponent)
-            // Unconditional: what is already there can be a symlink whose
-            // target does not exist yet, and `fileExists` follows symlinks.
+            // Unconditional: `fileExists` follows symlinks, and the target can
+            // be a dangling one.
             try? manager.removeItem(at: target)
             try manager.copyItem(at: item, to: target)
         }

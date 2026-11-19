@@ -1,37 +1,29 @@
 import Foundation
 
-/// One way Steam can start an app, as `SteamClient.Apps.GetLaunchOptionsForApp`
-/// lists them: Play, a benchmark tool, a compatibility-mode variant.
+/// One way Steam can start an app, as `GetLaunchOptionsForApp` lists them: Play, a benchmark tool,
+/// a compatibility variant.
 nonisolated struct LaunchOption: Equatable, Sendable {
     /// What Steam is answered with: `ContinueGameAction(actionID, String(index))`.
     let index: Int
-    /// The label Steam shows for it, in words.
+    /// The label Steam shows for it.
     let description: String
     /// Steam's `ELaunchOptionType`; 0 is the plain launch.
     let type: Int
 }
 
-/// Steam's "how should this app start" question: the options it lists, the
-/// answer it remembers per app, and the scripts that answer it.
+/// Steam's "how should this app start" question: its options, its per-app remembered answer, and
+/// the scripts that answer it.
 ///
-/// Steam asks through `RegisterForGameActionUserRequest` with the request
-/// `ShowLaunchOption`, and its own UI answers from a remembered choice when the
-/// user once picked "Forever", otherwise with a dialog. The remembered choice
-/// is a string under a `SteamClient.Storage` key built from the app id and a
-/// hash of the options' JSON, so it is only valid while the options are the
-/// same ones. Both the key and the hash are Steam's, mirrored here so the app
-/// can honor and clear the same memory Steam's dialog writes.
+/// Steam asks through `RegisterForGameActionUserRequest` with `ShowLaunchOption`; its UI answers
+/// from the choice remembered after "Forever", else with a dialog. That choice lives under a
+/// `SteamClient.Storage` key built from the app id and a hash of the options' JSON, both mirrored
+/// here so the app can honor and clear it.
 nonisolated enum LaunchOptions {
-    /// The options in an app's list, in index order, each labeled in words.
-    ///
-    /// Steam sends some descriptions as localization tokens; one of those
-    /// takes the option's own description from `descriptions` (the app's
-    /// `appinfo.vdf`, by index), read only when a token is there, and
-    /// otherwise reads as ``label(_:game:)`` makes it. Two options left with
-    /// one label are told apart by their number in the list. The JSON itself
-    /// is never changed: Steam's remembered choice is keyed by a hash of it.
-    /// An entry Steam did not number is skipped; malformed JSON is an empty
-    /// list.
+    /// The options in index order, labeled in words. A localization token takes the option's
+    /// description from `descriptions` (the app's `appinfo.vdf`, read only when a token is
+    /// present), else ``label(_:game:)``; repeated labels get their list number. Never alter the
+    /// JSON: Steam keys the remembered choice by its hash. Entries without `nIndex` are skipped;
+    /// malformed JSON is an empty list.
     static func parse(_ json: String, descriptions: () -> [Int: String] = { [:] }) -> [LaunchOption] {
         guard let data = json.data(using: .utf8),
               let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
@@ -52,11 +44,9 @@ nonisolated enum LaunchOptions {
         return distinguished(options)
     }
 
-    /// A description in words. Steam sends some as localization tokens:
-    /// `#Steam_LaunchOption_Game` is Steam's own "Play <game>", and any other
-    /// loses its marker and its `Steam_` and `LaunchOption_` prefixes, with
-    /// the underscores read as spaces (`#LaunchOption_Play_Safe_Mode` is
-    /// "Play Safe Mode").
+    /// A description in words. `#Steam_LaunchOption_Game` is "Play <game>"; any other token drops
+    /// `#`, `Steam_` and `LaunchOption_` and reads underscores as spaces
+    /// (`#LaunchOption_Play_Safe_Mode` is "Play Safe Mode").
     static func label(_ description: String, game: String? = nil) -> String {
         guard description.hasPrefix("#") else { return description }
         var token = Substring(description.dropFirst())
@@ -70,8 +60,8 @@ nonisolated enum LaunchOptions {
         return token.replacingOccurrences(of: "_", with: " ")
     }
 
-    /// The options with every repeated label followed by the option's number
-    /// in the list, counted from 1 as `sevo app launch --option` counts them.
+    /// Repeated labels followed by the option's list number, counted from 1 as `sevo app launch
+    /// --option` counts.
     static func distinguished(_ options: [LaunchOption]) -> [LaunchOption] {
         let counts = Dictionary(options.map { ($0.description, 1) }, uniquingKeysWith: +)
         return options.enumerated().map { number, option in
@@ -84,8 +74,7 @@ nonisolated enum LaunchOptions {
         }
     }
 
-    /// The index Steam's dialog would start with on its own: the stored
-    /// answer, when there is one and it still names an option in the list.
+    /// The stored answer, when it still names an option in the list.
     static func rememberedIndex(_ stored: String?, among options: [LaunchOption]) -> Int? {
         guard let stored, let index = Int(stored.trimmingCharacters(in: .whitespaces)),
               options.contains(where: { $0.index == index }) else { return nil }
@@ -99,9 +88,8 @@ nonisolated enum LaunchOptions {
 
     // MARK: - Steam's memory
 
-    /// The `SteamClient.Storage` key Steam keeps an app's remembered launch
-    /// option under, for the options list exactly as `GetLaunchOptionsForApp`
-    /// serializes it.
+    /// The `SteamClient.Storage` key for an app's remembered option, given the options JSON exactly
+    /// as `GetLaunchOptionsForApp` serializes it.
     static func rememberedKey(appID: Int, optionsJSON: String) -> String {
         "Apps\\\(appID)\\DefaultLaunchOption\\\(String(hash(optionsJSON), radix: 16))"
     }
@@ -116,8 +104,7 @@ nonisolated enum LaunchOptions {
         return UInt32(bitPattern: hash)
     }
 
-    /// The same key as a JavaScript function `(appid, options) -> key`, for
-    /// the scripts that read or clear the memory where the options are.
+    /// The same key as a JavaScript function `(appid, options) -> key`.
     static let rememberedKeyScript = """
     (function (appid, options) {
       var text = JSON.stringify(options), hash = 0;
@@ -142,9 +129,8 @@ nonisolated enum LaunchOptions {
         "SteamClient.Apps.CancelGameAction(\(actionID)); \"sent\""
     }
 
-    /// Starts an app after clearing the option Steam remembers for it, so the
-    /// question is asked again rather than answered from memory. Answers
-    /// `"started"` once the launch is requested.
+    /// Starts an app after clearing its remembered option, so Steam asks again; answers
+    /// `"started"`.
     static func forgetAndRunScript(appID: Int) -> String {
         """
         (function () {
@@ -161,12 +147,9 @@ nonisolated enum LaunchOptions {
         """
     }
 
-    /// Starts an app and answers its `ShowLaunchOption` request with `option`,
-    /// from a context with no app to ask the user: the client's own
-    /// `SharedJSContext`. The remembered option is cleared first, so Steam's
-    /// own UI has nothing to answer with ahead of this script. The
-    /// registrations leave with the answer, or after two minutes for a launch
-    /// that never asks.
+    /// Starts an app and answers its `ShowLaunchOption` request with `option`, from the client's
+    /// `SharedJSContext`. The remembered option is cleared first so Steam's UI cannot answer ahead;
+    /// the registration ends with the answer or after two minutes.
     static func runAnsweringScript(appID: Int, option: Int) -> String {
         """
         (function () {
@@ -196,7 +179,7 @@ nonisolated enum LaunchOptions {
         """
     }
 
-    /// The options list for an app, as JSON, from the client's own context.
+    /// The options list for an app, as JSON.
     static func listScript(appID: Int) -> String {
         "SteamClient.Apps.GetLaunchOptionsForApp(\(appID)).then(function (options) { return JSON.stringify(options || []); })"
     }

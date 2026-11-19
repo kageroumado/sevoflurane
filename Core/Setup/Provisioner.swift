@@ -3,14 +3,11 @@ import Observation
 import os
 
 /// The idempotent provisioning state machine behind the first-run assistant
-/// and Settings › Repair. Every stage is
-/// detect → perform → re-detect; quitting mid-setup and relaunching continues
-/// where it left off because detection, not stored progress, decides what
-/// still needs doing.
+/// and Settings › Repair. Every stage is detect → perform → re-detect, so a
+/// relaunch mid-setup continues where it left off.
 ///
-/// Policy lives here; the machine-touching effects live behind
-/// ``SetupEnvironment`` so the DEBUG onboarding harness can run the same flow
-/// against a fixture machine.
+/// Machine-touching effects live behind ``SetupEnvironment`` so the DEBUG
+/// onboarding harness can run the same flow against a fixture machine.
 @MainActor
 @Observable
 final class Provisioner {
@@ -21,8 +18,7 @@ final class Provisioner {
         case done
     }
 
-    /// Where a run is in the fixed stage sequence, for the wizard's overall
-    /// progress bar. Stages that detection skips flash past.
+    /// Where a run is in the fixed stage sequence, for the wizard's progress bar.
     struct Stage: Equatable {
         let index: Int
     }
@@ -33,15 +29,11 @@ final class Provisioner {
     /// Progress within the current stage (the engine download), or `nil`
     /// where none is measurable.
     private(set) var stageFraction: Double?
-    /// An engine tarball to install in place of a download — chosen in the
-    /// wizard or Settings by someone who has the file, the release asset
-    /// saved by hand on a Mac the release feed does not reach. The engine
-    /// stage consumes it.
+    /// An engine tarball the engine stage installs in place of a download.
     var engineTarball: URL?
-    /// Whether this run installs the whole dependency catalog rather than the
-    /// required entries alone. `nil` reads
-    /// ``BottleDependencies/installsEverything`` when the stage runs, which is
-    /// what the wizard needs: its switch is pressed after this object exists.
+    /// Whether this run installs the whole dependency catalog. `nil` reads
+    /// ``BottleDependencies/installsEverything`` when the stage runs, because
+    /// the wizard's switch is pressed after this object exists.
     var installsEveryDependency: Bool?
     private let environment: any SetupEnvironment
 
@@ -51,9 +43,8 @@ final class Provisioner {
 
     #if DEBUG
         /// A provisioner frozen mid-story, for the gallery's Repair pane. The
-        /// environment comes from the caller so this file stays buildable
-        /// where the harness is not — the `sevo` target compiles it without
-        /// `SetupDryRun.swift`.
+        /// caller passes the environment because the `sevo` target compiles
+        /// this file without `SetupDryRun.swift`.
         convenience init(
             previewActivity: Activity,
             detection: SetupDetection? = nil,
@@ -65,41 +56,30 @@ final class Provisioner {
         }
     #endif
 
-    /// Whether effects are simulated — the wizard badges itself so a
-    /// screenshot can never be mistaken for a real run.
+    /// Whether effects are simulated; the wizard badges itself so a
+    /// screenshot is never mistaken for a real run.
     var isDryRun: Bool {
         environment.isSimulation
     }
 
-    /// True when the app cannot reach a working library without the wizard:
-    /// no usable engine, or no Steam in the bottle we actually drive.
-    ///
-    /// The bottle's *name* matters: every path below this — `SteamBottle.root`,
-    /// the launch lines, the kill ladder — addresses `SteamBottle.name`, so a
-    /// Steam sitting in some other bottle is not a provisioned machine.
+    /// True when there is no usable engine, or no Steam in the bottle named
+    /// `SteamBottle.name`, the one every launch path addresses.
     var needsSetup: Bool {
         guard detection != nil else { return false }
         let ours = bottleRecord(named: environment.bottleName)?.hasSteam == true
         return !(detection?.hasEngine == true && ours)
     }
 
-    /// The record for `name` under the *active engine's* bottle root. A
-    /// CrossOver bottle and a managed prefix can share a name, and only the
-    /// active engine's one counts — matching by name alone let CrossOver's
-    /// "Steam" satisfy a managed-engine check and skip provisioning
-    /// entirely.
-    ///
-    /// The roots are compared as paths: `appendingPathComponent` gives a
-    /// directory URL a trailing slash only when that directory is already on
-    /// disk, so on a Mac whose bottle root does not exist yet the one
-    /// directory spelled two ways is two unequal URLs.
+    /// The record for `name` under the active engine's bottle root. Never
+    /// match by name alone: CrossOver's "Steam" would satisfy a managed-engine
+    /// check and skip provisioning.
     private func bottleRecord(named name: String) -> SetupDetection.Bottle? {
         ownBottles.first { $0.name == name }
     }
 
-    /// The bottles under the active engine's root: the ones a name chosen in
-    /// the wizard can mean. CrossOver's bottles and a managed engine's live
-    /// in different folders and can share names, "Steam" above all.
+    /// The bottles under the active engine's root. Roots are compared as
+    /// paths: `appendingPathComponent` adds a trailing slash only for a
+    /// directory already on disk, so a root not yet created compares unequal.
     var ownBottles: [SetupDetection.Bottle] {
         let root = environment.bottlesRoot.standardizedFileURL.path
         return detection?.bottles.filter {
@@ -107,28 +87,22 @@ final class Provisioner {
         } ?? []
     }
 
-    /// Whether what still needs doing starts with the engine: none on disk
-    /// and the built-in one wanted. The wizard offers the file route only
-    /// then — a failure past the engine has nothing a tarball fixes.
+    /// Whether no engine is on disk and the built-in one is wanted: the only
+    /// case where the wizard offers installing from a file.
     var engineInstallPending: Bool {
         guard let detection else { return false }
         return detection.managedEngineVersions.isEmpty
             && (detection.usableCrossOver == nil || environment.wantsManagedEngine)
     }
 
-    /// Names the bottle the remaining stages address. The wizard asks only
-    /// where detection found more than one Steam; a dry run's answer stays
-    /// inside the fixture.
+    /// Names the bottle the remaining stages address, and answers whether the
+    /// choice moved.
     ///
-    /// A client running in another bottle is stopped first, through
-    /// `stopClient`, which is the daemon's stop and pauses its supervision:
-    /// every stop rung aims at the bottles the preference and the boot record
-    /// name, so the stop has to land while the preference still names the
-    /// bottle that client runs in. `stopClient` narrates through its argument
-    /// and answers why it could not stop, and then the choice stays where it
-    /// was and the pass fails with that reason. The caller starts the client
-    /// again once the new bottle is provisioned. Answers whether the choice
-    /// moved.
+    /// A client in another bottle is stopped first through `stopClient` (the
+    /// daemon's stop), while the preference still names its bottle, because
+    /// every stop rung aims at the bottles the preference and boot record
+    /// name. When `stopClient` answers a refusal, the choice stays and the
+    /// pass fails with it. The caller restarts the client afterwards.
     @discardableResult
     func chooseBottle(
         named name: String,
@@ -170,15 +144,10 @@ final class Provisioner {
 
     // MARK: - Stage actions
 
-    /// Creates the Steam bottle if missing, silent-installs the Steam
-    /// bootstrapper, then runs the headless full-client update. Each stage is
-    /// skipped when detection says its product already exists.
-    ///
-    /// `rebuildingSteam` runs the two Steam stages over a bottle detection
-    /// already calls provisioned: the bootstrapper is fetched and run again
-    /// and the headless update follows it, which is how a client whose own
-    /// files are damaged is made whole. Rosetta, the engine and the prefix
-    /// stay as they are, and so do the games and saves inside it.
+    /// Runs every stage whose product detection does not find.
+    /// `rebuildingSteam` reruns the bootstrapper and headless update over a
+    /// provisioned bottle to repair damaged client files, leaving Rosetta,
+    /// the engine, the prefix and its games and saves as they are.
     private func provisionSteam(rebuildingSteam: Bool) async {
         guard detection != nil else { return }
         let interval = PerfProbe.setup.beginInterval("Provision")
@@ -210,8 +179,7 @@ final class Provisioner {
         stageFraction = nil
     }
 
-    /// Re-runs a failed provisioning pass. Detection decides what still needs
-    /// doing, so only the stage that failed (and those after it) run again.
+    /// Re-runs a failed pass from the stage that failed.
     func retry() async {
         guard case .failed = activity else { return }
         activity = .idle
@@ -232,10 +200,8 @@ final class Provisioner {
             beginStage(6, String(localized: "Installing \(dependency.name)…"))
             let result = await environment.installDependency(dependency)
             guard result.succeeded, environment.isDependencyInstalled(dependency) else {
-                // A bottle without a font pack or a legacy runtime still runs
-                // Steam and its games, so only a required entry is worth
-                // ending the whole setup over; the rest are installable again
-                // from Settings › Engine.
+                // Only a required entry ends setup; the rest can be
+                // installed later from Settings › Engine.
                 guard dependency.required else {
                     SetupLog.log("provision: \(dependency.name) did not install: "
                         + "\(result.output.suffix(200))")
@@ -246,18 +212,15 @@ final class Provisioner {
         }
     }
 
-    /// The whole stack is x86_64; without Rosetta neither cxbottle nor the
-    /// client runs. `softwareupdate` shows Apple's own progress; nothing of
-    /// ours to configure.
+    /// The whole stack is x86_64, so nothing runs without Rosetta.
     private func installRosettaIfMissing() async throws {
         guard detection?.rosetta == false else { return }
         beginStage(1, "Installing Rosetta…")
         SetupLog.log("provision: installing Rosetta")
         let result = await environment.installRosetta()
         guard result.succeeded else {
-            // A standard (non-administrator) macOS account can be refused
-            // here; the one honest exit is naming the command an admin can
-            // run, in the wizard instead of a forum.
+            // A standard (non-administrator) account can be refused here, so
+            // the error names the command an administrator can run.
             throw ProvisionError(
                 String(localized: "Rosetta install failed: \(result.output.suffix(200)). If this account isn't an administrator, run \"softwareupdate --install-rosetta --agree-to-license\" in Terminal as one, then Try Again."),
             )
@@ -265,10 +228,8 @@ final class Provisioner {
         await refreshDetection()
     }
 
-    /// The managed engine is downloaded from the manifest when nothing else
-    /// can run Steam — or when the stored engine
-    /// choice asks for it despite a usable CrossOver, which is how the
-    /// Engine pane's "Built-in engine (downloads on switch)" option lands.
+    /// Installs the managed engine when nothing else can run Steam or the
+    /// stored engine choice asks for it despite a usable CrossOver.
     private func installEngineIfMissing() async throws {
         guard let detection else { return }
         let managedWanted = detection.usableCrossOver == nil
@@ -295,11 +256,9 @@ final class Provisioner {
         }
     }
 
-    /// Installs an engine already on disk — a release tarball or a tree built
-    /// here — outside the provisioning sequence, which is Settings › Engine's
-    /// route for adding a release by hand. Narrates through `activity` while
-    /// it runs and rests at `.idle` after; the version installed comes back,
-    /// and the caller decides whether to switch to it.
+    /// Installs an engine tarball or tree from disk outside the provisioning
+    /// sequence (Settings › Engine), answering the version installed; the
+    /// caller decides whether to switch to it.
     func installEngine(from source: URL) async throws -> String {
         guard !isWorking else {
             throw ProvisionError(InterfaceCopy.localized("setup is already running"))
@@ -317,13 +276,12 @@ final class Provisioner {
         return result.output
     }
 
-    /// Setup is installing or repairing something: an engine, the bottle, the client.
+    /// Setup is installing or repairing something.
     var isWorking: Bool {
         if case .working = activity { true } else { false }
     }
 
-    /// The engine stage's narration: each new phase is logged once and shown,
-    /// the fraction rides along for the progress bar.
+    /// The engine stage's narration: each new phase is logged once.
     private func engineProgress() -> @Sendable (String, Double?) -> Void {
         { [weak self] phase, fraction in
             DispatchQueue.main.async {
@@ -340,10 +298,9 @@ final class Provisioner {
     }
 
     private func createBottleIfMissing(_ bottleName: String) async throws {
-        // A bottle with no Steam in it holds nothing to keep, so one that is
-        // unfit is set aside and built again: one whose boot never finished,
-        // or one Steam's installer failed in, which fails the same way when
-        // the installer runs into it again.
+        // A Steam-less bottle whose boot never finished, or that Steam's
+        // installer failed in, is set aside and rebuilt: the installer would
+        // fail the same way again.
         let rebuilding = bottleRecord(named: bottleName).map {
             !$0.hasSteam && (!environment.bottleIsComplete(named: bottleName)
                 || environment.steamInstallerFailed(inBottle: bottleName))
@@ -406,13 +363,9 @@ final class Provisioner {
         }
     }
 
-    /// Bootstrapper → full client, no login needed (the lancache-prefill
-    /// trick). On a bottle whose client is unfinished this is the update pass
-    /// — `-forcesteamupdate -forcepackagedownload` brings a client of any age
-    /// up to current. A complete client is left to update itself: the
-    /// updater would run inside the bottle of the client that is up, and
-    /// that client's own updater owns the same files. `force` is the rebuild,
-    /// which stops the client first.
+    /// Bootstrapper → full client with no login (the lancache-prefill trick).
+    /// A complete client is left to update itself, since its own updater owns
+    /// the same files; `force` is the rebuild, which stops the client first.
     private func updateClient(inBottle bottleName: String, force: Bool) async throws {
         guard force || !clientFullyUpdated(inBottle: bottleName) else { return }
         beginStage(
@@ -421,14 +374,11 @@ final class Provisioner {
                 ? "Updating Steam…"
                 : "Downloading Steam (this is the long step)…",
         )
-        // The CDN's bootstrapper is old enough that its first update replaces
-        // the updater itself, and the new updater then wants the separate
-        // win64 client package. One pass leaves that package — hundreds of
-        // megabytes behind an updater window — for the user's first launch
-        // to download; looping until the win64 manifest lands absorbs it here,
-        // where "Updating Steam…" is already on screen. Passes continue
-        // while each one moves bytes into `package/`, because a small fixed
-        // cap gives up mid-download on a slow switch.
+        // The CDN bootstrapper's first update replaces the updater, which
+        // then wants the separate win64 package (hundreds of MB); looping
+        // until its manifest lands keeps that download out of first launch.
+        // Passes continue while each moves bytes into `package/`, because a
+        // small fixed cap gives up mid-download on a slow switch.
         var lastPayload = packagePayloadBytes(inBottle: bottleName)
         for pass in 1 ... 6 {
             if pass > 1 {
@@ -452,9 +402,8 @@ final class Provisioner {
                 leavesNothingToStart: true,
             )
         }
-        // The tree is there with packages staged: the client's own
-        // bootstrapper applies them on its first launch, so an incomplete
-        // headless pass is a note, never a wall.
+        // The client applies staged packages at first launch, so an
+        // incomplete headless pass is not a failure.
         SetupLog.log("provision: update incomplete after the headless passes — "
             + "the client applies the staged packages at first launch")
     }
@@ -465,8 +414,7 @@ final class Provisioner {
             .appendingPathComponent("Steam.exe").path
     }
 
-    /// Bytes sitting in the client's `package/` staging directory — the
-    /// updater's visible progress between self-replacements.
+    /// Bytes in the client's `package/` staging directory.
     private func packagePayloadBytes(inBottle name: String) -> Int64 {
         let bottle = environment.bottlesRoot.appendingPathComponent(name)
         let package = SteamBottle.steamRoot(inBottle: bottle)
@@ -481,9 +429,8 @@ final class Provisioner {
         }
     }
 
-    /// Whether the bottle's client is current enough that a launch goes
-    /// straight through: the win64 package manifest is what the self-updated
-    /// updater installs last. A dry run has no bottle on disk to ask.
+    /// Whether the client is fully updated: the win64 package manifest is the
+    /// last thing the updater installs.
     private func clientFullyUpdated(inBottle name: String) -> Bool {
         guard !environment.isSimulation else {
             return steamPresent(inBottle: name)
@@ -495,32 +442,26 @@ final class Provisioner {
         return FileManager.default.fileExists(atPath: manifest.path)
     }
 
-    /// Applies the idempotent bottle configuration every adoption gets —
-    /// today the tray suppression; renderer/msync knobs land here too.
-    ///
-    /// Dormison's Mac driver reads `Mac Driver\StatusItems` and, off, hands
-    /// Steam's tray icon to explorer.exe's own systray window, which the
-    /// Explorer tray values keep hidden: no status item ever appears.
-    /// CrossOver's driver makes one regardless, and
-    /// `BottleSupervisor.suppressWineTray` removes it once the client is up.
+    /// Applies the idempotent bottle configuration: tray suppression, the SDL
+    /// bus value, the GPU registry entry and the graphics files. CrossOver's
+    /// driver ignores the tray values, so `BottleSupervisor.suppressWineTray`
+    /// removes its status item once the client is up.
     func configureBottle(named name: String) async {
-        // Leaves `activity` alone: the wizard's Continue button gates on
-        // `.done`, which this reassert must not overwrite.
+        // Never touches `activity`: the wizard's Continue button gates on `.done`.
         await environment.configureBottle(named: name)
     }
 
-    /// The quit's half of setup: a stage still running has Wine processes in
-    /// the bottle that nothing else owns, so they end with the app.
+    /// Ends the bottle's Wine processes when the app quits mid-stage, since
+    /// nothing else owns them.
     func endForQuit() async {
         guard isWorking else { return }
         SetupLog.log("provision: quitting mid-setup — ending the bottle's processes")
         await environment.endWineProcesses(inBottle: environment.bottleName)
     }
 
-    /// The wizard's whole sequence: install Steam, then apply the idempotent
-    /// bottle configuration the boot path also reasserts. The bottle is held
-    /// (``ProvisioningLease``) from the first stage to the last registry
-    /// write, so the daemon starts no client in it meanwhile.
+    /// The wizard's whole sequence: install Steam, then configure the bottle.
+    /// The bottle is held (``ProvisioningLease``) throughout so the daemon
+    /// starts no client in it.
     func provisionAndConfigure(rebuildingSteam: Bool = false) async {
         holdBottle()
         defer { releaseBottle() }
@@ -576,9 +517,8 @@ final class Provisioner {
 
     private struct ProvisionError: Error, CustomStringConvertible {
         let description: String
-        /// Whether the stage that threw leaves nothing to start: no engine,
-        /// no bottle, no Steam in it. The client start is held until such a
-        /// failure is retried or the user asks for it anyway.
+        /// Whether the failed stage leaves no engine, bottle or Steam, which
+        /// holds the client start until a retry or the user overrides it.
         let leavesNothingToStart: Bool
 
         init(_ description: String, leavesNothingToStart: Bool = false) {

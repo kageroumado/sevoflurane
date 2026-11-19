@@ -2,9 +2,8 @@ import CoreGraphics
 import Foundation
 import IOKit
 
-/// The facts about this Mac that decide how fast a game can run on it, each
-/// one shared by every Mac of the same configuration: the model identifier,
-/// the GPU's core count, and the memory tier.
+/// The facts that decide how fast a game runs on this Mac, each shared by
+/// every Mac of the same configuration.
 nonisolated enum MacHardware {
     /// The chip's marketing name, like `Apple M3 Pro`.
     static let chip: String? = sysctlString("machdep.cpu.brand_string")
@@ -12,10 +11,8 @@ nonisolated enum MacHardware {
     /// `hw.model`, like `Mac15,8`: one identifier per model, never per machine.
     static let model: String? = sysctlString("hw.model")
 
-    /// Whether this Mac's processor is Apple's, whichever slice of a universal
-    /// binary is running (`hw.optional.arm64` answers 1 under Rosetta too).
-    /// An Intel Mac runs the whole x86_64 stack natively, needs no Rosetta,
-    /// and cannot run D3DMetal, which is Apple's toolkit for Apple GPUs.
+    /// Whether this Mac's processor is Apple's; `hw.optional.arm64` answers 1
+    /// under Rosetta too. An Intel Mac needs no Rosetta and cannot run D3DMetal.
     static let isAppleSilicon: Bool = {
         var value: Int32 = 0
         var size = MemoryLayout<Int32>.size
@@ -23,8 +20,8 @@ nonisolated enum MacHardware {
         return value == 1
     }()
 
-    /// The GPU's core count, which splits configurations one chip name hides
-    /// (an M3 Pro has 14 or 18). Read from the AGX accelerator's registry entry.
+    /// The AGX accelerator's GPU core count, which splits configurations one
+    /// chip name hides (an M3 Pro has 14 or 18).
     static let gpuCores: Int? = {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AGXAccelerator"))
         guard service != 0 else { return nil }
@@ -49,8 +46,7 @@ nonisolated enum MacHardware {
         return memoryTiers.min { abs(Double($0) - gigabytes) < abs(Double($1) - gigabytes) } ?? 0
     }
 
-    /// The largest on-screen window a process owns, in pixels: its bounds in
-    /// points times the scale of the display it sits on.
+    /// The largest on-screen window a process owns, in pixels.
     static func largestWindow(ofPID pid: pid_t) -> RunRecord.Pixels? {
         guard let largest = largestWindowBounds(ofPID: pid) else { return nil }
         let scale = backingScale(at: CGPoint(x: largest.midX, y: largest.midY))
@@ -79,8 +75,7 @@ nonisolated enum MacHardware {
         return largest
     }
 
-    /// Windows smaller than this on either side are splash screens and
-    /// launchers, never the game's own surface.
+    /// Windows smaller than this on either side are splash screens and launchers.
     static let minimumSide: CGFloat = 320
 
     /// Pixels per point on the display under a point, from its current mode.

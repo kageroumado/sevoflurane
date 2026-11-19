@@ -1,24 +1,17 @@
 import Foundation
 import Synchronization
 
-/// What a launch owes a game before any process of it runs: a macOS
-/// version's symlinks real (``ReparseLinks``), the executables of its install
-/// on record, so its env files name it, and on its first launch under
-/// Sevoflurane the fix list's values written (``FixLedger``).
-///
-/// Every path that stages graphics for a game, spawns it or hands it to
-/// Steam awaits this first, so the process reads its settings, DLL overrides
-/// and renderer as the fixes left them. The wait is bounded by ``budget``:
-/// past it the launch goes ahead as the game stands, and the first-launch
-/// decision stays unmade, for the next launch to take.
+/// What a launch owes a game before any process of it runs: its macOS version's symlinks made real
+/// (``ReparseLinks``), its install's executables recorded so env files name it, and at its first
+/// launch the fix list applied (``FixLedger``). Every path that stages, spawns or hands a game to
+/// Steam awaits this. Past ``budget`` the launch goes ahead as the game stands, and the
+/// first-launch fixes wait for the next launch.
 nonisolated enum LaunchPreparation {
-    /// How long a launch waits for its preparation. The work is a directory
-    /// listing, the run log and a few small files, done in milliseconds on a
-    /// healthy disk.
+    /// How long a launch waits: the work takes milliseconds on a healthy disk.
     static let budget: Duration = .seconds(5)
 
-    /// Readies `appID`'s launch, waiting at most `budget`, and answers the
-    /// fixes its first launch took, for the caller to announce.
+    /// Readies `appID`'s launch within `budget` and answers the first-launch fixes, for the caller
+    /// to announce.
     static func prepare(
         appID: Int, budget: Duration = budget, log: @escaping @Sendable (String) -> Void,
     ) async -> AppliedFixes? {
@@ -30,8 +23,7 @@ nonisolated enum LaunchPreparation {
             if fixes == nil, recorded {
                 ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
             }
-            // An exe this game shares with another gets this game's lines
-            // before any process of it reads the file.
+            // A shared exe's env file gets this game's lines before any process reads it.
             ConfigMaterializer.noteLaunch(of: appID, bottle: SteamBottle.name, prefix: SteamBottle.root)
             return fixes
         }
@@ -51,23 +43,20 @@ nonisolated enum LaunchPreparation {
 
     /// How a bounded preparation ended.
     enum Outcome<Value: Sendable>: Sendable {
-        /// It finished, before the budget ran out or after it began writing.
+        /// Finished in time, or after it began writing.
         case finished(Value)
-        /// The budget ran out first, and the launch went on without it.
         case abandoned
     }
 
-    /// The line between a preparation and the launch waiting on it. The
-    /// preparation passes it before each write the launch must see whole;
-    /// a launch that stops waiting closes it, unless a write is under way,
-    /// in which case the launch waits for that write.
+    /// The line between a preparation and the waiting launch: the preparation passes it before each
+    /// write the launch must see whole, and a launch that stops waiting closes it unless a write is
+    /// under way.
     final class Gate: Sendable {
         private enum State { case open, committing, abandoned }
 
         private let state = Mutex(State.open)
 
-        /// Whether the preparation may write: `false` once the launch has
-        /// gone on without it. From a `true` on, the launch waits for it.
+        /// Whether the preparation may write; after a `true`, the launch waits for it.
         func commit() -> Bool {
             state.withLock { state in
                 guard state != .abandoned else { return false }
@@ -76,8 +65,8 @@ nonisolated enum LaunchPreparation {
             }
         }
 
-        /// Whether the launch may go on without the preparation: `false`
-        /// when a write is already under way.
+        /// Whether the launch may go on without the preparation; `false` while a write is under
+        /// way.
         func abandon() -> Bool {
             state.withLock { state in
                 guard state == .open else { return false }
@@ -87,14 +76,10 @@ nonisolated enum LaunchPreparation {
         }
     }
 
-    /// Runs `body` on a global queue and waits for it at most `budget`. A
-    /// body that has passed its gate by then is waited for to the end, so a
-    /// launch never starts halfway through a write; one that has not finds
-    /// the gate closed and writes nothing that needs it.
-    ///
-    /// The body and the clock both run on Dispatch: the body blocks on the
-    /// disk, and a clock on the cooperative pool would wait behind that same
-    /// kind of work, which is when the budget matters.
+    /// Runs `body` on a global queue and waits at most `budget`, or to the end once it has passed
+    /// its gate, so a launch never starts mid-write. Both the body and the clock use Dispatch: the
+    /// body blocks on disk, and a clock on the cooperative pool would wait behind the same kind of
+    /// work.
     static func run<Value: Sendable>(
         within budget: Duration, _ body: @escaping @Sendable (Gate) -> Value,
     ) async -> Outcome<Value> {
@@ -147,8 +132,8 @@ nonisolated enum LaunchPreparation {
             }!
         }
 
-        /// Files `continuation` as a waiter, or resumes it at once with a
-        /// value already there; answers whether it was filed.
+        /// Files `continuation` as a waiter, or resumes it at once when the value is there; answers
+        /// whether it was filed.
         private func wait(_ id: UUID, _ continuation: CheckedContinuation<Value?, Never>) -> Bool {
             let ready: Value?? = state.withLock { state in
                 if let value = state.value { return .some(value) }

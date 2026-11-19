@@ -2,8 +2,7 @@ import CoreAudio
 import Foundation
 
 /// The machine's state at one instant, recorded with every scenario so a
-/// timing can be read against the load it was taken under. A number from a
-/// host at load average 40 is a fact about the host, not the app.
+/// timing can be read against the load it was taken under.
 nonisolated struct HostSnapshot: Encodable, Sendable {
     let loadAverage1m: Double
     let activeProcessors: Int
@@ -14,9 +13,8 @@ nonisolated struct HostSnapshot: Encodable, Sendable {
     /// Where sound goes, or `nil` on a Mac with no output device at all.
     let audioOutput: AudioOutput?
 
-    /// The device the system sends sound to. A game's audio is opened against
-    /// this device by Wine's CoreAudio driver, so a report that names it
-    /// answers "which DAC" before anyone has to ask.
+    /// The system output device, which Wine's CoreAudio driver opens a game's
+    /// audio against.
     struct AudioOutput: Encodable, Sendable, Equatable {
         let name: String
         /// How the device is attached, as ``HostSnapshot/transportWord(_:)``
@@ -51,7 +49,6 @@ nonisolated struct HostSnapshot: Encodable, Sendable {
     }
 
     /// The system's default output device, or `nil` when the HAL has none.
-    /// A device that answers no name is still a device.
     nonisolated static func defaultAudioOutput() -> AudioOutput? {
         guard let device: AudioDeviceID = property(
             kAudioHardwarePropertyDefaultOutputDevice, of: AudioObjectID(kAudioObjectSystemObject),
@@ -68,8 +65,7 @@ nonisolated struct HostSnapshot: Encodable, Sendable {
         )
     }
 
-    /// A transport type as a word a person reads in a log. Bluetooth and
-    /// Bluetooth LE are one word: what matters is the radio, not the profile.
+    /// A transport type as a word for a log; Bluetooth and Bluetooth LE share one.
     nonisolated static func transportWord(_ code: UInt32) -> String {
         switch code {
         case kAudioDeviceTransportTypeBuiltIn: "built-in"

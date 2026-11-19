@@ -3,21 +3,16 @@ import Foundation
 /// What the Wine log gained during a run, read for the two things it can say
 /// on its own: an unhandled exception, and the renderer complaining.
 nonisolated enum WineExceptionTrail {
-    /// The last unhandled exception in the text — the one that ended the
-    /// process, since Wine terminates it on the spot.
+    /// The last unhandled exception in the text, which ended its process.
     static func lastException(in text: String) -> RunRecord.Crash? {
         ending(in: text, forProcesses: []).crash
     }
 
-    /// How a run's game ended, as the Wine log tells it.
     struct Ending: Equatable {
-        /// The unhandled exception that ended the game.
         var crash: RunRecord.Crash?
-        /// The exception came while the game had no window left: the user had
-        /// already left it, and it fell over on the way out.
+        /// The exception came while the game had no window left, on its way out.
         var afterWindowsClosed = false
-        /// The last `sevo:exit … windows` line of the game's processes says
-        /// `closed`: whatever ended the game came after the user left it.
+        /// The game processes' last `sevo:exit … windows` line says `closed`.
         var windowsClosedAtEnd = false
     }
 
@@ -27,26 +22,22 @@ nonisolated enum WineExceptionTrail {
     /// Three lines name an exception, read in this order of trust:
     ///
     /// - `sevo:crash wpid=<wine pid> code=<status> addr=<address> module=<name>`,
-    ///   which the engine writes once per crashing process as the exception
-    ///   reaches `UnhandledExceptionFilter`, before the game's own filter
-    ///   (Unity's, Unreal's, Mono's) gets to exit with a plain status. It is
-    ///   the game's when its Wine pid is one of `winePIDs` (the `wpid=` of the
-    ///   game's `sevo:run` lines) or of a game process's `sevo:exit` lines;
-    ///   with neither known, the last one is taken as the game's.
+    ///   written once per crashing process at `UnhandledExceptionFilter`,
+    ///   before the game's own filter (Unity's, Unreal's, Mono's) exits with a
+    ///   plain status. It is the game's when its Wine pid is in `winePIDs` or
+    ///   wrote a game process's `sevo:exit` line; with neither known, the last
+    ///   one counts.
     /// - `err:seh … Unhandled exception code … flags … addr …`, Wine's
     ///   last-chance handler.
     /// - `wine: Unhandled page fault … at address 0x…` and its siblings,
-    ///   written as Wine starts the debugger. It names no process.
+    ///   written as Wine starts the debugger; it names no process.
     ///
     /// The engine writes `sevo:exit pid=<unix pid> wpid=<wine pid> windows
-    /// closed` each time a process that presented is left with no on-screen
-    /// window, and `… windows reopened` when it shows one again (a game can
-    /// hide its only window for a mode switch). When one of `processes` (the
-    /// game's unix pids) wrote either, only exceptions of those Wine pids
-    /// count: a crash reporter or launcher falling over during the run is not
-    /// the game crashing. The exception is on the way out when the last of
-    /// those lines before it says `closed`. An engine without the lines, or a
-    /// game that never wrote one, leaves the last exception of any process.
+    /// closed` when a process that presented has no on-screen window left, and
+    /// `… windows reopened` when it shows one again (a mode switch can hide the
+    /// only window). When one of `processes` wrote either, only those Wine
+    /// pids' exceptions count, so a crash reporter falling over is not the
+    /// game crashing. Otherwise the last exception of any process counts.
     static func ending(
         in text: String, forProcesses processes: Set<Int>, winePIDs: Set<Int> = [],
     ) -> Ending {
@@ -103,8 +94,8 @@ nonisolated enum WineExceptionTrail {
         return Ending(crash: last.crash, afterWindowsClosed: last.closed, windowsClosedAtEnd: lastEdgeClosed)
     }
 
-    /// One exception line: the Wine process it came from when the line names
-    /// one, and whether that process's windows were closed when it came.
+    /// One exception line, with its Wine process when named and whether that
+    /// process's windows were closed.
     private struct Exception {
         var winePID: Int?
         var closed: Bool
@@ -141,8 +132,7 @@ nonisolated enum WineExceptionTrail {
     }
 
     /// The renderer's own complaints, deduplicated with a count. DXMT writes
-    /// these whatever `WINEDEBUG` says, and each one is a Direct3D call that
-    /// did not do what the game asked.
+    /// these whatever `WINEDEBUG` says.
     static func notes(in text: String) -> [String] {
         var counts: [String: Int] = [:]
         var order: [String] = []
@@ -169,7 +159,6 @@ nonisolated enum WineExceptionTrail {
         /Unhandled exception code ([0-9a-fA-F]+) flags ([0-9a-fA-F]+) addr (0x[0-9a-fA-F]+)/
     /// The `+pid` channel's prefix, `0288:0214:err:…`: the Wine process, then the thread.
     private nonisolated(unsafe) static let winePrefix = /^([0-9a-fA-F]{4,8}):[0-9a-fA-F]{4,8}:/
-    /// The engine's own line for a crashing process, one per process.
     private nonisolated(unsafe) static let reportedCrash =
         /sevo:crash wpid=([0-9a-fA-F]+) code=([0-9a-fA-F]{8}) addr=(?:0x)?([0-9a-fA-F]+) module=(.*)$/
     /// `kernelbase`'s `wine: %s (thread %04lx), starting debugger...`, for the

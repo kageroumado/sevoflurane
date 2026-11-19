@@ -1,14 +1,11 @@
 import Foundation
 
-/// Game files shared between bottles, one link at a time: the game's
-/// directory in `steamapps/common` becomes a symlink into the bottle that
-/// already has it, and its `appmanifest` is copied (per-bottle state Steam
-/// rewrites, so never shared). One copy on disk, no second download —
-/// exactly what testing a game on another engine needs.
+/// Game files shared between bottles: the game's `steamapps/common` directory
+/// becomes a symlink into the bottle that has it, and its `appmanifest` is
+/// copied, since Steam rewrites it per bottle.
 ///
-/// Steam reads the manifests at startup, so a link lands after the client
-/// restarts. Removing a linked game removes the link and the manifest,
-/// never the files behind them — those belong to the source bottle.
+/// Steam reads manifests at startup, so a link lands after a client restart.
+/// Removing a linked game removes the link and manifest, never the files.
 nonisolated enum SharedGames {
     struct Candidate: Identifiable, Sendable, Equatable {
         let appID: Int
@@ -16,9 +13,7 @@ nonisolated enum SharedGames {
         let installdir: String
         /// The other bottle's `steamapps`, where the real files live.
         let sourceSteamapps: URL
-        /// Where the files live, said the way a user tells bottles apart —
-        /// every engine names its default bottle "Steam", so the bottle
-        /// name alone reads as a stutter.
+        /// Shown with ``sourceEngine``: every engine's default bottle is "Steam".
         let sourceBottle: String
         let sourceEngine: String
         let bytes: Int64
@@ -33,8 +28,7 @@ nonisolated enum SharedGames {
         steamapps(inBottle: SteamBottle.root)
     }
 
-    /// One game installed in the active bottle, in whichever of Steam's
-    /// libraries holds it.
+    /// One game installed in the active bottle.
     struct Installed: Sendable, Equatable {
         let appID: Int
         let name: String
@@ -45,9 +39,7 @@ nonisolated enum SharedGames {
         let steamapps: URL
     }
 
-    /// Games installed in other bottles (any engine's) that the active
-    /// bottle doesn't already have — one candidate per app, first bottle
-    /// found wins.
+    /// Games in other bottles that the active one lacks; first bottle wins.
     static func linkable() -> [Candidate] {
         let active = SteamBottle.root.standardizedFileURL
         let engines: [Engine] = [.crossover, .crossoverPreview]
@@ -100,10 +92,8 @@ nonisolated enum SharedGames {
         Set(SteamLibraries.steamapps().flatMap(manifests(in:)).compactMap { read(manifest: $0)?.appID })
     }
 
-    /// The inert half of a link: the game directory's symlink. Steam pays
-    /// no attention to `common/` entries it has no manifest for, so this is
-    /// safe while the client runs. Idempotent — a link left by an earlier
-    /// session is reused.
+    /// The symlink half of a link, safe while the client runs: Steam ignores
+    /// `common/` entries without a manifest. Idempotent.
     static func linkGameFiles(_ candidate: Candidate) throws {
         let common = activeSteamapps.appendingPathComponent("common")
         try FileManager.default.createDirectory(
@@ -122,9 +112,8 @@ nonisolated enum SharedGames {
         )
     }
 
-    /// The half Steam notices: the manifest. Written only around a client
-    /// restart — a manifest landing mid-session trips the client's own
-    /// library watcher into a visible wobble.
+    /// The manifest half. Write it only around a client restart: mid-session
+    /// it makes the client's library visibly reshuffle.
     static func writeManifest(_ candidate: Candidate) throws {
         let acf = "appmanifest_\(candidate.appID).acf"
         let target = activeSteamapps.appendingPathComponent(acf)
@@ -135,8 +124,7 @@ nonisolated enum SharedGames {
         )
     }
 
-    /// Undoes a pending link — the symlink only, since no manifest was
-    /// written yet.
+    /// Undoes a pending link: the symlink only.
     static func removePendingLink(_ candidate: Candidate) throws {
         let target = activeSteamapps
             .appendingPathComponent("common/\(candidate.installdir)")
@@ -145,16 +133,14 @@ nonisolated enum SharedGames {
         try FileManager.default.removeItem(at: target)
     }
 
-    /// Whether the active bottle's copy of this game is a link into another
-    /// bottle — the distinction between "remove the link" and "uninstall".
+    /// Whether the active bottle's copy of this game is a link into another.
     static func isLinked(appID: Int) -> Bool {
         guard let directory = installDirectory(appID: appID) else { return false }
         return (try? FileManager.default
             .destinationOfSymbolicLink(atPath: directory.path)) != nil
     }
 
-    /// Removes the link and the manifest. Refuses a real directory — only
-    /// the source bottle uninstalls the actual files.
+    /// Removes the link and the manifest; refuses a real directory.
     static func unlink(appID: Int) throws {
         guard let directory = installDirectory(appID: appID),
               (try? FileManager.default
@@ -168,15 +154,12 @@ nonisolated enum SharedGames {
         )
     }
 
-    /// Where a game's files are in the active bottle, whether they are the
-    /// bottle's own or a link into another's. `nil` when the app is not
-    /// installed here.
+    /// Where a game's files are in the active bottle, or `nil`.
     static func installDirectory(appID: Int) -> URL? {
         installed(appID: appID)?.directory
     }
 
-    /// What Steam calls a game and where its files are, from its manifest in
-    /// whichever library holds it. `nil` when the app is not installed here.
+    /// A game's name and files from its manifest, or `nil` when not installed.
     static func installed(appID: Int) -> Installed? {
         for steamapps in SteamLibraries.steamapps() {
             let manifest = steamapps.appendingPathComponent("appmanifest_\(appID).acf")
@@ -185,9 +168,8 @@ nonisolated enum SharedGames {
         return nil
     }
 
-    /// Every game installed in the active bottle, across all of Steam's
-    /// libraries, from the manifests Steam keeps — the library as it stands on
-    /// disk, readable without the client. `steamapps` narrows it to one.
+    /// Every game installed in the active bottle, from Steam's manifests;
+    /// `steamapps` narrows it to one library.
     static func installedGames(in steamapps: URL? = nil) -> [Installed] {
         let libraries = steamapps.map { [$0] } ?? SteamLibraries.steamapps()
         return libraries.flatMap { library in
@@ -226,8 +208,7 @@ nonisolated enum SharedGames {
         return (id, name, installdir, value("SizeOnDisk").flatMap(Int64.init) ?? 0)
     }
 
-    /// The first value of `key` in an ACF manifest: a flat `"key" "value"`
-    /// format at the top, so a full VDF parser would be ceremony.
+    /// The first value of `key` in an ACF manifest's `"key" "value"` pairs.
     static func manifestValue(_ key: String, in text: String) -> String? {
         guard let range = text.range(of: "\"\(key)\"") else { return nil }
         let rest = text[range.upperBound...]

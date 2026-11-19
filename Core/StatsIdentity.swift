@@ -4,12 +4,10 @@ import Foundation
 
 /// The key the community database knows this Mac by.
 ///
-/// A P-256 key made inside the Secure Enclave at opt-in. What is stored is
-/// its ``SecureEnclave/P256/Signing/PrivateKey/dataRepresentation``: a blob
-/// only this Mac's enclave can use, so a copied file signs nothing anywhere
-/// else. The install id is derived from the public half, which lets the
-/// server check a claimed id against the key that signed it; it names the
-/// key, never the machine, and a reset makes a new one.
+/// A Secure Enclave P-256 key made at opt-in, stored as its
+/// ``SecureEnclave/P256/Signing/PrivateKey/dataRepresentation``, a blob only
+/// this Mac's enclave can use. The install id is derived from the public key,
+/// so the server can check it against the signature; a reset makes a new one.
 nonisolated struct StatsIdentity: Sendable {
     let key: SecureEnclave.P256.Signing.PrivateKey
 
@@ -38,8 +36,7 @@ nonisolated struct StatsIdentity: Sendable {
         SecureEnclave.isAvailable
     }
 
-    /// The stored key, or `nil` when there is none or it no longer opens:
-    /// a blob restored onto another Mac is one the enclave refuses.
+    /// The stored key, or `nil` when missing or restored from another Mac.
     static func load(from url: URL = StatsStore.identityURL) -> StatsIdentity? {
         guard let blob = try? Data(contentsOf: url),
               let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob)
@@ -57,12 +54,10 @@ nonisolated struct StatsIdentity: Sendable {
 
     // MARK: - Apple's word that the key is on a real Mac
 
-    /// What registration carries besides the key: App Attest's certificate
-    /// chain binding an Apple-attested key to ours, and a DeviceCheck token
-    /// the server trades with Apple for this device's two bits. The server
-    /// makes an install `attested` on App Attest, `device` on DeviceCheck
-    /// alone, and `unverified` on neither. An attesting Mac sends the token
-    /// too: its bit is what tells a reinstall from a new Mac.
+    /// What registration carries besides the key: an App Attest attestation and
+    /// a DeviceCheck token. The server grades `attested`, `device` or
+    /// `unverified`; the token is sent even with App Attest, since its bit
+    /// tells a reinstall from a new Mac.
     struct Evidence: Sendable {
         var appAttestKeyID: String?
         var attestation: Data?
@@ -94,8 +89,7 @@ nonisolated struct StatsIdentity: Sendable {
             } catch {
                 let nsError = error as NSError
                 if step == "attestKey", nsError.domain == DCError.errorDomain, nsError.code == DCError.invalidKey.rawValue {
-                    // macOS binds App Attest keys to Full Security with SIP on; a Mac booted
-                    // in Reduced or Permissive Security generates the key and cannot sign with it.
+                    // Under Reduced or Permissive Security the key generates but cannot attest.
                     StatsUploader.log("App Attest: this Mac cannot attest (App Attest needs Full Security and SIP) — registering without it")
                 } else {
                     StatsUploader.log("App Attest declined at \(step): \(nsError.domain) \(nsError.code) \(nsError.userInfo)")

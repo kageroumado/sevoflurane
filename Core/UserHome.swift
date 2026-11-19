@@ -2,16 +2,13 @@ import Foundation
 
 /// The home directory every path this app keeps under `~` starts from.
 ///
-/// A test run gets a fresh one of its own in the temporary directory. `xctest`
-/// hosts the tests inside the app, and the real home holds the installed app's
-/// bottles, settings and logs: state that differs from one Mac to the next,
-/// which a test must neither read nor change. Setting `HOME` for the test
-/// process moves nothing, because Foundation answers the home directory from
-/// the user database; the switch has to be here.
+/// A test run gets a fresh one in the temporary directory, because `xctest`
+/// hosts the tests inside the app and the real home holds the installed app's
+/// bottles, settings and logs. Setting `HOME` for the test process has no
+/// effect: Foundation reads the home directory from the user database.
 nonisolated enum UserHome {
-    /// Whether this process hosts the test bundle. The same signal as
-    /// ``TestHost/isHosting``, read here because the `sevo` package builds this
-    /// file without that one.
+    /// Whether this process hosts the test bundle; duplicates
+    /// ``TestHost/isHosting`` because the `sevo` package builds this file alone.
     static let isTestRun = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     static let url: URL = {

@@ -1,11 +1,9 @@
 import Foundation
 
-/// A record of `steam.exe` at the moment the supervisor finds its main thread
-/// parked: every thread's stack, sampled for a few seconds, beside the app's
-/// own log. A stall is restarted away in seconds and leaves nothing to read
-/// otherwise; this file is what names the wait the next time one happens.
+/// Every thread's stack of `steam.exe`, sampled for a few seconds when the
+/// supervisor finds its main thread parked, written beside the app's log. A
+/// stall is restarted within seconds, so this file is the only record of the wait.
 nonisolated enum StuckClientSample {
-    /// How long the sampler watches the process.
     static let seconds = 3
 
     /// Where the samples go: the folder the app's log lives in.

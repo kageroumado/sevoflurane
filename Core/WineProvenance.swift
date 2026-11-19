@@ -3,16 +3,15 @@ import Foundation
 /// The engine's own account of each process, written by `winemac.drv` to the
 /// Wine log: `sevo:run pid=<unix pid> exe=<name> appid=<steam id> …` when a
 /// process reaches the Mac driver, and `sevo:gfx pid=<unix pid>
-/// renderer=<name> …` once its Direct3D modules are loaded. The renderer named
-/// there is the one that answered the game — `wined3d-gl` for a D3D9 title
-/// under a D3DMetal bottle, which the staged selection cannot know.
+/// renderer=<name> …` once its Direct3D modules load. The latter names the
+/// renderer that actually answered, such as `wined3d-gl` for a D3D9 title
+/// under a D3DMetal bottle.
 nonisolated enum WineProvenance {
     /// The renderer that answered this app's own executable, or, failing that,
     /// any process the engine attributed to the app id.
     ///
-    /// `pid` is the game's own process when the app knows it. A program
-    /// Steam did not start carries no app id (`appid=none`), so its process
-    /// is the only thing that names its `sevo:gfx` line.
+    /// `pid` is the game's own process when known; a program Steam did not
+    /// start writes `appid=none`, so only its pid finds its `sevo:gfx` line.
     static func renderer(forApp appID: Int, exe: String?, pid: pid_t? = nil, in text: String) -> String? {
         var pidsByExe: [(pid: Substring, exe: String)] = []
         var renderers: [Substring: Substring] = [:]
@@ -44,9 +43,8 @@ nonisolated enum WineProvenance {
         return pids
     }
 
-    /// The app id the engine attributed the unix process `pid` to, from the
-    /// last `sevo:run` line about it; `nil` for a process without one, or
-    /// with `appid=none`, which is what a program Steam did not start writes.
+    /// The app id of the last `sevo:run` line about `pid`; `nil` without one
+    /// or for `appid=none`.
     static func appID(forProcess pid: Int, in text: String) -> Int? {
         let own = "sevo:run pid=\(pid) "
         var appID: Int?
@@ -76,31 +74,25 @@ nonisolated enum WineProvenance {
     private nonisolated(unsafe) static let gfx = /sevo:gfx pid=(\d+) renderer=(\S+)/
 }
 
-/// The exit of a program the helper started outside Steam, written to the
-/// Wine log by the helper when the program's launcher ends:
-/// `sevo:program-exit appid=<id> exe=<name> status=<code>`. Steam's process
-/// log has no line for such a program, so this is the only place its exit
-/// code exists. Written only where the launcher's status is the program's own
-/// — the `steam.exe` parent (SteamParent) exits with its child's code — since
-/// `start /unix` returns 0 the moment the program is spawned.
+/// The exit of a program the helper started outside Steam, which Steam's
+/// process log never records: `sevo:program-exit appid=<id> exe=<name>
+/// status=<code>`. Written only where the launcher's status is the program's
+/// own (the `steam.exe` parent, SteamParent), since `start /unix` returns 0
+/// once the program is spawned.
 nonisolated enum ProgramExit {
-    /// The program whose exit a launcher's status is.
     struct Program: Sendable {
         let appID: Int
-        /// The executable's file name, as the launch named it.
         let exe: String
     }
 
-    /// The line for `program`, whose launcher ended with `status`.
     static func line(_ program: Program, status: Int32) -> String {
         "sevo:program-exit appid=\(program.appID) exe=\(program.exe) status=\(status)"
     }
 
-    /// The exit code the last line about `appID` in `text` gives. The
-    /// `steam.exe` parent's own line carries the program's full 32-bit code
-    /// (`sevo:steam-parent exit … appid=<id> code=<n>`), so it is preferred;
-    /// the helper's line has the loader's unix status, which keeps only the
-    /// low 8 bits (`STATUS_CONTROL_C_EXIT`, 0xC000013A, would read as 58).
+    /// The exit code the last line about `appID` gives, preferring the
+    /// `steam.exe` parent's full 32-bit code (`sevo:steam-parent exit …
+    /// appid=<id> code=<n>`) over the loader's unix status, which keeps only
+    /// the low 8 bits (0xC000013A reads as 58).
     static func status(forApp appID: Int, in text: String) -> Int? {
         var parent: Int?, launcher: Int?
         for line in text.split(whereSeparator: \.isNewline) {

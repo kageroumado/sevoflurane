@@ -2,31 +2,24 @@ import Foundation
 
 /// The defaults the app and the `sevo` CLI both read.
 ///
-/// `UserDefaults.standard` is per-process: the app writes into its bundle's
-/// domain and the CLI into its own, so anything stored there is invisible to
-/// the other face of the same installation — the CLI would configure one
-/// bottle's graphics while the app configured another's. Everything the two
-/// must agree on lives in one suite instead.
+/// `UserDefaults.standard` is per process, so anything the app and CLI must
+/// agree on lives in this one suite.
 nonisolated enum Preferences {
-    /// `UserDefaults` is thread-safe by contract and predates `Sendable`; the
-    /// suite is opened once and only ever read and written through it.
-    ///
-    /// A test run reads and writes a copy in its own home (``UserHome``).
+    /// `nonisolated(unsafe)`: `UserDefaults` is thread-safe. A test run uses a
+    /// copy in its own home (``UserHome``).
     nonisolated(unsafe) static let shared: UserDefaults = {
         let defaults = UserDefaults(suiteName: domain) ?? .standard
         adoptLegacyValues(into: defaults)
         return defaults
     }()
 
-    /// The app's own domain, for what only the app reads: `standard`, or a
-    /// copy in the test home for a test run, whose process runs under the
-    /// shipping bundle identifier and would otherwise read the installed
-    /// app's settings.
+    /// The app's own domain, or a test-home copy so a test run does not read
+    /// the installed app's settings.
     nonisolated(unsafe) static let app: UserDefaults =
         UserHome.testDefaults(named: AppIdentity.identifierStem) ?? .standard
 
-    /// Deliberately not the bundle identifier: `UserDefaults(suiteName:)`
-    /// answers nil for the caller's own domain.
+    /// Never the bundle identifier: `UserDefaults(suiteName:)` answers nil
+    /// for the caller's own domain.
     private static let suiteName = "\(AppIdentity.identifierStem).shared"
 
     /// The suite's name, or its file in the test home for a test run.
@@ -36,17 +29,14 @@ nonisolated enum Preferences {
             : suiteName
     }
 
-    /// Forgets every choice this app stored — the settings half of an
-    /// uninstall, so a reinstall starts as a first run rather than inheriting
-    /// a renderer, a bottle name and a pinned toolkit that no longer exist.
+    /// Forgets every stored choice, so a reinstall starts as a first run.
     static func reset() {
         shared.removePersistentDomain(forName: domain)
         shared.synchronize()
     }
 
-    /// Keys that were written to the app's own domain before the suite
-    /// existed, brought across the first time the suite is opened. Reading
-    /// what the user last chose beats resetting them to the defaults.
+    /// Copies keys the suite lacks from the app's own domain, where older
+    /// installs wrote them, the first time the suite is opened.
     private static func adoptLegacyValues(into defaults: UserDefaults) {
         for key in ["managedRenderer", "managedMsync"]
             where defaults.object(forKey: key) == nil {
@@ -59,8 +49,7 @@ nonisolated enum Preferences {
 // MARK: - The Steam pages
 
 nonisolated extension Preferences {
-    /// Whether game pages carry the Mac compatibility strip. Off leaves
-    /// Steam's own page exactly as the client draws it.
+    /// Whether game pages carry the Mac compatibility strip.
     static var compatibilityStrip: Bool {
         get { bool(forKey: "compatibilityStrip", default: true) }
         set { shared.set(newValue, forKey: "compatibilityStrip") }
@@ -83,9 +72,7 @@ nonisolated extension Preferences {
 // MARK: - Community database
 
 nonisolated extension Preferences {
-    /// Whether closed runs go to the community database.
-    /// `nil` until the user has been asked, which is what makes the question
-    /// appear once and never again.
+    /// Whether closed runs go to the community database; `nil` until asked.
     static var sharesRunStats: Bool? {
         get { shared.object(forKey: sharesRunStatsKey) as? Bool }
         set { shared.set(newValue, forKey: sharesRunStatsKey) }
@@ -97,24 +84,22 @@ nonisolated extension Preferences {
 // MARK: - Updates
 
 nonisolated extension Preferences {
-    /// When failing update checks were last written to the log. Every launch checks once, so a
-    /// Mac that cannot reach the releases would otherwise say so at every boot.
+    /// When failing update checks were last logged, so an offline Mac does not
+    /// log one every launch.
     static var updateFailureLoggedAt: Date? {
         get { shared.object(forKey: "updateFailureLoggedAt") as? Date }
         set { shared.set(newValue, forKey: "updateFailureLoggedAt") }
     }
 
-    /// Whether the person has been told that Steam here signs out while Steam
-    /// for Mac is signed in to the same account. Told once, at the first game
-    /// handed to Steam for Mac.
+    /// Whether the person was told that Steam here signs out while Steam for
+    /// Mac uses the same account.
     static var toldAboutSteamForMacSession: Bool {
         get { bool(forKey: "toldAboutSteamForMacSession", default: false) }
         set { shared.set(newValue, forKey: "toldAboutSteamForMacSession") }
     }
 
-    /// Whether a game's Play setting offers Valve's Steam for Mac as where its
-    /// macOS version runs, on an engine that plays macOS versions in
-    /// Sevoflurane's own Steam (``NativeSteam/isOffered``). Off by default.
+    /// Whether a game's Play setting offers Steam for Mac
+    /// (``NativeSteam/isOffered``).
     static var offersSteamForMac: Bool {
         get { bool(forKey: "offersSteamForMac", default: false) }
         set { shared.set(newValue, forKey: "offersSteamForMac") }
@@ -124,8 +109,7 @@ nonisolated extension Preferences {
 // MARK: - Discord
 
 nonisolated extension Preferences {
-    /// Whether the daemon starts the in-bottle relay after a client boot, so a
-    /// game that ships its own Discord support reaches the Mac client.
+    /// Whether the daemon starts the in-bottle Discord relay after a client boot.
     static var discordBridge: Bool {
         get { bool(forKey: "discordBridge", default: true) }
         set { shared.set(newValue, forKey: "discordBridge") }
@@ -146,15 +130,14 @@ nonisolated extension Preferences {
 // MARK: - Fixes
 
 nonisolated extension Preferences {
-    /// Whether a game's first launch takes the fix list's values for the
-    /// settings it has no value of its own for (``FixLedger``).
+    /// Whether a game's first launch takes the fix list's values for unset
+    /// settings (``FixLedger``).
     static var appliesKnownFixes: Bool {
         get { shared.object(forKey: "appliesKnownFixes") as? Bool ?? true }
         set { shared.set(newValue, forKey: "appliesKnownFixes") }
     }
 
-    /// The highest serial of a signed fix list this Mac took; a list below
-    /// it is a replay and refused (``FixList``).
+    /// The highest fix list serial taken; a lower one is refused as a replay.
     static var fixListSerial: Int {
         get { shared.integer(forKey: "fixListSerial") }
         set { shared.set(newValue, forKey: "fixListSerial") }
@@ -164,8 +147,7 @@ nonisolated extension Preferences {
 // MARK: - Crash reports
 
 nonisolated extension Preferences {
-    /// Whether a run that ends in a crash opens the offer to send a report.
-    /// "Never ask again" on the prompt turns it off.
+    /// Whether a crashed run opens the offer to send a report.
     static var asksAfterCrash: Bool {
         get { asksAfterCrash(in: shared) }
         set { shared.set(newValue, forKey: asksAfterCrashKey) }
@@ -177,12 +159,10 @@ nonisolated extension Preferences {
         defaults.object(forKey: asksAfterCrashKey) as? Bool ?? true
     }
 
-    /// The games whose busy threads the app keeps quiet about: "Don't Ask for
-    /// This Game" on the processor-limit offer (``ThreadSpinDiagnosis``).
+    /// Games muted from the processor-limit offer (``ThreadSpinDiagnosis``).
     static let quietThreadSpinAppsKey = "quietThreadSpinApps"
 
-    /// Whether a run of `appID` that kept many threads busy opens the offer to
-    /// limit its processors.
+    /// Whether `appID` may get the processor-limit offer.
     static func asksAboutThreadSpin(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
         !(defaults.array(forKey: quietThreadSpinAppsKey) as? [Int] ?? []).contains(appID)
     }
@@ -194,12 +174,10 @@ nonisolated extension Preferences {
         defaults.set(quiet + [appID], forKey: quietThreadSpinAppsKey)
     }
 
-    /// The games whose blank videos the app keeps quiet about: "Don't Ask for
-    /// This Game" on the video-decoding offer (``VideoDecodingDiagnosis``).
+    /// Games muted from the video-decoding offer (``VideoDecodingDiagnosis``).
     static let quietVideoDecodingAppsKey = "quietVideoDecodingApps"
 
-    /// Whether a run of `appID` whose video decoded nothing opens the offer of
-    /// the other decoder.
+    /// Whether `appID` may get the video-decoding offer.
     static func asksAboutVideoDecoding(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
         !(defaults.array(forKey: quietVideoDecodingAppsKey) as? [Int] ?? []).contains(appID)
     }
@@ -211,9 +189,8 @@ nonisolated extension Preferences {
         defaults.set(quiet + [appID], forKey: quietVideoDecodingAppsKey)
     }
 
-    /// The token a sent report carries so two reports from one installation
-    /// can be told apart on the receiving end. Random the first time it is
-    /// asked for, then kept; it names nothing about the machine or the account.
+    /// A random per-install token that groups sent reports; it names nothing
+    /// about the machine or account.
     static var installToken: String {
         installToken(in: shared)
     }

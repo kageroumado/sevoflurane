@@ -6,8 +6,7 @@ nonisolated enum InterfaceCopy {
     }
 }
 
-/// What a setting's (i) button says: the long explanation a row has no room
-/// for, so the row keeps a title and at most one short line.
+/// What a setting's (i) button says.
 nonisolated struct SettingHelp: Equatable, Sendable {
     /// One named choice or term, with what it means.
     struct Entry: Equatable, Sendable {
@@ -23,9 +22,9 @@ nonisolated struct SettingHelp: Equatable, Sendable {
     let title: String
     let summary: String
     var entries: [Entry] = []
-    /// The small print under the entries: when a change applies, what to try.
+    /// The small print under the entries.
     var footnote: String?
-    /// Where the vendor documents the thing, for the reader who wants it.
+    /// The vendor's documentation.
     var link: Link?
 
     struct Link: Equatable, Sendable {

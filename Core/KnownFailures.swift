@@ -1,12 +1,7 @@
 import Foundation
 
-/// The failures this project has already diagnosed, matched against a run
-/// record.
-///
-/// There are not many failure modes, only many ways to print them: a game
-/// that dies before it draws, a fatal error in an engine's own runtime, a
-/// renderer refusing a call. Each entry turns a run record into the sentence
-/// a person can act on, and carries the fix where one exists.
+/// Diagnosed failures matched against a run record, each turned into a
+/// sentence a person can act on, with the fix where one exists.
 nonisolated enum KnownFailures {
     struct Entry: Sendable {
         /// Stable across versions: an issue can name it.
@@ -23,8 +18,8 @@ nonisolated enum KnownFailures {
         all.first { $0.matches(record) }
     }
 
-    /// Ordered: a run's own ending is more useful than a renderer's
-    /// complaints during it, so the exit entries come first.
+    /// Exit entries come first: a run's ending says more than a renderer's
+    /// complaints during it.
     static let all: [Entry] = [
         Entry(
             id: "unity-exit-1-no-window",

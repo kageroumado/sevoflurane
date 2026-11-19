@@ -1,55 +1,40 @@
 import Foundation
 
-/// A launch in progress and everything about the machine that was true when
-/// it started. `Sendable` so closing one can leave the caller's actor: it
-/// reads the tails of two logs, which is disk work.
+/// A launch in progress and the machine's state when it started. `Sendable` so closing one, which
+/// reads two logs, can leave the caller's actor.
 nonisolated struct RunInProgress: Sendable {
     let started: ContinuousClock.Instant
     var record: RunRecord
-    /// The macOS pid of the launch's own executable, from the dock shim's
-    /// chronicle. It is what the run's meters are read from, and it is not
-    /// carried in the armed file: a pid outlives nothing, and the next
-    /// process to hold that number is somebody else's.
+    /// The macOS pid of the launch's executable, from the dock shim's chronicle; the meters read
+    /// it. Never put it in the armed file: after a restart the number may be another process's.
     var gamePID: pid_t?
-    /// Where the two logs ended when the run began; what they gained since is
-    /// the run's own output.
+    /// Where the two logs ended when the run began.
     let wineLogOffset: UInt64
     let steamLogOffset: UInt64
     /// The client showed an error for this game action.
     var steamError: String?
-    /// The engine's `sevo:run` and `sevo:gfx` renderer lines, gathered while
-    /// the run is up (``RunRecorder/provenance(in:from:)``): a long run's
-    /// Wine log outgrows the tail read at its close, and these lines are
-    /// written in its first seconds.
+    /// The engine's `sevo:run` and `sevo:gfx` renderer lines, gathered while the run is up: a long
+    /// run's Wine log outgrows the tail read at its close.
     var provenance = ""
-    /// Where ``provenance`` has read the Wine log to; nil until the first
-    /// read, which starts at ``wineLogOffset``.
+    /// Where ``provenance`` has read the Wine log to; nil until the first read.
     var provenanceOffset: UInt64?
-    /// How many of the game's threads were busy at each sample taken while it
-    /// had focus (``ThreadActivity``); memory only, summarized at the close.
+    /// Busy-thread counts (``ThreadActivity``) at each sample taken while the game had focus.
     var busyThreadSamples: [Int] = []
-    /// How many processors the game was told of: the Mac's, or the game's cap.
+    /// The processors the game was told of: the Mac's, or the game's cap.
     var processors = ProcessInfo.processInfo.activeProcessorCount
-    /// Where the record goes when the run is over, and the two logs its
-    /// ending is read from.
+    /// Where the record goes and the two logs its ending is read from.
     var runsRoot = RunLog.root
     var wineLog = WineLog.fileURL
     var processLog = RunRecorder.steamProcessLogURL
 
-    /// Reads what the two logs gained during the run, decides how it ended,
-    /// and appends the record.
+    /// Reads what the two logs gained during the run, decides how it ended, and appends the record.
     ///
     /// - Parameters:
-    ///   - kind: The ending the caller knows for a fact whatever the logs say
-    ///     — the stall watchdog's kill.
-    ///   - unrecorded: What an ending Steam never wrote down is, on this
-    ///     path. A quit takes the bottle down with the app, so Steam is gone
+    ///   - kind: The ending the caller knows for a fact, such as the stall watchdog's kill.
+    ///   - unrecorded: The ending to record when Steam wrote none; a quit takes Steam down
     ///     before it can record the exit it caused.
-    ///   - programExitGrace: How long to give the helper's exit line for a
-    ///     program of ours (``ProgramExit``) to reach the Wine log. The line
-    ///     is written when the program's launcher ends, a moment after the
-    ///     program's own process is gone — and that process going is what
-    ///     closed the run.
+    ///   - programExitGrace: How long to wait for an adopted program's exit line
+    ///     (``ProgramExit``), which its launcher writes a moment after the program's process is gone.
     func write(
         lasting seconds: Double?,
         kind: RunRecord.Exit.Kind?,
@@ -82,7 +67,7 @@ nonisolated struct RunInProgress: Sendable {
         }
         let code = exit?.code ?? programStatus
         let lines = provenance.isEmpty ? wineTail : provenance + "\n" + wineTail
-        // A macOS build ran natively: the wine log holds only the bridge helper's lines.
+        // A macOS build: the wine log holds only the bridge helper's lines.
         if record.runner != GameRunner.macos {
             if let answered = WineProvenance.renderer(forApp: record.appid, exe: record.exe, in: lines) {
                 record.renderer = answered
@@ -113,13 +98,10 @@ nonisolated struct RunInProgress: Sendable {
         RunRecorder.didRecord?(record, wineTail)
     }
 
-    /// How often the Wine log is re-read while a program's exit line is
-    /// given its grace.
     private static let programExitPoll: TimeInterval = 0.25
 
-    /// How a run ended, from what the client and Steam's log actually say. A
-    /// stop on record outranks the exit status: the stop ends the process
-    /// whole, which reads as 0, and Steam's own `TerminateProcess` reads as 1.
+    /// How a run ended. A stop on record outranks the exit status: the stop ends the process whole,
+    /// which reads as 0, and Steam's own `TerminateProcess` reads as 1.
     static func kind(
         code: Int?, ending: WineExceptionTrail.Ending, endedNotResponding: Bool, stopRequest: RunLog.StopSource?,
         steamError: String?, unrecorded: RunRecord.Exit.Kind,
@@ -135,19 +117,16 @@ nonisolated struct RunInProgress: Sendable {
         return steamError == nil ? unrecorded : .steamTerminate
     }
 
-    /// The exception a run's exit status names, for a crash no log line
-    /// described.
+    /// The exception a run's exit status names, for a crash no log line described.
     private static func statusCrash(code: Int?, ended: RunRecord.Exit.Kind) -> RunRecord.Crash? {
         guard ended == .crash || ended == .crashAtExit, let status = code.flatMap(exceptionStatus) else { return nil }
         return RunRecord.Crash(code: status)
     }
 
-    /// The NT status an exit code is when it is an error-severity one
-    /// (`0xC…`, negative as Steam prints it): the status of the exception
-    /// that ended the process, which Windows hands on as its exit code.
-    /// `-1073741819` is `0xc0000005`. `STATUS_CONTROL_C_EXIT` is the console
-    /// closing, which is how a person ends a console program, and `-1` is a
-    /// program's own `exit(-1)`.
+    /// The NT status an error-severity exit code (`0xC…`, negative as Steam prints it) names:
+    /// Windows hands the ending exception's status on as the exit code, so `-1073741819` is
+    /// `0xc0000005`. `STATUS_CONTROL_C_EXIT` (a console closing) and `-1` (a program's own
+    /// `exit(-1)`) answer nil.
     static func exceptionStatus(_ code: Int) -> String? {
         guard (Int(Int32.min) ... Int(UInt32.max)).contains(code) else { return nil }
         let bits = UInt32(truncatingIfNeeded: code)
@@ -158,7 +137,6 @@ nonisolated struct RunInProgress: Sendable {
     private static let controlCExit: UInt32 = 0xC000_013A
     private static let exitMinusOne: UInt32 = 0xFFFF_FFFF
 
-    /// The ending a stop asked for by `source` is.
     static func stoppedKind(_ source: RunLog.StopSource) -> RunRecord.Exit.Kind {
         switch source {
         case .player: .stopped
@@ -179,17 +157,16 @@ nonisolated struct RunInProgress: Sendable {
     }
 }
 
-/// What the app saw of a game's window at one look (``RunRecorder/sample(observing:)``).
+/// What the app saw of a game's window at one look.
 nonisolated struct GameObservation: Equatable, Sendable {
     var focus: FrameTrace.Focus
-    /// The display under the game's window; nil while none of its windows is on screen.
+    /// The display under the game's window; nil while none is on screen.
     var display: RunRecord.Display?
 }
 
-/// A record's own moment: UTC, seconds, so records from two machines sort
-/// against each other. Spelled out rather than taken from
-/// `ISO8601DateFormatter`, which is not `Sendable` and would need an unchecked
-/// global to be shared between the app and `sevo`.
+/// A record's moment: UTC, seconds, so records from two machines sort together.
+/// `ISO8601DateFormatter` is not `Sendable`, so sharing it between the app and `sevo` would need an
+/// unchecked global.
 nonisolated let runRecordStamp: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
@@ -198,72 +175,48 @@ nonisolated let runRecordStamp: DateFormatter = {
     return formatter
 }()
 
-/// Opens a record when the client says a launch began, and closes it when the
-/// client says the app stopped running.
+/// Opens a record when the client says a launch began, and closes it when the client says the app
+/// stopped running; runs are keyed by app id, since Steam can have two games up.
 ///
-/// Armed at `GameActionStart` rather than at the first window: three of the
-/// five failed launches of the 2026-09-08 playtest never had a window, and a
-/// recorder hung off the window watch records nothing for exactly the launches
-/// worth recording. Closed from the client's own
-/// `GameSessions.RegisterForAppLifetimeNotifications`, because a game Steam
-/// started is not a process this app can wait on; the exit status comes from
-/// Steam's `gameprocess_log.txt`, which is the only place it exists.
-///
-/// Steam can have two games up at once, so a run is keyed by app id.
+/// Armed at `GameActionStart`, because a failed launch often never opens a window (three of five in
+/// one playtest). Closed from `GameSessions.RegisterForAppLifetimeNotifications`, because a game
+/// Steam started is not a process this app can wait on; the exit status exists only in Steam's
+/// `gameprocess_log.txt`.
 final nonisolated class RunRecorder {
-    /// Where the recorder narrates. The app points it at its own event log.
+    /// Where the recorder narrates.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
 
-    /// A record has been written, complete with how the run ended. Called on
-    /// the closing queue; the app hops to the main actor from here to decide
-    /// whether the ending deserves a word with the user.
+    /// A record has been written with its ending; called on the closing queue.
     nonisolated(unsafe) static var didClose: @Sendable (RunRecord) -> Void = { _ in }
 
-    /// A game's own settings as a run is armed; a test hands in a game's
-    /// runner without a store.
+    /// A game's own settings as a run is armed; replaceable for tests.
     nonisolated(unsafe) static var gameValues: @Sendable (Int) -> ConfigValues = { GameConfig.game($0) }
 
-    /// Called when an open run's video decoder is found to have produced
-    /// nothing (``RunRecord/video``), on whatever thread read the log: the
-    /// app offers the other decoder while the game still waits on the picture.
+    /// An open run's video decoder produced nothing (``RunRecord/video``); called on whatever
+    /// thread read the log, so the app can offer the other decoder while the game waits.
     nonisolated(unsafe) static var didStarveVideo: (@Sendable (RunRecord) -> Void)?
 
-    /// A run that has just been written, with what the Wine log gained while
-    /// it ran. The app hangs report collection off it (``CrashCollector``);
-    /// the CLI leaves it unset, since a `sevo` process only ever reads
-    /// records somebody else wrote.
-    ///
-    /// Called on the closing queue, after the record is on disk.
+    /// A record is on disk, with what the Wine log gained while it ran; called on the closing
+    /// queue. The app collects reports from it (``CrashCollector``).
     nonisolated(unsafe) static var didRecord: (@Sendable (RunRecord, String) -> Void)?
 
-    /// A run has just closed, called with its app id on the caller's thread
-    /// before the record is written. Every way a run ends passes through
-    /// here, an adopted program's included, which Steam never announces.
+    /// A run has just closed, called with its app id before the record is written. Every ending
+    /// passes here, an adopted program's included.
     var onClose: ((Int) -> Void)?
 
     private var open: [Int: OpenRun] = [:]
     private var hasGroomed = false
-    /// The directory this recorder's records and armed runs live in, and
-    /// the two logs it reads a run's ending out of.
     private let runs: URL
     private let wineLog: URL
-    /// A fixed Steam process-log to read a run's ending from. Nil in
-    /// production, where each `arm` resolves the booted engine's bottle log
-    /// at launch time (the engine can change between launches); a test injects
-    /// a concrete file so its fixtures, not a real bottle, decide the run.
+    /// A fixed Steam process log, for tests. Nil in the app, where each `arm` resolves the booted
+    /// engine's bottle log.
     private let processLogOverride: URL?
-    /// The driver's present counters, sampled for as long as a run is open;
-    /// what fills the record's ``RunRecord/fps``.
+    /// The driver's present counters, sampled while a run is open; they fill ``RunRecord/fps``.
     let presentStats: PresentStats
-    /// How long a closing program run waits for the helper's exit line
-    /// (``ProgramExit``) before it is written without one. Three seconds
-    /// covers the launcher's own teardown after the program's process is
-    /// gone; a test that needs no line passes zero.
+    /// How long a closing program run waits for its exit line (``ProgramExit``); three seconds
+    /// covers the launcher's teardown.
     private let programExitGrace: Duration
 
-    /// A launch in progress and everything about the machine that was true
-    /// when it started. `Sendable` so closing one can leave the main actor:
-    /// it reads the tails of two logs, which is disk work.
     typealias OpenRun = RunInProgress
 
     init(
@@ -282,23 +235,17 @@ final nonisolated class RunRecorder {
 
     /// Apps whose open run the client has confirmed running.
     private var confirmedRunning: Set<Int> = []
-    /// When a launch of an app took over from a run of it that was still open:
-    /// a game's launcher starting the game. The stop edge that follows within
-    /// ``handoverWindow`` is the launcher's, and the new run outlives it.
+    /// When a launch took over from a still-open run of the same app (a launcher starting its
+    /// game). The stop edge within ``handoverWindow`` is the launcher's.
     private var handovers: [Int: ContinuousClock.Instant] = [:]
     private static let handoverWindow: Duration = .seconds(5)
 
-    /// A launch of `appID` has begun. Re-arming an app that is already open
-    /// closes the old run: the client has told us a new one started, so
-    /// whatever the old one did, it is over and nobody said how.
-    /// A program was pressed and its launch is with the helper: the Wine
-    /// log's end now is where its run's trail begins, since the process can
-    /// write before the reply is handled.
+    /// A program was pressed: its run's Wine trail starts at the log's end now, since the process
+    /// can write before the reply is handled.
     func noteLaunchPressed(appID: Int) {
         pressedOffsets[appID] = (Self.size(of: wineLog), .now)
     }
 
-    /// The offset a press of `appID` took, if one was taken recently.
     private func takePressedOffset(_ appID: Int) -> UInt64? {
         defer { pressedOffsets[appID] = nil }
         guard let pressed = pressedOffsets[appID], .now - pressed.at < Self.pressedOffsetLife else { return nil }
@@ -308,6 +255,7 @@ final nonisolated class RunRecorder {
     private var pressedOffsets: [Int: (offset: UInt64, at: ContinuousClock.Instant)] = [:]
     private static let pressedOffsetLife: Duration = .seconds(300)
 
+    /// A launch of `appID` has begun. Re-arming an open app closes the old run as unknown.
     func arm(appID: Int) {
         guard appID != 0 else { return }
         if open[appID] != nil {
@@ -323,10 +271,9 @@ final nonisolated class RunRecorder {
             let current = BottleGraphics.currentSelection()
             return (current.renderer, current.msync, current.d3dMetalVersion)
         }()
-        // The engine the running client booted from, which is what actually
-        // ran the game — never Engine.active, which may already name the next
-        // restart's staged selection. Its bottle is where Steam wrote this
-        // run's exit, so the record and the log it reads name the same engine.
+        // The engine the client booted from, which ran the game. Never Engine.active: it may name
+        // the next restart's staged selection. Steam writes this run's exit in that engine's
+        // bottle.
         let bootedEngine = BottleGraphics.bootedEngineRoot().flatMap(Engine.booted(fromRoot:))
         let steamLog = processLogOverride
             ?? bootedEngine.map(Self.steamProcessLogURL(forEngine:))
@@ -382,32 +329,24 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// One of the launch's processes reached the Mac driver, named by the
-    /// dock shim's chronicle. The executable's file, found in the game's
-    /// install or given by the caller, says whether it is a 32- or 64-bit
-    /// image; the chronicle's pid is what the run's meters are read from.
-    /// The run carries the name of the process it follows, so a launcher that
-    /// armed first gives its name up with its pid.
+    /// One of the launch's processes reached the Mac driver, named by the dock shim's chronicle.
+    /// The executable's file gives the image's bitness; the run follows the named process, so a
+    /// launcher armed first hands over its name and pid.
     func noteExecutable(
         _ exe: String, pid: pid_t? = nil, forApp appID: Int, at url: URL? = nil,
     ) {
-        // A launcher's process gives way to the game's, but a process that
-        // arrives once the game has drawn (Genshin's frame-rate unlocker,
-        // a companion window) is a helper, and the game keeps its pid.
+        // A process arriving after the game has drawn (Genshin's frame-rate unlocker, a companion
+        // window) is a helper; the game keeps its pid.
         var takesOver = false
         if let pid, open[appID]?.gamePID == nil || !presentStats.hasCounted(forApp: appID) {
             takesOver = open[appID]?.gamePID != pid
             open[appID]?.gamePID = pid
-            // A Quick Launch program's pages carry no app id either: its own
-            // process is how its frames are found.
+            // A Quick Launch program's pages carry no app id, so its frames are found by pid.
             if AdoptedPrograms.program(appID) != nil { presentStats.claim(pid: pid, forApp: appID) }
         }
-        // A process that loaded winemac.drv runs in the bottle. A game set to
-        // the native NW.js runner whose process arrives this way was started
-        // under Wine after all (an exe it shares with another game, on an
-        // engine that keys env files by name alone), and the record says what
-        // ran rather than what was set: its renderer is the bottle's, to be
-        // confirmed from the Wine log like any Wine run's.
+        // A game set to native NW.js whose process loaded winemac.drv was started under Wine (an
+        // exe shared with another game, on an engine that keys env files by name), so it is
+        // recorded as a Wine run.
         if pid != nil, open[appID]?.record.runner == GameRunner.nwjs {
             open[appID]?.record.runner = GameRunner.wine
             open[appID]?.record.renderer = Self.bottleRenderer()
@@ -425,31 +364,19 @@ final nonisolated class RunRecorder {
         persist(appID: appID)
     }
 
-    /// The renderer the bottle's client booted on, or the one chosen for its
-    /// next boot: what a Wine run renders through until its log confirms one.
+    /// The bottle's booted renderer, else its next boot's: a Wine run's renderer until its log
+    /// confirms one.
     private static func bottleRenderer() -> String {
         (BottleGraphics.bootedSelection()?.renderer ?? BottleGraphics.currentSelection().renderer).rawValue
     }
 
-    /// Reads the meters that only exist while a run is up: what the kernel
-    /// has billed the game's own process, and whether macOS is running a Game
-    /// Mode session.
-    ///
-    /// Sampled rather than read at the close, because by then the process is
-    /// gone and `proc_pid_rusage` has nothing to answer with; the last
-    /// reading that came back is what the record keeps, and the counters only
-    /// grow. Called every ``meterInterval`` while any run is open.
-    ///
-    /// Memory only: a sample every two seconds is not worth a write to the
-    /// armed file, whose job is to name the launch a killed app left running.
+    /// Samples the meters that exist only while a run is up: the kernel's bill for the game's
+    /// process and whether a Game Mode session runs. At the close `proc_pid_rusage` has nothing
+    /// to read, so the record keeps the last reading. Memory only; the armed file is not rewritten.
     ///
     /// - Parameters:
-    ///   - observe: What the window server shows of a game process's window right
-    ///     now. Its focus goes into the run's frame trace, where ``GameplayWindow`` leaves
-    ///     the stretches nobody was playing out of the frame rate; the display it was played
-    ///     on goes into the record.
-    ///   - busyThreads: How many of a process's threads keep a core busy
-    ///     (``ThreadActivity``), counted at each look that finds the game focused.
+    ///   - observe: The game window's focus, for the frame trace (``GameplayWindow``), and its display.
+    ///   - busyThreads: Busy threads of a process (``ThreadActivity``), counted while the game is focused.
     func sample(
         observing observe: (pid_t) -> GameObservation? = { _ in nil },
         busyThreads: (pid_t) -> Int? = { ThreadActivity.busyThreads(pid: $0) },
@@ -457,8 +384,7 @@ final nonisolated class RunRecorder {
         guard !open.isEmpty else { return }
         let gameMode = GameModeSignal.isActive()
         for (appID, run) in open {
-            // Sticky: a session that began when the game went full screen and
-            // ended before the game did is still a fact about the run.
+            // Sticky: a Game Mode session that ended before the game is still a fact about the run.
             open[appID]?.record.gameMode = gameMode || run.record.gameMode == true
             guard let pid = run.gamePID else { continue }
             if let seen = observe(pid) {
@@ -470,8 +396,7 @@ final nonisolated class RunRecorder {
                     open[appID]?.busyThreadSamples.append(busy)
                 }
             }
-            // The largest window seen: a game opens on a launcher or splash
-            // window before the one it plays in.
+            // The largest window seen: a game opens on a launcher or splash window first.
             if let window = MacHardware.largestWindow(ofPID: pid),
                window.area > (run.record.resolution?.window?.area ?? 0) {
                 open[appID]?.record.resolution = RunRecord.Resolution(
@@ -483,8 +408,7 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// Every how many meter ticks the Wine log is read for the engine's
-    /// renderer lines: ten seconds.
+    /// Every how many meter ticks the Wine log is read for renderer lines: ten seconds.
     static let provenanceCheckEvery = 5
 
     /// One open Wine run's next read of the Wine log.
@@ -504,12 +428,9 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// The engine's renderer lines that `read` found, and where it stopped.
-    /// The record takes the renderer as soon as a process names one, so a
-    /// report collected while the game plays already says what answered it.
+    /// Folds in the renderer lines `read` found, so a report collected mid-game already names the renderer.
     ///
-    /// - Parameter read: The read that was started; a run closed or re-armed
-    ///   since then has moved on, and the lines are not its.
+    /// - Parameter read: The read that was started; its lines are dropped if the run closed or re-armed since.
     func noteProvenance(_ lines: String, readTo end: UInt64, for read: ProvenanceRead) {
         guard var run = open[read.appID],
               (run.provenanceOffset ?? run.wineLogOffset) == read.offset else { return }
@@ -536,12 +457,9 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// The `sevo:run` and `sevo:gfx` renderer lines, and the engine's
-    /// decoded-nothing lines, that the Wine log gained from `offset`, and
-    /// where the read stopped: after the last whole line, so a
-    /// line the engine is still writing is read whole the next time. A log
-    /// shorter than `offset` was replaced and is read from its start; growth
-    /// past ``maximumTailBytes`` is skipped to its last stretch.
+    /// The renderer and decoded-nothing lines the Wine log gained from `offset`, and where the read
+    /// stopped: after the last whole line. A log shorter than `offset` was replaced and is read
+    /// from its start; growth past ``maximumTailBytes`` is skipped to its last stretch.
     static func provenance(in url: URL, from offset: UInt64) -> (lines: String, end: UInt64) {
         let size = size(of: url)
         var start = size < offset ? 0 : offset
@@ -565,48 +483,34 @@ final nonisolated class RunRecorder {
         return (kept.joined(separator: "\n"), start + UInt64(whole.count))
     }
 
-    /// Every how many meter ticks the native runs' processes are looked for.
     static let nativeCheckEvery = 3
 
-    /// The open runs on the native NW.js runner, whose end only their own
-    /// processes tell.
+    /// Open runs on the native NW.js runner, whose end only their processes tell.
     var nativeRuns: [Int] {
         open.filter { $0.value.record.runner == GameRunner.nwjs }.map(\.key)
     }
 
-    /// The open runs of programs added to Quick Launch. A start from Quick
-    /// Launch sends no lifetime edge: like a native run, only their own
-    /// processes tell their end. A start from Steam's library has Steam's
-    /// edge as well, and whichever comes first closes the run. A shortcut the
-    /// user made in Steam for anything else has an id in the same range, but
-    /// no program entry.
+    /// Open runs of Quick Launch programs. A Quick Launch start sends no lifetime edge, so their
+    /// processes tell their end; a library start also has Steam's edge, and the first closes the
+    /// run.
     var programRuns: [Int] {
         open.filter { appID, run in
             run.record.runner != GameRunner.nwjs && AdoptedPrograms.program(appID) != nil
         }.map(\.key)
     }
 
-    /// How many empty checks close a program's run whose process never
-    /// appeared: about two minutes, since a HoYoverse game's first launch
-    /// makes its companion prefix before it starts.
+    /// Empty checks that close a program run whose process never appeared: about two minutes, since
+    /// a HoYoverse game's first launch makes its companion prefix first.
     static let programNeverSeenChecks = 20
 
-    /// Native runs whose processes have been seen alive.
     private var nativeSeen: Set<Int> = []
-    /// Checks in a row that found no process of a native run never seen alive.
     private var nativeUnseen: [Int: Int] = [:]
-    /// How many empty checks close a native run whose processes never appeared: about
-    /// thirty seconds at ``nativeCheckEvery`` meter ticks apart.
+    /// Empty checks that close a native run never seen alive: about thirty seconds.
     static let nativeNeverSeenChecks = 5
 
-    /// A native run's processes were looked for. Seen and then gone is the
-    /// end of the run; never seen is a game still starting, until
-    /// ``nativeNeverSeenChecks`` looks have found nothing and it never started.
-    ///
-    /// `gone` is how a run that was seen and then vanished ended when nobody
-    /// asked it to stop: a native run's player closed it; a Wine program's
-    /// ending is left to its Wine trail (`nil`), which tells a crash from an
-    /// exit.
+    /// A native run's processes were looked for. Seen and then gone ends the run, as a requested
+    /// stop or as `gone` (nil leaves a Wine program's ending to its Wine trail); never seen closes
+    /// it after `neverSeenChecks` empty looks.
     func noteNativeProcesses(
         alive: Bool, forApp appID: Int, gone: RunRecord.Exit.Kind? = .user,
         neverSeenChecks: Int = nativeNeverSeenChecks,
@@ -615,8 +519,6 @@ final nonisolated class RunRecorder {
             nativeSeen.insert(appID)
             nativeUnseen[appID] = nil
         } else if nativeSeen.remove(appID) != nil {
-            // The native processes carry no exit code here: the run was
-            // asked to stop, or the player closed it.
             let stop = RunLog.takeStopRequest(forApp: appID, in: runs)
             close(appID: appID, kind: stop.map(RunInProgress.stoppedKind) ?? gone)
         } else {
@@ -626,51 +528,38 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// How often ``sample`` is worth calling: two system calls per open run,
-    /// which is the same cadence the stall watchdog samples at.
+    /// How often ``sample`` runs: two system calls per open run, the stall watchdog's cadence.
     static let meterInterval: Duration = .seconds(2)
 
-    /// Whether any run is open, which is what makes the meters worth reading
-    /// and the machine worth sampling.
     var isRecording: Bool {
         !open.isEmpty
     }
 
-    /// How many runs this recorder has closed, so a reader polling it sees
-    /// every closing, a run re-armed within one poll included.
+    /// Runs closed so far, so a poller sees every closing, a re-arm within one poll included.
     private(set) var closedRuns = 0
 
-    /// The macOS process each open run is running under, for the watchdog that
-    /// samples them and for the monitor that lists them. A run whose
-    /// executable never reached the Mac driver is not in it.
+    /// The macOS pid each open run follows, for the stall watchdog and the process monitor.
     var runningPIDs: [Int: pid_t] {
         open.compactMapValues(\.gamePID)
     }
 
-    /// Moves an open run onto another process of the same game, for a game whose
-    /// followed process exited while the game plays on.
+    /// Moves an open run onto another process of the game, after the followed one exited.
     func follow(pid: pid_t, forApp appID: Int) {
         open[appID]?.gamePID = pid
     }
 
-    /// An open run's record as it stands, for anything that wants to act on a
-    /// game that is still playing — the process monitor collecting its report
-    /// without waiting for it to end.
+    /// An open run's record as it stands, for acting on a game still playing.
     func openRecord(forApp appID: Int) -> RunRecord? {
         guard var run = open[appID] else { return nil }
         run.record.durationSeconds = Self.seconds(since: run.started)
         return run.record
     }
 
-    /// One rung of the stall ladder, written into the run it happened in.
-    ///
-    /// `at` is measured from the run's own start rather than passed in: the
-    /// watchdog knows how long the game has been still, and the record wants
-    /// to know when in the session that was.
+    /// One rung of the stall ladder, written into its run; `at` comes from the run's start minus
+    /// the stall's length.
     func noteStall(lasting duration: Double, unwedged: String?, forApp appID: Int) {
         guard let run = open[appID] else { return }
-        // Clamped: a rung cannot have happened before the run it is in, and
-        // the two clocks that decide this are not the same one.
+        // Clamped: two different clocks decide this.
         let stall = RunRecord.Stall(
             at: max(0, Self.seconds(since: run.started) - duration), duration: duration,
             unwedged: unwedged,
@@ -679,24 +568,23 @@ final nonisolated class RunRecorder {
         persist(appID: appID)
     }
 
-    /// Where the executable a launch named sits on disk: in the app's Steam
-    /// install, or, for an adopted program, wherever it was adopted from.
-    /// The tuning a record carries: the preset, and for a custom one its
-    /// parameters, since two custom runs are only comparable by them.
+    /// The tuning a record carries; a custom preset includes its parameters, since only those make
+    /// two custom runs comparable.
     private static func tuningLabel(forApp appID: Int) -> String {
         let tuning = GameConfig.tuning(bottle: SteamBottle.name, game: appID).value
         guard tuning == .custom else { return tuning.rawValue }
         return "custom:\(GameConfig.tuningParameters(bottle: SteamBottle.name, game: appID).argument)"
     }
 
-    /// The processors a launch of `appID` is told of: its cap when it has one
-    /// below the Mac's count, otherwise the Mac's.
+    /// The processors a launch is told of: its cap when below the Mac's count.
     private static func processorsSeen(forApp appID: Int) -> Int {
         let host = ProcessInfo.processInfo.activeProcessorCount
         let cap = GameConfig.processors(bottle: SteamBottle.name, game: appID).value
         return cap > 0 ? min(cap, host) : host
     }
 
+    /// The launch's executable on disk: in the Steam install, or wherever an adopted program came
+    /// from.
     private static func executableURL(named exe: String, forApp appID: Int) -> URL? {
         let wanted = exe.lowercased()
         if let program = GameConfig.game(appID).program,
@@ -708,7 +596,6 @@ final nonisolated class RunRecorder {
             .first { $0.lastPathComponent.lowercased() == wanted }
     }
 
-    /// The game's first window is on screen.
     func noteWindowUp(forApp appID: Int) {
         guard var run = open[appID], run.record.windowAfterSeconds == nil else { return }
         run.record.windowAfterSeconds = Self.seconds(since: run.started)
@@ -716,24 +603,22 @@ final nonisolated class RunRecorder {
         persist(appID: appID)
     }
 
-    /// The client raised an error for this game action.
     func noteSteamError(_ detail: String, forApp appID: Int) {
         guard let run = open[appID], run.steamError != detail else { return }
         open[appID]?.steamError = detail
         persist(appID: appID)
     }
 
-    /// The client says the app is running. A run it never announced a launch
-    /// for (the game a launcher started, after the launcher's own run closed)
-    /// opens here.
+    /// The client says the app is running. A run it never announced (a launcher's game, after the
+    /// launcher's run closed) opens here.
     func noteRunning(appID: Int) {
         if open[appID] == nil { arm(appID: appID) }
         confirmedRunning.insert(appID)
         handovers[appID] = nil
     }
 
-    /// The client says the app stopped running. Right after a hand-over that
-    /// is the old instance going, and the run just armed has yet to start.
+    /// The client says the app stopped running. Right after a hand-over that is the old instance
+    /// going.
     func noteStopped(appID: Int) {
         if let handover = handovers.removeValue(forKey: appID),
            !confirmedRunning.contains(appID),
@@ -743,17 +628,12 @@ final nonisolated class RunRecorder {
         close(appID: appID)
     }
 
-    /// Ends the open run of `appID`. The record is written on the closing
-    /// queue: finishing it reads the tails of two logs, which is disk work
-    /// the caller should not wait on.
+    /// Ends the open run of `appID`; the record is written on the closing queue, since it reads two logs.
     ///
     /// - Parameters:
-    ///   - kind: The ending the caller knows for a fact whatever the logs say.
-    ///   - unrecorded: What the ending is when Steam wrote no exit for it and
-    ///     the logs name nothing else.
-    ///   - durationKnown: False for a run that ended while no process of this app watched
-    ///     it: the time since it was armed is not how long it ran, and the record says
-    ///     nothing rather than that.
+    ///   - kind: The ending the caller knows for a fact.
+    ///   - unrecorded: The ending when Steam wrote no exit and the logs name nothing else.
+    ///   - durationKnown: False for a run that ended unwatched, which records no duration.
     func close(
         appID: Int, kind: RunRecord.Exit.Kind? = nil, unrecorded: RunRecord.Exit.Kind = .unknown,
         durationKnown: Bool = true,
@@ -765,26 +645,19 @@ final nonisolated class RunRecorder {
         nativeSeen.remove(appID)
         nativeUnseen[appID] = nil
         run.record.fps = presentStats.disarm(appID: appID)
-        // Before the write rather than after it: the same app id can be armed
-        // again in the next moment, and a disarm behind that would take the
-        // new run's file with it.
+        // Disarmed before the write: the app id can be re-armed at once, and a later disarm would
+        // take the new run's file.
         RunLog.disarm(appID: appID, in: runs)
         let lasted = durationKnown ? Self.seconds(since: run.started) : nil
-        // A program of ours closing now is one whose launcher is still
-        // ending; a run picked up from an earlier process has had its line
-        // written long ago, or never.
+        // Only a program closing now has a launcher still writing its exit line.
         let grace = durationKnown && AdoptedPrograms.isAdopted(appID) ? programExitGrace : .zero
         Self.closings.async {
             run.write(lasting: lasted, kind: kind, unrecorded: unrecorded, programExitGrace: grace)
         }
     }
 
-    /// Closes every open run, for the quit path: the app is going away and
-    /// nothing will learn any more about these than is already on disk.
-    /// Inline, because nothing will drain a queue after this either.
-    ///
-    /// A game still up here is one the teardown is about to take down with
-    /// the bottle, so an ending Steam never recorded is that quit.
+    /// Closes every open run, inline, for the quit path. A game still up is about to go down with
+    /// the bottle, so an ending Steam never recorded is the quit.
     func closeAll() {
         for var run in open.values {
             run.record.fps = presentStats.disarm(appID: run.record.appid)
@@ -796,14 +669,9 @@ final nonisolated class RunRecorder {
         open.removeAll()
     }
 
-    /// Takes over the runs an earlier process of this app left open.
-    ///
-    /// A game outlives the app that launched it — a force-quit sends the
-    /// bottle nothing — so the launch is armed on disk as well as in memory
-    /// and read back here. Steam's own process log is what says which of them
-    /// is still up: it tracks every process it started for an app id, and it
-    /// is rewritten at each client start, so an app with no line in it at all
-    /// belongs to a client session that is over.
+    /// Takes over the runs an earlier process of this app left armed on disk (a force-quit leaves
+    /// its game running). Steam's process log, rewritten at each client start, says which are still
+    /// up.
     func reattach() {
         for armed in RunLog.armedRuns(in: runs) {
             let appID = armed.record.appid
@@ -826,9 +694,7 @@ final nonisolated class RunRecorder {
             let stillUp = SteamGameProcessLog.tracks(app: appID, in: tail)
                 && SteamGameProcessLog.exits(forApp: appID, in: tail).isEmpty
             if stillUp {
-                // The counter starts from this moment: the frames of the run
-                // before the app went away are in no page this process read, and the
-                // trace the earlier process wrote stays as it is.
+                // The counter starts now; the earlier process's trace stays as it is.
                 presentStats.arm(appID: appID)
                 Self.log("run reattached — \(armed.record.summary)")
             } else {
@@ -837,15 +703,12 @@ final nonisolated class RunRecorder {
         }
     }
 
-    /// Writes an open run to disk, so the launch outlives this process.
     private func persist(appID: Int) {
         guard let run = open[appID] else { return }
         RunLog.arm(run.armed, in: runs)
     }
 
-    /// Where a closing run reads its logs and writes its record. Serial, so
-    /// two games ending together are two records rather than one damaged
-    /// line.
+    /// Serial, so two games ending together write two records rather than one damaged line.
     private static let closings = DispatchQueue(label: "sevo.runrecorder", qos: .utility)
 
     // MARK: - The machine
@@ -870,7 +733,6 @@ final nonisolated class RunRecorder {
         return RunRecord.Host(thermal: snapshot.thermalState, load: snapshot.loadAverage1m)
     }
 
-    /// Elapsed seconds, one decimal.
     fileprivate static func seconds(since start: ContinuousClock.Instant) -> Double {
         let elapsed = ContinuousClock.now - start
         let seconds = Double(elapsed.components.seconds)
@@ -884,16 +746,17 @@ final nonisolated class RunRecorder {
         SteamBottle.steamRoot.appendingPathComponent("logs/gameprocess_log.txt")
     }
 
-    /// The same log inside a named engine's own bottle, for a run recorded
-    /// against the engine that booted the client rather than ``Engine/active``.
+    /// The same log in a named engine's bottle, for a run recorded against the engine that booted
+    /// the client.
     static func steamProcessLogURL(forEngine engine: Engine) -> URL {
         SteamBottle
             .steamRoot(inBottle: engine.bottlesRoot.appendingPathComponent(SteamBottle.name))
             .appendingPathComponent("logs/gameprocess_log.txt")
     }
 
-    /// A file shorter than the offset was truncated under us (Steam rewrites
-    /// its own log at each client start) and is read whole.
+    /// What `url` gained from `offset`, at most ``maximumTailBytes`` of its end. A file shorter
+    /// than the offset was truncated (Steam rewrites its log at each client start) and is read from
+    /// its start.
     fileprivate static func text(of url: URL, from offset: UInt64) -> String {
         let size = size(of: url)
         let start = size < offset ? 0 : offset
@@ -905,9 +768,8 @@ final nonisolated class RunRecorder {
         return String(decoding: data, as: UTF8.self)
     }
 
-    /// How much of a log's growth is read back at a run's end. A game left
-    /// running overnight with a verbose channel on can write gigabytes; the
-    /// exception that ends it is at the end.
+    /// How much of a log's growth is read at a run's end: a verbose channel overnight writes
+    /// gigabytes, and the ending is at the end.
     private static let maximumTailBytes = 4_000_000
 
     private static func size(of url: URL) -> UInt64 {

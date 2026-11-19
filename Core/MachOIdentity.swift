@@ -4,11 +4,10 @@ import MachO
 /// The UUID the linker stamps into a Mach-O image: the same for two copies
 /// of one build, different for any two builds, whatever version they claim.
 nonisolated enum MachOIdentity {
-    /// The running process's own image, read from memory: a file at the
+    /// The running process's own image, read from memory: the file at the
     /// executable's path can be a newer build than the process started from.
     static var ofThisProcess: String? {
-        // The executable is whichever loaded image says it is one; its place
-        // in dyld's list is no promise.
+        // Found by file type: its index in dyld's list is not guaranteed.
         for index in 0 ..< _dyld_image_count() {
             guard let header = _dyld_get_image_header(index), header.pointee.filetype == UInt32(MH_EXECUTE)
             else { continue }
@@ -35,9 +34,8 @@ nonisolated enum MachOIdentity {
         }
     }
 
-    /// The CPU types a Mach-O file carries: one for a thin file, one per
-    /// slice for a universal one. Nil when the file is unreadable or is no
-    /// Mach-O. Reads only the header.
+    /// The CPU types a Mach-O file carries, one per slice, read from the
+    /// header; `nil` when the file is unreadable or not Mach-O.
     static func cpuTypes(ofFile url: URL) -> [cpu_type_t]? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }

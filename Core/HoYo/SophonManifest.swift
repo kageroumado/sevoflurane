@@ -3,8 +3,7 @@ import Foundation
 /// Every file of one category of a Sophon build, decoded from the protobuf
 /// manifest `getBuild` points at.
 ///
-/// Field numbers, read off the 4.6.0 Star Rail manifest with `protoc
-/// --decode_raw` and checked by rebuilding files from them:
+/// Field numbers (from the 4.6.0 Star Rail manifest, `protoc --decode_raw`):
 ///
 /// - manifest: `1` file (repeated)
 /// - file: `1` path, `2` chunk (repeated), `3` type (64 for a directory),
@@ -80,12 +79,11 @@ nonisolated struct SophonManifest: Sendable {
 ///
 /// - manifest: `1` file (repeated), `2` deletions (repeated, one per tag)
 /// - file: `1` path, `2` size, `3` md5, `4` patch (repeated, one per tag the
-///   file changed since; a file with none is the same in every listed tag)
+///   file changed since)
 /// - patch: `1` tag, `2` diff
 /// - diff: `1` blob name on the server, `4` blob size, `6` offset of this
 ///   diff in the blob, `7` its length, `8` the older file it applies to
-///   (absent for a file that is new, whose diff applies to nothing),
-///   `9` that file's size, `10` its md5
+///   (absent for a new file), `9` that file's size, `10` its md5
 /// - deletions: `1` tag, `2` list, whose `1` entries are files with `1`
 ///   path, `2` size, `3` md5
 ///
@@ -200,8 +198,7 @@ nonisolated struct SophonPatchManifest: Sendable {
     }
 }
 
-/// The protobuf wire format, as far as Sophon's manifests use it: varints
-/// and length-delimited fields, read without a schema.
+/// The protobuf wire format, read without a schema.
 nonisolated enum ProtobufReader {
     struct Field {
         let number: Int
@@ -217,11 +214,8 @@ nonisolated enum ProtobufReader {
         let description: String
     }
 
-    /// A manifest's file path, when it names a file inside the game folder.
-    ///
-    /// Every path is appended to that folder and then written, patched or
-    /// deleted, so an empty one would name the folder itself and an absolute or
-    /// `..` one a file outside it.
+    /// A manifest's file path, checked to stay inside the game folder it is
+    /// written into: never empty, absolute, or containing `..`.
     static func contained(_ path: String) throws -> String {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !path.isEmpty, !path.hasPrefix("/"), !components.contains("..") else {

@@ -1,35 +1,30 @@
 import Foundation
 
-/// What supervision reports, in the vocabulary every process speaks: the
-/// daemon derives it, the app renders it, `sevo` prints it.
+/// What supervision reports: the daemon derives it, the app renders it,
+/// `sevo` prints it.
 ///
-/// The verdict is a function of ``SupervisorHealthInputs`` and nothing else —
-/// health used to be assigned from some twenty sites in three concurrent
-/// contexts, last writer wins, which is how a pause could be overwritten by a
-/// ladder that had been parked in an await since before it.
+/// The verdict is a function of ``SupervisorHealthInputs`` alone. Never assign
+/// it from several sites: last writer wins, and a ladder parked in an await
+/// can overwrite a pause.
 nonisolated enum SupervisorHealth: Equatable, Sendable {
     case starting
     case healthy
-    /// Signed out with the login window up: Steam's services stay down until
-    /// the user signs in, so recovery is held — the machine is waiting on a
-    /// human, not wedged.
+    /// Signed out with the login window up; recovery is held until the user
+    /// signs in.
     case waitingForSignIn
     /// Something is failing; the reason is shown in the menu bar.
     case degraded(String)
     /// Mid-restart; the phase is shown in the menu bar.
     case restarting(String)
-    /// A startup in progress. Wine takes tens of seconds to bring the client's
-    /// CDP endpoint up and Steam's stores take longer still, and this app is on
-    /// screen throughout — a launch that is merely slow must not read as a
-    /// fault, and must not be "recovered" from.
+    /// A startup in progress, which takes tens of seconds; a slow launch must
+    /// not read as a fault or be "recovered" from.
     case launching(String)
-    /// Repeated restarts failed — the client is crash-looping and another
-    /// launch would only stack crash dumps. Manual restarts only.
+    /// Repeated restarts failed, so only manual restarts remain.
     case gaveUp(String)
     case paused
 
-    /// The word `sevo` reads out of `/status`, and the app reads back off the
-    /// link. Stable: scripts and agents match on these.
+    /// The word in `/status` and on the link. Stable: scripts and agents
+    /// match on these.
     var wireName: String {
         switch self {
         case .starting: "starting"
@@ -70,8 +65,7 @@ nonisolated enum SupervisorHealth: Equatable, Sendable {
         }
     }
 
-    /// Whether the menu-bar glyph should carry the attention badge: the states
-    /// where nothing is healing itself and the user should look.
+    /// Whether the menu-bar glyph carries the attention badge.
     var needsAttention: Bool {
         switch self {
         case .degraded, .gaveUp: true
@@ -79,8 +73,7 @@ nonisolated enum SupervisorHealth: Equatable, Sendable {
         }
     }
 
-    /// Rebuilds a health from what crossed the link. `detail` carries the
-    /// phrase for the cases that hold one; the rest ignore it.
+    /// Rebuilds a health from what crossed the link.
     init(wireName: String, detail: String) {
         self = switch wireName {
         case "healthy": .healthy
@@ -94,8 +87,7 @@ nonisolated enum SupervisorHealth: Equatable, Sendable {
         }
     }
 
-    /// `statusText` prefixes a restart's phase; the phrase is what the case
-    /// holds, so the prefix comes back off before it is rebuilt.
+    /// Strips the prefix `statusText` adds to a restart's phase.
     private static func restartPhase(from detail: String) -> String {
         let prefix = "restarting: "
         return detail.hasPrefix(prefix) ? String(detail.dropFirst(prefix.count)) : detail
@@ -110,9 +102,8 @@ nonisolated enum SupervisorFault: Equatable, Sendable {
 }
 
 /// Where the client's own boot has got to, as the probe cycle sees it. The
-/// restart ladder hands over the moment the launcher is spawned, so every wait
-/// past that point runs with the cycle's guards on rather than inside a ladder
-/// that switches the cycle off for minutes.
+/// restart ladder hands over once the launcher is spawned, so later waits run
+/// with the cycle's guards on.
 nonisolated enum SupervisorBootPhase: Equatable, Sendable {
     case idle
     /// Launched; CDP has not answered yet.
@@ -140,16 +131,14 @@ nonisolated struct SupervisorHealthInputs: Equatable, Sendable {
     var isRestarting = false
     /// The rung the restart ladder is on.
     var restartPhase = ""
-    /// A phase the machine is deliberately waiting through, told as a first
-    /// launch or as a recovery by `hasBeenHealthy`.
+    /// A phase deliberately waited through; `hasBeenHealthy` decides whether
+    /// it reads as a launch or a recovery.
     var progressPhase: String?
     var isPageBooting = false
     var lastProbe: ClientLifecycle.ClientState = .down
     /// Whether the page reports Steam's stores as initialized.
     var pageServicesUp = false
-    /// Whether this session has had a healthy client: a client that
-    /// answers while Steam's services are still coming up is a launch in
-    /// progress.
+    /// Whether this session has had a healthy client.
     var hasBeenHealthy = false
     var isAwaitingSignIn = false
     var fault: SupervisorFault?
@@ -158,16 +147,12 @@ nonisolated struct SupervisorHealthInputs: Equatable, Sendable {
 nonisolated extension SupervisorHealth {
     /// The one place a `SupervisorHealth` comes from.
     ///
-    /// A paused supervisor reports the pause whatever the client is doing —
-    /// the flag is about supervision, not about Steam. A signed-out client
-    /// outranks progress and faults alike: it is a steady state waiting on a
-    /// human, and reading it as a fault is what drove the recovery ladder into
-    /// the login window.
+    /// A pause outranks everything. A signed-out client outranks progress and
+    /// faults: read as a fault, it drives the recovery ladder into the login window.
     static func evaluate(_ inputs: SupervisorHealthInputs) -> SupervisorHealth {
         if inputs.isPaused { return .paused }
         if case let .gaveUp(reason)? = inputs.fault { return .gaveUp(reason) }
-        // The ladder is how a client is started as well as restarted: it is a
-        // restart only where there was a client to lose.
+        // The ladder also starts a client; it is a restart only after a healthy one.
         if inputs.isRestarting {
             return inputs.hasBeenHealthy
                 ? .restarting(inputs.restartPhase) : .launching(inputs.restartPhase)

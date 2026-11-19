@@ -23,8 +23,7 @@ nonisolated enum SettingScope: Hashable, Sendable {
     }
 }
 
-/// Everything a settings pane can ask for. A view sends one of these and
-/// knows nothing of keys, files or the engine.
+/// Everything a settings pane can ask for.
 nonisolated enum SettingAction: Equatable, Sendable {
     /// Gives a setting a value at this level; `nil` hands it back to the
     /// level above.
@@ -32,20 +31,18 @@ nonisolated enum SettingAction: Equatable, Sendable {
     case setTuningParameters(TuningParameters)
     /// Gives a library a load order for this game; `nil` takes it away.
     case setDLLOverride(library: String, order: String?)
-    /// Sets a variable by name at this level; `nil` takes it away. A pair
-    /// ``UserEnvironment/problem(name:value:)`` refuses changes nothing.
+    /// Sets a variable at this level; `nil` takes it away. A pair
+    /// ``UserEnvironment/problem(name:value:)`` refuses is ignored.
     case setEnvironment(name: String, value: String?)
 }
 
 nonisolated enum SettingReducer {
-    /// What an action makes of a level's values. Pure: the whole of what a
-    /// control can change is readable here, and testable without a disk.
+    /// What an action makes of a level's values; pure.
     static func reduce(_ values: inout ConfigValues, _ action: SettingAction) {
         switch action {
         case let .set(id, value):
             SettingCatalog.setting(id).write(&values, value)
-            // The parameters belong to the Custom preset: they arrive with it
-            // and leave with it.
+            // Parameters exist only under the Custom preset.
             if id == .tuning {
                 values.tuningParameters = values.tuning == .custom
                     ? values.tuningParameters ?? .experimental : nil
@@ -76,9 +73,8 @@ protocol SettingsEnvironment: Sendable {
     nonisolated func resolved(_ setting: Setting, bottle: String, game: Int?) -> SettingValue
 }
 
-/// The real thing: the JSON store, the change trail, the env files and the
-/// registry pass, all behind ``GameConfig/update(bottle:prefix:inBackground:_:)``.
-/// Settings runs on the main actor, so the files are written off it.
+/// The store on disk, through ``GameConfig/update(bottle:prefix:inBackground:_:)``,
+/// written off the main actor.
 nonisolated struct LiveSettingsEnvironment: SettingsEnvironment {
     func values(_ scope: SettingScope) -> ConfigValues {
         switch scope {
@@ -101,8 +97,8 @@ nonisolated struct LiveSettingsEnvironment: SettingsEnvironment {
     }
 }
 
-/// A copy of the store in memory, for the demo, the gallery and tests: it
-/// starts from what is on disk and writes nothing back.
+/// An in-memory overlay of the store for the demo, gallery and tests; it
+/// writes nothing back.
 final nonisolated class InMemorySettingsEnvironment: SettingsEnvironment, @unchecked Sendable {
     private let lock = NSLock()
     private var stored: [SettingScope: ConfigValues]

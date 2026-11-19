@@ -1,8 +1,7 @@
 import Foundation
 
-/// What a game's own NW.js build says about itself: enough to pick the macOS
-/// runtime that matches it, to write the wrapper package it is started
-/// through, and to know whether achievements need the bottle-side stub.
+/// What a game's own NW.js build says about itself: enough to pick the matching macOS runtime,
+/// write its wrapper package, and know whether achievements need the bottle-side stub.
 nonisolated struct NWJSInfo: Codable, Equatable, Sendable {
     /// The NW.js the game ships, as its own binary declares it ("0.29.0").
     var version: String
@@ -12,17 +11,15 @@ nonisolated struct NWJSInfo: Codable, Equatable, Sendable {
     var main: String
     /// "RPG Maker MV", "RPG Maker MZ", or absent for a plain NW.js app.
     var flavor: String?
-    /// Whether the game bundles greenworks, the node module that talks to
-    /// `steam_api.dll` — the games whose achievements need the stub.
+    /// Whether the game bundles greenworks, the node module that talks to `steam_api.dll`, so its
+    /// achievements need the stub.
     var greenworks: Bool
-    /// Whether the game's own code stores anything through greenworks' Steam
-    /// Cloud calls. The bridge to the bottle carries achievements and stats
-    /// and reports failure for the cloud rather than pretending to write, so
-    /// such a game keeps its progress only on the wine runner.
+    /// Whether the game's own code stores anything through greenworks' Steam Cloud calls. The
+    /// bridge reports failure for cloud writes, so such a game keeps its progress only on the wine
+    /// runner.
     var greenworksCloud: Bool?
-    /// `package.json`'s `name`, which is the directory NW.js keeps
-    /// localStorage and IndexedDB under. NW.js' own default is `nwjs`, which
-    /// is what an empty name in the file means.
+    /// `package.json`'s `name`, the directory NW.js keeps localStorage and IndexedDB under; an
+    /// empty name means NW.js' default, `nwjs`.
     var packageName: String
 
     /// One line for a listing: `nwjs 0.29.0 · RPG Maker MV · greenworks no`.
@@ -33,8 +30,7 @@ nonisolated struct NWJSInfo: Codable, Equatable, Sendable {
             + (greenworksCloud == true ? " (uses Steam Cloud)" : "")
     }
 
-    /// What a user has to know before switching this game to the native
-    /// runner, or `nil` when there is nothing to say.
+    /// What a user must know before switching this game to the native runner.
     var caution: String? {
         greenworksCloud == true
             ? "this game stores progress through greenworks' Steam Cloud calls, which the "
@@ -44,23 +40,18 @@ nonisolated struct NWJSInfo: Codable, Equatable, Sendable {
     }
 }
 
-/// Finds the games that are NW.js applications wearing a Windows exe: an
-/// RPG Maker MV or MZ title, or anything else built on NW.js. Such a game is
-/// a Chromium app whose only Windows part is the loader, so macOS can run it
-/// natively — detection is what decides a game is eligible, and
-/// ``NWJSRunner`` is what arranges the native run.
+/// Finds the games that are NW.js applications behind a Windows exe (RPG Maker MV and MZ titles, or
+/// anything else on NW.js): Chromium apps whose only Windows part is the loader, which macOS can
+/// run natively through ``NWJSRunner``.
 nonisolated enum NWJSGames {
     /// What `main` has to name for the directory to be an NW.js application.
     private static let pageExtensions: Set<String> = ["html", "htm"]
 
     // MARK: - Detecting
 
-    /// The NW.js build in a game directory, or `nil` when it is an ordinary
-    /// Windows game.
-    ///
-    /// A `package.nw` **archive** is deliberately not resolved: its entry page
-    /// lives inside the zip, and the wrapper package the runner writes needs a
-    /// path on disk. An unpacked `package.nw` directory is read like any other.
+    /// The NW.js build in a game directory, or `nil`. An unpacked `package.nw` directory is read
+    /// like any other; a `package.nw` archive answers `nil`, since the runner's wrapper needs the
+    /// entry page on disk.
     static func detect(inDirectory directory: URL) -> NWJSInfo? {
         let manager = FileManager.default
         let loaders = ["nw.dll", "nw_elf.dll"]
@@ -78,8 +69,7 @@ nonisolated enum NWJSGames {
               let package = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let main = package["main"] as? String
         else { return nil }
-        // `main` is relative to the package, and may carry a query string the
-        // way a URL does.
+        // `main` is relative to the package and may carry a URL-style query.
         let page = String(main.prefix { $0 != "?" && $0 != "#" })
         guard pageExtensions.contains((page as NSString).pathExtension.lowercased()) else {
             return nil
@@ -100,13 +90,11 @@ nonisolated enum NWJSGames {
         )
     }
 
-    /// NW.js' own name for an application that does not give one, and so the
-    /// directory its browsing data lands in.
+    /// NW.js' default application name, and so an unnamed application's browsing-data directory.
     static let defaultPackageName = "nwjs"
 
-    /// RPG Maker ships its own runtime beside the game data, and which one it
-    /// is decides where saves live — MV keeps them under `www`, MZ beside the
-    /// package.
+    /// Which RPG Maker runtime ships beside the game data decides where saves live: MV under `www`,
+    /// MZ beside the package.
     private static func flavor(inDirectory directory: URL) -> String? {
         let manager = FileManager.default
         func exists(_ relative: String) -> Bool {
@@ -117,12 +105,9 @@ nonisolated enum NWJSGames {
         return nil
     }
 
-    /// Greenworks is a native node module, so a game that has one carries a
-    /// `greenworks*.node` — under `node_modules`, beside a plugin, or at the
-    /// top. Five levels reaches the deepest layout seen in the wild, an
-    /// unpacked `package.nw/www/js/libs/` (OMORI keeps its binding in
-    /// `www/js/libs/`, four down), while only listing the asset folders at
-    /// that depth, never reading them.
+    /// Whether a `greenworks*.node` binding sits within five levels: the deepest layout seen is an
+    /// unpacked `package.nw/www/js/libs/` (OMORI's binding is in `www/js/libs/`, four down).
+    /// Folders are listed, never read.
     private static func hasGreenworks(inDirectory directory: URL) -> Bool {
         func scan(_ url: URL, depth: Int) -> Bool {
             for entry in InstallDirectory.entries(in: url) {
@@ -136,37 +121,28 @@ nonisolated enum NWJSGames {
         return scan(directory, depth: 5)
     }
 
-    /// greenworks' Steam Cloud calls, the part of its surface the bridge to
-    /// the bottle does not carry.
+    /// greenworks' Steam Cloud calls, which the bridge to the bottle does not carry.
     private static let cloudCalls = ["saveTextToFile", "saveFilesToCloud", "readTextFromFile"]
 
-    /// Any mention of a cloud call as a whole identifier: a call, a call with
-    /// a space before its parenthesis, a bracketed `['saveTextToFile']`, a
+    /// A cloud call named as a whole identifier, which also catches `['saveTextToFile']` and
     /// `.call` or `.apply` through it.
     private static let cloudMention = try? NSRegularExpression(
         pattern: "(?<![\\w$])(?:\(cloudCalls.joined(separator: "|")))(?![\\w$])",
     )
 
-    /// A named function definition: `name = function (`, `name: function (`
-    /// or `function name(`. Group 1 or 2 is the name.
+    /// A named function definition: `name = function (`, `name: function (` or `function name(`;
+    /// group 1 or 2 is the name.
     private static let namedDefinition = try? NSRegularExpression(
         pattern: "([A-Za-z_$][\\w$]*)\\s*[=:]\\s*function\\s*\\(|function\\s+([A-Za-z_$][\\w$]*)\\s*\\(",
     )
 
-    /// Whether the game's own scripts use greenworks for cloud storage. Only
-    /// asked of a game that bundles greenworks at all, and only of its
-    /// scripts — a plugin directory is a few megabytes of text next to a
-    /// multi-gigabyte asset tree.
+    /// Whether the game's own scripts (within four levels) use greenworks for cloud storage.
     ///
-    /// greenworks' own `greenworks.js` is left out: every game that vendors
-    /// the module carries its cloud functions whether or not it calls them. A
-    /// mention inside a named function counts only when that function is
-    /// referenced anywhere beyond its definition, which keeps a plugin's
-    /// unused wrapper (Archeia Steamworks' `saveTextToCloud`, which OMORI
-    /// never touches) from deciding the runner, while a wrapper bound as a
-    /// handler (`this.onSavefileOk.bind(this)`) still counts. Each script is
-    /// read once per pass and dropped, so a large `node_modules` is never held
-    /// in memory.
+    /// `greenworks.js` itself is skipped, since every vendored copy carries the cloud functions. A
+    /// mention inside a named function counts only when that function is referenced beyond its
+    /// definition, so an unused plugin wrapper (Archeia Steamworks' `saveTextToCloud`, untouched by
+    /// OMORI) does not count, while one bound as a handler (`this.onSavefileOk.bind(this)`) does.
+    /// Scripts are read one at a time, never held together.
     private static func usesSteamCloud(inDirectory directory: URL) -> Bool {
         let scripts = scriptURLs(inDirectory: directory, depth: 4)
             .filter { $0.lastPathComponent.lowercased() != "greenworks.js" }
@@ -199,15 +175,14 @@ nonisolated enum NWJSGames {
         return found
     }
 
-    /// The function each cloud-call mention in a script sits in, in text
-    /// order: the innermost named definition whose body is open at the
-    /// mention. `nil` for a mention outside any named function, which runs
-    /// whenever the script does. One pass over the text, tracking braces.
+    /// The function each cloud-call mention sits in, in text order: the innermost named definition
+    /// open at the mention, or `nil` outside any, which runs whenever the script does. Tracks
+    /// braces in one pass.
     static func cloudCallers(in text: String) -> [String?] {
         let utf16 = Array(text.utf16)
         let whole = NSRange(location: 0, length: utf16.count)
-        // A pattern that failed to compile reads as a mention outside any
-        // function: the answer that keeps a game's saves in the bottle.
+        // A pattern that failed to compile counts as a top-level mention, which keeps the game's
+        // saves in the bottle.
         guard let cloudMention, let namedDefinition else { return [nil] }
         let mentions = cloudMention.matches(in: text, range: whole).map(\.range.location)
         guard !mentions.isEmpty else { return [] }
@@ -249,9 +224,8 @@ nonisolated enum NWJSGames {
         return callers
     }
 
-    /// How many times `text` mentions `name` as a whole identifier, less the
-    /// times it defines it. Summed over a game's scripts, a positive total is
-    /// a function something calls or hands on.
+    /// Mentions of `name` as a whole identifier less its definitions; summed over a game's scripts,
+    /// a positive total means something calls or hands on the function.
     static func referenceBalance(of name: String, in text: String) -> Int {
         let escaped = NSRegularExpression.escapedPattern(for: name)
         guard let mention = try? NSRegularExpression(pattern: "(?<![\\w$])\(escaped)(?![\\w$])"),
@@ -266,12 +240,9 @@ nonisolated enum NWJSGames {
 
     // MARK: - The version a game was built against
 
-    /// The NW.js version of a game's loader DLL. The version resource is the
-    /// documented place and is read first, through ``PEResources``; RPG
-    /// Maker's own builds ship one with every field zeroed, so the fallback is
-    /// the string NW.js writes into its resource bundle for
-    /// `process.versions.nw` — the same number the game itself would report at
-    /// runtime.
+    /// The NW.js version of a game's loader DLL: its version resource, else, since RPG Maker's
+    /// builds zero every field, the `process.versions.nw` string NW.js compiles into its resource
+    /// bundle.
     static func version(ofLoader loader: URL) -> String? {
         if let declared = PEResources.read(loader)?.productVersion,
            !declared.isEmpty, declared != "0.0.0.0", declared != "0.0.0" {
@@ -282,9 +253,8 @@ nonisolated enum NWJSGames {
 
     private static let versionNeedle = Data("process.versions['nw'] = '".utf8)
 
-    /// Scans the loader for the literal NW.js compiles its version into.
-    /// Chunked with an overlap, because the file is tens of megabytes and the
-    /// needle can straddle a boundary.
+    /// Scans the loader for the version literal in overlapping chunks, since the file is tens of
+    /// megabytes and the needle can straddle a boundary.
     private static func embeddedVersion(inLoader loader: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: loader) else { return nil }
         defer { try? handle.close() }
@@ -307,24 +277,18 @@ nonisolated enum NWJSGames {
 
     // MARK: - Recording what was found
 
-    /// Runs detection for one game and records it in the settings store, so
-    /// the runner switch and the listings read it without touching disk
-    /// again. Also seeds the game's executable when the directory names it
-    /// unambiguously — an NW.js game keeps one exe beside its loader, which
-    /// is the one Steam starts, so a per-game setting need not wait for a
-    /// first launch to learn it.
+    /// Runs detection for one game and records it in the settings store. Also records the game's
+    /// executable when the directory holds just one exe, the one Steam starts, so per-game settings
+    /// need not wait for a first launch.
     @discardableResult
     static func record(appID: Int) -> NWJSInfo? {
         guard let game = SharedGames.installed(appID: appID) else { return nil }
         let found = detect(inDirectory: game.directory)
         var values = GameConfig.game(appID)
-        // Steam's own name for the game, which is what a native run's window
-        // and Dock tile are titled after.
+        // A native run's window and Dock tile are titled with Steam's name.
         if values.nwjs != found || values.name != game.name {
-            // A native runner chosen while detection showed no Steam Cloud
-            // use, by the default or by a player who was never warned, was
-            // chosen on wrong facts once detection finds it: the game goes
-            // back to undecided, which keeps a cloud game in the bottle. A
+            // A native runner chosen without the cloud warning (by the default or a player) is
+            // reset to undecided once detection finds cloud use, keeping the game in the bottle; a
             // choice made after the warning stands.
             if values.runner == GameRunner.nwjs, found?.caution != nil,
                values.nwjs?.caution == nil {
@@ -343,9 +307,7 @@ nonisolated enum NWJSGames {
         return found
     }
 
-    /// Detection over the whole installed library, for the app to run once at
-    /// client start. Cheap: a directory listing and, for the NW.js games, one
-    /// scan of a loader each.
+    /// Detection over the installed library, run once at client start.
     static func recordLibrary() {
         for game in SharedGames.installedGames() {
             record(appID: game.appID)

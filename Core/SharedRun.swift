@@ -1,17 +1,15 @@
 import Foundation
 
-/// One run as the community database receives it: the ``RunRecord`` minus
-/// everything that could name the player or the machine. No title (the appid
-/// is enough), no path, no notes, no crash addresses, no exact memory size,
-/// no launch time finer than the hour.
+/// One run as the community database receives it: the ``RunRecord`` without
+/// title, paths, notes, crash addresses or exact memory size, and with the
+/// launch time cut to the hour.
 ///
 /// The keys are the wire format, version ``version``; changing one is a
 /// version bump on both ends.
 nonisolated struct SharedRun: Codable, Equatable, Sendable {
     static let version = 2
-    /// The signed envelope the runs travel in has a format of its own, checked
-    /// by the server before the runs are (`envelopeVersion` in
-    /// `infrastructure/sevostats/server.go`); bumping one is a bump on both ends.
+    /// The signed envelope's own format (`envelopeVersion` in
+    /// `infrastructure/sevostats/server.go`); a bump on both ends.
     static let envelopeVersion = 1
 
     var v: Int
@@ -38,14 +36,12 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     var resolution: RunRecord.Resolution?
     var windowAfterSeconds: Double?
     var durationSeconds: Double?
-    /// The display the game was played on; absent for a run none of whose windows was
-    /// ever seen on screen.
+    /// The display the game was played on; absent when no window was seen.
     var display: RunRecord.Display?
-    /// Seconds of the run that were gameplay (``GameplayWindow``); 0 for a run that never
-    /// settled into play or left no frame trace. What ``fps`` is measured over.
+    /// Seconds of gameplay (``GameplayWindow``), which ``fps`` covers; 0 without one.
     var gameplaySeconds: Double
-    /// The frame rate over the gameplay only, and only when it lasted
-    /// ``GameplayWindow/Rules/minimumSeconds`` on a display known to have hardware behind it.
+    /// The gameplay frame rate, when it lasted ``GameplayWindow/Rules/minimumSeconds``
+    /// on a non-virtual display.
     var fps: FrameRate?
     var stalls: Int
     var exit: String
@@ -113,7 +109,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
     /// sign-ins, which say nothing about the game.
     static let minimumUndrawnSeconds: Double = 20
 
-    /// A gameplay window's frame rate as shared: nil for one too short to carry one.
+    /// A gameplay window's frame rate as shared, nil when too short.
     static func frameRate(of gameplay: RunRecord.Gameplay) -> FrameRate? {
         guard let summary = gameplay.frameTimes else { return nil }
         return FrameRate(
@@ -156,16 +152,13 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         fps = record.display?.virtual == false ? gameplay.flatMap(Self.frameRate(of:)) : nil
         stalls = record.stalls?.count ?? 0
         exit = record.exit?.kind.rawValue ?? RunRecord.Exit.Kind.unknown.rawValue
-        // A crash on the way out comes after the user left the game, so it
-        // says nothing about whether the game plays.
+        // A crash at exit says nothing about whether the game plays.
         crashed = record.crash != nil && record.exit?.kind != .crashAtExit
         gameMode = record.gameMode
         hostLoad = Self.loadTier(record.host.load, thermal: record.host.thermal)
     }
 
-    /// A run as this Mac would share it, for showing exactly what goes out
-    /// before anything has: a real record's shape with the machine's own
-    /// hardware and made-up game figures.
+    /// A sample of what this Mac would share: its own hardware, made-up game figures.
     static func example(appVersion: String) -> SharedRun {
         let record = RunRecord(
             t: "2026-09-25T14:12:06Z", appid: 1_962_700, exe: "Subnautica2-Win64-Shipping.exe",
@@ -190,8 +183,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         return run
     }
 
-    /// Made-up frame times for ``example(appVersion:)``: about 58 fps with a slow frame a
-    /// second.
+    /// About 58 fps with a slow frame a second.
     private static let exampleFrameTimes: [Float] = (0 ..< 1200).map { $0 % 60 == 0 ? 25 : 17 }
 
     /// The JSON exactly as it is sent.
@@ -207,8 +199,7 @@ nonisolated struct SharedRun: Codable, Equatable, Sendable {
         return String(stamp.prefix(13)) + ":00:00Z"
     }
 
-    /// The host's state at launch as one of four words: a throttled or busy
-    /// Mac explains a slow run without saying anything else about it.
+    /// The host's state at launch as `hot`, `busy` or `quiet`.
     static func loadTier(_ load: Double, thermal: String) -> String {
         if thermal == "serious" || thermal == "critical" { return "hot" }
         let cores = Double(ProcessInfo.processInfo.activeProcessorCount)

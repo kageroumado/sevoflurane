@@ -4,16 +4,13 @@ import Foundation
 /// The symlinks of a macOS version that the bottle's Steam installed, made
 /// real for macOS.
 ///
-/// A depot lists a framework's links (`Versions/Current -> A`,
-/// `SDL2 -> Versions/Current/SDL2`) as symlink entries. Steam's Windows client
-/// creates them as Windows symlinks, and Wine stores each one as an empty file
-/// named `<name>?` carrying the reparse data in its `user.WINEREPARSE`
-/// attribute. Wine follows that; macOS sees a stray empty file, so a game
-/// that loads a framework through `Versions/Current` cannot start. Each such
-/// file gets a real symlink beside it: Wine keeps reading its own, and Steam's
-/// validation leaves both alone.
+/// Steam's Windows client creates a depot's framework links
+/// (`Versions/Current -> A`) as Windows symlinks, which Wine stores as an empty
+/// file named `<name>?` with the reparse data in its `user.WINEREPARSE`
+/// attribute. macOS sees a stray empty file, so a game that loads a framework
+/// through `Versions/Current` cannot start. Each such file gets a real symlink
+/// beside it; Wine and Steam's validation leave both alone.
 nonisolated enum ReparseLinks {
-    /// The attribute Wine keeps a reparse point's data in.
     static let attribute = "user.WINEREPARSE"
 
     /// `IO_REPARSE_TAG_SYMLINK`.
@@ -39,10 +36,9 @@ nonisolated enum ReparseLinks {
     }
 
     /// Gives every Wine symlink under `directory` a real symlink beside it,
-    /// and answers how many it made. A name already taken by a file or a
-    /// folder is left alone; a symlink there that points elsewhere is
-    /// replaced, since the depot's entry is the current one. A target that
-    /// resolves outside `directory` is refused.
+    /// and answers how many it made. A file or folder of that name is left
+    /// alone; a symlink pointing elsewhere is replaced, since the depot's entry
+    /// is current. A target outside `directory` is refused.
     @discardableResult
     static func restore(in directory: URL) -> Int {
         let root = directory.resolvingSymlinksInPath().standardizedFileURL.path
@@ -86,9 +82,8 @@ nonisolated enum ReparseLinks {
         return restore(in: game.directory)
     }
 
-    /// Steam commits a file under a temporary `rff<hex>.tmp` name and then
-    /// renames it; Wine leaves the temporary name's reparse file behind, a
-    /// name no depot lists.
+    /// Steam commits a file under a temporary `rff<hex>.tmp` name and renames
+    /// it; Wine leaves that name's reparse file behind.
     static func isCommitLeftover(_ name: String) -> Bool {
         name.hasPrefix("rff") && name.hasSuffix(".tmp") && name.count > 7
             && name.dropFirst(3).dropLast(4).allSatisfy(\.isHexDigit)

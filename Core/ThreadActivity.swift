@@ -1,19 +1,16 @@
 import Darwin
 import Foundation
 
-/// How many of a process's threads are keeping a core busy, from the kernel's
-/// own per-thread accounting (`proc_pidinfo` with `PROC_PIDLISTTHREADS`, then
-/// `PROC_PIDTHREADINFO` for each thread).
+/// How many of a process's threads are keeping a core busy, from
+/// `proc_pidinfo` (`PROC_PIDLISTTHREADS`, then `PROC_PIDTHREADINFO` per thread).
 ///
-/// A game that starts one worker per processor and never parks them (Unity 5's
-/// JobQueue under Rosetta) reads as a dozen threads each near a full core; a
-/// game that plays well reads as one or two.
+/// A game that never parks its per-processor workers (Unity 5's JobQueue under
+/// Rosetta) reads as a dozen busy threads; a game that plays well, one or two.
 nonisolated enum ThreadActivity {
-    /// The kernel's usage scale: `pth_cpu_usage` counts per mille of one core
-    /// (`TH_USAGE_SCALE`), so 1000 is a core kept fully busy.
+    /// `pth_cpu_usage` counts per mille of one core (`TH_USAGE_SCALE`).
     static let usageScale = 1000
 
-    /// The usage at which a thread counts as busy: 60 % of one core.
+    /// 60 % of one core.
     static let busyThreshold = 600
 
     /// The most thread handles one read lists.
@@ -26,8 +23,7 @@ nonisolated enum ThreadActivity {
         return busyCount(usages, threshold: threshold)
     }
 
-    /// How many of `usages` (per mille of one core, as ``usageScale`` counts)
-    /// are at or above `threshold`.
+    /// How many of `usages` are at or above `threshold`.
     static func busyCount(_ usages: [Int], threshold: Int = busyThreshold) -> Int {
         usages.count { $0 >= threshold }
     }
