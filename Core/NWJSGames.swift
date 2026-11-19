@@ -140,92 +140,128 @@ nonisolated enum NWJSGames {
     /// the bottle does not carry.
     private static let cloudCalls = ["saveTextToFile", "saveFilesToCloud", "readTextFromFile"]
 
-    /// Whether the game's own scripts call greenworks for cloud storage. Only
+    /// Any mention of a cloud call as a whole identifier: a call, a call with
+    /// a space before its parenthesis, a bracketed `['saveTextToFile']`, a
+    /// `.call` or `.apply` through it.
+    private static let cloudMention = try? NSRegularExpression(
+        pattern: "(?<![\\w$])(?:\(cloudCalls.joined(separator: "|")))(?![\\w$])",
+    )
+
+    /// A named function definition: `name = function (`, `name: function (`
+    /// or `function name(`. Group 1 or 2 is the name.
+    private static let namedDefinition = try? NSRegularExpression(
+        pattern: "([A-Za-z_$][\\w$]*)\\s*[=:]\\s*function\\s*\\(|function\\s+([A-Za-z_$][\\w$]*)\\s*\\(",
+    )
+
+    /// Whether the game's own scripts use greenworks for cloud storage. Only
     /// asked of a game that bundles greenworks at all, and only of its
     /// scripts — a plugin directory is a few megabytes of text next to a
     /// multi-gigabyte asset tree.
     ///
-    /// Two kinds of mention are not a call the game makes: greenworks' own
-    /// `greenworks.js`, which every game that vendors the module carries, and
-    /// a plugin's wrapper around a cloud call that no script ever calls (Archeia
-    /// Steamworks defines `saveTextToCloud`; OMORI never uses it).
+    /// greenworks' own `greenworks.js` is left out: every game that vendors
+    /// the module carries its cloud functions whether or not it calls them. A
+    /// mention inside a named function counts only when that function is
+    /// referenced anywhere beyond its definition, which keeps a plugin's
+    /// unused wrapper (Archeia Steamworks' `saveTextToCloud`, which OMORI
+    /// never touches) from deciding the runner, while a wrapper bound as a
+    /// handler (`this.onSavefileOk.bind(this)`) still counts. Each script is
+    /// read once per pass and dropped, so a large `node_modules` is never held
+    /// in memory.
     private static func usesSteamCloud(inDirectory directory: URL) -> Bool {
-        let scripts = scripts(inDirectory: directory, depth: 4)
-            .filter { !$0.name.lowercased().hasPrefix("greenworks") }
-        return scripts.contains { script in
-            cloudCallers(in: script.text).contains { caller in
+        let scripts = scriptURLs(inDirectory: directory, depth: 4)
+            .filter { $0.lastPathComponent.lowercased() != "greenworks.js" }
+        var wrappers: Set<String> = []
+        for url in scripts {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for caller in cloudCallers(in: text) {
                 guard let caller else { return true }
-                return scripts.contains { isCalled(caller, in: $0.text) }
+                wrappers.insert(caller)
             }
         }
+        guard !wrappers.isEmpty else { return false }
+        var balance: [String: Int] = [:]
+        for url in scripts {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for name in wrappers { balance[name, default: 0] += referenceBalance(of: name, in: text) }
+        }
+        return balance.values.contains { $0 > 0 }
     }
 
-    private static func scripts(
-        inDirectory directory: URL, depth: Int,
-    ) -> [(name: String, text: String)] {
-        var found: [(name: String, text: String)] = []
+    private static func scriptURLs(inDirectory directory: URL, depth: Int) -> [URL] {
+        var found: [URL] = []
         for entry in InstallDirectory.entries(in: directory) {
             if entry.isDirectory {
-                if depth > 1 { found += scripts(inDirectory: entry.url, depth: depth - 1) }
-                continue
+                if depth > 1 { found += scriptURLs(inDirectory: entry.url, depth: depth - 1) }
+            } else if entry.name.lowercased().hasSuffix(".js") {
+                found.append(entry.url)
             }
-            guard entry.name.lowercased().hasSuffix(".js"),
-                  let text = try? String(contentsOf: entry.url, encoding: .utf8)
-            else { continue }
-            found.append((entry.name, text))
         }
         return found
     }
 
-    /// The function each cloud call in a script sits in, by name: the
-    /// innermost named definition (`name = function (`, `name: function (` or
-    /// `function name(`) whose body is still open at the call. `nil` for a
-    /// call outside any named function, which runs whenever the script does.
+    /// The function each cloud-call mention in a script sits in, in text
+    /// order: the innermost named definition whose body is open at the
+    /// mention. `nil` for a mention outside any named function, which runs
+    /// whenever the script does. One pass over the text, tracking braces.
     static func cloudCallers(in text: String) -> [String?] {
-        let definition = /([A-Za-z_$][\w$]*)\s*[=:]\s*function\s*\(|function\s+([A-Za-z_$][\w$]*)\s*\(/
+        let utf16 = Array(text.utf16)
+        let whole = NSRange(location: 0, length: utf16.count)
+        // A pattern that failed to compile reads as a mention outside any
+        // function: the answer that keeps a game's saves in the bottle.
+        guard let cloudMention, let namedDefinition else { return [nil] }
+        let mentions = cloudMention.matches(in: text, range: whole).map(\.range.location)
+        guard !mentions.isEmpty else { return [] }
+        let definitions: [(end: Int, name: String)] = namedDefinition.matches(in: text, range: whole)
+            .compactMap { match in
+                let group = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
+                guard let range = Range(group, in: text) else { return nil }
+                return (NSMaxRange(match.range), String(text[range]))
+            }
+
+        let open = UInt16(UInt8(ascii: "{")), close = UInt16(UInt8(ascii: "}"))
         var callers: [String?] = []
-        for call in cloudCalls {
-            for match in text.ranges(of: "\(call)(") {
-                let before = text[..<match.lowerBound]
-                let enclosing = before.matches(of: definition).reversed().first { found in
-                    isOpen(text[found.range.upperBound..<match.lowerBound])
+        var stack: [(name: String, depth: Int)] = []
+        var pending: String?
+        var depth = 0
+        var nextDefinition = 0
+        var nextMention = 0
+        for (offset, unit) in utf16.enumerated() {
+            while nextDefinition < definitions.count, definitions[nextDefinition].end <= offset {
+                pending = definitions[nextDefinition].name
+                nextDefinition += 1
+            }
+            while nextMention < mentions.count, mentions[nextMention] == offset {
+                callers.append(stack.last?.name)
+                nextMention += 1
+            }
+            if nextMention == mentions.count { break }
+            if unit == open {
+                depth += 1
+                if let name = pending {
+                    stack.append((name, depth))
+                    pending = nil
                 }
-                let name = enclosing.map { String($0.output.1 ?? $0.output.2 ?? "") }
-                callers.append(name.flatMap { $0.isEmpty ? nil : $0 })
+            } else if unit == close {
+                if stack.last?.depth == depth { stack.removeLast() }
+                depth -= 1
             }
         }
         return callers
     }
 
-    /// Whether the body that starts in `span` (just after a definition's
-    /// opening parenthesis) is still open at its end: its first `{` opened
-    /// and not yet matched.
-    private static func isOpen(_ span: Substring) -> Bool {
-        var depth = 0
-        var opened = false
-        for character in span {
-            if character == "{" {
-                depth += 1
-                opened = true
-            } else if character == "}" {
-                depth -= 1
-                if opened, depth == 0 { return false }
-            }
-        }
-        return opened && depth > 0
-    }
-
-    /// Whether `name` is called in `text` anywhere other than its own
-    /// definition: `name(` that is neither `function name(` nor a longer
-    /// identifier ending in `name`.
-    static func isCalled(_ name: String, in text: String) -> Bool {
+    /// How many times `text` mentions `name` as a whole identifier, less the
+    /// times it defines it. Summed over a game's scripts, a positive total is
+    /// a function something calls or hands on.
+    static func referenceBalance(of name: String, in text: String) -> Int {
         let escaped = NSRegularExpression.escapedPattern(for: name)
-        guard let call = try? NSRegularExpression(pattern: "(?<![\\w$])\(escaped)\\s*\\("),
-              let definition = try? NSRegularExpression(pattern: "function\\s+\(escaped)\\s*\\(")
-        else { return true }
-        let range = NSRange(text.startIndex..., in: text)
-        return call.numberOfMatches(in: text, range: range)
-            > definition.numberOfMatches(in: text, range: range)
+        guard let mention = try? NSRegularExpression(pattern: "(?<![\\w$])\(escaped)(?![\\w$])"),
+              let definition = try? NSRegularExpression(
+                  pattern: "(?<![\\w$])\(escaped)\\s*[=:]\\s*function\\s*\\(|function\\s+\(escaped)\\s*\\(",
+              )
+        else { return 1 }
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        return mention.numberOfMatches(in: text, range: range)
+            - definition.numberOfMatches(in: text, range: range)
     }
 
     // MARK: - The version a game was built against
@@ -285,6 +321,18 @@ nonisolated enum NWJSGames {
         // Steam's own name for the game, which is what a native run's window
         // and Dock tile are titled after.
         if values.nwjs != found || values.name != game.name {
+            // A native runner chosen while detection showed no Steam Cloud
+            // use, by the default or by a player who was never warned, was
+            // chosen on wrong facts once detection finds it: the game goes
+            // back to undecided, which keeps a cloud game in the bottle. A
+            // choice made after the warning stands.
+            if values.runner == GameRunner.nwjs, found?.caution != nil,
+               values.nwjs?.caution == nil {
+                values.runner = nil
+                values.nwjsRuntime = nil
+                NWJSRunner.log("nwjs: app \(appID) stores progress in Steam Cloud — "
+                    + "it runs in the bottle again")
+            }
             values.nwjs = found
             values.name = game.name
             GameConfig.setGame(appID, values)

@@ -58,6 +58,32 @@ struct NWJSReleaseChoiceTests {
         #expect(named("nwjs-vsomething") == nil)
     }
 
+    /// The fallback runtime is filtered by the binary's own header, so an
+    /// x86_64 0.29 left on disk is never picked on Apple Silicon.
+    @Test
+    func `a runtime binary is native only with a slice for this Mac`() throws {
+        let arm64: [UInt8] = [0xCF, 0xFA, 0xED, 0xFE, 0x0C, 0x00, 0x00, 0x01]
+        let x86: [UInt8] = [0xCF, 0xFA, 0xED, 0xFE, 0x07, 0x00, 0x00, 0x01]
+        // FAT_MAGIC, two entries: x86_64 then arm64, 20 bytes each.
+        var fat: [UInt8] = [0xCA, 0xFE, 0xBA, 0xBE, 0, 0, 0, 2]
+        fat += [0x01, 0, 0, 0x07] + [UInt8](repeating: 0, count: 16)
+        fat += [0x01, 0, 0, 0x0C] + [UInt8](repeating: 0, count: 16)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macho-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func file(_ bytes: [UInt8], _ name: String) throws -> URL {
+            let url = directory.appendingPathComponent(name)
+            try Data(bytes).write(to: url)
+            return url
+        }
+        let onARM = NWJSRuntime.nativeFlavor == "osx-arm64"
+        #expect(NWJSRuntime.runsNatively(try file(arm64, "arm64")) == onARM)
+        #expect(NWJSRuntime.runsNatively(try file(x86, "x86")) == !onARM)
+        #expect(NWJSRuntime.runsNatively(try file(fat, "fat")))
+        #expect(!NWJSRuntime.runsNatively(try file([0, 1, 2], "short")))
+    }
+
     @Test
     func `an unreadable version and an index with no build here choose nothing`() {
         #expect(NWJSRuntime.release(forGameVersion: "nightly", in: index, flavor: "osx-arm64") == nil)
@@ -175,10 +201,52 @@ struct NWJSDetectionTests {
         function load(file) { steamworks.readTextFromFile(file, function(c) {}); }
         greenworks.saveFilesToCloud(['a']);
         """
-        // Grouped by call name in `cloudCalls` order: save…, saveFilesToCloud, read….
-        #expect(NWJSGames.cloudCallers(in: text) == ["save", nil, "load"])
-        #expect(NWJSGames.isCalled("load", in: "function load(f) {}; load('x');"))
-        #expect(!NWJSGames.isCalled("load", in: "function load(f) {}; reload('x');"))
+        #expect(NWJSGames.cloudCallers(in: text) == ["save", "load", nil])
+        #expect(NWJSGames.referenceBalance(of: "load", in: "function load(f) {}; load('x');") == 1)
+        #expect(NWJSGames.referenceBalance(of: "load", in: "function load(f) {}; reload('x');") == 0)
+    }
+
+    /// Every way a script reaches a cloud call is a mention: bracket access
+    /// and a space before the parenthesis included.
+    @Test
+    func `bracketed and spaced cloud calls are found`() {
+        let text = """
+        steamworks['saveTextToFile'](file, data);
+        steamworks.readTextFromFile (file, done);
+        """
+        #expect(NWJSGames.cloudCallers(in: text) == [nil, nil])
+    }
+
+    /// RPG Maker hands scene methods on as handlers, never calling them by
+    /// name: a wrapper bound with `.bind(this)` is a wrapper in use.
+    @Test
+    func `a wrapper bound as a handler makes a cloud game`() throws {
+        let root = try makeGame(greenworks: true)
+        defer { try? manager.removeItem(at: root) }
+        let plugins = root.appendingPathComponent("www/js/plugins")
+        try manager.createDirectory(at: plugins, withIntermediateDirectories: true)
+        try Data("""
+        Scene_Save.prototype.onSavefileOk = function() {
+            steamworks.saveTextToFile('file1', DataManager.makeSaveContents(), function() {});
+        };
+        Scene_Save.prototype.createListWindow = function() {
+            this._listWindow.setHandler('ok', this.onSavefileOk.bind(this));
+        };
+        """.utf8).write(to: plugins.appendingPathComponent("CloudSaves.js"))
+        let info = try #require(NWJSGames.detect(inDirectory: root))
+        #expect(info.greenworksCloud == true)
+    }
+
+    /// Only greenworks' own module is left out of the scan: a game's script
+    /// whose name starts with "Greenworks" is still the game's.
+    @Test
+    func `a game script named after greenworks is still scanned`() throws {
+        let root = try makeGame(greenworks: true)
+        defer { try? manager.removeItem(at: root) }
+        try Data("steamworks.saveTextToFile('file1', data);".utf8)
+            .write(to: root.appendingPathComponent("www/js/GreenworksCloudSave.js"))
+        let info = try #require(NWJSGames.detect(inDirectory: root))
+        #expect(info.greenworksCloud == true)
     }
 
     @Test

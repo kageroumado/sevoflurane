@@ -412,9 +412,14 @@ greenworks.FloatingGamepadTextInputMode = { SingleLine: 0, MultipleLines: 1, Ema
 // Steam Cloud writes must reach Steam's own cloud directory or the save is
 // lost, and the bridge carries no file transport. A game that stores progress
 // through these belongs on the wine runner.
-['saveTextToFile', 'saveFilesToCloud', 'fileShare'].forEach((name) => {
+// Each takes its error callback at a fixed position, after the success one:
+// a call that passes only a success callback must not hear back as a success.
+//   saveTextToFile(fileName, content, success, error)
+//   saveFilesToCloud(files, success, error)
+//   fileShare(file, success, error)
+[['saveTextToFile', 3], ['saveFilesToCloud', 2], ['fileShare', 2]].forEach(([name, errorAt]) => {
   greenworks[name] = function () {
-    const errorCallback = arguments[arguments.length - 1];
+    const errorCallback = arguments[errorAt];
     unsupported(name, typeof errorCallback === 'function' ? errorCallback : null);
   };
 });
@@ -488,4 +493,20 @@ try { process.versions.greenworks = greenworks._version; } catch (e) { /* frozen
 // page does, so the channel is up by the time the game asks for it.
 channel.connect();
 
-module.exports = greenworks;
+// greenworks has more API than the bridge carries (workshop, DLC, auth
+// tickets, lobbies). A game that calls one of those gets a function that logs
+// and answers nothing, where a missing property would throw a TypeError and
+// stop the game at boot. Only lower-camel-case names are answered this way;
+// anything else (symbols, `_private`, `then`, `default`) reads as absent.
+const NOT_API = new Set(['then', 'toJSON', 'inspect', 'default', 'constructor']);
+module.exports = new Proxy(greenworks, {
+  get(target, key, receiver) {
+    if (typeof key !== 'string' || key in target || NOT_API.has(key)
+        || !/^[a-z][A-Za-z0-9]*$/.test(key)) {
+      return Reflect.get(target, key, receiver);
+    }
+    return function () {
+      log(key + ' is not carried across the bridge');
+    };
+  },
+});

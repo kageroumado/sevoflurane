@@ -45,18 +45,47 @@ nonisolated enum NWJSRuntime {
 
     /// The installed runtime a game runs on: the release the switch recorded
     /// for it, or — for a game switched on before that was recorded — the
-    /// newest installed patch of the game's own series. `nil` when nothing
-    /// suitable is installed: a game whose runner is set and whose runtime is
-    /// gone is a state to report, not one to paper over with a mismatched
-    /// Chromium.
+    /// newest installed patch of the game's own series that this Mac runs
+    /// natively. `nil` when nothing suitable is installed: a game whose runner
+    /// is set and whose runtime is gone is a state to report, not one to paper
+    /// over with a mismatched Chromium or an x86_64 build under Rosetta.
     static func installedRuntime(recorded: String?, gameVersion: String) -> URL? {
         if let recorded, isInstalled(version: recorded) {
             return executable(version: recorded)
         }
         guard let wanted = series(of: gameVersion),
-              let match = installed().last(where: { series(of: $0) == wanted })
+              let match = installed().last(where: {
+                  series(of: $0) == wanted && runsNatively(executable(version: $0))
+              })
         else { return nil }
         return executable(version: match)
+    }
+
+    /// Whether a Mach-O binary carries a slice for this Mac's architecture,
+    /// read from its header: a thin binary's CPU type, or any entry of a fat
+    /// one's table.
+    static func runsNatively(_ binary: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: binary) else { return false }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 4096), header.count >= 8 else { return false }
+        let wanted: UInt32 = nativeFlavor == "osx-arm64" ? 0x0100_000C : 0x0100_0007
+        func word(_ offset: Int, bigEndian: Bool) -> UInt32? {
+            guard offset + 4 <= header.count else { return nil }
+            let bytes = header[header.startIndex + offset ..< header.startIndex + offset + 4]
+            let value = bytes.reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
+            return bigEndian ? value : value.byteSwapped
+        }
+        switch word(0, bigEndian: true) {
+        case 0xCFFA_EDFE:
+            // MH_MAGIC_64 as little-endian bytes; cputype follows it.
+            return word(4, bigEndian: false) == wanted
+        case 0xCAFE_BABE:
+            // FAT_MAGIC, big-endian: a count, then 20-byte entries led by cputype.
+            let count = Int(word(4, bigEndian: true) ?? 0)
+            return (0 ..< count).contains { word(8 + $0 * 20, bigEndian: true) == wanted }
+        default:
+            return false
+        }
     }
 
     /// "0.29.0" → "0.29". The series is what decides compatibility: NW.js
@@ -279,11 +308,19 @@ nonisolated enum NWJSRuntime {
         }
         let box = ObservationBox()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            let task = URLSession.shared.downloadTask(with: url) { temp, _, error in
+            let task = URLSession.shared.downloadTask(with: url) { temp, response, error in
                 box.observation?.invalidate()
                 box.observation = nil
                 if let error {
                     continuation.resume(throwing: error)
+                    return
+                }
+                // A release with no build for this Mac answers 404 with a page
+                // that would otherwise reach the unzip step as the archive.
+                if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
+                    continuation.resume(throwing: RuntimeError(
+                        "\(url.lastPathComponent) is not published (HTTP \(status))",
+                    ))
                     return
                 }
                 guard let temp else {
