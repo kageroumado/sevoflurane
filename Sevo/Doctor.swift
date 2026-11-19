@@ -42,7 +42,8 @@ nonisolated enum Doctor {
         let detection = await SetupProbe.detect()
         let clientState = await ClientLifecycle.probeClient()
         let bottleProcesses = await ClientLifecycle.bottleProcessIDs()
-        let appStatus = await AppControl.status()
+        // Every report built from this is printed or pasted; the account name stops here.
+        let appStatus = Self.withoutAccount(await AppControl.status())
         // Probe the app's own link port only when the daemon does not already
         // vouch for the app, so a healthy attached app costs no extra request.
         let daemonReportsAttached = (appStatus?["app"] as? String) == "running"
@@ -309,7 +310,7 @@ nonisolated enum Doctor {
             "dependencies": s.dependencies,
         ]
         report["provisioning"] = s.provision?.dictionary ?? NSNull()
-        report["app"] = Self.withoutAccount(s.appStatus) ?? ["app": "not running"]
+        report["app"] = s.appStatus ?? ["app": "not running"]
         report["app_state"] = AppRunState.classify(
             daemonReportsAttached: (s.appStatus?["app"] as? String) == "running",
             appLinkAlive: s.appLinkAlive,

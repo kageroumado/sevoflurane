@@ -107,20 +107,25 @@ final nonisolated class HTTPServer: Sendable {
         let gated = Self.gated(handler, by: gate)
         let open = OpenConnections()
         listener.newConnectionHandler = { [queue, port] connection in
-            guard open.enter() else {
-                open.noteRefused(port: port)
+            switch open.admit(connection) {
+            case .refused:
+                open.note("refusing a connection: every one of \(Self.connectionLimit) is serving", port: port)
                 connection.cancel()
                 return
+            case let .evicting(silent):
+                open.note("at \(Self.connectionLimit) connections; closing the oldest that sent nothing", port: port)
+                silent.cancel()
+            case .admitted:
+                break
             }
-            let left = Once()
             connection.stateUpdateHandler = { state in
                 switch state {
-                case .failed, .cancelled: if left.first() { open.leave() }
+                case .failed, .cancelled: open.leave(connection)
                 default: break
                 }
             }
             connection.start(queue: queue)
-            Self.serve(connection, handler: gated, leftover: Data())
+            Self.serve(connection, open: open, handler: gated, leftover: Data())
         }
         listener.start(queue: queue)
     }
@@ -133,32 +138,64 @@ final nonisolated class HTTPServer: Sendable {
     /// not counted.
     static let requestDeadline: Duration = .seconds(30)
 
+    /// The open connections and which of them are waiting for a request. At
+    /// the limit a new connection takes the place of the one that has waited
+    /// longest, so connections that never send anything cannot lock out a
+    /// client whose request arrives in milliseconds.
     private final class OpenConnections: @unchecked Sendable {
-        private let lock = NSLock()
-        private var count = 0
-        private var refusalLogged = false
+        enum Admission {
+            case admitted
+            case evicting(NWConnection)
+            case refused
+        }
 
-        func enter() -> Bool {
+        private struct Open {
+            let connection: NWConnection
+            /// When it began waiting for its next request; nil while one is served.
+            var waitingSince: ContinuousClock.Instant?
+        }
+
+        private let lock = NSLock()
+        private var open: [ObjectIdentifier: Open] = [:]
+        private var lastNote: ContinuousClock.Instant?
+
+        func admit(_ connection: NWConnection) -> Admission {
             lock.withLock {
-                guard count < HTTPServer.connectionLimit else { return false }
-                count += 1
+                var admission = Admission.admitted
+                if open.count >= HTTPServer.connectionLimit {
+                    let oldest = open.compactMap { key, entry in
+                        entry.waitingSince.map { (key: key, connection: entry.connection, since: $0) }
+                    }.min { $0.since < $1.since }
+                    guard let oldest else { return .refused }
+                    open[oldest.key] = nil
+                    admission = .evicting(oldest.connection)
+                }
+                open[ObjectIdentifier(connection)] = Open(connection: connection, waitingSince: .now)
+                return admission
+            }
+        }
+
+        func waiting(_ connection: NWConnection) {
+            lock.withLock { open[ObjectIdentifier(connection)]?.waitingSince = .now }
+        }
+
+        func serving(_ connection: NWConnection) {
+            lock.withLock { open[ObjectIdentifier(connection)]?.waitingSince = nil }
+        }
+
+        /// Idempotent: an evicted connection is already gone when its cancel arrives.
+        func leave(_ connection: NWConnection) {
+            lock.withLock { open[ObjectIdentifier(connection)] = nil }
+        }
+
+        /// At most once a minute, so a flood does not fill the log.
+        func note(_ message: String, port: UInt16) {
+            let due = lock.withLock {
+                if let lastNote, ContinuousClock.now - lastNote < .seconds(60) { return false }
+                lastNote = .now
                 return true
             }
-        }
-
-        func leave() {
-            lock.withLock { count -= 1 }
-        }
-
-        /// Said once per server, so a flood does not fill the log.
-        func noteRefused(port: UInt16) {
-            let first = lock.withLock {
-                defer { refusalLogged = true }
-                return !refusalLogged
-            }
-            if first {
-                EventLog.enqueue(.bridge, ":\(port) holds \(HTTPServer.connectionLimit) connections; refusing more")
-            }
+            if due { EventLog.enqueue(.bridge, ":\(port) \(message)") }
         }
     }
 
@@ -260,12 +297,14 @@ final nonisolated class HTTPServer: Sendable {
     /// past the previous request's end.
     private static func serve(
         _ connection: NWConnection,
+        open: OpenConnections,
         handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
         leftover: Data,
     ) {
         // The deadline and the request race for one claim: a request that
         // arrives late finds its connection already cancelled, and one that
         // arrives in time cancels the sleep.
+        open.waiting(connection)
         let claim = Once()
         let deadline = Task {
             try? await Task.sleep(for: requestDeadline)
@@ -274,13 +313,14 @@ final nonisolated class HTTPServer: Sendable {
         readRequest(connection, buffer: leftover) { request, remainder in
             guard claim.first() else { return }
             deadline.cancel()
+            open.serving(connection)
             Task {
                 let response = await handler(request)
                 connection.send(content: wire(response, isHead: request.method == "HEAD"), completion: .contentProcessed { error in
                     if error != nil {
                         connection.cancel()
                     } else {
-                        serve(connection, handler: handler, leftover: remainder)
+                        serve(connection, open: open, handler: handler, leftover: remainder)
                     }
                 })
             }
