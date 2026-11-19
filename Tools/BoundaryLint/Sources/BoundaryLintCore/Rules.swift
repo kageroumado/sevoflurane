@@ -215,6 +215,9 @@ final class ViewChecker: SyntaxVisitor {
     }
 
     private func checkStoredInitializers(_ variable: VariableDeclSyntax, in name: String) {
+        // A static stored property is initialized once, on first use, whatever
+        // the view's parent does.
+        if variable.modifiers.contains(where: { ["static", "class"].contains($0.name.text) }) { return }
         for binding in variable.bindings where binding.accessorBlock == nil {
             guard let value = binding.initializer?.value else { continue }
             for call in outermostWork(in: Syntax(value)) {

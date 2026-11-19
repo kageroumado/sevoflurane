@@ -113,6 +113,20 @@ struct RuleTests {
     }
 
     @Test
+    func `a static stored property runs once and is no view-init work`() {
+        let source = """
+        struct Pane: View {
+            private static let version: String = { AppVersion.displayed() }()
+            private static let sample = Sample.example(version: "1")
+            private let rows = Sample.example(version: "1")
+            var body: some View { EmptyView() }
+        }
+        """
+        let found = lint(source).filter { $0.rule == .viewInit }
+        #expect(found.map(\.line) == [4])
+    }
+
+    @Test
     func `a long body warns`() {
         let lines = (0 ..< 70).map { _ in "        Text(\"x\")" }.joined(separator: "\n")
         let source = "struct Pane: View {\n    var body: some View {\n        VStack {\n\(lines)\n        }\n    }\n}\n"
