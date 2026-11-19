@@ -4,19 +4,11 @@ import WebKit
 // MARK: - React hover relay
 
 extension SteamWindow {
-    /// Runs Steam's own `onMouseEnter`/`onMouseLeave` handlers for the
-    /// element path under the cursor.
-    ///
-    /// In a key window React's hover works off WKWebView's own tracking, but
-    /// a menu panel is never key — and there, no deliverable mouse event runs
-    /// a React enter/leave handler: forwarded native events and script
-    /// dispatches both reach the document and its React root listener with
-    /// no handler firing (clicks work; hover does not — measured). The
-    /// handlers are still right there on each node's `__reactProps$…`, so
-    /// the native tracking calls them directly: diff the ancestor path under
-    /// the cursor against the last one, leave the departed nodes, enter the
-    /// new ones. This is what keeps a hover menu open (the menu root's enter
-    /// handler arms Steam's keep-alive flag) and what highlights its rows.
+    /// Calls Steam's `onMouseEnter`/`onMouseLeave` handlers from each node's
+    /// `__reactProps$…` for the element path under the cursor. In a non-key
+    /// panel no forwarded or dispatched mouse event fires a React
+    /// enter/leave handler (clicks work); the menu root's enter handler arms
+    /// the keep-alive that holds a hover menu open.
     func relayReactHover(contentPoint: NSPoint, contentHeight: CGFloat) {
         let x = Int(contentPoint.x)
         let y = Int(contentHeight - contentPoint.y)
@@ -53,8 +45,8 @@ extension SteamWindow {
         """)
     }
 
-    /// The cursor left the window: run the leave handlers for everything
-    /// still marked hovered, so Steam's dismiss logic arms.
+    /// Runs the leave handlers for everything still hovered, arming Steam's
+    /// dismiss logic.
     func relayReactHoverExit() {
         webView.evaluateJavaScript("""
         (function () {

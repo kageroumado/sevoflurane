@@ -3,33 +3,26 @@ import Foundation
 /// The choice between a game's macOS and Windows builds, in Steam's own UI
 /// (``SteamPlayMacOS``).
 ///
-/// Three places, each drawn in Steam's own controls:
-/// - **Install**: for a game with a macOS build that runs here, the game
-///   page's Install button opens a menu with both versions, each with its
-///   download size and a line from the compatibility verdicts. The choice is
-///   mapped with `SpecifyCompatTool`, and Steam's own install wizard opens
-///   once the game's details show the mapping; a mapping Steam refuses is
-///   said in the menu, with a retry.
-/// - **The play bar**: an installed game gets a "Version" entry beside Cloud
-///   Status, in the same shape. It switches builds, saying first what Steam
-///   will download.
-/// - **Properties › Compatibility**: Steam's own page, the one a Linux user
-///   expects, with its "Force the use of a specific Steam Play compatibility
-///   tool" switch. Steam lists it only on Linux; ``contextScript`` lists it for
-///   games with a macOS build and leaves every other Linux check as it is.
+/// Three places, in Steam's own controls:
+/// - **Install**: for a game with a runnable macOS build, a menu with both
+///   versions, their download sizes and a verdict line. The choice is mapped
+///   with `SpecifyCompatTool`, and Steam's install wizard opens once the
+///   game's details show the mapping; a refused mapping is said in the menu
+///   with a retry.
+/// - **The play bar**: a "Version" entry beside Cloud Status that switches
+///   builds, saying first what Steam will download.
+/// - **Properties › Compatibility**: Steam's Linux-only page, which
+///   ``contextScript`` lists for games with a macOS build.
 ///
-/// Every game stays in one library, and the Windows build stays one click
-/// away, because some Mac ports run worse than their Windows build here.
-/// Install from anywhere else (the library's context menu, a `steam://` link)
-/// follows the game's current mapping, as it does on Linux.
+/// The Windows build stays one click away, since some Mac ports run worse.
+/// Installs from elsewhere (context menu, `steam://`) follow the current
+/// mapping, as on Linux.
 enum SteamNativeBuilds {
-    /// What ``contextScript`` answers once it has run, the outcomes an
-    /// installer stops retrying on.
+    /// The ``contextScript`` answers that stop an installer retrying.
     static let settled: Set<String> = ["installed", "installed without the Compatibility page", "reapplied", "removed", "not installed"]
 
-    /// Simple platform marks, drawn in `currentColor`: the Apple logo for the
-    /// macOS build, the Windows logo for the Windows one. Shared with the
-    /// library's badges (``SteamLibraryCompat``).
+    /// The Apple and Windows logos in `currentColor`, shared with
+    /// ``SteamLibraryCompat``.
     static let platformGlyphs = """
       var PLATFORM_PATHS = {
         macos: "M14.6 10.7c0-1.9 1.6-2.8 1.6-2.9-.9-1.3-2.3-1.5-2.8-1.5-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7-1.3 0-2.5.8-3.1 1.9-1.4 2.3-.4 5.7.9 7.6.6.9 1.4 2 2.4 1.9.9 0 1.3-.6 2.5-.6s1.5.6 2.5.6c1 0 1.7-.9 2.3-1.9.7-1.1 1-2.1 1-2.2 0 0-1.9-.7-1.9-2.9zM12.7 5c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.1-.5.6-.9 1.5-.8 2.3.9.1 1.8-.4 2.3-1z",
@@ -44,29 +37,20 @@ enum SteamNativeBuilds {
 
     // MARK: - The context page
 
-    /// The context page's half: switches native builds on for the desktop
-    /// half (``script``), then lists Steam's Properties › Compatibility page
-    /// for games with a macOS build.
+    /// The context page's half: switches native builds on for ``script``,
+    /// and lists Properties › Compatibility for games with a macOS build.
     ///
-    /// The page list is built in one component, which adds the Compatibility
-    /// page when the platform module's Linux test passes. The module's exports
-    /// are fixed getters, so the test itself cannot be replaced; `PLATFORM` is
-    /// a plain property of the shared config object, and it becomes a getter
-    /// that answers `linux` to that one test called from that one component,
-    /// and the real platform to every other reader. The caller is read off the
-    /// stack: JavaScriptCore names each frame after its function.
+    /// The page-list component adds that page when the platform module's
+    /// Linux test passes. The test is a fixed export, so the shared config's
+    /// plain `PLATFORM` property becomes a getter answering `linux` only to
+    /// that test called from that component (the caller read off the stack,
+    /// where JavaScriptCore names frames after functions), and only for a
+    /// game with a macOS build (the last game asked of the details store).
     ///
-    /// Both are found by what they are rather than how the minifier spelled
-    /// them. The test is the exported function that returns true with the
-    /// platform set to `linux` and false with it set to `windows` or `macos`;
-    /// the component is the function whose body holds the page's localization
-    /// key. A Steam build in which either cannot be found keeps the install
-    /// menu and the play bar's Version entry, and only the Properties page is
-    /// missing, as the result names.
-    ///
-    /// The page appears only for a game with a macOS build: Steam's details
-    /// store is the one the component reads its game through, so the last
-    /// game asked of it during that render is the game the list is for.
+    /// The test is found as the export true for `linux` and false for
+    /// `windows` and `macos`; the component by the page's localization key.
+    /// If either is missing only the Properties page is lost, as the result
+    /// says.
     static let contextScript = """
     (function () {
       var lib = window.__sevoNativeBuilds;
@@ -221,8 +205,8 @@ enum SteamNativeBuilds {
     })()
     """
 
-    /// Stands the context half down: the Compatibility page is listed by
-    /// Steam's own rule again, and the play bar's half stops drawing.
+    /// Turns the context half off: Steam's own rule lists the Compatibility
+    /// page again, and the desktop half stops drawing.
     static let contextRemovalScript = """
     (function () {
       if (!window.__sevoNativeBuilds) return "not installed";
@@ -237,8 +221,7 @@ enum SteamNativeBuilds {
     /// entry. Idempotent and self-reapplying, like ``SteamCompatBadge``.
     static let script = "(function () {\n" + platformGlyphs + text + desktop + "\n})()"
 
-    /// The menu's lines for a platform change in progress and one Steam
-    /// refused, in the app's language.
+    /// The menu's localized progress and failure lines.
     private static var text: String {
         let lines: [(String, String)] = [
             ("workingMacos", String(localized: "Setting the macOS version…")),
@@ -929,9 +912,8 @@ enum SteamNativeBuilds {
       return "installed";
     """
 
-    /// Takes the menu and the play bar entry off the window. The script stays
-    /// installed, so turning the feature on again is one evaluation of
-    /// ``script`` away.
+    /// Takes the menu and play bar entry off the window; evaluating
+    /// ``script`` turns them on again.
     static let removalScript = """
     (function () {
       if (!window.__sevoNativeMenu) { return "not installed"; }

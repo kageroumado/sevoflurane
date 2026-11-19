@@ -4,27 +4,24 @@ import Foundation
 /// page.
 ///
 /// Steam's own compatibility strip (`DeckVerifiedInfo`) is gated behind
-/// `bSteamOS && bSteamDeck`, so the desktop client on a Mac draws nothing in
-/// that slot. This script draws the same strip there, with the same geometry,
-/// colors and glyphs Steam's stylesheet gives the Deck one: the verdict on the
-/// Windows build the bottle runs, the game's own macOS version when it has
-/// one, the anti-cheat verdict, and a Details panel that names every source.
-/// Both pages read one ``GameCompatRecord``, so a game says the same thing in
-/// the library and in the store.
+/// `bSteamOS && bSteamDeck`, so the desktop client leaves that slot empty.
+/// This script draws a strip there in the geometry, colors and glyphs Steam
+/// gives the Deck one: the verdict on the Windows build the bottle runs, the
+/// game's macOS version when it has one, the anti-cheat verdict, and a
+/// Details panel naming every source. Both pages read one
+/// ``GameCompatRecord``.
 ///
-/// On the library page the slot is found through webpack rather than a class
-/// name: Steam's class names are content hashes, but the module that exports
-/// them is a plain `{DeckVerifiedInfo: "hash", Container: "hash", …}` object,
-/// so its source text is searched for the semantic key and the current hash
-/// is read off it. Steam's UI runs in the opener (the shared context page) and
-/// renders into this popup, so the webpack runtime, the router and the app
-/// store are all reached through `window.opener`. The record comes from the
-/// bridge's `/__compat/<appid>`.
+/// On the library page the slot is found through webpack: Steam's class
+/// names are content hashes, but the module exporting them is a plain
+/// `{DeckVerifiedInfo: "hash", Container: "hash", …}` object, so its source
+/// is searched for the semantic key. Steam's UI runs in the opener (the
+/// shared context page) and renders into this popup, so webpack, the router
+/// and the app store are reached through `window.opener`. The record comes
+/// from the bridge's `/__compat/<appid>`.
 ///
-/// The store page is a native web view at Steam's own origin, which cannot
-/// reach the bridge; it asks the `sevoCompat` message handler instead
-/// (``BrowserViewChild``), and the strip sits above Steam's Deck block in the
-/// right column.
+/// The store page is a native web view at Steam's origin, which cannot reach
+/// the bridge; it asks the `sevoCompat` message handler
+/// (``BrowserViewChild``), and the strip sits above Steam's Deck block.
 ///
 /// Idempotent and self-reapplying, like ``SteamDesktopChrome``: the observer
 /// sits on the Document, which survives Steam's `document.open()`.
@@ -40,12 +37,11 @@ enum SteamCompatBadge {
     /// sources' pages through.
     static let storeHandler = "sevoCompat"
 
-    /// Steam's four state glyphs and the colors its stylesheet gives each
-    /// state, ProtonDB's five medals in ProtonDB's colors, `glyph(state)`
-    /// and `medal(tier)` drawing one each, and `mark(badge)` choosing: the
-    /// medal when the badge carries a tier, the state glyph otherwise. The
-    /// strip and the library's badges (``SteamLibraryCompat``) share them,
-    /// so a game reads alike in both.
+    /// Steam's four state glyphs in its colors and ProtonDB's five medals in
+    /// ProtonDB's: `glyph(state)` and `medal(tier)` draw one each, and
+    /// `mark(badge)` picks the medal when the badge carries a tier, the state
+    /// glyph otherwise. Shared with the library's badges
+    /// (``SteamLibraryCompat``).
     static let glyphs = """
       /* Steam's four state glyphs, verbatim from its compatibility module, for
          the badges that carry no tier (anti-cheat, Steam Deck, unknown). */
@@ -495,10 +491,9 @@ enum SteamCompatBadge {
     """
 
     /// The store page: the slot above Steam's Deck block, the record from
-    /// the `sevoCompat` handler, drawn once it arrives. The handler answers
-    /// `{"off": true}` while Settings has the strip off, which the page
-    /// takes as the switch. DLC and soundtracks carry Steam's own bubbles and
-    /// get no strip.
+    /// the `sevoCompat` handler, drawn once it arrives. A `{"off": true}`
+    /// answer turns the strip off. DLC and soundtracks, marked by Steam's own
+    /// bubbles, get no strip.
     private static let store = """
       if (location.hostname !== "store.steampowered.com") return "not the store";
       if (window.__sevoCompat) {
@@ -592,8 +587,7 @@ enum SteamCompatBadge {
     """
 
     /// Takes the strip off the page and stops the observer putting it back.
-    /// The script itself stays installed, so turning the strip on again is
-    /// one evaluation of ``script`` away.
+    /// The script stays installed; evaluating ``script`` turns it on again.
     static let removalScript = """
     (function () {
       if (!window.__sevoCompat) { return "not installed"; }

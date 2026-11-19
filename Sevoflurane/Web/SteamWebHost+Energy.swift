@@ -1,18 +1,11 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Steam's library runs its animated capsule art at 60fps — a steady cost
-    /// even when idle. When macOS says the user wants to save power (Low Power
-    /// Mode) or reduce motion (the accessibility preference), that cost is
-    /// exactly what they are asking to shed, so the matching Steam settings
-    /// are turned on to match, and put back when the macOS preference goes
-    /// away.
-    ///
-    /// These are unambiguous system signals — the OS only reports them when the
-    /// user has opted in — so this never quiets the UI while they want it full.
-    /// The user's own Steam values are captured before the first change and
-    /// restored after, persisted across a quit so a launch under Low Power Mode
-    /// does not mistake our value for theirs.
+    /// Under Low Power Mode or Reduce Motion, Steam's matching rendering
+    /// settings are turned on (its animated capsule art runs at 60fps even
+    /// idle), and put back when the preference goes. The user's own values
+    /// are saved before the first change, persisted across a quit so a launch
+    /// under Low Power Mode does not take our values for theirs.
     private static let renderBaselineKey = "sevo.renderSettingsBaseline"
 
     func installEnergyPreferenceMirror() {
@@ -30,15 +23,12 @@ extension SteamWebHost {
         }
     }
 
-    /// Applies the current macOS energy/motion preference to Steam. Safe to
-    /// call whenever the context page is up — on the notifications, and once
-    /// the desktop is adopted so a preference set before launch is honored.
+    /// Applies the current macOS energy/motion preference to Steam.
     func updateEnergyPreference() {
         guard context != nil else { return }
         let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        // Passes run one after another: two overlapping passes race over
-        // the saved baseline, and the older one can finish last and win.
+        // Serialized: overlapping passes race over the saved baseline.
         let previous = energyUpdate
         energyUpdate = Task(name: "Match Steam's rendering to macOS") {
             await previous?.value

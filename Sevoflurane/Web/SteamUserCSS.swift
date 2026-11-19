@@ -3,18 +3,11 @@ import Foundation
 /// The script that puts the user's own stylesheet (``UserStyles``) into a
 /// Steam window, or a store or community page.
 ///
-/// The stylesheet lives in one `<style id="sevo-user-css">` that stays the
-/// head's last element, so at equal specificity the user's rules win over
-/// Steam's. Steam keeps adding stylesheets to a popup's head as its UI loads
-/// chunks, and writes the popup's document from the opener, so the script
-/// watches the Document (which survives `document.open()`, as in
-/// ``SteamDesktopChrome``) and moves the element back to the end whenever
-/// something lands after it.
-///
-/// Idempotent: a second evaluation hands the new stylesheet to the installed
-/// copy, which swaps the element's text in place.
+/// One `<style id="sevo-user-css">` kept as the head's last element, so the
+/// user's rules win at equal specificity. Steam keeps adding stylesheets, so
+/// an observer on the Document (which survives `document.open()`) moves it
+/// back to the end. A second evaluation swaps the text in place.
 nonisolated enum SteamUserCSS {
-    /// The element's id, unique to this stylesheet.
     static let styleID = "sevo-user-css"
 
     /// Installs `css`, or replaces the stylesheet an earlier evaluation
@@ -29,9 +22,7 @@ nonisolated enum SteamUserCSS {
         """
     }
 
-    /// Takes the stylesheet off the page. The observer stays installed and
-    /// idle, so turning the style on again is one evaluation of
-    /// ``script(css:)`` away.
+    /// Takes the stylesheet off the page; the observer stays installed.
     static let removalScript = """
     (function () {
       if (!window.__sevoUserCSS) { return "not installed"; }

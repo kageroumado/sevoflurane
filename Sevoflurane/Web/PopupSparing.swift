@@ -5,10 +5,9 @@ import Foundation
 ///
 /// Steam's launch-option dialog is a popup named after the game
 /// (`Black Myth: Wukong Benchmark Tool_uid0`), and a sweep that hides it
-/// leaves the launch waiting on an answer nobody can give. The name is known
-/// while the launch is; anything else the desktop UI puts up under a name the
-/// role table does not know is spared on the same grounds, since the table
-/// names every window this app draws for itself.
+/// leaves the launch waiting on an answer nobody can give. Any other
+/// desktop-UI popup under a name the role table does not know is spared too,
+/// since the table names every window this app draws for itself.
 nonisolated struct PopupSparing: Sendable, Equatable {
     /// Popup bases spared by name: the game a launch is in flight for.
     var exactBases: [String] = []

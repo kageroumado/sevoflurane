@@ -1,17 +1,9 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Opens Steam's friends list as its own window.
-    ///
-    /// The friends list and every chat are ordinary popups of the UI this app
-    /// already hosts, so they need nothing from the desktop window — which is
-    /// the point: a menu-bar Steam is a launcher and a friends list, and the
-    /// library is the optional part. Measured against a live client with
-    /// `SP Desktop` hidden throughout.
-    ///
-    /// With messages waiting, this opens the oldest of them instead, the way
-    /// clicking Steam's own tray badge does; Steam falls back to the plain
-    /// list when nothing is unread.
+    /// Opens Steam's friends list as its own window, which needs nothing from
+    /// the desktop window. With messages waiting it opens the oldest
+    /// conversation instead, as Steam's tray badge does.
     func openFriends() {
         runInContext(Self.friendsScript(unread: unreadChats > 0), describedAs: "friends list")
     }
@@ -32,10 +24,8 @@ extension SteamWebHost {
 
     private func runInContext(_ script: String, describedAs what: String) {
         chatPolicy.noteChatRequest(at: .now)
-        // The window comes forward with the app, the way any window opened
-        // from a menu-bar item does. Cooperative activation declines a
-        // request it cannot attribute to an event, so this happens now,
-        // while the click is still the reason for it.
+        // Activate now, while the click is still the reason: cooperative
+        // activation declines a request it cannot attribute to an event.
         NSApp.activate()
         Task(name: "Open \(what)") {
             let result = await evaluateInContext(script)
@@ -43,9 +33,7 @@ extension SteamWebHost {
         }
     }
 
-    /// One notification from the context page's subscription
-    /// (``notificationScript``), already decoded and with its identities
-    /// resolved.
+    /// One notification from ``notificationScript``, identities resolved.
     func noteSteamNotification(json: String) {
         guard let data = json.data(using: .utf8),
               let notification = try? JSONDecoder().decode(SteamNotification.self, from: data)
@@ -54,12 +42,10 @@ extension SteamWebHost {
             return
         }
         notifications?.post(notification)
-        // The bottle's hidden twin UI renders the same toast as a CEF window
-        // of its own (`notificationtoasts_N_desktop`), bottom-right on the
-        // real desktop. The supervisor's sweep would catch it eventually;
-        // catching it on the event is what keeps it from ever being seen.
-        // The schedule belongs to ``PopupSweeper``, so a second notification
-        // arriving mid-sweep lengthens this one instead of racing it.
+        // The bottle's twin UI shows the same toast as a CEF window
+        // (`notificationtoasts_N_desktop`); sweeping on the event hides it
+        // before it is seen. ``PopupSweeper`` owns the schedule, so a second
+        // notification lengthens the sweep instead of racing it.
         Task(name: "Hide client toast twin") {
             await PopupSweeper.shared.sweepAfterNotification { hidden in
                 let names = hidden.names.joined(separator: ", ")
@@ -73,11 +59,8 @@ extension SteamWebHost {
         }
     }
 
-    /// Opens the friends list, or the oldest unread conversation.
-    ///
-    /// `ShowChatUnreadMessages` is Steam's own "show me what is waiting": it
-    /// picks the oldest unread chat and activates it, and opens the plain
-    /// list when there is nothing unread after all.
+    /// Opens the friends list, or through `ShowChatUnreadMessages` the oldest
+    /// unread conversation (the plain list when nothing is unread).
     private static func friendsScript(unread: Bool) -> String {
         """
         (function () {
@@ -114,19 +97,13 @@ extension SteamWebHost {
         """
     }
 
-    /// Subscribes the context page to Steam's own toast value.
+    /// Subscribes the context page to `CurrentToastSubscribableValue`, the
+    /// value Steam's toast component reads, so the user's Steam notification
+    /// settings already apply. The payload arrives deserialized by Steam's
+    /// own per-type descriptor (`GetNotificationTargets()[type].proto`).
     ///
-    /// `CurrentToastSubscribableValue` is what Steam's toast component reads,
-    /// so subscribing to it sees exactly the notifications Steam would have
-    /// drawn — and the user's Steam notification settings, which are applied
-    /// upstream of it, are honored without this app knowing they exist. The
-    /// payload is deserialized by Steam's own per-type descriptor
-    /// (`GetNotificationTargets()[type].proto`), so the schema can never
-    /// drift from the client's.
-    ///
-    /// Identities are resolved here because only the page can resolve them:
-    /// an account id is a persona in `friendStore`, an app id is a name in
-    /// `appStore`. The words are written in ``SteamNotifications``.
+    /// Identities are resolved here, where `friendStore` and `appStore` live;
+    /// ``SteamNotifications`` writes the words.
     static let notificationScript = """
     (function () {
       if (window.__sevoNotifications) return "already registered";
@@ -208,16 +185,10 @@ extension SteamWebHost {
     })()
     """
 
-    /// Installs the scripts the context page needs standing: the notification
-    /// subscription, and the refusal of the chat window Steam opens for an
-    /// incoming message.
-    ///
-    /// Both reach for a global the bundle assigns partway through boot, and
-    /// Steam sends no "the UI is ready" signal, so each is retried until it
-    /// answers with one of the outcomes that means it is in place — the same
-    /// gap ``SteamMenuMirror`` retries across. The bottled client runs a
-    /// second copy of the friends UI, which opens a CEF chat window of its
-    /// own, so the refusal goes to that one too.
+    /// Installs the context page's standing subscriptions and refusals, each
+    /// retried until settled: they need globals assigned partway through
+    /// boot, with no ready signal. The chat and sound refusals also go to the
+    /// bottled client's own friends UI.
     func installContextScripts() {
         install(
             Self.notificationScript,
@@ -270,10 +241,9 @@ extension SteamWebHost {
         }
     }
 
-    /// Evaluates `script` in the context page until it answers one of
-    /// `outcomes`, once a second for ten seconds: Steam's globals appear a
-    /// moment after the page does. A result's words before a colon are its
-    /// outcome; what follows is logged with it.
+    /// Evaluates `script` in the context page once a second for ten seconds
+    /// until it answers one of `outcomes`. A result's words before a colon
+    /// are its outcome.
     func install(
         _ script: String, describedAs what: String, settledAt outcomes: Set<String>,
     ) {

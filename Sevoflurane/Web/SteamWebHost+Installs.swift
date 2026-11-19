@@ -1,16 +1,13 @@
 import AppKit
 
 extension SteamWebHost {
-    /// How long the install wizard has to sit on one page before the Steam window
-    /// comes forward for it. A wizard `sevo app install` drives moves on within two
-    /// seconds a page, so only one that waits for a person outlasts this.
+    /// How long the install wizard may sit on one page before Steam comes
+    /// forward; `sevo app install` moves on within two seconds a page.
     static let installWizardPatience: Duration = .seconds(3)
 
-    /// The install wizard moved (``installWizardScript``). Steam draws the wizard —
-    /// folder choice, license agreement — as a modal inside its main window, so an
-    /// install started with that window off screen (from `sevo`, Quick Launch or a
-    /// `steam://` link) waits on a dialog nobody can see. A wizard that holds one
-    /// page for ``installWizardPatience`` brings the Steam window forward.
+    /// The install wizard moved (``installWizardScript``). It is a modal
+    /// inside Steam's main window, so one that holds a page for
+    /// ``installWizardPatience`` with that window off screen brings it forward.
     func noteInstallWizard(state: Int, appID: String) {
         installWizardState = state
         installWizardUpdates += 1
@@ -24,15 +21,14 @@ extension SteamWebHost {
                 .window,
                 "install wizard for app \(appID) waits on page \(state) with Steam off screen; showing Steam",
             )
-            // A closed Steam window is rebuilt by reloading the page, which
-            // cancels the wizard: it is opened again once the window is up.
+            // Rebuilding a closed window reloads the page and cancels the
+            // wizard, so it is reopened after.
             if desktop == nil, !appID.isEmpty { installWizardToReopen = appID }
             showSteam()
         }
     }
 
-    /// Opens the wizard a page rebuild cancelled, now that the Steam window it
-    /// draws into is on screen.
+    /// Reopens the wizard a page rebuild cancelled.
     func reopenInstallWizardIfNeeded() {
         guard let appID = installWizardToReopen, let id = Int(appID) else { return }
         installWizardToReopen = nil
@@ -43,27 +39,23 @@ extension SteamWebHost {
         }
     }
 
-    /// Whether an install the page asked for goes ahead: at once for a game
-    /// nothing known stands against, after ``InstallWarning`` for one that
-    /// anti-cheat or an Unsupported verdict does. The warning follows the
-    /// Mac compatibility switch, as the strip and the library's badges do.
-    /// An install that goes ahead of a game set to its macOS version takes
-    /// Steam for Mac's copy first, whichever button started it.
+    /// Whether an install goes ahead, after ``InstallWarning`` for a game
+    /// with anti-cheat or an Unsupported verdict (only while the compatibility
+    /// switch is on). A game set to its macOS version takes Steam for Mac's
+    /// copy first.
     func confirmInstall(appID: Int) async -> Bool {
         guard await passesCompatibilityWarning(appID: appID) else { return false }
         await takeSteamForMacCopy(appID: appID)
         return true
     }
 
-    /// Clones Steam for Mac's copy into the library when the game is set to
-    /// its macOS version, before Steam's wizard looks at the disk
-    /// (``SteamForMacCopy``). A game set to Windows takes nothing: a macOS
-    /// copy under a Windows install is files Steam would leave behind.
+    /// Clones Steam for Mac's copy into the library (``SteamForMacCopy``)
+    /// before Steam's wizard looks at the disk, only for a game set to its
+    /// macOS version.
     private func takeSteamForMacCopy(appID: Int) async {
         guard Engine.running.supportsSteamPlayMacOS else { return }
-        // Either source alone misses a case: the page's details are loaded
-        // only for a game whose page was opened, and `config.vdf` takes a
-        // mapping made moments ago only when Steam next writes it.
+        // Both sources: the page has details only for games whose page was
+        // opened, and `config.vdf` lags a fresh mapping.
         let tool = JSLiteral.string(SteamPlayMacOS.toolName)
         let inPage = await evaluateInContext(
             "(function () { try { var d = appDetailsStore.GetAppDetails(\(appID)); return String(!!d && d.strCompatToolName === \(tool)); } catch (e) { return 'false'; } })()",
@@ -112,10 +104,8 @@ extension SteamWebHost {
         return install
     }
 
-    /// Subscribes the context page to Steam's install wizard. Each update carries
-    /// the install manager's state (`eInstallState`, 0 when the wizard is closed)
-    /// and the app it is installing, and comes back through the popup message
-    /// handler as `__installWizard`. Re-registered on reload.
+    /// Subscribes the context page to Steam's install wizard, posting
+    /// `__installWizard` with `eInstallState` (0 when closed) and the app id.
     static let installWizardScript = """
     (function () {
       if (window.__sevoInstallWizard) return "already registered";

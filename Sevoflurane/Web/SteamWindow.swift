@@ -3,19 +3,17 @@ import WebKit
 
 /// One of Steam's windows, hosted in a real `NSWindow`.
 ///
-/// Under CEF each popup Steam opens is an OS window it owns, and
-/// `SteamClient.Window` is the binding that drives it — show, hide, move,
-/// resize, close. Nothing else in the UI knows how a window is made, so
-/// pointing that one namespace at an `NSWindow` is enough to make Steam's own
-/// chrome, its context menus, and its window controls work unmodified.
+/// Under CEF each popup is an OS window driven through `SteamClient.Window`
+/// (show, hide, move, resize, close); pointing that one namespace at an
+/// `NSWindow` makes Steam's chrome, context menus and window controls work
+/// unmodified.
 @MainActor
 final class SteamWindow: NSObject {
     let webView: WKWebView
     private(set) var role: SteamWindowRole
     private(set) var name: String
 
-    /// Steam asks for this on windows whose close button should park them
-    /// rather than end them.
+    /// Set by Steam on windows whose close button hides rather than closes.
     private var hidesOnClose = false
     private var isClosed = false
 
@@ -25,26 +23,20 @@ final class SteamWindow: NSObject {
     /// it (a hiding window still reads as visible for a beat).
     var nsWindow: NSWindow? { window }
 
-    /// The hosting window's AppKit frame, for WebKit's window-frame delegate.
-    /// Steam's menu placement flips a flyout upward when `window.screenY` says
-    /// there is no room below, and WebKit answers that DOM API with a zero
-    /// rect unless the UI delegate supplies the real frame.
+    /// The hosting window's AppKit frame, for WebKit's window-frame delegate
+    /// (``SteamWebCoordinator``).
     var appKitFrame: CGRect {
         window?.frame ?? .zero
     }
 
-    /// Whether the hosting window is ordered in, for the `/windows` inventory.
-    /// A menu counts as visible only when faded in — it stays ordered in for
-    /// its whole life at alpha 0.
+    /// Whether the hosting window is ordered in. A menu and the game overlay
+    /// stay ordered in at alpha 0 so their pages keep rendering, and count as
+    /// visible only once faded in.
     var isWindowVisible: Bool {
         guard let window, window.isVisible else { return false }
-        // A menu and the game overlay stay ordered in at alpha 0 so their
-        // pages keep rendering; they count as visible only once faded in.
         return (role != .menu && role != .gameOverlay) || window.alphaValue > 0
     }
 
-    /// Whether an AppKit window is this popup's, for hit-testing an event's
-    /// window against the popup inventory.
     func ownsWindow(_ candidate: NSWindow) -> Bool {
         window === candidate
     }
@@ -54,9 +46,8 @@ final class SteamWindow: NSObject {
     private var minimumSize: CGSize?
     private var maximumSize: CGSize?
 
-    /// Regions of the page the user may drag the window by, in web coordinates
-    /// with the origin at the top-left of the content. Steam marks them with
-    /// `-webkit-app-region: drag`; the desktop chrome script reports them here.
+    /// Regions the window may be dragged by, in web coordinates from the
+    /// content's top-left, reported by the chrome scripts.
     private var dragRegions: [CGRect] = []
 
     weak var host: SteamWebHost?
@@ -80,19 +71,16 @@ final class SteamWindow: NSObject {
 
     // MARK: - Window lifecycle
 
-    /// Lets a genuinely on-screen window stop rendering when it is covered.
-    /// Deferred until the popup names itself, because until then every page is
-    /// an anonymous `about:blank` and the safe default is to keep rendering.
+    /// Lets a covered window stop rendering, per its role. Applied once the
+    /// popup names itself; until then it keeps rendering.
     private func applyOcclusionPolicy() {
         SteamWebHost.setOcclusionDetection(
             role.allowsOcclusionDetection && !occlusionDetectionSuspended, on: webView,
         )
     }
 
-    /// While suspended, the page stays visible to WebKit even when the window
-    /// is covered. A profile scenario needs its animation frames to keep
-    /// coming regardless of what sits in front of the window; nothing else
-    /// should ask for this.
+    /// Keeps the page visible to WebKit while covered, for benchmark runs
+    /// only.
     private var occlusionDetectionSuspended = false
 
     func suspendOcclusionDetection(_ suspended: Bool) {
@@ -100,12 +88,8 @@ final class SteamWindow: NSObject {
         applyOcclusionPolicy()
     }
 
-    /// Builds the `NSWindow` for this popup's role.
-    ///
-    /// The window starts hidden: Steam renders into a popup only after it is
-    /// told the popup exists, and asks for it to be shown afterwards with
-    /// `ShowWindow` or `BringToFront`. Creating it visible would flash an empty
-    /// frame before the UI paints.
+    /// Builds the `NSWindow` for this popup's role, hidden: Steam paints
+    /// first and asks for `ShowWindow` or `BringToFront` afterwards.
     func realize() {
         guard window == nil, role != .context else { return }
 
@@ -114,9 +98,7 @@ final class SteamWindow: NSObject {
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
-        // Steam's window model is the one that decides what exists: every
-        // window here is rebuilt from the page that opened it, so AppKit's
-        // own restoration has nothing to put back.
+        // Every window is rebuilt from the page that opened it.
         window.isRestorable = false
         applyRoleChrome(to: window)
         window.contentView = makeContentView(content: content)
@@ -126,18 +108,14 @@ final class SteamWindow: NSObject {
         place(window)
         self.window = window
         if role != .gameOverlay, let childLevel = host?.overlayChildLevel {
-            // Opened while the overlay is up — ride just above it rather than
-            // at the normal level, where the overlay and game would hide it.
-            // A `SteamPanel` hides itself when its app deactivates, and this
-            // app is never the active one over a game, so that is turned off or
-            // the popup would vanish the instant it appeared.
+            // Opened while the overlay is up: ride just above it. This app is
+            // never active over a game, so hiding on deactivation would make
+            // the panel vanish at once.
             window.level = NSWindow.Level(rawValue: childLevel)
             window.hidesOnDeactivate = false
         }
         if role == .menu || role == .gameOverlay {
-            // Ordered in at alpha 0 (chrome sets it) so WebKit schedules the
-            // page and it renders; the overlay is placed and faded in only
-            // when the client says it is active (`setOverlayActive`).
+            // Ordered in at alpha 0 (chrome sets it) so the page renders.
             window.orderFront(nil)
         } else if role == .toast {
             park(window)
@@ -147,21 +125,16 @@ final class SteamWindow: NSObject {
     /// The bare `NSWindow` for this popup's role, before any dressing.
     private func makeWindow(content: NSRect) -> NSWindow {
         if role != .gameOverlay, host?.isOverlayActive == true {
-            // A popup opened while the overlay is up (its Settings, a dialog):
-            // a non-activating panel, so it does not pull focus off the game.
-            // `realize` levels it above the overlay, and `show` orders it in
-            // without activating the app.
+            // Opened while the overlay is up: a non-activating panel, so it
+            // does not pull focus off the game.
             return SteamPanel(contentRect: content)
         }
         return switch role {
         case .menu, .keyboard, .dialog:
             SteamPanel(contentRect: content)
         case .toast:
-            // Borderless and never ordered in. It exists because WebKit only
-            // schedules a web view that lives in a window, and the toast's
-            // page has to run: it renders, starts its dismissal timer, and
-            // drains Steam's toast queue. The Mac side of the notification is
-            // posted from `SteamNotifications`.
+            // Never shown; a window only so WebKit runs the page, which
+            // drains Steam's toast queue on its dismissal timer.
             NSWindow(
                 contentRect: content,
                 styleMask: [.borderless],
@@ -169,18 +142,12 @@ final class SteamWindow: NSObject {
                 defer: false,
             )
         case .gameOverlay:
-            // A non-activating panel: clicking the overlay must not promote
-            // this app to frontmost, because that drops the game out of focus
-            // and Wine sinks the game window below the Dock — leaving the Dock
-            // and every other window sandwiched between the game and the
-            // overlay. Keeping the game frontmost keeps the two an adjacent
-            // pair above everything else. It can still become key for the
-            // overlay's own mouse and hover (SteamPanel.canBecomeKey).
+            // Non-activating: if this app became frontmost, Wine would sink
+            // the game below the Dock, between the game and the overlay. It
+            // can still become key (SteamPanel.canBecomeKey).
             SteamPanel(contentRect: content)
         case .bigPicture:
-            // BPM draws its own top bar flush with the content, leaving no
-            // strip for overlaid traffic lights, so the title bar stays a real
-            // one outside the page.
+            // BPM's top bar leaves no room for overlaid traffic lights.
             NSWindow(
                 contentRect: content,
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -207,10 +174,8 @@ final class SteamWindow: NSObject {
     private func makeContentView(content: NSRect) -> NSView {
         let container = SteamContentView(frame: content)
         container.owner = self
-        // Every window relays: WKWebView's own tracking is key-window gated,
-        // and with menus taking key, the desktop needs relayed hover exactly
-        // when a menu is up — that is what keeps its mouse-out logic (menu
-        // dismissal) alive.
+        // WKWebView's tracking is key-window gated, and the desktop needs
+        // hover while a menu holds key for its menu-dismissal logic.
         container.relaysHover = true
         webView.frame = container.bounds
         webView.autoresizingMask = [.width, .height]
@@ -222,49 +187,40 @@ final class SteamWindow: NSObject {
     var titleObservation: NSKeyValueObservation?
 
     // swiftlint:disable cyclomatic_complexity function_body_length
-    /// Answers one `SteamClient.Window` call. The return value crosses back to
-    /// the page as the resolution of the promise the UI is awaiting, so it must
-    /// stay JSON-representable.
-    ///
-    /// One case per call the shim routes here — the switch's size mirrors
-    /// Steam's API surface, not tangled logic, so the complexity metrics are
-    /// silenced rather than the switch split along artificial lines.
+    /// Answers one `SteamClient.Window` call. The return value resolves the
+    /// page's promise, so it must stay JSON-representable. One case per call
+    /// the shim routes here.
     func perform(_ function: String, _ args: [Any]) -> Any? {
         switch function {
         case "ShowWindow", "SetKeyFocus", "MarkLastFocused", "SetForegroundWindow":
             show(activating: true)
         case "BringToFront":
-            // The argument is Steam's k_EWindowBringToFront* enum.
-            // `k_EWindowBringToFrontWithoutForcingOS` is 2 — the bundle's
-            // popup portal passes it for `bNoFocusWhenShown` windows (the
-            // hover supernavs), and giving those key focus blurs the desktop,
-            // whose blur handler dismisses the menu 30ms after it opens.
+            // `k_EWindowBringToFrontWithoutForcingOS` (2) marks
+            // `bNoFocusWhenShown` windows (hover supernavs); giving those key
+            // blurs the desktop, which dismisses the menu 30ms after it opens.
             show(activating: (args.first as? NSNumber)?.intValue != 2)
         case "HideWindow":
             hide()
         case "Close":
             close()
         case "Minimize":
-            // Steam minimizes the chat it just opened for a message so it
-            // flashes in the taskbar; miniaturizing a window that was never
-            // shown would put a phantom in the Dock instead.
+            // Steam minimizes a chat it opened for a message; a never-shown
+            // window would become a phantom in the Dock.
             if !heldForNotification { window?.miniaturize(nil) }
         case "ToggleMaximize":
             window?.zoom(nil)
         case "ToggleFullScreen":
             window?.toggleFullScreen(nil)
         case "MoveTo", "MoveToLocation":
-            // A third argument carries the target monitor's scale factor,
-            // because on Windows these are physical pixels. AppKit points are
-            // already the page's own units, so it is dropped.
-            // A dialog's place is the app's: Steam would put it bottom-left.
+            // The third argument (the monitor's scale factor, for Windows'
+            // physical pixels) is dropped: AppKit points are the page's units.
+            // Dialogs are placed by the app; Steam would put them bottom-left.
             if !isParked, role != .gameOverlay, role != .dialog,
                let point = geometry(args, at: 0 ..< 2, from: function) {
                 moveTo(x: Self.clampedOffset(point[0]), y: Self.clampedOffset(point[1]))
             }
         case "ResizeTo":
-            // Steam resizes the overlay to the whole screen; it follows the
-            // game's frame instead (`setOverlayActive`).
+            // The overlay follows the game's frame, not Steam's full-screen size.
             if role != .gameOverlay, let size = geometry(args, at: 0 ..< 2, from: function) {
                 let size = Self.clampedSize(width: size[0], height: size[1])
                 resizeTo(width: size.width, height: size.height)
@@ -310,32 +266,27 @@ final class SteamWindow: NSObject {
         case "DefaultMonitorHasFullscreenWindow":
             return false
         case "GetWindowRestoreDetails":
-            // Steam treats this as an opaque token and hands it back to
-            // `PositionWindowRelative` to say *which* window a menu is being
-            // placed against, so the name is what it needs to carry. Restoring
-            // geometry from it is AppKit's job, through frame autosave.
+            // An opaque token Steam hands back to `PositionWindowRelative` to
+            // name the window a menu is placed against.
             return name
         case "__adopt":
             adopt(name: string(args, 0), parameters: string(args, 1))
         case "__dragRegions":
             dragRegions = rects(args.first)
         case "__openLocalDirectory":
-            // "Browse local files" and friends. Routed here by the shim; the
-            // client's own handler would open Wine's explorer.exe.
+            // "Browse local files"; the client's handler would open Wine's
+            // explorer.exe.
             if let target = SteamBottle.macURL(fromWindowsPath: string(args, 0)) {
                 Self.reveal(target)
             }
         case "__browseScreenshots":
-            // Steam's own handler opens the bottle's explorer.exe. The first
-            // argument is the game id in both routes; the screenshot handle
-            // the app menu passes with it names a file, and the folder is
-            // what "show on disk" means.
+            // The first argument is the game id in both routes; the folder is
+            // revealed rather than the screenshot the handle names.
             if let folder = SteamBottle.screenshots(forApp: string(args, 0)) {
                 Self.reveal(folder)
             }
         case "__openSoundSettings":
-            // The bottle's microphone panel configures a Wine device nobody
-            // speaks into; the input this app records from is the Mac's.
+            // The input recorded from is the Mac's, not the bottle's.
             if let panel = URL(
                 string: "x-apple.systempreferences:com.apple.Sound-Settings.extension",
             ) {
@@ -347,26 +298,19 @@ final class SteamWindow: NSObject {
                 NSWorkspace.shared.open(url)
             }
         case "__playMacBuild":
-            // The compat strip's "Play in Steam for Mac".
             if let appID = Int(string(args, 0)) {
                 MacBuildHandoff.playMacBuild(appID: appID)
             }
         case "__openCompanion":
-            // The compat strip's "Open Phosphene" on a companion app.
             if let appID = Int(string(args, 0)) {
                 CompanionHandoff.open(appID: appID)
             }
         case "__steamNotification":
-            // The context page's toast subscription
-            // (SteamWebHost.notificationScript), one decoded notification.
             host?.noteSteamNotification(json: string(args, 0))
         case "__unreadChats":
-            // Tapped out of Steam's own unread-count post to the client
-            // (the shim's NATIVE_TAPS).
+            // The shim's NATIVE_TAPS.
             host?.noteUnreadChats((args.first as? NSNumber)?.intValue ?? 0)
         case "__gameAction":
-            // The context page's game-action subscription reporting launch
-            // progress (SteamWebHost.gameActionScript).
             host?.noteGameAction(
                 phase: string(args, 0),
                 appID: string(args, 1),
@@ -374,8 +318,7 @@ final class SteamWindow: NSObject {
                 actionID: string(args, 3),
             )
         case "__launchOptions":
-            // The shim's tap on Steam's launch-option request (its
-            // CALLBACK_TAPS): the app answers it with a native alert.
+            // The shim's CALLBACK_TAPS.
             host?.noteLaunchOptions(
                 appID: Int(string(args, 0)) ?? 0,
                 actionID: Int(string(args, 1)) ?? 0,
@@ -383,43 +326,31 @@ final class SteamWindow: NSObject {
                 remembered: string(args, 3),
             )
         case "__overlayActivated":
-            // The context page's overlay subscription
-            // (SteamWebHost.overlayScript): Shift+Tab toggled the in-game
-            // overlay. The host places and shows the overlay window over the
-            // game, or hides it and returns focus. The app id is carried so the
-            // host can close it through Steam.
             host?.noteOverlayActivated(
                 active: ((args.first as? NSNumber)?.intValue ?? 0) != 0,
                 appID: string(args, 1),
             )
         case "__steamCallFailure":
-            // A SteamClient call the client refused, from its console
-            // (SteamWebHost.callFailureScript).
             host?.noteSteamCallFailure(string(args, 0))
         case "__installWizard":
-            // The context page's install-wizard subscription
-            // (SteamWebHost.installWizardScript): its state and app id.
             host?.noteInstallWizard(
                 state: (args.first as? NSNumber)?.intValue ?? 0,
                 appID: string(args, 1),
             )
         case "__jsError":
-            // A page-side error the shim's guard caught — the stack Steam's
-            // own error boundary swallows. Diagnostic for the intermittent
-            // library crash; goes to the event log a bug report attaches.
+            // A page error the shim's guard caught, with the stack Steam's
+            // error boundary swallows.
             host?.notePageError(string(args, 0))
         case "__bv":
-            // An identity, not a measurement — read as an integer so a stray
-            // `NaN` cannot trap `Int(_:)` on the way in.
+            // Read through NSNumber so a stray `NaN` cannot trap `Int(_:)`.
             performBrowserView(
                 id: (args.first as? NSNumber)?.intValue ?? 0,
                 method: string(args, 1),
                 args: Array(args.dropFirst(2)),
             )
         default:
-            // The rest of the namespace is window-manager plumbing with no
-            // AppKit counterpart (compositing mode, gamepad display scale, VR
-            // overlays). The UI calls them unconditionally.
+            // Window-manager calls with no AppKit counterpart (compositing
+            // mode, gamepad display scale, VR overlays).
             break
         }
         return nil
@@ -429,18 +360,13 @@ final class SteamWindow: NSObject {
 
     // MARK: - Adoption
 
-    /// Applies the identity Steam gave the popup, which only reaches us once
-    /// `window.open` has returned to the shim.
-    ///
-    /// `parameters` is the query of the `about:blank?…` URL the popup manager
-    /// opens; it carries the size limits and creation flags that the standard
-    /// window-features string has no room for.
+    /// Applies the identity Steam gave the popup, sent by the shim once
+    /// `window.open` returns. `parameters` is the query of the popup's
+    /// `about:blank?…` URL, carrying size limits and creation flags.
     func adopt(name: String, parameters: String) {
         guard window == nil else {
-            // The 400ms orphan fallback won the race against Steam's real
-            // adoption: the window is built, but the identity should still
-            // land — the name is what `/windows` and menu parent lookups key
-            // on.
+            // The 400ms orphan fallback built the window first; the name
+            // still lands for `/windows` and menu parent lookups.
             if self.name.isEmpty, !name.isEmpty {
                 self.name = name
                 EventLog.shared.log(.window, "late adoption: orphan popup is \(name)")
@@ -459,8 +385,8 @@ final class SteamWindow: NSObject {
         }
         let query = URLComponents(string: "about:blank?" + parameters)?
             .queryItems ?? []
-        // `Double("nan")` and `Double("inf")` both parse, and these values
-        // become window sizes — the same trap as the shim's numbers.
+        // `Double("nan")` and `Double("inf")` both parse; these become
+        // window sizes.
         func value(_ key: String) -> CGFloat? {
             guard let raw = query.first(where: { $0.name == key })?.value,
                   let number = Double(raw), number.isFinite else { return nil }
@@ -479,10 +405,8 @@ final class SteamWindow: NSObject {
 
     // MARK: - Visibility
 
-    /// Whether a Steam-driven show of the login window arrived while the host
-    /// was deferring it (the onboarding wizard still up, or sign-in skipped).
-    /// The window is built and ready; ``SteamWebHost/releaseWindowHold()``
-    /// replays the show.
+    /// Whether a show of the login window arrived while the host deferred it;
+    /// ``SteamWebHost/releaseWindowHold()`` replays it.
     private(set) var showWasDeferredByHold = false
 
     /// A chat window Steam opened for an incoming message, kept built and off
@@ -491,22 +415,18 @@ final class SteamWindow: NSObject {
 
     func show(activating: Bool) {
         realize()
-        // The game overlay's visibility is the client's to decide, through
-        // `setOverlayActive`; the `ShowWindow`/`BringToFront` Steam sends at
-        // creation must not put it on screen over the game.
+        // The overlay is shown only through overlay activation, never by the
+        // `ShowWindow`/`BringToFront` Steam sends at creation.
         guard role != .gameOverlay else { return }
         host?.noteWindowWillShow(self)
-        // A popup opened while the overlay is up rides above it (a
-        // non-activating panel levelled in `realize`) and is ordered in
-        // without activating the app, so the game keeps focus.
+        // Over the overlay: ordered in without activating, so the game keeps
+        // focus.
         if host?.isOverlayActive == true {
             window?.orderFrontRegardless()
             return
         }
-        // Steam asks for its toast to be shown the moment the page renders
-        // one. Refusing here is the whole of the suppression: the popup still
-        // exists and still runs, so Steam's own queue drains on schedule and
-        // nothing downstream can tell it was never on screen.
+        // Refusing the toast's show is the whole suppression; its page still
+        // runs and drains Steam's queue.
         guard role.isShowable else { return }
         guard let window else { return }
         if role == .login, host?.defersLoginWindow == true {
@@ -515,13 +435,8 @@ final class SteamWindow: NSObject {
         }
         showWasDeferredByHold = false
         if role == .chat, !window.isVisible, host?.chatShowIsUnasked == true {
-            // The backstop behind ``SteamChatAutoOpen``, which refuses Steam
-            // the auto-open in the first place. A show that still arrives with
-            // no press in this app and no request for a chat behind it is one
-            // Steam decided on, so the window stays built and hidden until
-            // something asks — the notification click, or the friends list.
-            // Nothing else happens for it either: no Dock icon, and no
-            // minimize or move of a window nobody has seen.
+            // Backstop behind ``SteamChatAutoOpen``: a show with no press or
+            // chat request behind it stays hidden until something asks.
             heldForNotification = true
             EventLog.shared.log(
                 .window, "chat window \(name) opened by an incoming message — left to the notification",
@@ -530,9 +445,8 @@ final class SteamWindow: NSObject {
         }
         heldForNotification = false
         if host?.clientIsStopping == true, role != .dialog {
-            // The client on its way out asks for its windows once more; the
-            // library coming forward and taking key is not how a quit should
-            // look. What is already on screen stays; nothing new comes up.
+            // A stopping client asks for its windows once more; nothing new
+            // comes up.
             return
         }
         let becameRegular = !role.isPanel && NSApp.activationPolicy() != .regular
@@ -550,12 +464,9 @@ final class SteamWindow: NSObject {
         }
         attachDialogToDesktop()
         if becameRegular {
-            // Promotion from `.accessory` only takes effect once the run loop
-            // turns. Activating in the same pass is swallowed: the window
-            // comes up behind whatever was frontmost, its traffic lights stay
-            // gray, and clicking it does nothing because as far as the window
-            // server is concerned the app still isn't one that activates —
-            // only a Cmd-Tab away and back fixes it.
+            // Promotion from `.accessory` takes effect only after the run loop
+            // turns; activating in the same pass leaves the window behind the
+            // frontmost app, gray and unclickable.
             DispatchQueue.main.async { [weak self] in self?.activate(window) }
         } else {
             activate(window)
@@ -568,27 +479,20 @@ final class SteamWindow: NSObject {
             Activation().bringAppForward()
         }
         window.makeKeyAndOrderFront(nil)
-        // Until the web view is first responder, AppKit routes mouse-moved
-        // events elsewhere and the page sees no hover — the "menus only
-        // react after one click inside" symptom.
+        // Until the web view is first responder the page sees no hover.
         if !role.isPanel, window.firstResponder === window {
             window.makeFirstResponder(webView)
         }
     }
 
-    /// Puts the window away. A menu fades to nothing instead of ordering out:
-    /// its page must stay `document.visibilityState == "visible"`, because
-    /// Steam's popup state is synced to DOM visibility and the ~100ms gap
-    /// between `orderFront` and WebKit marking the page visible reads as "the
-    /// menu failed to appear" — the state flips back and a 30ms-delayed
-    /// effect hides the window. That loop was the supernav blink.
+    /// Puts the window away. A menu or the overlay fades to alpha 0 instead
+    /// of ordering out, keeping its page `visible`: Steam syncs popup state to
+    /// DOM visibility, and the ~100ms gap after `orderFront` reads as a menu
+    /// that failed to appear, which made the supernav blink.
     private func hide() {
         showWasDeferredByHold = false
         guard let window else { return }
         if role == .menu || role == .gameOverlay {
-            // Fade rather than order out: the overlay's page must keep
-            // rendering so its next activation has no blank first frame, the
-            // same reason a menu stays ordered in at alpha 0.
             window.alphaValue = 0
             window.ignoresMouseEvents = true
         } else {
@@ -597,13 +501,9 @@ final class SteamWindow: NSObject {
         }
     }
 
-    /// Shows the game overlay over the running game: placed at the game's
-    /// `frame`, levelled just above the game (`level` = the game window's own
-    /// level + 1, so it rides above a frontmost fullscreen game rather than at
-    /// a fixed floating level below it), faded in, made key, input enabled,
-    /// cursor shown. The host only calls this while the game — or this app,
-    /// once the overlay has key — is frontmost, so the overlay never sits over
-    /// a third application.
+    /// Shows the overlay at the game's `frame` and `level` (the game window's
+    /// level + 1, above a full-screen game), faded in, key, taking input,
+    /// with the cursor shown.
     func showOverlay(frame: CGRect?, level: Int?) {
         guard role == .gameOverlay else { return }
         realize()
@@ -613,23 +513,18 @@ final class SteamWindow: NSObject {
         window.alphaValue = 1
         window.ignoresMouseEvents = false
         window.orderFrontRegardless()
-        // Key, so the overlay's own chat and search take the keyboard — but as
-        // a non-activating panel, so becoming key never promotes the app and
-        // drops the game out of focus. Shift+Tab (the overlay toggle) then
-        // lands here rather than in the game's hook, so the host swallows it
-        // and closes the overlay itself (`installOverlayKeyMonitor`).
+        // Key for the overlay's typing, without activating the app. Shift+Tab
+        // then lands here, so the host handles it (`installOverlayKeyMonitor`).
         window.makeKey()
         if window.firstResponder === window {
             window.makeFirstResponder(webView)
         }
-        // The game hides the cursor; the renderer's ShowCursor hook only acts
-        // inside the game, so it is unhidden here for the app window.
+        // The game hides the cursor, and its ShowCursor hook acts only inside
+        // the game.
         NSCursor.unhide()
     }
 
-    /// Orders an overlay child popup in or out with the overlay it belongs to,
-    /// so Settings and the like ride with it and vanish when it closes. A
-    /// no-op once the popup's own window is gone.
+    /// Orders an overlay child popup in or out with the overlay.
     func setOrderedIn(_ orderedIn: Bool) {
         guard let window else { return }
         if orderedIn {
@@ -639,29 +534,23 @@ final class SteamWindow: NSObject {
         }
     }
 
-    /// Takes the overlay off screen without ordering it out, so its page keeps
-    /// rendering: invisible, click-through, and dropped back to a normal level
-    /// so an alpha-0 window can never sit above — or intercept anything over —
-    /// another application. Used both when the overlay is dismissed and when a
-    /// third app takes the front.
+    /// Takes the overlay off screen: invisible, click-through, back at the
+    /// normal level, and ordered out. Used on dismissal and when a third app
+    /// takes the front.
     func hideOverlay() {
         guard role == .gameOverlay, let window else { return }
         window.alphaValue = 0
         window.ignoresMouseEvents = true
         window.level = .normal
-        // Ordered out so the panel resigns key: while it was up it held key to
-        // take the overlay's typing, and an invisible key window would keep
-        // eating the keyboard — the game would never see the next Shift+Tab
-        // that reopens the overlay.
+        // Ordered out to resign key; an invisible key window would eat the
+        // Shift+Tab that reopens the overlay.
         window.orderOut(nil)
     }
 
-    /// Hides a menu the way Steam hides one itself: through the menu instance
-    /// this popup renders for. The instance's owner window draws a full-size
-    /// `ContextMenuMouseOverlay` for as long as it counts the menu as active;
-    /// closing the popup from this side leaves that overlay up, and every
-    /// click in the owner window dies on it. Answers whether an instance was
-    /// found to hide.
+    /// Hides a menu through the menu instance it renders for, which also
+    /// takes down the owner window's full-size `ContextMenuMouseOverlay`;
+    /// closing the popup from this side leaves that overlay eating every
+    /// click. Answers whether an instance was found.
     func hideThroughSteam() async -> Bool {
         let script = """
         (function () {
@@ -684,9 +573,8 @@ final class SteamWindow: NSObject {
         return await ((try? webView.evaluateJavaScript(script)) as? Bool) ?? false
     }
 
-    /// Ends the popup from our side. Closing the `NSWindow` alone would leave
-    /// Steam's popup manager holding a window it still believes is open, so the
-    /// browsing context is closed too and the page's own teardown follows.
+    /// Ends the popup from our side, closing the browsing context too so
+    /// Steam's popup manager does not keep it as open.
     func close() {
         guard !isClosed else { return }
         isClosed = true
@@ -696,16 +584,12 @@ final class SteamWindow: NSObject {
 
     // MARK: - Browser views
 
-    /// Steam's embedded web content (store, community, profile), which CEF
-    /// renders as a native child browser positioned over a placeholder in the
-    /// page. Here each one is a child web view over the window's own web view,
-    /// placed by the same bounds Steam computes.
+    /// Steam's embedded web content (store, community, profile), each a child
+    /// web view over this window's, placed by the bounds Steam computes.
     private var browserViews: [Int: BrowserViewChild] = [:]
 
-    /// Whether the desktop's native Store BrowserView has reached a settled
-    /// visible state. This is deliberately a WebKit lifecycle signal rather
-    /// than a Steam DOM selector, which changes frequently across Steam UI
-    /// releases.
+    /// Whether the Store BrowserView is settled and visible: a WebKit
+    /// lifecycle signal, which outlasts Steam's DOM selectors.
     var hasSettledStoreBrowserView: Bool {
         browserViews.values.contains {
             $0.isSettledAndVisible && $0.loadedHost?.contains("store.steampowered.com") == true
@@ -741,8 +625,7 @@ final class SteamWindow: NSObject {
                 hostPage: webView,
                 host: host,
             )
-            // Steam is about to load a web property into this view; mirror
-            // the client's session first so it paints signed in.
+            // Mirror the client's session first so the page paints signed in.
             WebSessionCookies.refresh()
             return
         }
@@ -755,7 +638,6 @@ final class SteamWindow: NSObject {
                 view.load(url)
             }
         case "bounds":
-            // A browser view's frame reaches AppKit too, by way of `NSView`.
             if let bounds = geometry(args, at: 0 ..< 4, from: "browser view bounds") {
                 view.setBounds(
                     x: bounds[0], y: bounds[1], width: bounds[2], height: bounds[3],
@@ -781,15 +663,10 @@ final class SteamWindow: NSObject {
         }
     }
 
-    /// Why a popup stopped existing.
-    ///
-    /// Steam learns a popup is gone from its document's `unload`, and the app
-    /// fires that itself (``SteamWebHost/notifyPopupUnloaded(named:)``). It is
-    /// owed for a popup whose own document went away while the context page
-    /// lives on, and it is poison for one that went because the page under it
-    /// is being torn down: the listeners go with the page, and running
-    /// `CPopup.OnClose` anyway tells Steam the user closed that window — which
-    /// for `SP DesktopLoginWindow` means quit.
+    /// Why a popup stopped existing, which decides whether the app fires its
+    /// `unload` (``SteamWebHost/notifyPopupUnloaded(named:)``). Never fire it
+    /// during page teardown: `CPopup.OnClose` then reads as the user closing
+    /// the window, which for `SP DesktopLoginWindow` means quit.
     enum DetachReason: Equatable {
         /// The popup's own document went away while the context page lives on:
         /// Steam closed it, or the user did through its close button.
@@ -801,7 +678,6 @@ final class SteamWindow: NSObject {
     }
 
     /// Drops the window and the page without asking the page to close itself.
-    /// Used when WebKit has already closed the browsing context.
     func detach(reason: DetachReason) {
         isClosed = true
         for view in browserViews.values {
@@ -819,14 +695,11 @@ final class SteamWindow: NSObject {
         host?.windowDidClose(self, reason: reason)
     }
 
-    /// Tells the popup its frame changed. Steam's popup manager listens for
-    /// these on its own window, exactly as CEF posts them.
+    /// Tells the popup its frame changed, as CEF posts it.
     private func notifyPage(_ message: String) {
         webView.evaluateJavaScript("window.postMessage('\(message)', '*')")
     }
 
-    /// Whether a point in the window's content view sits in a region the page
-    /// declared draggable.
     func isDragRegion(contentPoint: NSPoint, contentHeight: CGFloat) -> Bool {
         let webPoint = CGPoint(x: contentPoint.x, y: contentHeight - contentPoint.y)
         return dragRegions.contains { $0.contains(webPoint) }
@@ -834,19 +707,13 @@ final class SteamWindow: NSObject {
 
     // MARK: - Argument decoding
 
-    /// The named arguments as numbers AppKit can be given, or `nil` when any
-    /// of them is not.
+    /// The named arguments as finite numbers, or `nil` when any is not.
     ///
-    /// JavaScript numbers are doubles, so `NaN` and `Infinity` cross the shim
-    /// through `NSNumber` intact — and Steam produces them: a menu placed
-    /// against a window that has gone computes `menuLeft - parent.screenX`
-    /// against `undefined`. `-[NSWindow _reallySetFrame:]` *raises* on a
-    /// non-finite frame rather than ignoring it, and that exception unwinds
-    /// out of the Swift concurrency frame this shim call arrives on, which
-    /// skips the pop of the thread's executor-tracking record. The app then
-    /// segfaults on the next `@MainActor` isolation check — a different stack,
-    /// in WebKit, hours later. So a bad number is refused here, where the
-    /// blame still reads.
+    /// Steam sends `NaN` (a menu placed against a window that has gone).
+    /// `-[NSWindow _reallySetFrame:]` raises on a non-finite frame, and the
+    /// exception unwinds out of the Swift concurrency frame, skipping the pop
+    /// of its executor-tracking record; the app then segfaults hours later in
+    /// WebKit on the next `@MainActor` check.
     private func geometry(
         _ args: [Any], at indices: Range<Int>, from function: String,
     ) -> [CGFloat]? {
@@ -920,14 +787,10 @@ extension SteamWindow {
 
 extension SteamWindow: NSWindowDelegate {
     func windowShouldClose(_: NSWindow) -> Bool {
-        // The desktop window ends when it is closed, and overrides Steam's
-        // `SetHideOnClose` to do it: its page is the whole library, which
-        // keeps a React tree animating and committing layer trees whether or
-        // not the window is on screen. Ordering it out would leave the app's
-        // most expensive surface running behind a window nobody can see —
-        // paid for in CPU the entire time the client is "away", and in a
-        // WebKit layer-commit path that has crashed the app twice from
-        // exactly that state. `SteamWebHost.showSteam` builds a new one.
+        // The desktop window closes despite `SetHideOnClose`: hidden, its
+        // library keeps animating and committing layer trees, costing CPU,
+        // and WebKit's layer-commit path has crashed from that state.
+        // `SteamWebHost.showSteam` builds a new one.
         guard role == .desktop || !hidesOnClose else {
             window?.orderOut(nil)
             host?.windowDidHide(self)

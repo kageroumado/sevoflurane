@@ -2,47 +2,27 @@ import WebKit
 
 /// Keeps Steam's modal overlay in step with the windows the app tears down.
 ///
-/// A Steam dialog that gets its own window is two objects, not one. The
-/// content goes into a popup (`PopupWindow_…`), and a second, invisible modal
-/// is pushed into the desktop's own modal manager to hold the dimming overlay
-/// up while the dialog is answered. The desktop's `FullModalOverlay` carries
-/// `display: none` exactly while that manager's modal list is empty, so the
-/// library behind it comes back only when the invisible modal is removed.
+/// A Steam dialog with its own window (`PopupWindow_…`) also pushes an
+/// invisible modal into the desktop's modal manager to hold the dimming
+/// `FullModalOverlay` up; the overlay goes away only when that modal is
+/// removed, which the popup document's `unload` does (`CPopup.OnUnload` runs
+/// the modal's `fnOnClose`).
 ///
-/// What removes it is the popup document's `unload` event: `CPopup.OnUnload`
-/// stops tracking the popup, runs the modal's `fnOnClose`, and that closes the
-/// invisible modal. Under CEF that event is the popup window closing. Here it
-/// is the page teardown that follows the web view being released, which is a
-/// different thing and lands whenever the app lets go — measured on a popup
-/// closed the way Steam closes one, `window.close()` set `closed` to true on
-/// the opener's handle and delivered no `pagehide` and no `unload` at all.
-/// The dialog leaves the screen, the overlay stays, and the library sits
-/// behind a scrim that nothing can dismiss.
-///
-/// So the app fires those two events itself, from the context page, which is
-/// where the popup's `Window` object and Steam's listeners both live. It works
-/// after the popup's web view is already gone, because the context page holds
-/// the object either way, and a second delivery is a no-op because the first
-/// clears the popup Steam would act on.
+/// WebKit delivers no `pagehide` or `unload` on `window.close()`, so the app
+/// fires both from the context page, where the popup's `Window` object and
+/// Steam's listeners live. This works after the popup's web view is gone,
+/// and a second delivery is a no-op.
 extension SteamWebHost {
-    /// Runs the teardown Steam expects from a popup whose window has closed.
-    ///
-    /// Addressed by popup name rather than by web view: the events have to be
-    /// dispatched in the context page's realm, where the listeners were
-    /// registered.
+    /// Runs the teardown Steam expects from a closed popup, by name, in the
+    /// context page's realm where the listeners live.
     func notifyPopupUnloaded(named name: String) {
         guard !name.isEmpty else { return }
         evaluateInContextPage(Self.popupUnloadScript(popup: name))
     }
 
-    /// Dismisses a modal overlay left standing over the desktop after the
-    /// popup that owned it went away.
-    ///
-    /// A safety net under `notifyPopupUnloaded`, for the case where Steam's
-    /// own teardown ran but left the invisible modal behind anyway. It fires
-    /// only on an overlay that is up, holds no window the user could answer,
-    /// and paints nothing — and it dismisses through the modal manager's own
-    /// `fnOnClose` and `RemoveModal`, so Steam's bookkeeping stays true.
+    /// Safety net under `notifyPopupUnloaded`: dismisses a modal overlay
+    /// that is up, holds no answerable window and paints nothing, through the
+    /// manager's own `fnOnClose` and `RemoveModal`.
     func repairStuckModalOverlay() {
         guard let desktopName = desktop?.name, !desktopName.isEmpty else { return }
         Task(name: "Repair stuck modal overlay") { [weak self] in

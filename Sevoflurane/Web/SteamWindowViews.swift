@@ -1,11 +1,8 @@
 import AppKit
 import WebKit
 
-/// A panel that can take key focus while borderless.
-///
-/// Steam's menus dismiss themselves when their window loses focus, which only
-/// happens if it could hold focus in the first place — a plain borderless
-/// `NSWindow` never becomes key, so every menu would stay on screen forever.
+/// A borderless panel that can become key: Steam's menus dismiss themselves
+/// on losing focus, which a window that never becomes key never does.
 final class SteamPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
@@ -16,8 +13,7 @@ final class SteamPanel: NSPanel {
         )
         hidesOnDeactivate = true
         worksWhenModal = true
-        // Steam's hover menus track the cursor inside their own page; without
-        // this a never-key panel starves its web view of mouse-moved events.
+        // A non-key panel otherwise gets no mouse-moved events for hover.
         acceptsMouseMovedEvents = true
     }
 
@@ -26,24 +22,16 @@ final class SteamPanel: NSPanel {
     }
 }
 
-/// The window's content view, which decides where the window may be dragged
-/// and, for panels, tracks the cursor on the page's behalf.
-///
-/// WebKit does not act on `-webkit-app-region: drag`, so the page reports those
-/// regions and the hit test hands the drag back to AppKit for exactly those
-/// rectangles. Everywhere else the click belongs to the page.
+/// The window's content view: it hands drags in the page's reported
+/// `-webkit-app-region: drag` rectangles to AppKit (WebKit ignores the
+/// property), and relays hover to the page.
 final class SteamContentView: NSView {
     weak var owner: SteamWindow?
 
-    /// Panels relay native hover into the web view's own responder methods.
-    ///
-    /// WKWebView's mouse tracking is `NSTrackingActiveInKeyWindow` and a menu
-    /// panel opens without key status, so the page would see no cursor at all
-    /// until a click makes the panel key — no `:hover`, no highlight, and
-    /// Steam's own dismiss-on-mouse-out never arms. This `.activeAlways` area
-    /// generates the events WKWebView's area would have, and forwarding the
-    /// genuine `NSEvent`s drives the full native pipeline (WebKit passes
-    /// foreign-tracking-area events straight to its event handler).
+    /// Relays native hover into the web view. WKWebView's tracking is
+    /// `NSTrackingActiveInKeyWindow`, and a non-key panel's page would see no
+    /// cursor; this `.activeAlways` area's genuine events go to WebKit's own
+    /// event handler.
     var relaysHover = false {
         didSet { updateTrackingAreas() }
     }
@@ -59,17 +47,14 @@ final class SteamContentView: NSView {
         ))
     }
 
-    /// Once the panel is key (after a click), WKWebView's own tracking is
-    /// live and forwarding would double every event.
+    /// Off once the window is key, where forwarding would double every event.
     private var shouldRelay: Bool {
         relaysHover && window?.isKeyWindow != true
     }
 
-    /// WKWebView implements no public mouse responder selectors — calling
-    /// `mouseEntered(with:)` on it falls through NSResponder's default, which
-    /// forwards up the chain to this very view and recurses until the stack
-    /// dies. These private selectors are WebKit's own entry points into the
-    /// same event pipeline its tracking area would use.
+    /// WebKit's private entry points into its tracking-area pipeline. Never
+    /// call `mouseEntered(with:)` on the web view: NSResponder forwards it up
+    /// to this view, which recurses until the stack dies.
     private static let simulateEnter = Selector(("_simulateMouseEnter:"))
     private static let simulateMove = Selector(("_simulateMouseMove:"))
     private static let simulateExit = Selector(("_simulateMouseExit:"))
@@ -80,8 +65,7 @@ final class SteamContentView: NSView {
         webView.perform(selector, with: event)
     }
 
-    /// ~30Hz is plenty for hover, and every native move would flood the page
-    /// with evaluate calls.
+    /// Throttles the React relay to ~30Hz of evaluate calls.
     private var lastReactRelay = ContinuousClock.Instant.now
 
     private func relayReact(_ event: NSEvent, throttled: Bool) {

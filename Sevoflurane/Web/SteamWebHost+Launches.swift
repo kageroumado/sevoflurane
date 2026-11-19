@@ -1,9 +1,7 @@
 import Foundation
 
 extension SteamWebHost {
-    /// One `__gameAction` event from the context page's registrations
-    /// (``gameActionScript``). The trail also lands in the log, so a slow
-    /// launch explains itself after the fact.
+    /// One `__gameAction` event (``gameActionScript``), also logged.
     func noteGameAction(phase: String, appID: String, task: String, actionID: String = "") {
         switch phase {
         case "start":
@@ -23,20 +21,15 @@ extension SteamWebHost {
             let actionID = activeLaunch?.appID == id ? activeLaunch?.actionID : nil
             setLaunch(GameLaunch(appID: id, detail: Self.launchTaskText(task), actionID: actionID), clearAfter: 180)
         case "end":
-            // The launch flow is done but the engine still has to put up its
-            // first window; GameLaunchWatch ends the story when it does. The
-            // status outlives the flow for as long as that watch runs,
-            // because which app is launching is what every window and every
-            // process the launch starts is attributed to.
+            // The status stays until GameLaunchWatch sees the first window:
+            // windows and processes the launch starts are attributed by it.
             EventLog.shared.log(.client, "launch flow finished — waiting for the game window")
             if var launch = activeLaunch {
                 launch.detail = "Waiting for the game window…"
                 setLaunch(launch, clearAfter: 180)
                 launchOptionAnswers[launch.appID] = nil
             }
-            // The end of a launch is the moment the user looks at the window
-            // again, whether a game came up or an error dialog did, so it is
-            // worth one check that there is something to look at.
+            // The user looks at the window again now.
             repairBlankDesktop()
         case "error":
             let id = self.appID(fromSteam: appID) ?? activeLaunch?.appID ?? 0
@@ -64,10 +57,8 @@ extension SteamWebHost {
         SteamShortcuts.appID(fromSteam: steamID, aliases: shortcutPrograms)
     }
 
-    /// Steam's launch-pipeline task names, in user words. `Show*` tasks are
-    /// the launch dialogs (EULA, launch options, playtime controls) — those
-    /// wait on the user, not the machine. Unknown names fall back to the raw
-    /// identifier spaced out: honest beats silent.
+    /// Steam's launch-pipeline task names in user words. `Show*` tasks are
+    /// dialogs waiting on the user; unknown names are spaced out.
     private static func launchTaskText(_ task: String) -> String {
         switch task {
         case "ProcessingInstallScript": "Running the install script…"
@@ -91,11 +82,9 @@ extension SteamWebHost {
 
     // MARK: - Launch options
 
-    /// Steam asked how to start `appID` (`ShowLaunchOption`, tapped out of the
-    /// page by the shim). Answered without asking when an answer was given
-    /// ahead of time, when Steam remembers one from a "Forever" in its own
-    /// dialog, or when there is nothing to choose between; otherwise a native
-    /// alert asks, after this message handler returns.
+    /// Steam asked how to start `appID` (`ShowLaunchOption`). Answered
+    /// without asking from an answer given ahead of time, a remembered
+    /// "Forever", or a single option; otherwise a native alert asks.
     func noteLaunchOptions(appID: Int, actionID: Int, json: String, remembered: String) {
         guard launchOptionAction != actionID else { return }
         launchOptionAction = actionID
@@ -134,8 +123,7 @@ extension SteamWebHost {
         }
     }
 
-    /// Sends the answer through the page, the way its own dialog would have.
-    /// Nil abandons the launch.
+    /// Sends the answer through the page; nil abandons the launch.
     private func answerLaunchOptions(appID: Int, actionID: Int, with index: Int?, of options: [LaunchOption]) {
         let script: String
         if let index {
@@ -149,18 +137,13 @@ extension SteamWebHost {
         Task(name: "Answer how to start \(appID)") { _ = await evaluateInContext(script) }
     }
 
-    /// Subscribes the context page to the client's game-action events and to
-    /// the running edge of every app; they come back through the popup message
-    /// handler as `__gameAction`.
+    /// Subscribes the context page to game-action events and every app's
+    /// running edge, posted as `__gameAction`. Registrations are recorded in
+    /// a page global, so re-evaluating adds only what is missing.
     ///
-    /// One registration per callback, recorded in a page global, so the script
-    /// can be re-evaluated at any time and only registers what the page is
-    /// missing. A reload drops the global with the page and re-registers,
-    /// which is what a fresh page needs.
-    ///
-    /// `GameSessions.RegisterForAppLifetimeNotifications` is the only place a
-    /// game's exit exists on this side: games are `CreateProcess`ed by
-    /// `Steam.exe` inside the bottle, so the app has no pid to wait on.
+    /// `GameSessions.RegisterForAppLifetimeNotifications` is the only exit
+    /// signal: `Steam.exe` starts games inside the bottle, so the app has no
+    /// pid to wait on.
     static let gameActionScript = """
     (function () {
       if (!window.SteamClient || !SteamClient.Apps

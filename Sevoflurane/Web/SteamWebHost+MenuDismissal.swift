@@ -1,13 +1,9 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Steam dismisses its own menus, mostly. The notifications popover is
-    /// the exception: on Windows it closes when its window loses focus, and
-    /// here it never has focus to lose, so no click anywhere would ever close
-    /// it. The guard restores the universal rule — a press outside a visible
-    /// menu closes it — while giving Steam first right of refusal: a real
-    /// context menu is gone well inside the grace period, and only a
-    /// survivor is closed from this side.
+    /// Closes a menu still visible 300 ms after a press outside it. Steam's
+    /// notifications popover closes only on losing focus, which it never has
+    /// here; real context menus are gone within the grace period.
     func installMenuDismissalGuard() {
         menuDismissalMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .keyDown],
@@ -41,9 +37,8 @@ extension SteamWebHost {
             try? await Task.sleep(for: grace)
             guard let self else { return }
             for menu in popups.values where menu.role == .menu && menu.isWindowVisible {
-                // Steam's own dismissal first: it takes the owner window's
-                // click-catching overlay down with the menu. Closing the
-                // window from here is the fallback for a menu whose page no
+                // Steam's own dismissal also takes down the owner window's
+                // click-catching overlay; closing is for a page that no
                 // longer answers.
                 if await menu.hideThroughSteam() {
                     try? await Task.sleep(for: .milliseconds(200))

@@ -8,11 +8,9 @@ extension SteamWebHost {
         Preferences.userStyles && Preferences.userStylesOnWebPages ? userStylesheet : nil
     }
 
-    /// Puts the Styles folder's stylesheet on every open Steam window and, if
-    /// chosen, every store and community page, or takes it off, to match the
-    /// stored choices. Watches the folder while the style is on, so a saved
-    /// file restyles the open windows. Called at boot and whenever Settings
-    /// changes either switch.
+    /// Puts the Styles folder's stylesheet on or off every open window (and
+    /// store and community page, if chosen) to match Settings, watching the
+    /// folder while the style is on.
     func applyUserStyles() {
         guard Preferences.userStyles else {
             userStylesWatch = nil
@@ -30,8 +28,7 @@ extension SteamWebHost {
         restyleWindows()
     }
 
-    /// Rereads the folder after a change in it, and restyles the open windows
-    /// when the stylesheet came out different.
+    /// Rereads the folder and restyles the windows when the stylesheet changed.
     private func reloadUserStyles() {
         let stylesheet = UserStyles.stylesheet()
         guard Preferences.userStyles, stylesheet != userStylesheet else { return }

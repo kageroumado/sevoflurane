@@ -1,12 +1,8 @@
 import AppKit
 import WebKit
 
-/// A web view whose first click counts.
-///
-/// A menu panel opens without key status, so every initial click in it is a
-/// "first mouse". WKWebView's default answer spends that click on making the
-/// panel key — Steam's menus then need one click to highlight and a second to
-/// activate. In a panel the click always belongs to the page.
+/// A web view whose first click in a panel reaches the page; WKWebView's
+/// default spends it on making the panel key, so menus needed two clicks.
 final class SteamWebView: WKWebView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         window is NSPanel || super.acceptsFirstMouse(for: event)
@@ -15,8 +11,7 @@ final class SteamWebView: WKWebView {
 
 // MARK: - WebKit plumbing
 
-/// The WebKit delegates, kept off ``SteamWebHost`` so the observable state is
-/// not also an `NSObject` full of protocol conformances.
+/// The WebKit delegates for ``SteamWebHost``.
 @MainActor
 final class SteamWebCoordinator: NSObject {
     static let handlerName = "sevoWindow"
@@ -35,9 +30,8 @@ extension SteamWebCoordinator: WKUIDelegate {
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures,
     ) -> WKWebView? {
-        // Steam's popup manager always opens about:blank and writes into it;
-        // a popup opened straight onto http(s) is an external link, and those
-        // belong in the user's browser, not in an orphan app window.
+        // Steam's popup manager always opens about:blank; a popup opened
+        // onto http(s) is an external link for the user's browser.
         if let url = navigationAction.request.url,
            url.scheme == "http" || url.scheme == "https" {
             NSWorkspace.shared.open(url)
@@ -50,14 +44,12 @@ extension SteamWebCoordinator: WKUIDelegate {
         host?.window(for: webView)?.detach(reason: .steamClosedIt)
     }
 
-    /// A file input in Steam's UI — Set Custom Artwork, a custom icon for a
-    /// non-Steam game — asks for a file. CEF opens the client's own dialog;
-    /// here the Mac's open panel answers, and WebKit hands the page the file.
+    /// A file input in Steam's UI (Set Custom Artwork, a non-Steam game's
+    /// icon), answered by the Mac's open panel.
     ///
-    /// The async form of the requirement: the completion-handler form takes
-    /// a `@MainActor` block, and a method declared with a plain closure
-    /// binds to no selector at all, so WebKit finds no delegate and the
-    /// click does nothing.
+    /// Must be the async form: the completion-handler form takes a
+    /// `@MainActor` block, and a method declared with a plain closure binds
+    /// to no selector, so WebKit finds no delegate.
     func webView(
         _ webView: WKWebView,
         runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -66,11 +58,10 @@ extension SteamWebCoordinator: WKUIDelegate {
         await WebFilePanel.choose(parameters, for: webView)
     }
 
-    /// WebKit's source of truth for `window.screenX/screenY/outer*` — without
-    /// this (private) delegate method it answers a zero rect, which Steam's
-    /// menu placement reads as "the window fills nothing at the bottom of the
-    /// screen" and flips every flyout upward. The rect is the AppKit frame;
-    /// WebKit flips it to CSS coordinates itself (`convertToUserSpace`).
+    /// WebKit's source for `window.screenX/screenY/outer*`. Without this
+    /// private method it answers a zero rect, and Steam flips every flyout
+    /// upward. The rect is the AppKit frame; WebKit flips it to CSS
+    /// coordinates (`convertToUserSpace`).
     @objc(_webView:getWindowFrameWithCompletionHandler:)
     func _webView(
         _ webView: WKWebView,
@@ -80,11 +71,10 @@ extension SteamWebCoordinator: WKUIDelegate {
     }
 }
 
-/// The navigation policy shared by every web view hosting Steam content:
-/// page traffic passes, `steam://` routes back into the client, and any
-/// other scheme is cancelled — CEF intercepts unknown schemes, while
-/// WKWebView would hand them to LaunchServices, launching the real Mac
-/// Steam app.
+/// The navigation policy of every web view hosting Steam content: page
+/// traffic passes, `steam://` routes back into the client, and any other
+/// scheme is cancelled, since WKWebView would hand it to LaunchServices and
+/// launch the real Mac Steam app.
 @MainActor
 func steamNavigationPolicy(for url: URL?, host: SteamWebHost?) -> WKNavigationActionPolicy {
     guard let url, let scheme = url.scheme?.lowercased() else { return .allow }
@@ -127,20 +117,16 @@ extension SteamWebCoordinator: WKNavigationDelegate {
         EventLog.shared.log(.bridge, "bridge unreachable: \(error.localizedDescription)")
     }
 
-    /// The page's own process died. WebKit leaves the view blank and alive
-    /// rather than taking the app with it, so this is recoverable — but only
-    /// if someone recovers it: a dead web process is indistinguishable from a
-    /// hung Steam UI from the outside.
+    /// The page's process died, leaving the view blank; from outside this
+    /// looks like a hung Steam UI.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         host?.webProcessDidTerminate(for: webView)
     }
 }
 
 extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
-    /// Every `SteamClient.Window` call arrives here. `message.webView` is the
-    /// window the call is about, which is why the shim posts through the
-    /// popup's own handler rather than the opener's: it identifies the target
-    /// without a handshake.
+    /// Every `SteamClient.Window` call arrives here. The shim posts through
+    /// the popup's own handler, so `message.webView` is the target window.
     func userContentController(
         _: WKUserContentController,
         didReceive message: WKScriptMessage,
@@ -165,11 +151,10 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
         return (window.perform(function, args), nil)
     }
 
-    /// `SteamClient.System.OpenFileDialog`, which the shim routes here: the
-    /// chosen path, or a rejection carrying `EResult` Cancelled for a
-    /// dismissed panel, which the pickers catch and ignore. Any other
-    /// rejection reaches the page as an error, and Add Library Folder shows
-    /// it in a dialog.
+    /// `SteamClient.System.OpenFileDialog`: the chosen path, or for a
+    /// dismissed panel a rejection with `EResult` Cancelled, which the
+    /// pickers ignore. Any other rejection shows as an error (Add Library
+    /// Folder puts it in a dialog).
     private static func openFileDialog(_ args: [Any], over window: NSWindow?) async -> Any {
         let options = SteamFileDialogs.Options(args.first as? [String: Any] ?? [:])
         guard let chosen = await SteamFileDialogs.choose(options, over: window) else {
@@ -178,10 +163,8 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
         return chosen
     }
 
-    /// Whether a message comes from Steam's UI: the top document of one of
-    /// its windows, on the bridge's origin. Steam's popups open `about:blank`
-    /// and inherit that origin from their opener; a frame the UI embeds, or a
-    /// window that has navigated to a web site, carries another.
+    /// Whether a message comes from Steam's UI: a window's top document on
+    /// the bridge's origin, which popups inherit from their opener.
     nonisolated static func admitsMessage(
         isMainFrame: Bool,
         origin: (scheme: String, host: String, port: Int),

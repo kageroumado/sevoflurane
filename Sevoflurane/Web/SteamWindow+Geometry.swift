@@ -5,9 +5,7 @@ extension SteamWindow {
     /// user last left it.
     func place(_ window: NSWindow) {
         if role == .login {
-            // Steam centers its login window against its own screen model,
-            // which lands bottom-left here. A sign-in dialog belongs in the
-            // middle of the screen, wherever Steam thinks it put it.
+            // Steam's own centering lands bottom-left here.
             window.center()
         } else if role == .dialog {
             centerOnDesktop(window)
@@ -20,20 +18,15 @@ extension SteamWindow {
                 ),
             )
         } else if role == .desktop, !window.setFrameUsingName(Self.desktopFrameName) {
-            // Centered only the first time: the desktop window is torn down
-            // and rebuilt on every close, and a window that forgets where the
-            // user put it is a window the user has to place again every time.
+            // Centered only when no frame is saved; it is rebuilt on every close.
             window.center()
         }
         centerIfOffScreen(window, placedBy: "the frame it was built with")
     }
 
-    /// Brings a window back onto a display when the frame it was given lands
-    /// on none. A frame saved on a display that has since been unplugged, and
-    /// a `MoveTo` computed against Steam's own screen model, both produce a
-    /// window that exists and that nobody can reach — and the desktop
-    /// window's frame is autosaved, so one bad placement persists across
-    /// every later launch.
+    /// Centers a window whose frame lands on no display (a frame saved on an
+    /// unplugged display, a `MoveTo` from Steam's screen model). The desktop
+    /// frame is autosaved, so a bad placement would persist.
     private func centerIfOffScreen(_ window: NSWindow, placedBy source: String) {
         guard role.needsAReachableFrame,
               !SteamScreenSpace.isOnSomeScreen(window.frame) else { return }
@@ -45,8 +38,7 @@ extension SteamWindow {
         window.center()
     }
 
-    /// A dialog sits in the middle of the desktop window when there is one on
-    /// screen, and in the middle of the screen otherwise.
+    /// Centers a dialog on the visible desktop window, or on the screen.
     private func centerOnDesktop(_ window: NSWindow) {
         guard let parent = host?.desktop?.nsWindow, parent.isVisible else {
             window.center()
@@ -59,18 +51,15 @@ extension SteamWindow {
         ))
     }
 
-    /// Makes a dialog the desktop window's child, so it rides above it and
-    /// moves with it.
+    /// Makes a dialog the desktop window's child, above it and moving with it.
     func attachDialogToDesktop() {
         guard role == .dialog, let window, window.parent == nil,
               let parent = host?.desktop?.nsWindow, parent.isVisible else { return }
         parent.addChildWindow(window, ordered: .above)
     }
 
-    /// Keeps a toast's page alive without ever putting it on screen: it is
-    /// invisible, click-through, out of every window list, and parked off
-    /// every display. WebKit schedules it because it lives in a window, which
-    /// is all its dismissal timer needs.
+    /// Keeps a toast's page running off every display: invisible,
+    /// click-through and out of every window list.
     func park(_ window: NSWindow) {
         window.setFrameOrigin(Self.toastParkOrigin)
         window.backgroundColor = .clear
@@ -81,20 +70,12 @@ extension SteamWindow {
         window.orderBack(nil)
     }
 
-    /// Where a toast's page is kept while it renders: off every screen, the
-    /// same park the context page uses.
+    /// Off every screen.
     private static let toastParkOrigin = CGPoint(x: -20_000, y: -20_000)
 
-    /// Whether this window's position is the app's to decide rather than
-    /// Steam's.
-    ///
-    /// A toast is parked off every display for its whole life, so a move is
-    /// meaningless — and Steam issues them per animation frame while the
-    /// toast slides in, every one of them carrying `NaN` for the x it
-    /// computes against a screen edge it cannot measure here. Refusing them
-    /// by role rather than by value keeps the non-finite guard for the case
-    /// it was written for (a menu against a window that has gone) instead of
-    /// making it a log of an animation.
+    /// Whether this window's position is the app's to decide. Steam moves a
+    /// toast every animation frame with a `NaN` x; refusing by role keeps
+    /// those out of the non-finite guard's log.
     var isParked: Bool {
         role == .toast
     }
@@ -131,19 +112,16 @@ extension SteamWindow {
     func resizeTo(width: CGFloat, height: CGFloat) {
         requestedSize = CGSize(width: width, height: height)
         guard let window else { return }
-        // Resizing an AppKit window grows it downward from its origin; Steam
-        // expects the top-left to stay put, as it does on Windows.
+        // Steam expects the top-left to stay put.
         let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
         window.setContentSize(requestedSize)
         window.setFrameTopLeftPoint(topLeft)
         if role == .dialog { centerOnDesktop(window) }
     }
 
-    /// Places a menu against the window that opened it.
-    ///
-    /// Steam computes the offset as `menuLeft - parentWindow.screenX`, so the
-    /// coordinates are relative to the parent's top-left in screen space, and
-    /// the first argument is the parent's restore-details token.
+    /// Places a menu relative to the top-left of its parent, named by the
+    /// parent's restore-details token (Steam computes
+    /// `menuLeft - parentWindow.screenX`).
     func positionRelative(
         toWindowNamed parentName: String,
         x: CGFloat,
@@ -172,9 +150,8 @@ extension SteamWindow {
         return CGPoint(x: rect.minX, y: rect.minY)
     }
 
-    /// The display this window is measured against. A Mac with no display
-    /// attached has no screen at all, and Steam is answered with a nominal
-    /// 1920×1080 one.
+    /// The display this window is measured against; a nominal 1920×1080
+    /// when the Mac has none attached.
     private var measuredScreen: (frame: NSRect, visible: NSRect, scale: CGFloat) {
         if let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first {
             return (screen.frame, screen.visibleFrame, screen.backingScaleFactor)
@@ -183,11 +160,9 @@ extension SteamWindow {
         return (nominal, nominal, 1)
     }
 
-    /// This window's geometry and the display it is on, in Steam's
-    /// coordinates. The screen's own origin travels with its size, the way
-    /// ``monitorDimensions()`` reports `nAvailableLeft`: a display at a
-    /// negative x holds windows at a negative x, and a screen described by
-    /// size alone cannot say so.
+    /// This window's geometry and its display, in Steam's coordinates. The
+    /// screen's origin is included because a display at a negative x holds
+    /// windows at a negative x.
     func dimensions() -> [String: Any] {
         let screenRect = SteamScreenSpace.steamRect(from: measuredScreen.frame)
         var answer: [String: Any] = [

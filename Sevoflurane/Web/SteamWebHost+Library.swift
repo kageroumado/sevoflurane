@@ -1,12 +1,8 @@
 import Foundation
 
-/// How the popover's index files the library: by the name Steam's own library
-/// sorts by, under a heading for its first letter.
-///
-/// A letter is folded before it is read, so "Ōkami" and "Éternel" sit under O
-/// and E beside everything else there. A title that starts with a digit, a
-/// symbol or a letter outside A to Z is filed under "#", which comes first, as
-/// digits do in Steam's library.
+/// How the popover's index files the library: by Steam's sort name, under its
+/// folded first letter ("Ōkami" under O), or under "#" first for anything
+/// outside A to Z.
 nonisolated enum LibraryIndex {
     /// One heading of the index and the games under it.
     struct Section: Identifiable, Equatable, Sendable {
@@ -19,9 +15,8 @@ nonisolated enum LibraryIndex {
     /// The heading for names that start with no letter from A to Z.
     static let otherHeading = "#"
 
-    /// The games in index order: by sort name as Finder orders names, which
-    /// puts "Game 2" before "Game 10", then by app id so equal names keep one
-    /// order from refresh to refresh.
+    /// The games by sort name in Finder order ("Game 2" before "Game 10"),
+    /// then by app id so the order is stable.
     static func sorted(_ games: [SteamWebHost.RecentGame]) -> [SteamWebHost.RecentGame] {
         games.sorted { lhs, rhs in
             switch lhs.sortName.localizedStandardCompare(rhs.sortName) {
@@ -32,8 +27,7 @@ nonisolated enum LibraryIndex {
         }
     }
 
-    /// The index's headings in order, each with its games; a letter with no
-    /// games has no heading.
+    /// The non-empty headings in order, each with its games.
     static func sections(_ games: [SteamWebHost.RecentGame]) -> [Section] {
         let byHeading = Dictionary(grouping: sorted(games)) { heading(for: $0.sortName) }
         return byHeading.keys
@@ -63,11 +57,9 @@ extension SteamWebHost {
         let name: String
         /// What Steam's library shows under the name, by the client's own numbering.
         var displayStatus: Int?
-        /// The name Steam's own library sorts by (`sort_as`): no leading
-        /// article, a romanized title for one written in another script.
+        /// Steam's sort name (`sort_as`): no leading article, romanized.
         var sortAs: String?
 
-        /// What the index files the game under.
         var sortName: String {
             guard let sortAs, !sortAs.isEmpty else { return name }
             return sortAs

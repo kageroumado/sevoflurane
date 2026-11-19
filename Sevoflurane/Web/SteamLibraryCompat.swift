@@ -1,35 +1,30 @@
 import Foundation
 
 /// The Mac verdict across the whole library: a badge on every game's row in
-/// the left list and on its tile in the grids, each with a tooltip naming
-/// what it means, and an Apple chip in the filter bar that keeps only the
-/// games that play on a Mac.
+/// the left list and on its tile in the grids, each with a tooltip, and an
+/// Apple chip in the filter bar that keeps only the games that play on a Mac.
 ///
-/// Two scripts, one per realm. Steam's UI runs in the shared context page and
-/// renders into the desktop window, so the state lives in the context page
-/// (``contextScript``), which outlives the window: the library's verdicts,
+/// Two scripts, one per realm. The state lives in the context page
+/// (``contextScript``), which outlives the desktop window: the verdicts,
 /// fetched in one `POST /__compat/batch`, and the filter. The desktop
-/// window's script (``script``) draws the badges and the chip from that
-/// state.
+/// window's script (``script``) draws the badges and the chip from it.
 ///
-/// The filter is Steam's own. The library matches every app against one
-/// MobX filter class (`MatchesImpl`, `MatchesScoredImpl`), found through
-/// webpack by a string its module logs, and the script wraps both methods
-/// on the prototype: while the chip is on, an app that does not play on a
-/// Mac fails to match. Only the library's two filters are affected (the
-/// left list's and the grids'); dynamic collections build their membership
-/// with the same class and are left alone, since they update it in place.
-/// The wrappers read a MobX box, so every list that matched through them
-/// recomputes when the chip or the verdicts change. A self-test runs the
-/// wrapper once against Steam's live filter; when any piece is missing the
-/// chip stays hidden and the badges still draw.
+/// The filter is Steam's own MobX filter class (`MatchesImpl`,
+/// `MatchesScoredImpl`), found through webpack by a string its module logs;
+/// both methods are wrapped on the prototype so that, with the chip on, an
+/// app that does not play on a Mac fails to match. Only the library's two
+/// filters (the left list's and the grids') are affected; dynamic
+/// collections use the same class and are left alone. The wrappers read a
+/// MobX box, so every list matched through them recomputes when the chip or
+/// the verdicts change. A self-test runs the wrapper once against Steam's
+/// live filter; when any piece is missing the chip stays hidden and the
+/// badges still draw.
 enum SteamLibraryCompat {
-    /// Where the chip's state is kept in the page's local storage, so the
-    /// filter is as the user left it across launches.
+    /// The page's local-storage key for the chip, so the filter survives
+    /// relaunches.
     static let storageKey = "sevoMacFilter"
 
-    /// What the context script answers once it has run, the outcomes an
-    /// installer stops retrying on.
+    /// The context script's answers that stop an installer retrying.
     static let settled: Set<String> = ["installed", "installed without the filter", "reapplied", "removed", "not installed"]
 
     /// The context page's half: verdicts, the filter patch, and the switch.
@@ -244,18 +239,16 @@ enum SteamLibraryCompat {
     })()
     """
 
-    /// The desktop window's half: badges on rows and tiles, the chip beside
-    /// the search, and the tooltip that names what each means. The rows and
-    /// tiles carry no app id in the DOM; React's fiber on each holds the
-    /// props it was drawn from, the app id among them. Idempotent and
+    /// The desktop window's half: badges on rows and tiles, the chip, and
+    /// the tooltip. Rows and tiles carry no app id in the DOM, so it is read
+    /// from the props on each element's React fiber. Idempotent and
     /// self-reapplying, like ``SteamCompatBadge``.
     static var script: String {
         "(function () {\n" + SteamCompatBadge.glyphs + SteamNativeBuilds.platformGlyphs + text + desktop + "\n})()"
     }
 
-    /// What the tooltip says over each mark and over the filter, in the
-    /// app's language: a name and one line of what it means, then the line
-    /// naming where the verdict comes from.
+    /// The tooltip text for each mark and the filter, localized: a name and
+    /// one line of meaning, then where the verdict comes from.
     private static var text: String {
         let lines: [(String, String, String)] = [
             ("platinum", String(localized: "Platinum"), String(localized: "Runs perfectly.")),
@@ -607,9 +600,9 @@ enum SteamLibraryCompat {
       return "installed";
     """
 
-    /// Takes the badges and chip off the window. The script stays installed
-    /// and reads the context half's switch, which ``contextRemovalScript``
-    /// turns off; this redraws the window at once.
+    /// Redraws the window at once from the context half's switch, which
+    /// ``contextRemovalScript`` turns off; with it off the badges and chip
+    /// come off. The script stays installed.
     static let removalScript = """
     (function () {
       if (!window.__sevoLibraryBadges) { return "not installed"; }

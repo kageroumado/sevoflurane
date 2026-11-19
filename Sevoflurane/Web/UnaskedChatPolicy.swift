@@ -2,39 +2,27 @@ import Foundation
 
 /// Whether a chat window Steam is showing is one the user asked for.
 ///
-/// Steam shows a chat window for reasons that are indistinguishable at the
-/// `ShowWindow` call it makes: the user picked a conversation out of the
-/// friends list, a notification click asked for one, or a message arrived and
-/// Steam opened the conversation by itself. The `bFocus` argument does not
-/// separate them — Steam passes it for its own reasons — so the host keeps
-/// the two things it can see instead: the last press or key in one of this
-/// app's windows, and the last time something on the user's behalf asked for
-/// a chat or the friends list.
+/// Steam's `ShowWindow` (and its `bFocus`) looks the same whether the user
+/// picked a conversation, clicked a notification, or a message arrived. So
+/// the host tracks the last press or key in this app and the last chat
+/// request; a show with neither recently behind it is Steam's own. The
+/// clock is passed in, so tests need no window or sleep.
 ///
-/// A show with neither behind it is Steam's own. The clock is passed in, so
-/// every case is a value comparison and no test needs a bottle, a window, or
-/// a sleep.
-///
-/// This is the backstop, not the cure: ``SteamChatAutoOpen`` stops Steam
-/// opening the window at all, and this catches a show that arrives anyway —
-/// a client whose globals came up after the refusal was installed, or a
-/// future release that finds a second way to the same popup.
+/// The backstop behind ``SteamChatAutoOpen``, for a show that arrives
+/// anyway.
 nonisolated struct UnaskedChatPolicy: Equatable, Sendable {
-    /// How long a press or key in one of this app's windows keeps counting as
-    /// the reason for the next chat Steam shows. Short: a click is a direct
-    /// cause, and Steam acts on it in the same breath.
+    /// How long a press or key counts as the reason for a chat show; Steam
+    /// acts on a click at once.
     static let interactionGrace: Duration = .seconds(3)
 
-    /// How long an explicit request keeps counting. Longer, because
-    /// `ShowFriendChatDialogWhenReady` is exactly that — Steam builds the
-    /// window, waits for the friends UI to be ready, and only then shows it.
+    /// How long a chat request counts: `ShowFriendChatDialogWhenReady` waits
+    /// for the friends UI before showing.
     static let requestGrace: Duration = .seconds(8)
 
     private var lastUserInteraction: ContinuousClock.Instant
     private var lastChatRequest: ContinuousClock.Instant
 
-    /// A policy that has seen nothing yet: both graces long expired, so the
-    /// first show Steam makes on its own is recognized as one.
+    /// A policy with both graces long expired.
     init(startingAt now: ContinuousClock.Instant) {
         let never = now - .seconds(3600)
         lastUserInteraction = never
@@ -52,8 +40,7 @@ nonisolated struct UnaskedChatPolicy: Equatable, Sendable {
         lastChatRequest = now
     }
 
-    /// Whether a chat window Steam is showing now was opened for an incoming
-    /// message rather than for the user.
+    /// Whether a chat show now was opened for an incoming message.
     func showIsUnasked(at now: ContinuousClock.Instant) -> Bool {
         now - lastUserInteraction > Self.interactionGrace
             && now - lastChatRequest > Self.requestGrace

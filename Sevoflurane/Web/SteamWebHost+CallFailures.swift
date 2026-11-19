@@ -1,23 +1,17 @@
 import Foundation
 
 extension SteamWebHost {
-    /// Writes one call Steam's client refused to the event log, once per
-    /// message while the app runs: a call the page keeps making would
-    /// otherwise fill the log with one line.
+    /// Logs a call Steam's client refused, once per message per app run.
     func noteSteamCallFailure(_ line: String) {
         let message = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, loggedSteamCallFailures.insert(message).inserted else { return }
         EventLog.shared.log(.client, "Steam refused a call: \(message)")
     }
 
-    /// Subscribes the context page to the client's console and passes on the
-    /// lines in which Steam refuses a `SteamClient` call, back through the
-    /// popup message handler as `__steamCallFailure`.
-    ///
-    /// The client answers a call it refuses with nothing at all: the caller's
-    /// promise resolves, and only the console says why. A Steam update that
-    /// changes a method's arguments then shows up as a button that does
-    /// nothing, so this is where such a change is seen first.
+    /// Forwards the client console lines in which Steam refuses a
+    /// `SteamClient` call, as `__steamCallFailure`. A refused call still
+    /// resolves its promise, so a Steam update that changes a method's
+    /// arguments shows up only here.
     static let callFailureScript = """
     (function () {
       if (window.__sevoCallFailures) return "already registered";

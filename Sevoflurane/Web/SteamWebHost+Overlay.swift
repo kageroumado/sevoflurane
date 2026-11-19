@@ -1,23 +1,17 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Whether the in-game overlay is up. A popup Steam opens while it is (the
-    /// overlay's Settings, its dialogs) is built as a non-activating panel and
-    /// shown without activating the app, so clicking it never pulls focus off
-    /// the game — the drop that puts the Dock between the game and the overlay
-    /// and breaks Shift+Tab.
+    /// Whether the in-game overlay is up; popups opened meanwhile are
+    /// non-activating panels so the game keeps focus.
     var isOverlayActive: Bool { overlayActive }
 
-    /// The level such a popup sits at: above the overlay (the game's level + 1),
-    /// so it is not hidden behind it. `nil` when no overlay is up.
+    /// The level of such a popup: the game's level + 2, above the overlay.
+    /// `nil` when no overlay is up.
     var overlayChildLevel: Int? { overlayGame.map { $0.layer + 2 } }
 
-    /// The in-game overlay was activated or dismissed (Shift+Tab), told by the
-    /// context page's subscription (``overlayScript``). Places the overlay
-    /// window over the running game and fades it in, or fades it out and hands
-    /// focus back to the game process. The game window's frame comes from
-    /// CGWindowList (`WineWindowWatch.gameWindow`), so a game that moved or
-    /// resized since launch is followed on the next activation.
+    /// The overlay was toggled (``overlayScript``): shows it over the game's
+    /// current frame (`WineWindowWatch.gameWindow`), or hides it and returns
+    /// focus to the game.
     func noteOverlayActivated(active: Bool, appID: String) {
         guard let overlay = popups.values.first(where: { $0.role == .gameOverlay }) else {
             EventLog.shared.log(
@@ -31,8 +25,7 @@ extension SteamWebHost {
             removeOverlayFrontObserver()
             removeOverlayKeyMonitor()
             overlay.hideOverlay()
-            // Closed, not merely hidden: a child left open is one Steam
-            // restores at the next activation and at the next game start.
+            // Closed: Steam restores a child left open at the next activation.
             for child in overlayChildren {
                 child.close()
             }
@@ -63,10 +56,8 @@ extension SteamWebHost {
         }
     }
 
-    /// Closes the overlay the way its own "Back to Game" does — through Steam,
-    /// so the client's overlay state stays in step with ours. It answers with
-    /// `RegisterForOverlayActivated(false)`, which drives the hide and returns
-    /// focus to the game.
+    /// Closes the overlay through Steam, as "Back to Game" does; Steam's
+    /// `RegisterForOverlayActivated(false)` then drives the hide.
     private func closeOverlay() {
         guard overlayActive, !overlayAppID.isEmpty else { return }
         let appID = overlayAppID
@@ -75,10 +66,8 @@ extension SteamWebHost {
         }
     }
 
-    /// While the overlay is up it holds key (so its chat and search take the
-    /// keyboard), which means Shift+Tab — the toggle that would close it —
-    /// lands in the overlay panel instead of the game's hook. This swallows
-    /// that one chord and closes the overlay through Steam.
+    /// The overlay holds key, so Shift+Tab lands in it instead of the game's
+    /// hook; this swallows that chord and closes the overlay through Steam.
     private func installOverlayKeyMonitor() {
         removeOverlayKeyMonitor()
         overlayKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -100,24 +89,19 @@ extension SteamWebHost {
         }
     }
 
-    /// Whether the overlay group belongs on screen: only while active and while
-    /// the game — or this app, once the overlay has taken key — is the
-    /// frontmost application. Any other app in front (one the user switched to,
-    /// or a window that raised itself) takes the overlay off screen with it.
+    /// Whether the overlay group belongs on screen: while active and while
+    /// the game, or this app once the overlay has key, is frontmost.
     nonisolated static func overlayShouldShow(
         active: Bool, front: pid_t?, gamePID: pid_t?, ourPID: pid_t,
     ) -> Bool {
-        // `let front` first: with no frontmost app, and none reported, a bare
-        // `front == gamePID` would be nil == nil == true and show a stuck
-        // overlay over the desktop when no game was even found.
+        // Unwrap first: with no front app and no game, `front == gamePID`
+        // would be nil == nil and show a stuck overlay.
         guard active, let front else { return false }
         return front == gamePID || front == ourPID
     }
 
-    /// Shows the overlay at the game's frame and level only while the game — or
-    /// this app, once the overlay has key — is frontmost; hides it whenever a
-    /// third application is, so the overlay travels with the game and never
-    /// covers anything else.
+    /// Shows or hides the overlay and its children per
+    /// ``overlayShouldShow(active:front:gamePID:ourPID:)``.
     private func applyOverlayPresence(_ overlay: SteamWindow) {
         let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let ours = ProcessInfo.processInfo.processIdentifier
@@ -139,8 +123,6 @@ extension SteamWebHost {
         } else {
             overlay.hideOverlay()
         }
-        // The children ride with the overlay: hidden when it is, shown when it
-        // returns (a closed one's window is gone, so this no-ops for it).
         for child in overlayChildren {
             child.setOrderedIn(shown)
         }
@@ -167,14 +149,10 @@ extension SteamWebHost {
         }
     }
 
-    /// Subscribes the context page to the client's overlay activation. The
-    /// callback is Steam's own `OnOverlayActivated(unPID, unAppID, bActive, …)`
-    /// (its handler does `GetOverlayInstance(appid, pid)` then, for a desktop
-    /// overlay, `SetIsOverlayActive(bActive)`): the second argument is the
-    /// app id, the third the shown flag. Both come back through the popup
-    /// message handler as `__overlayActivated`; the app id lets the host close
-    /// the overlay the way "Back to Game" does, `SetOverlayState(appid, 0)`.
-    /// Re-registered on reload.
+    /// Subscribes the context page to overlay activation, posted as
+    /// `__overlayActivated`. The callback is Steam's
+    /// `OnOverlayActivated(unPID, unAppID, bActive, …)`; the app id lets the
+    /// host close the overlay with `SetOverlayState(appid, 0)`.
     static let overlayScript = """
     (function () {
       if (window.__sevoOverlay) return "already registered";

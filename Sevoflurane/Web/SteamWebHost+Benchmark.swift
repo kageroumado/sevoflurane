@@ -2,8 +2,8 @@ import AppKit
 import os
 
 extension SteamWebHost {
-    /// What one profile run is asked to do. Parsed from the control
-    /// endpoint's query string so the CLI and a curl invocation agree.
+    /// What one profile run is asked to do, parsed from the control
+    /// endpoint's query string.
     nonisolated struct BenchmarkOptions: Sendable, Equatable {
         static let iterationRange = 1 ... 10
 
@@ -38,8 +38,8 @@ extension SteamWebHost {
         }
     }
 
-    /// One complete profile run, serialized because all three targets share
-    /// Steam's desktop page and popup manager.
+    /// One profile run; runs are serialized because the targets share the
+    /// desktop page and popup manager.
     struct BenchmarkReport: Encodable {
         let iterations: Int
         /// `visible`, `forced` (the window was covered, so occlusion
@@ -104,9 +104,9 @@ extension SteamWebHost {
         case friends
     }
 
-    /// Runs a repeatable, warm UI workload. It does not use DOM selectors:
-    /// Library waits for two desktop frames, Store also waits for its native
-    /// BrowserView to settle, and Friends waits for its adopted NSWindow.
+    /// Runs a repeatable, warm UI workload without DOM selectors: Library
+    /// waits for two desktop frames, Store for its BrowserView to settle, and
+    /// Friends for its adopted NSWindow.
     func runSmokeBenchmark(options: BenchmarkOptions) async throws -> BenchmarkReport {
         guard !benchmarkRunning else { throw BenchmarkFailure.alreadyRunning }
         benchmarkRunning = true
@@ -139,7 +139,6 @@ extension SteamWebHost {
         defer { load.stop() }
         mainQueueLatency.start()
         defer { mainQueueLatency.stop() }
-        // Let the load and the watchdog reach steady state before timing.
         try await Task.sleep(for: .milliseconds(500))
         _ = mainQueueLatency.snapshotAndReset()
 
@@ -170,8 +169,7 @@ extension SteamWebHost {
         return [target]
     }
 
-    /// One sample per target per iteration. A hidden desktop page yields
-    /// skipped samples, since nothing measured on it would ever complete.
+    /// One sample per target per iteration; skipped on a hidden desktop page.
     private func benchmarkSamples(
         of targets: [BenchmarkTarget], iterations: Int, desktopVisibility visibility: String,
     ) async throws -> [BenchmarkSample] {
@@ -189,11 +187,9 @@ extension SteamWebHost {
         return samples
     }
 
-    /// The desktop page as WebKit sees it. A covered window is `hidden` —
-    /// animation frames stop and nothing measured below would ever complete
-    /// — so occlusion detection is suspended for the run and the page
-    /// re-read; `forced` means that was needed. A page still hidden after
-    /// that is not on any screen, and the run reports it instead of timing it.
+    /// The desktop page's visibility to WebKit. A covered page stops its
+    /// animation frames, so occlusion detection is suspended for the run
+    /// (`forced`); a page still hidden is reported instead of timed.
     private func ensureDesktopPageVisible() async -> String {
         guard let desktop else { return "hidden" }
         if await desktopPageVisibilityState(desktop) == "visible" { return "visible" }
@@ -237,15 +233,13 @@ extension SteamWebHost {
         try await benchmarkStep(target: .store, iteration: iteration) {
             let reply = await self.evaluateInContext(Self.storeBenchmarkScript)
             try self.requireBenchmarkCommand(reply)
-            // Store readiness belongs to the native BrowserView child. Its
-            // load state remains reliable when Steam throttles Desktop rAFs.
+            // The BrowserView's load state holds when Steam throttles rAF.
             try await self.waitForStoreBrowserView()
         }
     }
 
     private func benchmarkFriends(iteration: Int) async throws -> BenchmarkSample {
-        // An open Friends window would make the step trivially ready; close
-        // it first so the sample is a real open, popup creation included.
+        // Close an open Friends window so the sample includes popup creation.
         if friendsWindow != nil {
             do {
                 try await closeFriendsFromSteam()
@@ -268,11 +262,9 @@ extension SteamWebHost {
         popups.values.first { $0.role == .friends }
     }
 
-    /// Closes the Friends popup the way its close button does: from Steam's
-    /// side, so the popup manager drops its record before our window goes.
-    /// Closing our window first (`SteamWindow.close()`) races the page's own
-    /// teardown, and Steam then keeps a record of a dead popup against which
-    /// every later show request is a no-op.
+    /// Closes the Friends popup from Steam's side. Closing our window first
+    /// races the page's teardown, and Steam keeps a dead popup record that
+    /// swallows every later show.
     private func closeFriendsFromSteam() async throws {
         _ = await evaluateInContext(Self.friendsCloseScript)
         try await waitForReadiness("Steam to drop the Friends popup") { [weak self] in
@@ -281,8 +273,7 @@ extension SteamWebHost {
         try await waitForReadiness("Friends window to close") { [weak self] in
             self?.friendsWindow == nil
         }
-        // Steam's FriendsUI finishes its own teardown a moment after the
-        // popup manager forgets the window.
+        // FriendsUI finishes its teardown a moment later.
         try await Task.sleep(for: .milliseconds(300))
     }
 
@@ -342,9 +333,8 @@ extension SteamWebHost {
         }
     }
 
-    /// Steam's stores, not just its window. A sample taken between the two
-    /// clocks measures a page still assembling itself, and the library route
-    /// into it throws inside Steam's own code.
+    /// Waits for Steam's stores; before them the library route throws inside
+    /// Steam's code.
     private func waitForPageReady() async throws {
         try await waitForReadiness("Steam's stores") { [weak self] in
             await self?.evaluateInContext(

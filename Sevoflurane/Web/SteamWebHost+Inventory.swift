@@ -1,27 +1,16 @@
 import AppKit
 
 extension SteamWebHost {
-    /// Whether Steam's own window is somewhere a person can see it.
-    ///
-    /// AppKit's answer to the same question is worthless here: the context
-    /// page, faded menus and parked toasts are all ordered in without being
-    /// on any screen, so `NSApp.windows` and the `hasVisibleWindows` a reopen
-    /// carries both say yes when the user is looking at nothing. This is the
-    /// one answer the app acts on.
+    /// Whether Steam's desktop window is visible on some screen. Use this
+    /// over `NSApp.windows` or a reopen's `hasVisibleWindows`, which count the
+    /// context page, faded menus and parked toasts.
     var isSteamOnScreen: Bool {
         guard let desktop, desktop.isWindowVisible else { return false }
         return SteamScreenSpace.isOnSomeScreen(desktop.appKitFrame)
     }
 
-    /// The inventory as a log line, written on every adoption and close while
-    /// debug mode is on. `GET /windows` answers the same question, but only
-    /// for someone who thought to ask it while the window was still there;
-    /// this is what a report has afterwards.
-    ///
-    /// A closed menu is counted rather than described: Steam keeps a dozen of
-    /// them per window, they are hidden two-by-one points at the pointer, and
-    /// spelling them all out on every adoption is what would make this
-    /// unreadable.
+    /// Logs the window inventory on every adoption and close in debug mode.
+    /// Closed menus, a dozen per window, are only counted.
     func logWindowInventory(_ occasion: String) {
         guard DebugModeSwitch.shared.isOn else { return }
         var rows: [String] = []

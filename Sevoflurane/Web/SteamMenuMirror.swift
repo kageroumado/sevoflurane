@@ -2,32 +2,28 @@ import AppKit
 
 /// Steam's in-window menu strip, mirrored one to one into the macOS menu bar.
 ///
-/// All five of the strip's menus exist as hidden popups from the moment the UI
-/// boots — `Steam Root Menu` through `Help Root Menu` — with their items
-/// already rendered and localized. The mirror reads each popup's DOM through
-/// the context page into a cache; choosing a native item clicks the
-/// corresponding element, which reaches React's root listener even while the
-/// element is hidden. The in-window strip itself is hidden by
-/// ``SteamDesktopChrome``, so the native menu bar is the only visible strip.
+/// The strip's five menus exist as hidden popups from the moment the UI boots
+/// (`Steam Root Menu` through `Help Root Menu`), already rendered and
+/// localized. The mirror reads each popup's DOM through the context page into
+/// a cache; choosing a native item clicks the matching element, which reaches
+/// React's root listener even while hidden. ``SteamDesktopChrome`` hides the
+/// in-window strip.
 ///
-/// **The native menus change in `menuNeedsUpdate(_:)` and nowhere else.** A
-/// read of the page updates the cache and stops there; AppKit calls
-/// `menuNeedsUpdate(_:)` synchronously in the instant before the menu is
-/// shown, and that is the one moment at which the menu bar — which on recent
-/// macOS is another process holding handles on our items — expects the items
-/// to move. A menu mutated at any other moment can leave that process waiting
-/// on an item that no longer exists, with the app parked inside
-/// `NSMenuTrackingSession` and no lever from this side that ends it.
+/// **The native menus change in `menuNeedsUpdate(_:)` and nowhere else.**
+/// AppKit calls it synchronously just before the menu is shown, the one
+/// moment the menu bar (another process holding handles on our items)
+/// expects items to move. A menu mutated at any other moment can leave that
+/// process waiting on an item that no longer exists, with the app parked
+/// inside `NSMenuTrackingSession` and no lever from this side to end it.
 ///
-/// Inside that window the mirror still prefers the smallest change it can
-/// make: while the section's shape holds — same count, rules in the same
-/// places — labels, states and enablement are written into the items the menu
-/// already has, so every item keeps its identity. Items are removed and
-/// re-inserted only when the shape itself changed.
+/// While the section's shape holds (same count, rules in the same places),
+/// labels, states and enablement are written into the existing items, so
+/// every item keeps its identity; items are rebuilt only when the shape
+/// changed.
 ///
-/// The page is read on the events that can change the strip and never from a
-/// menu delegate: `menuNeedsUpdate(_:)` must leave the menu populated before
-/// it returns, and a fetch that answers a frame later cannot.
+/// The page is read on the events that can change the strip, never from a
+/// menu delegate: `menuNeedsUpdate(_:)` must return with the menu populated,
+/// and a fetch answers a frame later.
 @MainActor
 final class SteamMenuMirror: NSObject {
     /// The strip's menus, left to right. Each names a `<title> Root Menu`
@@ -40,18 +36,16 @@ final class SteamMenuMirror: NSObject {
     static let nativeTag = 1
 
     /// Marks an item the mirror itself made. The mirrored section is the set
-    /// of items carrying this tag, not a range of positions: AppKit puts its
-    /// own search item into the Help menu, and a section defined by position
-    /// would sweep that item away on every update and AppKit would put it
-    /// back — a structural change to a menu, twice, every time Help opens.
-    /// The value is arbitrary and far from the small integers a framework
-    /// hands out, so ownership stays a question with one answer.
+    /// of items carrying this tag rather than a range of positions: AppKit
+    /// puts its own search item into the Help menu, and a positional section
+    /// would sweep it away on every update and AppKit would put it back. The
+    /// value is arbitrary, far from the small integers frameworks use.
     static let mirroredTag = 0x5E70
 
     /// The single disabled item a title carries until the page has answered
-    /// for it. A root menu with no items gives the menu-bar agent no menu
-    /// window to display, and a tracking session with nothing on screen has
-    /// nothing to dismiss.
+    /// for it. An empty root menu gives the menu-bar agent no window to
+    /// display, and a tracking session with nothing on screen cannot be
+    /// dismissed.
     static let placeholderTitle = "Steam is starting…"
 
     /// One item of one root menu, as the page reports it. `sep` marks a rule;
@@ -63,16 +57,15 @@ final class SteamMenuMirror: NSObject {
         var disabled: Bool?
     }
 
-    /// What one update of a native menu did, which is what the log says and
-    /// what the tests assert on.
+    /// What one update of a native menu did, for the log and the tests.
     enum Update: Equatable {
         /// The menu already said what the cache says.
         case unchanged(items: Int)
-        /// Written into the items the menu already had; every item, and every
-        /// handle another process holds on one, survived.
+        /// Written into the existing items; every item, and every handle
+        /// another process holds on one, survived.
         case patched(items: Int)
-        /// The section's shape changed, so its items were removed and new ones
-        /// inserted. The expensive one, and the one the menu bar can notice.
+        /// The section's shape changed, so its items were replaced. The one
+        /// the menu bar can notice.
         case rebuilt(from: Int, to: Int)
     }
 
@@ -81,9 +74,8 @@ final class SteamMenuMirror: NSObject {
         /// rendered, so the first reads after boot see an incomplete strip.
         static let retries = 10
         static let retryInterval: Duration = .seconds(1)
-        /// Steam moves labels (`View Friends List (2 Online)`, the status
-        /// marks) with no signal to subscribe to, so the cache is re-read on a
-        /// slow tick for as long as the user is in the app.
+        /// Steam moves labels with no signal, so the cache is re-read on this
+        /// tick while the app is active.
         static let frontmostInterval: TimeInterval = 30
     }
 
@@ -111,15 +103,14 @@ final class SteamMenuMirror: NSObject {
         for title in Self.rootTitles {
             let menu = NSMenu(title: title)
             menu.delegate = self
-            // Enablement comes from Steam's own `aria-disabled`, not from the
-            // responder chain.
+            // Enablement comes from Steam's own `aria-disabled`.
             menu.autoenablesItems = false
             menus[title] = menu
             Self.apply([], to: menu, target: self)
         }
         observeActivation()
         // The watchdog's private stop lever inspects the open menus' tracking
-        // sessions; the mirror is the one place that knows which are open.
+        // sessions, and only the mirror knows which are open.
         watchdog.trackedMenus = { [weak self] in
             guard let self else { return [] }
             return openTitles.compactMap { menus[$0] }
@@ -133,8 +124,8 @@ final class SteamMenuMirror: NSObject {
     }
 
     /// Re-reads the strip into the cache, retrying until all five menus have
-    /// answered. The retry closes the gap between a popup being adopted and
-    /// its items existing, which Steam sends no signal for.
+    /// answered: Steam sends no signal between a popup's adoption and its
+    /// items existing.
     func refresh() {
         guard !refreshing else { return }
         refreshing = true
@@ -151,17 +142,16 @@ final class SteamMenuMirror: NSObject {
     }
 
     /// Ends any menu-bar tracking session and answers which root menus were
-    /// open. A stuck session leaves the app looking frozen while its control
-    /// port still answers, so this is the way out from outside.
+    /// open: the way out from outside when a stuck session freezes the app
+    /// while its control port still answers.
     ///
     /// On macOS 27+ this also pulls the watchdog's private stop lever, so
     /// `POST /menu/cancel` and the Settings button reach the leaked remote
-    /// session the public cancel cannot. This runs on the main actor, so it
-    /// can only free a live freeze if the tracking loop is draining main-queue
-    /// work — the same property the watchdog's `.common`-mode probe relies on,
-    /// and the reason that probe, not this call, is the lever we count on. Its
-    /// value here is external: it lets a tester fire the lever on demand, and
-    /// its log lines say whether the handler ran during a freeze at all.
+    /// session the public cancel cannot. It runs on the main actor, so it
+    /// frees a live freeze only if the tracking loop drains main-queue work;
+    /// the watchdog's `.common`-mode probe is the lever relied on. This call
+    /// lets a tester fire the lever on demand, and its log lines show whether
+    /// it ran during a freeze.
     @discardableResult
     func cancelTracking() -> [String] {
         let open = openTitles.sorted()
@@ -176,8 +166,8 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Reading the strip
 
-    /// One read of the strip into the cache, which is all it touches. Answers
-    /// whether every root menu was present.
+    /// One read of the strip into the cache. Answers whether every root menu
+    /// was present.
     private func fetch() async -> Bool {
         guard let raw = await host?.evaluateInContext(Self.fetchScript),
               let data = raw.data(using: .utf8),
@@ -196,10 +186,7 @@ final class SteamMenuMirror: NSObject {
     }
 
     /// Takes one page read into the cache, answering the titles whose entries
-    /// moved. Nothing here can reach a native menu, which is the point: the
-    /// strip is read on a timer, on activation and on every popup adoption,
-    /// and a menu changed at one of those moments is a menu changed behind
-    /// the menu bar's back.
+    /// moved. Never touches a native menu.
     static func merge(
         _ roots: [String: [MirroredItem]], into model: inout [String: [MirroredItem]],
     ) -> [String] {
@@ -214,17 +201,16 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Writing the menus
 
-    /// Brings one title's native menu up to date with the cache, and says in
-    /// the log what that took.
+    /// Brings one title's native menu up to date with the cache, and logs
+    /// what that took.
     private func update(_ title: String) {
         guard let menu = menus[title] else { return }
         log(Self.apply(model[title] ?? [], to: menu, target: self), for: title)
     }
 
-    /// A structural rebuild is always written down — it is rare, and a
-    /// rebuild that happened while a session was live is the first thing to
-    /// look for in a report of a menu that stopped responding. The in-place
-    /// updates are the normal case and are written down only in debug mode.
+    /// A rebuild is always logged: it is rare, and one during a live session
+    /// is the first thing to look for when a menu stopped responding.
+    /// In-place updates are logged only in debug mode.
     private func log(_ update: Update, for title: String) {
         switch update {
         case let .rebuilt(from, to):
@@ -240,8 +226,8 @@ final class SteamMenuMirror: NSObject {
     }
 
     /// Writes `items` into `menu`'s mirrored section, in place while the shape
-    /// allows it, leaving the app's own items and AppKit's own alone. An empty
-    /// `items` yields the placeholder, so the menu is never left empty.
+    /// allows, leaving the app's and AppKit's own items alone. An empty
+    /// `items` yields the placeholder.
     @discardableResult
     static func apply(
         _ items: [MirroredItem], to menu: NSMenu, target: AnyObject?,
@@ -265,17 +251,16 @@ final class SteamMenuMirror: NSObject {
             : .unchanged(items: wanted.count)
     }
 
-    /// Whether `items` can be written over `existing` with nothing added,
-    /// removed or reordered: the counts match and the rules fall in the same
-    /// places. Steam's own churn is labels — `View Friends List (2 Online)`,
-    /// the status marks — which this covers.
+    /// Whether `items` can be written over `existing` in place: same count,
+    /// rules in the same places. Covers Steam's label churn
+    /// (`View Friends List (2 Online)`).
     static func sameShape(_ items: [MirroredItem], as existing: [NSMenuItem]) -> Bool {
         items.count == existing.count
             && zip(items, existing).allSatisfy { ($0.sep == true) == $1.isSeparatorItem }
     }
 
-    /// Writes each cache entry into the item already standing in its place,
-    /// answering whether any of them moved.
+    /// Writes each entry into the item in its place; answers whether any
+    /// changed.
     @discardableResult
     static func patch(
         _ existing: [NSMenuItem], to items: [MirroredItem], target: AnyObject?,
@@ -304,8 +289,7 @@ final class SteamMenuMirror: NSObject {
         }
     }
 
-    /// Everything one cache entry says about one native item, answering
-    /// whether any of it differed from what the item already said.
+    /// Writes one entry into one native item; answers whether it changed.
     @discardableResult
     private static func write(
         _ item: MirroredItem, at index: Int, into native: NSMenuItem, target: AnyObject?,
@@ -345,9 +329,8 @@ final class SteamMenuMirror: NSObject {
         items.isEmpty ? [placeholderModel] : items
     }
 
-    /// The placeholder is disabled, so the action it carries with every other
-    /// mirrored item is never sent. Carrying one is what lets the first real
-    /// item Steam answers with be written straight into it.
+    /// Disabled, so its action is never sent; carrying one lets the first
+    /// real item Steam answers with be written straight into it.
     private static let placeholderModel = MirroredItem(
         sep: nil, label: placeholderTitle, on: false, disabled: true,
     )
@@ -383,15 +366,13 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Friends status
 
-    /// One persona state as the Friends menu offers it: Steam's label, in
-    /// Steam's language, and where the strip holds it.
+    /// One persona state from the Friends menu, with Steam's localized label.
     struct StatusChoice: Equatable {
         let label: String
         /// The DOM child index ``clickScript(rootTitle:childIndex:label:)``
         /// takes.
         let childIndex: Int
-        /// Whether this is the state the user is in: Steam marks it with a
-        /// check.
+        /// The checked state, the one the user is in.
         let isCurrent: Bool
         let isEnabled: Bool
     }
@@ -408,9 +389,8 @@ final class SteamMenuMirror: NSObject {
     }
 
     /// The Friends menu's last group, which Steam builds from the four
-    /// persona states. It is found by position so it reads the same in every
-    /// language Steam speaks; a last group of any other size is some other
-    /// menu, and answers none.
+    /// persona states. Found by position so it works in every language; a
+    /// last group of any other size answers none.
     static func statusChoices(in items: [MirroredItem]) -> [StatusChoice] {
         guard let rule = items.lastIndex(where: { $0.sep == true }) else { return [] }
         let group = items.indices.dropFirst(rule + 1)
@@ -429,8 +409,8 @@ final class SteamMenuMirror: NSObject {
 
     // MARK: - Refresh triggers
 
-    /// Arms and disarms the frontmost tick, which only earns its wakeups while
-    /// someone is looking at the app.
+    /// Arms the frontmost tick while the app is active and disarms it
+    /// otherwise.
     private func observeActivation() {
         for name in [
             NSApplication.didBecomeActiveNotification,
@@ -444,11 +424,10 @@ final class SteamMenuMirror: NSObject {
         }
     }
 
-    /// Steam moves its labels under the app, so the cache is re-read on a slow
-    /// tick while the app is in front. The tick runs in `.common` modes: a
-    /// menu-bar tracking session runs the run loop in
-    /// `NSEventTrackingRunLoopMode`, where a `.default`-mode timer would stop,
-    /// and a read landing mid-tracking touches nothing but the cache.
+    /// Re-reads the cache on a slow tick while the app is in front. The tick
+    /// runs in `.common` modes because a menu-bar tracking session runs the
+    /// run loop in `NSEventTrackingRunLoopMode`; a read landing mid-tracking
+    /// touches only the cache.
     private func updateFrontmostTick() {
         guard NSApp.isActive else {
             frontmostTick?.invalidate()
@@ -490,11 +469,10 @@ final class SteamMenuMirror: NSObject {
         }
     }
 
-    /// Clicks the item's element in the hidden root-menu popup. The index is
-    /// the DOM child index (separators included), the one the fetch read the
-    /// item at; the element is clicked only while its text is still `label`,
-    /// so a strip Steam changed since the last read answers "moved" instead
-    /// of running its neighbor.
+    /// Clicks the item's element in the hidden root-menu popup, by the DOM
+    /// child index the fetch read it at (separators included). It clicks
+    /// only while the text is still `label`, so a strip changed since the
+    /// last read answers "moved" instead of running its neighbor.
     static func clickScript(rootTitle: String, childIndex: Int, label: String) -> String {
         """
         (function () {
@@ -523,24 +501,19 @@ final class SteamMenuMirror: NSObject {
 }
 
 extension SteamMenuMirror: NSMenuDelegate {
-    /// Brings the menu up to date with the cache, synchronously, which is the
-    /// contract: the menu-bar agent reads the menu the moment this returns,
-    /// and an accessibility query resolves items through it without opening
-    /// anything. It is also the only place the mirror changes a menu.
+    /// Brings the menu up to date with the cache, synchronously: the menu-bar
+    /// agent reads the menu the moment this returns, and an accessibility
+    /// query resolves items through it without opening anything. The only
+    /// place the mirror changes a menu.
     ///
     /// A title whose shape changed is restructured here even while a session
-    /// is live — a menu still carrying the placeholder when Steam's UI comes
-    /// up is the case, and the alternative is showing the user a menu that
-    /// says `Steam is starting…` after it has started. The menu being
-    /// restructured is the one AppKit is about to read, which is what makes
-    /// this moment the safe one; the log line says a session was live so a
-    /// report can be read against it.
+    /// is live (a menu still showing the placeholder once Steam's UI is up):
+    /// the menu being restructured is the one AppKit is about to read, and
+    /// the log line notes the live session.
     ///
     /// The lazy protocol (`numberOfItems(in:)` + `menu(_:update:at:shouldCancel:)`)
-    /// would be the better shape for a strip this size, but it cannot express
-    /// this one: AppKit materializes plain items for it to configure, and
-    /// `NSMenuItem.isSeparatorItem` is read-only, so the rules Steam puts
-    /// between its groups have nowhere to go.
+    /// cannot carry Steam's rules: AppKit materializes plain items for it,
+    /// and `NSMenuItem.isSeparatorItem` is read-only.
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let title = title(of: menu) else { return }
         update(title)

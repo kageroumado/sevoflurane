@@ -13,9 +13,8 @@ nonisolated enum UserStyles {
     /// The commented sample the folder starts with.
     static let sampleName = "README.css"
 
-    /// Every `.css` file in `folder`, in Finder's name order (`2-` before
-    /// `10-`), each under a comment naming its file. Empty when the folder is
-    /// missing or holds no stylesheet.
+    /// Every `.css` file in `folder` in Finder's name order (`2-` before
+    /// `10-`), each under a comment naming its file.
     static func stylesheet(in folder: URL = folder) -> String {
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles],
@@ -36,8 +35,8 @@ nonisolated enum UserStyles {
         try sample.write(to: folder.appending(path: sampleName), atomically: true, encoding: .utf8)
     }
 
-    /// The sample stylesheet: how the folder works and which of Steam's
-    /// selectors hold across client updates, all inside one comment.
+    /// The sample stylesheet, one comment explaining the folder and Steam's
+    /// stable selectors.
     static let sample = """
     /*
       Custom style for Steam in Sevoflurane
@@ -117,8 +116,8 @@ final class FolderWatch {
         FSEventStreamRelease(stream)
     }
 
-    /// Runs on the main queue the stream is scheduled on; the stream is
-    /// invalidated in `deinit`, before the watch it points at goes.
+    /// Runs on the main queue; `deinit` invalidates the stream before the
+    /// unretained watch goes.
     private static let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
         guard let info else { return }
         let watch = Unmanaged<FolderWatch>.fromOpaque(info).takeUnretainedValue()

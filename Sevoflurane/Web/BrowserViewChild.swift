@@ -2,10 +2,10 @@ import AppKit
 import os
 import WebKit
 
-/// One embedded web page (store, community, profile) living as a native child
-/// web view over a Steam window's page — the WKWebView stand-in for CEF's
-/// BrowserView. Its cookies persist in the default website data store, so a
-/// web login in the store survives app restarts.
+/// One embedded web page (store, community, profile) as a native child web
+/// view over a Steam window's page: the WKWebView stand-in for CEF's
+/// BrowserView. Its cookies live in the default website data store, so a web
+/// login in the store survives app restarts.
 @MainActor
 final class BrowserViewChild: NSObject {
     struct Status: Encodable {
@@ -80,8 +80,8 @@ final class BrowserViewChild: NSObject {
         webView.isHidden = true
         webView.allowsBackForwardNavigationGestures = true
         webView.isInspectable = true
-        // Steam's tracking placeholders are empty pages; an opaque white flash
-        // under every internal route is WebKit's default without this.
+        // Steam's tracking placeholders are empty pages, and WebKit's opaque
+        // default background flashes white under every internal route.
         if webView.responds(to: Selector(("_setDrawsBackground:"))) {
             webView.setValue(false, forKey: "drawsBackground")
         }
@@ -93,10 +93,9 @@ final class BrowserViewChild: NSObject {
         // flipped terms.
         webView.autoresizingMask = [.minYMargin]
         container.addSubview(webView)
-        // Same-document navigations (the store and community are pushState
-        // SPAs) never reach the navigation delegate; the URL and title
-        // observations are what keeps Steam's history model and title bar in
-        // sync for those.
+        // Same-document navigations (pushState on the store and community)
+        // never reach the navigation delegate; these observations keep
+        // Steam's history model and title bar in sync for them.
         observations = [
             webView.observe(\.url) { [weak self] _, _ in
                 onMainThread { self?.fireHistoryChanged() }
@@ -206,10 +205,9 @@ final class BrowserViewChild: NSObject {
         )
     }
 
-    /// Steam's browser manager mirrors the browser's *whole* history model —
-    /// `history-changed` must carry `{entries: [{url, key}…], index}` or its
-    /// `LoadURL` throws before ever reaching the browser and every web
-    /// navigation silently dies on the previous page.
+    /// Steam's browser manager mirrors the browser's whole history model:
+    /// `history-changed` must carry `{entries: [{url, key}…], index}`, or its
+    /// `LoadURL` throws and every web navigation stays on the previous page.
     func fireHistoryChanged() {
         let list = webView.backForwardList
         var entries = list.backList.map(Self.historyEntry)
@@ -229,8 +227,8 @@ final class BrowserViewChild: NSObject {
     }
 
     /// A history entry's key identifies it across diffs (push/pop/replace
-    /// detection, client backstack jumps); the item's identity is the one
-    /// thing stable for its lifetime.
+    /// detection, backstack jumps); the item's object identity is stable for
+    /// its lifetime.
     private static func historyEntry(_ item: WKBackForwardListItem) -> [String: String] {
         [
             "url": item.url.absoluteString,
@@ -306,9 +304,9 @@ extension BrowserViewChild: WKUIDelegate {
         return nil
     }
 
-    /// A file input on a community or store page: Upload your avatar, a
-    /// profile background, a screenshot or workshop upload. In the async
-    /// form, for the reason ``SteamWebCoordinator`` gives.
+    /// A file input on a community or store page (avatar, profile background,
+    /// screenshot or workshop upload). Async form, for the reason
+    /// ``SteamWebCoordinator`` gives.
     func webView(
         _ webView: WKWebView,
         runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -321,8 +319,8 @@ extension BrowserViewChild: WKUIDelegate {
 /// Answers the store page's Mac compatibility strip: the record for a game
 /// (``GameCompatService``), the same one the library page draws, or
 /// `{"off": true}` while Settings has the strip off. A message carrying
-/// `open` is a source link, opened in the default browser; one carrying
-/// `playMac` starts the game's macOS build in Steam for Mac.
+/// `open` is a source link, opened in the default browser; `playMac` starts
+/// the game's macOS build in Steam for Mac; `companion` opens the partner app.
 private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithReply {
     func userContentController(
         _: WKUserContentController, didReceive message: WKScriptMessage,

@@ -8,16 +8,16 @@ final class JavaScriptEvaluator {
     private var evaluationPending: [Int: CheckedContinuation<String?, Never>] = [:]
     private var evaluationTimeouts: [Int: Task<Void, Never>] = [:]
 
-    /// Evaluates JavaScript with an app-owned timeout. WebKit does not offer a
-    /// cancellation token for this API, so the late callback is ignored after
-    /// the continuation has been resolved exactly once by the timeout.
+    /// Evaluates JavaScript with an app-owned timeout. WebKit cannot cancel
+    /// an evaluation, so whichever of the callback and the timeout comes
+    /// second finds the continuation already resumed and is dropped.
     func evaluateInWebView(
         _ script: String, webView: WKWebView, timeout: Duration = .seconds(20),
     ) async -> String? {
         evaluationSequence += 1
         let id = evaluationSequence
-        // The round trip to the web content process and back: what the UI
-        // waits on for every question it asks a page.
+        // The round trip to the web content process, which every question the
+        // UI asks a page waits on.
         let eval = PerfProbe.bridge.beginInterval(
             "WebKitEval", id: PerfProbe.bridge.makeSignpostID(), "eval=\(id, privacy: .public)",
         )

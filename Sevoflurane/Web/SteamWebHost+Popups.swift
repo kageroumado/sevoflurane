@@ -10,39 +10,30 @@ extension SteamWebHost {
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
         webView.allowsBackForwardNavigationGestures = false
-        // `developerExtrasEnabled` alone only adds the context-menu item; Safari
-        // cannot attach to the page without this, and Steam's DOM is the only
-        // place its layout can be measured.
+        // Safari's inspector cannot attach without this.
         webView.isInspectable = true
-        // Steam's own background paints the whole page; letting WebKit paint an
-        // opaque base under it flashes white on every popup and blocks the
-        // transparency the menus need.
+        // WebKit's opaque base flashes white on every popup and blocks menu
+        // transparency.
         if webView.responds(to: Selector(("_setDrawsBackground:"))) {
             webView.setValue(false, forKey: "drawsBackground")
         }
-        // Off until a role says otherwise: every page starts life as an
-        // unnamed `about:blank` popup, and the two roles that must never be
-        // marked hidden — the parked context page and the pop-up-level panels
-        // — are exactly the ones the occlusion service would judge occluded
-        // immediately. `SteamWindow.applyOcclusionPolicy` turns it back on
-        // once the popup names itself.
+        // Off until the popup names itself (`SteamWindow.applyOcclusionPolicy`):
+        // the context page and pop-up-level panels would be judged occluded
+        // at once.
         SteamWebHost.setOcclusionDetection(false, on: webView)
         return webView
     }
 
-    /// Lets WebKit stop rendering a page whose window is covered. Private on
-    /// `WKWebView`, so guarded by a `responds(to:)` check — a Steam release
-    /// cannot affect this, but a WebKit one could.
+    /// Lets WebKit stop rendering a covered page; private API, so guarded by
+    /// `responds(to:)`.
     static func setOcclusionDetection(_ enabled: Bool, on webView: WKWebView) {
         guard webView.responds(to: Selector(("_setWindowOcclusionDetectionEnabled:")))
         else { return }
         webView.setValue(enabled, forKey: "windowOcclusionDetectionEnabled")
     }
 
-    /// Steam's popup manager calls `window.open` and then writes the popup's
-    /// document itself. WebKit hands us the chance to supply the web view; the
-    /// window around it waits until the shim says which popup this is, because
-    /// the name is the only thing that tells a context menu from the desktop.
+    /// Supplies the web view for Steam's `window.open`; the window around it
+    /// waits for the shim to name the popup.
     func adoptPopup(
         configuration: WKWebViewConfiguration,
         features: WKWindowFeatures,
@@ -68,8 +59,7 @@ extension SteamWebHost {
         )
         popups[ObjectIdentifier(webView)] = popup
 
-        // Every popup Steam opens is adopted a moment later over the shim. A
-        // window opened by anything else still needs a frame to live in.
+        // A popup the shim never names still gets a window.
         Task(name: "Adopt orphan popup") { [weak popup] in
             try? await Task.sleep(for: .milliseconds(400))
             popup?.adopt(name: "", parameters: "")
@@ -77,12 +67,9 @@ extension SteamWebHost {
         return webView
     }
 
-    /// A window feature WebKit actually measured.
-    ///
-    /// Steam's popup manager leaves `left` and `top` out of the features string
-    /// for any window it means to place itself, and WebKit fills the gap with
-    /// `INT_MIN`. Handed to AppKit unexamined that becomes a window two billion
-    /// points off-screen, whose layer geometry takes the process down with it.
+    /// A window feature WebKit actually measured. WebKit fills an omitted
+    /// `left`/`top` with `INT_MIN`, and a window two billion points
+    /// off-screen crashes the process in its layer geometry.
     private func plausible(_ value: NSNumber?) -> CGFloat? {
         guard let value else { return nil }
         let number = value.doubleValue
@@ -95,8 +82,7 @@ extension SteamWebHost {
         return popups[ObjectIdentifier(webView)]
     }
 
-    /// The top-left of a window Steam named, in the coordinates it measures in.
-    /// Menus are placed relative to whichever window opened them.
+    /// The top-left of a named window, in Steam's coordinates.
     func steamOrigin(ofWindowNamed name: String) -> CGPoint? {
         popups.values.first { $0.name == name }?.steamOrigin
     }
@@ -106,13 +92,11 @@ extension SteamWebHost {
         ActivationPolicy.recedeIfLastWindow(closing: window.nsWindow)
     }
 
-    /// Draws the Mac compatibility strip on game pages and store pages, and
-    /// the library's badges and "Plays on Mac" filter, or takes them off, to
-    /// match the stored choice. Called at adoption and whenever Settings
-    /// changes it, so a switch is visible on the page already open.
+    /// Puts the compatibility strip, the library's badges and the Mac filter
+    /// on or off every open page to match Settings.
     func applyCompatibilityStrip() {
         let on = Preferences.compatibilityStrip
-        // Read by the strip's "Play in Steam for Mac" link (`playsInThisSteam`).
+        // Read by the strip's `playsInThisSteam`.
         let steamForMac = "window.__sevoSteamForMac = \(Preferences.offersSteamForMac);\n"
             + "window.__sevoNativeBuildsOn = \(Engine.running.supportsSteamPlayMacOS);\n"
         desktop?.webView.evaluateJavaScript(steamForMac + (on ? SteamCompatBadge.script : SteamCompatBadge.removalScript))
@@ -126,11 +110,8 @@ extension SteamWebHost {
         }
     }
 
-    /// Offers each game's macOS build beside its Windows one
-    /// (``SteamNativeBuilds``) when the client's engine runs macOS builds,
-    /// and takes the offer off otherwise. Called at adoption, which follows
-    /// every client start, so an engine switch is reflected with the client
-    /// it boots.
+    /// Offers each game's macOS build (``SteamNativeBuilds``) when the
+    /// running engine runs macOS builds. Called at every desktop adoption.
     func applyNativeBuilds() {
         let on = Engine.running.supportsSteamPlayMacOS
         install(

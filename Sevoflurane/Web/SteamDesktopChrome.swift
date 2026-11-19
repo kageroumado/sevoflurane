@@ -2,17 +2,14 @@ import Foundation
 
 /// The script that turns Steam's Windows chrome into macOS chrome.
 ///
-/// Steam's title strip is a normal part of the page, so the adjustments are
-/// too: its window buttons are removed because the traffic lights already do
-/// that job, and its menu strip is removed because the macOS menu bar drives
-/// those menus through ``SteamMenuMirror``. Everything is anchored on
-/// `.TitleBar.title-area`, the one semantic class in that corner of the DOM —
-/// the rest of Steam's class names are content hashes that change with every
-/// client build.
+/// Steam's window buttons are hidden because the traffic lights do that job,
+/// and its menu strip because the macOS menu bar drives those menus through
+/// ``SteamMenuMirror``. Everything is anchored on `.TitleBar.title-area`, the
+/// one semantic class in that corner of the DOM; the rest of Steam's class
+/// names are content hashes that change with every client build.
 ///
-/// The script is idempotent and re-applies itself: Steam writes the popup's
-/// document from the opener and keeps copying stylesheets into its head, so an
-/// injection that assumed a stable head would be undone.
+/// Idempotent and self-reapplying: Steam writes the popup's document from the
+/// opener and keeps copying stylesheets into its head.
 enum SteamDesktopChrome {
     static let script = """
     (function () {
@@ -193,17 +190,14 @@ enum SteamDesktopChrome {
     })()
     """
 
-    /// Steam's ordinary popups (friends, chat, the configurator, notes):
-    /// the page draws its strip, `.TitleBar.title-area`, absolutely
-    /// positioned inside a header of its own, and the macOS title bar is
-    /// transparent over the page. The strip goes away, the header becomes the
-    /// title bar: padded by the title-bar height so its content (the friends
-    /// avatar, a chat's tabs) moves out from under the traffic lights, in
-    /// Steam's own color all the way to the top edge. The friends header's
-    /// backdrop, an SVG gradient Steam starts below its strip, is pulled up
-    /// to the edge so the gradient runs under the lights with no band above
-    /// it. The header's stretch right of the traffic lights is the window's
-    /// drag handle.
+    /// Steam's ordinary popups (friends, chat, the configurator, notes),
+    /// whose `.TitleBar.title-area` strip sits absolutely positioned inside
+    /// a header of its own, under a transparent macOS title bar. The strip
+    /// is hidden and the header becomes the title bar, padded by the
+    /// title-bar height so its content (the friends avatar, a chat's tabs)
+    /// clears the traffic lights. The friends header's SVG gradient backdrop
+    /// is pulled up to the top edge. The header's stretch right of the
+    /// traffic lights is the drag handle.
     static let popupChromeScript = """
     (function () {
       if (window.__sevoChrome) { window.__sevoChrome.apply(); return "reapplied"; }

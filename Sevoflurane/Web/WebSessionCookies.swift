@@ -2,24 +2,15 @@ import Foundation
 import os
 import WebKit
 
-/// Mirrors the bottled client's authenticated web session into the app's
-/// WKWebView cookie jar, so the store, community, and help pages render
-/// signed in.
-///
-/// Steam's web properties authenticate with a `steamLoginSecure` cookie the
-/// client already holds for every Steam domain — it mints them at sign-in
-/// through `login.steampowered.com/jwt/finalizelogin` and refreshes them on
-/// its own schedule. Re-minting our own session would mean holding the
-/// account's refresh token, which the client does not hand out
-/// (`Auth.GetRefreshInfo` returns an id, never the token). Copying the jar it
-/// already maintains needs no credentials and stays correct by construction:
-/// whatever the client is signed in as, the web views are too.
+/// Mirrors the bottled client's Steam cookies (`steamLoginSecure` among them)
+/// into WebKit's jar, so the store, community and help pages render signed
+/// in as the client. Minting a session would need the refresh token, which
+/// the client never hands out (`Auth.GetRefreshInfo` returns an id).
 @MainActor
 enum WebSessionCookies {
-    /// Steam's own web properties: the hosts cookies are mirrored for, and
-    /// the hosts the page's proxy (``WebProxy``) will fetch. The client's jar
-    /// also holds `steamloopback.host` entries, which belong to the local UI
-    /// origin and mean nothing to a remote page.
+    /// Steam's web properties: the hosts cookies are mirrored for and
+    /// ``WebProxy`` fetches. The jar's `steamloopback.host` entries are left
+    /// out.
     nonisolated static let domains = [
         "steampowered.com",
         "steamcommunity.com",
@@ -28,44 +19,37 @@ enum WebSessionCookies {
         "csgo.com.cn",
     ]
 
-    /// The live bridge, wired once at app start — the same one-assignment
-    /// pattern as ``ClientLifecycle/log``.
+    /// The live bridge, assigned once at app start.
     static var bridge: SteamBridge?
 
     private static var inFlight: Task<Void, Never>?
 
-    /// Starts a fresh mirror pass. Called at startup and whenever Steam
-    /// creates an embedded browser, so a session that rotated while the app
-    /// was idle is picked up before the page loads.
+    /// Starts a mirror pass; called at startup and for every new embedded
+    /// browser, so a rotated session lands before the page loads.
     static func refresh() {
         let previous = inFlight
         inFlight = Task {
-            // Passes never overlap: a second `setCookie` for the same name
-            // while the first is in flight is a race over which value wins.
+            // Serialized: overlapping `setCookie`s race over which value wins.
             await previous?.value
             await syncNow()
         }
     }
 
-    /// Waits for the current mirror pass, if any. A load that races the pass
-    /// renders signed out, so browser views await this before loading.
+    /// Waits for the current pass; a load racing it renders signed out.
     static func settled() async {
         await inFlight?.value
     }
 
-    /// What the last pass wrote into WebKit, so the next pass writes only
-    /// the difference. Each `setCookie` is a network-process round trip on
-    /// every browser view's load path. The store itself persists on disk, so
-    /// the first pass after launch re-applies everything once and settles.
+    /// What earlier passes wrote, so a pass writes only the difference: each
+    /// `setCookie` is a network-process round trip on a browser view's load
+    /// path.
     private static var lastApplied: [String: SteamWebCookie] = [:]
 
     /// Copies the client's Steam-domain cookies into the default website data
-    /// store, replacing what was there. Returns how many landed.
+    /// store. Returns how many landed.
     @discardableResult
     static func syncNow() async -> Int {
-        // One CDP read plus one network-process round trip per changed
-        // cookie, all before a browser view may load: the interval is that
-        // critical path.
+        // The critical path before a browser view may load.
         let mirror = PerfProbe.bridge.beginInterval("CookieMirror")
         guard let bridge, let raw = await bridge.clientCookies() else {
             PerfProbe.bridge.endInterval("CookieMirror", mirror, "applied=0")
@@ -98,9 +82,8 @@ enum WebSessionCookies {
         "\(cookie.domain)|\(cookie.path)|\(cookie.name)"
     }
 
-    /// The cookies whose value differs from what a previous pass applied.
-    /// Client-side deletions are not mirrored: a stale extra cookie in
-    /// WebKit is harmless, and the store's own expiry retires it.
+    /// The cookies that differ from what a previous pass applied. Deletions
+    /// are not mirrored; WebKit's expiry retires the stale cookie.
     nonisolated static func changedCookies(
         in cookies: [SteamWebCookie], since applied: [String: SteamWebCookie],
     ) -> [SteamWebCookie] {
@@ -112,12 +95,11 @@ enum WebSessionCookies {
         return domains.contains { bare == $0 || bare.hasSuffix("." + $0) }
     }
 
-    /// The property `HTTPCookie` reads `isHTTPOnly` from. Foundation names
-    /// no constant for it; the string is the one its own parser writes.
+    /// The key `HTTPCookie` reads `isHTTPOnly` from; Foundation has no
+    /// constant for it.
     private nonisolated static let httpOnlyKey = HTTPCookiePropertyKey("HttpOnly")
 
-    /// Translates one client cookie into an `HTTPCookie`, dropping anything
-    /// outside Steam's own web properties.
+    /// One client cookie as an `HTTPCookie`; nil outside Steam's domains.
     nonisolated static func httpCookie(from cookie: SteamWebCookie) -> HTTPCookie? {
         guard isSteamDomain(cookie.domain) else { return nil }
         var properties: [HTTPCookiePropertyKey: Any] = [
@@ -138,9 +120,8 @@ enum WebSessionCookies {
         default: break
         }
         if let expires = cookie.expires {
-            // Foundation caps a cookie's lifetime at 400 days, so a
-            // longer-lived client cookie lands shortened here. Harmless: the
-            // mirror re-runs per browser view, well inside any cap.
+            // Foundation caps lifetimes at 400 days; the mirror re-runs well
+            // inside that.
             properties[.expires] = Date(timeIntervalSince1970: expires)
         }
         return HTTPCookie(properties: properties)

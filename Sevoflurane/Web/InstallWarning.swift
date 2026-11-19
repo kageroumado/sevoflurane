@@ -4,10 +4,9 @@ import AppKit
 /// run there, asked here for a game known not to run on a Mac: anti-cheat
 /// that cannot load, or an Unsupported verdict.
 ///
-/// A native alert rather than a dialog drawn into Steam's page: the
-/// decision is made where the install passes through the bridge, from a
-/// verdict that lives on this side, so it needs no anchor in Steam's
-/// markup, and it reads like the app's other questions (``LaunchOptionPrompt``).
+/// A native alert: the decision is made where the install passes through the
+/// bridge, from a verdict on this side, so it needs no anchor in Steam's
+/// markup and reads like the app's other questions (``LaunchOptionPrompt``).
 @MainActor
 enum InstallWarning {
     /// How long Install waits for the verdict before going ahead without

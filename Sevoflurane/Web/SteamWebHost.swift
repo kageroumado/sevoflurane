@@ -5,15 +5,13 @@ import WebKit
 
 /// Owns the web side of the app.
 ///
-/// Steam's UI is one JavaScript context that renders its visible windows into
-/// popups it opens itself. Reproducing that shape is what lets the app ship no
-/// UI of its own: a hidden web view runs the context, and every popup it opens
-/// is adopted into a real `NSWindow`.
+/// Steam's UI is one JavaScript context that renders its windows into popups
+/// it opens itself: a hidden web view runs the context, and every popup it
+/// opens is adopted into a real `NSWindow`.
 ///
-/// The popups must be built from the *same* `WKWebViewConfiguration` as the
-/// context. That keeps them in one web content process, which is what lets the
-/// opener script them across documents — the thing CEF gives Steam for free and
-/// the whole architecture depends on.
+/// Popups must be built from the context's own `WKWebViewConfiguration`,
+/// which keeps them in one web content process so the opener can script them
+/// across documents, as CEF lets it.
 @MainActor
 @Observable
 final class SteamWebHost {
@@ -25,31 +23,24 @@ final class SteamWebHost {
     /// The desktop window, once Steam has opened it.
     private(set) var desktop: SteamWindow?
 
-    /// Whether the page holds Steam's login window — the signed-out state in
-    /// which Steam's services legitimately never initialize until the user
-    /// acts. The supervisor holds its recovery ladder on this, and every
-    /// reload path refuses while it is true: a reload detaches the popup, and
-    /// Steam reads its document unloading as the user closing the sign-in
-    /// window, which quits.
-    ///
-    /// The popup existing is the whole test. Whether it is on screen is a
-    /// question about window ordering, and a window this app is deliberately
-    /// holding back is still a session waiting on a human.
+    /// Whether the page holds Steam's login window: the signed-out state, in
+    /// which Steam's services never initialize until the user acts. The
+    /// supervisor holds its recovery ladder on this. A reload detaches the
+    /// popup, and Steam reads its document unloading as the user closing the
+    /// sign-in window, which quits.
     var isAwaitingSignIn: Bool {
         Self.isAwaitingSignIn(popupRoles: popups.values.map(\.role))
     }
 
-    /// Whether a page holding these popups is waiting on a sign-in. Visibility
-    /// is not a parameter: a login window this app is deliberately keeping off
-    /// screen is still a session waiting on a human, and keying on visibility
-    /// is what let a stuck stop flag switch the whole guard off.
+    /// Whether a page holding these popups is waiting on a sign-in. Never key
+    /// this on visibility: a login window held off screen is still waiting on
+    /// a human, and a stuck stop flag would switch the guard off.
     static func isAwaitingSignIn(popupRoles: some Sequence<SteamWindowRole>) -> Bool {
         popupRoles.contains(.login)
     }
 
-    /// ``isAwaitingSignIn``, observable: the popup table is not, and the setup
-    /// assistant's finish button waits on this to name the window it opens.
-    /// Refreshed wherever a popup is adopted or closes.
+    /// ``isAwaitingSignIn``, observable, for the setup assistant's finish
+    /// button. Refreshed wherever a popup is adopted or closes.
     private(set) var hasLoginWindow = false
 
     func refreshLoginWindowState() {
@@ -57,22 +48,19 @@ final class SteamWebHost {
         if hasLoginWindow != awaiting { hasLoginWindow = awaiting }
     }
 
-    /// The login window itself, for the paths that must put it in front of
-    /// the user rather than rebuild the page under it.
+    /// The login window, for paths that must bring it forward rather than
+    /// rebuild the page under it.
     var loginWindow: SteamWindow? {
         popups.values.first { $0.role == .login }
     }
 
-    /// While true, a login window Steam asks to show stays built but off
-    /// screen — the onboarding wizard is still up, and the wizard's finish
-    /// button is the moment the user asked for a window.
+    /// While true (the onboarding wizard is up), a login window Steam asks to
+    /// show stays built but off screen until the wizard's finish button.
     private(set) var isHoldingWindows = false
 
-    /// Whether the user chose to use the app without signing in to Steam: its
-    /// own Windows programs run from Quick Launch, and Steam stays signed out
-    /// in the background. The login window Steam asks to show stays built and
-    /// off screen, as under the setup hold, until the user asks for Steam —
-    /// which is choosing to sign in after all, and clears this.
+    /// Whether the user chose to use the app without signing in to Steam
+    /// (Quick Launch only). The login window stays built and off screen, as
+    /// under the setup hold, until the user asks for Steam, which clears this.
     var signInIsSkipped = Preferences.app.bool(forKey: SteamWebHost.signInSkippedKey) {
         didSet { Preferences.app.set(signInIsSkipped, forKey: Self.signInSkippedKey) }
     }
@@ -85,14 +73,13 @@ final class SteamWebHost {
     }
 
     /// Set while the supervisor brings the client down (a quit, a stop, a
-    /// restart). The client asks for its windows again on the way out, and
-    /// `SteamWindow.show` answers those requests with nothing.
+    /// restart); `SteamWindow.show` ignores the window requests the client
+    /// makes on its way out.
     private(set) var clientIsStopping = false
 
-    /// Marks the client as stopping, opened and closed by the daemon across the
-    /// link around each stop — the stop runs in the daemon's process. Every
-    /// signed-out boot is such a stop, and a mark left set refuses every login
-    /// window `show()` asks for.
+    /// Set and cleared by the daemon around each stop. A mark left set
+    /// refuses every login window `show()` asks for, and every signed-out
+    /// boot is such a stop.
     func beginClientStop() {
         clientIsStopping = true
     }
@@ -120,17 +107,13 @@ final class SteamWebHost {
     /// Where Steam's notifications are re-posted as the Mac's.
     @ObservationIgnored weak var notifications: SteamNotifications?
 
-    /// How many conversations are waiting, as Steam itself counts them.
-    ///
-    /// Steam's friends UI computes this and posts it to the client on every
-    /// change, for the client's own tray badge
-    /// (`SteamClient.WebChat.SetNumChatsWithUnreadPriorityMessages`). That
-    /// call crosses the shim, which taps it — so the count is pushed, exactly
-    /// when it changes, and nothing here has to ask.
+    /// How many conversations are waiting, as Steam counts them: the shim
+    /// taps the friends UI's
+    /// `SteamClient.WebChat.SetNumChatsWithUnreadPriorityMessages` call,
+    /// made on every change for the client's tray badge.
     private(set) var unreadChats = 0
 
-    /// The most recently played installed games, for the menu-bar extra —
-    /// the same list Steam's own tray menu leads with.
+    /// The most recently played installed games, for the menu-bar extra.
     private(set) var recentGames: [RecentGame] = []
 
     /// Every installed game, in the order ``LibraryIndex`` files them: the
@@ -144,9 +127,9 @@ final class SteamWebHost {
     /// When each game was first seen at Synchronizing.
     @ObservationIgnored private var cloudSyncSince: [Int: Date] = [:]
 
-    /// The games the client has held at Synchronizing for longer than a sync takes. A game
-    /// force-ended during its Steam Cloud sync stays there, and the client accepts and drops
-    /// every launch of it until it restarts.
+    /// The games held at Synchronizing longer than a sync takes. A game
+    /// force-ended during its Steam Cloud sync stays there, and the client
+    /// drops every launch of it until it restarts.
     private(set) var gamesHeldInCloudSync: Set<Int> = []
 
     /// How long a sync may run before its row says the client is holding the game.
@@ -160,17 +143,15 @@ final class SteamWebHost {
         if held != gamesHeldInCloudSync { gamesHeldInCloudSync = held }
     }
 
-    /// Asks the page for the installed games: the five most recently played,
-    /// and every one of them for the index. One evaluation answers both, so
-    /// the two lists never describe different moments of the library.
+    /// Asks the page for the five most recently played installed games and
+    /// for all of them, in one evaluation so both lists describe one moment.
     func refreshRecentGames() {
         Task(name: "Refresh recent games") { _ = await readInstalledGames() }
     }
 
-    /// ``refreshRecentGames()`` for the moment the desktop window arrives,
-    /// when Steam's app store is often still filling: it asks again every two
-    /// seconds for up to a minute until the library has games, so the Dock
-    /// menu has its recent games without the popover having been opened.
+    /// ``refreshRecentGames()`` for when the desktop window arrives and the
+    /// app store is often still filling: retries every two seconds for up to
+    /// a minute until the library has games.
     func refreshRecentGamesWhenLoaded() {
         Task(name: "Refresh recent games once the library loads") {
             for _ in 0 ..< 30 {
@@ -180,8 +161,8 @@ final class SteamWebHost {
         }
     }
 
-    /// Reads the installed games into ``recentGames`` and ``libraryGames``;
-    /// whether the library had any.
+    /// Reads ``recentGames`` and ``libraryGames``; answers whether the
+    /// library had any.
     private func readInstalledGames() async -> Bool {
         guard let raw = await evaluateInContext(Self.installedGamesScript),
               let data = raw.data(using: .utf8),
@@ -220,14 +201,11 @@ final class SteamWebHost {
     })()
     """
 
-    /// The same call by app id, for the daemon: it decides whether a launch
-    /// needs the client restarted first, and the launch itself comes back here
-    /// because it is a line of JavaScript in the page.
+    /// Runs a game by app id from the page, for the daemon.
     ///
-    /// `forgettingChoice` clears the launch option Steam remembers for the app
-    /// first, so its `ShowLaunchOption` request is asked rather than answered
-    /// from memory: what an answer given ahead of time (``launchOptionAnswers``)
-    /// needs, since Steam's own UI answers from memory before this app can.
+    /// `forgettingChoice` first clears the launch option Steam remembers, so
+    /// its `ShowLaunchOption` request reaches an answer given ahead of time
+    /// (``launchOptionAnswers``) instead of being answered from memory.
     func launchGame(appID: Int, forgettingChoice: Bool = false) {
         context?.webView.evaluateJavaScript(
             forgettingChoice
@@ -246,11 +224,10 @@ final class SteamWebHost {
     /// context page and the shim's tap can both report one request.
     @ObservationIgnored var launchOptionAction: Int?
 
-    /// What a sweep of the client's popups leaves alone right now: the popup
-    /// named after the game a launch is in flight for, and any other
-    /// desktop-UI popup the role table cannot name, since either may be the
-    /// dialog the launch is waiting on. While this app's own alert is asking
-    /// the question, the client's copy of it is redundant and is not spared.
+    /// What a sweep of the client's popups spares now: the popup named after
+    /// the game a launch is in flight for, and any unnamed desktop-UI popup,
+    /// either of which may be the dialog the launch waits on. Nothing is
+    /// spared while this app's own launch-option alert is asking.
     var launchPopupSparing: PopupSparing {
         guard let launch = activeLaunch, launchOptionPending != launch.appID else { return .none }
         return PopupSparing(exactBases: [gameName(launch.appID)], unclassifiedDesktopPopups: true)
@@ -264,12 +241,10 @@ final class SteamWebHost {
 
     // MARK: - Friends, chat, and notifications
 
-    /// What the host has seen of the user, for telling a chat window Steam
-    /// opened for an incoming message from one it opened for a click.
+    /// Tells a chat window Steam opened for an incoming message from one
+    /// opened for a click.
     @ObservationIgnored var chatPolicy = UnaskedChatPolicy(startingAt: .now)
 
-    /// The unread count Steam posts to the client, tapped on its way through
-    /// the shim.
     func noteUnreadChats(_ count: Int) {
         let clamped = max(0, count)
         guard clamped != unreadChats else { return }
@@ -294,11 +269,9 @@ final class SteamWebHost {
     @ObservationIgnored private var launchClear: Task<Void, Never>?
 
     #if DEBUG
-        /// A host with a library and no client behind it, for the gallery.
-        /// Nothing here starts a page: the web views exist only after
-        /// ``bootstrap()``, which the gallery never calls.
-        /// `library` is every installed game; left out, it is the recent
-        /// ones, a library small enough that the popover shows no index.
+        /// A host with a library and no client behind it, for the gallery;
+        /// no page starts until ``bootstrap()``. `library` defaults to
+        /// `games`, small enough that the popover shows no index.
         static func preview(
             games: [RecentGame] = [], library: [RecentGame]? = nil, launching: GameLaunch? = nil,
             status: String = "Steam is ready", unreadChats: Int = 0,
@@ -313,18 +286,17 @@ final class SteamWebHost {
         }
     #endif
 
-    /// A launch has begun for this app id, on any path (library, popover,
-    /// `steam://run`, the CLI): the client's own game-action event, so it
-    /// fires even for a launch the bridge never saw.
+    /// A launch has begun for this app id, on any path, from the client's own
+    /// game-action event.
     var onGameLaunchStart: ((Int) -> Void)?
 
-    /// An app started or stopped running, told by the client itself
-    /// (`GameSessions.RegisterForAppLifetimeNotifications`). The stop edge is
-    /// what closes a run record.
+    /// An app started or stopped running
+    /// (`GameSessions.RegisterForAppLifetimeNotifications`); the stop edge
+    /// closes a run record.
     var onGameRunningChanged: ((_ appID: Int, _ running: Bool) -> Void)?
 
-    /// The client showed an error for a game action — it refused or abandoned
-    /// the launch rather than the game exiting on its own.
+    /// The client showed an error for a game action: it refused or abandoned
+    /// the launch.
     var onGameActionError: ((_ appID: Int, _ detail: String) -> Void)?
 
     /// The launch task the log last carried, as `appid:task`.
@@ -334,12 +306,11 @@ final class SteamWebHost {
     /// as non-Steam games (``SteamShortcuts/aliases(_:)``).
     @ObservationIgnored var shortcutPrograms: [Int: Int] = [:]
 
-    /// The expected refusals this page has already logged, so each is said
-    /// once per page load.
+    /// The expected refusals already logged for this page load.
     private var loggedRefusals: Set<String> = []
 
-    /// Logs what the page's error guard reported: an error as it arrived, a
-    /// refusal every session produces once and in plain words.
+    /// Logs what the page's error guard reported: an error as it arrived, an
+    /// expected refusal once per page load.
     func notePageError(_ detail: String) {
         switch PageErrorTriage.verdict(for: detail) {
         case .error:
@@ -357,15 +328,13 @@ final class SteamWebHost {
         }
     }
 
-    // Overlay presence. It is shown only while the overlay is active *and* the
-    // game (or this app, once the overlay has taken key) is frontmost, so it
-    // rides just above the game and vanishes the moment another app comes
-    // forward — never a full-screen window sitting over everything.
+    // Overlay presence: shown only while active and while the game (or this
+    // app, once the overlay has key) is frontmost.
     @ObservationIgnored var overlayActive = false
     @ObservationIgnored var overlayGame: WineWindowWatch.GameWindow?
     @ObservationIgnored var overlayAppID = ""
-    /// The install wizard's latest state and how many updates it has had, so the
-    /// check that follows one can tell whether the wizard moved on since.
+    /// The install wizard's latest state and update count, so a delayed check
+    /// can tell whether the wizard moved on.
     @ObservationIgnored var installWizardState = 0
     @ObservationIgnored var installWizardUpdates = 0
     /// An install whose wizard the page rebuild cancelled, reopened once the
@@ -373,30 +342,27 @@ final class SteamWebHost {
     @ObservationIgnored var installWizardToReopen: String?
     /// The refused-call messages already logged (``noteSteamCallFailure(_:)``).
     @ObservationIgnored var loggedSteamCallFailures: Set<String> = []
-    /// The latest pass of the energy preference mirror, which the next one
-    /// waits behind.
+    /// The latest energy-preference pass; the next one waits behind it.
     @ObservationIgnored var energyUpdate: Task<Void, Never>?
     @ObservationIgnored var overlayFrontObserver: (any NSObjectProtocol)?
     @ObservationIgnored var overlayKeyMonitor: Any?
 
-    /// The popups Steam opened while the overlay was up (its Settings, friends,
-    /// dialogs). The overlay owns them: they are ordered in and out with it and
-    /// dismissed when it closes, so none is left floating above the game.
+    /// The popups Steam opened while the overlay was up (its Settings,
+    /// friends, dialogs), ordered in and out with it and closed with it.
     @ObservationIgnored var overlayChildren: [SteamWindow] = []
 
-    /// The game's first window is up (``GameLaunchWatch``) — story over.
+    /// The game's first window is up (``GameLaunchWatch``); the launch line
+    /// clears.
     func gameWindowDidAppear() {
         guard activeLaunch != nil else { return }
         launchClear?.cancel()
         activeLaunch = nil
     }
 
-    /// A Quick Launch program was pressed. The client never hears of these,
-    /// so the app tells their launch story itself, in the same three beats a
-    /// Steam launch gets: the row's status line at once, …
-    /// Answers the ticket the line was opened with, or nil when a launch of
-    /// this program is already under way: that launch owns the line, and a
-    /// press made meanwhile (the daemon answers it 409) changes nothing.
+    /// A Quick Launch program was pressed, which the client never hears of:
+    /// opens the row's status line. Answers the line's ticket, or nil when a
+    /// launch of this program already owns the line (the daemon answers that
+    /// press 409).
     func beginProgramLaunch(appID: Int) -> UUID? {
         if activeLaunch?.appID == appID { return nil }
         let launch = GameLaunch(appID: appID, detail: String(localized: "Starting…"))
@@ -406,11 +372,11 @@ final class SteamWebHost {
     }
 
     /// A program's launch is with the helper: the watch and the recorder take
-    /// their marks now, before the process can write ahead of the reply.
+    /// their marks before the process can write ahead of the reply.
     var onProgramLaunchPressed: ((Int) -> Void)?
 
-    /// … then, once the helper has spawned it, the window watch and the run
-    /// record, which ``onGameLaunchStart`` opens for every launch, …
+    /// The helper spawned the program: starts the window watch and run record
+    /// through ``onGameLaunchStart``.
     func programDidStart(appID: Int) {
         let ticket = activeLaunch?.appID == appID ? activeLaunch?.ticket : nil
         setLaunch(
@@ -420,8 +386,8 @@ final class SteamWebHost {
         onGameLaunchStart?(appID)
     }
 
-    /// … or, when the helper started nothing, the status line cleared again
-    /// by the press that opened it, and by no other.
+    /// The helper started nothing: clears the status line, only for the
+    /// press whose ticket opened it.
     func endProgramLaunch(appID: Int, ticket: UUID?) {
         guard let ticket, activeLaunch?.appID == appID, activeLaunch?.ticket == ticket else { return }
         launchClear?.cancel()
@@ -449,9 +415,8 @@ final class SteamWebHost {
 
     // MARK: - Boot
 
-    /// Starts Steam's UI at launch rather than on first window open, mirroring
-    /// the client itself: by the time the user asks for a window, the UI is
-    /// already running and the window can be handed over immediately.
+    /// Starts Steam's UI at launch, as the client does, so a window the user
+    /// asks for can be handed over immediately.
     func bootstrap() {
         guard context == nil else { return }
         installMenuDismissalGuard()
@@ -460,12 +425,10 @@ final class SteamWebHost {
         createContextPage()
     }
 
-    /// Tears the context page down to nothing and boots a fresh one: a new web
-    /// view, a new web content process, new delegates. The rung above
-    /// `reload()`, for the page a reload cannot bring back: a web view whose
-    /// content process is gone or wedged loads nothing, while WebKit's
-    /// networking process keeps its socket to the bridge open — so the bridge
-    /// goes on sending every eval into that socket and every one times out.
+    /// Boots a fresh context page: new web view, web content process and
+    /// delegates. The rung above `reload()`: a web view whose content process
+    /// is gone or wedged loads nothing, while WebKit's networking process
+    /// keeps its socket to the bridge open and every eval times out.
     func rebuildContextPage() {
         EventLog.shared.log(
             .page, "rebuilding the UI page from scratch (\(popups.count) popups detached)",
@@ -493,9 +456,8 @@ final class SteamWebHost {
         )
 
         let webView = makeWebView(configuration: configuration)
-        // The name deliberately mirrors the title of the real client's context
-        // page this window stands in for; it travels back to Steam through
-        // GetWindowRestoreDetails.
+        // The real client's context page title; it travels back to Steam
+        // through GetWindowRestoreDetails.
         let page = SteamWindow(
             webView: webView,
             role: .context,
@@ -506,15 +468,11 @@ final class SteamWebHost {
         )
         context = page
 
-        // The context renders nothing, but WebKit only schedules a web view
-        // that lives in a window. A window with no size and no opacity at the
-        // origin schedules it exactly as an on-screen one does — measured:
-        // the page keeps `document.visibilityState == "visible"` and its
-        // animation frames at 60 Hz, because occlusion detection is off for
-        // this view — and it is not a phantom in `/windows`, in the window
-        // server's lists, or on a display the user just plugged in. The web
-        // view keeps its own 1280×800 frame inside it, so the page's viewport
-        // is the size Steam's UI expects rather than nothing.
+        // WebKit only schedules a web view that lives in a window. A
+        // zero-size, transparent window at the origin keeps the page
+        // `visible` with 60 Hz animation frames (occlusion detection is off
+        // for this view) without showing up anywhere. The web view keeps its
+        // 1280×800 frame, the viewport Steam's UI expects.
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: .zero),
             styleMask: [.borderless],
@@ -542,8 +500,7 @@ final class SteamWebHost {
 
     func reload() {
         EventLog.shared.log(.page, "reloading the UI page (\(popups.count) popups detached)")
-        // A Steam window on screen comes back on screen: the reload rebuilds it,
-        // and the adoption shows it again.
+        // A desktop window on screen is shown again when the reload adopts it.
         let wasShowingDesktop = desktop?.nsWindow?.isVisible == true || desktopShowIsPending
         detachPopups(reason: .pageTeardown)
         desktop = nil
@@ -553,28 +510,22 @@ final class SteamWebHost {
         context?.webView.load(URLRequest(url: Self.uiURL))
     }
 
-    /// Brings every Steam window in line with a changed ``StreamerMode``.
-    ///
-    /// The mask is part of the served page and of each web view's
-    /// configuration, so the page is reloaded: the served `index.html` is
-    /// built again with or without it, and Steam re-creates its popups and
-    /// their web views from the fresh page. A reload rather than a live undo,
-    /// because text the mask already rewrote has no record of what it was.
-    /// A desktop window on screen is shown again once the reload adopts it.
+    /// Brings every Steam window in line with a changed ``StreamerMode`` by
+    /// reloading the page: the mask is part of the served page and each web
+    /// view's configuration, and text it already rewrote cannot be restored.
     func applyStreamerMode() {
         guard context != nil else { return }
         EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — reloading the UI page")
         reload()
     }
 
-    /// Whether a detach loop over every popup is running. The backstop under
-    /// ``SteamWindow/DetachReason``: a detach that reaches
-    /// ``windowDidClose(_:reason:)`` by some other route while the page under
-    /// it is going still says nothing to Steam.
+    /// Whether a detach loop over every popup is running, so a detach that
+    /// reaches ``windowDidClose(_:reason:)`` by another route during page
+    /// teardown still says nothing to Steam.
     private var isTearingDownPage = false
 
-    /// Drops every adopted popup, telling each why. One writer for all three
-    /// teardowns, so none of them can forget the guard.
+    /// Drops every adopted popup, telling each why; the one writer of
+    /// ``isTearingDownPage``.
     private func detachPopups(reason: SteamWindow.DetachReason) {
         isTearingDownPage = true
         defer { isTearingDownPage = false }
@@ -584,11 +535,9 @@ final class SteamWebHost {
         popups.removeAll()
     }
 
-    /// Clears the windows a dead client left on screen — its library is frozen
-    /// and dimmed once nothing is behind it, and leaving it up for the length
-    /// of a restart is the "stuck, dimmed Steam window" the user sees. The
-    /// fresh client adopts its own windows when it boots; the context page
-    /// stays, so this is lighter than a full reload.
+    /// Clears the windows a dead client left on screen, frozen and dimmed,
+    /// keeping the context page; the fresh client's windows are adopted when
+    /// it boots.
     func dismissWindows(reason: SteamWindow.DetachReason = .pageTeardown) {
         guard desktop != nil || !popups.isEmpty else { return }
         detachPopups(reason: reason)
@@ -601,21 +550,15 @@ final class SteamWebHost {
     /// page when the user closed it, and otherwise asking the booting UI for
     /// the library.
     ///
-    /// Rebuilding is a page reload rather than a request for a new window,
-    /// because the window model is the client's: `UpdateDesiredWindows` is
-    /// driven by a native callback, and a window instance recreated by hand
-    /// never renders its popup (measured — the instance appears, its
-    /// `BrowserWindow` stays nil, and `SteamClient.UI.EnsureMainWindowCreated`
-    /// reaches the bottle's client, not this page). A reload boots the UI the
-    /// way it boots at launch, and the desktop window is adopted a second or
-    /// so later.
+    /// Rebuilding is a page reload: a window instance recreated by hand never
+    /// renders its popup (its `BrowserWindow` stays nil, and
+    /// `SteamClient.UI.EnsureMainWindowCreated` reaches the bottle's client).
+    /// The reloaded desktop window is adopted a second or so later.
     func showSteam() {
         if let loginWindow, isAwaitingSignIn {
-            // Signed out, the window the user is asking for is the login
-            // popup. The desktop window can exist beside it, but a signed-out
-            // client never boots its stores, so it would show empty and fail
-            // to route; and a reload would detach the popup, which Steam reads
-            // as the user closing its sign-in window, and quits.
+            // Signed out, the window to show is the login popup: a signed-out
+            // desktop window shows empty, and a reload would quit Steam (see
+            // ``isAwaitingSignIn``).
             EventLog.shared.log(
                 .window, "asked for Steam while signed out — bringing the login window forward",
             )
@@ -624,12 +567,8 @@ final class SteamWebHost {
             return
         }
         if let desktop {
-            // The window exists from the moment Steam's UI boots, but on no
-            // route — a `-silent` client is the same until its tray item is
-            // clicked. Routing it is what fills it, and it happens the first
-            // time someone actually asks for the window rather than at
-            // launch: a menu-bar app that puts a window on screen at login
-            // is not a menu-bar app.
+            // The window boots on no route, like a `-silent` client; it is
+            // routed the first time someone asks for it, never at launch.
             EventLog.shared.log(
                 .window,
                 "asked for Steam — its window exists"
@@ -642,17 +581,13 @@ final class SteamWebHost {
             desktop.show(activating: true)
             return
         }
-        // Come forward now, while the user's click is still the reason for it.
-        // The rebuilt window does not exist for another couple of seconds, and
-        // by then cooperative activation no longer sees an event to attribute
-        // the request to: it declines, and the window arrives behind whatever
-        // was frontmost with its traffic lights gray.
+        // Activate now, while the click is still the reason: cooperative
+        // activation declines a request seconds later, and the rebuilt window
+        // would arrive behind the frontmost app with gray traffic lights.
         ActivationPolicy.becomeRegular(forAWindowWithin: ActivationPolicy.graceForAPromisedWindow)
         NSApp.activate()
-        // The window the user asked for does not exist yet: a reload boots
-        // the UI and Steam re-creates its desktop window hidden, on the
-        // route it had. Nothing else would ever show it, so the request is
-        // held until the adoption it is waiting for.
+        // Steam re-creates its desktop window hidden, so the request is held
+        // until the adoption.
         desktopShowIsPending = true
         if desktopWasClosed {
             EventLog.shared.log(
@@ -671,28 +606,20 @@ final class SteamWebHost {
         }
     }
 
-    /// Whether a ``showSteam`` found no desktop window and is waiting for the
-    /// one the page is building. Cleared by the adoption that answers it, and
-    /// by a close, which is a newer statement of what the user wants.
+    /// Whether a ``showSteam`` is waiting for the desktop window the page is
+    /// building. Cleared by that adoption, and by a close.
     private var desktopShowIsPending = false
 
-    /// Ends the Steam UI from our side, the way the window's close button
-    /// does. Exposed so the control endpoint (and anything driving the app)
-    /// can put Steam away without a click.
+    /// Closes the desktop window as its close button does, for the control
+    /// endpoint.
     func closeSteam() {
         desktop?.close()
     }
 
-    /// One page's web process is every page's web process — they share a
-    /// pool — so a single death is reported once per hosted view, fourteen
-    /// times over. The first report that matters does the recovery and the
-    /// rest are dropped; without this the reloads pile up inside each other
-    /// and the boot that follows has to be reloaded again.
-    ///
-    /// The context page is the whole of Steam's JavaScript and the desktop
-    /// window is rebuilt from it, so both take the same reload the supervisor
-    /// uses. Any other popup is Steam's to re-create: detaching tells its
-    /// popup manager the window is gone.
+    /// The pages share one web process, so a single death is reported once
+    /// per hosted view; the first report for the context or desktop reloads
+    /// the page and the rest are dropped, or the reloads pile up. Any other
+    /// popup is detached for Steam to re-create.
     func webProcessDidTerminate(for webView: WKWebView) {
         let window = self.window(for: webView)
         switch window?.role {
@@ -704,9 +631,8 @@ final class SteamWebHost {
                 "web content process died (\(window?.name ?? "an unadopted page")) — rebuilding the UI",
             )
             reload()
-            // The flag normally clears when the desktop window is adopted; this
-            // is the backstop for a reload that never gets that far, so a
-            // second death is not ignored forever.
+            // Adoption clears the flag; this backstop covers a reload that
+            // never gets there.
             Task(name: "Web process recovery backstop") {
                 try? await Task.sleep(for: .seconds(30))
                 isRecoveringFromWebProcessDeath = false
@@ -718,16 +644,15 @@ final class SteamWebHost {
 
     private var isRecoveringFromWebProcessDeath = false
 
-    /// Whether the desktop window existed and the user closed it — the state
-    /// that separates "rebuild the page" from "the UI is still booting".
+    /// Whether the desktop window existed and was closed, which separates
+    /// "rebuild the page" from "the UI is still booting".
     private var desktopWasClosed = false
 
-    /// Whether this desktop window has been sent to a route yet. A freshly
-    /// adopted one renders nothing until it is.
+    /// Whether this desktop window has been routed; until then it renders
+    /// nothing.
     var hasRoutedDesktop = false
 
-    /// Whether a route is being retried, so a second ask joins the first
-    /// rather than racing it onto the same window.
+    /// Whether a route is being retried, so a second ask does not race it.
     var isRoutingDesktop = false
 
     func storeBrowserViewStatuses() -> [BrowserViewChild.Status] {
@@ -737,19 +662,13 @@ final class SteamWebHost {
     // MARK: - Popup adoption
 
     func windowDidAdopt(_ window: SteamWindow) {
-        // The name is what classifies a popup, so an unexpected window on
-        // screen can be traced to the name Steam gave it.
         EventLog.shared.log(.window, "popup adopted: \(window.name) as \(window.role)")
         refreshLoginWindowState()
         defer { logWindowInventory("adopting \(window.name)") }
-        // A popup adopted while the overlay is up belongs to it (its Settings,
-        // a dialog): track it so it is ordered in and out with the overlay and
-        // dismissed when it closes, rather than left floating above the game.
-        // The overlay's own UI instance also restores whatever panels were
-        // open when it last closed — the friends list, a game overview — the
-        // moment a game starts, with the overlay still down. Those would come
-        // up as ordinary windows over the game, so they are closed instead:
-        // the overlay starts every session with nothing open.
+        // A popup adopted while the overlay is up rides with the overlay. The
+        // overlay's UI instance also restores the panels open when it last
+        // closed, as soon as a game starts with the overlay down; those
+        // would sit over the game as ordinary windows, so they are closed.
         let fromOverlayInstance = SteamWindowRole.instanceUID(ofPopupNamed: window.name) != 0
         let isOverlayFurniture = window.role != .desktop && window.role != .context
             && window.role != .gameOverlay && window.role != .toast && window.role != .menu
@@ -762,9 +681,8 @@ final class SteamWebHost {
             window.close()
             return
         }
-        // Every adoption is a chance the root menus now exist — they are
-        // created after the desktop window, so anchoring on the desktop alone
-        // reads an empty strip. Re-reading an unchanged strip is a no-op.
+        // The root menus are created after the desktop window, so every
+        // adoption re-reads the strip.
         menuMirror?.refresh()
         if window.role == .login {
             window.webView.evaluateJavaScript(SteamDesktopChrome.popupScript)
@@ -783,15 +701,8 @@ final class SteamWebHost {
         status = "Steam is ready"
         PerfProbe.poi.emitEvent("DesktopAdopted")
         EventLog.shared.log(.window, "desktop window adopted — Steam is ready")
-        // Steam draws a Windows title bar because under CEF it owns a
-        // borderless OS window. Hosted here its buttons duplicate the traffic
-        // lights and its strip has nowhere for them to sit.
         window.webView.evaluateJavaScript(SteamDesktopChrome.script)
-        // The Mac compatibility strip on game pages, in the slot Steam's own
-        // Deck strip leaves empty on a desktop client.
         applyCompatibilityStrip()
-        // The choice between a game's macOS and Windows builds, where the
-        // engine runs macOS builds.
         applyNativeBuilds()
         Task(name: "Register game-action events") {
             let result = await evaluateInContext(Self.gameActionScript)
@@ -799,7 +710,6 @@ final class SteamWebHost {
         }
         installContextScripts()
         refreshRecentGamesWhenLoaded()
-        // The user asked for the window before it existed; this is it.
         if desktopShowIsPending {
             desktopShowIsPending = false
             routeDesktop()
@@ -815,37 +725,28 @@ final class SteamWebHost {
         popups.removeValue(forKey: ObjectIdentifier(window.webView))
         refreshLoginWindowState()
         defer { logWindowInventory("closing \(window.name)") }
-        // A window the overlay adopted is held until the overlay dismisses, so
-        // that it rides in and out with it. Once it has closed there is
-        // nothing left to order, and holding it keeps its web view alive past
-        // the page teardown that tells Steam the popup is gone.
+        // Holding a closed overlay child would keep its web view alive past
+        // the teardown that tells Steam the popup is gone.
         overlayChildren.removeAll { $0 === window }
         // Steam learns a popup is gone from its document's `unload`, which
-        // WebKit ties to the page's teardown rather than to the window
-        // closing. Only a popup that went on its own is owed that word: a
-        // teardown takes the listeners with it, and telling Steam anyway runs
-        // `CPopup.OnClose`, which for the login window is the user closing it
-        // — and closing it quits Steam. Menus are left out: Steam keeps one
-        // per window and reopens it by name, and the app reaps them wholesale
-        // when the desktop's page goes.
+        // WebKit ties to page teardown. Only a popup that went on its own is
+        // owed it: during a teardown it runs `CPopup.OnClose`, which for the
+        // login window quits Steam. Menus are reopened by name and reaped
+        // with the desktop's page.
         if reason == .steamClosedIt, !isTearingDownPage,
            window !== desktop, window.role != .menu, window.role != .context {
             notifyPopupUnloaded(named: window.name)
             repairStuckModalOverlay()
-            // Settings is one of these popups, and a language or a friends-list
-            // preference rewrites the strip's labels as it closes.
+            // Closing Settings can rewrite the strip's labels.
             menuMirror?.refresh()
         }
         guard window === desktop else { return }
         desktop = nil
         desktopWasClosed = true
         desktopShowIsPending = false
-        // Steam's context menus are per-window popups it creates lazily and
-        // then keeps: a dozen hidden web views accumulate behind one desktop
-        // window, and closing that window from our side leaves them orphaned
-        // (Steam only reaps them when it tears the window down itself). They
-        // belong to the page that just went, so they go with it — otherwise
-        // every close/open cycle strands another dozen.
+        // Steam keeps a dozen hidden context-menu popups per desktop window
+        // and reaps them only when it tears the window down itself; without
+        // this, every close/open cycle strands another dozen.
         for popup in popups.values where popup.role == .menu {
             popup.detach(reason: .pageTeardown)
         }
