@@ -50,3 +50,7 @@ dormison-*.tar.xz
 
 ## Renderer probe droppings
 *.dxvk-cache
+
+# BoundaryLint built in place (the build phase builds it beside DerivedData).
+Tools/BoundaryLint/.build/
+Tools/BoundaryLint/.swiftpm/

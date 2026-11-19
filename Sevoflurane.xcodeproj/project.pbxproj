@@ -278,6 +278,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0B33EFFB30290E6100182A68 /* Build configuration list for PBXNativeTarget "Sevoflurane" */;
 			buildPhases = (
+				0BAA00000000000000200001 /* Boundary lint */,
 				0B33EFD630290E5E00182A68 /* Sources */,
 				0B33EFD730290E5E00182A68 /* Frameworks */,
 				0B33EFD830290E5E00182A68 /* Resources */,
@@ -495,6 +496,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		0BAA00000000000000200001 /* Boundary lint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Boundary lint";
+			shellPath = /bin/zsh;
+			shellScript = (
+				"\"$SRCROOT/Tools/boundary-lint.sh\"",
+				"",
+			);
+		};
 		0BAA000000000000000C0002 /* Embed engine */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

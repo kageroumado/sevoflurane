@@ -234,8 +234,53 @@ compiles it:
 | SevofluraneThumbnail | `SevofluraneThumbnail/`, `Shared/` |
 
 Code the helper needs goes in `Supervision/`, and code `sevo` needs too goes
-in `Core/`. Neither folder may import SwiftUI, WebKit or Propofol;
-`SevofluraneTests/HelperSourcesTests` fails if one does.
+in `Core/`. Neither folder may import SwiftUI, WebKit or Propofol.
+
+### Where a file goes
+
+Inside a root, folders name a domain or a role; moving a file between them
+changes nothing in the project.
+
+- `Core/`: `Foundation/` (process, deadline, path and parsing helpers),
+  `Bottle/`, `Engine/`, `Client/` (the client's lifecycle and CDP), `Steam/`
+  (Steam's files and data), `Games/` (with `NWJS/` and `HoYo/`), `Config/`,
+  `Runs/`, `Community/` (stats and compatibility), `Diagnostics/`, `Setup/`.
+- `Sevoflurane/`: `App/` (the delegate, menus, activation), `Services/` (work
+  with no screen of its own), `Stores/` (`@Observable` state and its
+  `*Environment` seams), `Views/` (`Settings/`, `MenuBar/`, `Windows/`,
+  `Prompts/`, `Setup/`, `Design/`), `Bridge/` and `Web/` (Steam's UI), `Demo/`
+  and `Gallery/` (fixtures).
+
+A file holds views or a store, never both: a panel's model goes to `Stores/`
+beside its view in `Views/`.
+
+### The boundary, checked on every build
+
+The app target's first phase, *Boundary lint*, runs `Tools/BoundaryLint` over
+every source folder and marks what it finds at the line in Xcode:
+
+| Rule | What it refuses |
+|---|---|
+| `ui-import` | SwiftUI, WebKit or Propofol imported in `Core/`, `Supervision/`, `Shared/`, `Sevo/` or `SevofluraneDaemon/` |
+| `store-swiftui` | SwiftUI imported in `Sevoflurane/Stores/` or `Services/` |
+| `view-io` | a `View` (or an extension of one) naming `FileManager`, `URLSession`, `Subprocess`, `Process(`, `JSONDecoder`, `JSONSerialization`, `UserDefaults`, `EventLog`, `Data(contentsOf:)`, `String(contentsOf:)`, `sysctl` or `proc_*` |
+| `view-task-on-appear` | `.onAppear { Task { … } }`; `.task` cancels when the view goes |
+| `view-state-count` | more than 6 `@State` in one view warns, more than 10 fails |
+| `view-state-private` | an `@State` that is not private |
+| `view-init` | a view init, or a stored property's initial value, calling anything but a type's own initializer: it runs on every parent render |
+| `view-body-length` | a `body` or `some View` member over 60 lines (a warning) |
+
+`Tools/BoundaryLint/baseline.json` counts the violations each file had when
+the rules arrived. Up to that count they are warnings; one more fails the
+build. Fixing one prints a note: run the tool with `--write-baseline` and
+commit the smaller baseline, so it only shrinks. To run it by hand:
+
+```bash
+swift run --package-path Tools/BoundaryLint boundary-lint --root .
+```
+
+Its rules have their own tests: `swift test --package-path Tools/BoundaryLint`.
+`SevofluraneTests/HelperSourcesTests` keeps the `ui-import` check as a backstop.
 
 ## Watching a game or the client from outside
 
