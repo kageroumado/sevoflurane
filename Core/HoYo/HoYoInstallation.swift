@@ -3,11 +3,9 @@ import Foundation
 /// A HoYoverse game's folder: which game, which build, and the files it
 /// should hold.
 ///
-/// The build is the `game_version` line of the folder's `config.ini`, which
-/// HoYoPlay writes and every launcher reads. The files are the folder's
-/// `pkg_version` (and `Audio_<language>_pkg_version` beside it): one JSON
-/// object per line, `{"remoteName", "md5", "fileSize"}`, which the game's
-/// own build ships and a finished download leaves in place.
+/// The build is `config.ini`'s `game_version`; the files are listed in
+/// `pkg_version` and `Audio_<language>_pkg_version`, one
+/// `{"remoteName", "md5", "fileSize"}` object per line.
 nonisolated struct HoYoInstallation: Sendable {
     let game: HoYoGame
     let folder: URL
@@ -25,22 +23,19 @@ nonisolated struct HoYoInstallation: Sendable {
 
     var configFile: URL { folder.appending(path: "config.ini") }
 
-    /// The build the folder holds, from `config.ini`, or nil for a folder no
-    /// launcher has written one in.
+    /// The build `config.ini` names.
     var version: String? {
         guard let text = try? String(contentsOf: configFile, encoding: .utf8) else { return nil }
         return Self.value(of: "game_version", in: text)
     }
 
-    /// Records `tag` as the folder's build, keeping every other line of an
-    /// existing `config.ini`.
+    /// Records `tag`, keeping every other line of `config.ini`.
     func recordVersion(_ tag: String) throws {
         let existing = (try? String(contentsOf: configFile, encoding: .utf8)) ?? ""
         try Self.settingVersion(tag, in: existing).write(to: configFile, atomically: true, encoding: .utf8)
     }
 
-    /// `text` with its `game_version` set to `tag`: the line replaced where
-    /// there is one, added under `[General]` where there is not.
+    /// `text` with `game_version` replaced, or added under `[General]`.
     static func settingVersion(_ tag: String, in text: String) -> String {
         var lines = text.isEmpty ? [] : text.components(separatedBy: "\n")
         if let index = lines.firstIndex(where: { key(of: $0) == "game_version" }) {
@@ -70,15 +65,13 @@ nonisolated struct HoYoInstallation: Sendable {
 
     // MARK: - Files
 
-    /// One line of a `pkg_version` file.
     struct Entry: Decodable, Sendable, Equatable {
         let remoteName: String
         let md5: String
         let fileSize: Int64
     }
 
-    /// Every `pkg_version` file in the folder: the game's own and one per
-    /// installed voice pack.
+    /// The game's `pkg_version` and one per installed voice pack.
     var packageLists: [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         return names.filter { $0 == "pkg_version" || $0.hasSuffix("_pkg_version") }
@@ -86,7 +79,6 @@ nonisolated struct HoYoInstallation: Sendable {
             .map { folder.appending(path: $0) }
     }
 
-    /// The files the folder's `pkg_version` lists say it holds.
     func expectedFiles() -> [Entry] {
         var seen = Set<String>()
         var entries: [Entry] = []
@@ -106,17 +98,13 @@ nonisolated struct HoYoInstallation: Sendable {
         }
     }
 
-    /// A file of the installation that is missing or not the file it should
-    /// be.
     struct Problem: Sendable, Equatable {
         enum Kind: String, Sendable { case missing, size, checksum }
         let path: String
         let kind: Kind
     }
 
-    /// Checks every listed file: that it exists, has its size and, unless
-    /// `quick`, its md5. `progress` is called after each file with the bytes
-    /// checked so far and the total.
+    /// Checks every listed file's presence, size and, unless `quick`, md5.
     func verify(
         quick: Bool = false,
         progress: @Sendable (_ done: Int64, _ total: Int64) -> Void = { _, _ in },

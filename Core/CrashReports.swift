@@ -2,28 +2,20 @@ import Foundation
 
 /// A macOS crash report (`.ips`) as a collected report carries it.
 ///
-/// The file is two JSON documents: a one-line header naming the process and
-/// the moment, then the body with the threads, the exception and every image
-/// that was mapped. A whole one is hundreds of kilobytes of thread state and
-/// system libraries; what answers "why did this die" is the exception, the
-/// thread that took it, and the images that are ours — the engine, the
-/// renderer, D3DMetal. The rest is dropped.
-///
-/// The render keeps paths whole; taking the person out of them is
-/// ``ReportStripper``'s job, once, over the finished text.
+/// The file is a one-line JSON header, then a JSON body. The render keeps the
+/// exception, the faulting thread and our own images, with paths whole for
+/// ``ReportStripper`` to redact.
 nonisolated enum CrashReportIPS {
     /// The header's `procName`, the body's `procPath`, and when the report
     /// was written.
     struct Identity: Sendable, Equatable {
         let process: String
-        /// The executable that died. The header names only the process, so
-        /// this comes from the body, whose opening keys carry it.
+        /// From the body's opening keys.
         let path: String?
         let timestamp: Date?
     }
 
-    /// The header of a report and the path at the head of its body, from the
-    /// opening kilobytes alone.
+    /// The header and `procPath`, from the opening kilobytes alone.
     static func identity(of url: URL) -> Identity? {
         guard let opening = opening(of: url),
               let split = opening.firstIndex(of: UInt8(ascii: "\n")),
@@ -39,14 +31,8 @@ nonisolated enum CrashReportIPS {
         )
     }
 
-    /// Whether a report is one of this project's processes.
-    ///
-    /// The engine's own executables are known by name, so their reports are
-    /// matched by `prefixes`. A Wine game runs through its launcher bundle,
-    /// `~/Library/Application Support/Sevoflurane/Launchers/<appid>/<Title>.app`,
-    /// and macOS names its report after the bundle: `<Title>-<date>.ips`,
-    /// which no list of prefixes can anticipate. That report is recognized by
-    /// its `procPath`, which sits inside the bundle and so contains one of
+    /// Whether a report is ours: by file-name prefix, or for a game's launcher
+    /// bundle (named `<Title>-<date>.ips`) by a `procPath` holding one of
     /// `pathMarkers`.
     static func isOurs(_ url: URL, prefixes: [String], pathMarkers: [String]) -> Bool {
         let name = url.lastPathComponent
@@ -55,8 +41,8 @@ nonisolated enum CrashReportIPS {
         return pathMarkers.contains { path.contains($0) }
     }
 
-    /// The report, rendered down to what a person can act on. `ours` decides
-    /// which images are kept whole — everything else is named by count only.
+    /// The report rendered down; `ours` picks the images listed, the rest
+    /// counted.
     static func render(_ url: URL, ours: (String) -> Bool) -> String? {
         guard let data = try? Data(contentsOf: url),
               let split = data.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
@@ -90,8 +76,7 @@ nonisolated enum CrashReportIPS {
         return lines
     }
 
-    /// The thread that took the exception, frame by frame, each named by its
-    /// image and its offset in it.
+    /// The faulting thread, frame by frame.
     private static func faultingThread(
         of report: [String: Any], images: [[String: Any]],
     ) -> [String] {
@@ -110,12 +95,10 @@ nonisolated enum CrashReportIPS {
         return lines
     }
 
-    /// How deep a backtrace is kept. Past this it is the runtime's own
-    /// start-up frames, which are the same in every report.
+    /// Deeper frames are the runtime's start-up, the same in every report.
     private static let maximumFrames = 64
 
-    /// One frame: the image it sits in, the symbol when the report has one,
-    /// and the offset that a symbolication would need.
+    /// Image, symbol when known, and the offset symbolication needs.
     private static func describe(_ frame: [String: Any], in images: [[String: Any]]) -> String {
         let index = frame["imageIndex"] as? Int
         let image = index.flatMap { images.indices.contains($0) ? images[$0] : nil }
@@ -128,8 +111,7 @@ nonisolated enum CrashReportIPS {
         return "\(name)  \(symbol) + \(location)  (+\(offset))"
     }
 
-    /// The images the run's own software contributed, named with the build
-    /// each one came from; everything else is counted rather than listed.
+    /// Our images with their UUIDs; the rest counted.
     private static func ourImages(
         _ images: [[String: Any]], ours: (String) -> Bool,
     ) -> [String] {
@@ -157,8 +139,7 @@ nonisolated enum CrashReportIPS {
         return String(describing: value)
     }
 
-    /// The first kilobytes of a report: the whole header line and the opening
-    /// of the body, where `procPath` sits.
+    /// The header line and the body's opening, where `procPath` sits.
     private static func opening(of url: URL) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -168,19 +149,15 @@ nonisolated enum CrashReportIPS {
     private static let openingBytes = 8192
 
     // `nonisolated(unsafe)`: a `Regex` built from a literal holds no state.
-    // The body is pretty-printed JSON, so the value is quoted and any quote
-    // or backslash inside it is escaped.
     private nonisolated(unsafe) static let procPath = /"procPath"\s*:\s*"((?:[^"\\]|\\.)*)"/
 
-    /// A JSON string's slashes as the path has them: the report writes every
-    /// `/` as `\/`.
+    /// The report writes every `/` as `\/`.
     private static func unescaped(_ value: String) -> String {
         value.replacingOccurrences(of: "\\/", with: "/")
     }
 }
 
-/// The header's own moment format: local time with an offset, seconds and
-/// hundredths.
+/// The header's timestamp format.
 private nonisolated let reportStamp: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SS Z"
@@ -190,20 +167,14 @@ private nonisolated let reportStamp: DateFormatter = {
 
 /// What a Windows minidump says about itself without being opened.
 ///
-/// A `.dmp` is a process image: every thread's stack, and often the heap. It
-/// is bytes nobody can read out of a report, it can be hundreds of megabytes,
-/// and it carries whatever the game had in memory — so level 0 and level 1
-/// keep its size and the modules that were loaded, which is the part that
-/// answers "which DLL was it in", and nothing else.
-///
-/// The format is a header, a directory of streams, and the streams; the module
-/// list (stream type 4) names every DLL with a UTF-16 string at its own offset.
+/// A dump holds the process's memory, so levels 0 and 1 keep only its size
+/// and loaded modules. The module list is stream type 4, each name a UTF-16
+/// string at its own offset.
 nonisolated struct MinidumpMetadata: Sendable, Equatable {
     let bytes: Int
-    /// The modules that were loaded, in the order the dump lists them.
     let modules: [String]
 
-    /// The dump's own account of itself, or `nil` for a file that is not one.
+    /// `nil` for a file that is not a minidump.
     static func read(_ url: URL) -> MinidumpMetadata? {
         guard let data = try? Data(contentsOf: url), data.count >= headerBytes,
               data.prefix(4).elementsEqual(signature) else { return nil }
@@ -220,8 +191,7 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
         return MinidumpMetadata(bytes: data.count, modules: [])
     }
 
-    /// The module list: a count, then one fixed-size record per module whose
-    /// fifth field is the offset of its name.
+    /// A count, then one fixed-size record per module.
     private static func modules(in data: Data, at offset: Int) -> [String] {
         guard let count = data.integer(UInt32.self, at: offset) else { return [] }
         var found: [String] = []
@@ -229,8 +199,7 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
             let record = offset + 4 + index * moduleRecordBytes
             guard let nameOffset = data.integer(UInt32.self, at: record + moduleNameField),
                   let name = string(in: data, at: Int(nameOffset)) else { continue }
-            // A Windows path, so the last component is after a backslash —
-            // which `NSString.lastPathComponent` does not know about.
+            // `NSString.lastPathComponent` ignores backslashes.
             found.append(
                 name.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init)
                     ?? name,
@@ -239,7 +208,7 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
         return found
     }
 
-    /// A minidump string: a byte length, then that many bytes of UTF-16.
+    /// A byte length, then that many bytes of UTF-16.
     private static func string(in data: Data, at offset: Int) -> String? {
         guard let length = data.integer(UInt32.self, at: offset), length > 0,
               length < maximumStringBytes else { return nil }
@@ -252,7 +221,6 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
         return String(decoding: units, as: UTF16.self)
     }
 
-    /// One line for a report: how large it is and what was in it.
     var summary: String {
         let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
         guard !modules.isEmpty else { return "\(size), module list unreadable" }
@@ -273,8 +241,7 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
 }
 
 private nonisolated extension Data {
-    /// A little-endian integer at a byte offset from the start, or `nil` when
-    /// the file ends before it.
+    /// A little-endian integer at `offset`, `nil` past the end.
     func integer<Value: FixedWidthInteger>(_: Value.Type, at offset: Int) -> Value? {
         let start = startIndex + offset
         let end = start + MemoryLayout<Value>.size

@@ -1,23 +1,15 @@
 import Foundation
 
-/// The executables a game ships, read from its install directory before its
-/// first launch.
-///
-/// A game's per-program env file (and with it `SEVO_LOADER`, the bundle that
-/// gives the game its own name, icon and Game Mode) is keyed on the exe name.
-/// Waiting for the first window to learn that name means the first run of
-/// every game is an anonymous `wine` in the Dock. The install directory says
-/// which exes exist before anything runs, so every candidate is recorded at
-/// launch time and the env files are in place when the process starts.
+/// The executables a game ships, read from its install directory so its env
+/// files and `SEVO_LOADER` bundle, keyed on exe name, exist before its first
+/// launch.
 nonisolated enum GameExecutables {
-    /// Where the scan's outcome is narrated. The default reaches `sevo`'s
-    /// caller; the app points it at its own event log.
+    /// Stderr, or the app's event log.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
 
-    /// How deep the scan looks: `Game.exe` at the top, `bin/Game.exe`, and
-    /// Unreal's `<Project>/Binaries/Win64/Game-Win64-Shipping.exe`.
+    /// Deep enough for Unreal's `<Project>/Binaries/Win64/Game-Win64-Shipping.exe`.
     private static let maxDepth = 3
     /// Games ship their tools beside the game; the tools are not the game.
     private static let excludedFragments = [
@@ -26,25 +18,16 @@ nonisolated enum GameExecutables {
         "ue4prereq", "ueprereq", "easyanticheat", "eac", "battleye",
     ]
 
-    /// Records every plausible executable of the app's install directory that
-    /// is not already on record. Returns whether anything new was added, so
-    /// the caller knows whether the env files need rewriting.
+    /// Records the install directory's new executables; answers whether any.
     @discardableResult
     static func recordFromInstall(appID: Int) -> Bool {
         guard let game = SharedGames.installed(appID: appID) else { return false }
         return record(appID: appID, name: game.name, directory: game.directory)
     }
 
-    /// Records every installed game's executables — what the app runs at
-    /// every client start, so a game's env file and its launcher bundle exist
-    /// before Steam starts it. A link or an unlink is followed by a client
-    /// restart, and a game Steam downloads mid-session is read by
-    /// ``recordFromInstall(appID:)`` when it launches, so this is the whole
-    /// library's supply. Returns whether any game gained an exe, so one
-    /// materialize covers them all.
-    ///
-    /// A directory listing per game to ``maxDepth`` levels: a 29-game library
-    /// walks in under 10 ms, which is why it needs no cache.
+    /// Records every installed game's executables at each client start;
+    /// mid-session downloads go through ``recordFromInstall(appID:)``. A
+    /// 29-game library walks in under 10 ms, so there is no cache.
     @discardableResult
     static func recordLibrary() -> Bool {
         var recorded = false
@@ -81,8 +64,7 @@ nonisolated enum GameExecutables {
         executableURLs(in: directory).map { $0.lastPathComponent.lowercased() }
     }
 
-    /// The same executables as files, for a caller that has to open one
-    /// rather than name it.
+    /// The same executables as files.
     static func executableURLs(in directory: URL) -> [URL] {
         var found: [(depth: Int, url: URL)] = []
         var queue: [(URL, Int)] = [(directory, 0)]
@@ -101,13 +83,9 @@ nonisolated enum GameExecutables {
         return found.sorted { $0.depth < $1.depth }.map(\.url)
     }
 
-    /// Windows' own tools, which a game's install script or launcher runs
-    /// inside the launch: DirectX's setup registers its DLLs through
-    /// `regsvr32`, a redistributable runs `msiexec`, and HoYoPlay shows its
-    /// pages through `iexplore.exe`. Taken for the game, one of them becomes
-    /// the run's process and the name its settings are written under, its exit
-    /// ends the launch in Steam halfway through, and the next launch runs the
-    /// script again.
+    /// Windows tools a game's install script or launcher runs (`regsvr32`,
+    /// `msiexec`, HoYoPlay's `iexplore.exe`). Taken for the game, its exit
+    /// would end the launch halfway and rerun the script next time.
     static let windowsTools: Set<String> = [
         "regsvr32.exe", "msiexec.exe", "cmd.exe", "reg.exe", "regedit.exe", "dllhost.exe",
         "wscript.exe", "cscript.exe", "powershell.exe", "oalinst.exe", "dxwsetup.exe",

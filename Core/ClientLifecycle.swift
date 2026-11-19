@@ -3,9 +3,8 @@ import os
 import Synchronization
 
 /// The mechanics of the bottled client's life: probing, launching, and the
-/// kill ladder. Policy lives with the callers — the daemon's
-/// `BottleSupervisor` decides *when* to act, the `sevo` CLI exposes the same
-/// actions to a terminal or an agent — so both drive one implementation.
+/// kill ladder. Policy lives with the callers (the daemon's
+/// `BottleSupervisor`, the `sevo` CLI).
 nonisolated enum ClientLifecycle {
     /// The names the kill ladder owns. Mac Steam's own `ipcserver`
     /// (launchd `com.valvesoftware.steam.ipctool`) matches none of them.
@@ -17,9 +16,8 @@ nonisolated enum ClientLifecycle {
         "wineserver",
     ]
 
-    /// The client's own processes — what a client-only stop takes down,
-    /// leaving the booted Windows (wineserver, services, device hosts)
-    /// resident the way CrossOver keeps its fake machine warm.
+    /// The client's own processes, which a client-only stop takes down while
+    /// wineserver, services and device hosts stay resident.
     static let steamProcessNames = [
         "steam.exe",
         "steamwebhelper",
@@ -32,16 +30,14 @@ nonisolated enum ClientLifecycle {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
 
-    /// Called with its status when the wine launcher that spawned the client
-    /// exits. The daemon points this at its `BottleSupervisor` so a death is
-    /// an event rather than something the next poll happens to notice, and
-    /// with a game up the poll is a minute apart. Same contract as ``log``.
+    /// Called with its status when the client's wine launcher exits, so the
+    /// daemon hears of a death without waiting up to a minute for its poll.
+    /// Same contract as ``log``.
     nonisolated(unsafe) static var clientDidExit: @Sendable (Int32) -> Void = { _ in }
 
-    /// When this process last began bringing the bottle's programs down. What exits within
-    /// ``stopWindow`` of it was asked to: the launcher by SIGTERM (status 15), the Discord
-    /// relay by losing its wineserver (status 1). Read from termination handlers on
-    /// Foundation's own threads, so it is kept under a lock.
+    /// When this process last began a stop; an exit within ``stopWindow`` of
+    /// it was asked for (the launcher's status 15, the Discord relay's 1).
+    /// Locked because termination handlers read it off Foundation's threads.
     static var stopRequestedAt: Date? {
         get { stopRequest.withLock { $0 } }
         set { stopRequest.withLock { $0 = newValue } }
@@ -49,8 +45,7 @@ nonisolated enum ClientLifecycle {
 
     private static let stopRequest = Mutex<Date?>(nil)
 
-    /// Long enough to cover a whole restart, so the launcher's exit at its end
-    /// still reads as asked for.
+    /// Long enough to cover a whole restart.
     static let stopWindow: TimeInterval = 300
 
     /// The log line for a program of ours that exited.
@@ -69,16 +64,14 @@ nonisolated enum ClientLifecycle {
         case portWithoutContext
         /// The process is alive and its DevTools server accepted the
         /// connection without answering. A busy CEF under memory pressure
-        /// reads exactly like a dead one to a plain timeout, and treating the
-        /// two alike bought a two-minute restart for a stall that ends by
-        /// itself.
+        /// reads like a dead one to a plain timeout, and restarting it costs
+        /// two minutes for a stall that ends by itself.
         case busy
         case down
     }
 
-    /// A generous timeout: under memory pressure a Rosetta CEF answers
-    /// `/json` slowly, and a slow answer must read as "slow", never as
-    /// "down" — a false "down" costs a two-minute full restart.
+    /// A generous timeout: a Rosetta CEF under memory pressure answers `/json`
+    /// slowly, and a false "down" costs a two-minute full restart.
     static func probeClient() async -> ClientState {
         do {
             let targets = try await CDPClient.discoverTargets(
@@ -93,13 +86,10 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Whether a client process of these bottles exists at all, told by
-    /// command line (`Steam.exe -silent` is this app's own launch line; the
-    /// Mac Steam client is `steam_osx` and cannot match) and scoped like
-    /// ``bottleProcessIDs(matchingAnyOf:in:)``. It runs on the probe's
-    /// failure path to separate "CDP is slow" from "nothing is running", and
-    /// the client's working directory is inside the prefix, so the answer
-    /// is one `pgrep` and a kernel call.
+    /// Whether a client process of these bottles exists at all, matched by
+    /// this app's own launch line (`Steam.exe -silent`) and scoped like
+    /// ``bottleProcessIDs(matchingAnyOf:in:)``. The probe's failure path uses
+    /// it to separate "CDP is slow" from "nothing is running".
     static func clientProcessAlive(in targets: [BottleTarget] = BottleTarget.inScope) async -> Bool {
         let out = await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).output
         return await !inBottle(processIDs(in: out), targets: targets).isEmpty
@@ -107,9 +97,8 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Processes
 
-    /// PIDs of the bottles' processes, matched by name and then scoped by
-    /// open files inside the bottles so other prefixes' wine processes are
-    /// untouched. The default reach is the booted and the configured bottle.
+    /// PIDs of the bottles' processes, matched by name and scoped to the
+    /// bottles so other prefixes' wine processes are untouched.
     static func bottleProcessIDs(
         matching name: String? = nil, in targets: [BottleTarget] = BottleTarget.inScope,
     ) async -> [pid_t] {
@@ -134,14 +123,10 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// The pids among `candidates` that belong to one of `targets`.
-    ///
-    /// A process whose working directory lies in a prefix, or is a prefix's
-    /// wineserver directory, is decided by that alone. The rest (a game
-    /// working in a library folder outside the prefix, or a process between
-    /// directories) are decided by their open files, read through `libproc`:
-    /// the wineserver keeps the prefix itself open, and every other Wine
-    /// process has a file inside it.
+    /// The pids among `candidates` that belong to one of `targets`: by working
+    /// directory (a prefix or its wineserver directory), else by open files
+    /// through `libproc`, since every Wine process holds a file inside its
+    /// prefix.
     private static func inBottle(_ candidates: [pid_t], targets: [BottleTarget]) async -> [pid_t] {
         guard !candidates.isEmpty, !targets.isEmpty else { return [] }
         let roots = bottleRoots(targets)
@@ -166,15 +151,14 @@ nonisolated enum ClientLifecycle {
         return Set(scoped).sorted()
     }
 
-    /// Each bottle's directory as a path and, where it differs, as the path
-    /// with its links resolved, which is how the kernel reports open files.
+    /// Each bottle's path, plain and link-resolved (as the kernel reports
+    /// open files).
     private static func bottleRoots(_ targets: [BottleTarget]) -> [String] {
         Array(Set(targets.flatMap { [$0.prefix.path, $0.path] }))
     }
 
-    /// Whether any of `paths` is `roots`' directory itself or lies inside it.
-    /// A sibling that merely begins with the same name (`Steam2` beside
-    /// `Steam`) and another app's `Bottles/Steam` are elsewhere.
+    /// Whether any of `paths` is a root or lies inside one; a sibling such as
+    /// `Steam2` beside `Steam` is outside.
     static func isInBottle(openPaths paths: [String], roots: [String]) -> Bool {
         paths.contains { path in
             roots.contains { root in
@@ -188,10 +172,8 @@ nonisolated enum ClientLifecycle {
     /// Windows booted; `everything` tears down the whole fake machine.
     enum ForceScope { case steam, everything }
 
-    /// The escape hatch: immediate `SIGKILL`, no graceful ask and no wait —
-    /// for when the graceful ladder is the thing that hung. Scoped by open
-    /// files to the booted and the configured bottle, so another prefix's
-    /// wine is never touched. Answers the processes it signaled.
+    /// Immediate `SIGKILL` with no graceful ask, for when the ladder itself
+    /// hung. Answers the processes it signaled.
     @discardableResult
     static func forceQuit(_ scope: ForceScope) async -> [pid_t] {
         let targets = BottleTarget.inScope
@@ -203,8 +185,7 @@ nonisolated enum ClientLifecycle {
             log("force-quit (\(reach)): SIGKILL'd \(pids.count) Steam process(es) \(pids)")
             return pids
         case .everything:
-            // wineserver -k brings down every process in the prefix — games
-            // and service hosts included; the sweep is for anything it missed.
+            // The sweep is for anything `wineserver -k` missed.
             await killWineservers(targets)
             let pids = await bottleProcessIDs(matchingAnyOf: processNames, in: targets)
             for pid in pids { kill(pid, SIGKILL) }
@@ -213,10 +194,8 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// The Windows program name behind each pid, best effort — so a
-    /// force-quit's reply can name what it killed and what came back, not
-    /// just count them. A wine process carries its Windows exe as `argv`
-    /// (`C:\…\Game.exe`); the name is that path's last component.
+    /// The Windows program name behind each pid, best effort: a wine process
+    /// carries its Windows exe as `argv` (`C:\…\Game.exe`).
     static func processNames(_ pids: [pid_t]) async -> [pid_t: String] {
         guard !pids.isEmpty else { return [:] }
         let out = await Subprocess.run(
@@ -228,9 +207,8 @@ nonisolated enum ClientLifecycle {
             guard let space = trimmed.firstIndex(of: " "),
                   let pid = pid_t(trimmed[..<space]) else { continue }
             let command = trimmed[trimmed.index(after: space)...]
-            // "C:\Program Files (x86)\Steam\Steam.exe -silent" → "Steam.exe": the
-            // path holds spaces, so split on the separators first, then drop
-            // the arguments that trail the last component.
+            // "C:\Program Files (x86)\Steam\Steam.exe -silent" → "Steam.exe":
+            // split on separators first, since the path holds spaces.
             let lastComponent = command
                 .split(whereSeparator: { $0 == "/" || $0 == "\\" }).last ?? command
             names[pid] = lastComponent.split(separator: " ").first.map(String.init)
@@ -239,10 +217,8 @@ nonisolated enum ClientLifecycle {
         return names
     }
 
-    /// One DevTools call — a shutdown ask, a script install — gets at most
-    /// this long, and less when its phase's deadline is nearer. The cap is
-    /// the CDP budget's, because a call that holds a permit for longer holds
-    /// it against everything else that wants to talk to the client.
+    /// The most one DevTools call gets, less when its phase's deadline is
+    /// nearer; it is the CDP budget's cap, since a call holds a permit.
     static let cdpCallCap = CDPBudget.callCap
 
     /// The smaller of a call's own cap and what remains of its phase.
@@ -250,19 +226,16 @@ nonisolated enum ClientLifecycle {
         min(limit, ContinuousClock.now.duration(to: deadline))
     }
 
-    /// Asks the clients of `targets` to exit. The CDP ask is bounded by
-    /// `deadline`; the spawn fallback carries its own subprocess timeout.
+    /// Asks the clients of `targets` to exit; the CDP ask is bounded by
+    /// `deadline`, the spawn fallback by its own timeout.
     static func gracefulShutdown(
         _ targets: [BottleTarget], until deadline: ContinuousClock.Instant,
     ) async {
-        // The quiet path first: StartShutdown in the client's own JS context,
-        // and only when the client answering the port is one of these: CDP is
-        // one fixed port, and a client of another bottle holding it would be
-        // the one asked. `steam.exe -shutdown` spawns a whole second client
-        // instance just to deliver the message — seconds of bottle work to
-        // say one word. The spawn is the fallback for a client whose CDP is
-        // gone or answers for another bottle, and it goes through the same
-        // suppressed environment as every other spawn.
+        // StartShutdown in the client's own JS context first, and only when
+        // the client answering the fixed CDP port belongs to one of these
+        // bottles. `steam.exe -shutdown` spawns a second client instance to
+        // deliver the message, so it is the fallback for a client whose CDP
+        // is gone or answers for another bottle.
         var known: [String: String] = [:]
         for target in targets {
             if let directory = WineOrphans.serverDirectory(forPrefix: target.path) { known[directory] = target.path }
@@ -289,8 +262,8 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Asks the running client to exit via `SteamClient.User.StartShutdown`
-    /// in SharedJSContext. Answers whether the ask was delivered.
+    /// `SteamClient.User.StartShutdown` in SharedJSContext; answers whether
+    /// the ask was delivered.
     private static func shutdownOverCDP(until deadline: ContinuousClock.Instant) async -> Bool {
         guard let targets = try? await CDPClient.discoverTargets(port: BridgePorts.cdp) else {
             return false
@@ -331,15 +304,11 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Stops Steam's own processes and leaves Windows booted: a CDP shutdown
-    /// ask, one-second polls for `gracePolls`, then SIGTERM and SIGKILL.
-    ///
-    /// Wineserver, services and the device hosts stay resident, so the next
-    /// client start skips the machine boot entirely. The callers decide when
-    /// Windows itself must go instead (``stopAll(gracePolls:hidingPopups:phase:)``):
-    /// a different engine's wineserver, an msync change (sync primitives are
-    /// negotiated with the server), a quit. A client that is already gone
-    /// leaves nothing to wait for, so its leftovers go straight to the signals.
+    /// Stops Steam's own processes and leaves Windows booted, so the next
+    /// client start skips the boot: a CDP shutdown ask, one-second polls for
+    /// `gracePolls`, then SIGTERM and SIGKILL. Callers use
+    /// ``stopAll(gracePolls:hidingPopups:phase:)`` instead for an engine or
+    /// msync change, or a quit.
     static func stopClient(
         gracePolls: Int,
         targets: [BottleTarget] = BottleTarget.inScope,
@@ -383,18 +352,15 @@ nonisolated enum ClientLifecycle {
         try? await Task.sleep(for: .seconds(1))
     }
 
-    /// The shutdown ask draws on one absolute deadline: the ask's cap plus
-    /// the grace in seconds. A mute target can hold the ladder for at most
-    /// this long; the force rung's subprocesses carry their own timeouts.
+    /// The shutdown ask's deadline: the call cap plus the grace in seconds.
     private static func cdpBudget(gracePolls: Int) -> Duration {
         cdpCallCap + .seconds(gracePolls)
     }
 
     /// Brings every process of `targets` down: the CDP shutdown ask while a
     /// client is alive, then `wineserver -k`, then signals, each rung only for
-    /// what the previous one left alive. `gracePolls` is the graceful rung's
-    /// patience in one-second polls: a restart can afford 30 s, a quit cannot.
-    /// The default reach is the booted and the configured bottle.
+    /// survivors. `gracePolls` is the graceful rung's patience in one-second
+    /// polls: a restart can afford 30, a quit cannot.
     static func stopAll(
         gracePolls: Int,
         targets: [BottleTarget] = BottleTarget.inScope,
@@ -410,26 +376,19 @@ nonisolated enum ClientLifecycle {
         stopRequestedAt = .now
         log("\(reach): processes running (pids \(existing)) — shutting them down")
         phase("stopping the client")
-        // `steam.exe -shutdown` only means anything to a live client. When the
-        // client has already crashed (the usual reason for a restart), asking
-        // a corpse to shut down and then waiting 30 s for it is pure stall —
-        // the leftover wineserver/winedevice never answer a client shutdown.
-        // Skip straight to the force rung, which brings them down in seconds.
+        // A shutdown ask only reaches a live client. When the client has
+        // already crashed (the usual reason for a restart), the leftover
+        // wineserver and winedevice never answer one, so the force rung
+        // brings them down in seconds.
         let stopBegan = ContinuousClock.now
         let cdpDeadline = stopBegan + cdpBudget(gracePolls: gracePolls)
         var clean = false
         if await clientProcessAlive(in: targets) {
             await gracefulShutdown(targets, until: cdpDeadline)
-            // One-second polls: a healthy client exits in 2–6 s, and a quit
-            // with nothing to upload should be over in ten — the poll count
-            // is the whole grace budget in seconds.
+            // A healthy client exits in 2–6 s.
             for _ in 0 ..< gracePolls {
                 if hidingPopups {
-                    // The client shows its "Shutting down Steam…" dialog on
-                    // the way out; hiding it each poll keeps a deliberate
-                    // stop (an engine switch, `sevo client stop`) from
-                    // narrating itself in Wine windows. It is optional: once
-                    // the CDP budget is spent, the sweep does nothing.
+                    // Hides the client's "Shutting down Steam…" dialog.
                     _ = await hideVisibleClientPopups()
                 }
                 if await bottleProcessIDs(in: targets).isEmpty { clean = true; break }
@@ -463,10 +422,8 @@ nonisolated enum ClientLifecycle {
             + "\(stopBegan.duration(to: .now).components.seconds)s")
     }
 
-    /// Extra `steam.exe` arguments from `SEVO_STEAM_ARGS` in the app's
-    /// environment, whitespace-separated — an experiment knob (`-nojoy`,
-    /// `-noshaders`, `-cef-*`) that reaches the client through the
-    /// supervisor's own launch path.
+    /// Extra `steam.exe` arguments from `SEVO_STEAM_ARGS`, whitespace
+    /// separated: an experiment knob (`-nojoy`, `-noshaders`, `-cef-*`).
     static var extraClientArguments: [String] {
         (ProcessInfo.processInfo.environment["SEVO_STEAM_ARGS"] ?? "")
             .split(whereSeparator: \.isWhitespace)
@@ -474,24 +431,19 @@ nonisolated enum ClientLifecycle {
     }
 
     /// Fire and forget: the wine launcher regularly outlives its useful work
-    /// by half a minute, so CDP polling — not the launcher exiting — decides
-    /// whether the client is up. The exit is still logged for the trail.
-    /// `@concurrent` so the spawn never runs on the calling actor.
+    /// by half a minute, so CDP polling decides whether the client is up and
+    /// the launcher's exit is only logged. `@concurrent` so the spawn never
+    /// runs on the calling actor.
     @concurrent
     static func launchClient() async {
-        // Reconcile the engine tree to the desired selection before steam.exe
-        // loads anything: the renderer DLLs and both halves of the picked
-        // D3DMetal version, staged together. This is the single point graphics
-        // effects happen, so a record-only picker takes effect at the next
-        // spawn with no chance of a crossed tree.
+        // The one place graphics choices take effect: the tree is staged
+        // before steam.exe loads anything, so it is never crossed.
         if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
             log(note)
         }
         let process = Process()
-        // -nocrashdialog suppresses steam.exe's VGUI rescue dialog
-        // ("Steamwebhelper is not responding"); with it, the client relaunches
-        // a wedged webhelper by itself instead of parking a visible Wine
-        // window.
+        // -nocrashdialog: the client relaunches a wedged webhelper itself
+        // instead of showing its VGUI "not responding" dialog.
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
             program: [
@@ -516,33 +468,25 @@ nonisolated enum ClientLifecycle {
             try? trail.close()
             clientDidExit(finished.terminationStatus)
         }
-        // The macOS-build tool, registered while the client is down: its
-        // mappings live in config.vdf, which a running client rewrites.
+        // Registered while the client is down: a running client rewrites
+        // config.vdf.
         if Engine.active.supportsSteamPlayMacOS {
             for note in SteamPlayMacOS.prepareClient(steamRoot: SteamBottle.steamRoot, engineRoot: Engine.active.root) {
                 log("Steam Play for macOS builds: \(note)")
             }
         }
-        // The per-bottle and per-program env files the engine reads at
-        // every process start, from the store as it stands now.
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         do {
             try process.run()
-            // Games inherit this environment; remember what it was so a
-            // later selection change knows a restart is owed.
+            // Games inherit this environment, so a later change owes a restart.
             BottleGraphics.recordBootedSelection()
-            // And the bottle, which every stop reaches until the next spawn.
             BootedBottle.record(.configured)
         } catch {
             log("wine launcher failed to start: \(error.localizedDescription)")
             closeTrail(trail)
         }
-        // What each installed game is built on and which executables it
-        // ships, recorded for the library once per client start: a directory
-        // listing per game and one loader scan for the NW.js ones, which is
-        // why it follows the spawn rather than delaying it. The env files and
-        // launcher bundles are then in place before Steam starts anything,
-        // rather than a game's first run being an anonymous `wine`.
+        // Records each game's executables after the spawn so the env files
+        // and launcher bundles are in place before Steam starts a game.
         Task(name: "Record the library") {
             GameExecutables.recordLibrary()
             NWJSGames.recordLibrary()
@@ -552,12 +496,9 @@ nonisolated enum ClientLifecycle {
         await startDiscordBridge()
     }
 
-    /// Starts the Discord relay for this client boot, so a game that ships its
-    /// own Discord support finds the pipe already served when it looks.
-    ///
-    /// One bridge serves the whole prefix and a second copy exits on its own
-    /// mutex, so starting it once per client boot is enough. It makes itself a
-    /// Wine system process half a minute in and comes down with the bottle.
+    /// Starts the Discord relay for this client boot. One bridge serves the
+    /// prefix (a second copy exits on its mutex), and it comes down with the
+    /// bottle.
     private static func startDiscordBridge() async {
         guard Preferences.discordBridge, let bridge = Engine.active.discordBridge else { return }
         await launchInBottle([bridge.path, "--dir", NSTemporaryDirectory()])
@@ -565,22 +506,14 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Client window suppression
 
-    /// What hides the client's popups: one evaluate on the SharedJSContext
-    /// connection the bridge already holds
-    /// (``SteamBridge/hideVisibleClientPopups()``). The app points this
-    /// there; a process without a bridge — the `sevo` CLI — has no
-    /// connection to sweep through, and none of its paths ask. Same contract
-    /// as ``log``.
+    /// Hides the client's popups over the bridge's SharedJSContext connection
+    /// (``SteamBridge/hideVisibleClientPopups()``); a process without a bridge
+    /// sweeps nothing. Same contract as ``log``.
     nonisolated(unsafe) static var hidePopupsOverBridge:
         @Sendable (PopupSweepScope) async -> [String] = { _ in [] }
 
-    /// Hides any CEF popup window the bottled client has put on screen, and
-    /// answers the names it hid for the caller's log.
-    ///
-    /// The sweep is a single evaluate over the bridge's live connection, and
-    /// every ask for one — the supervisor's cycle, a stop's polls, a client
-    /// notification's schedule — goes through ``PopupSweeper``, which is what
-    /// keeps two of them from running at the same millisecond.
+    /// Hides the client's visible CEF popups and answers their names. Every
+    /// sweep goes through ``PopupSweeper`` so two never run at once.
     static func hideVisibleClientPopups(
         _ scope: PopupSweepScope = .everything,
     ) async -> [String] {
@@ -589,17 +522,12 @@ nonisolated enum ClientLifecycle {
         return await PopupSweeper.shared.sweep(scope).names
     }
 
-    /// Runs one of the app's standing scripts in the bottled client's own
-    /// friends UI, retrying until it answers that it is in place.
+    /// Runs one of the app's standing scripts in the client's own friends UI,
+    /// retrying until it answers one of `outcomes`, and answers that.
     ///
-    /// The client runs a second copy of the UI this app hosts, and it reacts
-    /// to every event the same way: it opens a CEF chat window for an arriving
-    /// message, on the Wine desktop in front of whatever the user was doing,
-    /// and it plays Steam's message chime out of a page nobody can see. So
-    /// both refusals — ``SteamChatAutoOpen`` and ``SteamMessageSound`` — go to
-    /// that copy as well as to the app's own page.
-    ///
-    /// Answers what the script answered, for the caller's log.
+    /// The client runs a second copy of the UI this app hosts, which would
+    /// open CEF chat windows and play the chime itself, so
+    /// ``SteamChatAutoOpen`` and ``SteamMessageSound`` go to it too.
     static func installInClientUI(
         _ script: String, settledAt outcomes: Set<String>, attempts: Int = 10,
     ) async -> String {
@@ -618,17 +546,14 @@ nonisolated enum ClientLifecycle {
         return "the client's own friends UI never appeared"
     }
 
-    /// Asks the client's own `SharedJSContext` whether `GetServicesInitialized()`
-    /// is true — the part that dies with the client's UI session while CDP goes
-    /// on listing the target. Nil when the client cannot be reached at all, so
-    /// a caller's own cycle decides what a client that stopped answering means.
+    /// Whether `App.GetServicesInitialized()` is true in SharedJSContext — the
+    /// part that dies with the UI session while CDP still lists the target.
+    /// Nil when the client cannot be reached.
     ///
-    /// Asked over the connection the bridge already holds, for the same reason
-    /// the popup sweep is: a boot spends two minutes asking this once a second,
-    /// and a fresh DevTools session per ask is a hundred sessions against a
-    /// component this project has wedged twice that way. The default opens one
-    /// anyway, because a process with no bridge — the `sevo` CLI — still has
-    /// the question. Same contract as ``log``.
+    /// Asked over the connection the bridge already holds: a boot asks this
+    /// once a second for two minutes, and a fresh DevTools session per ask has
+    /// wedged the client twice. The default opens its own session for a
+    /// process with no bridge, the `sevo` CLI. Same contract as ``log``.
     nonisolated(unsafe) static var servicesReadyOverBridge: @Sendable () async -> Bool? = {
         await servicesReadyOverOwnSession()
     }
@@ -654,12 +579,8 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Crash-loop hygiene
 
-    /// Fresh crash dumps in the client's `dumps/` folder — the crash-loop
-    /// signature when the count climbs while the supervisor is restarting.
-    ///
-    /// Only `.dmp` files count, and only by when they were written: the folder
-    /// also holds the bookkeeping the client rewrites at every start, which
-    /// counted as three fresh crashes across a night with no crash in it.
+    /// Fresh `.dmp` files in the client's `dumps/` folder, by creation date;
+    /// a climbing count while restarting is the crash-loop signature.
     static func recentDumpCount(within interval: TimeInterval = 600) -> Int {
         let cutoff = Date.now.addingTimeInterval(-interval)
         guard let files = try? FileManager.default.contentsOfDirectory(
@@ -672,9 +593,8 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// Whether a swept popup name is the client's own sign-in window
-    /// (`SP DesktopLoginWindow_uid0`). A client showing it is signed out and
-    /// waiting on a human, which no recovery timer should read as a wedge.
+    /// Whether a swept popup is the sign-in window
+    /// (`SP DesktopLoginWindow_uid0`): a signed-out client, never a wedge.
     static func isLoginWindow(_ name: String) -> Bool {
         name.range(of: "DesktopLoginWindow", options: .caseInsensitive) != nil
     }
@@ -686,12 +606,9 @@ nonisolated enum ClientLifecycle {
         (try? FileManager.default.trashItem(at: SteamBottle.htmlcache, resultingItemURL: nil)) != nil
     }
 
-    /// Trashes Steam's shader cache so the next launch rebuilds it — the
-    /// response to a black screen or a stuck load a plain restart does not
-    /// clear. Only safe with the client stopped; the caller brings the bottle
-    /// down first. Answers whether a cache was there to trash. Only
-    /// ``SteamBottle/shaderCache`` (`steamapps/shadercache`) is removed, so
-    /// saves and game files are never reached.
+    /// Trashes ``SteamBottle/shaderCache`` (`steamapps/shadercache`) so the
+    /// next launch rebuilds it. Only safe with the client stopped. Answers
+    /// whether a cache was there.
     @discardableResult
     static func clearShaderCache() -> Bool {
         let cache = SteamBottle.shaderCache
@@ -699,9 +616,8 @@ nonisolated enum ClientLifecycle {
         return (try? FileManager.default.trashItem(at: cache, resultingItemURL: nil)) != nil
     }
 
-    /// Headless client refresh (the lancache-prefill trick): re-downloads the
-    /// full client package and exits without logging in. Only safe with the
-    /// client stopped. Returns whether the updater exited cleanly.
+    /// Re-downloads the full client package and exits without logging in.
+    /// Only safe with the client stopped.
     static func headlessUpdate() async -> Bool {
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .children,
@@ -722,13 +638,9 @@ nonisolated enum ClientLifecycle {
 
     // MARK: - Arbitrary programs
 
-    /// Runs one Windows program inside the Steam bottle to completion — a
-    /// dependency installer, a `reg` edit — through the same engine
-    /// invocation as the client itself, so the renderer environment and
-    /// msync ride along. The program shares the bottle with a running
-    /// client; `stopAll` and the supervisor's restart ladder would take it
-    /// down with the client, so long installers are best run while Steam
-    /// is healthy or stopped.
+    /// Runs one Windows program in the Steam bottle to completion through the
+    /// client's own engine invocation. A stop or restart of the client takes
+    /// it down too.
     @discardableResult
     static func runInBottle(
         _ program: [String],
@@ -749,18 +661,14 @@ nonisolated enum ClientLifecycle {
     /// The same command, run by the daemon that owns the bottle whenever one
     /// answers, and in this process when none does.
     ///
-    /// A dependency installer is a minutes-long wine tree. Started from the
-    /// app it belongs to the window that asked for it; started from `sevo` it
-    /// belongs to a process that exits as soon as the command returns. The
-    /// daemon outlives both and is the one owner of bottle processes, so the
-    /// tree survives whatever closes above it. The direct fall-back is the
-    /// machine with no daemon answering: the first run, before the app has
-    /// registered one, and `--no-app`.
+    /// A dependency installer is a minutes-long wine tree, and the daemon
+    /// outlives both the app window and the `sevo` process that asked for it.
+    /// The direct fallback covers a machine with no daemon answering: the
+    /// first run, before the app has registered one, and `--no-app`.
     ///
-    /// Only a daemon that could not be reached, or that has no `/bottle/run`,
-    /// hands the program back to this process. A request that timed out or
-    /// broke off may have started the program already, and a second copy of
-    /// an installer in the same bottle is worse than a failed run.
+    /// Only an unreachable daemon, or one without `/bottle/run`, hands the
+    /// program back: a request that broke off may have started it, and a
+    /// second installer in the same bottle is worse than a failed run.
     @discardableResult
     static func runSupervisedInBottle(
         _ program: [String],
@@ -810,10 +718,8 @@ nonisolated enum ClientLifecycle {
         return .answered(result)
     }
 
-    /// The `/bottle/run` request one bottle command becomes: one argument per
-    /// body line, so a Windows path with spaces stays one argument with no
-    /// quoting to undo. The socket's deadline sits past the bottle's own, so
-    /// what comes back is the program's answer rather than the socket's.
+    /// The `/bottle/run` request: one argument per body line, and a socket
+    /// deadline past the program's own.
     static func daemonRunRequest(_ program: [String], timeout: Duration) -> URLRequest? {
         guard !program.isEmpty, !program.contains(where: { $0.contains("\n") }) else { return nil }
         let seconds = timeout.components.seconds
@@ -839,19 +745,13 @@ nonisolated enum ClientLifecycle {
         return ((object["status"] as? NSNumber).map(\.int32Value), output)
     }
 
-    /// Starts one windowed Windows program inside the Steam bottle — winecfg,
-    /// the control panel — and returns as soon as it's spawned, because a
-    /// window the user is going to interact with has no useful exit to wait
-    /// for. `@concurrent` so the spawn never runs on the calling actor.
-    ///
-    /// `environment` replaces the invocation's own, for a program that runs
-    /// in the bottle's companion prefix (``SteamParent``), and `directory`
-    /// is the working directory its Windows side starts in.
-    /// - Parameter programExit: For a launcher whose status is the program's
-    ///   own — the `steam.exe` parent exits with its child's code — the
-    ///   program, so its exit is written to the Wine log for the run record
-    ///   to read (``ProgramExit``). Nil for `start /unix`, which returns 0
-    ///   the moment the program is spawned.
+    /// Starts one windowed Windows program in the Steam bottle and returns
+    /// once it is spawned. `environment` replaces the invocation's own (for
+    /// the companion prefix, ``SteamParent``).
+    /// - Parameter programExit: For a launcher that exits with the program's
+    ///   own code (the `steam.exe` parent), the program whose exit is written
+    ///   to the Wine log (``ProgramExit``). Nil for `start /unix`, which
+    ///   returns 0 at spawn.
     @concurrent
     static func launchInBottle(
         _ program: [String], environment: [String: String]? = nil, directory: URL? = nil,
@@ -869,8 +769,7 @@ nonisolated enum ClientLifecycle {
         if let directory {
             process.currentDirectoryURL = directory
         }
-        // The program's own name: a full path in a log line is the account's
-        // name in a bug report, and nobody reads past it.
+        // The name alone: a full path carries the account's name.
         let name = program.first.map(programName) ?? "?"
         let trail = WineLog.handle(labeled: name) ?? FileHandle.nullDevice
         process.standardOutput = trail
@@ -878,9 +777,7 @@ nonisolated enum ClientLifecycle {
         process.terminationHandler = { finished in
             let status = finished.terminationStatus
             log(exitLine(of: name, status: status, stopRequestedAt: stopRequestedAt))
-            // A signal is the kill ladder's, or the system's; its number is
-            // no exit code of the program's. The parent's own line carries
-            // the program's code whenever the program itself ended.
+            // A signal's number is no exit code of the program's.
             if let programExit, finished.terminationReason == .exit {
                 trail.write(Data((ProgramExit.line(programExit, status: status) + "\n").utf8))
             }
@@ -894,15 +791,13 @@ nonisolated enum ClientLifecycle {
         }
     }
 
-    /// The file name at the end of a path as Windows or as Unix spells it:
-    /// `C:\windows\system32\steam.exe` and `/Applications/Game/game.exe` both
-    /// name their last component.
+    /// The last component of a Windows or Unix path.
     static func programName(of path: String) -> String {
         path.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init) ?? path
     }
 
-    /// Closes a log handle whose process never started, which leaves no
-    /// termination handler to close it. The null device is shared and stays.
+    /// Closes the log handle of a process that never started; the shared
+    /// null device stays open.
     private static func closeTrail(_ trail: FileHandle) {
         guard trail !== FileHandle.nullDevice else { return }
         try? trail.close()
@@ -916,9 +811,8 @@ nonisolated enum ClientLifecycle {
             .contains("BootStrapperInhibitAll=enable")
     }
 
-    /// The emergency brake when a client update breaks under Wine: pinning
-    /// writes `steam.cfg` next to steam.exe. A pinned client eventually loses
-    /// connectivity — unpin as soon as the engine fix ships.
+    /// Pinning writes `steam.cfg` next to steam.exe to stop a client update
+    /// that breaks under Wine. A pinned client eventually loses connectivity.
     static func setPinned(_ pinned: Bool) throws {
         if pinned {
             try Data("BootStrapperInhibitAll=enable\n".utf8).write(to: SteamBottle.steamCfg)

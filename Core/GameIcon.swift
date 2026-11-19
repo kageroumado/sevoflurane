@@ -2,21 +2,12 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-/// The picture a game shows on a Dock tile, as an `.icns`.
-///
-/// Every game Sevoflurane runs gets a bundle of its own — a copy of the wine
-/// loader for a bottled game, NW.js for a native one — and macOS reads the
-/// icon out of that bundle. This is where the best picture of a game on this
-/// machine is found and made into one.
+/// The picture a game's own bundle shows on a Dock tile, as an `.icns`.
 nonisolated enum GameIcon {
-    /// The best picture of this game on the machine, as an `.icns`, or `nil`
-    /// when there is none worth using.
-    ///
-    /// The exe's own icon comes first and is already an `.icns`: the dock shim
-    /// writes one per title the first time a game runs under wine, taking the
-    /// raster winemac.drv hands the Dock, and that is the artwork the game
-    /// ships — 256 pixels for an RPG Maker title, where Steam's client icon
-    /// and the package's `window.icon` are both 32.
+    /// The best picture of this game as an `.icns`. The dock shim's cached
+    /// icon comes first: written per title at the game's first run from the
+    /// raster winemac.drv hands the Dock, it is the shipped artwork (256 px for
+    /// RPG Maker, where Steam's is 32).
     static func icns(appID: Int, title: String) -> URL? {
         let manager = FileManager.default
         if let program = AdoptedPrograms.program(appID) {
@@ -30,11 +21,9 @@ nonisolated enum GameIcon {
         return icns(from: artwork, named: "\(appID)")
     }
 
-    /// The sharpest square picture of a Steam game before it has run: the
-    /// executable's own icon when it carries a Retina-sized one, else the
-    /// middle square of Steam's library capsule (600 px), else the
-    /// executable's smaller icon, else Steam's client icon, which is 32 px
-    /// for most games and would be a blur on any tile.
+    /// The sharpest square picture before a first run: a Retina-sized exe
+    /// icon, else the library capsule's middle square, else a smaller exe icon,
+    /// else Steam's 32 px client icon.
     private static func bestArtwork(appID: Int) -> CGImage? {
         let exeIcon = executableIcon(appID: appID)
         if let exeIcon, exeIcon.width >= retinaTile { return exeIcon }
@@ -49,8 +38,7 @@ nonisolated enum GameIcon {
     /// A tile is 128 points; this is its Retina size.
     private static let retinaTile = 256
 
-    /// The icon in the game's own executable, found by the names the game
-    /// has on record inside its install folder.
+    /// The icon of the game's recorded executables.
     private static func executableIcon(appID: Int) -> CGImage? {
         guard let exes = GameConfig.game(appID).exes, !exes.isEmpty,
               let directory = SharedGames.installDirectory(appID: appID) else { return nil }
@@ -72,8 +60,7 @@ nonisolated enum GameIcon {
         return nil
     }
 
-    /// The middle square of the library capsule Steam keeps for an
-    /// installed game (`library_600x900.jpg`): box art, 600 px on a side.
+    /// The middle square of `library_600x900.jpg`.
     private static func capsuleSquare(appID: Int) -> CGImage? {
         let capsule = SteamBottle.libraryCache.appendingPathComponent("\(appID)/library_600x900.jpg")
         guard let image = image(at: capsule) else { return nil }
@@ -88,14 +75,8 @@ nonisolated enum GameIcon {
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
-    /// An adopted program's icon: the artwork in its own PE resources, drawn
-    /// onto the macOS icon platter (``IconShaping``) so the Dock tile and the
-    /// Quick Look thumbnail of the same exe show one picture.
-    ///
-    /// The result is cached under the program's id and the renderer's
-    /// version, and rebuilt whenever the executable is newer than the icon,
-    /// which is how a program that updates itself in place gets its new
-    /// artwork.
+    /// An adopted program's PE icon on the macOS platter (``IconShaping``), as
+    /// Quick Look shows it. Rebuilt whenever the executable is newer.
     static func shapedICNS(forProgramAt exe: URL, named name: String) -> URL? {
         let manager = FileManager.default
         let cache = iconCache
@@ -139,10 +120,8 @@ nonisolated enum GameIcon {
             .appendingPathComponent("GameIcons")
     }
 
-    /// Steam's own icon for the app, from the client's art cache: a per-app
-    /// directory in current clients, a flat `<appid>_icon.jpg` in older ones.
-    /// The square image is the icon; the capsules and the hero art beside it
-    /// are wide and would be cropped into nothing.
+    /// Steam's square icon from the client's art cache, flat
+    /// (`<appid>_icon.jpg`) or per-app directory.
     private static func steamIcon(appID: Int) -> URL? {
         let cache = SteamBottle.libraryCache
         let flat = cache.appendingPathComponent("\(appID)_icon.jpg")
@@ -157,8 +136,7 @@ nonisolated enum GameIcon {
         }.max { (imageSize(of: $0)?.width ?? 0) < (imageSize(of: $1)?.width ?? 0) }
     }
 
-    /// The icon the game's own package names, which RPG Maker points at
-    /// `www/icon/icon.png`.
+    /// The NW.js package's `window.icon`.
     private static func packageIcon(appID: Int) -> URL? {
         guard let info = GameConfig.game(appID).nwjs,
               let package = (try? Data(contentsOf: URL(fileURLWithPath: info.dir)
@@ -181,15 +159,11 @@ nonisolated enum GameIcon {
         return (width, height)
     }
 
-    /// Named in every cached render of a Steam game's icon: a change to
-    /// where the picture comes from re-renders each one once.
+    /// Bumped to re-render every cached icon once.
     private static let version = 2
 
-    /// Turns a picture into an `.icns`, cached so that rebuilding a bundle
-    /// does not rebuild the icon. Every representation is drawn into an RGBA
-    /// bitmap: LaunchServices applies the macOS icon shape (continuous
-    /// corners, platter, glass edge) only to an icon with an alpha channel,
-    /// and shows an opaque one as the square it is.
+    /// A cached `.icns` of RGBA bitmaps: LaunchServices shapes only an icon
+    /// with an alpha channel and shows an opaque one square.
     private static func icns(from image: CGImage, named name: String) -> URL? {
         let manager = FileManager.default
         let cache = iconCache
@@ -231,7 +205,6 @@ nonisolated enum GameIcon {
         return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
-    /// A tool run to completion, for `iconutil`.
     @discardableResult
     private static func run(_ tool: String, _ arguments: [String]) -> Bool {
         let process = Process()
@@ -244,7 +217,7 @@ nonisolated enum GameIcon {
         return process.terminationStatus == 0
     }
 
-    /// A title as a file name, matching the name the dock shim's cache uses.
+    /// A title as the dock shim's cache names it.
     private static func fileSafe(_ title: String) -> String {
         let cleaned = title.map { $0 == "/" || $0 == ":" ? "-" : $0 }
         return String(cleaned).trimmingCharacters(in: .whitespaces)

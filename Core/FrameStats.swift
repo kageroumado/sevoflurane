@@ -2,23 +2,17 @@ import Foundation
 
 /// What a run's frame times say, and whether two sets of runs differ.
 ///
-/// The unit of a frame-time statistic is the frame; the unit of a comparison is the run.
-/// Frames of one run are not independent — a scene that is slow for a second is slow for
-/// sixty frames — so a test that counts frames as samples calls every difference
-/// significant. Runs repeated under one configuration are independent, and they are what
-/// ``PerfComparison/versus(_:baseline:)`` tests. With a single run on a side, the comparison falls back to a
-/// moving-block bootstrap over that run's seconds, which keeps the within-second
-/// correlation and is labeled as the weaker evidence it is.
+/// A comparison's unit is the run, since a run's frames are correlated and counting them
+/// as samples makes every difference significant. ``PerfComparison/versus(_:baseline:)``
+/// tests repeated runs; with one run a side it falls back to a moving-block bootstrap over
+/// seconds, labeled as weaker evidence.
 nonisolated enum FrameStats {
-    /// The summary of one run's frames.
     struct Summary: Codable, Equatable, Sendable {
         var frames: Int
-        /// Seconds the frames cover.
         var seconds: Double
         /// Frames per second over the whole span.
         var avg: Double
-        /// The frame rate of the slowest one per cent of frames, averaged: 1000 / the mean of
-        /// the slowest 1 % of frame times.
+        /// 1000 / the mean of the slowest 1 % of frame times.
         var low1: Double
         var low01: Double
         /// Frame-time percentiles, milliseconds.
@@ -27,10 +21,9 @@ nonisolated enum FrameStats {
         var p99: Double
         var p999: Double
         var max: Double
-        /// Standard deviation of the frame times, milliseconds.
+        /// Milliseconds.
         var stdev: Double
-        /// Frames that took more than twice as long as the median of the frames around them
-        /// and at least 8 ms longer: what a player sees as a hitch.
+        /// Frames over twice their neighborhood's median and at least 8 ms longer.
         var hitches: Int
 
         enum CodingKeys: String, CodingKey {
@@ -90,8 +83,7 @@ nonisolated enum FrameStats {
         return Double(sorted[Swift.min(sorted.count - 1, Swift.max(0, rank))])
     }
 
-    /// How many frames of the neighborhood around them are the median; the count is
-    /// odd so the median is a frame.
+    /// The hitch neighborhood, odd so the median is a frame.
     static let hitchWindow = 31
 
     static func hitchCount(_ times: [Float]) -> Int {
@@ -101,7 +93,6 @@ nonisolated enum FrameStats {
         var window = Array(times[0 ..< hitchWindow]).sorted()
         for index in half ..< times.count - half {
             if index > half {
-                // Slide: drop the frame leaving the window, insert the one entering it.
                 let leaving = times[index - half - 1], entering = times[index + half]
                 if let at = window.firstIndex(of: leaving) { window.remove(at: at) }
                 window.insert(entering, at: window.firstIndex { $0 >= entering } ?? window.count)
@@ -130,29 +121,24 @@ nonisolated enum FrameStats {
 
     // MARK: - Comparing
 
-    /// How a statistic moved from `a` to `b`, with an interval and a verdict.
+    /// How a statistic moved from `a` to `b`.
     struct Difference: Codable, Equatable, Sendable {
-        /// The statistic on the baseline side, a.
         var base: Double
-        /// b − a, in the statistic's unit.
+        /// b − a.
         var delta: Double
-        /// delta / a, as a percentage.
         var percent: Double
         /// 95 % confidence interval of `delta`.
         var low: Double
         var high: Double
-        /// Two-sided p value, when the method gives one.
+        /// Two-sided, where the method gives one.
         var p: Double?
         var method: Method
 
         enum Method: String, Codable, Sendable {
-            /// Welch's t-test over the runs of each side.
             case welch
-            /// A moving-block bootstrap over one run's seconds on each side.
             case blockBootstrap = "block-bootstrap"
         }
 
-        /// The interval's ends as percentages of the baseline.
         var percentLow: Double { base != 0 ? 100 * low / base : 0 }
         var percentHigh: Double { base != 0 ? 100 * high / base : 0 }
 
@@ -162,8 +148,7 @@ nonisolated enum FrameStats {
         }
     }
 
-    /// Welch's t-test and interval for the difference of means, `b − a`. Nil with fewer than
-    /// two values on a side or no variance at all.
+    /// Welch's t-test for `b − a`; nil with fewer than two values on a side.
     static func welch(_ a: [Double], _ b: [Double]) -> Difference? {
         guard a.count >= 2, b.count >= 2 else { return nil }
         let (ma, va) = meanAndVariance(a), (mb, vb) = meanAndVariance(b)
@@ -187,9 +172,8 @@ nonisolated enum FrameStats {
         )
     }
 
-    /// The difference of `statistic` between two runs' frames, `b − a`, with a 95 % interval
-    /// from a moving-block bootstrap: each resample strings together whole seconds of the run
-    /// in blocks of `blockSeconds`, so the correlation inside a scene stays in the sample.
+    /// `b − a` of `statistic` with a 95 % interval from resampling whole seconds in blocks
+    /// of `blockSeconds`, which keeps a scene's correlation.
     static func blockBootstrap(
         _ a: [Float], _ b: [Float], blockSeconds: Int = 5, resamples: Int = 1000, seed: UInt64 = 1,
         statistic: ([Float]) -> Double,
@@ -317,7 +301,7 @@ nonisolated enum FrameStats {
     }
 }
 
-/// A small seeded generator, so a report's intervals are the same every time it is drawn.
+/// A seeded generator, so a report's intervals are reproducible.
 nonisolated struct SplitMix: RandomNumberGenerator {
     private var state: UInt64
 

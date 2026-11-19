@@ -1,46 +1,30 @@
 import Foundation
 
-/// The shape of the library's bulk question: the games it asks about, the
-/// community database's batch endpoint, the per-app lookups that wait for
-/// their turn, and the compact answer the page reads.
-///
-/// The whole-table sources (AppleGamingWiki, AreWeAntiCheatYet) and the
-/// client's app cache cost nothing per game, and Sevoflurane's database
-/// answers a hundred games a request. What remains per game is PCGamingWiki's
-/// app-id-to-title bridge, asked only for a title the wiki does not know by
-/// name, and ProtonDB, asked only when nothing Mac-side has a verdict, which
-/// keeps the badge in the library the same as the strip on the game's page,
-/// and PCGamingWiki's page for a macOS build that would otherwise count as
-/// playing. All wait in a queue one second apart, PCGamingWiki's published
-/// rate.
+/// The library's bulk compat question and the compact answer the page reads.
+/// Per-game lookups (PCGamingWiki's title and page, ProtonDB when nothing
+/// Mac-side decides) queue one second apart, PCGamingWiki's published rate.
 nonisolated enum GameCompatBatch {
-    /// One game the library asks about: its app id and display name, the
-    /// name being what the wiki joins on.
+    /// One game; the wiki joins on its name.
     struct Game: Equatable, Sendable {
         let appID: Int
         let name: String
     }
 
-    /// One per-app lookup left for the queue.
     enum Lookup: Hashable, Sendable {
-        /// PCGamingWiki's page title for the app.
+        /// PCGamingWiki's page title.
         case title(Int)
-        /// ProtonDB's summary for the app.
         case proton(Int)
-        /// The architectures of the app's macOS build, from its PCGamingWiki
-        /// page.
+        /// The macOS build's architectures, from PCGamingWiki.
         case architecture(Int)
     }
 
-    /// The most games one request may name; a library past this asks again.
     static let maxGames = 5000
-    /// The most app ids the community database answers in one request.
+    /// App ids per community request.
     static let communityChunk = 100
-    /// The pause between two queued lookups.
     static let lookupInterval: Duration = .seconds(1)
 
-    /// The games in a `POST /__compat/batch` body, `{"apps": [[appid, "name"], …]}`.
-    /// Entries off the shape are skipped, and the first of two with one id wins.
+    /// The games in a `POST /__compat/batch` body, `{"apps": [[appid, "name"], …]}`;
+    /// the first of two with one id wins.
     static func games(fromRequest body: Data) -> [Game] {
         guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let apps = object["apps"] as? [[Any]] else { return [] }
@@ -63,9 +47,8 @@ nonisolated enum GameCompatBatch {
         }
     }
 
-    /// Each game's summary out of a batch answer, `{"<appid>": {…}, …}`, as
-    /// the body `GET /v1/games/<appid>` would have returned, so it is cached
-    /// and read like one. `nil` when the answer is not that shape.
+    /// Each game's body out of a batch answer, `{"<appid>": {…}, …}`, shaped
+    /// like `GET /v1/games/<appid>`.
     static func communityBodies(_ data: Data) -> [Int: Data]? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         var bodies: [Int: Data] = [:]
@@ -77,8 +60,7 @@ nonisolated enum GameCompatBatch {
         return bodies
     }
 
-    /// Whether ProtonDB's summary could change the game's verdict: only when
-    /// Sevoflurane's players, the wiki and anti-cheat all leave it open.
+    /// Whether ProtonDB could change the verdict.
     static func needsProton(
         antiCheat: GameCompatRecord.AntiCheat?,
         wiki: GameCompatRecord.WikiTiers?,
@@ -89,20 +71,10 @@ nonisolated enum GameCompatBatch {
         return GameCompatVerdict.antiCheatBlocker(antiCheat) == nil
     }
 
-    /// The page's answer: `{"pending": n, "apps": {"<appid>": {"s": state, "t": tier, "l": true, "n": native, "p": true, "m": true}}}`.
-    /// `t` is the verdict's tier on ProtonDB's scale, the medal the page draws,
-    /// and `l` marks a verdict from ProtonDB alone, which the page says is
-    /// untested on a Mac. `n` marks a macOS build that runs on Apple silicon (``GameCompatSummary/native``
-    /// or ``GameCompatSummary/macRunnable``), the one the page draws an apple for.
-    /// `p` marks a game the Apple filter keeps, from the evidence alone
-    /// (``GameCompatSummary/playsOnMac``); `m` a game set to its macOS build
-    /// (``SteamPlayMacOS``), from `macBuilds`, which is the player's choice of
-    /// build and says nothing about whether it plays; `c` names the partner app
-    /// a companion plays through (``GameCompanion``). A game with nothing to
-    /// draw (Unknown, no playable macOS build, Windows build) is left out,
-    /// which the page reads as Unknown.
-    /// `pending` counts the lookups still queued, so the page knows to ask
-    /// again.
+    /// `{"pending": n, "apps": {"<appid>": {"s", "t", "l", "n", "p", "m", "c"}}}`: `t` the
+    /// tier, `l` ProtonDB alone, `n` a macOS build that runs on Apple silicon, `p` kept by
+    /// the Apple filter (``GameCompatSummary/playsOnMac``), `m` set to its macOS build
+    /// (`macBuilds`), `c` a companion's partner. A game with nothing to draw is left out.
     static func answer(_ summaries: [GameCompatSummary], pending: Int, macBuilds: Set<Int> = []) -> Data {
         var apps: [String: Any] = [:]
         for summary in summaries {

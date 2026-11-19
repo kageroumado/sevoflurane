@@ -5,11 +5,9 @@ nonisolated struct DeadlineExceeded: Error {}
 /// Runs `body` and throws ``DeadlineExceeded`` once `limit` has passed
 /// without it returning.
 ///
-/// The body is cancelled when the limit passes, and this returns after the
-/// loser *finishes*: a task group waits for its children, so the bound holds
-/// only for work that stops promptly on cancellation. A body that awaits
-/// something cancellation cannot interrupt stretches this call for as long
-/// as that wait takes.
+/// The body is cancelled at the limit, but a task group waits for its
+/// children, so the bound holds only for a body that stops promptly on
+/// cancellation.
 nonisolated func withDeadline<T: Sendable>(
     _ limit: Duration,
     _ body: @escaping @Sendable () async throws -> T,

@@ -5,21 +5,13 @@ import Foundation
 /// (``KnownFixes/all``), then the community database's list
 /// (`GET /v1/fixes.json`, curated from "plays with fixes" reports).
 ///
-/// A first launch applies the list without a click, so it is taken only
-/// signed: `fixes.json.sig` is the raw Ed25519 signature over the list's
-/// exact bytes, base64, from the key pinned here, made on the admin's Mac
-/// (`kagerou sevostats publish-fixes`). The signed payload carries a
-/// `serial` that grows with every publish and the time it was `issued`; the
-/// highest serial taken is remembered (``Preferences/fixListSerial``) and a
-/// list below it is refused, so an old signed list cannot be replayed to
-/// bring back a fix that was retired. The signature and the serial are
-/// checked when the list arrives and again at every read of the cache, and
-/// every entry's values then pass ``FixValues/admitted(_:)``.
-///
-/// The cache is asked for again once it is a week old with the `ETag` it
-/// came with, so an unchanged list costs a 304. A list that cannot be
-/// reached, or arrives without a valid signature, leaves the cached one
-/// standing, and a Mac that never took one has the built-in table alone.
+/// Applied without a click, so taken only signed: `fixes.json.sig` is a base64
+/// Ed25519 signature over the exact bytes from the pinned key
+/// (`kagerou sevostats publish-fixes`). A list whose `serial` is below the
+/// highest taken (``Preferences/fixListSerial``) is refused, so a retired fix
+/// cannot be replayed. Both are checked on arrival and at every cache read,
+/// and values pass ``FixValues/admitted(_:)``. The cache is refetched weekly
+/// with its `ETag`; a failed or unsigned list leaves the cached one standing.
 nonisolated enum FixList {
     static let url = StatsUploader.baseURL.appendingPathComponent("fixes.json")
     static let signatureURL = StatsUploader.baseURL.appendingPathComponent("fixes.json.sig")
@@ -32,12 +24,9 @@ nonisolated enum FixList {
         Data(base64Encoded: pinnedPublicKeyBase64).flatMap { try? Curve25519.Signing.PublicKey(rawRepresentation: $0) }
     }
 
-    /// Where a refused or unreachable list is reported. The app points it at
-    /// its event log.
+    /// Where a refused list is reported; the app's event log.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = { _ in }
 
-    /// As long as the compat tables: the list changes when a fix is promoted,
-    /// a few times a month.
     static let maxAge = GameCompatService.maxAge
 
     static var cacheURL: URL {
@@ -55,10 +44,8 @@ nonisolated enum FixList {
     /// How far ahead of this Mac's clock a list may say it was issued.
     static let issuedTolerance: TimeInterval = 24 * 3600
 
-    /// Every fix, the built-in table first: where both name a value for the
-    /// same game, the built-in one is the one that counts. The cached list
-    /// counts only while its signature verifies and its serial is still the
-    /// highest taken.
+    /// Every fix, the built-in table first and winning; the cached list counts
+    /// only while it verifies.
     static var current: [KnownFix] {
         guard let body = try? Data(contentsOf: cacheURL),
               let signature = try? Data(contentsOf: cachedSignatureURL),
@@ -67,29 +54,24 @@ nonisolated enum FixList {
         return merged(builtIn: KnownFixes.all, served: list.fixes)
     }
 
-    /// A signed list as it was read.
     struct SignedList: Equatable {
         let serial: Int
         let issued: Date
         let fixes: [KnownFix]
     }
 
-    /// What a list is worth to this Mac.
     enum Verdict: Equatable {
         case taken(SignedList)
-        /// No valid signature from the fixes key over the bytes.
         case unsigned
-        /// Signed, without a serial and an issued time this version reads.
+        /// Signed, without a readable serial and issued time.
         case malformed
-        /// Signed, and older than a list this Mac took.
         case older(serial: Int, highest: Int)
-        /// Signed, and issued more than ``issuedTolerance`` from now.
+        /// Issued more than ``issuedTolerance`` from now.
         case fromTheFuture(Date)
     }
 
-    /// Whether `body` is a list to take: a signature from `key` over its
-    /// exact bytes, a serial at least `highestSerial` (the same list again
-    /// is taken), and an issued time no later than a day from `now`.
+    /// Whether `body` is a list to take: signed by `key`, a serial at least
+    /// `highestSerial`, and issued no later than a day from `now`.
     static func verdict(
         on body: Data, signature: Data, highestSerial: Int,
         key: Curve25519.Signing.PublicKey? = pinnedKey, now: Date = .now,
@@ -109,17 +91,14 @@ nonisolated enum FixList {
 
     // MARK: - Reading a served list
 
-    /// The signed payload. Each entry keeps only the values
-    /// ``FixValues/admitted(_:)`` lets through; an entry naming a value this
-    /// version does not know is left out on its own, and one left setting
-    /// nothing is left out too.
+    /// The signed payload; entries that fail to decode or set nothing are
+    /// dropped one by one.
     private struct Listing: Decodable {
         let serial: Int
         let issued: String
         let fixes: [Entry]
     }
 
-    /// One served entry, `nil` where it does not decode.
     private struct Entry: Decodable {
         let fix: KnownFix?
 
@@ -156,10 +135,8 @@ nonisolated enum FixList {
 
     // MARK: - Merging
 
-    /// The built-in fixes, then each served one without the keys a built-in
-    /// fix for the same game or the same executable pattern already sets.
-    /// A served entry left with nothing is dropped, which is what the
-    /// server's copies of the built-in table come to.
+    /// The built-in fixes, then each served one minus the keys a built-in fix
+    /// for the same target sets; an emptied entry is dropped.
     static func merged(builtIn: [KnownFix], served: [KnownFix]) -> [KnownFix] {
         builtIn + served.compactMap { fix in
             let covered = builtIn
@@ -176,9 +153,8 @@ nonisolated enum FixList {
 
     // MARK: - Fetching
 
-    /// Asks for the list when the cached one is older than ``maxAge`` or
-    /// missing, and keeps a new one only when ``verdict(on:signature:highestSerial:key:now:)``
-    /// takes it. Failures leave the cache as it is.
+    /// Refetches a stale or missing list, keeping it only when
+    /// ``verdict(on:signature:highestSerial:key:now:)`` takes it.
     static func refreshIfStale(session: URLSession = .shared) async {
         let manager = FileManager.default
         let modified = (try? manager.attributesOfItem(atPath: cacheURL.path))?[.modificationDate] as? Date

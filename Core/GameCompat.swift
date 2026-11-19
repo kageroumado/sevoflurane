@@ -1,16 +1,12 @@
 import Foundation
 
-/// What the community databases say about one game running under the
-/// bottle, kept per source so the headline badges can be explained.
-///
-/// Every field carries the source it came from, because the badges are
-/// derived and a user who disagrees with one needs somewhere to go and look.
+/// What the community databases say about one game, kept per source with
+/// its URL so each derived badge can be explained.
 nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     let appID: Int
     let name: String
 
-    /// One AreWeAntiCheatYet entry. Its status describes Linux; the badge
-    /// only ever reads the engine names and the vendor's outright refusals.
+    /// One AreWeAntiCheatYet entry. Its status describes Linux.
     struct AntiCheat: Codable, Sendable, Equatable {
         let engines: [String]
         /// `Broken`, `Running`, `Supported`, `Denied`, or `Planned`.
@@ -46,9 +42,9 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
 
     let proton: ProtonSummary?
 
-    /// Sevoflurane's own community database: runs players shared from this
-    /// app, summarized by kagerou.glass. Its verdict is in the wiki's words
-    /// and stays `unknown` until enough runs back it.
+    /// Sevoflurane's community database, summarized by kagerou.glass; the
+    /// verdict uses the wiki's words and stays `unknown` until enough runs
+    /// back it.
     struct Community: Codable, Sendable, Equatable {
         let verdict: String
         let runs: Int
@@ -59,13 +55,13 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
         let pageURL: URL
         /// The runs the verdict leaves out: the ones a tool stopped.
         var leftOut = 0
-        /// The share of runs that drew a frame, taken over the judged runs
-        /// and the left-out ones that drew; the median across installs (0–1).
+        // Shares (0–1), each the median across installs.
+        /// Runs that drew a frame, over the judged runs plus the left-out
+        /// ones that drew.
         var reachedFrame: Double? = nil
-        /// The share of judged runs played past five minutes and ended by the
-        /// player, the median across installs.
+        /// Judged runs played past five minutes and ended by the player.
         var played: Double? = nil
-        /// The share of judged runs that crashed, the median across installs.
+        /// Judged runs that crashed.
         var crashed: Double? = nil
 
         /// The runs the verdict is taken over.
@@ -80,9 +76,8 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     /// client's app cache).
     let hasMacBuild: Bool
 
-    /// Which processors the macOS build is compiled for, from PCGamingWiki's
-    /// `API` template: Steam's own cache leaves the architecture blank for
-    /// most Mac builds. `nil` for a value the wiki leaves unknown.
+    /// The macOS build's architectures, from PCGamingWiki's `API` template
+    /// (Steam's cache leaves them blank); `nil` where the wiki says unknown.
     struct MacArchitectures: Codable, Sendable, Equatable {
         let intel32: Bool?
         let intel64: Bool?
@@ -90,8 +85,7 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
         /// The PCGamingWiki page the fields were read from.
         var pageURL: URL?
 
-        /// A build no Apple silicon Mac can run: Rosetta 2 translates 64-bit
-        /// Intel code only, and macOS dropped 32-bit apps in 10.15.
+        /// A build no Apple silicon Mac can run: Rosetta 2 is 64-bit only.
         var is32BitOnly: Bool {
             intel32 == true && intel64 != true && arm != true
         }
@@ -104,16 +98,14 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     let deckCategory: Int?
 
     let mac: GameCompatBadge
-    /// The game's own macOS build, judged apart from the Windows build the
-    /// bottle runs; `nil` when the game has none anyone knows of.
+    /// The game's own macOS build; `nil` when none is known.
     let nativeBadge: GameCompatBadge?
     let antiCheatBadge: GameCompatBadge
     let fetchedAt: Date
     /// Set for an app that serves a Mac through a partner app (``GameCompanion``).
     var companion: GameCompanion? = nil
 
-    /// The record of a companion app: Verified through its partner, with no
-    /// database behind it, since nothing the databases rate is what runs.
+    /// A companion app's record: Verified through its partner.
     static func companion(_ companion: GameCompanion, name: String, deckCategory: Int?) -> GameCompatRecord {
         GameCompatRecord(
             appID: companion.appID, name: name.isEmpty ? companion.name : name,
@@ -125,9 +117,8 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
     }
 }
 
-/// One headline badge: a state the app's rules read (the Apple filter, the
-/// install warning), the line that names the source behind it, and for a
-/// rated build the tier it is drawn as, on ProtonDB's medal scale.
+/// One headline badge: the state the app's rules read, the reason naming its
+/// source, and a rated build's tier on ProtonDB's medal scale.
 nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
     enum State: String, Codable, Sendable {
         case verified
@@ -136,11 +127,9 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
         case unknown
     }
 
-    /// ProtonDB's five tiers, the scale every rated build is shown on.
-    /// AppleGamingWiki's words and Sevoflurane players' verdicts map by
-    /// meaning: `perfect` is Platinum, `playable` (minor glitches) Silver,
-    /// `runs` (major glitches) Bronze, a crash at boot or the menu Borked.
-    /// Gold, perfect after tweaks, is a tier only ProtonDB awards.
+    /// ProtonDB's five tiers. Wiki words map by meaning: `perfect` Platinum,
+    /// `playable` Silver, `runs` Bronze, `menu` and `unplayable` Borked; only
+    /// ProtonDB awards Gold.
     enum Tier: String, Codable, Sendable, CaseIterable {
         case platinum
         case gold
@@ -148,11 +137,9 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
         case bronze
         case borked
 
-        /// The tier as the badge labels it.
         var label: String { rawValue.capitalized }
 
-        /// The state the app's rules read for a build of this tier: only
-        /// Platinum is Verified, and only Borked fails.
+        /// Only Platinum is Verified, and only Borked fails.
         var state: State {
             switch self {
             case .platinum: .verified
@@ -161,7 +148,7 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
             }
         }
 
-        /// The tier a wiki or community word earns; `nil` for an unrated one.
+        /// `nil` for an unrated word.
         init?(wiki word: String) {
             switch word {
             case "perfect": self = .platinum
@@ -172,12 +159,12 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
             }
         }
 
-        /// The tier ProtonDB names; `nil` for `pending` and anything else.
+        /// `nil` for `pending` and anything else.
         init?(proton word: String) {
             self.init(rawValue: word)
         }
 
-        /// Whether this tier ranks above `other`; the cases run best first.
+        /// The cases run best first.
         func isBetter(than other: Tier) -> Bool {
             Self.allCases.firstIndex(of: self)! < Self.allCases.firstIndex(of: other)!
         }
@@ -195,60 +182,48 @@ nonisolated struct GameCompatBadge: Codable, Sendable, Equatable {
         self.tier = tier
     }
 
-    /// The badge a tier earns, labeled with its name.
     init(tier: Tier, reason: String) {
         self.init(state: tier.state, label: tier.label, reason: reason, tier: tier)
     }
 }
 
-/// One game's verdict as the library draws it: the Mac badge's state and
-/// whether the game's own macOS build plays, without the reasons. The
-/// library asks for hundreds at once; the game page asks for the whole
-/// ``GameCompatRecord``.
+/// One game's verdict for the library grid, without the reasons; the game
+/// page reads the whole ``GameCompatRecord``.
 nonisolated struct GameCompatSummary: Codable, Sendable, Equatable {
     let appID: Int
     let state: GameCompatBadge.State
     /// The wiki rates the macOS build perfect or playable.
     let native: Bool
     /// The macOS build runs on Apple silicon: rated playable, or unrated with
-    /// PCGamingWiki naming a 64-bit Intel or arm64 slice. An unrated build alone
-    /// does not count: plenty of the macOS builds Steam lists are 32-bit only.
+    /// PCGamingWiki naming a 64-bit Intel or arm64 slice, since many listed
+    /// builds are 32-bit only.
     var macRunnable = false
-    /// The Windows verdict comes from Mac evidence: Sevoflurane players' runs or
-    /// AppleGamingWiki. A ProtonDB rating is Linux evidence.
+    /// The Windows verdict comes from Sevoflurane players' runs or
+    /// AppleGamingWiki.
     var macEvidence = false
-    /// The Windows verdict's tier, when a build is rated.
     var tier: GameCompatBadge.Tier? = nil
-    /// The Windows verdict rests on ProtonDB alone: a Linux rating, untested
-    /// on a Mac.
+    /// The Windows verdict rests on ProtonDB alone.
     var linuxOnly = false
     /// The partner app a companion plays through (``GameCompanion``).
     var companion: String? = nil
 
-    /// Whether the game belongs under the library's Apple filter: its macOS
-    /// build runs, or Mac evidence rates its Windows build Verified or Playable.
+    /// Whether the game belongs under the library's Apple filter.
     var playsOnMac: Bool {
         native || macRunnable || (macEvidence && (state == .verified || state == .playable))
     }
 }
 
-/// Why installing a game deserves a second thought, from the same verdicts
-/// the strip shows.
+/// Why installing a game deserves a second thought.
 nonisolated enum GameCompatInstallRisk: Equatable, Sendable {
-    /// Anti-cheat that cannot run here: a kernel engine, or one AreWeAntiCheatYet
-    /// lists as Denied or Broken. Carries the anti-cheat badge's reason and
-    /// whether the game itself is known to start.
+    /// The anti-cheat badge is Unsupported.
     case antiCheat(reason: String, gameStarts: Bool)
-    /// The Mac verdict is Unsupported: a crash in Sevoflurane players' runs or
-    /// on the wiki, or broken under Proton with nothing better known.
+    /// The Mac verdict is Unsupported.
     case unsupported(reason: String)
 }
 
 /// The rules that turn the sources into the two badges.
 nonisolated enum GameCompatVerdict {
-    /// Anti-cheat that lives in a kernel driver, so no translation layer can
-    /// carry it: a game that requires one refuses to start under the bottle
-    /// no matter what the renderer does.
+    /// Kernel-driver anti-cheat, which no translation layer can carry.
     static let kernelEngines: Set<String> = [
         "easy anti-cheat", "battleye", "vanguard", "nprotect gameguard",
         "xigncode3", "anti-cheat expert", "netease anti-cheat expert",
@@ -264,9 +239,8 @@ nonisolated enum GameCompatVerdict {
         kernelEngines.contains(engine.lowercased())
     }
 
-    /// The anti-cheat badge. Kernel engines and vendor refusals are
-    /// unsupported outright; a user-mode engine the Linux community runs is
-    /// playable; anything else is said plainly.
+    /// Kernel engines and vendor refusals are unsupported; a user-mode engine
+    /// that runs on Linux is playable.
     static func antiCheat(_ record: GameCompatRecord.AntiCheat?) -> GameCompatBadge {
         guard let record else {
             return GameCompatBadge(
@@ -305,14 +279,10 @@ nonisolated enum GameCompatVerdict {
         }
     }
 
-    /// The Mac badge for the Windows build the bottle runs. Sevoflurane's own
-    /// runs come first, being this engine on real Macs, except that one Mac
-    /// rating it below the wiki's Wine-family columns leaves the wiki's tier
-    /// capped at Silver: one Mac can be the outlier, and its result is still
-    /// the reason to withhold Verified. Then a structural anti-cheat failure;
-    /// then the wiki's columns; then the Linux prior, which keeps ProtonDB's
-    /// medal but can only ever say "untested here", so its state stops at
-    /// Playable.
+    /// The Mac badge for the Windows build, by precedence: Sevoflurane
+    /// players' runs (a single Mac rating below the wiki gives the wiki's
+    /// tier capped at Silver), an anti-cheat blocker, the wiki's columns, then
+    /// ProtonDB, whose state stops at Playable.
     static func mac(
         antiCheat: GameCompatRecord.AntiCheat?,
         wiki: GameCompatRecord.WikiTiers?,
@@ -358,10 +328,8 @@ nonisolated enum GameCompatVerdict {
         return GameCompatBadge(state: .unknown, label: "Unknown", reason: "No Mac reports yet.")
     }
 
-    /// The badge one wiki word earns: its tier, except that Platinum needs
-    /// no anti-cheat in the way. Real Mac evidence outranks the anti-cheat
-    /// veto, but never past Silver: the game starts, its protected modes do
-    /// not. A word the wiki leaves unrated reads as Silver with the reason.
+    /// The badge one wiki word earns; with an anti-cheat blocker Platinum
+    /// drops to Silver, and an unrated word reads as Silver.
     private static func badge(tier word: String, blocker: String?, reason: String, caveat: String) -> GameCompatBadge {
         let tier = GameCompatBadge.Tier(wiki: word) ?? .silver
         switch tier {
@@ -376,11 +344,9 @@ nonisolated enum GameCompatVerdict {
         }
     }
 
-    /// The badge for the game's own macOS build, drawn beside the Windows
-    /// verdict and independent of it. The wiki's native column speaks for
-    /// the build, Rosetta 2's when native is unrated; a build Steam lists
-    /// that nobody has rated reads as available. A 32-bit-only build gets no
-    /// badge at all, whatever anyone rated it: no Apple silicon Mac runs it.
+    /// The badge for the game's own macOS build: the wiki's native column,
+    /// else its Rosetta 2 column, else "Available" when Steam lists one. A
+    /// 32-bit-only build gets none.
     static func native(
         wiki: GameCompatRecord.WikiTiers?, hasMacBuild: Bool,
         architectures: GameCompatRecord.MacArchitectures? = nil,
@@ -444,9 +410,7 @@ nonisolated enum GameCompatVerdict {
         )
     }
 
-    /// What installing the Windows build risks, or `nil` when nothing known
-    /// stands in its way. Anti-cheat speaks first, being the failure no
-    /// setting fixes.
+    /// What installing risks, anti-cheat first since no setting fixes it.
     static func installRisk(_ record: GameCompatRecord) -> GameCompatInstallRisk? {
         if record.antiCheatBadge.state == .unsupported {
             return .antiCheat(reason: record.antiCheatBadge.reason, gameStarts: record.mac.state != .unsupported)
@@ -455,8 +419,7 @@ nonisolated enum GameCompatVerdict {
         return nil
     }
 
-    /// The anti-cheat that stops the game outright, named for the reason
-    /// line: a kernel engine, or a publisher who said no outside Windows.
+    /// A kernel engine or a publisher's refusal, named for the reason line.
     static func antiCheatBlocker(_ antiCheat: GameCompatRecord.AntiCheat?) -> String? {
         guard let antiCheat else { return nil }
         if let kernel = antiCheat.engines.first(where: isKernel) { return "\(kernel) kernel anti-cheat" }
@@ -466,11 +429,8 @@ nonisolated enum GameCompatVerdict {
         return nil
     }
 
-    /// The wiki's verdict on the Windows build from its two Wine-family
-    /// columns. One rated column, or two that agree, give their tier. Two
-    /// that disagree give the better one capped at Playable when it is a
-    /// pass: a pass under one Wine on a Mac shows the build can run, and the
-    /// other column's failure is the reason to withhold Verified.
+    /// The wiki's verdict from its Wine and CrossOver columns. Two that
+    /// disagree give the better one, flagged `capped` when it is a pass.
     static func wikiEvidence(_ wiki: GameCompatRecord.WikiTiers) -> (tier: String, capped: Bool, reason: String)? {
         let crossover = wiki.crossover.flatMap { rank($0) != nil ? $0 : nil }
         let wine = wiki.wine.flatMap { rank($0) != nil ? $0 : nil }
@@ -505,10 +465,8 @@ nonisolated enum GameCompatVerdict {
         count == 1 ? "1 run" : "\(count.formatted()) runs"
     }
 
-    /// What Sevoflurane players' runs show, from the figures the server took
-    /// the verdict from: a frame reached, five minutes played, a crash. One
-    /// Mac's shares are its own, so they are told as runs; across several Macs
-    /// each share is the median Mac's, so it is told as one.
+    /// What Sevoflurane players' runs show. One Mac's shares are told as run
+    /// counts; across several, each is the median Mac's.
     static func describe(_ community: GameCompatRecord.Community) -> String {
         let one = community.installs == 1
         let tally = "\(runs(community.judged)) on \(macs(community.installs))"
@@ -521,8 +479,7 @@ nonisolated enum GameCompatVerdict {
         let played = "played past five minutes and ended by the player"
         let finding: String? = switch community.verdict {
         case "unplayable", "menu":
-            // The share of frames also counts the left-out runs that drew, so
-            // it is a count of judged runs only when none was left out.
+            // A run count only when none was left out (see `reachedFrame`).
             if community.leftOut == 0, let drew = count(community.reachedFrame) {
                 drew == 0 ? "it reached no frame in \(tally)" : "it reached a frame in \(drew) of \(tally)"
             } else if community.reachedFrame != nil {
@@ -556,9 +513,7 @@ nonisolated enum GameCompatVerdict {
         return "Sevoflurane players rate it \(tier) across \(tally)."
     }
 
-    /// A macOS version keeps AppleGamingWiki's own word. ProtonDB's medals
-    /// grade a Windows build through a compatibility layer, which a macOS
-    /// version does not run through.
+    /// A macOS version keeps AppleGamingWiki's own word, not a medal.
     static func nativeLabel(_ tier: String) -> String {
         switch tier {
         case "perfect": "Perfect"
@@ -635,9 +590,8 @@ nonisolated enum GameCompatSources {
         private let byAppID: [Int: GameCompatRecord.AntiCheat]
         private let byTitle: [String: GameCompatRecord.AntiCheat]
 
-        /// Read by hand rather than decoded: `storeIds` mixes strings
-        /// (`steam`) with objects (`epic`), and one odd record must not take
-        /// the whole table with it.
+        /// Read by hand: `storeIds` mixes strings and objects, and one odd
+        /// record must not lose the table.
         init(data: Data) throws {
             guard let entries = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                 throw GameCompatError("AreWeAntiCheatYet games.json is not a JSON array")
@@ -718,8 +672,8 @@ nonisolated enum GameCompatSources {
         }
     }
 
-    /// One ProtonDB summary. A missing app answers 404 with an HTML page, so
-    /// anything that is not the JSON shape reads as absent.
+    /// One ProtonDB summary; anything off the JSON shape (a 404 page) is
+    /// absent.
     static func protonSummary(appID: Int, data: Data) -> GameCompatRecord.ProtonSummary? {
         struct Summary: Decodable {
             let tier: String
@@ -735,9 +689,8 @@ nonisolated enum GameCompatSources {
         )
     }
 
-    /// One game's summary from Sevoflurane's community database
-    /// (`GET /v1/games/<appid>`). A game with no runs answers 404, cached as
-    /// `{}`, which reads as absent like anything else off the shape.
+    /// One game's summary (`GET /v1/games/<appid>`); a 404, cached as `{}`,
+    /// reads as absent.
     static func community(data: Data) -> GameCompatRecord.Community? {
         struct Summary: Decodable {
             struct FPS: Decodable {
@@ -814,8 +767,7 @@ nonisolated enum GameCompatSources {
         return (try? JSONDecoder().decode(Parse.self, from: data))?.parse.wikitext
     }
 
-    /// PCGamingWiki's page title for a Steam app id, the bridge to a wiki
-    /// keyed on titles when Steam's own display name does not match.
+    /// PCGamingWiki's page title for a Steam app id.
     static func pcGamingWikiTitle(data: Data) -> String? {
         struct Lookup: Decodable {
             struct Hit: Decodable {

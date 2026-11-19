@@ -1,10 +1,8 @@
 import Foundation
 
-/// What a game's Dock tile shows while the game is not running, written for
-/// the tile plug-in (``GameLaunchers/dockTilePlugIn``) to read: the
-/// renderers its Play with menu offers, a word for a badge, a download's
-/// progress. One file beside every bundle for the game's own state, one
-/// beside the bundles for the renderers, which are the machine's.
+/// What a Dock tile shows while its game is not running, for the plug-in
+/// (``GameLaunchers/dockTilePlugIn``): a file per game for badge and progress,
+/// and one shared renderers file for the Play with menu.
 nonisolated enum DockTileState {
     struct Renderer: Codable {
         let id: String

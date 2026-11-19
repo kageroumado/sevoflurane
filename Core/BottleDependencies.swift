@@ -1,25 +1,17 @@
 import Foundation
 
-/// The Windows pieces games assume are present and a fresh prefix lacks —
-/// CrossOver's own Steam bottle recipe ("Game Launcher Dependencies" in its
-/// profile database) distilled, plus the two heavyweights
-/// older games ask for. Every install is silent and idempotent: downloads go
-/// to the bottle's own temp, installers run inside the bottle through the
-/// same engine invocation as the client, and "installed" is judged by what
-/// landed on disk rather than by exit codes.
+/// The Windows pieces games assume and a fresh prefix lacks, after
+/// CrossOver's "Game Launcher Dependencies" recipe. Installs are silent and
+/// idempotent, and "installed" is judged by what landed on disk.
 nonisolated enum BottleDependencies {
     struct Dependency: Identifiable, Sendable, Equatable {
         let id: String
         let name: String
-        /// The symptom this fixes — how a user recognizes they need it.
+        /// The symptom this fixes.
         let detail: String
-        /// Rough download size, for the row's fine print.
         let download: String
-        /// Whether a bottle without it is incomplete rather than merely
-        /// missing a nicety. A required entry is one a modern title links
-        /// against or compiles shaders with; the rest are legacy runtimes and
-        /// fonts, whose absence costs glyphs and old titles, not launches.
-        /// Nothing gates a launch on either kind.
+        /// Whether a bottle without it is incomplete: modern titles link
+        /// against it. Nothing gates a launch on it.
         let required: Bool
 
         init(id: String, name: String, detail: String, download: String, required: Bool) {
@@ -63,22 +55,16 @@ nonisolated enum BottleDependencies {
         ),
     ]
 
-    /// The required entries a bottle is missing — what "bottle incomplete"
-    /// means everywhere it is said.
+    /// The required entries a bottle is missing ("bottle incomplete").
     static func missingRequired() -> [Dependency] {
         catalog.filter { $0.required && !isInstalled($0) }
     }
 
     // MARK: - What a new bottle gets
 
-    /// Whether setting up a bottle installs the whole catalog rather than the
-    /// required entries alone.
-    ///
-    /// On by default: the optional entries are the ones whose absence shows up
-    /// as a symptom nobody can trace — boxes instead of glyphs, silent audio,
-    /// an old title that names a d3dx9 file. A few hundred megabytes during a
-    /// setup that is already downloading Steam buys a bottle that does not ask
-    /// again.
+    /// Whether bottle setup installs the whole catalog. On by default: the
+    /// optional entries' absence shows as untraceable symptoms (boxes for
+    /// glyphs, silent audio).
     static var installsEverything: Bool {
         get { Preferences.shared.object(forKey: everythingKey) as? Bool ?? true }
         set { Preferences.shared.set(newValue, forKey: everythingKey) }
@@ -114,21 +100,16 @@ nonisolated enum BottleDependencies {
     private static var fontsDirectory: URL { driveC.appendingPathComponent("windows/Fonts") }
     private static var system32: URL { driveC.appendingPathComponent("windows/system32") }
     private static var syswow64: URL { driveC.appendingPathComponent("windows/syswow64") }
-    /// Downloads and extractions, inside the bottle so installers can see
-    /// them at a plain `C:` path.
+    /// Inside the bottle, so installers see it at a `C:` path.
     private static var scratchRoot: URL { driveC.appendingPathComponent("windows/temp/sevo-deps") }
     private static let scratchRootWindowsPath = #"C:\windows\temp\sevo-deps"#
 
     /// One install's own directory under the scratch root, in both the paths
-    /// it is addressed by. Each install creates one and removes that one:
-    /// a directory shared between installs is deleted out from under whoever
-    /// is still downloading into it, which reads afterwards as a move that
-    /// found no destination, or an installer that could not find the files it
-    /// had just extracted.
+    /// it is addressed by. Never share one between installs: the first to
+    /// finish deletes it out from under the others' downloads and extractions.
     ///
     /// `root` is the bottle's scratch directory; tests give it one of their
-    /// own, since a scratch that answers a Windows path only exists inside a
-    /// prefix.
+    /// own.
     struct Scratch {
         let url: URL
         let windowsPath: String
@@ -158,10 +139,9 @@ nonisolated enum BottleDependencies {
         return names.contains { $0.lowercased().hasPrefix(prefix) }
     }
 
-    /// A DLL that exists and is the genuine article. Wine stamps its
-    /// stand-in PE files near the DOS header — "Wine placeholder DLL"
-    /// (CrossOver) or "Wine builtin DLL" (upstream) — so a fresh prefix's
-    /// fake file doesn't read as an installed redistributable.
+    /// A DLL that exists and is not Wine's stand-in, which is stamped
+    /// "Wine placeholder DLL" (CrossOver) or "Wine builtin DLL" near the DOS
+    /// header.
     private static func hasRealDLL(_ name: String) -> Bool {
         let url = system32.appendingPathComponent(name)
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
@@ -173,14 +153,9 @@ nonisolated enum BottleDependencies {
 
     // MARK: - Install
 
-    /// Installs one catalog entry, narrating stages through `phase`.
-    /// Answers a failure description, or `nil` when the pieces landed.
-    ///
-    /// Installs run one at a time however many are asked for at once: they
-    /// run installers inside one prefix, against one registry, and the two
-    /// download hosts rate-limit a burst of parallel requests. The queue is
-    /// first-come, so a second install waits with `phase` reading `waiting`
-    /// rather than starting and failing.
+    /// Installs one catalog entry, narrating through `phase`; answers a
+    /// failure description or `nil`. Installs run one at a time, first come
+    /// first served: they share one registry, and the hosts rate-limit bursts.
     static func install(
         _ id: String, phase: @escaping @Sendable (String) -> Void,
     ) async -> String? {
@@ -218,8 +193,8 @@ nonisolated enum BottleDependencies {
         private var tail: Task<Void, Never>?
         private var queued = 0
 
-        /// Runs `body` after everything already queued. `waiting` is called
-        /// when the job does not start at once, so a queued row can say so.
+        /// Runs `body` after everything queued; `waiting` is called when it
+        /// cannot start at once.
         func enqueue(
             _ body: @escaping @Sendable () async -> String?,
             waiting: @Sendable () -> Void,
@@ -243,15 +218,10 @@ nonisolated enum BottleDependencies {
         var errorDescription: String? { message }
     }
 
-    /// The eleven classic self-extracting font archives, from the mirror
-    /// winetricks uses. They are cabinets inside a small Windows extractor,
-    /// and macOS's `tar` (libarchive) reads them directly; then the faces are
-    /// copied into the bottle's Fonts — Wine registers everything it finds
-    /// there on its own.
-    ///
-    /// Never run the archives' own extractor into one shared folder: every
-    /// archive carries `fontinst.exe`, so from the second one on it stops at
-    /// an "Overwrite file" prompt `/Q` does not answer.
+    /// The eleven classic font archives from winetricks' mirror, unpacked by
+    /// macOS's `tar` and copied into Fonts, where Wine registers them. Never
+    /// run their own extractor into one folder: from the second archive on
+    /// `fontinst.exe` stops at an "Overwrite file" prompt `/Q` does not answer.
     private static func installCoreFonts(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -283,9 +253,8 @@ nonisolated enum BottleDependencies {
         try copyFonts(from: extracted, matching: ["ttf", "ttc"])
     }
 
-    /// Microsoft's evergreen 14.x redistributable, both architectures, run
-    /// with its documented silent flags, then the 140-family DLL overrides so
-    /// the installed files actually win over Wine's builtins.
+    /// Microsoft's 14.x redistributable, both architectures, then the
+    /// 140-family overrides so the installed files win over Wine's builtins.
     private static func installVCRedist(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -300,8 +269,7 @@ nonisolated enum BottleDependencies {
                 SteamBottle.windowsPath(for: installer),
                 "/install", "/quiet", "/norestart",
             ])
-            // 1638: a newer version is already installed. 3010: success,
-            // wants a reboot it won't get and doesn't need.
+            // 1638: a newer version is installed. 3010: success, reboot wanted.
             guard let status = result.status, [0, 1638, 3010].contains(Int(status)) else {
                 let status = result.status.map(String.init) ?? InterfaceCopy.localized("no exit")
                 throw InstallFailure(message: String(localized: "vc_redist.\(arch).exe failed (\(status))"))
@@ -316,14 +284,9 @@ nonisolated enum BottleDependencies {
         try await importOverrides(family.map { ($0, "native,builtin") }, scratch: scratch)
     }
 
-    /// The two fxc2 builds of d3dcompiler_47, copied straight over Wine's
-    /// stand-ins — CrossOver's own trick, and with the fake file gone no
-    /// registry override is needed.
-    ///
-    /// Both are addressed by the commit that built them and checked against
-    /// the digest of what that commit holds: this DLL is copied over a system
-    /// DLL and then compiles every shader a game asks for, so what it is has
-    /// to be a fact rather than whatever a branch points at today.
+    /// The two fxc2 builds of d3dcompiler_47, copied over Wine's stand-ins so
+    /// no override is needed. Pinned to a commit and a digest, since they
+    /// replace a system DLL.
     private static func installD3DCompiler(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -343,9 +306,8 @@ nonisolated enum BottleDependencies {
         try replaceFile(at: syswow64.appendingPathComponent("d3dcompiler_47.dll"), with: x86)
     }
 
-    /// The last classic DirectX redistributable: self-extracts, then its own
-    /// DXSETUP lays down d3dx9, XAudio, XACT and X3DAudio for both
-    /// architectures.
+    /// The June 2010 DirectX redistributable: d3dx9, XAudio, XACT and
+    /// X3DAudio for both architectures.
     private static func installDirectX2010(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -372,8 +334,7 @@ nonisolated enum BottleDependencies {
         }
     }
 
-    /// Source Han Sans, the four regional builds CrossOver's Asian-fonts
-    /// component ships, from Adobe's pinned release.
+    /// Source Han Sans, four regions, from Adobe's pinned release.
     private static func installCJKFonts(
         scratch: Scratch, phase: @Sendable (String) -> Void,
     ) async throws {
@@ -405,13 +366,11 @@ nonisolated enum BottleDependencies {
         var id: String { dll }
     }
 
-    /// The load-order modes Wine accepts, in the order someone reaches for
-    /// them.
+    /// The load-order modes Wine accepts.
     static let overrideModes = ["native,builtin", "native", "builtin", "disabled"]
 
-    /// The bottle's global overrides, read from `user.reg`. The file lags
-    /// wineserver's in-memory registry by a few seconds after a write, so
-    /// callers that just wrote should trust what they wrote.
+    /// The bottle's global overrides from `user.reg`, which lags wineserver's
+    /// registry by a few seconds after a write.
     static func overrides() -> [Override] {
         let file = SteamBottle.root.appendingPathComponent("user.reg")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
@@ -450,22 +409,17 @@ nonisolated enum BottleDependencies {
 
     // MARK: - Plumbing
 
-    /// The fxc2 commit the two d3dcompiler builds are taken from, as a raw
-    /// content URL prefix.
+    /// The fxc2 commit's raw content URL prefix.
     private static let fxc2Revision =
         "https://raw.githubusercontent.com/mozilla/fxc2/9aba9b11079303d5577e0e3eb455f4d00f3b5946"
 
     /// How long a download waits after the first refusal and after the
-    /// second — so three attempts in all. Both hosts these files come from
-    /// rate-limit a burst, and a burst is what a user pressing every Install
-    /// button makes.
+    /// second, so three attempts in all. Both hosts rate-limit a burst, which
+    /// is what pressing every Install button makes.
     static let downloadBackoff: [Duration] = [.seconds(2), .seconds(8)]
 
-    /// Fetches one file into this install's scratch directory, retrying a
-    /// host that is rate-limiting or briefly broken. `sha256` is the digest
-    /// the bytes must have, lowercase hex; a file that does not match it is
-    /// refused rather than copied over a system DLL. `session` and `backoff`
-    /// are what a test replaces to drive the retries without a network.
+    /// Fetches one file into `scratch`, retrying a rate-limiting or briefly
+    /// broken host. A file not matching `sha256` (lowercase hex) is refused.
     static func download(
         _ url: String, as name: String, into scratch: Scratch, sha256: String? = nil,
         session: URLSession = .shared, backoff: [Duration] = downloadBackoff,
@@ -489,8 +443,7 @@ nonisolated enum BottleDependencies {
         throw lastFailure
     }
 
-    /// A refusal worth waiting out: the host is rate-limiting (429), is
-    /// briefly broken (5xx), or the transfer itself failed.
+    /// A 429, a 5xx, or a failed transfer.
     private struct RetryableDownload: Error {
         let message: String
     }
@@ -499,8 +452,6 @@ nonisolated enum BottleDependencies {
         _ source: URL, as name: String, into scratch: Scratch, sha256: String?,
         session: URLSession,
     ) async throws -> URL {
-        // The destination directory exists before the transfer does, so the
-        // move at the end has somewhere to land.
         try FileManager.default.createDirectory(
             at: scratch.url, withIntermediateDirectories: true,
         )
@@ -527,9 +478,7 @@ nonisolated enum BottleDependencies {
                 )
             }
         }
-        // Again, because the move is where a missing directory is felt: the
-        // transfer landed in the session's own temp, and the file only enters
-        // the bottle here.
+        // Again before the move, which is where a missing directory fails.
         try FileManager.default.createDirectory(
             at: scratch.url, withIntermediateDirectories: true,
         )
@@ -564,8 +513,7 @@ nonisolated enum BottleDependencies {
         }
     }
 
-    /// One `regedit /S` import for a batch of overrides — eleven `reg add`
-    /// spawns collapsed into one.
+    /// One `regedit /S` import for a batch of overrides.
     private static func importOverrides(
         _ entries: [(dll: String, mode: String)], scratch: Scratch,
     ) async throws {

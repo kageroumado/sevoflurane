@@ -6,9 +6,8 @@ import os
 actor CDPClient {
     enum Failure: Error, Equatable {
         case unreachable(String)
-        /// Something is listening and did not answer inside the timeout. A
-        /// mute server is a different fault from an absent one: one is a
-        /// client under load, the other is a client that is gone.
+        /// Something listens but did not answer in time: a loaded client,
+        /// unlike a gone one.
         case unanswered(String)
         case closed
         case badReply(String)
@@ -30,15 +29,9 @@ actor CDPClient {
         self.onPush = onPush
     }
 
-    /// Wine binds the debug port to whichever loopback family it feels like on
-    /// a given run, so the reachable one is discovered rather than assumed.
-    ///
-    /// Every discovery opens a fresh connection, on a session of its own. A
-    /// pooled connection can predate the client: anything else listening on
-    /// the port (a wildcard-bound dev server on the same machine) accepts the
-    /// probe, and the shared pool then keeps every later probe glued to that
-    /// connection even once the client's own listener is up. An unpooled
-    /// connect always lands on the client's specific-address bind.
+    /// Tries both loopback families, since Wine binds either. Each discovery
+    /// uses its own session: a pooled connection to a wildcard-bound listener
+    /// on the same port would keep later probes off the client's bind.
     static func discoverTargets(port: Int, timeout: TimeInterval = 3) async throws -> [[String: Any]] {
         try await CDPBudget.spend("target discovery") {
             let session = URLSession(configuration: .ephemeral)
@@ -78,18 +71,12 @@ actor CDPClient {
         _ = try await send(method: "Runtime.addBinding", params: ["name": "__sevo"])
     }
 
-    /// How long the handshake may take. Every other call is bounded by its
-    /// caller, whose budget it knows; the handshake has one budget wherever
-    /// it is made.
+    /// The handshake's bound; every other call is bounded by its caller.
     static let connectBudget: Duration = .seconds(5)
 
-    /// Opens the socket within ``connectBudget``. A handshake that fails or
-    /// runs out of time leaves the client closed.
-    ///
-    /// `consumingBindings` enables the `Runtime` domain, which only the
-    /// bridge's persistent connection needs: `Runtime.bindingCalled` is what
-    /// carries the client's callbacks back, and `Runtime.evaluate` answers
-    /// without the domain enabled; one-shot sessions leave it off.
+    /// Opens the socket within ``connectBudget``, closed on failure.
+    /// `consumingBindings` enables the `Runtime` domain for
+    /// `Runtime.bindingCalled`; `Runtime.evaluate` works without it.
     func connect(socketURL: URL, consumingBindings: Bool) async throws {
         do {
             try await withDeadline(Self.connectBudget) {
@@ -101,10 +88,8 @@ actor CDPClient {
         }
     }
 
-    /// One-shot sessions get an ephemeral session of their own, invalidated
-    /// with the socket: on the shared session they compete with the bridge's
-    /// persistent connection for the six connections `URLSession` allows per
-    /// host, and a cancelled task can sit in that pool.
+    /// A one-shot's own session: on the shared one it competes with the
+    /// bridge for six connections per host, and cancelled tasks linger there.
     private var ephemeralSession: URLSession?
 
     private func handshake(socketURL: URL, consumingBindings: Bool) async throws {
@@ -119,9 +104,8 @@ actor CDPClient {
         socket.maximumMessageSize = 64 * 1024 * 1024
         task = socket
         socket.resume()
-        // Pushes are delivered on their own task, in order, so the receive
-        // loop never waits on the bridge: a reply to a pending call must not
-        // queue behind a push whose handler is busy elsewhere.
+        // Pushes run on their own task so a reply never queues behind a busy
+        // push handler.
         let (pushes, pushContinuation) = AsyncStream.makeStream(of: String.self)
         pushSink = pushContinuation
         Task { [onPush] in
@@ -140,20 +124,12 @@ actor CDPClient {
         markClosed()
     }
 
-    /// One-shot evaluate against a specific target's debugger socket —
-    /// connect, evaluate, disconnect. The bridge's persistent connection
-    /// stays on `SharedJSContext`; this is for the asks that stand outside
-    /// it, the shutdown ask and the standing scripts in the client's own
-    /// friends UI.
-    ///
-    /// It spends a permit from ``CDPBudget`` for its whole life, because a
-    /// session is what CEF's one DevTools thread pays for.
+    /// Connect, evaluate, disconnect, holding a ``CDPBudget`` permit
+    /// throughout, since CEF's one DevTools thread pays per session.
     static func evaluateOnce(socketURL: URL, _ expression: String) async throws -> String? {
         try await CDPBudget.spend("one-shot evaluate") {
             let client = CDPClient(onPush: { _ in })
-            // `connect` sits inside the cleanup scope: a cancelled handshake
-            // must close the socket, pump and push stream like a failed
-            // evaluate.
+            // A cancelled handshake must clean up too.
             do {
                 try await client.connect(socketURL: socketURL, consumingBindings: false)
                 let value = try await client.evaluate(expression)
@@ -166,10 +142,9 @@ actor CDPClient {
         }
     }
 
-    /// Evaluates `expression` with `returnByValue` + `awaitPromise` and returns
-    /// the value: strings verbatim, other scalars as their JSON text, `nil`
-    /// for null/undefined. A script that throws, or a promise that rejects,
-    /// throws ``Failure/scriptThrew(_:)``.
+    /// Evaluates with `returnByValue` and `awaitPromise`: strings verbatim,
+    /// other values as JSON, `nil` for null; a throw or rejection throws
+    /// ``Failure/scriptThrew(_:)``.
     func evaluate(_ expression: String) async throws -> String? {
         let reply = try await send(method: "Runtime.evaluate", params: [
             "expression": expression, "returnByValue": true, "awaitPromise": true,
@@ -177,8 +152,7 @@ actor CDPClient {
         return try Self.value(fromEvaluateReply: reply)
     }
 
-    /// The value a `Runtime.evaluate` reply carries, rendered as
-    /// ``evaluate(_:)`` returns it.
+    /// The value of a `Runtime.evaluate` reply, as ``evaluate(_:)`` returns it.
     nonisolated static func value(fromEvaluateReply reply: [String: Any]) throws -> String? {
         let outer = reply["result"] as? [String: Any]
         if let details = outer?["exceptionDetails"] as? [String: Any] {
@@ -204,9 +178,7 @@ actor CDPClient {
         }
     }
 
-    /// The client's whole CEF cookie jar. `Storage.getCookies` is a
-    /// browser-wide read that a page session answers too, so this reuses the
-    /// connection the bridge already holds instead of opening a second one.
+    /// The client's whole CEF cookie jar, which a page session can read.
     func cookies() async throws -> [SteamWebCookie] {
         let reply = try await send(method: "Storage.getCookies", params: [:])
         let result = reply["result"] as? [String: Any]
@@ -230,13 +202,9 @@ actor CDPClient {
         )
         defer { PerfProbe.bridge.endInterval("CDPCall", call, "\(method, privacy: .public)") }
         try Task.checkCancellation()
-        // Reply, socket error, closure and cancellation all resume the
-        // continuation through `pending.removeValue(forKey:)`, so whichever
-        // arrives first is the only one that resumes it. The cancellation
-        // handler's task cannot reach `fail` before the insertion below: both
-        // wrappers run their bodies synchronously on this actor. No `await`
-        // may sit between entering the operation and `pending[id] = …`, or
-        // that ordering is gone.
+        // Every path resumes through `pending.removeValue(forKey:)`, so only
+        // the first does. Never put an `await` before `pending[id] = …`: the
+        // cancellation `fail` must not run before the insertion.
         let raw: String? = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 pending[id] = continuation
@@ -299,9 +267,7 @@ actor CDPClient {
         pending.removeAll()
         pushSink?.finish()
         pushSink = nil
-        // A close frame, not a dropped connection: CEF then tears the
-        // session down itself instead of discovering a transport that
-        // stopped answering.
+        // A close frame, so CEF tears the session down itself.
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         ephemeralSession?.finishTasksAndInvalidate()

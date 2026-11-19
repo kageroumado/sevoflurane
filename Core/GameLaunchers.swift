@@ -5,19 +5,16 @@ import Foundation
 ///
 /// macOS reads a running process's name, its Dock icon and its eligibility
 /// for Game Mode out of the bundle **its own executable lives in**. A wine
-/// game's executable is the engine's loader, so all three say "wine"; a
-/// launcher that execs the loader somewhere else loses the attribution
-/// entirely, because by then the process is the loader again. So each game
-/// gets a copy of the loader inside a bundle named after it, and the engine
-/// starts the game through that copy (`SEVO_LOADER` in the game's env file,
-/// read by ntdll's `loader_exec`).
+/// game's executable is the engine's loader, so all three say "wine", and a
+/// launcher that execs the loader elsewhere loses the attribution again. So
+/// each game gets a copy of the loader inside a bundle named after it, and the
+/// engine starts the game through that copy (`SEVO_LOADER` in the game's env
+/// file, read by ntdll's `loader_exec`).
 ///
-/// Game Mode wants three things at once: the bundle declares
-/// the games category, the process is frontmost, and its window covers the
-/// screen. This provides the first; the other two are the game's own doing.
+/// Game Mode also needs the process frontmost and its window covering the
+/// screen; the bundle supplies only the games category.
 nonisolated enum GameLaunchers {
-    /// Where the launcher's decisions are narrated. The default reaches
-    /// `sevo`'s caller; the app points it at its own event log.
+    /// Where the launcher logs: stderr, or the app's event log.
     nonisolated(unsafe) static var log: @Sendable (String) -> Void = {
         FileHandle.standardError.write(Data(($0 + "\n").utf8))
     }
@@ -25,9 +22,8 @@ nonisolated enum GameLaunchers {
     static let root = AppIdentity.supportFolder
         .appendingPathComponent("Launchers")
 
-    /// The Dock tile plug-in every bundle carries, when this process is
-    /// inside Sevoflurane.app or beside it: the Dock loads it out of a kept
-    /// tile while the game is not running, for the tile's menu and badge.
+    /// The app's Dock tile plug-in, which the Dock loads from a kept tile
+    /// while the game is not running.
     static var dockTilePlugIn: URL? {
         var app = Bundle.main.bundleURL
         while app.pathExtension != "app" {
@@ -41,37 +37,32 @@ nonisolated enum GameLaunchers {
 
     static let dockTilePlugInName = "SevofluraneDockTile.docktileplugin"
 
-    /// Where the app says what a tile shows while the game is not running:
-    /// the plug-in reads it beside the bundle.
+    /// What a tile shows while the game is not running, read by the plug-in.
     static func tileStateFile(appID: Int) -> URL {
         directory(appID: appID).appendingPathComponent(tileStateName)
     }
 
     private static let tileStateName = "tile.json"
 
-    /// The renderers the tile's Play with menu offers, for every game at
-    /// once: the plug-in reads this beside the bundles.
+    /// The renderers the tile's Play with menu offers, for every game.
     static var renderersFile: URL {
         root.appendingPathComponent("renderers.json")
     }
 
-    /// Whether any game has a bundle right now — the cheap question to ask
-    /// before the expensive one.
+    /// Whether any game has a bundle, cheaply.
     static var hasBundles: Bool {
         ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
             .contains { Int($0) != nil }
     }
 
-    /// Where a game's bundles live — one directory per app id, so two games
-    /// sharing a title cannot share a bundle.
+    /// One directory per app id, so two games sharing a title never share a
+    /// bundle.
     static func directory(appID: Int) -> URL {
         root.appendingPathComponent(String(appID))
     }
 
-    /// Builds (or refreshes) the game's bundle and answers the loader inside
-    /// it, which is what the engine execs. `nil` when the engine has no
-    /// loader to copy — CrossOver's tree is not ours to reshape — or when the
-    /// game has no name to put on the tile.
+    /// Builds or refreshes the game's bundle and answers its loader; `nil`
+    /// for CrossOver or a game with no name.
     @discardableResult
     static func materialize(appID: Int, title: String, engine: Engine) -> URL? {
         guard case .managed = engine, let loader = engine.unixLoader else { return nil }
@@ -92,18 +83,12 @@ nonisolated enum GameLaunchers {
                 at: contents.appendingPathComponent("Resources"),
                 withIntermediateDirectories: true,
             )
-            // A copy, and it has to be one. Measured on Subnautica 2, same
-            // bundle and plist and a fullscreen window each time: with the
-            // executable a **symlink** to the engine's loader the Dock tile,
-            // the icon and the LaunchServices identity are all right and Game
-            // Mode stays **off**; with a copy it comes **on**. Signing is not
-            // what decides it — an unsigned copy carrying the engine's own
-            // `org.winehq.wine` identity turns it on too. A hard link is not
-            // a middle way: `codesign` breaks it, and the bundle ends up with
-            // a copy anyway.
-            // Signing rewrites the copy, so it never matches the original
-            // again: what decides a re-copy is the engine the bundle records,
-            // not the bytes.
+            // Never a symlink: measured on Subnautica 2, a symlinked loader
+            // gets the Dock tile, icon and LaunchServices identity right but
+            // leaves Game Mode off, while a copy turns it on, signed or not.
+            // `codesign` breaks a hard link into a copy anyway. Signing
+            // rewrites the copy, so the engine the bundle records decides a
+            // re-copy rather than the bytes.
             let copied = !manager.isExecutableFile(atPath: executable.path)
                 || recordedEngine(in: contents) != engine.preferenceValue
             if copied {
@@ -120,9 +105,7 @@ nonisolated enum GameLaunchers {
                     iconChanged = true
                     try? manager.removeItem(at: destination)
                     try manager.copyItem(at: icon, to: destination)
-                    // LaunchServices caches a bundle's icon against the bundle's
-                    // own date; a new icon behind an untouched bundle is served
-                    // stale until the bundle itself looks changed.
+                    // LaunchServices caches the icon against the bundle's date.
                     try? manager.setAttributes([.modificationDate: Date()], ofItemAtPath: bundle.path)
                 }
             }
@@ -138,8 +121,6 @@ nonisolated enum GameLaunchers {
             let stamp = Data("APPL????".utf8)
             let pkgInfo = contents.appendingPathComponent("PkgInfo")
             if (try? Data(contentsOf: pkgInfo)) != stamp { try stamp.write(to: pkgInfo) }
-            // The signature seals the plist, the executable, the icon and the
-            // plug-in, so it is renewed whenever any of them was.
             if copied || plist || plugIn.copied || iconChanged {
                 sign(bundle)
                 log("launcher: built \(stem).app on \(engine.description)")
@@ -151,10 +132,8 @@ nonisolated enum GameLaunchers {
         return executable
     }
 
-    /// The game's bundle, when a Dock tile made of it would start the game:
-    /// its loader hands a LaunchServices open with no program to
-    /// `sevoflurane://play/<id>`. A loader copied from an engine without that
-    /// handoff would print wine's usage and quit, so its bundle is not offered.
+    /// The game's bundle when its loader carries the handoff that sends a
+    /// program-less open to `sevoflurane://play/<id>`.
     static func dockableBundle(appID: Int) -> URL? {
         let directory = directory(appID: appID)
         guard let bundle = (try? FileManager.default.contentsOfDirectory(
@@ -168,11 +147,9 @@ nonisolated enum GameLaunchers {
         return bundle
     }
 
-    /// The URL prefix the loader's handoff opens, and what the app answers.
     static let dockHandoff = "sevoflurane://play/"
 
-    /// One line per bundle in the store — `<appid>/<Title>.app` and the
-    /// engine its loader was copied from — for a diagnostics report.
+    /// `<appid>/<Title>.app — <engine>` per bundle, for diagnostics.
     static func inventory() -> [String] {
         let manager = FileManager.default
         let ids = ((try? manager.contentsOfDirectory(atPath: root.path)) ?? [])
@@ -203,8 +180,7 @@ nonisolated enum GameLaunchers {
 
     private static let iconName = "app"
 
-    /// A renamed game leaves a bundle behind that is no longer anyone's.
-    /// The tile's state file lives beside the bundle and stays.
+    /// Removes a renamed game's old bundle; the tile state file stays.
     private static func removeOtherBundles(in directory: URL, keeping bundle: URL) {
         let manager = FileManager.default
         for entry in (try? manager.contentsOfDirectory(
@@ -215,8 +191,7 @@ nonisolated enum GameLaunchers {
         }
     }
 
-    /// The engine a bundle's loader was copied from, or `nil` for a bundle
-    /// that predates the record.
+    /// The engine a bundle's loader was copied from.
     private static func recordedEngine(in contents: URL) -> String? {
         guard let data = try? Data(contentsOf: contents.appendingPathComponent("Info.plist")),
               let plist = try? PropertyListSerialization.propertyList(
@@ -228,9 +203,8 @@ nonisolated enum GameLaunchers {
 
     private static let engineKey = "SevofluraneEngine"
 
-    /// The loader, and the preloader beside it when the engine has one:
-    /// `preloader_exec` tries `<loader>-preloader` before the loader itself,
-    /// so the copy has to be able to answer the same question.
+    /// The loader and its preloader: `preloader_exec` tries
+    /// `<loader>-preloader` first.
     private static func loaderFiles(_ loader: URL, stem: String) -> [(URL, String)] {
         var files = [(loader, stem)]
         let preloader = loader.deletingLastPathComponent()
@@ -241,11 +215,9 @@ nonisolated enum GameLaunchers {
         return files
     }
 
-    /// Puts the app's Dock tile plug-in into the bundle, or replaces it when
-    /// the app's differs — by content, since a build installed later can be
-    /// older. Answers whether one is there, and whether this call wrote it.
-    /// A process without the app beside it (a bare `sevo`) leaves whatever
-    /// is there.
+    /// Copies the app's Dock tile plug-in into the bundle when its content
+    /// differs (a later install can be older). Answers whether one is there
+    /// and whether this call wrote it.
     private static func copyDockTilePlugIn(into contents: URL) -> (present: Bool, copied: Bool) {
         let manager = FileManager.default
         let destination = contents.appendingPathComponent("PlugIns/\(dockTilePlugInName)")
@@ -267,8 +239,7 @@ nonisolated enum GameLaunchers {
         }
     }
 
-    /// Answers whether it wrote, so a signature is only renewed when the
-    /// thing it covers changed.
+    /// Answers whether it wrote.
     private static func writePlist(
         to destination: URL, title: String, stem: String, appID: Int, engine: Engine,
         carrying resources: (icon: Bool, plugIn: Bool),
@@ -280,13 +251,11 @@ nonisolated enum GameLaunchers {
             "CFBundleExecutable": stem,
             "CFBundlePackageType": "APPL",
             "CFBundleInfoDictionaryVersion": "6.0",
-            // What makes macOS willing to turn Game Mode on for the process.
+            // Game Mode needs the games category.
             "LSApplicationCategoryType": "public.app-category.games",
             "GCSupportsGameMode": true,
             "NSHighResolutionCapable": true,
-            // The engine the loader was copied from: a bundle built against
-            // an older one is rebuilt rather than left to exec a loader that
-            // no longer matches its tree.
+            // A bundle built against another engine is rebuilt.
             engineKey: engine.preferenceValue,
         ]
         if resources.icon { plist["CFBundleIconFile"] = iconName }
@@ -300,9 +269,8 @@ nonisolated enum GameLaunchers {
     }
 
     /// Ad hoc, so the bundle is a whole one a user can pin to the Dock and
-    /// its executable carries the identity its plist claims. Game Mode does
-    /// not require it — an unsigned copy is enough for that — so this is for
-    /// the bundle's sake rather than the game's.
+    /// its executable carries the identity its plist claims. Game Mode turns
+    /// on for an unsigned copy as well.
     private static func sign(_ bundle: URL) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")

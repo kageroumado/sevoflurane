@@ -2,22 +2,9 @@ import Foundation
 
 /// How much a run is asked to say about itself.
 ///
-/// Level zero is always on and costs nothing measurable: the run record, the
-/// app's own event trail, and Wine's errors. Level one is what someone
-/// reproducing a bug turns on — the exception channel, the renderers' own
-/// logs, and a collected report after every run rather than only after a bad
-/// one. Level two is for a bug that survives level one: every library load,
-/// whole minidumps, a doctor report, the machine sampled while the game runs,
-/// and the report compressed when it closes.
-///
-/// The engine half reaches games at their next launch through `bottle.env`
-/// (``ConfigMaterializer``), the same way the settings hierarchy does. The app
-/// half is read live, so a level set from `sevo` while the app runs takes
-/// effect on the next sample.
-///
-/// Level two turns itself off when the next run closes: it is the level
-/// someone sets to catch one crash, and the cost of leaving it on is a
-/// gigabyte of logs nobody asked for.
+/// The engine half reaches games at their next launch through `bottle.env`;
+/// the app half is read live. Level two turns itself off when the next run
+/// closes, since left on it costs a gigabyte of logs.
 nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparable {
     /// The run record, the event log, Wine's errors, and a collected report
     /// after a run that crashed.
@@ -35,45 +22,35 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
 
     // MARK: - What is on
 
-    /// Whether the run's report is collected whatever the run's ending was.
     var collectsEveryRun: Bool {
         self >= .one
     }
 
-    /// Whether the driver's present counter is sampled at one second.
     var samplesPresents: Bool {
         self >= .one
     }
 
-    /// Whether minidumps are copied whole rather than named and measured.
     var keepsWholeDumps: Bool {
         self == .two
     }
 
-    /// Whether the machine's state is written to the event log while a game
-    /// runs, and how often.
+    /// How often the machine's state is logged while a game runs.
     var hostSampleInterval: Duration? {
         self == .two ? .seconds(10) : nil
     }
 
-    /// Whether a report is compressed when the run closes.
     var compressesReports: Bool {
         self == .two
     }
 
-    /// Whether the level takes itself off at the end of the next run.
     var isSingleRun: Bool {
         self == .two
     }
 
     // MARK: - What the engine is told
 
-    /// The `WINEDEBUG` channels this level adds to the bottle's own, or `nil`
-    /// at level zero, where the bottle's setting is the whole of it.
-    ///
-    /// `+seh` costs a line at an exception and nothing while a game runs;
-    /// `+loaddll,+module` costs a line per library, which is tens of thousands
-    /// per launch — which is why it is a level of its own.
+    /// The `WINEDEBUG` channels this level adds; `+loaddll,+module` costs tens
+    /// of thousands of lines per launch, so it is level two only.
     var wineChannels: String? {
         switch self {
         case .zero: nil
@@ -82,22 +59,15 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
         }
     }
 
-    /// What a game actually carries: this level's channels folded onto the
-    /// bottle's own, so a `wine-debug` string set by hand keeps its channels
-    /// through a level instead of being replaced by one. Where both name a
-    /// channel the bottle's token stands, since that is the one reached for
-    /// deliberately.
+    /// This level's channels folded onto the bottle's own; where both name a
+    /// channel, the bottle's hand-set token wins.
     func channels(over bottle: String = WineLog.channels) -> String {
         guard let wineChannels else { return bottle }
         return WineLog.compose(wineChannels, with: bottle)
     }
 
-    /// What the level writes into `bottle.env` beyond the channels: the
-    /// renderers' own logs, each into the directory the report collects.
-    ///
-    /// The three renderers spell it three ways — DXMT takes a level and a
-    /// directory, DXVK a level and a file, D3DMetal a single switch — so all
-    /// three are named rather than one being derived from another.
+    /// The renderers' own log switches, each spelled its own way, pointed at
+    /// the directory the report collects.
     var rendererLines: [String] {
         guard self >= .one else { return [] }
         let directory = DebugMode.rendererLogWindowsPath
@@ -114,8 +84,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
         return lines
     }
 
-    /// The directory the renderers are told to write into, as macOS sees it.
-    /// Created here because DXMT opens a file in it and does not make it.
+    /// Creates the renderer log directory, which DXMT does not make.
     static func prepareRendererLogs(prefix: URL) {
         try? FileManager.default.createDirectory(
             at: DebugMode.rendererLogDirectory(prefix: prefix), withIntermediateDirectories: true,
@@ -156,8 +125,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
         DiagnosticLevel(rawValue: Preferences.shared.integer(forKey: key)) ?? .zero
     }
 
-    /// Sets the level and rewrites the bottle's env files, so the next game
-    /// launched carries it. Answers the level that is now in force.
+    /// Sets the level and rewrites the env files; answers the level in force.
     @discardableResult
     static func set(_ level: DiagnosticLevel, prefix: URL = SteamBottle.root) -> DiagnosticLevel {
         if level == .zero {
@@ -170,8 +138,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
         return current
     }
 
-    /// Takes a single-run level off, now that its run has closed. Answers
-    /// whether it did anything, which is what the caller says out loud.
+    /// Takes a single-run level off; answers whether it did.
     @discardableResult
     static func expireAfterRun(prefix: URL = SteamBottle.root) -> Bool {
         guard current.isSingleRun else { return false }
@@ -181,8 +148,7 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
 
     private static let key = "diagnosticLevel"
 
-    /// `level 1 (diagnostics)` — what `sevo diag status` and the report window
-    /// both print.
+    /// `level 1 (diagnostics)`.
     var summary: String {
         "level \(rawValue) (\(title.lowercased()))"
     }

@@ -4,52 +4,34 @@ import Synchronization
 /// What the player is playing, published to the Discord client on this Mac
 /// under the game's own Discord application.
 ///
-/// Sevoflurane is a host that runs games, the way Steam is, so it publishes
-/// the activity under the application id Discord's own database gives that
-/// game: the status reads "Playing Subnautica 2", with the game's icon, which
-/// is what Discord's detection shows for a game running natively.
-/// ``DiscordApplications`` resolves the id.
+/// The activity goes under the application id Discord's database gives the
+/// game (``DiscordApplications``), so it reads "Playing Subnautica 2" with
+/// the game's icon. A game the database does not name goes under
+/// ``fallbackApplicationID`` with its own name and Steam box art, which
+/// Discord shows over the application's.
 ///
-/// A game Discord's database does not name is published under Sevoflurane's
-/// own application, ``fallbackApplicationID``, carrying the game's own name
-/// and its Steam box art: Discord shows the activity's name over the
-/// application's and the art over the application's icon, so the card reads
-/// "Playing <game>" with the game's cover and never names Sevoflurane.
+/// Most Windows games ship no Discord support, and Discord's own game scanner
+/// sees `wine64-preloader` rather than a game, so the app publishes the
+/// activity itself over Discord's local IPC socket.
 ///
-/// Most Windows games ship no Discord support at all, and Discord's own game
-/// scanner sees `wine64-preloader` rather than a game, so nothing appears in a
-/// player's status by itself. The app knows the game, its Steam app id and how
-/// long it has been running, and Discord's local IPC socket is reachable from
-/// the host side, so it publishes the activity directly.
+/// A game that ships its own Discord library wins
+/// (``publishesItsOwn(appID:)``).
 ///
-/// A game that ships its own Discord library publishes a richer activity of
-/// its own through the in-bottle bridge, and that one must win — see
-/// ``publishesItsOwn(appID:)``.
-///
-/// The transport is Discord's RPC framing: an 8-byte header of two
-/// little-endian `UInt32`s, opcode then payload length, followed by JSON.
-/// Opcode 0 is the handshake, 1 a frame, 2 a close.
+/// Discord's RPC framing: two little-endian `UInt32`s, opcode then payload
+/// length, followed by JSON.
 actor DiscordPresence {
     /// The session the app publishes through.
     static let shared = DiscordPresence()
 
-    /// Sevoflurane's Discord application, which a game Discord's database
-    /// does not name is published under.
+    /// Sevoflurane's Discord application, for games the database lacks.
     static let fallbackApplicationID = "1562606589373055026"
 
     /// One game, as Discord will show it.
     struct Activity: Sendable, Equatable {
-        /// The Discord application the game is registered as, which is what
-        /// Discord names the activity after.
         var applicationID: String
-        /// The game's name, as Discord's database spells it, or as the app
-        /// knows it for a game published under ``fallbackApplicationID``.
         var name: String
-        /// The game's box art, shown in place of the application's icon.
-        /// Only a game published under ``fallbackApplicationID`` carries one;
-        /// Discord has its own picture of a game its database names.
+        /// Box art, used under ``fallbackApplicationID`` only.
         var cover: URL?
-        /// When play began.
         var started: Date
 
         init(applicationID: String, name: String, cover: URL? = nil, started: Date = .now) {
@@ -59,8 +41,6 @@ actor DiscordPresence {
             self.started = started
         }
 
-        /// Whether the activity is published under Sevoflurane's application,
-        /// where it has to say what it is itself.
         var isFallback: Bool {
             applicationID == fallbackApplicationID
         }
@@ -81,28 +61,24 @@ actor DiscordPresence {
 
     private let directory: URL
     private var socket: Int32?
-    /// The application the open session handshook with, so a session opened
-    /// for one game is closed before another game claims the status line.
+    /// The application the open session handshook with.
     private var openApplicationID: String?
     /// The Steam game whose activity is on the status line.
     private var shownGame: Int?
-    /// How many times each Steam game has stopped. A publish carries the count
-    /// it saw when the game's window came up, and one that finds the count
-    /// moved is for a game that has already gone. Synchronous, so the main
-    /// actor orders a stop against the publishes it started before it.
+    /// Stops per game: a publish whose ticket no longer matches is for a game
+    /// already gone. Locked rather than isolated, so the main actor orders a
+    /// stop against publishes it started earlier.
     private nonisolated let stops = Mutex<[Int: UInt64]>([:])
 
-    /// - Parameter directory: where the `discord-ipc-N` sockets live. Discord
-    ///   resolves the same per-user `TMPDIR` the app does, since neither is
-    ///   sandboxed. Injectable so a test can point at a socket of its own.
+    /// - Parameter directory: where the `discord-ipc-N` sockets live, the
+    ///   per-user `TMPDIR` both unsandboxed apps share.
     init(directory: URL = URL(fileURLWithPath: NSTemporaryDirectory())) {
         self.directory = directory
     }
 
     // MARK: - Publishing
 
-    /// The ticket a publish for `appID` carries: it stays good until the game
-    /// stops.
+    /// The ticket a publish carries, good until the game stops.
     nonisolated func ticket(forGame appID: Int) -> UInt64 {
         stops.withLock { $0[appID, default: 0] }
     }
@@ -112,15 +88,11 @@ actor DiscordPresence {
         stops.withLock { $0[appID, default: 0] &+= 1 }
     }
 
-    /// Shows `activity` as what the user is playing `appID`, opening the
-    /// session first if it is not already open.
-    ///
-    /// A `ticket` that `gameStopped(_:)` has voided publishes nothing: the
-    /// game ended while its Discord application was being looked up.
+    /// Shows `activity` for `appID`, opening the session if needed; a voided
+    /// `ticket` publishes nothing.
     ///
     /// A Discord that refuses the handshake answers with a close frame; the
-    /// session ends there and nothing is published. That is an answer, not an
-    /// error, so it does not throw.
+    /// session ends there and nothing is published, without throwing.
     func show(_ activity: Activity, forGame appID: Int, ticket: UInt64) throws {
         guard !activity.applicationID.isEmpty, ticket == self.ticket(forGame: appID) else { return }
         if openApplicationID != activity.applicationID { end() }
@@ -131,8 +103,7 @@ actor DiscordPresence {
         shownGame = appID
     }
 
-    /// Withdraws the activity if it is `appID`'s, and ends the session. Another
-    /// game's activity stays.
+    /// Withdraws the activity and ends the session if it is `appID`'s.
     func clear(forGame appID: Int) {
         guard shownGame == appID else { return }
         clear()
@@ -154,9 +125,7 @@ actor DiscordPresence {
         shownGame = nil
     }
 
-    /// Opens the socket and completes the handshake as `applicationID`.
-    ///
-    /// - Returns: whether Discord accepted the application id.
+    /// Opens the socket and handshakes; answers whether Discord accepted.
     private func openSession(applicationID: String) throws -> Bool {
         guard let opened = Self.connectToDiscord(in: directory) else { throw Failure.discordAbsent }
         socket = opened
@@ -196,16 +165,10 @@ actor DiscordPresence {
         return bytes
     }
 
-    /// The `SET_ACTIVITY` payload for a game that is running.
-    ///
-    /// The handshake already named the game, and Discord fills the name, the
-    /// icon and the store links in from that application, so the activity
-    /// carries only its type and when play began. A fallback activity names
-    /// the game itself: Discord shows an activity's `name` over the
-    /// application's, and fetches an `https` `large_image` through its media
-    /// proxy and shows it over the application's icon, so the game's own
-    /// name and cover are what appears. `pid` is the app's own, which is the
-    /// process Discord watches to clear the activity.
+    /// The `SET_ACTIVITY` payload: type and start time, plus for a fallback
+    /// the game's `name` and an `https` `large_image`, which Discord shows
+    /// over the application's. `pid` is the app's, which Discord watches to
+    /// clear the activity.
     static func setActivity(_ activity: Activity) -> Data {
         var payload: [String: Any] = [
             "type": 0,
@@ -226,8 +189,7 @@ actor DiscordPresence {
     }
 
     private static func command(_ name: String, activity: [String: Any]?) -> Data {
-        // A null activity is how SET_ACTIVITY takes the status away, so the
-        // key stays and only its value goes.
+        // A null activity clears the status, so the key stays.
         let arguments: [String: Any] = [
             "pid": Int(getpid()),
             "activity": activity.map { $0 as Any } ?? NSNull(),
@@ -245,16 +207,11 @@ actor DiscordPresence {
     // MARK: - The socket
 
     /// How long a read waits before giving up on a Discord that has stopped
-    /// answering. The app is publishing a status line; nothing is worth a
-    /// stalled task.
+    /// answering.
     private static let replyTimeout = timeval(tv_sec: 2, tv_usec: 0)
 
-    /// Whether a Discord client answers one of the sockets right now.
-    ///
-    /// Discord leaves its socket file behind when it exits and takes the next
-    /// free index on restart, so liveness is decided by connecting rather than
-    /// by looking. The connection is opened and dropped without a handshake,
-    /// which Discord treats as a client that changed its mind.
+    /// Whether a Discord client answers a socket now, by connecting: Discord
+    /// leaves stale socket files behind.
     static func isDiscordRunning(
         in directory: URL = URL(fileURLWithPath: NSTemporaryDirectory()),
     ) -> Bool {
@@ -298,8 +255,8 @@ actor DiscordPresence {
         setsockopt(
             descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size),
         )
-        // A write to a Discord that has quit fails with EPIPE; without this
-        // it raises SIGPIPE, whose default action ends the app.
+        // Without this a write to a quit Discord raises SIGPIPE and ends the
+        // app.
         var noSignal: Int32 = 1
         setsockopt(
             descriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size),
@@ -307,8 +264,7 @@ actor DiscordPresence {
         return descriptor
     }
 
-    /// Writes one frame. A write that fails ends the session, so the next
-    /// publish connects afresh to whichever Discord is running then.
+    /// Writes one frame; a failed write ends the session.
     private func send(opcode: Opcode, payload: Data) throws {
         guard let socket else { throw Failure.connectionLost }
         var bytes = Self.frame(opcode: opcode, payload: payload)
@@ -358,16 +314,11 @@ actor DiscordPresence {
         "discord_game_sdk.dll", "discord_partner_sdk.dll", "discord-rpc.dll", "discord-rpc64.dll",
     ]
 
-    /// How deep the search goes. A game's Discord dll sits beside its exe or
-    /// one folder down, the same shape ``GameExecutables`` scans for.
+    /// How many folders down the search goes.
     private static let maxDepth = 3
 
-    /// Whether the game ships a Discord library of its own: an adopted
-    /// program's folder is searched, else the installed Steam game's.
-    ///
-    /// Such a game publishes its own activity through the in-bottle bridge,
-    /// with its own artwork, state and buttons. The app stays quiet so the two
-    /// do not fight over the same status line.
+    /// Whether the game ships a Discord library of its own and so publishes
+    /// through the in-bottle bridge, where the app stays quiet.
     static func publishesItsOwn(appID: Int) -> Bool {
         let folder = AdoptedPrograms.program(appID)?.url.deletingLastPathComponent()
             ?? SharedGames.installed(appID: appID)?.directory

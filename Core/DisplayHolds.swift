@@ -2,12 +2,9 @@ import Darwin
 import Foundation
 import IOKit.pwr_mgt
 
-/// Every power assertion on this Mac that keeps the display awake, and whose it is.
-///
-/// A display that never sleeps is noticed long after the hold that caused it began, and
-/// `pmset -g assertions` names a Wine process only as `wine`. This reads the same table
-/// (`IOPMCopyAssertionsByProcess`) and says which holds are Sevoflurane's: the app's own game
-/// hold, the daemon's, and any bottle process's, by the Windows program it runs.
+/// Every display-awake power assertion and whose it is. `pmset -g assertions` names a
+/// Wine process only `wine`; this reads the same table (`IOPMCopyAssertionsByProcess`)
+/// and names our holds, a bottle process's by its Windows program.
 nonisolated enum DisplayHolds {
     /// The assertion types that keep a display from sleeping. `UserIsActive` is declared
     /// activity (input, `caffeinate -u`): it restarts the idle clock and times out.
@@ -16,8 +13,7 @@ nonisolated enum DisplayHolds {
     ]
 
     struct Hold: Sendable, Equatable, Codable {
-        /// The process the hold counts against: the one it was taken on behalf of, when a
-        /// system daemon took it for another.
+        /// The process the hold was taken on behalf of.
         var pid: pid_t
         var process: String
         var type: String
@@ -37,7 +33,7 @@ nonisolated enum DisplayHolds {
             .sorted { ($0.since ?? .distantPast) < ($1.since ?? .distantPast) }
     }
 
-    /// One assertion's dictionary as a hold, or nil when it does not hold the display.
+    /// Nil when the assertion does not hold the display.
     static func hold(from entry: [String: Any], ownRoots: [String]) -> Hold? {
         guard let type = entry["AssertType"] as? String, displayTypes.contains(type) else { return nil }
         let owner = (entry["AssertionOnBehalfOfPID"] as? NSNumber)?.int32Value
@@ -83,18 +79,16 @@ nonisolated enum DisplayHolds {
     }
 }
 
-/// Notices Sevoflurane's display holds that outlive every game run: said once per hold,
-/// after ``grace``, so the next time the display stays on the log names the process.
+/// Logs each of our display holds that outlives every game run by ``grace``, once.
 nonisolated struct DisplayHoldWatch: Sendable {
-    /// How long a hold of ours may stand with no run open before it is reported.
     static let grace: TimeInterval = 5 * 60
 
     private var reported: Set<String> = []
 
     init() {}
 
-    /// The holds to report now: ours, older than ``grace``, while no run is open, and not
-    /// reported before. A run opening forgets what was reported, so a hold after it counts anew.
+    /// Ours, older than ``grace``, with no run open, not reported before; a run
+    /// opening resets what was reported.
     mutating func check(_ holds: [DisplayHolds.Hold], runOpen: Bool, now: Date = .now) -> [DisplayHolds.Hold] {
         guard !runOpen else {
             reported.removeAll()

@@ -3,17 +3,13 @@ import Foundation
 /// Everything a run left behind, gathered into one directory it can be shared
 /// from.
 ///
-/// Every game has its own dumping ground and none of them agrees with another:
 /// Wine's exception trail is in the app's own log, macOS writes `.ips` files
 /// for the processes that took a signal, Unreal keeps `Saved/Crashes`, Unity
 /// keeps `Player.log` under a company and a product that do not name the app
 /// id, NW.js keeps a Crashpad database, and Steam keeps five logs of its own.
 /// A report is all of them, read once, stripped by ``Redaction`` and
-/// ``ReportStripper``, and written under one directory named for the run —
-/// so "send us the crash" is one folder rather than a treasure hunt.
-///
-/// Nothing here parses a report back: the whole directory is bytes to be
-/// attached to an issue.
+/// ``ReportStripper``, and written under one directory named for the run, to
+/// be attached to an issue as it is.
 nonisolated enum CrashCollector {
     /// Where reports live, one directory per run.
     static let root = AppIdentity.supportFolder
@@ -28,45 +24,35 @@ nonisolated enum CrashCollector {
     /// How much of one log is kept: the end, where the failure is.
     static let maximumBytesPerFile = 2_000_000
 
-    /// A game's own files are still being written when its process dies, so a
-    /// last write can land after the run record closed.
+    /// A game's last write can land after the run record closed.
     static let graceAfterRun: TimeInterval = 300
 
-    /// Where the collector reads and writes. Every path is injectable so a
-    /// test can drive a whole collection without a bottle or a real crash.
+    /// Where the collector reads and writes, injectable for tests.
     struct Places: Sendable {
         var reports = root
         var bottle = SteamBottle.root
         var steamLogs = SteamBottle.steamRoot.appendingPathComponent("logs")
         var diagnosticReports = UserHome.url
             .appending(path: "Library/Logs/DiagnosticReports")
-        /// The names a report's redaction is given, since no rule can derive
-        /// them from the text.
+        /// Account names to redact, which no rule can derive from the text.
         var personas: [String] = SteamAccounts.names()
-        /// Path fragments that mark an image as this project's software, for
-        /// the crash reports' image lists.
         var ourImageMarkers = CrashCollector.ourImageMarkers
-        /// Where a game is installed, which is where its own logs and dumps
-        /// are. Injected so a test never reads the Mac's real library.
         var installDirectory: @Sendable (Int) -> URL? = {
             SharedGames.installed(appID: $0)?.directory
         }
 
-        /// The engine-specific logs ``GameLogs`` already knows how to find.
         var gameLogs: @Sendable (RunRecord) -> [GameLogs.Collected] = {
             GameLogs.collect(for: [$0])
         }
 
-        /// Whether a minidump is copied whole rather than named and measured.
-        /// A dump is the process's memory, so only the level someone set on
-        /// purpose keeps one (``DiagnosticLevel/keepsWholeDumps``).
+        /// Whether a minidump, the process's memory, is copied whole
+        /// (``DiagnosticLevel/keepsWholeDumps``).
         var keepsWholeDumps = DiagnosticLevel.current.keepsWholeDumps
 
         init() {}
     }
 
-    /// What a report holds and what was taken out of it, written beside the
-    /// files as `manifest.json`.
+    /// `manifest.json`: what a report holds and what was taken out.
     struct Manifest: Codable, Equatable, Sendable {
         /// When the report was collected.
         var t: String
@@ -77,9 +63,8 @@ nonisolated enum CrashCollector {
         var removed: [String]
 
         struct Source: Codable, Equatable, Sendable {
-            /// Which row of the plan's table this came from.
             var kind: String
-            /// Where it sits inside the report.
+            /// The path inside the report.
             var file: String
             /// Where it was read from, redacted.
             var from: String
@@ -92,15 +77,9 @@ nonisolated enum CrashCollector {
         let manifest: Manifest
     }
 
-    /// Gathers everything this run left behind.
-    ///
-    /// - Parameters:
-    ///   - record: The run, already closed — its window is what decides which
-    ///     of a game's files belong to it.
-    ///   - wineTail: What the Wine log gained during the run, which the
-    ///     recorder has already read to decide how the run ended.
-    ///   - places: Where to read and write. The defaults are this Mac's.
-    /// - Returns: The report, or `nil` when nothing could be written.
+    /// Gathers everything this closed run left behind; its window decides
+    /// which files belong to it. `wineTail` is what the Wine log gained
+    /// during the run. Answers `nil` when nothing could be written.
     @discardableResult
     static func collect(
         for record: RunRecord, wineTail: String = "", places: Places = Places(),
@@ -110,8 +89,7 @@ nonisolated enum CrashCollector {
         guard (try? manager.createDirectory(at: directory, withIntermediateDirectories: true))
             != nil else { return nil }
         var writer = Writer(directory: directory, personas: places.personas)
-        // Stripped already, by construction: a run record names no one, and
-        // the file stays byte-exact so it can be decoded back.
+        // A run record names no one, and stays byte-exact for decoding.
         writer.write(
             runRecord(record), as: "run.json", kind: "run record", from: "the run log",
             stripped: true,
@@ -135,13 +113,9 @@ nonisolated enum CrashCollector {
         return Report(directory: directory, manifest: manifest)
     }
 
-    /// What a finished run gets, at the level in force: a report when the run
-    /// ended badly or when the level asks for one after every run, and a
-    /// compressed one when the level says so.
-    ///
-    /// - Parameter beforeCompressing: The caller's chance to put something of
-    ///   its own in the report — the app adds a doctor report at level two —
-    ///   while it is still a directory.
+    /// A report for a run that ended badly, or for every run where the level
+    /// asks, compressed where it says so. `beforeCompressing` can add files
+    /// (the app's doctor report) while it is still a directory.
     @discardableResult
     static func collectIfWanted(
         for record: RunRecord, wineTail: String,
@@ -150,8 +124,6 @@ nonisolated enum CrashCollector {
     ) -> Report? {
         let ended = record.exit?.kind
         guard level.collectsEveryRun || collectedEndings.contains(where: { $0 == ended }) else { return nil }
-        // The level decides the dumps, so the caller never has to keep the two
-        // in step by hand.
         var places = places
         places.keepsWholeDumps = level.keepsWholeDumps
         guard let report = collect(for: record, wineTail: wineTail, places: places) else {
@@ -162,21 +134,13 @@ nonisolated enum CrashCollector {
         return report
     }
 
-    /// The endings every level collects a report for. An error exit is one:
-    /// the game's own log says why it gave up, and its next launch writes
-    /// over that log.
+    /// The endings every level collects; an error exit is one because the
+    /// next launch overwrites the game's log of why.
     static let collectedEndings: Set<RunRecord.Exit.Kind> = [.crash, .crashAtExit, .watchdog, .exitError]
 
-    /// Puts `sevo doctor`'s JSON in a report, by running the CLI that rides
-    /// inside the app bundle — the same report the terminal prints, so a
-    /// reader is never comparing two different checks.
-    ///
-    /// Blocking, on the queue the record was written from: a doctor pass is a
-    /// few seconds, and it only runs at the level someone set on purpose. A
-    /// pass still running after ``doctorTimeout`` is killed and the report
-    /// goes without it, so a doctor stuck on a wedged bottle never holds the
-    /// queue. Answers nothing when the helper is not there, which is every
-    /// process that is not the app.
+    /// Puts `sevo doctor --json` from the bundled CLI in a report. Blocking;
+    /// a pass past ``doctorTimeout`` is killed and left out. Answers `false`
+    /// outside the app, which alone carries the helper.
     @discardableResult
     static func addDoctorReport(to report: Report) -> Bool {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/sevo")
@@ -187,12 +151,9 @@ nonisolated enum CrashCollector {
 
     static let doctorTimeout: TimeInterval = 30
 
-    /// Runs `tool` with its output going to `url`, and kills it once
-    /// `timeout` has passed. Answers whether it exited by itself, cleanly,
-    /// having written something; a run that did not leaves no file.
-    ///
-    /// Output goes to a file rather than a pipe, so a tool that prints more
-    /// than a pipe holds never blocks on a reader that is waiting for it.
+    /// Runs `tool` into the file `url` (a pipe could fill and block), killing
+    /// it after `timeout`. Answers whether it exited cleanly with output;
+    /// otherwise the file is removed.
     static func runBounded(_ tool: URL, _ arguments: [String], into url: URL, timeout: TimeInterval) -> Bool {
         let manager = FileManager.default
         guard manager.createFile(atPath: url.path, contents: nil),
@@ -226,8 +187,7 @@ nonisolated enum CrashCollector {
         return true
     }
 
-    /// `<appid>-<when the run began>`, which sorts by app and then by time and
-    /// never collides with the next launch of the same game.
+    /// `<appid>-<start>`, sorting by app, then time.
     static func name(for record: RunRecord) -> String {
         let moment = record.t.replacingOccurrences(of: ":", with: "")
         return "\(record.appid)-\(moment)"
@@ -242,9 +202,7 @@ nonisolated enum CrashCollector {
 
     // MARK: - Wine's exception trail
 
-    /// The `+seh` records and the backtrace under them. The rest of the Wine
-    /// log during a run is every other channel that was on, which the report
-    /// zip carries whole anyway.
+    /// The `+seh` records and the backtrace under them.
     private static func collectWineTrail(_ tail: String, into writer: inout Writer) {
         let lines = exceptionLines(in: tail)
         guard !lines.isEmpty else { return }
@@ -254,13 +212,11 @@ nonisolated enum CrashCollector {
         )
     }
 
-    /// Wine's exception machinery in a log: the `seh` channel itself, the
-    /// sentence `ntdll` prints before it kills the process, and the rows of
-    /// the backtrace and register dump that follow.
+    /// Wine's exception lines: the `seh` channel, `ntdll`'s fatal sentence,
+    /// and the backtrace and register dump rows.
     ///
-    /// The rows are not marked with a channel — they are written straight to
-    /// stderr — so they are recognized by what follows a heading rather than
-    /// by what they say.
+    /// The rows go straight to stderr with no channel mark, so they are
+    /// recognized by the heading they follow.
     static func exceptionLines(in text: String) -> [String] {
         var kept: [String] = []
         var inDump = false
@@ -277,8 +233,7 @@ nonisolated enum CrashCollector {
         return kept
     }
 
-    /// A row under a backtrace or a register dump: a frame number and an
-    /// address, or a row of addresses with nothing else on it.
+    /// A frame number and an address, or a row of addresses alone.
     private static func isDumpRow(_ line: some StringProtocol) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return false }
@@ -299,9 +254,7 @@ nonisolated enum CrashCollector {
 
     // MARK: - macOS crash reports
 
-    /// The `.ips` files macOS wrote for our processes while the run was up,
-    /// each rendered down to the exception, the faulting thread and our own
-    /// images.
+    /// The `.ips` files macOS wrote for our processes during the run.
     private static func collectCrashReports(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
@@ -324,28 +277,20 @@ nonisolated enum CrashCollector {
         }
     }
 
-    /// The processes whose crash reports are this app's business, by the name
-    /// at the head of the report's file name. Everything else on the Mac
-    /// crashed on its own account — except a game run through its launcher
-    /// bundle, whose report carries the game's title and is told apart by its
-    /// path (``CrashReportIPS/isOurs(_:prefixes:pathMarkers:)``).
+    /// Report file-name prefixes of our processes; a launcher-bundle game is
+    /// matched by path instead
+    /// (``CrashReportIPS/isOurs(_:prefixes:pathMarkers:)``).
     static let ourCrashReportPrefixes = [
         "wine", "wine64", "wine-preloader", "wineserver", "nwjs", "Sevoflurane", "steam",
         "sevo-", "winedevice", "services", "explorer", "start", "ExcUserFault_",
     ]
 
-    /// Path fragments that mark an executable or an image as this project's
-    /// software: the app and everything under its Application Support
-    /// directory, the engines, the renderers, and D3DMetal wherever it sits.
+    /// Path fragments that mark an executable or image as ours.
     static let ourImageMarkers = ["Sevoflurane", "/Engines/", "D3DMetal", "/Renderers/"]
 
     // MARK: - The game's own logs
 
-    /// Unreal's `Saved/Logs` and `Saved/Crashes`, Unity's `Player.log`, and
-    /// the renderer's own files: ``GameLogs`` already knows where each of them
-    /// is for a given run and has read them path-redacted and capped. The
-    /// writer strips them again with the account's persona names, which a
-    /// game prints and no path rule can find.
+    /// ``GameLogs``'s files, stripped again for persona names a game prints.
     private static func collectGameLogs(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
@@ -354,8 +299,7 @@ nonisolated enum CrashCollector {
         }
     }
 
-    /// Which row of the plan's table a game log came out of, from where it
-    /// sits: the engines' directory names are their own signature.
+    /// A game log's kind, from where it sits.
     private static func kind(ofGameLog path: String) -> String {
         let name = path.lowercased()
         if name.contains("crashcontext") || name.contains("/crashes/") { return "unreal crash" }
@@ -364,8 +308,8 @@ nonisolated enum CrashCollector {
         return "game log"
     }
 
-    /// Unity's older player writes beside the game rather than under the
-    /// Windows profile, which is the one place ``GameLogs`` does not look.
+    /// Unity's older player writes beside the game, where ``GameLogs`` does
+    /// not look.
     private static func collectUnity(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
@@ -407,9 +351,7 @@ nonisolated enum CrashCollector {
 
     // MARK: - Steam's own logs
 
-    /// The lines Steam's own logs gained while the run was up. The files are
-    /// rewritten at each client start and appended to constantly, so it is the
-    /// run's window that decides, not the file.
+    /// The lines Steam's logs gained during the run, picked by timestamp.
     private static func collectSteamLogs(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
@@ -427,15 +369,12 @@ nonisolated enum CrashCollector {
         }
     }
 
-    /// Steam's logs that carry a run: what it started, what it connected to,
-    /// and its own console trail.
     static let steamLogNames = [
         "console_log.txt", "connection_log.txt", "bootstrap_log.txt", "gameprocess_log.txt",
     ]
 
-    /// The moment at the head of a Steam log line, `[2026-09-11 17:23:09]`.
-    /// A line without one belongs to the line above it, and a report that
-    /// cannot place it leaves it out rather than guessing.
+    /// The moment at the head of a Steam log line, `[2026-09-11 17:23:09]`;
+    /// lines without one are left out.
     static func steamLogMoment(of line: some StringProtocol) -> Date? {
         guard line.hasPrefix("["), let end = line.firstIndex(of: "]") else { return nil }
         return steamLogStamp.date(from: String(line[line.index(after: line.startIndex) ..< end]))
@@ -443,13 +382,10 @@ nonisolated enum CrashCollector {
 
     // MARK: - Minidumps
 
-    /// What the bottle's minidumps say about themselves — and, at the level
-    /// someone set on purpose, the dumps as well.
+    /// The run's minidumps, summarized, or copied whole where the level asks.
     private static func collectDumps(
         for record: RunRecord, places: Places, into writer: inout Writer,
     ) {
-        // A dump written outside the run's window is another run's, and the
-        // bottle's dump folder holds every game's.
         guard let window = window(of: record) else { return }
         for user in InstallDirectory.entries(
             in: places.bottle.appendingPathComponent("drive_c/users"),
@@ -470,11 +406,8 @@ nonisolated enum CrashCollector {
     // MARK: - Compression
 
     /// Compresses a finished report into `archives/` and removes the loose
-    /// directory. Level two only: a report of every library a game loaded is
-    /// tens of megabytes of text, which is a megabyte of `xz`.
-    ///
-    /// `tar -J` rather than the `xz` tool: liblzma is inside the system's own
-    /// `tar` and `xz` is not on a Mac that has no Homebrew.
+    /// directory. `tar -J`: the system `tar` carries liblzma, and `xz` is
+    /// absent without Homebrew.
     @discardableResult
     static func compress(_ directory: URL, in root: URL = root) -> URL? {
         let manager = FileManager.default
@@ -502,16 +435,14 @@ nonisolated enum CrashCollector {
         return archive
     }
 
-    /// Where compressed reports live, beside the loose ones and under a budget
-    /// of their own.
+    /// Compressed reports, under a budget of their own.
     static func archives(in root: URL = root) -> URL {
         root.appendingPathComponent(archivesName)
     }
 
     private static let archivesName = "archives"
 
-    /// Drops compressed reports, oldest first, until they are inside their
-    /// budget.
+    /// Drops compressed reports, oldest first, until within budget.
     static func groomArchives(in root: URL = root, budget: Int = maximumArchiveBytes) {
         let directory = archives(in: root)
         let manager = FileManager.default
@@ -534,9 +465,7 @@ nonisolated enum CrashCollector {
 
     // MARK: - The cap
 
-    /// Drops whole reports, oldest first, until the directory is inside its
-    /// budget. Whole reports rather than files inside them: half a report
-    /// answers nothing, and the oldest is the one nobody is asking about.
+    /// Drops whole reports, oldest first, until within budget.
     static func groom(in root: URL = root, budget: Int = maximumBytes) {
         var reports = self.reports(in: root)
         var total = reports.reduce(0) { $0 + $1.bytes }
@@ -571,8 +500,7 @@ nonisolated enum CrashCollector {
         .sorted { $0.modified < $1.modified }
     }
 
-    /// The report this run left, loose or compressed, or `nil` for a run that
-    /// never had one collected.
+    /// The report this run left, loose or compressed.
     static func report(for record: RunRecord, in root: URL = root) -> URL? {
         let manager = FileManager.default
         let directory = root.appendingPathComponent(name(for: record))
@@ -582,11 +510,7 @@ nonisolated enum CrashCollector {
         return manager.fileExists(atPath: archive.path) ? archive : nil
     }
 
-    /// The lines of a report that say what went wrong: the exceptions in
-    /// Wine's trail and the heading of every macOS crash report in it.
-    ///
-    /// Reads a loose report only. A compressed one is level two's, and
-    /// unpacking a `.tar.xz` to fill a list is work a window should not do.
+    /// A loose report's exception lines and crash report headings.
     static func findings(in directory: URL, limit: Int = 12) -> [String] {
         var found: [String] = []
         if let trail = try? String(
@@ -638,7 +562,7 @@ nonisolated enum CrashCollector {
         try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
-    /// Writes a report's files and keeps the list the manifest is made of.
+    /// Writes a report's files and lists them for the manifest.
     private struct Writer {
         let directory: URL
         let personas: [String]
@@ -666,9 +590,8 @@ nonisolated enum CrashCollector {
             )
         }
 
-        /// What a directory of minidumps written during `window` holds, as
-        /// one text file — and the dumps themselves when `whole`, which is a
-        /// level someone chose.
+        /// Summarizes the minidumps written during `window`, copying them
+        /// when `whole`.
         mutating func writeDumps(
             in directory: URL, as file: String, kind: String, within window: ClosedRange<Date>,
             whole: Bool = false,

@@ -1,43 +1,26 @@
 import Darwin
 import Foundation
 
-/// Ends a game's own processes before Steam is asked to, so that a stop
-/// somebody asked for leaves no crash report behind.
+/// Ends a game's own processes before Steam is asked to, so a requested stop
+/// leaves no crash report.
 ///
-/// Steam's `TerminateApp` reaches the game as `TerminateProcess`, and Wine
-/// carries that out one thread at a time: the server sends every Wine thread
-/// `SIGQUIT` (`server/thread.c`, `kill_thread`), and each thread's handler
-/// leaves through `pthread_exit` (`dlls/ntdll/unix/thread.c`, `abort_thread`)
-/// while the threads Wine did not make — AppKit's main thread, Metal's and
-/// Core Audio's workers, libdispatch's — keep running. A Wine thread that dies
-/// inside a Metal or XPC call owning a libdispatch workloop leaves the next
-/// worker to find that owner gone, and libdispatch aborts the process
-/// (`Invalid workloop owner`); macOS files that as a crash of the game's own
-/// bundle and asks whether to reopen it. A signal to the whole process has no
-/// such window: the kernel ends every thread at once with no user code in
-/// between, and `SIGTERM`, which nothing in the engine handles, ends the
-/// process without a report.
+/// Steam's `TerminateApp` makes Wine end one thread at a time (`SIGQUIT`,
+/// `kill_thread`, then `abort_thread`'s `pthread_exit`) while non-Wine
+/// threads keep running; a Wine thread dying inside a Metal or XPC call that
+/// owns a libdispatch workloop makes libdispatch abort (`Invalid workloop
+/// owner`), which macOS files as the game's crash. A whole-process `SIGTERM`,
+/// unhandled by the engine, ends every thread at once without a report.
 ///
-/// So a stop on purpose ends the game's processes here first — `SIGTERM`, a
-/// bounded wait, `SIGKILL` for whatever is left — and only then reaches Steam,
-/// whose `TerminateApp` finds no process to tear down and clears its own
-/// record of the run. A game that crashes on its own still files its report:
-/// only the stop the player or `sevo` asked for takes this path.
-///
-/// A macOS build runs under the engine's native supervisor
-/// (``NativeSessions``), which owns the game's process group and the pipe
-/// Steam's waiter watches; that build is stopped through its supervisor first,
-/// and the same ladder then ends whatever of it is left.
+/// A macOS build is stopped through its native supervisor
+/// (``NativeSessions``) first, and the same ladder ends what is left.
 nonisolated enum GameEnding {
     /// How long a process gets to leave on `SIGTERM` before `SIGKILL`.
     static let grace: Duration = .seconds(5)
-    /// How long the kernel gets to reap a `SIGKILL`ed process before it is
-    /// reported as a survivor.
+    /// How long the kernel gets to reap a `SIGKILL`ed process.
     static let killGrace: Duration = .seconds(2)
-    /// How often the processes are looked at while a wait runs.
     static let poll: Duration = .milliseconds(100)
 
-    /// What the ladder needs from the machine, so a test can stand in for it.
+    /// What the ladder needs from the machine, replaceable in tests.
     protocol Processes: Sendable {
         /// Whether the process is still running: a zombie is gone.
         func isAlive(_ pid: pid_t) -> Bool
@@ -65,16 +48,14 @@ nonisolated enum GameEnding {
         }
     }
 
-    /// What became of the processes: which left on `SIGTERM`, which needed
-    /// `SIGKILL`, and which answered to the end.
+    /// Which processes left on `SIGTERM`, needed `SIGKILL`, or survived.
     struct Outcome: Equatable, Sendable {
         var terminated: [pid_t] = []
         var killed: [pid_t] = []
         var survivors: [pid_t] = []
         /// The native supervisors that ended their macOS build and exited.
         var sessionsStopped: [pid_t] = []
-        /// The native supervisors still running when their stop's wait ran
-        /// out; the ladder then signaled them with the rest.
+        /// Native supervisors still running after their stop's wait.
         var sessionsUnstopped: [pid_t] = []
 
         var isEmpty: Bool {
@@ -104,9 +85,8 @@ nonisolated enum GameEnding {
         }
     }
 
-    /// Ends the game: its running macOS builds through their supervisors,
-    /// then every process of it still alive (``processes(ofApp:)``), and
-    /// answers what it took.
+    /// Ends the game's macOS builds through their supervisors, then every
+    /// process of it still alive (``processes(ofApp:)``).
     static func end(appID: Int) async -> Outcome {
         let stop = await NativeSessions.stop(appID: appID, in: NativeSessions.live(removingStale: true))
         var outcome = await end(processes(ofApp: appID))
@@ -115,8 +95,7 @@ nonisolated enum GameEnding {
         return outcome
     }
 
-    /// `SIGTERM` to every live process at once, `grace` for them to go, then
-    /// `SIGKILL` to what is left and ``killGrace`` for the kernel to reap it.
+    /// `SIGTERM` to all, `grace` to go, then `SIGKILL` and ``killGrace``.
     static func end(
         _ pids: [pid_t], grace: Duration = grace, processes: some Processes = LiveProcesses(),
     ) async -> Outcome {
@@ -133,8 +112,7 @@ nonisolated enum GameEnding {
         return outcome
     }
 
-    /// The pids among `pids` still alive once they have all gone or `wait`
-    /// has passed, whichever comes first.
+    /// The pids still alive once all have gone or `wait` has passed.
     private static func remaining(
         of pids: [pid_t], after wait: Duration, processes: some Processes,
     ) async -> [pid_t] {
@@ -151,12 +129,8 @@ nonisolated enum GameEnding {
 
     // MARK: - Which processes are the game's
 
-    /// The game's own processes: those of its running macOS builds
-    /// (``NativeSessions``), and those in this bottle named from its
-    /// executables — every plausible exe in a Steam game's install directory,
-    /// the one file an adopted program is. An app whose files cannot be placed
-    /// and that runs no macOS build has nothing to match, and then only
-    /// Steam's record speaks for it.
+    /// The game's macOS build processes (``NativeSessions``) and the bottle's
+    /// processes named after its executables.
     static func processes(ofApp appID: Int) async -> [pid_t] {
         let native = NativeSessions.processes(ofApp: appID, in: NativeSessions.live())
         let bottled = await bottleProcesses(ofApp: appID)
@@ -166,9 +140,8 @@ nonisolated enum GameEnding {
     private static func bottleProcesses(ofApp appID: Int) async -> [pid_t] {
         let names = executableNames(ofApp: appID)
         guard !names.isEmpty else { return [] }
-        // `pgrep` matches a pattern anywhere in the command line, so the
-        // bottle-scoped candidates are kept only where the program itself —
-        // argv[0]'s last path component — carries one of the names exactly.
+        // `pgrep` matches anywhere in the command line, so only candidates
+        // whose argv[0] last component is one of the names are kept.
         let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
         let exact = Set(names.flatMap { WineProcessList.pids(named: $0, inPgrepLong: listing) })
         guard !exact.isEmpty else { return [] }

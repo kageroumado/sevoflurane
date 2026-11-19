@@ -1,13 +1,8 @@
 import Foundation
 
-/// Files the app bundle ships in `Contents/Resources`, by name — the
-/// greenworks preload, the shader packages directory.
-///
-/// `sevo` lives in the same bundle's `Contents/Helpers`, where `Bundle.main`
-/// may resolve to the helper directory rather than the app, so the bundle's
-/// `Contents` is found by walking up from the executable when the direct
-/// lookup misses. `nil` from a bundle without the file, and from a `sevo`
-/// built outside any bundle.
+/// Files in the app's `Contents/Resources`, by name. For `sevo` in
+/// `Contents/Helpers`, `Bundle.main` can miss them, so `Contents` is found by
+/// walking up from the executable.
 nonisolated enum BundledResources {
     static func url(_ name: String) -> URL? {
         let manager = FileManager.default

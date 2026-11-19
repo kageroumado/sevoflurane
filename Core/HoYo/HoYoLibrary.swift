@@ -1,16 +1,11 @@
 import Foundation
 
-/// The HoYoverse game folders Sevoflurane keeps current: every folder it
-/// installed or updated a game in, and every added program that is one of
-/// these games.
-///
-/// The folders live in the shared settings suite, so a game installed from
-/// `sevo` shows in the app and the other way round.
+/// The HoYoverse game folders Sevoflurane keeps current, recorded in the
+/// shared suite, plus adopted programs that are one of these games.
 nonisolated enum HoYoLibrary {
     static let foldersKey = "hoyoFolders"
 
-    /// Every known installation, one per folder, in the order they were
-    /// added. A folder whose game is gone is left out.
+    /// Every installation still present, one per folder, in order added.
     static func installations(in defaults: UserDefaults = Preferences.shared) -> [HoYoInstallation] {
         let recorded = (defaults.stringArray(forKey: foldersKey) ?? []).map { URL(fileURLWithPath: $0) }
         let adopted = AdoptedPrograms.all().map { $0.program.url.deletingLastPathComponent() }
@@ -36,16 +31,13 @@ nonisolated enum HoYoLibrary {
         defaults.set((defaults.stringArray(forKey: foldersKey) ?? []).filter { $0 != path }, forKey: foldersKey)
     }
 
-    /// Adds an installed game to Quick Launch unless it is there already or
-    /// is one Sevoflurane cannot start. Answers the program's id.
+    /// Adds a startable game to Quick Launch once; answers the program's id.
     @discardableResult
     static func addToQuickLaunch(_ installation: HoYoInstallation, bottle: String) -> Int? {
         guard installation.game.launches else { return nil }
         let exe = installation.folder.appending(path: installation.game.executable).standardizedFileURL
         if let existing = AdoptedPrograms.all().first(where: { $0.program.url.standardizedFileURL == exe }) {
-            // Adopted by hand before this library knew the game, it carries
-            // the executable's stem for a name; the game's own is better on
-            // a Dock tile.
+            // A hand-adopted program is named after the exe's stem.
             if existing.name == exe.deletingPathExtension().lastPathComponent {
                 var values = GameConfig.game(existing.id)
                 values.name = installation.game.displayName

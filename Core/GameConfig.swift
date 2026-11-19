@@ -4,28 +4,22 @@ import Foundation
 /// `ResizableWindows` option (dormison winemac.drv), which reads the first
 /// character of the value, so the raw values must stay distinct in it.
 ///
-/// The labels say which windows each case reaches: a collapsed picker shows
-/// only the selected label, so a label that names what it does without
-/// naming what it leaves out cannot be read against its neighbors. The raw
-/// values are stored in every config file and stay as they are; `fixed`
-/// names the windows it reaches, which a reader of `windows=fixed` alone
-/// takes for "cannot move or resize", so the command-line help spells each
-/// one out (``help``).
+/// Each label names the windows its case reaches, because a collapsed picker
+/// shows only the selected one. The raw values are stored in config files and
+/// must not change; `windows=fixed` alone reads as "cannot move or resize",
+/// so ``help`` spells each case out.
 nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     /// Windows are left as the game makes them.
     case off
-    /// A titled window the game locks to one size becomes resizable; the
-    /// picture scales to fit. A borderless window covering the screen stays
-    /// as it is.
+    /// A titled window the game locks to one size becomes resizable and its
+    /// picture scales; a borderless full-screen window stays as it is.
     case fixed
-    /// As `fixed`, and a borderless window covering a screen becomes an
-    /// ordinary titled window the player can move and resize, while the game
-    /// still believes it fills the screen.
+    /// As `fixed`, and a borderless full-screen window becomes a movable,
+    /// resizable titled window while the game still believes it fills the
+    /// screen.
     case window
-    /// Every titled window becomes resizable, the ones the game already lets
-    /// the user resize included — which those games would otherwise redraw at
-    /// the new size rather than scale. A borderless window covering the
-    /// screen stays as it is.
+    /// Every titled window becomes resizable and scales, the ones the game
+    /// resizes itself included; a borderless full-screen window stays.
     case all
 
     /// The picker's line for this case.
@@ -39,8 +33,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// What the player gets, for a command line that has no picker to read
-    /// the neighboring cases from.
+    /// What the player gets, for a command line.
     var summary: String {
         let value = switch self {
         case .off: "every window stays as the game makes it; a full-screen game covers the screen"
@@ -54,8 +47,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// Every case and what the player gets, one line each, plus the
-    /// level-clearing value the config commands accept.
+    /// Every case and its summary, one line each, plus `inherit`.
     static var help: String {
         let width = (allCases.map(\.rawValue) + ["inherit"]).map(\.count).max() ?? 0
         let line = { (name: String, text: String) in
@@ -65,8 +57,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
             .joined(separator: "\n")
     }
 
-    /// The case names alone, for the places a line of help has room for the
-    /// values but not for what they mean.
+    /// The case names alone, for a one-line help.
     static var rungs: String {
         allCases.map(\.rawValue).joined(separator: " | ") + " | inherit"
     }
@@ -77,11 +68,9 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
 /// directory (``ShaderPackages``), which carries its own title and
 /// description.
 nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
-    /// The driver's presenter stays off and the window system scales the
-    /// picture.
+    /// The window system scales the picture.
     case off
-    /// The presenter resamples the frame at the display's full resolution
-    /// with the final filter.
+    /// The final filter alone resamples the frame to the display's resolution.
     case lanczos
     /// MetalFX Spatial, then the final filter.
     case metalfx
@@ -139,11 +128,9 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
 nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
     /// A waiting thread goes to sleep at once, as Wine does it.
     case standard
-    /// A waiting thread looks for its wake-up for two microseconds before it
-    /// sleeps, and stops looking where that keeps failing. Hand-offs between
-    /// threads get up to ten times quicker; a game
-    /// that runs more busy threads than the Mac has cores pays for it in
-    /// processor time.
+    /// A waiting thread spins two microseconds before it sleeps, and stops
+    /// spinning where that keeps failing. Hand-offs get up to ten times
+    /// quicker; a game with more busy threads than cores pays in CPU time.
     case experimental
     /// The three parameters as the level's ``TuningParameters`` set them.
     case custom
@@ -157,8 +144,8 @@ nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// The parameters a preset stands for; `custom` stands for the ones
-    /// handed in, and for the experimental ones where none are stored.
+    /// The parameters a preset stands for; `custom` falls back to the
+    /// experimental ones.
     func parameters(custom: TuningParameters?) -> TuningParameters {
         switch self {
         case .standard: .standard
@@ -168,17 +155,15 @@ nonisolated enum PerformanceTuning: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// How long a waiting thread looks for its wake-up before it sleeps — the
-/// engine switches ``PerformanceTuning`` sets, open to a hand.
+/// The engine's spin-before-sleep switches that ``PerformanceTuning`` sets.
 nonisolated struct TuningParameters: Codable, Equatable, Sendable {
     /// Iterations a thread spins on a wait before it parks (`SEVO_WAIT_SPIN`).
     /// One iteration is about 0.4 ns, so 5200 is two microseconds.
     var waitSpin: Int
-    /// Whether a wait that keeps failing to catch its wake-up stops spinning
-    /// (`SEVO_WAIT_SPIN_ADAPT`).
+    /// Whether a wait that keeps missing stops spinning (`SEVO_WAIT_SPIN_ADAPT`).
     var adaptive: Bool
-    /// Iterations a thread spins on a contended object — a mutex, an event, a
-    /// semaphore — before it parks (`SEVO_OBJECT_SPIN`).
+    /// Iterations a thread spins on a contended mutex, event or semaphore
+    /// before it parks (`SEVO_OBJECT_SPIN`).
     var objectSpin: Int
 
     static let standard = TuningParameters(waitSpin: 0, adaptive: false, objectSpin: 0)
@@ -193,7 +178,7 @@ nonisolated struct TuningParameters: Codable, Equatable, Sendable {
         min(max(spin, spinRange.lowerBound), spinRange.upperBound)
     }
 
-    /// Every key, always: a game's file is read over the bottle's, and an
+    /// Every key, always: a game's file is read over the bottle's, so an
     /// absent key would leave the bottle's value standing.
     var environment: [(key: String, value: String)] {
         [
@@ -215,15 +200,13 @@ nonisolated extension TuningParameters {
     }
 }
 
-/// What a game holding the cursor for mouse-look is given as mouse movement —
+/// The mouse movement a game holding the cursor for mouse-look receives —
 /// the driver's `LinearMouse` option (dormison winemac.drv).
 nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
-    /// The pointer moves the way it does everywhere else on the Mac, the
-    /// system's acceleration curve included.
+    /// The system's acceleration curve applies.
     case system
-    /// The mouse's own displacement reaches the game unshaped, so the same
-    /// sweep of the hand turns the camera the same distance however fast it
-    /// is made.
+    /// The raw displacement reaches the game, so the same sweep turns the
+    /// camera the same distance at any speed.
     case linear
 
     var label: String {
@@ -235,10 +218,9 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// A cap on the frames a second a game shows (`SEVO_FPS_LIMIT`): the engine
-/// holds each frame until its turn on every present path, Metal and OpenGL
-/// alike (dormison `winemac.drv` `sevo_limiter`). The rates are the ones a
-/// running game's View › Frame Rate Limit offers.
+/// A frame-rate cap (`SEVO_FPS_LIMIT`), applied on every present path, Metal
+/// and OpenGL (dormison `winemac.drv` `sevo_limiter`). The rates match a
+/// running game's View › Frame Rate Limit.
 nonisolated enum FrameRateLimit: String, Codable, CaseIterable, Sendable {
     case off
     case fps30 = "30"
@@ -248,7 +230,7 @@ nonisolated enum FrameRateLimit: String, Codable, CaseIterable, Sendable {
     case fps90 = "90"
     case fps120 = "120"
 
-    /// What the engine reads: frames a second, `0` for no limit.
+    /// Frames a second, `0` for no limit.
     var framesPerSecond: Int {
         Int(rawValue) ?? 0
     }
@@ -258,25 +240,21 @@ nonisolated enum FrameRateLimit: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// How much the frame rate counter shows (`SEVO_OVERLAY_LEVEL`), by the
-/// level the engine reads.
+/// How much the frame rate counter shows (`SEVO_OVERLAY_LEVEL`).
 nonisolated enum OverlayDetail: String, Codable, CaseIterable, Sendable {
     /// The number alone.
     case frameRate = "1"
-    /// A card with the number, the 1 % low and a graph of the last five
-    /// seconds of frame times.
+    /// The number, the 1 % low and a five-second frame-time graph.
     case frameTime = "2"
-    /// The card with a row for the game's CPU, the GPU's load, the Mac's
-    /// power draw and its temperature.
+    /// The graph card plus the game's CPU, GPU load, power draw and
+    /// temperature.
     case system = "3"
 
-    /// Whether the counter is the frame-time card, which is what `fps-graph`
-    /// reads.
+    /// Whether the counter is the frame-time card, which `fps-graph` reads.
     var showsFrameGraph: Bool {
         self != .frameRate
     }
 
-    /// The level as the engine reads it.
     var level: Int {
         Int(rawValue) ?? 1
     }
@@ -307,88 +285,63 @@ nonisolated enum VideoDecoding: String, Codable, CaseIterable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// The other one: what a game whose video decoded nothing is offered.
+    /// The other choice, offered to a game whose video decoded nothing.
     var other: VideoDecoding {
         self == .hardware ? .software : .hardware
     }
 }
 
-/// One level of the settings hierarchy: the keys a game's launch reads, each
-/// optional so an absent one inherits from the level above. Game files also
-/// carry the executables the game is known to run under, which is what a
-/// per-program value is written against.
+/// One level of the settings hierarchy: every key optional, so an absent one
+/// inherits from the level above. Game files also carry the executables the
+/// game runs under, which per-program values are written against.
 nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     var windows: WindowTreatment?
-    /// What the game is given as mouse movement while it holds the cursor for
-    /// mouse-look.
     var mouse: MouseCurve?
-    /// Experimental: how the engine's threads wait for each other
-    /// (``PerformanceTuning``).
+    /// Experimental (``PerformanceTuning``).
     var tuning: PerformanceTuning?
     /// The parameters the `custom` tuning stands for at this level.
     var tuningParameters: TuningParameters?
-    /// The present-time upscaler: one of ``UpscalerChoice`` by raw value, or
-    /// the name of a shader package. Stored as text so a file written by a
-    /// later version, naming a package this one does not know, still reads;
-    /// `"off"` is a value like any other and means off at this level.
+    /// An ``UpscalerChoice`` raw value or a shader package name, stored as
+    /// text so a package a later version names still reads.
     var upscaler: String?
-    /// How the upscaler's last pass is resampled into the window.
     var filter: FinalFilter?
     /// Game level only: the translation layer this game renders through, over
     /// the bottle's own choice. An engine that reads the env files hands it to
-    /// the game at its next launch, through a `WINEDLLPATH_PREPEND` directory
-    /// of that renderer's payload; an engine without them takes a client
-    /// restart, which is what ``BottleGraphics/rendererNeedingRestart(forApp:)``
-    /// answers.
+    /// the game at its next launch through a `WINEDLLPATH_PREPEND` directory of
+    /// that renderer's payload; any other engine needs a client restart
+    /// (``BottleGraphics/rendererNeedingRestart(forApp:)``).
     var renderer: Renderer?
-    /// Whether the prefix draws at the display's full resolution, which
-    /// doubles what a game is told the screen measures
-    /// (`Mac Driver\RetinaMode`).
-    ///
-    /// Bottle-wide: `winemac.drv` reads it with no app key so that the DPI and
-    /// the monitor sizes are one answer for every process in the prefix.
+    /// Whether the prefix draws at full resolution, doubling the screen size
+    /// a game is told (`Mac Driver\RetinaMode`). Bottle-wide: `winemac.drv`
+    /// reads it with no app key, so DPI and monitor sizes agree prefix-wide.
     var retina: Bool?
-    /// Whether a game that switches the display mode gets the switch faked and
-    /// its picture in a window the user can resize
-    /// (win32u `X11 Driver\EmulateModeset`).
+    /// Whether a display-mode switch is faked and the picture shown in a
+    /// resizable window (win32u `X11 Driver\EmulateModeset`).
     var emulateModeset: Bool?
     /// Per DLL, the load order Wine gives it, in the registry's own spelling:
     /// `n,b`, `b,n`, `n`, `b`, or the empty string for disabled
     /// (`DllOverrides`, per program under `AppDefaults\<exe>`).
     var dllOverrides: [String: String]?
-    /// Variables set by name, written after the lines this level's rows
-    /// write, so one of them wins over a row that writes the same name
+    /// Variables set by name, written after this level's rows so they win
     /// (``UserEnvironment``). An empty value removes the variable.
     var environment: [String: String]?
-    /// Whether Metal draws its performance HUD over the game
-    /// (`MTL_HUD_ENABLED`) — frame time, GPU time and memory, from the driver
-    /// itself rather than from anything the game exposes.
+    /// Metal's performance HUD (`MTL_HUD_ENABLED`).
     var hud: Bool?
-    /// Whether the engine draws its frame-rate counter at the top right of the
-    /// game's window (`SEVO_FPS`): one number, from the engine's own count of
-    /// presented frames, whichever renderer draws them.
+    /// The engine's frame-rate counter at the window's top right (`SEVO_FPS`),
+    /// counted from presented frames under any renderer.
     var fps: Bool?
-    /// What the counter shows: the number, a card with the frame-time graph,
-    /// or that card with the Mac's load, power and temperature
-    /// (`SEVO_OVERLAY_LEVEL`).
     var overlayDetail: OverlayDetail?
-    /// The most frames a second the engine lets the game show
-    /// (`SEVO_FPS_LIMIT`).
     var frameRateLimit: FrameRateLimit?
     /// Whether a program's own Win32 menus show in the macOS menu bar, with
     /// the strip in its window cropped away (`SEVO_MENU_BAR`).
     var nativeMenuBar: Bool?
-    /// Whether a 32-bit game gets the whole 4 GB of address space rather than
-    /// the low 2 GB.
-    ///
-    /// An image carrying `IMAGE_FILE_LARGE_ADDRESS_AWARE` gets it either way;
-    /// `SEVO_LARGE_ADDRESS_AWARE=1` gives it to one without the flag, in
-    /// dormison's `virtual_set_large_address_space` (`ntdll/unix/virtual.c`),
-    /// as Proton's `PROTON_FORCE_LARGE_ADDRESS_AWARE` does.
+    /// Whether a 32-bit game without `IMAGE_FILE_LARGE_ADDRESS_AWARE` gets the
+    /// whole 4 GB of address space (`SEVO_LARGE_ADDRESS_AWARE`, dormison's
+    /// `virtual_set_large_address_space`, like Proton's
+    /// `PROTON_FORCE_LARGE_ADDRESS_AWARE`).
     var largeAddressAware: Bool?
-    /// Whether Rosetta tells the game the CPU has AVX and AVX2
-    /// (`ROSETTA_ADVERTISE_AVX`). Rosetta translates those instructions
-    /// either way; the advertisement is what a game's CPU check reads.
+    /// Whether Rosetta advertises AVX and AVX2 to a game's CPU check
+    /// (`ROSETTA_ADVERTISE_AVX`); it translates them either way.
     var avx: Bool?
     /// Experimental: whether the game is told the Mac's memory is one pool
     /// shared by the CPU and the GPU, which it is (`SEVO_FORCE_UMA`).
@@ -397,55 +350,46 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
     /// each upload into a staging buffer and then copies it into a second
     /// allocation that is the same physical memory. Skipping that copy is
     /// worth 27-107% of a bandwidth-bound frame; dormison's `winemac.drv`
-    /// reports the unified answer when this is on. Off by default because a game that
+    /// reports the unified answer when this is on. Off by default: a game that
     /// believes it takes every unified path, and the texture layouts among
     /// them are the least tested.
     var unifiedMemory: Bool?
-    /// Whether the window server holds the pointer inside the game's window
-    /// while the game has the cursor clipped (`SEVO_CURSOR_CONFINE`), which is
-    /// what keeps mouse-look from walking onto a second display.
+    /// Whether the pointer stays inside the window while the game clips the
+    /// cursor (`SEVO_CURSOR_CONFINE`), so mouse-look cannot reach a second
+    /// display.
     var cursorConfine: Bool?
-    /// How many processors the game is told the Mac has (`SEVO_CPU_COUNT`):
-    /// dormison caps `GetSystemInfo`, the affinity mask and
-    /// `GetLogicalProcessorInformation` to it. `0` is every processor.
-    ///
-    /// Unity 5's JobQueue starts one worker per processor and parks a worker
-    /// only when no other worker is looking for work, so under Rosetta every
-    /// one of them spins; a game told of fewer processors starts fewer.
+    /// The processor count a game is told (`SEVO_CPU_COUNT`), capping
+    /// `GetSystemInfo`, the affinity mask and
+    /// `GetLogicalProcessorInformation`; `0` is every processor. Unity 5's
+    /// JobQueue spins one worker per processor under Rosetta, so fewer
+    /// processors means fewer spinning workers.
     var processors: Int?
-    /// Which decoders play the game's videos (``VideoDecoding``,
-    /// `GST_PLUGIN_FEATURE_RANK`).
     var videoDecoding: VideoDecoding?
-    /// Game level only: which runtime the game runs on — the bottle's engine
-    /// (`wine`, the default) or macOS NW.js (`nwjs`, for the games
-    /// ``NWJSGames`` detects). Stored as text so a file written by a later
-    /// version, naming a runner this one does not know, still reads.
+    /// Game level only: ``GameRunner`` `wine` (the default) or `nwjs`, stored
+    /// as text so a runner a later version names still reads.
     var runner: String?
-    /// Game level only: whether Play runs the game in Sevoflurane's Steam (the
-    /// default) or hands its macOS version to Steam for Mac (``MacBuildRoute``),
-    /// honored while ``NativeSteam/isOffered``. Read by the app at every Play.
+    /// Game level only: whether Play uses Sevoflurane's Steam or hands the
+    /// macOS version to Steam for Mac (``MacBuildRoute``), honored while
+    /// ``NativeSteam/isOffered``.
     var build: GameBuild?
-    /// Game level only: what ``NWJSGames`` found about the game's own NW.js
-    /// build, recorded whether or not the native runner is switched on.
+    /// Game level only: what ``NWJSGames`` found, recorded whether or not the
+    /// native runner is on.
     var nwjs: NWJSInfo?
-    /// Game level only: the NW.js release the native runner installed for
-    /// this game, which is its own where this Mac can run that natively and a
-    /// newer one where it cannot (``NWJSRuntime/release(forGameVersion:)``).
+    /// Game level only: the NW.js release the native runner installed
+    /// (``NWJSRuntime/release(forGameVersion:)``).
     var nwjsRuntime: String?
-    /// Game level only: the exe names Steam has launched for this app, lower
-    /// case, as `GameLaunchWatch` saw them own the first window.
+    /// Game level only: lowercased exe names `GameLaunchWatch` saw own the
+    /// first window.
     var exes: [String]?
-    /// Game level only: the display name, for listings.
+    /// Game level only: the display name.
     var name: String?
-    /// Game level only: the Windows program the user handed to Sevoflurane,
-    /// which is what makes this entry an adopted program rather than a Steam
-    /// app (``AdoptedPrograms``).
+    /// Game level only: set for an adopted program (``AdoptedPrograms``).
     var program: AdoptedProgram?
 
     static let empty = ConfigValues()
 
-    /// Whether any setting is set at this level (the exe list and the
-    /// detection record are bookkeeping, not settings).
+    /// Whether any setting is set at this level; the exe list and the
+    /// detection record are bookkeeping.
     var hasSettings: Bool {
         windows != nil || mouse != nil || upscaler != nil || filter != nil || runner != nil
             || renderer != nil || retina != nil || emulateModeset != nil
@@ -461,9 +405,7 @@ nonisolated struct ConfigValues: Codable, Equatable, Sendable {
 
 nonisolated extension ConfigValues {
     /// `fps-graph` at this level: on is the frame-time card with the counter
-    /// shown, off the number alone, `nil` hands the detail back. A running
-    /// game's View › Overlay Detail sends it ahead of the level itself, which
-    /// then has the last word.
+    /// shown, off the number alone, `nil` inherits.
     mutating func setFrameGraph(_ on: Bool?, counterShown: Bool) {
         switch on {
         case nil: overlayDetail = nil
@@ -475,25 +417,21 @@ nonisolated extension ConfigValues {
     }
 }
 
-/// The runtimes a game can run on. `wine` is the absence of a choice, so it
-/// is never written to a file.
+/// The runtimes a game can run on. `wine` is the default and never written.
 nonisolated enum GameRunner {
     static let wine = "wine"
     static let nwjs = "nwjs"
     static let all = [wine, nwjs]
-    /// A game's own macOS build, set by Steam's mapping (``SteamPlayMacOS``)
-    /// rather than by a game setting, so it is outside ``all``. A run record
-    /// names it as its runner and renderer.
+    /// A game's own macOS build, set by Steam's mapping (``SteamPlayMacOS``),
+    /// so it is outside ``all``; run records name it as runner and renderer.
     static let macos = "macos"
 }
 
-/// What a changed setting costs to reach the game — the badge Settings shows
-/// beside every control, and the sentence `sevo` prints after a write.
+/// What a changed setting costs to reach the game, as Settings and `sevo`
+/// say it.
 nonisolated enum SettingReach: Equatable, Sendable {
-    /// The game reads it when it next starts; Steam keeps running.
     case nextLaunch
-    /// The client itself carries the value, so it restarts around the next
-    /// launch.
+    /// The client carries the value, so it restarts around the next launch.
     case clientRestart
 
     var label: String {
@@ -504,7 +442,6 @@ nonisolated enum SettingReach: Equatable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// The sentence behind the badge, and what a command line prints.
     var detail: String {
         let value = switch self {
         case .nextLaunch:
@@ -516,19 +453,16 @@ nonisolated enum SettingReach: Equatable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// What a setting carried by a game's env file costs: the next launch on an
-    /// engine that reads those files, a client restart on one that does not.
+    /// An env-file setting: next launch where the engine reads the files.
     static var env: SettingReach {
         Engine.active.supportsEnvFiles ? .nextLaunch : .clientRestart
     }
 
-    /// The registry is live in wineserver and read at every process start, so
-    /// a value written now is what the next game process sees.
+    /// The registry is live in wineserver and read at every process start.
     static let registry = SettingReach.nextLaunch
 
-    /// What a renderer costs this game: a layer a `WINEDLLPATH_PREPEND`
-    /// directory can carry rides in the game's own env file; every other one
-    /// is the client's to hand down.
+    /// A renderer a `WINEDLLPATH_PREPEND` directory can carry rides in the
+    /// game's env file; any other is the client's to hand down.
     static func renderer(_ own: Renderer?) -> SettingReach {
         guard let own else { return env }
         return Engine.active.supportsEnvFiles && EngineRenderers.supportsPerGame(own)
@@ -557,12 +491,9 @@ nonisolated struct Resolved<Value: Sendable>: Sendable {
     let source: ConfigLevel
 }
 
-/// The settings hierarchy — global, bottle, game — and its resolver: the
-/// game's own value wins, then the bottle's, then the global default.
-///
-/// JSON files under `~/Library/Application Support/Sevoflurane/Config/` are
-/// the source of truth; the env files the engine reads at every process
-/// start (`ConfigMaterializer`) are derived from them.
+/// The settings hierarchy — global, bottle, game — and its resolver. JSON
+/// files under `~/Library/Application Support/Sevoflurane/Config/` are the
+/// source of truth; `ConfigMaterializer` derives the engine's env files.
 nonisolated enum GameConfig {
     static let root = AppIdentity.supportFolder
         .appendingPathComponent("Config")
@@ -575,10 +506,9 @@ nonisolated enum GameConfig {
         // bilinearly.
         upscaler: UpscalerChoice.lanczos.rawValue, filter: .lanczos,
         retina: false, emulateModeset: false,
-        // AVX on: the bottle has advertised it since the translation defaults
-        // were written, and a growing number of titles read the CPUID answer
-        // and refuse to start without it. A game that misbehaves with the
-        // advertisement turns it off for itself.
+        // AVX on: a growing number of titles read the CPUID answer and refuse
+        // to start without it. A game that misbehaves with it turns it off for
+        // itself.
         hud: false, fps: false, overlayDetail: .frameRate, frameRateLimit: .off, nativeMenuBar: false, largeAddressAware: true, avx: true, unifiedMemory: false,
         cursorConfine: false, processors: 0, videoDecoding: .hardware,
     )
@@ -625,66 +555,49 @@ nonisolated enum GameConfig {
 
     // MARK: - Resolver
 
-    /// The window treatment a launch in this bottle gets: for a specific game
-    /// when its id is known, otherwise the bottle's own value.
+    // Each resolver answers for a specific game when its id is known,
+    // otherwise for the bottle (``resolve(_:bottle:game:)``).
+
     static func windows(bottle: String, game appID: Int? = nil) -> Resolved<WindowTreatment> {
         resolve(\.windows, bottle: bottle, game: appID)
     }
 
-    /// The mouse curve a launch in this bottle gets: for a specific game when
-    /// its id is known, otherwise the bottle's own value.
     static func mouse(bottle: String, game appID: Int? = nil) -> Resolved<MouseCurve> {
         resolve(\.mouse, bottle: bottle, game: appID)
     }
 
-    /// The performance tuning a launch in this bottle gets: for a specific
-    /// game when its id is known, otherwise the bottle's own value.
     static func tuning(bottle: String, game appID: Int? = nil) -> Resolved<PerformanceTuning> {
         resolve(\.tuning, bottle: bottle, game: appID)
     }
 
-    /// The thread-wait parameters a launch gets: the resolved preset's, and
-    /// for `custom` the nearest level's own.
+    /// The resolved preset's parameters; for `custom`, the nearest level's.
     static func tuningParameters(bottle: String, game appID: Int? = nil) -> TuningParameters {
         let custom = appID.flatMap { game($0).tuningParameters }
             ?? Self.bottle(bottle).tuningParameters ?? global().tuningParameters
         return tuning(bottle: bottle, game: appID).value.parameters(custom: custom)
     }
 
-    /// The upscaler a launch in this bottle gets — an ``UpscalerChoice`` raw
-    /// value or a package name: for a specific game when its id is known,
-    /// otherwise the bottle's own value.
     static func upscaler(bottle: String, game appID: Int? = nil) -> Resolved<String> {
         resolve(\.upscaler, bottle: bottle, game: appID)
     }
 
-    /// Whether a launch in this bottle is told the memory is unified: for a
-    /// specific game when its id is known, otherwise the bottle's own value.
     static func unifiedMemory(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.unifiedMemory, bottle: bottle, game: appID)
     }
 
-    /// The final filter a launch in this bottle gets: for a specific game
-    /// when its id is known, otherwise the bottle's own value.
     static func filter(bottle: String, game appID: Int? = nil) -> Resolved<FinalFilter> {
         resolve(\.filter, bottle: bottle, game: appID)
     }
 
-    /// Whether the prefix draws at the display's full resolution. One answer
-    /// for the whole prefix, so there is no game to ask for.
+    /// Prefix-wide, so there is no game to ask for.
     static func retina(bottle: String) -> Resolved<Bool> {
         resolve(\.retina, bottle: bottle, game: nil)
     }
 
-    /// Whether a game that switches the display mode gets the switch faked:
-    /// for a specific game when its id is known, otherwise the bottle's own
-    /// value.
     static func emulateModeset(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.emulateModeset, bottle: bottle, game: appID)
     }
 
-    /// The env-carried switches, each resolved for a specific game when its id
-    /// is known and for the bottle otherwise.
     static func hud(bottle: String, game appID: Int? = nil) -> Resolved<Bool> {
         resolve(\.hud, bottle: bottle, game: appID)
     }
@@ -693,14 +606,10 @@ nonisolated enum GameConfig {
         resolve(\.fps, bottle: bottle, game: appID)
     }
 
-    /// What the counter shows in a launch in this bottle: for a specific game
-    /// when its id is known, otherwise the bottle's own value.
     static func overlayDetail(bottle: String, game appID: Int? = nil) -> Resolved<OverlayDetail> {
         resolve(\.overlayDetail, bottle: bottle, game: appID)
     }
 
-    /// The frame rate limit a launch in this bottle gets: for a specific game
-    /// when its id is known, otherwise the bottle's own value.
     static func frameRateLimit(bottle: String, game appID: Int? = nil) -> Resolved<FrameRateLimit> {
         resolve(\.frameRateLimit, bottle: bottle, game: appID)
     }
@@ -721,26 +630,18 @@ nonisolated enum GameConfig {
         resolve(\.cursorConfine, bottle: bottle, game: appID)
     }
 
-    /// How many processors a launch in this bottle is told of, `0` for every
-    /// one: for a specific game when its id is known, otherwise the bottle's
-    /// own value.
     static func processors(bottle: String, game appID: Int? = nil) -> Resolved<Int> {
         resolve(\.processors, bottle: bottle, game: appID)
     }
 
-    /// Which decoders a launch in this bottle plays its videos through: for a
-    /// specific game when its id is known, otherwise the bottle's own value.
     static func videoDecoding(bottle: String, game appID: Int? = nil) -> Resolved<VideoDecoding> {
         resolve(\.videoDecoding, bottle: bottle, game: appID)
     }
 
-    /// The renderer a launch gets: the game's own choice when it has one,
-    /// otherwise the bottle's.
-    ///
-    /// The bottle's renderer lives in the graphics store rather than in this
-    /// hierarchy — it is negotiated with the staged Wine tree and with msync,
-    /// which have not moved here yet — so this resolver reaches across to it
-    /// instead of falling through to ``defaults``.
+    /// The game's own renderer, otherwise the bottle's. The bottle's lives in
+    /// the graphics store, where it is
+    /// negotiated with the staged Wine tree and with msync, so this resolver
+    /// reaches across to it instead of falling through to ``defaults``.
     static func renderer(game appID: Int? = nil) -> Resolved<Renderer> {
         if let appID, let pinned = game(appID).renderer {
             return Resolved(value: pinned, source: .game(appID))
@@ -767,13 +668,11 @@ nonisolated enum GameConfig {
 
     // MARK: - Writing with effect
 
-    /// Changes the bottle's own values and rewrites the engine's env files
-    /// from the result — the one write path Settings › Engine and `sevo
-    /// bottle config` share.
+    /// Changes the bottle's own values and rewrites the env files — the one
+    /// write path Settings › Engine and `sevo bottle config` share.
     ///
-    /// - Parameter inBackground: whether the env files are written on a
-    ///   detached task, for a caller on the main actor. Otherwise they are on
-    ///   disk when this returns.
+    /// - Parameter inBackground: write the env files on a detached task, for
+    ///   a main-actor caller; otherwise they are on disk on return.
     static func update(
         bottle name: String, prefix: URL, inBackground: Bool = false,
         _ change: (inout ConfigValues) -> Void,
@@ -786,9 +685,8 @@ nonisolated enum GameConfig {
         rewriteFiles(bottle: name, prefix: prefix, inBackground: inBackground)
     }
 
-    /// Changes a game's own values and rewrites the engine's env files from
-    /// the result — the one write path Settings › Games and `sevo app
-    /// config` share. `inBackground` is as for ``update(bottle:prefix:inBackground:_:)``.
+    /// The game-level counterpart of ``update(bottle:prefix:inBackground:_:)``,
+    /// shared by Settings › Games and `sevo app config`.
     static func update(
         game appID: Int, bottle name: String, prefix: URL, inBackground: Bool = false,
         _ change: (inout ConfigValues) -> Void,
@@ -811,14 +709,12 @@ nonisolated enum GameConfig {
 
     // MARK: - The trail of changes
 
-    /// Where a changed setting is written down. The app points this at its
-    /// event log; `sevo`, which has none, appends the same line to the file.
+    /// Where a changed setting is logged: the app's event log, or for `sevo`
+    /// the log file.
     nonisolated(unsafe) static var logChange: @Sendable (String) -> Void = appendToLogFile
 
-    /// One line per setting that changed: what it was, what it is, and which
-    /// process wrote it and on whose behalf. A setting can be written from
-    /// Settings, from `sevo`, and from a running game's View menu (which runs
-    /// `sevo`), and a value nobody remembers choosing is only explained here.
+    /// One line per changed setting, with the writing process and its parent:
+    /// Settings, `sevo` and a running game's View menu all write settings.
     private static func noteChanges(from before: ConfigValues, to after: ConfigValues, of level: String) {
         let writer = "\(ProcessInfo.processInfo.processName), started by \(parentProcessName())"
         for change in changes(from: before, to: after) {
@@ -826,8 +722,7 @@ nonisolated enum GameConfig {
         }
     }
 
-    /// Each setting that differs between two levels, as `key was → is`, with
-    /// `inherit` for a level that does not set it.
+    /// Each differing setting as `key was → is`; `inherit` for an unset one.
     static func changes(from before: ConfigValues, to after: ConfigValues) -> [String] {
         guard before != after else { return [] }
         let old = fields(of: before), new = fields(of: after)
@@ -880,8 +775,7 @@ nonisolated enum GameConfig {
 
     // MARK: - Executables
 
-    /// Records that a launch of this app put up a window owned by `exe`; the
-    /// per-program env file is written for every exe recorded here.
+    /// Records that a launch of this app put up a window owned by `exe`.
     static func noteExecutable(_ exe: String, forApp appID: Int, named name: String? = nil) {
         let lowered = exe.lowercased()
         guard GameExecutables.isRecordable(lowered) else { return }
@@ -895,11 +789,10 @@ nonisolated enum GameConfig {
         setGame(appID, values)
     }
 
-    /// Whether `exe` is a program a game starts beside itself rather than the
-    /// game: an embedded browser's processes, a crash reporter, a
-    /// redistributable's installer. It takes the game's settings and never the
-    /// game's Dock identity — Unreal's `EpicWebHelper.exe` alone is three to
-    /// five processes, some of them living for under a second.
+    /// Whether `exe` is a helper a game starts beside itself (an embedded
+    /// browser, a crash reporter, a redistributable's installer). It takes the
+    /// game's settings but never its Dock identity: Unreal's
+    /// `EpicWebHelper.exe` alone is three to five short-lived processes.
     static func isCompanionExecutable(_ exe: String) -> Bool {
         let name = exe.lowercased()
         return companionExecutables.contains(name)
@@ -933,8 +826,7 @@ nonisolated enum GameConfig {
         return values
     }
 
-    /// A level with nothing in it has no file, so the directory listing is
-    /// the list of levels that say something.
+    /// An empty level has no file.
     private static func write(_ values: ConfigValues, to url: URL) {
         let manager = FileManager.default
         if values == .empty {
@@ -952,17 +844,16 @@ nonisolated enum GameConfig {
 
     // MARK: - Migration
 
-    /// Every settings key that used to live in the shared defaults, moved into
-    /// the hierarchy. Each pass clears the keys it read, so none runs twice.
+    /// Moves settings keys found in the shared defaults into the hierarchy.
+    /// Each pass clears the keys it read, so none runs twice.
     private static func migrateIfNeeded() {
         migrateWindowSwitches()
         migrateRendererPins()
         _ = frameGraphMigration
     }
 
-    /// Every level's file, the frame time graph switch stored in it becoming
-    /// the overlay detail it stands for; once a process, since a rewritten
-    /// file no longer carries the key.
+    /// Rewrites each level's `fpsGraph` key as an overlay detail, once per
+    /// process.
     private static let frameGraphMigration: Void = {
         let manager = FileManager.default
         var urls = [globalURL]
@@ -977,9 +868,8 @@ nonisolated enum GameConfig {
         }
     }()
 
-    /// A level stored with `fpsGraph`, as it reads once that switch is the
-    /// overlay detail: on is the frame-time card with the counter shown,
-    /// which is what the graph switch drew. `nil` for a file without the key.
+    /// A level stored with `fpsGraph`, with an on switch as the frame-time
+    /// card and the counter shown; `nil` for a file without the key.
     static func migratedFrameGraph(_ data: Data) -> ConfigValues? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let graph = object["fpsGraph"] as? Bool,
@@ -991,9 +881,8 @@ nonisolated enum GameConfig {
         return values
     }
 
-    /// The two window switches that lived in the shared defaults become the
-    /// global level's `windows`, once; the keys are then removed so this
-    /// cannot run twice.
+    /// Moves the two window switches in the shared defaults into the global
+    /// `windows`, then removes the keys.
     private static func migrateWindowSwitches() {
         let defaults = Preferences.shared
         let resizableKey = "resizableGameWindows"
@@ -1010,10 +899,9 @@ nonisolated enum GameConfig {
         defaults.removeObject(forKey: fullscreenKey)
     }
 
-    /// The per-app renderer pins that lived in the shared defaults become each
-    /// game's own `renderer`, once. The key goes first: a pin nobody can
-    /// decode is still a pin this hierarchy now owns, and leaving the key
-    /// would make every read of every game file try it again.
+    /// Moves the per-app renderer pins in the shared defaults into each game's
+    /// `renderer`. The key goes first, so an undecodable map is not retried on
+    /// every read.
     private static func migrateRendererPins() {
         let defaults = Preferences.shared
         let pinsKey = "rendererOverrides"
@@ -1031,7 +919,7 @@ nonisolated enum GameConfig {
         }
     }
 
-    /// One entry of the shared defaults' old per-app renderer map.
+    /// One entry of the shared defaults' per-app renderer map.
     private struct RendererPin: Decodable {
         let renderer: Renderer
         let name: String

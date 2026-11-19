@@ -2,16 +2,12 @@ import Foundation
 
 /// Every frame of a run, one line each, beside the run records.
 ///
-/// `Runs/traces/<run>.csv`, where `<run>` is the record's start and app id
-/// (``name(for:)``). The file is plain CSV so any tool can read it: two comment lines
-/// naming the run, a header, then `time_s,frame_ms` per frame, where `time_s` is when the
-/// frame ended counted from the run's first frame. The present counter's ring is where the
-/// times come from (``PresentStats``); a gap the ring could not cover is a line of its own,
-/// `# dropped <n>`, so a reader knows the time axis skips there, and `# mark <label>` is a
-/// moment someone named while the run was up (`sevo perf mark`), between the frames around it.
-/// `# focus <state>` is where the app saw the game's window change state (``Focus``), and
-/// `# display <hz> Hz[ vrr][ virtual]` where the display under it changed; both are what
-/// ``GameplayWindow`` reads to leave out the stretches nobody was playing.
+/// `Runs/traces/<start>-<appid>.csv`: two comment lines, a header, then
+/// `time_s,frame_ms` per frame (`time_s` from the first frame's end), from
+/// ``PresentStats``' ring. Comment lines mark a ring gap (`# dropped <n>`), a
+/// `sevo perf mark` (`# mark <label>`), and the focus and display changes
+/// ``GameplayWindow`` reads (`# focus <state>`,
+/// `# display <hz> Hz[ vrr][ virtual]`).
 nonisolated enum FrameTrace {
     static let directoryName = "traces"
 
@@ -19,7 +15,7 @@ nonisolated enum FrameTrace {
         runs.appendingPathComponent(directoryName)
     }
 
-    /// The trace's file name for a run that began at `stamp` (a record's `t`).
+    /// The file name for a run that began at `stamp` (a record's `t`).
     static func name(appID: Int, stamp: String) -> String {
         let safe = stamp.replacingOccurrences(of: ":", with: "-")
         return "\(safe)-\(appID).csv"
@@ -31,8 +27,7 @@ nonisolated enum FrameTrace {
 
     // MARK: - Writing
 
-    /// Appends a run's frames as they arrive. Not thread-safe; ``PresentStats`` calls it
-    /// under its lock.
+    /// Appends a run's frames; ``PresentStats`` serializes it under its lock.
     final class Writer {
         let url: URL
         private var handle: FileHandle?
@@ -58,7 +53,7 @@ nonisolated enum FrameTrace {
             flushIfLarge()
         }
 
-        /// The game's window changed state; written at once, like a mark.
+        /// Written at once, like a mark.
         func noteFocus(_ focus: Focus) {
             pending += "# focus \(focus.rawValue)\n"
             flush()
@@ -75,8 +70,7 @@ nonisolated enum FrameTrace {
             pending += "# dropped \(count)\n"
         }
 
-        /// Names this moment of the run. Written at once, so a reader of the
-        /// live file finds it.
+        /// Written at once, so a reader of the live file finds it.
         func noteMark(_ label: String) {
             let line = label.replacingOccurrences(of: "\n", with: " ")
             pending += "# mark \(line)\n"
@@ -104,17 +98,14 @@ nonisolated enum FrameTrace {
 
     // MARK: - What the app saw of the window
 
-    /// Whether the game could be being played at a moment of the run, as the app's own
-    /// look at the window server says.
+    /// Whether the game could be being played, as the window server shows it.
     enum Focus: String, Equatable, Sendable {
-        /// The game's app is frontmost, its window is on screen and the display is awake.
         case focused
-        /// Its window is on screen, but another app is frontmost: many games drop their
-        /// frame rate or stop presenting here.
+        /// On screen with another app frontmost.
         case background
-        /// None of its windows is on screen: hidden, minimized, or on another Space.
+        /// Hidden, minimized, or on another Space.
         case hidden
-        /// The display is asleep or the screen is locked.
+        /// Display asleep or screen locked.
         case asleep
     }
 
@@ -146,8 +137,7 @@ nonisolated enum FrameTrace {
 
     // MARK: - Keeping
 
-    /// How many traces are kept and how much disk they may take together; the oldest go
-    /// first. A trace is about 20 bytes a frame, so an hour at 60 fps is 4 MB.
+    /// Trace retention limits; about 20 bytes a frame, 4 MB an hour at 60 fps.
     static let keptCount = 300
     static let keptBytes: Int64 = 1_000_000_000
 
@@ -170,8 +160,6 @@ nonisolated enum FrameTrace {
 
     // MARK: - Reading
 
-    /// A trace read back: the frame times in order, the frames the ring lost,
-    /// and the marks.
     struct Contents: Equatable, Sendable {
         var frameTimes: [Float]
         var dropped: Int
@@ -180,7 +168,7 @@ nonisolated enum FrameTrace {
         var displays: [DisplayChange] = []
     }
 
-    /// A named moment: the seconds of frames before it, and its label.
+    /// A named moment at the seconds of frames before it.
     struct Mark: Equatable, Sendable {
         var seconds: Double
         var label: String

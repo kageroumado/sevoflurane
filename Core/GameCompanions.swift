@@ -1,22 +1,18 @@
 import Foundation
 
-/// A Steam app that serves a Mac through a kagerou app of its own: its window
-/// never draws under Wine, but what Steam downloads for it is used by the
-/// partner. Wallpaper Engine is one: its Workshop subscriptions become video
-/// wallpapers through Phosphene.
+/// A Steam app whose downloads a kagerou partner app uses on the Mac, such as
+/// Wallpaper Engine's Workshop items in Phosphene.
 nonisolated struct GameCompanion: Codable, Sendable, Equatable {
     let appID: Int
     let name: String
-    /// The kagerou app that uses the downloads.
     let partner: String
     let partnerBundleID: String
     /// Opens the partner where the downloads show.
     let openURL: URL
-    /// The Workshop page in Steam, where the downloads are chosen.
     let workshopURL: URL
     /// Where to get the partner.
     let pageURL: URL
-    /// The strip's reason line, and the body of the Play alert.
+    /// The strip's reason line and the Play alert's body.
     let reason: String
 
     static let wallpaperEngine = GameCompanion(
@@ -32,8 +28,7 @@ nonisolated struct GameCompanion: Codable, Sendable, Equatable {
 
     static let all: [Int: GameCompanion] = [wallpaperEngine.appID: wallpaperEngine]
 
-    /// `{431960: true}`: the page scripts treat these apps as games, which
-    /// Steam files under Software.
+    /// `{431960: true}`, so page scripts treat these Software apps as games.
     static var appIDsLiteral: String {
         "{" + all.keys.sorted().map { "\($0): true" }.joined(separator: ", ") + "}"
     }

@@ -2,12 +2,10 @@ import Foundation
 
 /// HoYoPlay's public launcher API and the Sophon download service behind it.
 ///
-/// No account is involved: these are the calls HoYoPlay makes before anyone
-/// signs in. `getGameBranches` names each game's current build and the
-/// builds it can be patched from; `getBuild` lists every file of a build as
-/// zstd chunks; `getPatchBuild` (a POST) lists the diffs from each older
-/// build. The manifests these return are protobuf, decoded by
-/// ``SophonManifest`` and ``SophonPatchManifest``.
+/// The calls HoYoPlay makes before sign-in: `getGameBranches`, `getBuild`
+/// (zstd chunks) and `getPatchBuild` (a POST, diffs from older builds). Their
+/// protobuf manifests are decoded by ``SophonManifest`` and
+/// ``SophonPatchManifest``.
 nonisolated struct HoYoAPI: Sendable {
     /// HoYoPlay's own launcher id on the global servers.
     static let launcherID = "VYTpXlbWo8"
@@ -15,19 +13,17 @@ nonisolated struct HoYoAPI: Sendable {
     static let sophonURL = "https://sg-public-api.hoyoverse.com/downloader/sophon_chunk/api"
 
     var session: URLSession = .shared
-    /// Where the two services are reached; a test points them at a stub.
+    /// Replaceable in tests.
     var branchesEndpoint = Self.branchesURL
     var sophonEndpoint = Self.sophonURL
 
-    /// Why a call to HoYoverse's servers did not give an answer.
     struct Failure: Error, CustomStringConvertible {
         let description: String
     }
 
     // MARK: - Branches
 
-    /// A game's current build: what `getBuild` and `getPatchBuild` are asked
-    /// about, and the older tags it has diffs from.
+    /// A game's current build and the older tags it has diffs from.
     struct Branch: Decodable, Sendable {
         let packageID: String
         let branch: String
@@ -44,8 +40,7 @@ nonisolated struct HoYoAPI: Sendable {
         }
     }
 
-    /// The current build of `game`. A game in pre-download also has a
-    /// `pre_download` branch; only `main` is read, which is what is playable.
+    /// The playable `main` branch of `game`; `pre_download` is ignored.
     func branch(_ game: HoYoGame) async throws -> Branch {
         struct Envelope: Decodable {
             struct Data: Decodable {
@@ -69,7 +64,6 @@ nonisolated struct HoYoAPI: Sendable {
 
     // MARK: - Builds
 
-    /// Where a manifest or a build's files are downloaded from.
     struct Download: Decodable, Sendable {
         let urlPrefix: String
         let compression: Int
@@ -79,8 +73,7 @@ nonisolated struct HoYoAPI: Sendable {
         func url(_ name: String) -> URL? { URL(string: "\(urlPrefix)/\(name)") }
     }
 
-    /// A manifest file: its name on the server and the md5 of its
-    /// decompressed bytes.
+    /// A manifest's server name and the md5 of its decompressed bytes.
     struct ManifestFile: Decodable, Sendable {
         let id: String
         let checksum: String
@@ -96,7 +89,6 @@ nonisolated struct HoYoAPI: Sendable {
         }
     }
 
-    /// Sizes the service states for a manifest.
     struct Stats: Decodable, Sendable {
         let compressedSize: Int64
         let uncompressedSize: Int64
@@ -116,8 +108,7 @@ nonisolated struct HoYoAPI: Sendable {
         }
     }
 
-    /// One category of a build: the game's own files (`game`) or a voice
-    /// pack (`en-us`, `ja-jp`, …).
+    /// The game's own files (`game`) or a voice pack (`en-us`, …).
     struct BuildManifest: Decodable, Sendable {
         let matchingField: String
         let manifest: ManifestFile
@@ -138,8 +129,7 @@ nonisolated struct HoYoAPI: Sendable {
         let manifests: [BuildManifest]
     }
 
-    /// Every file of a build. `tag` asks for an older build than the current
-    /// one; the service keeps those.
+    /// Every file of a build; `tag` asks for an older one.
     func build(_ branch: Branch, tag: String? = nil) async throws -> Build {
         var url = "\(sophonEndpoint)/getBuild?\(branch.query)"
         if let tag { url += "&tag=\(tag)" }
@@ -149,8 +139,7 @@ nonisolated struct HoYoAPI: Sendable {
 
     // MARK: - Patches
 
-    /// One category of a patch build. `stats` is keyed by the tag a patch
-    /// starts from.
+    /// `stats` is keyed by the tag a patch starts from.
     struct PatchManifest: Decodable, Sendable {
         let matchingField: String
         let manifest: ManifestFile
@@ -181,8 +170,7 @@ nonisolated struct HoYoAPI: Sendable {
 
     // MARK: - Manifests
 
-    /// Downloads a manifest, decompresses it and checks it against the md5
-    /// the build names.
+    /// Downloads, decompresses and md5-checks a manifest.
     @concurrent func manifestData(_ file: ManifestFile, from download: Download) async throws -> Data {
         guard let url = download.url(file.id) else {
             throw Failure(description: "bad manifest URL \(download.urlPrefix)/\(file.id)")
@@ -200,7 +188,7 @@ nonisolated struct HoYoAPI: Sendable {
 
     // MARK: - Plumbing
 
-    /// The `{retcode, message, data}` envelope every call answers in.
+    /// `{retcode, message, data}`.
     private struct Envelope<Payload: Decodable>: Decodable {
         let retcode: Int
         let message: String

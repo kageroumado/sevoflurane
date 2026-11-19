@@ -1,29 +1,19 @@
 import Foundation
 
-/// The report bundle: the three logs, `doctor` and `status` as JSON, the
-/// machine, the active engine's `engine-info.json`, the bottle's env files
-/// and dependency state, the game launcher bundles, Steam's own logs, this
-/// month's run records with the logs the games in them wrote for themselves,
-/// and the last two days of crash reports from the engine's processes.
-/// Nothing in it names the account; crash reports and env files carry paths
-/// under the home directory, so the user's short name is in them.
-///
-/// One builder for every face of the project: `sevo diag` writes it to the
-/// Desktop, the app's crash prompt sends it. Whatever a face knows that this
-/// code cannot ask — the doctor's verdicts, the daemon's status — arrives
-/// through ``faceReport``.
+/// The report bundle: app logs, `doctor` and `status`, the machine, the
+/// engine's `engine-info.json`, the bottle's env files, launcher bundles,
+/// Steam's logs, this month's runs with their game logs, and two days of
+/// crash reports, every file passed through ``Redaction``. `sevo diag` and
+/// the app's crash prompt share it; what only a face knows arrives through
+/// ``faceReport``.
 nonisolated enum Diagnostics {
-    /// What the face building the bundle knows about the installation and
-    /// this code cannot find out for itself, as JSON text ready to write.
+    /// What the building face knows, as JSON text.
     struct FaceReport: Sendable {
-        /// The doctor's verdicts (`doctor.json`).
         var doctor: String?
-        /// The daemon's status (`status.json`).
         var status: String?
-        /// The bottle's dependency catalog and last provisioning outcome
-        /// (`bottle/dependencies.json`).
+        /// `bottle/dependencies.json`.
         var bottleState: String?
-        /// Which face wrote the bundle and its version, merged into `host.json`.
+        /// Merged into `host.json`.
         var host: [String: String] = [:]
     }
 
@@ -37,13 +27,11 @@ nonisolated enum Diagnostics {
         }
     }
 
-    /// Installed by the process before it builds a bundle. The CLI answers
-    /// with `Doctor`; the app asks its bundled `sevo` the same questions.
+    /// Installed by the process: the CLI answers with `Doctor`, the app asks
+    /// its bundled `sevo`.
     nonisolated(unsafe) static var faceReport: @Sendable () async -> FaceReport = { FaceReport() }
 
-    /// `console_log.txt` carries the whole `GameAction` trail and the exit
-    /// code of a game the client started, which is the answer to most of what
-    /// a launch failure is asked about.
+    /// `console_log.txt` carries the `GameAction` trail and a game's exit code.
     static let steamLogNames = [
         "bootstrap_log.txt", "connection_log.txt", "webhelper.txt", "gameprocess_log.txt",
         "console_log.txt",
@@ -55,10 +43,8 @@ nonisolated enum Diagnostics {
         "Sevoflurane-windows.log",
     ]
 
-    /// Writes the bundle and answers where it went.
-    ///
-    /// - Parameter destination: A directory the zip is named into, a `.zip`
-    ///   path it is written at, or nil for the Desktop.
+    /// Writes the bundle into a directory, at a `.zip` path, or on the
+    /// Desktop, and answers where.
     static func bundle(to destination: URL?, steamLogs: Bool) async throws -> URL {
         let manager = FileManager.default
         let name = "Sevoflurane-report-\(stamp.string(from: Date()))"
@@ -105,8 +91,7 @@ nonisolated enum Diagnostics {
         for file in appLogNames {
             staging.copy(logs.appendingPathComponent(file), as: "logs/\(file)")
         }
-        // One sidecar per ObjC exception the app caught (`ExceptionWatch`),
-        // over the same window as the crash reports.
+        // `ExceptionWatch` sidecars.
         for url in recentFiles(in: logs, where: { $0.hasPrefix("Sevoflurane-exception-") && $0.hasSuffix(".json") }) {
             staging.copy(url, as: "logs/\(url.lastPathComponent)")
         }
@@ -116,8 +101,7 @@ nonisolated enum Diagnostics {
         staging.copy(Engine.active.root.appendingPathComponent("engine-info.json"), as: "engine/engine-info.json")
         let sevoDir = SteamBottle.root.appendingPathComponent(".sevo")
         staging.copy(sevoDir.appendingPathComponent("bottle.env"), as: "bottle/bottle.env")
-        // Present only while debug mode is on, which is itself the answer to
-        // "why is this Wine log so large".
+        // Present only while debug mode is on.
         staging.copy(sevoDir.appendingPathComponent("debug.env"), as: "bottle/debug.env")
         let apps = sevoDir.appendingPathComponent("apps")
         for app in (try? FileManager.default.contentsOfDirectory(atPath: apps.path)) ?? [] {
@@ -125,9 +109,7 @@ nonisolated enum Diagnostics {
         }
     }
 
-    /// Which games have a launcher bundle, and on which engine: a game whose
-    /// Dock tile says "wine" either has no bundle or did not take it, and the
-    /// two look identical from the outside.
+    /// Which games have a launcher bundle, and on which engine.
     private static func collectLaunchers(into staging: Staging) {
         let launchers = GameLaunchers.inventory()
         staging.write(
@@ -136,10 +118,7 @@ nonisolated enum Diagnostics {
         )
     }
 
-    /// The reports macOS wrote for the engine's processes and for the games
-    /// they ran, whichever name a report carries. The per-run collector and
-    /// this bundle answer the question with the same lists, so a report one
-    /// keeps the other keeps too.
+    /// Our crash reports, matched by the per-run collector's lists.
     private static func collectCrashReports(into staging: Staging) {
         let reports = logs.appendingPathComponent("DiagnosticReports")
         for url in recentFiles(in: reports, where: { _ in true })
@@ -158,9 +137,7 @@ nonisolated enum Diagnostics {
         }
     }
 
-    /// The month's run records, and the logs the games in them wrote for
-    /// themselves — the two things that say what a launch did rather than
-    /// what the app saw of it.
+    /// The month's run records and their games' own logs.
     private static func collectRuns(into staging: Staging) {
         let runs = RunLog.records(inMonth: Date())
         let month = RunLog.url(forMonth: Date())
@@ -193,8 +170,7 @@ nonisolated enum Diagnostics {
         return host
     }
 
-    /// The app's marketing version, whether this process is the app or the
-    /// CLI riding inside it as `Contents/Helpers/sevo`.
+    /// The app's marketing version, also from `Contents/Helpers/sevo`.
     private static var appVersion: String? {
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
             return version
@@ -226,7 +202,6 @@ nonisolated enum Diagnostics {
         return formatter
     }()
 
-    /// The directory the zip is made from, and the list of what landed in it.
     private final class Staging {
         let root: URL
         private var contents: [String] = []
@@ -245,8 +220,8 @@ nonisolated enum Diagnostics {
             try? manager.removeItem(at: root)
         }
 
-        /// Everything the zip carries is text, and all of it goes through
-        /// ``Redaction``: the zip is what people attach to a public issue.
+        /// Everything goes through ``Redaction``: the zip is attached to
+        /// public issues.
         func write(_ text: String, as file: String) {
             let url = root.appendingPathComponent(file)
             try? manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

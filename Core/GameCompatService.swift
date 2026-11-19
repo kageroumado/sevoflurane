@@ -1,22 +1,13 @@
 import Foundation
 
 /// Assembles one ``GameCompatRecord`` per app from the community databases,
-/// with every source cached on disk so a game page answers offline after its
-/// first look and no source is asked twice in a week.
-///
-/// Two of the sources are whole tables fetched once (AreWeAntiCheatYet's
-/// `games.json`, AppleGamingWiki's compatibility table); three are per-app
-/// lookups (ProtonDB's summary, PCGamingWiki's app-id-to-title bridge,
-/// Sevoflurane's own community summary, which also answers in batches for the
-/// library). The client's app cache adds whether a macOS build exists. A
-/// source that cannot be reached reads as absent, never as an error: the
-/// badge for a game nobody has data on is "Unknown", and the page must never
-/// show a spinner that waits on a wiki.
+/// each cached on disk for a week: two whole tables (AreWeAntiCheatYet,
+/// AppleGamingWiki) and per-app lookups (ProtonDB, PCGamingWiki, Sevoflurane's
+/// community summary). An unreachable source reads as absent.
 actor GameCompatService {
     static let shared = GameCompatService()
 
-    /// How long a cached answer stands before it is asked for again. The
-    /// tables change a few times a month; ProtonDB's summaries drift slowly.
+    /// How long a cached answer stands.
     static let maxAge: TimeInterval = 7 * 24 * 3600
     static let communityMaxAge: TimeInterval = 24 * 3600
 
@@ -24,8 +15,6 @@ actor GameCompatService {
         .appendingPathComponent("Compat")
 
     private let session: URLSession
-    /// Where this service keeps its answers: ``cacheRoot``, or a folder of a
-    /// test's own.
     private let cache: URL
     /// The client's app cache, which says whether a macOS build exists.
     private let appInfo: URL
@@ -43,8 +32,7 @@ actor GameCompatService {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.timeoutIntervalForRequest = 15
             configuration.timeoutIntervalForResource = 30
-            // The wikis ask for a contactable agent string and cache-friendly
-            // clients; both are cheap to give.
+            // The wikis ask for a contactable agent string.
             let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
             configuration.httpAdditionalHeaders = [
                 "User-Agent": "Sevoflurane/\(version) (https://kagerou.glass; mail@kagerou.glass)",
@@ -91,8 +79,7 @@ actor GameCompatService {
         let protonSummary = await proton
         let communitySummary = await community
         let hasMacBuild = SteamAppInfo.platforms(appID: appID, in: appInfo).contains("macos")
-        // The architecture only changes the macOS cell, so it is asked for
-        // only when that cell would show without it.
+        // Only asked for when the macOS cell would show.
         let architectures = GameCompatVerdict.native(wiki: wiki, hasMacBuild: hasMacBuild) == nil
             ? nil : await loadMacArchitectures(appID: appID)
         return GameCompatRecord(
@@ -118,14 +105,10 @@ actor GameCompatService {
 
     // MARK: - The library
 
-    /// The library's verdicts for many games at once, from what costs no
-    /// per-game request: the two whole tables, the community database's
-    /// batches, the client's app cache, and whatever per-app answers the disk
-    /// already holds. A per-app lookup the answer lacks joins the queue
-    /// (``GameCompatBatch``), and the page asks again while ``pending`` says
-    /// some remain. A macOS build that would count as playing waits on its
-    /// architectures there too, as the game's page does: a 32-bit-only build
-    /// plays nowhere on Apple silicon.
+    /// The library's verdicts from the whole tables, community batches, the
+    /// app cache and per-app answers already on disk. Missing lookups join the
+    /// queue (``GameCompatBatch``), and the page asks again while `pending` is
+    /// nonzero.
     func summaries(for games: [GameCompatBatch.Game]) async -> (summaries: [GameCompatSummary], pending: Int) {
         async let antiCheatTable = loadAntiCheatIndex()
         async let wikiTable = loadWikiIndex()
@@ -177,7 +160,7 @@ actor GameCompatService {
         return (summaries, queuedLookups.count)
     }
 
-    /// Lookups waiting for their turn or in flight, in order and as a set.
+    /// Waiting or in-flight lookups, in order and as a set.
     private var lookupQueue: [GameCompatBatch.Lookup] = []
     private var queuedLookups: Set<GameCompatBatch.Lookup> = []
     private var lookupDrain: Task<Void, Never>?
@@ -191,7 +174,7 @@ actor GameCompatService {
     }
 
     /// Runs the queue one lookup at a time, ``GameCompatBatch/lookupInterval``
-    /// apart; each answer lands in the disk cache the next ask reads.
+    /// apart, into the disk cache.
     private func drainLookups() async {
         while !lookupQueue.isEmpty {
             let lookup = lookupQueue.removeFirst()
@@ -199,8 +182,7 @@ actor GameCompatService {
             case let .title(id): _ = await loadPCGamingWikiTitle(appID: id)
             case let .proton(id): _ = await loadProton(appID: id)
             case let .architecture(id):
-                // The page text is asked for by title, which is a request
-                // of its own when the disk lacks it, and takes its own turn.
+                // The title lookup takes a turn of its own.
                 if Self.cached(at: cache.appendingPathComponent("pcgw/\(id).json"), maxAge: Self.maxAge) == nil {
                     _ = await loadPCGamingWikiTitle(appID: id)
                     try? await Task.sleep(for: GameCompatBatch.lookupInterval)
@@ -213,10 +195,8 @@ actor GameCompatService {
         lookupDrain = nil
     }
 
-    /// Sevoflurane's own summaries for many games: a day-fresh cached answer
-    /// where there is one, the batch endpoint for the rest, each answer
-    /// cached per game as ``loadCommunity(appID:)`` caches it. A batch that
-    /// fails leaves its games on whatever stale answer the disk holds.
+    /// Community summaries: day-fresh cache, else the batch endpoint, cached
+    /// per game; a failed batch falls back to stale answers.
     private func loadCommunities(appIDs: [Int]) async -> [Int: GameCompatRecord.Community] {
         var summaries: [Int: GameCompatRecord.Community] = [:]
         var missing: [Int] = []
@@ -294,15 +274,13 @@ actor GameCompatService {
     private func loadProton(appID: Int) async -> GameCompatRecord.ProtonSummary? {
         guard let data = await cachedOrFetched(
             file: "proton/\(appID).json", from: GameCompatSources.protonSummaryURL(appID: appID),
-            // A missing app is a 404 with an HTML page; caching the miss
-            // keeps the next look at the same game off the network too.
+            // A 404 miss is cached too.
             acceptingMissesAs: Data("{}".utf8),
         ) else { return nil }
         return GameCompatSources.protonSummary(appID: appID, data: data)
     }
 
-    /// Sevoflurane's own summary for the app. Runs arrive daily, so this
-    /// answer is kept a day where the community tables are kept a week.
+    /// Sevoflurane's own summary, cached a day since runs arrive daily.
     private func loadCommunity(appID: Int) async -> GameCompatRecord.Community? {
         guard let data = await cachedOrFetched(
             file: "community/\(appID).json",
@@ -313,16 +291,15 @@ actor GameCompatService {
         return GameCompatSources.community(data: data)
     }
 
-    /// The macOS build's architectures from the game's PCGamingWiki page.
-    /// Only the three fields are kept on disk; a page is tens of kilobytes.
+    /// The macOS build's architectures from PCGamingWiki; only the fields are
+    /// cached.
     private func loadMacArchitectures(appID: Int) async -> GameCompatRecord.MacArchitectures? {
         let path = cache.appendingPathComponent("pcgw-mac/\(appID).json")
         if let data = Self.cached(at: path, maxAge: Self.maxAge) {
             return try? JSONDecoder().decode(GameCompatRecord.MacArchitectures?.self, from: data)
         }
         guard let title = await loadPCGamingWikiTitle(appID: appID) else {
-            // PCGamingWiki answered and has no page for the app: kept as an
-            // answer, so the library's queue asks again only once it is stale.
+            // No page for the app is cached as an answer.
             if Self.cached(at: cache.appendingPathComponent("pcgw/\(appID).json"), maxAge: Self.maxAge) != nil {
                 Self.store(Data("null".utf8), at: path)
             }
@@ -348,9 +325,8 @@ actor GameCompatService {
 
     // MARK: - Disk cache
 
-    /// The cached body when it is younger than ``maxAge``; otherwise a fresh
-    /// fetch, written back on success. A stale file stands in when the
-    /// network fails, so an offline machine keeps its last answers.
+    /// The cached body if fresh, else a fetch written back; a stale file
+    /// stands in when the network fails.
     private func cachedOrFetched(
         file: String, from url: URL, maxAge: TimeInterval = GameCompatService.maxAge, acceptingMissesAs miss: Data? = nil,
     ) async -> Data? {

@@ -1,25 +1,18 @@
 import Foundation
 
-/// A folder of every game's bundle, for the Dock: kept there as a directory
-/// tile, it opens as a stack or a grid with each game under its own icon,
-/// and a click starts one.
-///
-/// The bundles stay where they are — `Launchers/<id>/<Title>.app`, where the
-/// loader reads the id off its own path — so the folder holds a symlink per
-/// bundle under the game's title. The Dock sorts by the symlink's own date,
-/// so a launch touches it and the last played game comes first and on top.
+/// A folder of symlinks to every game's bundle, for a Dock stack. The bundles
+/// stay in `Launchers/<id>/` because the loader reads the id off its path; the
+/// Dock sorts by each link's own date, which a launch touches.
 nonisolated enum GamesFolder {
     static let root = AppIdentity.supportFolder.appendingPathComponent("Games")
     /// The tile's label in the Dock.
     static let label = "Games"
 
-    /// Rebuilds the folder: one symlink per bundle a Dock tile could start,
-    /// nothing else. A symlink already pointing right keeps its date.
+    /// Rebuilds the folder; a link already pointing right keeps its date.
     static func sync(appIDs: some Sequence<Int>) {
         let manager = FileManager.default
         try? manager.createDirectory(at: root, withIntermediateDirectories: true)
-        // Two games sharing a title: the lower id keeps the plain name, so the
-        // app's pass and the daemon's agree on who gets it.
+        // The lower id keeps a shared title, so the app and daemon agree.
         var wanted: [String: URL] = [:]
         for id in appIDs.sorted() {
             guard let bundle = GameLaunchers.dockableBundle(appID: id) else { continue }
@@ -44,8 +37,7 @@ nonisolated enum GamesFolder {
         }
     }
 
-    /// The bundle's name, or the name with the id when another game's link
-    /// holds it already.
+    /// The bundle's name, with the id when another game holds it.
     private static func linkName(for bundle: URL, appID: Int, taken: [String: URL]) -> String {
         let plain = bundle.lastPathComponent
         guard let other = taken[plain], other != bundle else { return plain }
@@ -65,7 +57,7 @@ nonisolated enum GamesFolder {
         return nil
     }
 
-    /// Puts the game first in the folder's order: its symlink's date is now.
+    /// Puts the game first by touching its link.
     static func markPlayed(appID: Int) {
         guard let link = link(appID: appID) else { return }
         let now = timeval(tv_sec: time(nil), tv_usec: 0)

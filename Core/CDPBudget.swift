@@ -1,34 +1,22 @@
 import Foundation
 
-/// The whole allowance for opening DevTools sessions against the bottled
-/// client, in one place.
-///
-/// CEF serves `/json` and every WebSocket upgrade from a single thread, so
-/// what one session costs, every other session pays. Per-call caps bound how
-/// long one exchange may take and nothing bounded how many ran at once, so
-/// "at most five seconds per call" composed into a hundred concurrent calls
-/// and the DevTools server went silent for thirty-two seconds on a client
-/// that was alive and idle. This is the missing half: a token bucket over
-/// session creation, so a burst waits its turn instead of arriving together.
-///
-/// The bridge's own persistent SharedJSContext socket is one connection for
-/// the app's lifetime and carries the page's hot path; it spends a permit to
-/// open, and none of its traffic after that.
+/// A token bucket over DevTools session creation against the bottled client.
+/// CEF serves `/json` and every WebSocket upgrade from one thread, and a
+/// hundred concurrent capped calls once silenced an idle client's DevTools
+/// server for thirty-two seconds. The bridge's persistent socket spends one
+/// permit to open and none after.
 actor CDPBudget {
     static let shared = CDPBudget()
 
-    /// How many one-shot DevTools exchanges may be in flight at once.
     static let concurrentSessions = 2
 
-    /// How many may start in any one second.
+    /// Session starts per second.
     static let perSecond = 8.0
 
     /// How long one exchange may hold its permit.
     static let callCap: Duration = .seconds(5)
 
-    /// How often a waiting caller looks again. Contention is rare and short,
-    /// so the cost of asking is a few comparisons on an actor that is
-    /// otherwise idle.
+    /// How often a waiting caller looks again; contention is rare and short.
     private static let retryInterval: Duration = .milliseconds(50)
 
     private let ceiling: Int
@@ -43,9 +31,8 @@ actor CDPBudget {
         tokens = perSecond
     }
 
-    /// Takes a permit, waiting until both the concurrency ceiling and the
-    /// rate allow it. `caller` names the surface in the log line a wait
-    /// produces. Balance every call with ``release()``.
+    /// Takes a permit when the ceiling and rate allow; `caller` names the
+    /// waiter in the log. Balance every call with ``release()``.
     func take(_ caller: String) async {
         var announced = false
         while true {
@@ -64,9 +51,8 @@ actor CDPBudget {
             do {
                 try await Task.sleep(for: Self.retryInterval)
             } catch {
-                // A cancelled caller takes its permit and lets the work it
-                // wraps fail on its own cancellation check, so the release
-                // that balances this stays paired.
+                // A cancelled caller still takes a permit, so its release
+                // stays paired; its work fails on its own cancellation check.
                 tokens = max(tokens - 1, 0)
                 inFlight += 1
                 return
@@ -78,8 +64,7 @@ actor CDPBudget {
         inFlight = max(inFlight - 1, 0)
     }
 
-    /// What is in flight and what is left of this second's allowance, for a
-    /// test to read.
+    /// For tests.
     var state: (inFlight: Int, tokens: Double) {
         (inFlight, tokens)
     }
@@ -100,8 +85,7 @@ extension CDPBudget {
         try await spend(caller, on: shared, body)
     }
 
-    /// The same, against a budget of the caller's own — how a test drives it
-    /// without the app's.
+    /// The same, against a budget of the caller's own.
     static func spend<T>(
         _ caller: String, on budget: CDPBudget, _ body: () async throws -> T,
     ) async throws -> T {

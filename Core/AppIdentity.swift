@@ -3,27 +3,18 @@ import Foundation
 /// What names this installation on the Mac: its folders, logs, defaults,
 /// background helper, ports and command-line link.
 ///
-/// A Debug build is a second installation beside the shipping one, with its
-/// own bottle, engines, settings and helper, so running it from Xcode leaves
-/// the installed app untouched. Sharing any one of these would let the two
-/// collide: a helper registered under one label by two differently signed
-/// apps gets a launch requirement only one of them meets, two supervisors
-/// would drive one bottle's Wine, and two bridges would race for one port.
-/// `DEBUG` is set project-wide, so the app, its helper and `sevo` built
-/// together always agree on which installation they are.
+/// A Debug build is a second installation with everything its own: a shared
+/// helper label gets a launch requirement only one signature meets, and a
+/// shared bottle or port gets two supervisors or bridges. `DEBUG` is set
+/// project-wide, so the app, helper and `sevo` agree.
 nonisolated enum AppIdentity {
     #if DEBUG
-        /// The name of this installation's folders under `~/Library`.
         static let folderName = "Sevoflurane Debug"
-        /// The stem of this installation's log files in `~/Library/Logs`.
         static let logStem = "Sevoflurane-Debug"
-        /// The reverse-DNS stem every identifier this installation mints starts from.
         static let identifierStem = "glass.kagerou.sevoflurane.debug"
-        /// Added to every loopback port, keeping this installation's in a
-        /// block of its own.
+        /// Added to every loopback port.
         static let portOffset = 10
-        /// The name `sevo` is linked under in `/usr/local/bin`, and the name
-        /// its MCP server registers under with the agents.
+        /// The `/usr/local/bin` link and MCP server name.
         static let commandName = "sevo-debug"
     #else
         static let folderName = "Sevoflurane"
@@ -33,14 +24,12 @@ nonisolated enum AppIdentity {
         static let commandName = "sevo"
     #endif
 
-    /// `~/Library/Application Support/<folder>`, the root of everything this
-    /// installation keeps: bottles, engines, runs, reports and settings.
+    /// `~/Library/Application Support/<folder>`.
     static var supportFolder: URL {
         UserHome.url.appendingPathComponent("Library/Application Support/\(folderName)")
     }
 
-    /// `~/Library/Caches/<folder>`: art, icons and rewritten assets, all
-    /// regenerable.
+    /// `~/Library/Caches/<folder>`, all regenerable.
     static var cachesFolder: URL {
         UserHome.url.appendingPathComponent("Library/Caches/\(folderName)")
     }

@@ -2,27 +2,19 @@ import Foundation
 
 /// The frames of a run that were gameplay: what a frame rate is measured over.
 ///
-/// A trace runs from the game's first frame to its last, and most of what lies at either
-/// side of play is not play. A game presents its loading screens at a few frames a second
-/// with gaps of seconds between them, many games drop to a trickle or stop presenting when
-/// their window is not the focused one, and a display that sleeps stops them outright. An
-/// average over all of that describes the loading screen and the time the player was
-/// away, not the game. So the window, from a trace alone (``FrameTrace/Contents``):
+/// Loading screens, an unfocused window and a sleeping display all distort an
+/// average, so the window is cut from a trace alone (``FrameTrace/Contents``):
 ///
-/// 1. **Start.** Gameplay begins at the first frame at least ``Rules/warmup`` after the
-///    trace's first frame from which ``Rules/steady`` seconds pass with no frame slower than
-///    ``Rules/steadyFrame``: loading is over once frames come steadily. A run that never
-///    settles starts at ``Rules/settleLimit`` regardless, so a game that stutters all the
-///    way through still gets measured, stutter included.
-/// 2. **Away.** Frames while the app saw the window in the background, hidden or asleep
-///    (``FrameTrace/Focus``), or on a virtual display, are left out, and so are the
-///    ``Rules/focusGuard`` seconds before each such change: the app looks every two seconds,
-///    so the change happened up to that long before it was written.
-/// 3. **Gaps.** A frame slower than ``Rules/gapFrame`` after the start is a pause, a load or
-///    a game that stopped presenting, and is left out, counted in ``Result/gaps``.
+/// 1. **Start.** The first frame at least ``Rules/warmup`` in from which ``Rules/steady``
+///    seconds pass with no frame slower than ``Rules/steadyFrame``, or ``Rules/settleLimit``
+///    for a run that never settles.
+/// 2. **Away.** Frames while unfocused, hidden, asleep (``FrameTrace/Focus``) or on a
+///    virtual display are left out, plus ``Rules/focusGuard`` seconds before each change,
+///    since the app samples focus every two seconds.
+/// 3. **Gaps.** Frames slower than ``Rules/gapFrame`` are left out and counted.
 ///
 /// A window shorter than ``Rules/minimumSeconds`` carries no frame rate. `sevo perf` and the
-/// run record read traces through the same function, so the two agree frame for frame.
+/// run record share this function.
 nonisolated enum GameplayWindow {
     struct Rules: Equatable, Sendable {
         var warmup: Double = 10
@@ -36,25 +28,20 @@ nonisolated enum GameplayWindow {
         static let standard = Rules()
     }
 
-    /// What the window kept of a trace.
     struct Result: Equatable, Sendable {
         /// Seconds after the trace's first frame that gameplay began.
         var from: Double
-        /// The kept frames, in order.
         var frameTimes: [Float]
         /// Seconds after ``from`` left out as away.
         var away: Double
-        /// Frames after ``from`` left out as gaps.
         var gaps: Int
 
-        /// Seconds the kept frames cover.
         var seconds: Double {
             frameTimes.reduce(0.0) { $0 + Double($1) } / 1000
         }
     }
 
-    /// The gameplay of a trace, or nil for one that never settled into play before it
-    /// ended.
+    /// The gameplay of a trace, or nil for one that never settled.
     static func compute(_ trace: FrameTrace.Contents, rules: Rules = .standard) -> Result? {
         let times = trace.frameTimes
         guard !times.isEmpty else { return nil }
@@ -87,8 +74,7 @@ nonisolated enum GameplayWindow {
         )
     }
 
-    /// The record's summary of a trace's gameplay: nil when the trace has no gameplay at
-    /// all, and no frame times for a window too short to carry a rate.
+    /// The record's gameplay summary; no frame times for a window too short.
     static func gameplay(of trace: FrameTrace.Contents, rules: Rules = .standard) -> RunRecord.Gameplay? {
         guard let result = compute(trace, rules: rules) else { return nil }
         let seconds = result.seconds
@@ -100,17 +86,11 @@ nonisolated enum GameplayWindow {
         )
     }
 
-    /// How far from the median frame time the 5th and 95th percentiles may lie for a run
-    /// to count as held to one rate.
+    /// How far the 5th and 95th percentiles may lie from the median for a steady rate.
     static let steadyBand = 1.1
 
-    /// The rate a run's frames were held to, or nil for frames that wandered.
-    ///
-    /// A game that caps itself, or is paced by the display, puts nine frames in ten
-    /// within a tenth of one frame time whatever the scene; a game limited by the GPU
-    /// slows and speeds up with what is on screen. The community database takes the
-    /// highest such rate any Mac held as the game's own cap, so a title that runs at a
-    /// fixed 30 is judged against 30 rather than against the display.
+    /// The rate a capped or display-paced run was held to, or nil for frames that
+    /// wandered; the community database takes the highest as the game's own cap.
     static func steadyRate(_ times: [Float]) -> Double? {
         guard times.count >= 100 else { return nil }
         let sorted = times.sorted()
@@ -133,7 +113,6 @@ nonisolated enum GameplayWindow {
                 continue
             }
             if begins >= rules.settleLimit { return index }
-            // The steady stretch: every frame ending within `steady` of this one's start.
             var probe = index
             var unsteady: Int?
             while probe < times.count, ends[probe] <= begins + rules.steady {
@@ -153,9 +132,7 @@ nonisolated enum GameplayWindow {
         return nil
     }
 
-    /// The stretches, in seconds of frames, that were away: from each change to a state
-    /// other than focused, less the guard, to the next change back; and likewise for a
-    /// virtual display.
+    /// The away stretches in seconds, each starting `margin` early.
     private static func awayStretches(
         _ trace: FrameTrace.Contents, guard margin: Double,
     ) -> [ClosedRange<Double>] {

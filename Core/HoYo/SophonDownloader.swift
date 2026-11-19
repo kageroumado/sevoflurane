@@ -3,24 +3,15 @@ import Foundation
 
 /// Installs, updates and repairs a HoYoverse game from HoYoPlay's servers.
 ///
-/// An install downloads every file of the current build as zstd chunks,
-/// writes each chunk at its offset in a `<file>.sophon` beside the file,
-/// checks the finished file's md5 and moves it into place. A file already in
-/// the folder with the right size and md5 is kept, so an interrupted install
-/// picks up where it stopped, file by file.
+/// An install writes each zstd chunk at its offset in a `<file>.sophon`,
+/// checks the md5 and moves the file into place; files already matching are
+/// kept, so an interrupted install resumes.
 ///
-/// An update from a build the service has diffs for downloads each changed
-/// file's diff with a range request into the blob that carries it, applies
-/// it to the older file (or to nothing, for a new file), checks the result's
-/// md5, replaces the file and deletes what the new build dropped. A file
-/// whose diff cannot be applied is downloaded whole instead, and a build too
-/// old for diffs updates as a repair against the current build: only the
-/// files that differ are downloaded. The folder's `config.ini` names the new
-/// build only once every file is in place.
-///
-/// Its entry points are `@concurrent`: hashing and patching run for minutes,
-/// and a caller on the main actor would otherwise hold the interface for
-/// all of it.
+/// An update range-requests each changed file's diff, applies it, checks the
+/// md5 and deletes what the new build dropped; a diff that fails is
+/// downloaded whole, and a build too old for diffs is repaired against the
+/// current one. `config.ini` names the new build only once every file is in
+/// place. Entry points are `@concurrent`: hashing and patching take minutes.
 nonisolated struct SophonDownloader: Sendable {
     var api = HoYoAPI()
     /// How many chunks or diffs are in flight at once.
@@ -55,14 +46,12 @@ nonisolated struct SophonDownloader: Sendable {
         let kind: Kind
         /// The voice packs the plan covers besides the game's own files.
         let voices: [String]
-        /// Bytes the service states the plan downloads at most (a download
-        /// plan keeps files already in place, so it can be less).
+        /// The most the plan downloads, per the service.
         let downloadSize: Int64
     }
 
-    /// Works out what bringing `folder` to `game`'s current build takes,
-    /// without changing anything. `voices` are the packs a fresh install
-    /// gets; an existing installation keeps the ones it has.
+    /// What bringing `folder` to the current build takes, changing nothing.
+    /// `voices` apply to a fresh install; an existing one keeps its own.
     @concurrent func plan(game: HoYoGame, folder: URL, voices: [String] = []) async throws -> Plan {
         let installation = HoYoInstallation(game: game, folder: folder)
         let branch = try await api.branch(game)
@@ -89,8 +78,7 @@ nonisolated struct SophonDownloader: Sendable {
 
     // MARK: - Install and repair
 
-    /// Downloads `game`'s current build into `folder`, keeping every file
-    /// already there that matches. Answers the build installed.
+    /// Downloads the current build into `folder`, keeping matching files.
     @discardableResult
     @concurrent func install(
         game: HoYoGame, into folder: URL, voices: [String], progress: @escaping ProgressHandler = { _ in },
@@ -104,8 +92,7 @@ nonisolated struct SophonDownloader: Sendable {
         return build.tag
     }
 
-    /// Downloads every file of `build`'s `fields` that `installation` lacks
-    /// or holds a different copy of, or only `only` when given.
+    /// Downloads the files of `fields` that differ, limited to `only`.
     @concurrent func download(
         build: HoYoAPI.Build, into installation: HoYoInstallation, fields: [String], only: Set<String>? = nil,
         progress: @escaping ProgressHandler,
@@ -137,8 +124,8 @@ nonisolated struct SophonDownloader: Sendable {
         return (try? SophonCodec.md5(of: url)) == md5
     }
 
-    /// Downloads the files an installation is missing or holds broken copies
-    /// of, from the current build. The installation has to be on that build.
+    /// Redownloads missing or broken `paths`; the installation must be on the
+    /// current build.
     @concurrent func repair(
         _ installation: HoYoInstallation, paths: Set<String>, progress: @escaping ProgressHandler = { _ in },
     ) async throws {
@@ -156,9 +143,8 @@ nonisolated struct SophonDownloader: Sendable {
     /// What an update did.
     enum Outcome: Sendable, Equatable {
         case upToDate(String)
-        /// `files` diffs applied, `current` files already at the new build
-        /// (from an update that was interrupted), `downloadedWhole` files
-        /// whose diff did not apply.
+        /// `current` files were already new (an interrupted update);
+        /// `downloadedWhole` diffs did not apply.
         case patched(from: String, to: String, files: Int, current: Int, downloadedWhole: Int)
         case downloaded(to: String)
     }
@@ -201,18 +187,14 @@ nonisolated struct SophonDownloader: Sendable {
         let (results, failed) = try await apply(jobs, to: installation.folder, totalBytes: total, progress: progress)
         var whole = 0
         if !failed.isEmpty {
-            // A diff that would not apply (an older file that was changed or
-            // lost) is replaced by the whole file from the current build.
             let build = try await api.build(branch)
             let fields = Array(Set(failed.map(\.field)))
             try await download(build: build, into: installation, fields: fields, only: Set(failed.map(\.file.path)), progress: progress)
             whole = failed.count
         }
         progress(SophonProgress(phase: .finishing))
-        // The deletion list names files dropped outright. A file the new
-        // build renamed (most of the asset blocks, which are named by their
-        // hash) is not on it: its older copy is the diff's original, and it
-        // goes once nothing in the new build is called that.
+        // Renamed files (hash-named asset blocks) are not on the deletion
+        // list: their originals go once no new file has the name.
         let originals = jobs.compactMap(\.diff.original)
         for path in Set(originals + deletions.map(\.path)).subtracting(newFiles) {
             try? FileManager.default.removeItem(at: installation.folder.appending(path: path))
@@ -236,8 +218,7 @@ nonisolated struct SophonDownloader: Sendable {
         return found
     }
 
-    /// The patch manifests an update of `installation` applies: the game's
-    /// own and those of the voice packs it has files of.
+    /// The game's patch manifest and those of the voice packs installed.
     @concurrent func patchManifests(
         for installation: HoYoInstallation, branch: HoYoAPI.Branch,
     ) async throws -> [(reference: HoYoAPI.PatchManifest, manifest: SophonPatchManifest)] {
@@ -251,8 +232,8 @@ nonisolated struct SophonDownloader: Sendable {
         return chosen
     }
 
-    /// Whether any of the first files of `paths` is in the installation: a
-    /// voice pack's files are all or nothing, so a few are enough to tell.
+    /// Whether any of the first 64 `paths` exists; voice packs are all or
+    /// nothing.
     static func hasAny(of paths: [String], in installation: HoYoInstallation) -> Bool {
         paths.prefix(64).contains { path in
             FileManager.default.fileExists(atPath: installation.folder.appending(path: path).path)
@@ -273,8 +254,8 @@ nonisolated struct SophonDownloader: Sendable {
         let field: String
     }
 
-    /// Downloads every chunk of `files`, `parallelism` at a time, and moves
-    /// each file into place once its last chunk has landed and it checks out.
+    /// Downloads every chunk, `parallelism` at a time, placing each file when
+    /// its last chunk lands.
     private func fetch(
         _ files: [ChunkedFile], into folder: URL, totalBytes: Int64, progress: @escaping ProgressHandler,
     ) async throws {
@@ -330,9 +311,8 @@ nonisolated struct SophonDownloader: Sendable {
         case failed
     }
 
-    /// Applies each file's diff, `parallelism` at a time. Answers how many
-    /// went each way and the jobs whose diff did not produce the file the
-    /// manifest names.
+    /// Applies each diff, `parallelism` at a time; answers the tally and the
+    /// failed jobs.
     private func apply(
         _ jobs: [PatchJob], to folder: URL, totalBytes: Int64, progress: @escaping ProgressHandler,
     ) async throws -> (results: [Applied: Int], failed: [PatchJob]) {
@@ -361,8 +341,7 @@ nonisolated struct SophonDownloader: Sendable {
         return (results, failed)
     }
 
-    /// Downloads one diff and applies it. Fails when the older file is not
-    /// the one the diff was made from, or the result is not the new file.
+    /// Downloads and applies one diff.
     private func apply(_ job: PatchJob, in folder: URL) async throws -> Applied {
         let target = folder.appending(path: job.file.path)
         if Self.holds(target, size: job.file.size, md5: job.file.md5) { return .current }
@@ -421,8 +400,7 @@ nonisolated struct SophonDownloader: Sendable {
         throw last
     }
 
-    /// Refuses a transfer the volume has no room for, with a margin of a
-    /// gigabyte for the staged copies.
+    /// Refuses a transfer without room plus a gigabyte of margin.
     static func requireSpace(_ bytes: Int64, at folder: URL) throws {
         let values = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         guard let free = values?.volumeAvailableCapacityForImportantUsage else { return }
@@ -457,8 +435,7 @@ nonisolated struct SophonProgress: Sendable, Equatable {
     }
 }
 
-/// Sums what concurrent transfers report and passes it on at most a few
-/// times a second.
+/// Sums concurrent progress and reports it at most every 250 ms.
 private actor Tally {
     private var progress: SophonProgress
     private let report: SophonDownloader.ProgressHandler
@@ -490,16 +467,14 @@ private actor Tally {
     }
 }
 
-/// The files being written from chunks: an open descriptor and the chunks
-/// still to come for each, so the last one to land checks the file and
-/// moves it into place.
+/// Files being written from chunks: a descriptor and the chunks to come.
 private actor Assembly {
     private let folder: URL
     private var open: [String: (descriptor: Int32, remaining: Int)] = [:]
 
     init(folder: URL) { self.folder = folder }
 
-    /// Writes one chunk. Answers the staged file when the chunk completed it.
+    /// Writes one chunk; answers the staged file once complete.
     func write(_ data: Data, of chunk: SophonManifest.Chunk, into file: SophonManifest.File) throws -> URL? {
         let staged = folder.appending(path: file.path).appendingPathExtension("sophon")
         var entry = try open[file.path] ?? (descriptor: create(staged, size: file.size), remaining: file.chunks.count)
@@ -538,8 +513,8 @@ private actor Assembly {
         return descriptor
     }
 
-    /// Checks a finished file and moves it over the folder's copy. Outside
-    /// the actor, so hashing a large file holds up no other file's chunks.
+    /// Checks and places a finished file, off the actor so hashing blocks no
+    /// chunks.
     nonisolated static func place(_ staged: URL, as file: SophonManifest.File, in folder: URL) throws {
         guard (try? SophonCodec.md5(of: staged)) == file.md5 else {
             try? FileManager.default.removeItem(at: staged)

@@ -3,22 +3,16 @@ import Foundation
 /// The Chromium APIs Steam's UI bundle may call that WebKit lacks, and the
 /// audit that finds the bundle calling one without checking for it first.
 ///
-/// Steam writes its UI for CEF and updates it on its own schedule. A call to a
-/// Chromium-only function that the bundle does not feature-detect throws in
-/// WebKit, and Steam's error boundary replaces the whole window with "Something
-/// went wrong while displaying this content". The shim supplies the ones the
-/// bundle calls (`supplyChromiumSurface` in `steamclient_shim.js`); this audit
-/// runs on every new bundle and names any call the shim does not cover, so the
-/// next one is in the log before anyone opens Steam.
+/// An unchecked call to a Chromium-only function throws in WebKit, and Steam's
+/// error boundary replaces the window with "Something went wrong while
+/// displaying this content". The shim supplies some (`supplyChromiumSurface`
+/// in `steamclient_shim.js`); this audit runs on every new bundle and logs
+/// any call it does not cover.
 nonisolated enum ChromiumSurface {
-    /// A Chromium-only function or constructor, absent from WKWebView on
-    /// macOS 27, and the text that marks a call to it in minified code.
+    /// A Chromium-only API and the token that marks a call in minified code.
     struct API: Hashable, Sendable {
-        /// The name as a reader would look it up, `scheduler.postTask`.
         let name: String
-        /// The identifier a call site contains. A member reached through a
-        /// renamed local (`h1.getHighEntropyValues(`) is matched by its last
-        /// component, which minification keeps.
+        /// Defaults to the last component, which minification keeps.
         let token: String
 
         init(_ name: String, token: String? = nil) {
@@ -27,8 +21,7 @@ nonisolated enum ChromiumSurface {
         }
     }
 
-    /// Functions and constructors Chromium ships and WKWebView does not,
-    /// each checked against a live WKWebView on macOS 27.
+    /// Each checked absent from a live WKWebView on macOS 27.
     static let chromiumOnly: [API] = [
         API("requestIdleCallback"),
         API("cancelIdleCallback"),
@@ -55,20 +48,15 @@ nonisolated enum ChromiumSurface {
         "cancelIdleCallback",
     ]
 
-    /// One call the shim does not cover, with the code around it.
     struct Finding: Equatable, Sendable {
         let api: String
         let file: String
         let excerpt: String
     }
 
-    /// The unguarded calls in one script to Chromium-only APIs the shim does
-    /// not supply.
-    ///
-    /// A call counts as guarded when the code just before it tests for the
-    /// name (`"EyeDropper" in window`, `typeof x.requestIdleCallback`,
-    /// `x.foo && x.foo(`, `x.foo?.(`), which is how the bundle writes every
-    /// optional API it already handles.
+    /// Unguarded calls the shim does not supply. A call is guarded when the
+    /// code before it tests the name (`"EyeDropper" in window`, `typeof`,
+    /// `x.foo && x.foo(`, `x.foo?.(`).
     static func audit(_ source: String, file: String) -> [Finding] {
         audit(Array(source.utf8), file: file)
     }
@@ -92,9 +80,8 @@ nonisolated enum ChromiumSurface {
 
     // MARK: - Matching
 
-    /// One pass over the bytes: at every `(`, the identifier before it is
-    /// looked up among the tokens. sp.js alone is 16 MB and the bundle 80;
-    /// a search per token through a String took ten seconds.
+    /// One byte pass, looking up the identifier before every `(`: the bundle
+    /// is 80 MB, and a String search per token took ten seconds.
     private static func audit(_ text: [UInt8], file: String) -> [Finding] {
         let wanted = chromiumOnly.filter { !suppliedByShim.contains($0.name) }
         let byMember = Dictionary(grouping: wanted) { member(of: $0.token) }
@@ -123,8 +110,7 @@ nonisolated enum ChromiumSurface {
         String(token.split(separator: ".").last ?? Substring(token))
     }
 
-    /// A dotted token (`scheduler.postTask`) needs its qualifier in front of
-    /// the member, and the qualifier must start an identifier itself.
+    /// A dotted token needs its whole qualifier before the member.
     private static func hasQualifier(
         _ token: String, endingAt start: Int, in bytes: UnsafeBufferPointer<UInt8>,
     ) -> Bool {

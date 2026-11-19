@@ -1,16 +1,14 @@
 import Foundation
 
-/// The graphics translation layer games render through. Steam's own UI never
-/// touches Direct3D, so switching takes effect at the next game launch.
+/// The graphics translation layer games render through; a switch takes
+/// effect at the next game launch.
 nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
-    /// The renderers a Mac can run at all: every one on Apple silicon, and
-    /// every one but D3DMetal on Intel, where Apple's toolkit does not run.
+    /// The renderers this Mac can run: D3DMetal needs Apple silicon.
     static func hostable(onAppleSilicon appleSilicon: Bool = MacHardware.isAppleSilicon) -> [Renderer] {
         allCases.filter { appleSilicon || $0 != .d3dmetal }
     }
 
-    /// The engine picks per game from CrossOver's own database, falling
-    /// back to wined3d for a game it does not list.
+    /// CrossOver's per-game database, falling back to wined3d.
     case auto
     /// Apple's Game Porting Toolkit layer: D3D11 + D3D12.
     case d3dmetal
@@ -43,9 +41,7 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// When to reach for this one, for the Graphics pane's explainer.
-    /// Sourced from CodeWeavers' own toggle documentation and their ARM64
-    /// guidance.
+    /// When to reach for this one, after CodeWeavers' own documentation.
     var guidance: String {
         let value = switch self {
         case .auto:
@@ -64,28 +60,22 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
         return InterfaceCopy.localized(value)
     }
 
-    /// The layers a game can be given for itself, plus the level-clearing
-    /// value the config commands accept.
+    /// The layers a game can pin, plus `inherit`.
     static var gameRungs: String {
         allCases.filter { $0 != .auto }.map(\.rawValue).joined(separator: " | ") + " | inherit"
     }
 
-    /// `WINEDLLOVERRIDES` for a managed engine, whose renderer DLLs are
-    /// copied into the prefix as native overrides; nil when built-in Wine
-    /// should keep its own DLLs.
+    /// `WINEDLLOVERRIDES` for a managed engine; nil keeps Wine's own DLLs.
     var managedDLLOverrides: String? {
         switch self {
         case .dxvk:
-            // What the payload ships, and only that: the engine's DXVK build
-            // is `d3d10core` and `d3d11`, so `d3d9` and `dxgi` stay Wine's
-            // own. Naming a DLL the payload does not carry sends a game
+            // Only what the payload ships: naming a DLL it lacks sends a game
             // looking for a native file that is not there.
             "d3d10core,d3d11=n,b"
         case .dxmt:
             "d3d10core,d3d11,dxgi=n,b"
         case .d3dmetal:
-            // D3DMetal is staged as the engine's own d3d11/d3d12/dxgi, so
-            // builtin resolution already reaches it.
+            // Staged as the engine's own d3d11/d3d12/dxgi.
             nil
         case .auto, .wined3d:
             nil
@@ -93,37 +83,27 @@ nonisolated enum Renderer: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// Reads and writes the per-bottle graphics knobs. For CrossOver bottles the
-/// store is `cxbottle.conf`'s `[EnvironmentVariables]` section — the same
-/// store CrossOver's own GUI writes, so the two never fight over a second
-/// copy of the truth. For managed engines the store is UserDefaults and the
-/// values ride each launch's environment (``Engine/environment(bottle:)``).
+/// Reads and writes the per-bottle graphics knobs: in `cxbottle.conf`'s
+/// `[EnvironmentVariables]` for CrossOver, which its own GUI writes too, and
+/// in UserDefaults for managed engines (``Engine/environment(bottle:)``).
 nonisolated enum BottleGraphics {
     struct Selection: Equatable, Sendable {
         var renderer: Renderer
         var msync: Bool
         /// What the bottle tells a game its GPU is.
         var gpu: GPUIdentity = defaultGPU
-        /// The D3DMetal toolkit version a game gets, resolved (auto → newest)
-        /// for the active managed engine; `nil` for CrossOver or no toolkit.
-        /// Part of the booted diff so an engine switch and a version switch
-        /// coalesce into one restart rather than two.
+        /// The resolved D3DMetal toolkit version for a managed engine; `nil`
+        /// for CrossOver or no toolkit.
         var d3dMetalVersion: String?
     }
 
-    /// The card a bottle claims when nobody has chosen one.
-    ///
-    /// A GeForce rather than the Apple chip: a game that recognizes the
-    /// vendor picks its normal settings and skips its driver-install prompt,
-    /// and the card ``GPUEquivalence`` matches is one of about the machine's
-    /// real speed, so nothing is promised that the Mac cannot deliver.
+    /// The default card: a GeForce a game recognizes, matched by
+    /// ``GPUEquivalence`` to about the machine's real speed.
     static let defaultGPU = GPUIdentity.nvidia
 
-    /// What the bottle is set to right now, whichever engine owns the store.
-    ///
-    /// For a managed engine the D3DMetal version is resolved here — not in
-    /// ``managedSelection``, which engine resolution itself calls, so reading
-    /// ``Engine/active`` from there would recurse.
+    /// What the bottle is set to now. The D3DMetal version is resolved here
+    /// because ``managedSelection`` runs inside engine resolution, where
+    /// reading ``Engine/active`` would recurse.
     static func currentSelection() -> Selection {
         if Engine.active.isCrossOver {
             return selection(forBottle: SteamBottle.root)
@@ -144,25 +124,17 @@ nonisolated enum BottleGraphics {
 
     // MARK: - Per-game renderers
 
-    /// Whether this game's own renderer reaches it at its next launch through
-    /// its env file, leaving the bottle's default and the staged tree alone.
-    ///
-    /// Two things have to hold: the engine reads the env files at process
-    /// start, and the renderer is one a `WINEDLLPATH_PREPEND` directory can
-    /// supply (``EngineRenderers/supportsPerGame(_:)``).
+    /// Whether this game's own renderer reaches it through its env file: the
+    /// engine reads env files and the renderer supports
+    /// ``EngineRenderers/supportsPerGame(_:)``.
     static func perGameRendererIsLive(forApp appID: Int) -> Bool {
         guard Engine.active.supportsEnvFiles, let own = GameConfig.game(appID).renderer
         else { return false }
         return EngineRenderers.supportsPerGame(own)
     }
 
-    /// The renderer this game must run under, when the running client cannot
-    /// hand it over at the next launch.
-    ///
-    /// Where the env files cannot carry it, a game inherits the client's
-    /// environment and the staged tree, so a per-game choice and a changed
-    /// bottle default both mean a restart — and the comparison is against what
-    /// the client *booted* with, never the stored selection.
+    /// The renderer this game needs a client restart for: compared against
+    /// what the client *booted* with, never the stored selection.
     static func rendererNeedingRestart(forApp appID: Int) -> Renderer? {
         guard !perGameRendererIsLive(forApp: appID) else { return nil }
         let wanted = GameConfig.renderer(game: appID).value
@@ -170,10 +142,9 @@ nonisolated enum BottleGraphics {
         return wanted == booted ? nil : wanted
     }
 
-    /// The renderer a launch has to move the bottle onto for this game: its
-    /// own choice, where that choice cannot ride in its env file. `explicit`
-    /// is a one-off "Run with", which moves the bottle whatever the game is
-    /// pinned to.
+    /// The renderer a launch moves the bottle onto: a one-off `explicit`
+    /// "Run with", else the game's own choice when its env file cannot carry
+    /// it.
     static func rendererToStage(forApp appID: Int, explicit: Renderer?) -> Renderer? {
         if let explicit { return explicit }
         guard !perGameRendererIsLive(forApp: appID) else { return nil }
@@ -182,18 +153,12 @@ nonisolated enum BottleGraphics {
 
     // MARK: - Desired vs booted
 
-    /// How the desired graphics differ from what the running client booted
-    /// with — the single classification the launch and restart paths read.
-    ///
-    /// A renderer or D3DMetal-version change is a **restage**: the DLLs are
-    /// resolved from the engine tree, so ``EngineRenderers/stage`` puts the
-    /// new ones in place and the next game to launch loads them, with the
-    /// client left up. An msync or engine change is a **bounce**: those are
-    /// negotiated with a fresh wineserver at spawn, so the client restarts.
+    /// How the desired graphics differ from what the client booted with. A
+    /// renderer or D3DMetal-version change is a **restage** of the tree under
+    /// a running client; an msync or engine change is a **bounce**, since
+    /// those are negotiated with a fresh wineserver.
     struct GraphicsChange: Equatable {
-        /// Renderer or D3DMetal version moved — a restage applies it.
         var restage = false
-        /// msync or the engine root moved — the wineserver must go.
         var bounce = false
         var any: Bool {
             restage || bounce
@@ -201,16 +166,13 @@ nonisolated enum BottleGraphics {
     }
 
     /// Whether a renderer/version change can be applied under a running
-    /// client by restaging the tree in place — the next game to launch loads
-    /// the new DLLs — rather than bouncing the client. Steam itself does not
-    /// render (it does not even draw its own UI here), so nothing it runs
-    /// should hold the renderer DLLs open. The one predicate the launch path
-    /// reads: flip to `false` if a live client is ever shown to hold them.
+    /// client by restaging the tree in place rather than bouncing the client.
+    /// Steam itself renders nothing here, so nothing it runs should hold the
+    /// renderer DLLs open; flip to `false` if a live client is ever shown to
+    /// hold them.
     static let hotRestageSupported = true
 
-    /// The change since boot for the bottle default. A nil booted record
-    /// (nothing has spawned yet) reads as no change — the first spawn stages
-    /// from the desired selection regardless.
+    /// The change since boot; no booted record reads as no change.
     static func graphicsChangeSinceBoot() -> GraphicsChange {
         guard let booted = bootedSelection() else { return GraphicsChange() }
         let wanted = currentSelection()
@@ -223,14 +185,8 @@ nonisolated enum BottleGraphics {
         )
     }
 
-    /// Whether the DXMT or DXVK version picked in Settings differs from the
-    /// one the running client's tree was staged from. A version change is a
-    /// restage like any other — the stager reads the chosen directory, so the
-    /// next game to launch loads the new DLLs — and it only counts as one
-    /// because the choice is recorded at every spawn.
-    ///
-    /// A client booted before this was recorded reads as no change: the first
-    /// spawn after an update stages from the desired versions regardless.
+    /// Whether the DXMT or DXVK version picked differs from the one recorded
+    /// at the last spawn; no record reads as no change.
     static func rendererVersionsChangedSinceBoot() -> Bool {
         guard let booted = Preferences.shared.string(forKey: bootedRenderersKey) else {
             return false
@@ -248,11 +204,8 @@ nonisolated enum BottleGraphics {
             .joined(separator: "|")
     }
 
-    /// Brings the active managed engine's Wine tree in line with the desired
-    /// selection — both halves of the picked D3DMetal version and the
-    /// renderer's DLLs — so the next process to load them gets what the picker
-    /// says. Run before every client spawn; idempotent. A no-op for CrossOver,
-    /// which keeps its renderers in `cxbottle.conf`, not a shared tree.
+    /// Stages the selected renderer and D3DMetal version into the active
+    /// managed engine's tree; run before every client spawn, idempotent.
     @discardableResult
     static func reconcileManagedTree() -> [String] {
         guard case let .managed(version) = Engine.active else { return [] }
@@ -263,12 +216,8 @@ nonisolated enum BottleGraphics {
         )
     }
 
-    /// One line naming what a staging pass put in the Wine tree: the renderer
-    /// a game will load, the toolkit version behind it, and how many DLLs
-    /// moved. Nil for an engine that keeps no managed tree.
-    ///
-    /// Every spawn and every hot restage says this, because a black-screen
-    /// report has to name the layer the game actually loaded.
+    /// One log line naming what a staging pass put in the tree, so a
+    /// black-screen report names the layer the game loaded.
     static func stagingNote(_ staged: [String]) -> String? {
         guard case .managed = Engine.active else { return nil }
         let toolkit = D3DMetalInstaller.active(inEngine: D3DMetalInstaller.store)?.version
@@ -280,22 +229,17 @@ nonisolated enum BottleGraphics {
 
     private static let bootedKey = "bootedGraphics"
 
-    /// Called at every client spawn: the selection games will actually
-    /// inherit, whatever Settings says later — plus the engine whose
-    /// wineserver is now booted, which is what decides whether a later
-    /// restart can leave Windows running.
+    /// Records at every client spawn the selection games inherit and the
+    /// engine whose wineserver is booted.
     static func recordBootedSelection() {
         let selection = currentSelection()
-        // The engine root comes last: it holds "/" and could hold "|", so
-        // every reader takes it as the tail after a bounded split. The
-        // D3DMetal version sits before it so an empty version stays one field.
+        // The engine root comes last because it could hold "|": readers take
+        // it as the tail of a bounded split.
         Preferences.shared.set(
             "\(selection.renderer.rawValue)|\(selection.msync ? "1" : "0")"
                 + "|\(selection.d3dMetalVersion ?? "")|\(Engine.active.root.path)",
             forKey: bootedKey,
         )
-        // Its own key: the versions are a per-component list, and the record
-        // above ends in a path that may hold any separator.
         Preferences.shared.set(rendererVersionRecord(), forKey: bootedRenderersKey)
     }
 
@@ -321,11 +265,9 @@ nonisolated enum BottleGraphics {
 
     // MARK: - CrossOver bottles (cxbottle.conf)
 
-    /// The knob vocabulary CrossOver's own tooling uses (win10_64 template +
-    /// the live bottle): `CX_GRAPHICS_BACKEND` selects the layer, the legacy
-    /// per-layer flags (`WINED3DMETAL`, `WINEDXVK`) are kept in agreement
-    /// because the bottle templates still read them, and `WINEMSYNC` gates
-    /// msync (CrossOver 26 migrated `WINEESYNC` away).
+    /// CrossOver's knobs: `CX_GRAPHICS_BACKEND` selects the layer, the legacy
+    /// `WINED3DMETAL` and `WINEDXVK` flags are kept in agreement because the
+    /// templates still read them, and `WINEMSYNC` gates msync.
     static func selection(forBottle bottle: URL) -> Selection {
         let vars = environmentVariables(inConf: confText(forBottle: bottle))
         let renderer: Renderer =
@@ -347,21 +289,15 @@ nonisolated enum BottleGraphics {
 
     /// The renderer a bottle gets when nobody has chosen one.
     ///
-    /// Not CrossOver's "Automatic": that consults their per-game database and
-    /// falls back to **wined3d**, which is the slowest layer here and the one
-    /// a modern title is least likely to run on. A bottle whose whole purpose
-    /// is Steam is better served starting on D3DMetal — the only layer that
-    /// speaks Direct3D 12 — and a user who prefers the database can still
-    /// pick Automatic, which is written as an empty value and left alone.
+    /// D3DMetal, the only layer that speaks Direct3D 12. CrossOver's
+    /// "Automatic" falls back to wined3d, the slowest layer here and the one a
+    /// modern title is least likely to run on; a user who prefers its database
+    /// can still pick Automatic, which is written as an empty value and left
+    /// alone.
     static let defaultRenderer = Renderer.d3dmetal
 
-    /// Brings a bottle's graphics settings up to what this app writes:
-    /// ``defaultRenderer`` when nothing was ever chosen, and in every case the
-    /// derived knobs — the translation defaults and the GPU the games are
-    /// told about — which an older bottle predates.
-    ///
-    /// A renderer already chosen, Automatic included (stored as an empty
-    /// value), is left exactly as the user left it.
+    /// Writes ``defaultRenderer`` when no renderer was ever chosen (Automatic
+    /// is an empty value and stays), and in every case the derived knobs.
     static func reassertDefaults(forBottle bottle: URL) throws {
         let text = confText(forBottle: bottle)
         guard !text.isEmpty else { return }
@@ -372,15 +308,8 @@ nonisolated enum BottleGraphics {
         try apply(selection, toBottle: bottle)
     }
 
-    /// Moves a bottle still reporting the Apple chip onto the recommended
-    /// card, once.
-    ///
-    /// Every bottle this app sets up carries `SEVO_GPU_IDENTITY`, written
-    /// whether or not anyone opened the picker, so an absent key cannot tell
-    /// a real choice from a default that has since changed. One pass over the
-    /// stored value settles it: a bottle sitting where the old default left
-    /// it moves to ``defaultGPU``, and a bottle put back on the Apple chip
-    /// after this pass stays there.
+    /// Moves a bottle still reporting the Apple chip onto ``defaultGPU``, once
+    /// per Mac, so a bottle put back on the Apple chip afterwards stays there.
     static func adoptDefaultGPU(forBottle bottle: URL) {
         let defaults = Preferences.shared
         guard !defaults.bool(forKey: gpuAdoptedKey) else { return }
@@ -413,15 +342,12 @@ nonisolated enum BottleGraphics {
         for (name, value) in Self.translationDefaults {
             text = settingVariable(name, to: value, inConf: text)
         }
-        // The choice itself is stored, and every layer's own variables are
-        // derived from it — reading five knobs back into one answer would
-        // guess where this simply knows.
+        // The choice is stored; each layer's variables are derived from it.
         text = settingVariable(gpuKey, to: selection.gpu.rawValue, inConf: text)
         for (name, value) in selection.gpu.environment {
             text = settingVariable(name, to: value.isEmpty ? nil : value, inConf: text)
         }
-        // DXVK takes its share of the same choice as a file, because this one
-        // reads no config string from the environment.
+        // This DXVK reads its share only from a file.
         GPUIdentity.writeDXVKConfig(selection.gpu, intoBottle: bottle)
         try Data(text.utf8).write(to: confURL(forBottle: bottle))
         carryGPUToRegistry(selection.gpu, intoBottle: bottle)
@@ -431,20 +357,15 @@ nonisolated enum BottleGraphics {
 
     /// Carries the card into the prefix's registry at the moment it is chosen.
     ///
-    /// Wine's own renderer reads the card from `HKCU\Software\Wine\Direct3D`
-    /// rather than from the launch environment, so a choice that has not
-    /// reached the registry has not reached that renderer. `regedit` imports
-    /// the file through the engine's own wine, which reaches a prefix that is
-    /// already running and starts one for a bottle that is down.
+    /// Wine's own renderer reads the card from `HKCU\Software\Wine\Direct3D`,
+    /// not from the launch environment. `regedit` imports the file through the
+    /// engine's own wine, which reaches a running prefix and boots a stopped one.
     ///
-    /// For the Steam bottle the import is the daemon's to run, on a detached
-    /// task with a minute's bound, and its outcome is logged: the daemon owns
-    /// every process in that bottle. Another bottle has no daemon, so the
-    /// import is spawned directly and not waited for.
-    ///
-    /// The file lands in the bottle whether or not the import does, and
+    /// For the Steam bottle the daemon, which owns every process there, runs
+    /// the import with a minute's bound and the outcome is logged; another
+    /// bottle has no daemon, so the import is spawned and not waited for.
     /// ``SetupEnvironment`` writes the same two values at the next app start,
-    /// so a spawn that fails costs the choice a restart rather than losing it.
+    /// so a failed import costs the choice a restart rather than losing it.
     private static func carryGPUToRegistry(_ identity: GPUIdentity, intoBottle bottle: URL) {
         guard GPUIdentity.writeWineD3DRegistry(identity, intoBottle: bottle) != nil,
               !registryHolds(identity, inBottle: bottle)
@@ -477,8 +398,8 @@ nonisolated enum BottleGraphics {
         try? process.run()
     }
 
-    /// Whether the prefix already says what this choice says, so a bottle that
-    /// is right pays no spawn. The Apple chip is the absence of both values.
+    /// Whether `user.reg` already holds this choice (the Apple chip is the
+    /// absence of both values), so a right bottle pays no spawn.
     static func registryHolds(_ identity: GPUIdentity, inBottle bottle: URL) -> Bool {
         let text = (try? String(
             contentsOf: bottle.appendingPathComponent("user.reg"), encoding: .utf8,
@@ -492,15 +413,9 @@ nonisolated enum BottleGraphics {
         }
     }
 
-    /// Knobs Apple documents for the evaluation environment, and that a Steam
-    /// bottle wants on:
-    ///
-    /// - `ROSETTA_ADVERTISE_AVX` makes the translation layer publish AVX
-    ///   support to the game. Rosetta translates those instructions either
-    ///   way; without the advertisement a growing number of titles decide the
-    ///   CPU is too old and refuse to start.
-    /// - `D3DM_ENABLE_METALFX` lets D3DMetal answer a game's DLSS calls with
-    ///   MetalFX on macOS 26. It does nothing under the other renderers.
+    /// Apple-documented knobs a Steam bottle wants on: `ROSETTA_ADVERTISE_AVX`
+    /// (titles that see no AVX refuse to start) and `D3DM_ENABLE_METALFX`
+    /// (D3DMetal answers DLSS with MetalFX on macOS 26).
     static let translationDefaults = [
         "ROSETTA_ADVERTISE_AVX": "1",
         "D3DM_ENABLE_METALFX": "1",
@@ -514,8 +429,8 @@ nonisolated enum BottleGraphics {
         (try? String(contentsOf: confURL(forBottle: bottle), encoding: .utf8)) ?? ""
     }
 
-    /// The `"NAME" = "value"` pairs of `[EnvironmentVariables]`, the last
-    /// section of the conf. Comment lines (`;;`) are skipped.
+    /// The `"NAME" = "value"` pairs of `[EnvironmentVariables]`, skipping
+    /// `;` comments.
     static func environmentVariables(inConf text: String) -> [String: String] {
         var inSection = false
         var vars: [String: String] = [:]
@@ -532,10 +447,9 @@ nonisolated enum BottleGraphics {
         return vars
     }
 
-    /// Replaces, appends, or removes (`value: nil`) one variable inside
-    /// `[EnvironmentVariables]`, leaving every other byte of the file alone —
-    /// CrossOver's own tools read and rewrite this file, so edits must be
-    /// surgical.
+    /// Replaces, appends or removes (`nil`) one variable in
+    /// `[EnvironmentVariables]`, leaving every other byte alone, since
+    /// CrossOver's own tools rewrite this file.
     static func settingVariable(
         _ name: String, to value: String?, inConf text: String,
     ) -> String {
@@ -565,9 +479,8 @@ nonisolated enum BottleGraphics {
         guard inSection else {
             return text + "\n[EnvironmentVariables]\n\"\(name)\" = \"\(value)\"\n"
         }
-        // Lands after the section's last real assignment: CrossOver parks
-        // commented-out examples at the end of the section, and appending
-        // below those scatters the file a little more on every write.
+        // After the last real assignment, above CrossOver's commented-out
+        // examples at the section's end.
         var insertion = sectionEnd
         while insertion > 0 {
             let line = lines[insertion - 1].trimmingCharacters(in: .whitespaces)
@@ -607,12 +520,8 @@ nonisolated enum BottleGraphics {
         return Selection(renderer: renderer, msync: msync, gpu: gpu ?? defaultGPU)
     }
 
-    /// What a managed engine runs when the user never picked a renderer:
-    /// ``defaultRenderer`` once a D3DMetal toolkit is installed, and DXMT
-    /// until then — D3DMetal comes from Apple's Game Porting Toolkit, which
-    /// a managed engine holds only once the user has added it. Installing one
-    /// is what moves an unchosen bottle onto it, so DirectX 12 games run
-    /// without a trip to Settings.
+    /// An unchosen managed renderer: ``defaultRenderer`` once a D3DMetal
+    /// toolkit is installed, DXMT until then.
     static func unchosenManagedRenderer(toolkitInstalled: Bool) -> Renderer {
         toolkitInstalled ? defaultRenderer : .dxmt
     }
@@ -622,12 +531,9 @@ nonisolated enum BottleGraphics {
         defaults.set(selection.renderer.rawValue, forKey: rendererKey)
         defaults.set(selection.msync, forKey: msyncKey)
         defaults.set(selection.gpu.rawValue, forKey: gpuKey)
-        // After the store, because the launch environment a spawn inherits is
-        // derived from it.
         GPUIdentity.writeDXVKConfig(selection.gpu, intoBottle: SteamBottle.root)
         carryGPUToRegistry(selection.gpu, intoBottle: SteamBottle.root)
-        // The renderer is part of engine resolution, so the next client
-        // start re-picks the wine.
+        // The renderer is part of engine resolution.
         Engine.refreshResolution()
     }
 

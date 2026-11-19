@@ -2,16 +2,10 @@ import Foundation
 
 /// The logs a game writes for itself, gathered for the runs a report covers.
 ///
-/// Every engine invents its own dumping ground and none of them is named for
-/// the app id, so the join is made from the game's own install: a Unity
-/// player carries `<Game>_Data/app.info`, whose first line is the company and
-/// whose second is the product it logs under, and an Unreal game's shipping
-/// executable names the project its `Saved/` directory sits in. A run whose
-/// install says neither falls back to the write times — a file last written
-/// while the run was up — which two games up at once can both claim.
-///
-/// Paths are rewritten (``Redaction``) and every file is capped, because a
-/// game left running writes without a bound.
+/// No log is named for the app id, so the join comes from the install: Unity's
+/// `<Game>_Data/app.info` names the company and product, and an Unreal
+/// shipping exe names its project. Otherwise write times decide, which two
+/// running games can both claim. Paths are redacted and files capped.
 nonisolated enum GameLogs {
     struct Collected {
         /// Where it goes inside the report, `games/<appid>/…`.
@@ -19,17 +13,15 @@ nonisolated enum GameLogs {
         let text: String
     }
 
-    /// How much of a log is kept: the end, where the failure is.
+    /// How much of a log's end is kept.
     static let maximumBytesPerFile = 2_000_000
     /// The whole section's budget, spent newest run first.
     static let maximumBytesTotal = 20_000_000
-    /// A log is still being written when the process dies, so its last write
-    /// can land just after the run record closes. Only the fallback join and
-    /// Unreal's shared `Saved/` directories spend this.
+    /// A last write can land after the run record closes; used by the
+    /// write-time joins.
     static let graceAfterRun: TimeInterval = 300
 
-    /// What every run in `records` left behind, newest run first so the
-    /// budget is spent on what is being asked about.
+    /// What every run in `records` left behind, newest first for the budget.
     static func collect(for records: [RunRecord]) -> [Collected] {
         var collected: [Collected] = []
         var budget = maximumBytesTotal
@@ -58,12 +50,8 @@ nonisolated enum GameLogs {
         return collected
     }
 
-    /// Where one file goes under `games/<appid>/`.
-    ///
-    /// Two files of one app id can share a name — an Unreal crash directory
-    /// per crash, two Unity products claimed by the same fallback — and the
-    /// report is a flat directory per app id, so a repeat is qualified by the
-    /// directory it came out of rather than overwriting what is already there.
+    /// Where one file goes under `games/<appid>/`; a repeated name is
+    /// qualified by its parent directory.
     static func path(of url: URL, forApp appID: Int, avoiding taken: Set<String>) -> String {
         let root = "games/\(appID)"
         let name = url.lastPathComponent
@@ -86,26 +74,21 @@ nonisolated enum GameLogs {
         return start ... end
     }
 
-    /// The Windows profiles a game can write under: the bottle's, and the
-    /// companion prefix's, where the programs that need a `steam.exe` parent
-    /// run (HoYoverse's games).
+    /// The bottle's and the companion prefix's Windows profiles.
     private static var windowsUserRoots: [URL] {
         [SteamBottle.root, SteamBottle.companion].map { $0.appendingPathComponent("drive_c/users") }
     }
 
     // MARK: - Unity
 
-    /// The file the Unity player writes now, and the one it rotated the
-    /// previous launch's output into, under Unity's names and under the ones
-    /// HoYoverse's players use.
+    /// Current and rotated player logs, under Unity's and HoYoverse's names.
     static let unityLogNames = ["Player.log", "Player-prev.log", "output_log.txt", "output_log.txt.last"]
 
     /// The names a player's current log goes by.
     private static let currentUnityLogNames = ["Player.log", "output_log.txt"]
 
-    /// Where a run's Unity player writes, from the identity in its install.
-    /// `nil` when the install names no company and product, which is the
-    /// caller's cue to fall back to the write times.
+    /// A run's Unity logs from its install's identity; `nil` sends the caller
+    /// to the write times.
     private static func unityLogs(for record: RunRecord) -> [URL]? {
         let install = SharedGames.installed(appID: record.appid)?.directory
             ?? AdoptedPrograms.program(record.appid)?.url.deletingLastPathComponent()
@@ -116,12 +99,8 @@ nonisolated enum GameLogs {
         }
     }
 
-    /// The Unity logs a company and product wrote, in every Windows profile
-    /// the bottle has.
-    ///
-    /// Both files are taken whether or not either was written during the run:
-    /// a second launch of the same game rotates the first launch's output
-    /// into `Player-prev.log`, so that is where the earlier run's log is.
+    /// A company and product's Unity logs in every profile, whatever their
+    /// write times: a second launch rotates the first into `Player-prev.log`.
     static func unityLogs(company: String, product: String, underUsers users: URL) -> [URL] {
         var found: [URL] = []
         for user in InstallDirectory.entries(in: users) where user.isDirectory {
@@ -136,10 +115,8 @@ nonisolated enum GameLogs {
         return found
     }
 
-    /// The company and product a Unity game logs under, from the `app.info`
-    /// its player data directory carries: the first line is the company, the
-    /// second the product. The directory matching the run's executable is
-    /// read first, since a game can ship more than one player.
+    /// The company and product from `app.info`, preferring the player
+    /// directory that matches `exe`.
     static func unityIdentity(
         inInstall directory: URL, exe: String?,
     ) -> (company: String, product: String)? {
@@ -167,8 +144,7 @@ nonisolated enum GameLogs {
         dataDirectory.dropLast(playerDataSuffix.count).lowercased()
     }
 
-    /// Unity writes `Player.log` under the Windows user's `LocalLow`, one
-    /// directory per company and product, neither of which names the app id.
+    /// Every current Unity log under `LocalLow`, with its write time.
     private static func unityPlayerLogs(underUsers users: URL) -> [(url: URL, written: Date)] {
         var found: [(url: URL, written: Date)] = []
         for user in InstallDirectory.entries(in: users) where user.isDirectory {
@@ -186,9 +162,8 @@ nonisolated enum GameLogs {
         return found
     }
 
-    /// The entry a name refers to, matched case-insensitively: the bottle's
-    /// drive is case sensitive, and Unity writes the name into `app.info` and
-    /// creates the directory from separate code paths.
+    /// Case-insensitive: Unity's `app.info` and directory names can differ in
+    /// case on the case-sensitive drive.
     private static func directory(named name: String, in parent: URL) -> URL? {
         let wanted = name.lowercased()
         return InstallDirectory.entries(in: parent)
@@ -197,15 +172,11 @@ nonisolated enum GameLogs {
 
     // MARK: - Unreal
 
-    /// Unreal keeps its logs and crash reports under `<Project>/Saved/`, which
-    /// sits beside the game in a development build and under the Windows
-    /// user's `AppData\Local` in a shipping one — where every project has a
-    /// directory whether or not it ran, so those are taken by write time.
+    /// Unreal's `<Project>/Saved/` logs, beside the game or under
+    /// `AppData\Local`, taken by write time.
     private static func unrealLogs(for record: RunRecord) -> [URL] {
         let project = unrealProject(of: record.exe)
-        // The user's `AppData\Local` holds a directory for every Unreal game
-        // ever run, so a run that cannot name its project would claim all of
-        // them that were written while it was up.
+        // An unnamed project would claim every Unreal game written meanwhile.
         guard project != nil || record.runtime == "unreal", let window = window(of: record)
         else { return [] }
         var savedDirectories: [URL] = []
@@ -234,8 +205,7 @@ nonisolated enum GameLogs {
         return found
     }
 
-    /// The project name Unreal writes under, taken off its shipping
-    /// executable: `Subnautica2-Win64-Shipping.exe` is `Subnautica2`.
+    /// `Subnautica2-Win64-Shipping.exe` is `subnautica2`.
     private static func unrealProject(of exe: String?) -> String? {
         guard let exe = exe?.lowercased() else { return nil }
         for suffix in ["-win64-shipping.exe", "-win32-shipping.exe"]
@@ -247,9 +217,8 @@ nonisolated enum GameLogs {
 
     // MARK: - The renderer
 
-    /// The renderer's own logs, when the bottle's environment names where
-    /// they go. DXMT takes a directory and writes one file per executable in
-    /// it, so a directory contributes its files rather than itself.
+    /// The renderer logs `DXMT_LOG_PATH` names; a directory contributes its
+    /// files.
     private static func rendererLogs() -> [URL] {
         let sevo = SteamBottle.root.appendingPathComponent(".sevo")
         var files = [
@@ -278,12 +247,10 @@ nonisolated enum GameLogs {
 
     // MARK: - Files
 
-    /// Extensions whose content is text. A minidump is bytes nobody can read
-    /// out of a report, so it is left where it is.
+    /// Extensions whose content is text.
     private static let textExtensions = ["log", "txt", "xml", "json", "ini", "runtime-xml"]
 
-    /// Text files in a directory and one level under it — Unreal's crash
-    /// reports are one directory per crash.
+    /// Text files in a directory and one level under (one per Unreal crash).
     private static func textFiles(under directory: URL) -> [URL] {
         var found: [URL] = []
         for entry in InstallDirectory.entries(in: directory) {
@@ -302,7 +269,7 @@ nonisolated enum GameLogs {
         textExtensions.contains { name.lowercased().hasSuffix(".\($0)") }
     }
 
-    /// The end of a file, redacted. `nil` when it is not there or is empty.
+    /// The end of a file, redacted; `nil` when missing or empty.
     private static func read(_ url: URL) -> String? {
         guard let (text, elided) = ReportStripper.rawTail(of: url, limit: maximumBytesPerFile) else {
             return nil

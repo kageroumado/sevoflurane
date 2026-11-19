@@ -1,16 +1,13 @@
 import Foundation
 
-/// The HoYoverse games Sevoflurane downloads and updates itself, from the
-/// same servers and in the same format HoYoPlay uses (Sophon).
-///
-/// The global (`_global`) servers only: the Chinese builds come from other
-/// hosts with other game ids and have never been tried here.
+/// The HoYoverse games Sevoflurane installs through HoYoPlay's Sophon service,
+/// global servers only.
 nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
     case genshin = "hk4e_global"
     case starRail = "hkrpg_global"
     case zenless = "nap_global"
 
-    /// HoYoPlay's id for the game, which every launcher API call is keyed by.
+    /// HoYoPlay's id, the key of every launcher API call.
     var gameID: String {
         switch self {
         case .genshin: "gopR6Cufr3"
@@ -27,7 +24,6 @@ nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The executable at the top of an installed folder.
     var executable: String {
         switch self {
         case .genshin: "GenshinImpact.exe"
@@ -36,7 +32,7 @@ nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// A short name for the command line: `genshin`, `starrail`, `zzz`.
+    /// The command-line name.
     var slug: String {
         switch self {
         case .genshin: "genshin"
@@ -45,10 +41,8 @@ nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// Whether Sevoflurane can start the game once it is installed, which is
-    /// whether `SteamParent.executables` names it. Star Rail's protection
-    /// ends the game a few seconds in under Wine even behind that parent
-    /// (MHYPBase, 4.5 and 4.6, 2026-09-29), so it is downloaded and kept
+    /// Whether `SteamParent.executables` names the game. Star Rail's MHYPBase
+    /// protection ends it seconds in under Wine (4.5 and 4.6), so it is kept
     /// current but never added to Quick Launch.
     var launches: Bool { self != .starRail }
 
@@ -59,8 +53,7 @@ nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The game a command-line word names: its slug, its biz code or its
-    /// display name, in any case.
+    /// The game a slug, biz code or display name names, in any case.
     static func named(_ word: String) -> HoYoGame? {
         let word = word.lowercased()
         return allCases.first { game in
@@ -69,11 +62,9 @@ nonisolated enum HoYoGame: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// The Sophon category a voice-over pack is published under, and the name a
-/// person knows it by.
+/// Sophon voice-pack fields and their names.
 nonisolated enum HoYoVoice {
-    /// The manifest field of a game's own files, beside which the voice packs
-    /// are published.
+    /// The manifest field of a game's own files.
     static let gameField = "game"
 
     static let names: [String: String] = [

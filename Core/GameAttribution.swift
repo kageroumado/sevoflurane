@@ -1,10 +1,8 @@
 import Foundation
 
 nonisolated extension GameConfig {
-    /// Whether `appID`'s records claim executables: an adopted program's
-    /// always, a Steam game's while a library holds its manifest
-    /// (`installed`). A game that is not installed starts no process, so no
-    /// window and no env file is its, however many exes it has on record.
+    /// Whether `appID`'s records claim executables: always for an adopted
+    /// program, while installed for a Steam game.
     static func claims(_ appID: Int, installed: Set<Int>) -> Bool {
         AdoptedPrograms.isAdopted(appID) || installed.contains(appID)
     }
@@ -20,16 +18,12 @@ nonisolated extension GameConfig {
         claimants(in: games(), installed: installed)
     }
 
-    /// The app whose recorded exes include this one, if any: a window owned
-    /// by an exe another game has already claimed is that game's, whatever
-    /// launch is in flight.
+    /// The app whose recorded exes include `exe`, whatever launch is in flight.
     static func app(claiming exe: String) -> Int? {
         app(claiming: exe, in: claimingGames())
     }
 
-    /// ``app(claiming:)`` over `games`. Two games that both record the exe
-    /// answer the lower app id, so the answer is the same whatever order the
-    /// store lists them in.
+    /// ``app(claiming:)`` over `games`; a shared exe answers the lower app id.
     static func app(claiming exe: String, in games: [Int: ConfigValues]) -> Int? {
         let lowered = exe.lowercased()
         guard GameExecutables.isRecordable(lowered) else { return nil }

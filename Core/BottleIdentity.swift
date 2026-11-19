@@ -2,13 +2,11 @@ import Darwin
 import Foundation
 
 /// One bottle a stop can aim at: the prefix and the engine whose wineserver
-/// runs it, so `wineserver -k` and the `-shutdown` fallback reach the server
-/// that actually holds the prefix.
+/// holds it.
 nonisolated struct BottleTarget: Equatable, Sendable {
     let prefix: URL
     let engine: Engine
-    /// The prefix as the kernel reports it, links resolved: what two targets
-    /// are compared by, and what a process's working directory is matched to.
+    /// The link-resolved prefix that targets are compared and matched by.
     let path: String
 
     init(prefix: URL, engine: Engine) {
@@ -17,7 +15,6 @@ nonisolated struct BottleTarget: Equatable, Sendable {
         path = prefix.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
-    /// The bottle's folder name, which is how the log and the CLI name it.
     var name: String {
         prefix.lastPathComponent
     }
@@ -26,23 +23,20 @@ nonisolated struct BottleTarget: Equatable, Sendable {
         lhs.path == rhs.path
     }
 
-    /// The bottle the preference names now, under the engine this process
-    /// resolved.
     static var configured: BottleTarget {
         BottleTarget(prefix: SteamBottle.root, engine: Engine.active)
     }
 
     /// What every scoped lookup and stop reaches: the bottle the client
     /// booted in and the configured one. They differ when the preference
-    /// moved under a running client, and a stop aimed at the preference alone
-    /// finds nothing and leaves that client running.
+    /// moved under a running client, which a stop aimed at the preference
+    /// alone would leave running.
     static var inScope: [BottleTarget] {
         stopSet(booted: BootedBottle.target, configured: configured)
     }
 
-    /// The booted bottle, the configured one and any strays, each once, in
-    /// that order. The booted bottle leads because its engine is the one whose
-    /// wineserver holds the prefix when the two share a path.
+    /// The booted bottle, the configured one and any strays, each once; the
+    /// booted one leads because its engine holds a shared prefix.
     static func stopSet(
         booted: BottleTarget?, configured: BottleTarget, strays: [BottleTarget] = [],
     ) -> [BottleTarget] {
@@ -61,11 +55,8 @@ nonisolated struct BottleTarget: Equatable, Sendable {
     }
 }
 
-/// The bottle the running client was launched in.
-///
-/// Written only when the client is spawned. The graphics record beside it is
-/// also rewritten by a hot restage, which moves no client, so the bottle keeps
-/// a key of its own.
+/// The bottle the running client was launched in, written only at spawn; a
+/// hot restage rewrites the graphics record, so this has its own key.
 nonisolated enum BootedBottle {
     private static let key = "bootedBottle"
 
@@ -88,12 +79,10 @@ nonisolated enum BootedBottle {
 /// Which bottle the client answering on the CDP port lives in, and which
 /// Sevoflurane bottles have a wineserver running.
 ///
-/// At most one bottle's client runs, and it is the configured one. A client
-/// found in another Sevoflurane bottle is foreign, and a Sevoflurane bottle
-/// with a live wineserver beside the configured one is extra; both are
-/// stopped. **Only folders under ``Engine/managedBottlesRoot`` count.** A
-/// Wine prefix anywhere else runs on the same engines — a tester's own
-/// prefix for another game — and is never stopped, whatever it runs.
+/// Only the configured bottle may run; a client in another Sevoflurane
+/// bottle is foreign and another bottle's live wineserver is extra, and both
+/// are stopped. **Only folders under ``Engine/managedBottlesRoot`` count**: a
+/// prefix anywhere else is never stopped.
 nonisolated enum BottleIdentity {
     /// A live wineserver of a managed engine.
     struct Server: Equatable, Sendable {
@@ -112,8 +101,7 @@ nonisolated enum BottleIdentity {
             (prefix as NSString).lastPathComponent
         }
 
-        /// The stop's target: the engine whose server holds the prefix, or
-        /// the active one when that server was not found.
+        /// The engine whose server holds the prefix, else the active one.
         var target: BottleTarget {
             BottleTarget(
                 prefix: URL(fileURLWithPath: prefix),
@@ -123,34 +111,24 @@ nonisolated enum BottleIdentity {
     }
 
     struct Verdict: Equatable, Sendable {
-        /// The client answering CDP runs in another Sevoflurane bottle.
         var foreignClient: Stray?
-        /// Sevoflurane bottles other than the configured one, and other than
-        /// a foreign client's, with a live wineserver.
+        /// Other Sevoflurane bottles with a live wineserver.
         var extras: [Stray] = []
-        /// The client answering CDP runs in a prefix outside Sevoflurane's
-        /// bottles. It is neither adopted nor stopped.
+        /// A CDP client in a prefix outside Sevoflurane's bottles, which is
+        /// left alone.
         var outsideClient: String?
 
         var isOurs: Bool {
             foreignClient == nil && extras.isEmpty && outsideClient == nil
         }
 
-        /// Every bottle the verdict stops, the foreign client's first.
         var strays: [Stray] {
             [foreignClient].compactMap(\.self) + extras
         }
     }
 
-    /// Classifies what runs against the configured bottle.
-    ///
-    /// - Parameters:
-    ///   - clientPrefix: the prefix of the process listening on the CDP port,
-    ///     or nil when nothing listens or its prefix could not be named.
-    ///   - servers: the live wineservers of managed engines.
-    ///   - bottles: each folder under Sevoflurane's bottles root, keyed by its
-    ///     server directory. Nothing outside it is ever a stray.
-    ///   - configured: the configured bottle's path.
+    /// Classifies what runs against the configured bottle. `bottles` maps
+    /// server directories to the folders under the bottles root.
     static func classify(
         clientPrefix: String?, servers: [Server], bottles: [String: String], configured: String,
     ) -> Verdict {
@@ -175,33 +153,28 @@ nonisolated enum BottleIdentity {
         return verdict
     }
 
-    /// Whether the preference names another bottle than the one the running
-    /// client booted in. No record says nothing moved.
+    /// Whether the preference moved off the booted bottle; no record is no.
     static func bottleMoved(booted: String?, configured: String) -> Bool {
         guard let booted else { return false }
         return booted != configured
     }
 
-    /// What the running Windows was booted with, as far as a restart cares:
-    /// the engine, the sync primitives and the bottle.
+    /// What the running Windows was booted with, as a restart cares.
     struct Boot: Equatable, Sendable {
         var engineRoot: String?
         var msync: Bool?
         var bottle: String?
     }
 
-    /// Whether a restart can stop only Steam and keep the booted Windows.
-    /// Anything unknown about the boot takes Windows down, because keeping a
-    /// server of another engine, other primitives or another prefix is the
-    /// failure and a fresh boot only costs time.
+    /// Whether a restart can keep the booted Windows; anything unknown takes
+    /// it down, since a fresh boot only costs time.
     static func windowsCanStay(booted: Boot, current: Boot) -> Bool {
         booted.engineRoot != nil && booted.engineRoot == current.engineRoot
             && booted.msync != nil && booted.msync == current.msync
             && booted.bottle != nil && booted.bottle == current.bottle
     }
 
-    /// The bottle words `sevo status` prints: the bottle the client runs in,
-    /// and the configured one beside it when the two differ.
+    /// The bottle words `sevo status` prints.
     static func statusText(clientBottle: String?, configured: String, steamInstalled: Bool) -> String {
         let steam = steamInstalled ? "steam ok" : "no steam"
         guard let clientBottle, clientBottle != configured else {
@@ -212,29 +185,24 @@ nonisolated enum BottleIdentity {
 
     // MARK: - Paths
 
-    /// A server directory as ``WineOrphans/serverDirectory(forPrefix:uid:)``
-    /// spells it. The kernel reports the working directory through the link
-    /// `/tmp` is, as `/private/tmp/…`.
+    /// A kernel-reported `/private/tmp/…` server directory as
+    /// ``WineOrphans/serverDirectory(forPrefix:uid:)`` spells it.
     static func canonicalServerDirectory(_ path: String) -> String {
         path.hasPrefix("/private/tmp/") ? String(path.dropFirst("/private".count)) : path
     }
 
-    /// The managed engine a binary belongs to: the first component under the
-    /// engines root.
+    /// The first component of `path` under the engines root.
     static func engineVersion(ofExecutable path: String, under root: String) -> String? {
         guard path.hasPrefix(root + "/") else { return nil }
         return path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init)
     }
 
-    /// The pids `lsof -Fp` lists, one `p<pid>` line each.
     /// Whether a process's command line says it serves the CDP port: the
     /// client is launched with `-devtools-port <port>` and spawns its
     /// webhelper with `--remote-debugging-port=<port>`, so the port is in
-    /// the arguments of both. Read from the process table rather than from
-    /// `lsof`, which walks every mount and open file on the Mac and blocks
-    /// for good on one that is wedged (a stuck DeviceFS held thirty of them
-    /// in an uninterruptible wait on 2026-10-14, and the supervisor with
-    /// them).
+    /// the arguments of both. Never ask `lsof` instead: it walks every mount
+    /// and blocks for good on a wedged one (a stuck DeviceFS held thirty of
+    /// them, and the supervisor with them, in an uninterruptible wait).
     static func servesCDPPort(commandLine: String, port: Int = BridgePorts.cdp) -> Bool {
         let arguments = commandLine.split(whereSeparator: \.isWhitespace).map(String.init)
         if arguments.contains("--remote-debugging-port=\(port)") { return true }
@@ -260,8 +228,7 @@ nonisolated enum BottleIdentity {
         )
     }
 
-    /// The bottle the client answering CDP runs in, by name: what the port
-    /// shows when it can be named, and the launch record otherwise.
+    /// The name of the bottle the CDP client runs in, else the launch record's.
     static func clientBottleName() async -> String? {
         var known = managedBottles()
         for target in BottleTarget.inScope {
@@ -275,10 +242,8 @@ nonisolated enum BottleIdentity {
         return BootedBottle.target?.name
     }
 
-    /// The prefix of the process serving the CDP port, told by its command
-    /// line (``servesCDPPort(commandLine:port:)``). The client's webhelper
-    /// works inside its prefix; the wineserver, which holds the socket too,
-    /// works in its server directory, named through `known`.
+    /// The prefix of the process serving the CDP port: the webhelper's working
+    /// directory, or a wineserver's server directory named through `known`.
     static func clientPrefix(known: [String: String]) async -> String? {
         let holders = WineOrphans.allProcessIDs().filter { pid in
             WineOrphans.commandLine(of: pid).map { servesCDPPort(commandLine: $0) } ?? false
@@ -293,8 +258,7 @@ nonisolated enum BottleIdentity {
         return nil
     }
 
-    /// Each folder under Sevoflurane's bottles root, keyed by the directory
-    /// its wineserver works in.
+    /// Each bottle folder, keyed by its wineserver's directory.
     static func managedBottles(root: URL = Engine.managedBottlesRoot) -> [String: String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         var bottles: [String: String] = [:]

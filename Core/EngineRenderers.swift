@@ -5,28 +5,20 @@ import Foundation
 /// 32-bit ones in `lib/wine/i386-windows` for a payload that carries them.
 ///
 /// The payloads (DXMT's "builtin" release, DXVK-macOS "builtin", GPTk's
-/// D3DMetal) are winelib builds carrying Wine's builtin signature — and Wine
-/// resolves a builtin DLL to its canonical tree copy no matter what sits in
+/// D3DMetal) are winelib builds carrying Wine's builtin signature, and Wine
+/// resolves a builtin DLL to its canonical tree copy whatever sits in
 /// `system32`, so a payload staged only there loses to Wine's own (vkd3d's
-/// d3d12 answers "DirectX 12 is not supported" with D3DMetal present). So
-/// activation swaps the canonical copies instead, keeping
-/// each displaced original beside the tree for the swap back.
+/// d3d12 answers "DirectX 12 is not supported" with D3DMetal present).
+/// Activation swaps the canonical copies instead, keeping each displaced
+/// original beside the tree for the swap back.
 ///
-/// D3DMetal is two halves and both are the picked version. The macOS half —
-/// `libd3dshared.dylib` and the framework — goes into `wine/lib/external`
-/// where the `.so` stubs resolve; the Windows half is that same toolkit's PE
-/// DLLs. Both are re-asserted on every boot, because the picker only records
-/// a choice and a tree holding another version runs that version whatever
-/// was picked.
-///
-/// The halves are one release and are never crossed. A PE DLL is a thin
-/// bridge whose calls carry a function index into the unix-side dylib, and
-/// the releases do not number those alike, so a crossed pair of D3DMetal
-/// halves calls the wrong functions.
+/// D3DMetal's two halves — `libd3dshared.dylib` and the framework in
+/// `wine/lib/external`, and the toolkit's PE DLLs — are both the picked
+/// version, re-asserted on every boot. Never cross them: each PE call carries
+/// a function index into the dylib, numbered differently per release.
 nonisolated enum EngineRenderers {
-    /// Asserts the selected renderer in `engine`'s Wine tree and makes sure
-    /// `bottle`'s system32 holds a file for each renderer DLL. Answers what
-    /// it placed. Idempotent; runs on every boot.
+    /// Asserts the selected renderer in `engine`'s tree and the loader files
+    /// in `bottle`; answers what it placed. Idempotent; runs on every boot.
     @discardableResult
     static func stage(
         _ renderer: Renderer, engine: URL, bottle: URL,
@@ -37,8 +29,7 @@ nonisolated enum EngineRenderers {
         )
     }
 
-    /// `toolkit` is the D3DMetal version to hold in the tree; the
-    /// preference-free entry point for tests.
+    /// The preference-free entry point for tests.
     @discardableResult
     static func stage(
         _ renderer: Renderer, engine: URL, bottle: URL,
@@ -54,9 +45,7 @@ nonisolated enum EngineRenderers {
 
         let payloads = payloadFiles(engine: engine)
         if renderer == .d3dmetal, let toolkit {
-            // Into the store's copy, before the comparison below: the tree
-            // is kept equal to the store, so a tree patched alone would be
-            // put back at every boot.
+            // Patch the store's copy: the tree is kept equal to it.
             switch D3DMetalPatches.apply(to: toolkit) {
             case .unchanged: break
             case let .patched(names):
@@ -98,10 +87,8 @@ nonisolated enum EngineRenderers {
             if renderer == .d3dmetal, architecture.modules == Architecture.x86_64.modules {
                 staged += placeExportAliases(in: canonical, engine: engine)
             }
-            // Every architecture, whether this renderer has a payload for it
-            // or not: an architecture that gets no DLLs is exactly the one
-            // whose prefix still holds the last renderer's loader files, and
-            // `auto` and `wined3d` have no payload for either.
+            // Every architecture, payload or not: one that got no DLLs still
+            // holds the last renderer's loader files.
             ensureLoaderFiles(
                 canonical: canonical, engine: engine, bottle: bottle,
                 architecture: architecture,
@@ -111,8 +98,7 @@ nonisolated enum EngineRenderers {
         return staged
     }
 
-    /// Copies the NVIDIA libraries a GPTk-flavored engine ships into the
-    /// bottle's `system32`, and names the ones that landed.
+    /// Copies a GPTk-flavored engine's NVIDIA libraries into `system32`.
     private static func stageGPTkCompanions(engine: URL, bottle: URL) -> [String] {
         let manager = FileManager.default
         let source = engine.appendingPathComponent("wine/lib/wine/x86_64-windows")
@@ -129,9 +115,8 @@ nonisolated enum EngineRenderers {
         return staged
     }
 
-    /// Copies a renderer's DLLs over the engine's own in `canonical`, setting
-    /// each engine DLL aside in `originals` the first time it is covered, and
-    /// names the ones that landed.
+    /// Copies a renderer's DLLs over the engine's own, setting each original
+    /// aside the first time it is covered.
     private static func place(
         _ dlls: [URL], into canonical: URL, keepingOriginalsIn originals: URL, payloads: [String: [URL]],
     ) -> [String] {
@@ -156,14 +141,10 @@ nonisolated enum EngineRenderers {
         return staged
     }
 
-    /// Apple's NVIDIA stubs export under other names than they are filed:
-    /// `nvapi64.dll` names itself `nvapi.dll` and `nvngx-on-metalfx.dll`
-    /// names itself `nvngx.dll`, and Wine binds a builtin's unix half by the
-    /// export name (`find_builtin_dll`'s `exp_name`). Without a PE and a `.so`
-    /// under that name the stub loads with no unix half, its DllMain returns
-    /// 0, and the game's NvAPI never initializes, so NGX answers
-    /// FeatureNotSupported and DLSS stays off (Subnautica 2, 2026-09-26).
-    /// Apple's README renames the nvngx pair by hand; nvapi64 needs the same.
+    /// Apple's NVIDIA stubs export as `nvapi.dll` and `nvngx.dll`, and Wine
+    /// binds a builtin's unix half by export name (`find_builtin_dll`'s
+    /// `exp_name`). Without a PE and `.so` under that name NvAPI never
+    /// initializes and DLSS stays off (Subnautica 2).
     private static let exportAliases: [(file: String, export: String)] = [
         ("nvapi64.dll", "nvapi.dll"),
         ("nvngx-on-metalfx.dll", "nvngx.dll"),
@@ -173,8 +154,7 @@ nonisolated enum EngineRenderers {
     /// `x86_64-unix`.
     private static let bridgeLink = "../../external/libd3dshared.dylib"
 
-    /// Puts a copy of each stub the tree holds under its export name, with
-    /// the unix half Wine will look for beside it. Names what it placed.
+    /// Copies each stub under its export name, with its unix half beside it.
     private static func placeExportAliases(in canonical: URL, engine: URL) -> [String] {
         let manager = FileManager.default
         let unix = engine.appendingPathComponent("wine/lib/wine/x86_64-unix")
@@ -197,9 +177,8 @@ nonisolated enum EngineRenderers {
         return staged
     }
 
-    /// Clears the last staging's aliases. Wine ships nothing under these
-    /// names, so a file there is a previous alias, or another renderer's
-    /// payload, which the payload bookkeeping owns.
+    /// Clears the last staging's aliases, leaving payload files to the
+    /// payload bookkeeping.
     private static func removeExportAliases(from canonical: URL, matching payloads: [String: [URL]]) {
         let manager = FileManager.default
         for alias in exportAliases {
@@ -211,18 +190,15 @@ nonisolated enum EngineRenderers {
 
     // MARK: - One game's own renderer
 
-    /// Whether GPTk's DLLs load from a `WINEDLLPATH_PREPEND` directory the way
-    /// DXMT's and DXVK's builtin-flavored ones do — `find_builtin_dll` demands
-    /// Wine's builtin signature of anything it takes off the dll path
-    /// (`ntdll/unix/loader.c`), and the toolkit's `d3d12.dll` has not been put
-    /// through that route yet. The probe is `dxgiprobe12.exe` under a per-exe
-    /// D3DMetal env file while the bottle runs another renderer, judged by the
+    /// Whether GPTk's DLLs load from a `WINEDLLPATH_PREPEND` directory:
+    /// `find_builtin_dll` demands Wine's builtin signature there, and the
+    /// toolkit's `d3d12.dll` is untested on that route. The probe is
+    /// `dxgiprobe12.exe` under a per-exe D3DMetal env file, judged by the
     /// adapter string.
     static let gptkLoadsFromPrependPath = false
 
-    /// Whether this renderer can answer one game alone, through a
-    /// ``prependDirectory(for:engine:)`` in that game's env file, rather than
-    /// the whole bottle through the staged tree.
+    /// Whether one game can get this renderer through a
+    /// ``prependDirectory(for:engine:)``.
     static func supportsPerGame(_ renderer: Renderer) -> Bool {
         switch renderer {
         case .dxmt, .dxvk: true
@@ -231,16 +207,11 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// The directory a game's `WINEDLLPATH_PREPEND` names to load `renderer`
-    /// while the rest of the bottle loads the staged one:
-    /// `<engine>/renderers/<name>`, holding a `x86_64-windows` symlink — and
-    /// an `i386-windows` one where the payload has 32-bit builds — to the
-    /// payload directory.
-    ///
-    /// The loader appends the machine directory to every dll path entry and
-    /// searches the prepend entries ahead of the tree (`set_dll_path`), so the
-    /// link's name is what makes the payload reachable under its own path.
-    /// Answers nil for a renderer this engine has no payload for.
+    /// `<engine>/renderers/<name>`, the directory a game's
+    /// `WINEDLLPATH_PREPEND` names, holding `x86_64-windows` and
+    /// `i386-windows` symlinks to the payload: the loader appends the machine
+    /// directory to each dll path entry (`set_dll_path`). Nil without a
+    /// payload.
     static func prependDirectory(for renderer: Renderer, engine: URL) -> URL? {
         prependDirectory(
             for: renderer, engine: engine,
@@ -248,8 +219,7 @@ nonisolated enum EngineRenderers {
         )
     }
 
-    /// `toolkit` is the D3DMetal version to link; the preference-free entry
-    /// point for tests.
+    /// The preference-free entry point for tests.
     static func prependDirectory(
         for renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
     ) -> URL? {
@@ -279,12 +249,9 @@ nonisolated enum EngineRenderers {
         return directory
     }
 
-    /// Links `x86_64-unix` in a prepend directory to the engine's own unix
-    /// modules. Wine loads a builtin's unix half from beside the DLL it found
-    /// (`load_builtin_unixlib`), so DXMT's `winemetal.dll`, found here, looks
-    /// for `winemetal.so` here too; an engine before Dormison b2 has no other
-    /// place to find it, and the game dies at load. The same `.so` the
-    /// bottle's own staging pairs every DXMT version with.
+    /// Links `x86_64-unix` to the engine's unix modules: Wine loads a unix
+    /// half from beside the DLL (`load_builtin_unixlib`), and before Dormison
+    /// b2 a game dies at load without `winemetal.so` here.
     private static func linkUnixHalves(in directory: URL, engine: URL) {
         let manager = FileManager.default
         let link = directory.appendingPathComponent("x86_64-unix")
@@ -294,18 +261,14 @@ nonisolated enum EngineRenderers {
         try? manager.createSymbolicLink(atPath: link.path, withDestinationPath: destination)
     }
 
-    /// The `WINEDLLOVERRIDES` a game loading a renderer from `directory`
-    /// carries: every DLL that directory supplies, forced builtin.
+    /// Every DLL `directory` supplies, forced builtin.
     ///
-    /// The bottle's own renderer has a copy of its DLLs in the prefix's
-    /// `system32`, and the bottle-wide override asks for those as native — so
-    /// without this a game with a renderer of its own would import the
-    /// bottle's file under its own name. Builtin resolution searches the dll
+    /// The bottle-wide override asks for the bottle renderer's copies in
+    /// `system32` as native, so without this a game with a renderer of its own
+    /// would import the bottle's file. Builtin resolution searches the dll
     /// path instead, where the prepend directory sits first.
     static func perGameDLLOverrides(in directory: URL) -> String? {
-        // Resolved, because the machine directory is a symlink to the payload
-        // and `contentsOfDirectory(at:)` answers nil for a symlink URL rather
-        // than following it.
+        // `contentsOfDirectory(at:)` answers nil for a symlink URL.
         let modules = directory
             .appendingPathComponent(Architecture.x86_64.modules)
             .resolvingSymlinksInPath()
@@ -320,14 +283,9 @@ nonisolated enum EngineRenderers {
 
     // MARK: - Provenance
 
-    /// The file `winemac.drv` reads at every process start to print which
-    /// renderer answered and which build of it: `key=value` lines carrying
-    /// the renderer, the payload version, and the sha256 of each DLL this
-    /// staging put in the tree.
-    ///
-    /// Written here because this is the only place that knows what was
-    /// staged, and written whole each time — an engine that finds no file, or
-    /// no key, prints `unknown`, so a stale line would be worse than none.
+    /// The `key=value` file `winemac.drv` prints at process start: renderer,
+    /// payload version and each staged DLL's sha256. Written whole each time,
+    /// since a stale line is worse than the `unknown` a missing one prints.
     static let provenanceFile = "renderer-hashes"
 
     private static func writeProvenance(
@@ -353,10 +311,8 @@ nonisolated enum EngineRenderers {
         )
     }
 
-    /// The version of the payload this renderer is staged from: the picked
-    /// toolkit for D3DMetal, the chosen version for DXMT and DXVK, and
-    /// otherwise the one the engine shipped, read from the asset URL in its
-    /// own `engine-info.json`.
+    /// The staged payload's version: the picked or chosen one, else the
+    /// engine's own from the asset URL in `engine-info.json`.
     private static func payloadVersion(
         of renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
     ) -> String? {
@@ -375,14 +331,11 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// A module tree in the engine and the prefix directory whose files let it
-    /// load. A 32-bit game's `d3d11` is its own PE, found in `i386-windows`
-    /// and `syswow64`, and reaches Metal through wow64 unix calls into the
-    /// same 64-bit `winemetal.so` — so the 32-bit half is DLLs only.
+    /// A module tree and its prefix directory. The 32-bit half is DLLs only:
+    /// they reach Metal through wow64 calls into the 64-bit `winemetal.so`.
     private struct Architecture {
         let modules: String
-        /// Where inside a payload directory this architecture's DLLs sit;
-        /// `nil` for the x86_64 set, which is the payload directory itself.
+        /// The subdirectory of a payload; `nil` for x86_64.
         let payload: String?
         let system: String
 
@@ -407,11 +360,8 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Every renderer DLL any installed payload could supply, by name.
-    ///
-    /// A file is "stock" only if it is not one of these: the tree is the
-    /// place renderers overwrite, so a payload copy sitting there is the
-    /// last activation's work, never Wine's own.
+    /// Every renderer DLL any installed payload could supply, by name; a tree
+    /// file matching one is a staging's work, never Wine's own.
     private static func payloadFiles(engine: URL) -> [String: [URL]] {
         var files: [String: [URL]] = [:]
         for architecture in Architecture.all {
@@ -422,10 +372,8 @@ nonisolated enum EngineRenderers {
         return files
     }
 
-    /// Every DLL one architecture's payloads offer. The two architectures
-    /// share names, and a file only ever matches its own: `isPayload`
-    /// compares contents, so `d3d11.dll` in the 32-bit tree can equal the
-    /// 32-bit payload alone.
+    /// Every DLL one architecture's payloads offer; `isPayload` compares
+    /// contents, so a name shared across architectures matches its own only.
     private static func payloadDLLs(engine: URL, architecture: Architecture) -> [URL] {
         let manager = FileManager.default
         return payloadDirectories(engine: engine).flatMap { payload in
@@ -442,13 +390,8 @@ nonisolated enum EngineRenderers {
         } ?? false
     }
 
-    /// Drops a kept "original" that is really a renderer's own DLL.
-    ///
-    /// The tree is only read for an original the first time a name is
-    /// staged, and a payload that reached it before that — an activation
-    /// under an older build, a hand-swapped tree — was recorded as Wine's.
-    /// Restoring it puts one release's DLL under another's, which is the
-    /// thing versions are kept apart to prevent.
+    /// Drops a kept "original" that is really a payload, recorded from a tree
+    /// that already held one; restoring it would cross releases.
     private static func disownPayloads(in originals: URL, matching payloads: [String: [URL]]) {
         let manager = FileManager.default
         let kept = (try? manager.contentsOfDirectory(
@@ -461,13 +404,9 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Clears a renderer DLL that Wine never shipped and this activation
-    /// does not supply — a name the previous renderer or toolkit version
-    /// staged, which has no original to restore over it.
-    ///
-    /// Only a file that is itself a payload goes: a stock builtin no name
-    /// has been staged over yet has no kept original either, and it is the
-    /// very thing the next staging must capture.
+    /// Clears a payload file with no kept original, left by the previous
+    /// staging. A stock builtin also has no original yet and must stay for
+    /// the next staging to capture.
     private static func removeStrays(
         from canonical: URL, keptIn originals: URL, matching payloads: [String: [URL]],
     ) {
@@ -480,8 +419,7 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Puts Wine's own builtins back, so each activation starts from the
-    /// stock tree rather than the previous renderer's leftovers.
+    /// Puts Wine's own builtins back, so each activation starts from stock.
     private static func restoreOriginals(into canonical: URL, from originals: URL) {
         let manager = FileManager.default
         let kept = (try? manager.contentsOfDirectory(
@@ -494,9 +432,8 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Gives another prefix on `engine` the loader files ``stage(_:engine:bottle:toolkit:)``
-    /// gives the bottle, from the tree as the bottle's staging left it: the
-    /// companion prefix (``SteamParent``) runs on that same tree.
+    /// The bottle's loader files for another prefix on the same tree (the
+    /// companion prefix, ``SteamParent``).
     static func ensureLoaderFiles(engine: URL, prefix: URL) {
         guard !isGPTkFlavor(engine) else { return }
         for architecture in Architecture.all {
@@ -508,16 +445,11 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Guarantees every renderer DLL has a file in the bottle's system
-    /// directory for `architecture` — `system32` for x86_64, `syswow64` for
-    /// i386, which is what a 32-bit process sees as its own `system32`.
-    ///
-    /// Wine loads a builtin only when a file of that name exists there
-    /// (`find_builtin_without_file` refuses outside prefix bootstrap), and
-    /// resolves any Wine-signed file it finds to the canonical tree copy — so
-    /// the file's job is purely to exist, and the tree's own copy fills it.
-    /// Without this, a game importing dxgi.dll dies at load with
-    /// STATUS_DLL_NOT_FOUND (0xC0000135) before drawing anything.
+    /// Gives every renderer DLL a file in `system32` or `syswow64`: Wine
+    /// loads a builtin only when a file of that name exists there
+    /// (`find_builtin_without_file`), then resolves it to the tree copy.
+    /// Without it a game importing dxgi.dll dies with STATUS_DLL_NOT_FOUND
+    /// (0xC0000135).
     private static func ensureLoaderFiles(
         canonical: URL, engine: URL, bottle: URL, architecture: Architecture,
     ) {
@@ -535,20 +467,15 @@ nonisolated enum EngineRenderers {
             guard manager.fileExists(atPath: source.path) else {
                 if loaderOnlyDLLs.contains(name.lowercased()),
                    let payload = payloads.first(where: { $0.lastPathComponent == name }) {
-                    // Only another payload DLL imports this one, so a copy
-                    // here cannot be mistaken for anything the bottle's own
-                    // renderer loads, and a game pinned to that payload
-                    // needs it: Wine resolves an import only through a file
-                    // in system32, and DXMT's dxgi.dll imports winemetal.dll.
+                    // DXMT's dxgi.dll imports winemetal.dll, which a pinned
+                    // game can resolve only through system32.
                     if !manager.contentsEqual(atPath: payload.path, andPath: target.path) {
                         try? manager.removeItem(at: target)
                         try? manager.copyItem(at: payload, to: target)
                     }
                     continue
                 }
-                // The tree no longer carries this one, so neither may the
-                // prefix: a file left here is the previous renderer's, and
-                // Wine would load it as the real thing.
+                // A file the tree lacks is the previous renderer's.
                 try? manager.removeItem(at: target)
                 continue
             }
@@ -557,11 +484,8 @@ nonisolated enum EngineRenderers {
         }
     }
 
-    /// Payload DLLs that only other payload DLLs import, lowercased. A
-    /// per-game pin (`WINEDLLPATH_PREPEND`) reaches a payload's DLLs through
-    /// the loader files in system32, and these have no counterpart in Wine
-    /// or D3DMetal, so the tree never carries them while the bottle runs
-    /// another renderer. Without a file the pinned game dies at load:
+    /// Payload DLLs only other payload DLLs import, lowercased; the tree
+    /// lacks them under another renderer, so a pinned game would die with
     /// `winemetal.dll (which is needed by …\system32\dxgi.dll) not found`.
     static let loaderOnlyDLLs: Set<String> = ["winemetal.dll"]
 
@@ -583,10 +507,8 @@ nonisolated enum EngineRenderers {
             engine.appendingPathComponent("dxmt"),
             engine.appendingPathComponent("dxvk"),
         ]
-        // Every added version too, so a file staged from one of them is
-        // still recognized as a payload after the choice moves on.
+        // Every added version, so a file staged from one stays recognized.
         directories += RendererVersions.allDirectories()
-        // The store's versions, and any an engine still carries in its own d3dmetal/.
         for toolkit in D3DMetalInstaller.installed(inEngine: D3DMetalInstaller.store)
             + D3DMetalInstaller.installed(inEngine: engine) {
             directories.append(D3DMetalInstaller.windowsLibraries(of: toolkit))
@@ -594,12 +516,8 @@ nonisolated enum EngineRenderers {
         return directories
     }
 
-    /// Where a renderer's Windows DLLs for `architecture` live inside a
-    /// managed engine. The engine's `package-engine.sh` places `dxmt/` and
-    /// `dxvk/`; D3DMetal's are the picked toolkit's own, the pair to the
-    /// `libd3dshared` its macOS half put in the tree. A renderer with no
-    /// build for an architecture has no subdirectory there, and that
-    /// architecture keeps Wine's own builtins.
+    /// Where a renderer's Windows DLLs for `architecture` live; nil keeps
+    /// Wine's own builtins for that architecture.
     private static func libraries(
         for renderer: Renderer, engine: URL, toolkit: D3DMetalInstaller.Installed?,
         architecture: Architecture,

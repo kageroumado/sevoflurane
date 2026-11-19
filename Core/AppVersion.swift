@@ -1,13 +1,10 @@
 import Foundation
 
-/// The app's marketing version: as the bundle carries it (`1.0.0-beta.1`, the
-/// full semantic version the updater matches against the release's tag and its
-/// `Sevoflurane-1.0.0-beta.1.dmg`), as a person reads it ("1.0 beta 1"), and how
-/// two of them order.
+/// The app's marketing version (`1.0.0-beta.1`, which the updater matches
+/// against release tags), how a person reads it, and how two order.
 nonisolated enum AppVersion {
-    /// "1.0 beta 1" for `1.0.0-beta.1` and `1.0-beta.1`, "1.2.3 beta 4" for
-    /// `1.2.3-beta.4`: a zero patch number is left out. Any other version comes
-    /// back as it is.
+    /// "1.0 beta 1" for `1.0.0-beta.1`, dropping a zero patch number; any
+    /// other version comes back as it is.
     static func display(_ version: String) -> String {
         guard let beta = parse(version), let number = beta.beta else { return version }
         var release = beta.release
@@ -15,12 +12,9 @@ nonisolated enum AppVersion {
         return "\(release) beta \(number)"
     }
 
-    /// Whether `lhs` comes before `rhs`. Dotted numbers compare component by
-    /// component, a missing trailing component reading as zero, so "1.6"
-    /// equals "1.6.0". A beta comes before its release and after the release
-    /// that precedes it: `1.0-beta.2` < `1.0` < `1.1-beta.1`. A component that
-    /// is not a number counts as zero, which keeps a "dev" or empty version
-    /// from ever reading as newer than a numbered release.
+    /// Whether `lhs` comes before `rhs`: missing components read as zero ("1.6"
+    /// equals "1.6.0"), `1.0-beta.2` < `1.0` < `1.1-beta.1`, and a non-number
+    /// such as "dev" reads as zero, never newer than a release.
     static func isOlder(_ lhs: String, than rhs: String) -> Bool {
         let left = parse(lhs) ?? Parsed(release: lhs, numbers: numbers(lhs), beta: nil)
         let right = parse(rhs) ?? Parsed(release: rhs, numbers: numbers(rhs), beta: nil)
@@ -36,17 +30,16 @@ nonisolated enum AppVersion {
         }
     }
 
-    /// The running bundle's marketing version as a person reads it, or
-    /// `fallback` when the bundle carries none.
+    /// The bundle's version for display, or `fallback`.
     static func displayed(from info: [String: Any]?, fallback: String) -> String {
         (info?["CFBundleShortVersionString"] as? String).map(display) ?? fallback
     }
 
     private struct Parsed {
-        /// The numeric part, `1.0.0` of `1.0.0-beta.1`.
+        /// `1.0.0` of `1.0.0-beta.1`.
         let release: String
         let numbers: [Int]
-        /// The beta number, `1` of `1.0.0-beta.1`; nil for a release.
+        /// `1` of `1.0.0-beta.1`.
         let beta: Int?
     }
 

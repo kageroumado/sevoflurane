@@ -1,14 +1,9 @@
 import Foundation
 
-/// The Apple chip this Mac has, in the two dimensions that decide how fast
-/// its GPU is: which generation, and how wide.
-///
-/// Read from `machdep.cpu.brand_string`, which is the marketing name
-/// ("Apple M1 Max") and the one place both halves are stated together. The
-/// generation is parsed as a number rather than matched against a list, so a
-/// chip newer than this build still lands on its own rung.
+/// The Apple chip's generation and width, parsed from
+/// `machdep.cpu.brand_string` ("Apple M1 Max"); the generation is a number,
+/// so a newer chip lands on its own rung.
 nonisolated struct MacChip: Equatable, Sendable {
-    /// How wide the GPU is, in Apple's own ladder.
     enum Tier: String, Sendable, CaseIterable {
         case base
         case pro
@@ -16,15 +11,11 @@ nonisolated struct MacChip: Equatable, Sendable {
         case ultra
     }
 
-    /// The generation number: 1 for M1, 3 for M3. `nil` on a Mac whose brand
-    /// string is not an Apple chip at all — an Intel Mac, or a name shaped in
-    /// a way this parser has never seen.
+    /// 1 for M1; `nil` for an Intel Mac or an unparsed name.
     let generation: Int?
     let tier: Tier
-    /// The brand string as macOS gives it, for showing to the user.
     let name: String
 
-    /// The chip this process is running on, read once.
     static let current = read()
 
     static func parse(_ brand: String) -> MacChip {
@@ -54,17 +45,14 @@ nonisolated struct MacChip: Equatable, Sendable {
     }
 }
 
-/// One graphics card, as a game reads it: the four numbers DXGI hands over
-/// and the driver metadata Windows keeps in the registry beside them.
+/// One graphics card as a game reads it, with its registry driver metadata.
 nonisolated struct GraphicsCard: Equatable, Sendable {
     let name: String
     let vendorID: UInt16
     let deviceID: UInt16
-    /// The card's own memory, in megabytes. A Mac has one pool of memory and
-    /// every layer reports a slice of it; this is what a game is told instead,
-    /// so the figure agrees with the card it is being sold.
+    /// The card's shipping memory in megabytes, so the figure fits the card.
     let videoMemoryMB: Int
-    /// The Windows driver version string, in the vendor's own internal shape.
+    /// The vendor's internal Windows driver version string.
     let driverVersion: String
     /// `M-D-YYYY`, the format Windows keeps in the registry.
     let driverDate: String
@@ -73,26 +61,15 @@ nonisolated struct GraphicsCard: Equatable, Sendable {
 
 /// Which real graphics card each Apple chip is reported as.
 ///
-/// The basis is approximate raster parity at 1440p — how the chip and the
-/// card actually land in the same games, from published benchmark runs, and
-/// not either vendor's marketing tier. Cards come from the RTX 40/50 and
-/// Radeon RX 7000/9000 generations, with PCI device ids taken from the
-/// pci.ids registry, so a game that looks the id up finds the card the name
-/// promises.
-///
-/// Memory figures are the shipping card's, which is usually less than the
-/// Mac has to give. Reporting less than the machine can supply is the safe
-/// direction: it keeps the card believable, and a game that sizes its
-/// textures to it stays inside what the chip can hold.
+/// Matched by approximate raster parity at 1440p in published benchmarks,
+/// from the RTX 40/50 and RX 7000/9000 generations, with device ids from
+/// pci.ids. Shipping memory figures are usually below what the Mac offers,
+/// which keeps a game's texture budget inside what the chip holds.
 nonisolated enum GPUEquivalence {
-    /// The newest generation with a row of its own. A chip past it is read as
-    /// this generation at its own tier — a future Mac is at least this fast.
+    /// The newest generation with rows; a later chip reads as this one.
     static let newestGeneration = 5
 
-    /// What an unrecognized chip is reported as: the Max-tier card of the
-    /// newest generation. Any Mac that can run this app is at least a base
-    /// chip, and the Max rung is the one that leaves a game's settings
-    /// somewhere sensible.
+    /// An unrecognized chip's tier, at the newest generation.
     static let fallbackTier = MacChip.Tier.max
 
     static func nvidia(for chip: MacChip) -> GraphicsCard {
@@ -158,9 +135,7 @@ nonisolated enum GPUEquivalence {
         Rung(generation: 5, tier: .ultra): ("NVIDIA GeForce RTX 5090", 0x2B85, 32),
     ]
 
-    /// Navi 32 and Navi 48 each cover several retail cards under one device
-    /// id, which is why the same id appears at more than one rung with a
-    /// different name and memory size — exactly as the real cards ship.
+    /// Navi 32 and Navi 48 ship several retail cards under one device id.
     private static let amdCards: [Rung: (String, UInt16, Int)] = [
         Rung(generation: 1, tier: .base): ("AMD Radeon RX 7600", 0x7480, 8),
         Rung(generation: 1, tier: .pro): ("AMD Radeon RX 7600 XT", 0x7480, 16),
@@ -192,17 +167,9 @@ nonisolated enum GPUEquivalence {
 
     /// GeForce Game Ready 610.88, released 2026-08-03.
     ///
-    /// The four groups are Windows' own driver-version shape, and only the
-    /// last two carry the number a game recognizes: joined and cut to five
-    /// digits they spell 610.88, which is what NVIDIA's control panel — and a
-    /// game's minimum-driver check — call the version. ``unifiedNVIDIAVersion``
-    /// does that conversion, and the tests hold the two in agreement.
-    ///
-    /// The leading `32.0` is the pair NVIDIA's shipping drivers carry. Wine
-    /// writes a higher first group for the cards it invents; matching NVIDIA
-    /// is the point here, because a game that reads driver strings at all
-    /// reads them as NVIDIA's, and the first group is the Windows driver
-    /// model rather than anything about recency.
+    /// The last two groups spell 610.88 (``unifiedNVIDIAVersion``, held by
+    /// the tests), and the leading `32.0` is the pair NVIDIA's shipping
+    /// drivers carry, which a game's driver check expects.
     static let nvidiaDriver = (
         version: "32.0.16.1088",
         date: "8-3-2026",
@@ -212,9 +179,8 @@ nonisolated enum GPUEquivalence {
 
     /// AMD Software: Adrenalin Edition 26.8.1.
     ///
-    /// AMD publishes no mapping from the internal string to the Adrenalin
-    /// release, so the release is spelled into the third group where a reader
-    /// can see it, in the five-digit shape AMD's own strings use.
+    /// AMD publishes no mapping to the Adrenalin release, so it is spelled
+    /// into the third group in AMD's five-digit shape.
     static let amdDriver = (
         version: "32.0.26081.1001",
         date: "8-12-2026",
@@ -222,10 +188,8 @@ nonisolated enum GPUEquivalence {
         vendor: UInt16(0x1002),
     )
 
-    /// The version a game shows the player and compares against its own
-    /// floor, from the internal four-group string: the last two groups
-    /// joined, cut to their last five digits, split three-and-two. NVIDIA's
-    /// `32.0.15.9571` is `595.71` by this rule.
+    /// The version a game shows: the last two groups joined, cut to five
+    /// digits, split three-and-two (`32.0.15.9571` is `595.71`).
     static func unifiedNVIDIAVersion(from internalVersion: String) -> String? {
         let groups = internalVersion.split(separator: ".")
         guard groups.count >= 4 else { return nil }

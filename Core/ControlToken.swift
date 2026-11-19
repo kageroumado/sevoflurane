@@ -4,19 +4,12 @@ import Foundation
 /// ports: the daemon's control endpoint, the app's link port, and the page's
 /// `/__eval`.
 ///
-/// Binding to 127.0.0.1 keeps other machines out, and every account on this
-/// Mac is still a local client. ``LoopbackGate`` tells a web page from a local
-/// program by its headers; nothing in a request tells one account from
-/// another. The token does: 32 random bytes, hex-encoded, in a file only this
-/// account can read (0600 inside a 0700 directory), sent by every native
-/// caller as ``header``. A process of another account cannot read the file and
-/// so cannot present it. A process of this account can, and that is authority
-/// it already holds over the bottle and every file the daemon reaches.
-///
-/// Each installation keeps its own under its ``AppIdentity/supportFolder``, so
-/// a Debug build's token admits nobody to the shipping installation's ports.
+/// The loopback bind keeps other machines out and ``LoopbackGate`` keeps web
+/// pages out; the token keeps other accounts out: 32 random bytes, hex, in a
+/// file only this account can read (0600 in a 0700 directory), sent as
+/// ``header``. Each installation keeps its own under
+/// ``AppIdentity/supportFolder``.
 nonisolated enum ControlToken {
-    /// The request header that carries the token.
     static let header = "X-Sevo-Token"
 
     /// `<support folder>/Control`, kept at 0700.
@@ -26,15 +19,12 @@ nonisolated enum ControlToken {
 
     static let fileName = "token"
 
-    /// Random bytes behind one token; the file holds twice as many hex digits.
+    /// Random bytes behind one token, written as hex.
     static let byteCount = 32
 
-    /// Why the token could not be read or made.
     enum Failure: Error, Equatable, CustomStringConvertible {
-        /// The file or its directory belongs to another account, so whatever
-        /// it holds may be known to that account.
+        /// The file or directory belongs to another account.
         case foreignOwner(String)
-        /// A symbolic link, a directory or a device where the file should be.
         case notAFile(String)
         /// A system call failed, with its `errno`.
         case system(String, Int32)
@@ -48,34 +38,27 @@ nonisolated enum ControlToken {
         }
     }
 
-    /// What a token file's owner and mode make of it.
     enum Ownership: Equatable {
-        /// This account's plain file, readable by nobody else.
         case usable
-        /// This account's file with group or world bits set: the token may
-        /// have been read, so it is replaced rather than used.
+        /// Group or world bits set: replaced rather than used.
         case exposed
         case foreignOwner
         case notAFile
     }
 
-    /// This installation's token, made by whichever process asks first. Read
-    /// from disk on every call, so a replaced token reaches every process at
-    /// its next request.
+    /// This installation's token, made by the first process to ask and read
+    /// from disk on every call.
     static func current() throws -> String {
         try load(in: directory)
     }
 
-    /// Adds the token to `request`. A request sent without one, because the
-    /// token could not be read, is answered 401.
+    /// Adds the token to `request`; without one the request gets a 401.
     static func authorize(_ request: inout URLRequest) {
         guard let token = try? current() else { return }
         request.setValue(token, forHTTPHeaderField: header)
     }
 
-    /// Whether `presented` is `expected`, compared in time that depends only
-    /// on the length. The length itself is public: every token has
-    /// ``byteCount`` × 2 digits.
+    /// Constant-time comparison; only the public length shows.
     static func matches(_ presented: String?, expected: String) -> Bool {
         guard let presented else { return false }
         let given = Array(presented.utf8)
@@ -92,15 +75,12 @@ nonisolated enum ControlToken {
         return mode & 0o077 == 0 ? .usable : .exposed
     }
 
-    /// The token kept in `directory`, creating the directory and the token
-    /// when either is missing and replacing a token that is exposed or
-    /// malformed. Throws, and so fails closed, for a file or directory that
-    /// belongs to another account or is not what it should be.
+    /// The token in `directory`, created when missing and replaced when
+    /// exposed or malformed. Fails closed on a foreign or odd file.
     static func load(in directory: URL) throws -> String {
         try prepare(directory)
         let file = directory.appendingPathComponent(fileName)
-        // A creator that loses the race to another process reads the
-        // winner's token on the next round.
+        // A creator that loses the race reads the winner's token next round.
         for _ in 0 ..< 3 {
             switch try read(file) {
             case let .token(token):
@@ -119,12 +99,10 @@ nonisolated enum ControlToken {
     private enum Contents {
         case token(String)
         case missing
-        /// Exposed, or not a token at all.
         case unusable
     }
 
-    /// Makes `directory` if it is missing, and holds it to 0700 and this
-    /// account.
+    /// Makes `directory` and holds it to 0700 and this account.
     private static func prepare(_ directory: URL) throws {
         let parent = directory.deletingLastPathComponent()
         do {
@@ -145,8 +123,8 @@ nonisolated enum ControlToken {
         }
     }
 
-    /// Opens without following a link, and without blocking on a FIFO, then
-    /// judges what was opened rather than the path.
+    /// Opens without following a link or blocking on a FIFO, then judges the
+    /// opened file rather than the path.
     private static func read(_ file: URL) throws -> Contents {
         let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         guard descriptor >= 0 else {
@@ -173,9 +151,8 @@ nonisolated enum ControlToken {
         return isWellFormed(text) ? .token(text) : .unusable
     }
 
-    /// Writes a fresh token beside `file` and moves it into place whole, so a
-    /// reader sees no file or a complete one. Without `replacing`, a token
-    /// another process put there first wins and this answers nil.
+    /// Writes a fresh token and moves it into place whole. Without
+    /// `replacing`, an existing token wins and this answers nil.
     private static func create(_ file: URL, replacing: Bool) throws -> String? {
         let token = generate()
         let staging = file.deletingLastPathComponent()
@@ -185,7 +162,7 @@ nonisolated enum ControlToken {
         defer { unlink(staging.path) }
         let bytes = Array(token.utf8)
         let written = write(descriptor, bytes, bytes.count)
-        // The umask can only clear bits, and 0600 is exact whatever it is.
+        // Exact whatever the umask.
         let permitted = fchmod(descriptor, 0o600)
         close(descriptor)
         guard written == bytes.count, permitted == 0 else { throw Failure.system(staging.path, errno) }

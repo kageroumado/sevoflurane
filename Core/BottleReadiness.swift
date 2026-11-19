@@ -1,26 +1,16 @@
 import Foundation
 
-/// Whether the bottle is finished, and what is on record about the last
-/// attempt to finish it.
-///
-/// A provisioning pass and a dependency install both fail into a view the
-/// user has usually left by the time they read it. Both outcomes are written
-/// here instead, in the shared preference suite, so the Engine pane, the
-/// popover, `sevo doctor` and the diagnostics zip all read one record — and
-/// so a failure survives the navigation that used to erase it.
+/// Whether the bottle is finished, and the last provisioning and dependency
+/// outcomes, kept in the shared suite so every face reads one record.
 nonisolated enum BottleReadiness {
-    /// What a provisioning pass ended as, and for which pair.
     struct ProvisionOutcome: Sendable, Equatable {
         let succeeded: Bool
-        /// The failure in the user's words, or the stage that finished.
         let reason: String
         let date: Date
         let engine: String
         let bottle: String
-        /// Whether the client must stay down until this is resolved. A Steam
-        /// installer that failed leaves a prefix with no client to start, and
-        /// starting one anyway is how a switch ends with the app supervising
-        /// a bottle that has no Steam in it.
+        /// Whether the client must stay down, as after a failed Steam install
+        /// that left no client to start.
         let blocksClientStart: Bool
 
         var dictionary: [String: Any] {
@@ -39,9 +29,7 @@ nonisolated enum BottleReadiness {
         store(stored(outcome), forKey: provisionKey)
     }
 
-    /// The record as the preference suite holds it, and back. Split from the
-    /// storage so both directions can be read — and tested — without a
-    /// suite the live app is also reading.
+    /// The record as the suite holds it, testable without the live suite.
     static func stored(_ outcome: ProvisionOutcome) -> [String: Any] {
         [
             "succeeded": outcome.succeeded,
@@ -68,9 +56,7 @@ nonisolated enum BottleReadiness {
         )
     }
 
-    /// The failure in `outcome` that holds the client down for the given
-    /// pair, if it is one. A record made for another engine or another
-    /// bottle says nothing about this one.
+    /// The failure holding the client down for this engine and bottle.
     static func block(
         from outcome: ProvisionOutcome?, engine: String, bottle: String,
     ) -> String? {
@@ -80,7 +66,7 @@ nonisolated enum BottleReadiness {
         return outcome.reason
     }
 
-    /// Records a pass that finished, which is also what clears a block.
+    /// Also clears a block.
     static func recordProvisionSucceeded() {
         record(provision: ProvisionOutcome(
             succeeded: true, reason: "the bottle is complete", date: .now,
@@ -101,9 +87,7 @@ nonisolated enum BottleReadiness {
         outcome(from: Preferences.shared.dictionary(forKey: provisionKey))
     }
 
-    /// The failure standing in the way of starting the client, if one is:
-    /// the last pass failed at a stage that leaves nothing to start, for the
-    /// pair in use, and nobody has retried it or asked for it anyway.
+    /// The failure holding the client down now, if any.
     static var clientStartBlock: String? {
         block(
             from: lastProvision,
@@ -111,8 +95,7 @@ nonisolated enum BottleReadiness {
         )
     }
 
-    /// Starts the client anyway — the user's own decision, taken in the
-    /// Engine pane. The record stays; only its hold on the client is lifted.
+    /// Lifts the record's hold on the client, at the user's request.
     static func allowClientStart() {
         guard let outcome = lastProvision else { return }
         record(provision: ProvisionOutcome(
@@ -145,8 +128,7 @@ nonisolated enum BottleReadiness {
         Preferences.shared.dictionary(forKey: dependencyKey) as? [String: String] ?? [:]
     }
 
-    /// Every catalog entry with what is true of it right now — the shape the
-    /// diagnostics zip and `doctor --json` both carry.
+    /// Every catalog entry's state, for the diagnostics zip and `doctor --json`.
     static func dependencyReport() -> [[String: Any]] {
         BottleDependencies.catalog.map { dependency in
             var entry: [String: Any] = [
@@ -160,14 +142,12 @@ nonisolated enum BottleReadiness {
         }
     }
 
-    /// What to say about the required pieces the bottle lacks, or `nil` when
-    /// it lacks none.
+    /// The sentence for missing required pieces, or `nil`.
     static func incompleteSummary() -> String? {
         incompleteSummary(missing: BottleDependencies.missingRequired().map(\.name))
     }
 
-    /// The same sentence for a list a caller already has — the Settings pane
-    /// reads its rows, which a simulated environment can pose.
+    /// The same sentence for a list the caller has.
     static func incompleteSummary(missing names: [String]) -> String? {
         guard !names.isEmpty else { return nil }
         let list = ListFormatter.localizedString(byJoining: names)

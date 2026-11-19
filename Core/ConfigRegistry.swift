@@ -1,21 +1,12 @@
 import Foundation
 
-/// The settings whose sink is the prefix's registry rather than an env file,
-/// written under the bottle's own key and under `AppDefaults\<exe>` for a game
-/// that sets one.
+/// The settings that live in the prefix's registry, under the bottle's key and
+/// `AppDefaults\<exe>`, read by Wine at every process start. Writes go through
+/// the engine's `reg.exe`, since `user.reg` is the wineserver's to edit.
 ///
-/// Wine opens both keys at process start — `winemac.drv` `setup_options`,
-/// win32u's `X11 Driver` pass, and the loader's `DllOverrides` — so a value
-/// written now is what the next game process reads, with the client left
-/// running. Writes go through the engine's `reg.exe`, the way provisioning
-/// writes the tray and SDL values; `user.reg` is the wineserver's to edit.
-///
-/// `<prefix>/.sevo/registry.json` records what the last pass wrote, so a pass
-/// that changes nothing spawns nothing, and a value the store no longer sets
-/// is deleted rather than left to outlive its setting. The record is what
-/// makes this cheap enough to run at every store change and every client
-/// start, and it is the only reader: `user.reg` lags a write by seconds, so a
-/// file scan would ask a stale question.
+/// `<prefix>/.sevo/registry.json` records the last pass, so an unchanged pass
+/// spawns nothing and a dropped setting is deleted. It is the only reader:
+/// `user.reg` lags a write by seconds.
 nonisolated enum ConfigRegistry {
     /// One value under `HKCU\Software\Wine`.
     struct Entry: Hashable, Codable, Sendable {
@@ -25,29 +16,24 @@ nonisolated enum ConfigRegistry {
         let name: String
         let value: String
 
-        /// The full path `reg.exe` takes.
         var path: String {
             #"HKCU\Software\Wine\"# + key
         }
-        /// What identifies this value wherever it is, so a changed value is
-        /// one write and a dropped setting is one delete.
+        /// The value's identity, whatever it holds.
         var place: String {
             "\(key)\\\(name)"
         }
     }
 
-    /// Wine's own spelling for a switch, which it reads by first character.
+    /// Wine reads a switch by its first character.
     private static func flag(_ on: Bool) -> String {
         on ? "Y" : "N"
     }
 
     // MARK: - What the store asks for
 
-    /// Every value the hierarchy asks the registry to hold, in a stable order.
-    ///
-    /// Retina is bottle-wide alone: `winemac.drv` reads `RetinaMode` with no
-    /// app key, so that the DPI and the monitor sizes are the same for every
-    /// process in the prefix, and a per-program copy would sit there unread.
+    /// Every value the hierarchy asks for, in a stable order. `RetinaMode` is
+    /// bottle-wide only: `winemac.drv` reads it with no app key.
     static func desired(bottle name: String) -> [Entry] {
         var entries = [
             Entry(
@@ -65,8 +51,7 @@ nonisolated enum ConfigRegistry {
         return entries.sorted { $0.place < $1.place }
     }
 
-    /// What one game's own values ask the registry to hold, under each
-    /// executable the game is known to run as.
+    /// One game's values, under each of its executables.
     static func gameEntries(_ values: ConfigValues) -> [Entry] {
         var entries: [Entry] = []
         for exe in values.exes ?? [] {
@@ -88,23 +73,19 @@ nonisolated enum ConfigRegistry {
 
     // MARK: - Applying
 
-    /// Queues a pass that brings the prefix's registry in line with the store.
-    /// The app's process outlives the write, so it does not wait.
+    /// Queues a pass without waiting.
     static func apply(bottle name: String, prefix: URL) {
         Task(name: "Registry settings") { await settle(bottle: name, prefix: prefix) }
     }
 
-    /// Runs a pass after every pass already queued, and waits for it — what a
-    /// command line does before it exits, since a process that ends takes its
-    /// unfinished writes with it. Passes run one at a time and in order, so two
-    /// changes in a row cannot write their values the wrong way round.
+    /// Queues a pass and waits for it, as a command line must before exiting.
+    /// Passes run one at a time, in order.
     static func settle(bottle name: String, prefix: URL) async {
         await Writer.shared.enqueue { await reconcile(bottle: name, prefix: prefix) }
     }
 
-    /// The one pass: write what changed, delete what the store dropped, and
-    /// record what landed. A value whose `reg.exe` failed stays out of the
-    /// record, so the next pass tries it again.
+    /// Writes what changed, deletes what was dropped, and records what landed,
+    /// so a failed write is retried next pass.
     static func reconcile(bottle name: String, prefix: URL) async {
         let wanted = desired(bottle: name)
         let written = record(prefix: prefix)
@@ -162,7 +143,6 @@ nonisolated enum ConfigRegistry {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// The one lane every pass runs in, in arrival order.
     private actor Writer {
         static let shared = Writer()
         private var tail: Task<Void, Never>?

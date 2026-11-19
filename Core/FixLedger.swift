@@ -3,7 +3,6 @@ import Foundation
 /// What the fix list wrote into one game's own settings at its first launch,
 /// and what those settings were before, so that it can be undone key by key.
 nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
-    /// A fix that set something, as the notification and Settings name it.
     struct Source: Codable, Equatable, Sendable {
         var title: String
         var reason: String
@@ -12,14 +11,11 @@ nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
     var fixes: [Source]
     /// The keys the fix list wrote, with the values they were left at.
     var applied: ConfigValues
-    /// The game's own values of those keys before. A key missing here was
-    /// unset; a table (DLL overrides) is the game's own table before the
-    /// fix's entries joined it.
+    /// The game's own values of those keys before; a missing key was unset.
     var previous: ConfigValues
     var date: Date
 
-    /// The keys still holding what the fix list wrote, by their
-    /// ``ConfigValues`` name. A key the player has changed since is theirs.
+    /// The keys still holding what the fix list wrote.
     func keys(in own: ConfigValues) -> [String] {
         let current = own.fields
         return applied.fields.filter { FixLedger.same(current[$0.key], $0.value) }.keys.sorted()
@@ -37,20 +33,15 @@ nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
         return "fixes: \(name) (\(appID)) first launch took \(titles): \(changes)"
     }
 
-    /// The reasons of the fixes behind it, one paragraph each.
     var reasons: String {
         fixes.map { InterfaceCopy.localized($0.reason) }.joined(separator: "\n\n")
     }
 }
 
-/// The first-launch half of the fix list: the first time a game launches
-/// under Sevoflurane, every matching fix (``FixList``) sets the keys the
-/// game has no value of its own for, and the record of it
-/// (``AppliedFixes``) is what Settings' and the notification's Undo read.
-///
-/// A game is decided once. The record stays after an undo, so a game whose
-/// fixes were undone is never fixed again, and a game with a run record from
-/// before is left as it is.
+/// At a game's first launch, every matching fix (``FixList``) sets the keys
+/// the game lacks, recorded in ``AppliedFixes`` for Undo. A game is decided
+/// once: the record outlives an undo, and a game with an earlier run record is
+/// left alone.
 nonisolated enum FixLedger {
     static let root = GameConfig.root.appendingPathComponent("fixes")
 
@@ -63,11 +54,9 @@ nonisolated enum FixLedger {
         enabled && !hasRunRecord && !wasDecided
     }
 
-    /// The game's values with every fix's automatic part
-    /// (``FixValues/automatic(_:)``) folded in where it has no value of its
-    /// own, and the record of what changed; `nil` when the fixes set nothing
-    /// the game lacks. The first fix to name a key wins it; a table gains the
-    /// entries it does not have.
+    /// The game's values with each fix's ``FixValues/automatic(_:)`` part
+    /// filling what it lacks, and the record; `nil` when nothing changes. The
+    /// first fix to name a key wins; a table gains missing entries.
     static func plan(
         own: ConfigValues, fixes: [KnownFix], date: Date = .now,
     ) -> (values: ConfigValues, record: AppliedFixes)? {
@@ -102,9 +91,8 @@ nonisolated enum FixLedger {
         return (values, AppliedFixes(fixes: sources, applied: applied, previous: previous, date: date))
     }
 
-    /// The game's values with `keys` (every key when `nil`) put back as they
-    /// were, and the record without them. A key the player changed after the
-    /// fix keeps the player's value and leaves the record all the same.
+    /// Puts `keys` (all when `nil`) back and drops them from the record; a key
+    /// the player changed keeps the player's value.
     static func undo(
         _ record: AppliedFixes, keys: Set<String>? = nil, own: ConfigValues,
     ) -> (values: ConfigValues, record: AppliedFixes) {
@@ -167,11 +155,9 @@ nonisolated enum FixLedger {
 
     // MARK: - Applying and undoing
 
-    /// Applies the fix list to a game launching for the first time, writing
-    /// its values and the engine's env files; `nil` when this launch is not
-    /// a first one, no fix sets anything the game lacks, or `commit` refuses
-    /// the write (``LaunchPreparation/Gate``). The record is written before
-    /// the values, so a game is never fixed twice.
+    /// Applies the fix list at a first launch unless `commit` refuses
+    /// (``LaunchPreparation/Gate``). The record is written before the values,
+    /// so a game is never fixed twice.
     static func applyAtFirstLaunch(appID: Int, committing commit: () -> Bool = { true }) -> AppliedFixes? {
         let own = GameConfig.game(appID)
         return apply(
@@ -186,8 +172,7 @@ nonisolated enum FixLedger {
         }
     }
 
-    /// ``applyAtFirstLaunch(appID:committing:)`` with what it reads passed
-    /// in and the game's values written through `write`.
+    /// ``applyAtFirstLaunch(appID:committing:)`` with its inputs injected.
     static func apply(
         appID: Int, enabled: Bool, hasRunRecord: Bool, own: ConfigValues, fixes: [KnownFix],
         in root: URL = root, committing commit: () -> Bool, write: (ConfigValues) -> Void,
@@ -200,8 +185,7 @@ nonisolated enum FixLedger {
         return planned.record
     }
 
-    /// Puts `keys` (every key when `nil`) of a game back as they were before
-    /// the fix list, and answers the record as it stands after.
+    /// Undoes `keys` (all when `nil`) for a game; answers the updated record.
     @discardableResult
     static func undo(appID: Int, keys: Set<String>? = nil, inBackground: Bool = false) -> AppliedFixes? {
         guard let record = record(for: appID) else { return nil }
@@ -221,8 +205,7 @@ nonisolated enum FixLedger {
 // MARK: - Values as JSON fields
 
 nonisolated extension ConfigValues {
-    /// The values as their JSON object: one field per key that is set, by
-    /// its stored name.
+    /// The values as a JSON object of stored names.
     var fields: [String: Any] {
         guard let data = try? JSONEncoder().encode(self),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -230,8 +213,7 @@ nonisolated extension ConfigValues {
         return object
     }
 
-    /// Values from a JSON object of stored names, `nil` where one does not
-    /// decode.
+    /// `nil` when the object does not decode.
     init?(fields: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: fields),
               let values = try? JSONDecoder().decode(ConfigValues.self, from: data)

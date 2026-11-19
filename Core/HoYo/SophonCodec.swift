@@ -4,8 +4,7 @@ import SophonCodecs
 
 /// The checksums and codecs Sophon's files are checked and unpacked with.
 nonisolated enum SophonCodec {
-    /// md5 of bytes, lowercase hex: the digest Sophon names every chunk,
-    /// file and manifest by.
+    /// Lowercase hex, as Sophon names chunks, files and manifests.
     static func md5(_ data: Data) -> String {
         Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -20,7 +19,6 @@ nonisolated enum SophonCodec {
         try Zstd.decompress(data, expectedSize: expectedSize)
     }
 
-    /// Why a diff could not be applied.
     typealias PatchFailure = HPatch.Failure
 
     /// Applies one file's diff. `old` is nil for a file the diff creates.

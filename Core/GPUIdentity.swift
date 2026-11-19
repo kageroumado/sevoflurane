@@ -2,23 +2,16 @@ import Foundation
 
 /// What the bottle tells a game its graphics card is.
 ///
-/// Every translation layer reports the Mac's GPU honestly, and a growing
-/// number of Windows games read that, fail to find a vendor they know, and
-/// either refuse to start, keep their best settings back, or offer to install
-/// an NVIDIA driver. Each layer has its own way to be told otherwise, so the
-/// choice is made once here and written for all of them — whichever one a
-/// game ends up on, the answer is the same.
-///
-/// Which card stands in for this Mac comes from ``GPUEquivalence``, matched to
-/// the chip the machine actually has.
+/// Games that see an unknown vendor refuse to start, hold back settings or
+/// offer an NVIDIA driver, so one choice is written for every translation
+/// layer; ``GPUEquivalence`` matches the card to this Mac's chip.
 nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     /// The truth: an Apple GPU.
     case automatic
     case nvidia
     case amd
 
-    /// The card this Mac is reported as, or `nil` when it is reported as
-    /// itself.
+    /// The card this Mac is reported as; `nil` for itself.
     var card: GraphicsCard? {
         card(for: MacChip.current)
     }
@@ -31,8 +24,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The row in the picker: the card by name, so the choice and its
-    /// consequence are the same sentence.
+    /// The picker row: the card by name.
     var label: String {
         label(for: MacChip.current)
     }
@@ -45,9 +37,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// What picking this identity buys. The card itself is in ``label``,
-    /// which is matched to the Mac's chip; this line is the same on every
-    /// Mac.
+    /// What picking this identity buys, the same on every Mac.
     var detail: String {
         switch self {
         case .automatic:
@@ -59,27 +49,16 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The environment every renderer reads, written together: a bottle can
-    /// change renderer without changing what the game is told.
-    ///
-    /// D3DMetal takes the pieces as separate variables and reads them as
-    /// `0x`-prefixed hexadecimal. DXMT and DXVK take a config string of
-    /// `dxgi.*` keys, semicolon-separated, in the shape both projects use in
-    /// their `.conf` files: an id is exactly four bare hex digits, and a
-    /// value with a space in it has to be quoted or the parser keeps only the
-    /// first word.
-    ///
-    /// `dxgi.maxDeviceMemory` is DXVK's alone. DXMT reads the same string and
-    /// passes over keys it has none of, and D3DMetal has no memory knob at
-    /// all, so under those two a game is told how much memory Metal offers
-    /// rather than how much the card ships with.
+    /// The environment every renderer reads, so a renderer change keeps what
+    /// the game is told. D3DMetal reads `0x`-prefixed hex variables; DXMT and
+    /// DXVK read `;`-separated `dxgi.*` keys, ids as four bare hex digits and
+    /// spaced values quoted. Only DXVK honors `dxgi.maxDeviceMemory`.
     ///
     /// The `SEVO_GPU_*` names are Wine's own. Wine writes the Windows driver
-    /// registry from the display driver's idea of the GPU at every display
-    /// enumeration, which is where a game's driver-version check reads, and
-    /// where the number is one Wine invents for a card nobody ships; the
-    /// engine patch makes it prefer these instead.
-    /// An engine without that patch ignores them.
+    /// registry, where a game's driver-version check reads, from the display
+    /// driver's idea of the GPU at every display enumeration, with a version
+    /// it invents; the engine patch makes it prefer these, and an engine
+    /// without the patch ignores them.
     var environment: [String: String] {
         environment(for: MacChip.current)
     }
@@ -113,8 +92,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         ]
     }
 
-    /// Every name ``environment`` can set, so choosing Apple clears the ones a
-    /// previous choice wrote into a bottle's stored environment.
+    /// Every name ``environment`` sets, cleared when choosing Apple.
     static let environmentKeys = [
         "D3DM_VENDOR_ID", "D3DM_DEVICE_ID", "D3DM_DEVICE_DESCRIPTION",
         "DXMT_CONFIG", "DXVK_CONFIG", "DXVK_CONFIG_FILE",
@@ -125,28 +103,17 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
 
     // MARK: - DXVK's config file
 
-    /// Where the bottle keeps DXVK's config, as Windows names it.
-    ///
-    /// This DXVK reads `DXVK_CONFIG_FILE`, and failing that a `dxvk.conf` in
-    /// whatever the game's working directory happens to be
-    /// (`DXVK-macOS/src/util/config/config.cpp:1020-1033`). It opens the path
-    /// through Win32 from inside the prefix, so the path has to be one Windows
-    /// can name, which is why the file lives in the bottle rather than in the
-    /// app's own storage.
+    /// DXVK's config as Windows names it: DXVK opens `DXVK_CONFIG_FILE`
+    /// through Win32, so the file lives in the bottle
+    /// (`DXVK-macOS/src/util/config/config.cpp:1020-1033`).
     static let dxvkConfigWindowsPath = #"C:\windows\dxvk.conf"#
 
     private static let dxvkConfigBottlePath = "drive_c/windows/dxvk.conf"
 
-    /// The file's contents, in DXVK's syntax: one `key = value` a line, an id
-    /// as four bare hex digits, and any value holding a space in quotes.
-    ///
-    /// The rules are the parser's, at `config.cpp:824-869` and
-    /// `dxgi_options.cpp:7-27`: a value ends at the first whitespace unless it
-    /// is quoted, and `parsePciId` returns -1 for anything that is not exactly
-    /// four hex characters. A line whose first character cannot start a key is
-    /// read as far as the missing `=` and dropped, which is what makes the
-    /// first line a comment. There is no `[section]` header, because one would
-    /// gate every option below it on the running executable's name.
+    /// The file in DXVK's syntax (`config.cpp:824-869`,
+    /// `dxgi_options.cpp:7-27`): ids as four bare hex digits, spaced values
+    /// quoted, the first line dropped as a non-key, and no `[section]`, which
+    /// would gate options on the exe name.
     var dxvkConfigFile: String? {
         guard let card else { return nil }
         return """
@@ -159,9 +126,8 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         """
     }
 
-    /// Puts the file where the bottle's DXVK will find it, and takes it away
-    /// again when the bottle goes back to reporting the Apple chip — DXVK has
-    /// no way to say "no override", so an absent file is the way to say it.
+    /// Writes the file, or removes it for the Apple chip, since DXVK has no
+    /// "no override" value.
     static func writeDXVKConfig(_ identity: GPUIdentity, intoBottle bottle: URL) {
         let file = bottle.appendingPathComponent(dxvkConfigBottlePath)
         let manager = FileManager.default
@@ -169,16 +135,14 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
             try? manager.removeItem(at: file)
             return
         }
-        // A path that is not a prefix gets nothing: the file is only meaningful
-        // beside a `drive_c` that a bottled DXVK can reach.
+        // Only inside a prefix.
         guard manager.fileExists(atPath: file.deletingLastPathComponent().path) else { return }
         try? Data(contents.utf8).write(to: file)
     }
 
     // MARK: - Wine's own renderer
 
-    /// Wine's own renderer keeps the same numbers in the registry rather than
-    /// the environment: `HKCU\Software\Wine\Direct3D`.
+    /// wined3d's copy, in `HKCU\Software\Wine\Direct3D`.
     var wineD3DRegistry: [(value: String, data: String)] {
         wineD3DRegistry(for: MacChip.current)
     }
@@ -191,22 +155,14 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         ]
     }
 
-    /// Where the queued registry write waits, in the bottle and as Windows
-    /// names it — `regedit` opens it from inside the prefix.
+    /// The queued registry file, as `regedit` in the prefix names it.
     static let wineD3DRegistryWindowsPath = #"C:\windows\sevo-gpu.reg"#
 
     private static let wineD3DRegistryBottlePath = "drive_c/windows/sevo-gpu.reg"
 
-    /// The registry file that carries this choice into a prefix.
-    ///
-    /// Choosing the Apple chip deletes the two values rather than writing
-    /// nothing. wined3d keeps whatever it was last told, so a bottle moved off
-    /// a card would otherwise go on claiming that card; `=-` is how a registry
-    /// file says a value should go away.
-    ///
-    /// CRLF and UTF-16: `regedit` decides the encoding from the byte order
-    /// mark, and a `Version 5.00` file without one is read as the machine's
-    /// code page.
+    /// The registry file for this choice. The Apple chip deletes the values
+    /// (`=-`), since wined3d keeps what it was last told. CRLF and UTF-16
+    /// with a BOM, or `regedit` reads the machine's code page.
     var wineD3DRegistryFile: String {
         let values = card.map { card in
             [
@@ -221,11 +177,8 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
         ] + values + [""]).joined(separator: "\r\n")
     }
 
-    /// Puts the registry file in the bottle, ready to import, and answers
-    /// where it went.
-    ///
-    /// The file is written the moment the choice is made, so a prefix that
-    /// cannot be reached right now still has the answer waiting in it.
+    /// Writes the registry file into the bottle at once, so an unreachable
+    /// prefix still has it waiting.
     @discardableResult
     static func writeWineD3DRegistry(
         _ identity: GPUIdentity, intoBottle bottle: URL,
