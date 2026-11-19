@@ -113,7 +113,9 @@ final nonisolated class WebSocketServer: Sendable {
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!,
         )
-        parameters.allowLocalEndpointReuse = true
+        // Held alone: with reuse on, a bind succeeds beside a socket another
+        // account opened first, and that socket would receive the page.
+        parameters.allowLocalEndpointReuse = false
         let websocket = NWProtocolWebSocket.Options()
         websocket.autoReplyPing = true
         websocket.maximumMessageSize = maxMessageSize

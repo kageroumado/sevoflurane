@@ -146,7 +146,7 @@ actor SteamBridge {
             }
             try await ui.startWaitingForThePort()
             uiServer = ui
-            let art = try HTTPServer(port: BridgePorts.art, gate: .art) { request in
+            let art = try HTTPServer(port: BridgePorts.art, gate: .art, exclusive: true) { request in
                 Self.handleArtRequest(request)
             }
             try await art.startWaitingForThePort()
@@ -179,7 +179,7 @@ actor SteamBridge {
                     + "page ws :\(BridgePorts.pageWS), relay ws :\(BridgePorts.relayWS)",
             )
         } catch {
-            log(.bridge, "bridge failed to start: \(error.localizedDescription)")
+            log(.bridge, "bridge failed to start: \(error)")
             return false
         }
         return true

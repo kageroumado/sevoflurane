@@ -74,17 +74,25 @@ final nonisolated class HTTPServer: Sendable {
     private let queue: DispatchQueue
 
     /// Why an exclusive listener did not come up.
-    enum StartFailure: Error, Equatable {
+    enum StartFailure: Error, Equatable, CustomStringConvertible {
         /// Another process holds the port.
         case portIsTaken(UInt16)
         case listenerFailed(String)
+
+        var description: String {
+            switch self {
+            case let .portIsTaken(port): "port \(port) is held by another process"
+            case let .listenerFailed(reason): "the listener failed: \(reason)"
+            }
+        }
     }
 
     private let port: UInt16
 
     /// - Parameter exclusive: Whether the port is held alone. Required for
-    ///   anything that owns state: two listeners on the control port would
-    ///   split requests between two supervisors.
+    ///   anything that owns state (two listeners on the control port would
+    ///   split requests between two supervisors) and for any port a page is
+    ///   sent to: a shared bind succeeds beside another account's socket.
     init(
         port: UInt16,
         gate: LoopbackGate,
