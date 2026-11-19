@@ -64,26 +64,27 @@ nonisolated enum D3DMetalInstaller {
         case foundInFolder
     }
 
-    /// The Windows DLLs of the versions on record, by SHA-256. macOS checks
-    /// the image's native code against Apple's signature; nothing but this
-    /// table speaks for a PE file.
+    /// The Windows programs of the versions on record, by their path under
+    /// `redist/lib` and SHA-256. macOS checks the image's native code against
+    /// Apple's signature; nothing but this table speaks for a PE file, so a
+    /// version on record holds exactly these and no other, anywhere.
     static let knownWindowsHalves: [String: [String: String]] = [
         "3.0": [
-            "atidxx64.dll": "bd004dd9e41415b0e1395d51a2ded762a02c7731491e74ed6076f3648ae9ea7f",
-            "d3d10.dll": "d316848cc78301829e6031b60c6f558716cdc74c440df72935968160253c03a5",
-            "d3d11.dll": "05fa6f700fb5ee5561dc3a46d98f0aed845d4fa8ab274bff1dc604b0b3f6edd1",
-            "d3d12.dll": "27dcf69bedb20ed557a83953e356ab2477b688c2a2c631f880b7583f30ff0705",
-            "dxgi.dll": "249711d3d786a9b0bb7c3558f36e472ab07ee21b8dbf118e34c975046832f9a2",
-            "nvapi64.dll": "8e1e6cde85551360d7a061a09445500f3c38805651502f3be65049d937c6960c",
-            "nvngx-on-metalfx.dll": "d7c0df74d9bb4de5e2a3cc357b2309148fd3fdc824fe7941e4d789dbd072ff99",
+            "wine/x86_64-windows/atidxx64.dll": "bd004dd9e41415b0e1395d51a2ded762a02c7731491e74ed6076f3648ae9ea7f",
+            "wine/x86_64-windows/d3d10.dll": "d316848cc78301829e6031b60c6f558716cdc74c440df72935968160253c03a5",
+            "wine/x86_64-windows/d3d11.dll": "05fa6f700fb5ee5561dc3a46d98f0aed845d4fa8ab274bff1dc604b0b3f6edd1",
+            "wine/x86_64-windows/d3d12.dll": "27dcf69bedb20ed557a83953e356ab2477b688c2a2c631f880b7583f30ff0705",
+            "wine/x86_64-windows/dxgi.dll": "249711d3d786a9b0bb7c3558f36e472ab07ee21b8dbf118e34c975046832f9a2",
+            "wine/x86_64-windows/nvapi64.dll": "8e1e6cde85551360d7a061a09445500f3c38805651502f3be65049d937c6960c",
+            "wine/x86_64-windows/nvngx-on-metalfx.dll": "d7c0df74d9bb4de5e2a3cc357b2309148fd3fdc824fe7941e4d789dbd072ff99",
         ],
         "4.0 beta 2": [
-            "d3d10.dll": "14c84a364a1260497f0a5117ef8efd6e228764ab139a67af1127e8bd013c48c7",
-            "d3d11.dll": "303b2bb41efa30c890e2e93d39c3d3c565c8557e069eee832f2cb8a37bd4ec26",
-            "d3d12.dll": "1b7a02cb37ec6b484e2aaa76b5ec9cbb47e63aeec29dbe087d5d1589a3347cfb",
-            "dxgi.dll": "522a8b37216afb09e614489d88a74118076f4d7e08d2b289df6a6eb6f3e817af",
-            "nvapi64.dll": "05eedf19e75c6b4c0dce918577aa6ca3fe5da79d04e42145cf66f498fad3556a",
-            "nvngx-on-metalfx.dll": "f6bc9d77fd1e898fec8c6339d367bd8e0f338992c9c0c66d59b30c6e9e0743e4",
+            "wine/x86_64-windows/d3d10.dll": "14c84a364a1260497f0a5117ef8efd6e228764ab139a67af1127e8bd013c48c7",
+            "wine/x86_64-windows/d3d11.dll": "303b2bb41efa30c890e2e93d39c3d3c565c8557e069eee832f2cb8a37bd4ec26",
+            "wine/x86_64-windows/d3d12.dll": "1b7a02cb37ec6b484e2aaa76b5ec9cbb47e63aeec29dbe087d5d1589a3347cfb",
+            "wine/x86_64-windows/dxgi.dll": "522a8b37216afb09e614489d88a74118076f4d7e08d2b289df6a6eb6f3e817af",
+            "wine/x86_64-windows/nvapi64.dll": "05eedf19e75c6b4c0dce918577aa6ca3fe5da79d04e42145cf66f498fad3556a",
+            "wine/x86_64-windows/nvngx-on-metalfx.dll": "f6bc9d77fd1e898fec8c6339d367bd8e0f338992c9c0c66d59b30c6e9e0743e4",
         ],
     ]
 
@@ -326,7 +327,7 @@ nonisolated enum D3DMetalInstaller {
     @concurrent
     static func install(
         from source: URL, intoEngine engine: URL, origin: Origin = .chosen,
-        vet: @Sendable (URL, String, Origin) throws -> Void = D3DMetalInstaller.vet,
+        vet: @Sendable (URL, String, Origin) throws -> Void = { try D3DMetalInstaller.vet(lib: $0, version: $1, origin: $2) },
     ) async throws -> Installed {
         var attached: [URL] = []
         defer { for volume in attached.reversed() {
@@ -412,8 +413,12 @@ nonisolated enum D3DMetalInstaller {
     /// inside the folder, and the Windows DLLs are the version's on record.
     /// A version with no record passes on its native half alone when the user
     /// chose the file, and not at all when a folder watch found it.
-    static func vet(lib: URL, version: String, origin: Origin) throws {
+    static func vet(
+        lib: URL, version: String, origin: Origin, records: [String: [String: String]] = knownWindowsHalves,
+    ) throws {
         let root = lib.resolvingSymlinksInPath().path
+        // Keyed by path: a second file of the same name in another folder is
+        // another file, and the one that is staged is the one that is judged.
         var windows: [String: String] = [:]
         let keys: [URLResourceKey] = [.isSymbolicLinkKey, .isRegularFileKey]
         guard let walk = FileManager.default.enumerator(at: lib, includingPropertiesForKeys: keys) else {
@@ -433,12 +438,15 @@ nonisolated enum D3DMetalInstaller {
             } else if values?.isRegularFile == true {
                 switch executableKind(of: item) {
                 case .machO: try requireAppleSignature(item)
-                case .windows: windows[item.lastPathComponent.lowercased()] = try FileDigest.sha256(of: item)
+                case .windows:
+                    let path = item.resolvingSymlinksInPath().path
+                    guard path.hasPrefix(root + "/") else { throw InstallError.notApples(item.lastPathComponent) }
+                    windows[String(path.dropFirst(root.count + 1))] = try FileDigest.sha256(of: item)
                 case nil: break
                 }
             }
         }
-        if let known = knownWindowsHalves[version] {
+        if let known = records[version] {
             guard windows == known else {
                 let odd = Set(windows.keys).symmetricDifference(known.keys).sorted().first
                     ?? windows.first { known[$0.key] != $0.value }?.key ?? "a Windows DLL"

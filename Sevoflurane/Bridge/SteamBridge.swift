@@ -149,7 +149,7 @@ actor SteamBridge {
             let art = try HTTPServer(port: BridgePorts.art, gate: .art) { request in
                 Self.handleArtRequest(request)
             }
-            art.start()
+            try await art.startWaitingForThePort()
             artServer = art
             // Sized for Set Custom Artwork's base64 image, several MB for a
             // hero.
@@ -159,7 +159,7 @@ actor SteamBridge {
                 gate: .pageWS,
                 maxMessageSize: 64 * 1024 * 1024,
             )
-            page.start { [weak self] connection in
+            try await page.start { [weak self] connection in
                 Task { await self?.attachPage(connection, queue: page.queue) }
             }
             pageServer = page
@@ -169,7 +169,7 @@ actor SteamBridge {
                 gate: .relayWS,
                 maxMessageSize: 64 * 1024 * 1024,
             )
-            relaySocket.start { [weak self] connection in
+            try await relaySocket.start { [weak self] connection in
                 Task { await self?.attachRelay(connection, queue: relaySocket.queue) }
             }
             relayServer = relaySocket

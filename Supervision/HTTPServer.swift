@@ -216,10 +216,19 @@ final nonisolated class HTTPServer: Sendable {
     /// ``bindBudget``. An exclusive listener's failure arrives only on its
     /// state handler.
     func startWaitingForThePort() async throws {
+        try await Self.waitUntilBound(listener, port: port, on: queue) { self.start() }
+    }
+
+    /// Runs `start` and returns once `listener` holds its port; otherwise
+    /// cancels it and throws. A page is sent only to ports this process
+    /// bound: whoever holds one receives what the page sends there.
+    static func waitUntilBound(
+        _ listener: NWListener, port: UInt16, on queue: DispatchQueue, start: @escaping @Sendable () -> Void,
+    ) async throws {
         let outcome = Outcome()
         do {
             try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, any Error>) in
-                listener.stateUpdateHandler = { [port] state in
+                listener.stateUpdateHandler = { state in
                     switch state {
                     case .ready:
                         outcome.finish(waiter, with: .success(()))
@@ -235,9 +244,9 @@ final nonisolated class HTTPServer: Sendable {
                         break
                     }
                 }
-                queue.asyncAfter(deadline: .now() + Self.bindBudget) {
+                queue.asyncAfter(deadline: .now() + bindBudget) {
                     outcome.finish(waiter, with: .failure(
-                        StartFailure.listenerFailed("not bound after \(Int(Self.bindBudget)) s"),
+                        StartFailure.listenerFailed("not bound after \(Int(bindBudget)) s"),
                     ))
                 }
                 start()

@@ -142,17 +142,22 @@ final nonisolated class WebSocketServer: Sendable {
         }
     }
 
-    func start(onConnection: @escaping @Sendable (WSConnection) -> Void) {
+    /// Starts and returns once the port is held; throws when another process
+    /// holds it. The page presents its session cookie to whatever listens
+    /// here, so it is told to dial only after this returns.
+    func start(onConnection: @escaping @Sendable (WSConnection) -> Void) async throws {
         listener.newConnectionHandler = { connection in
             onConnection(WSConnection(connection))
         }
-        // A port another process holds fails here, after `start` returned;
-        // unlogged, the page never boots and nothing says why.
+        try await HTTPServer.waitUntilBound(listener, port: port, on: queue) { [listener, queue] in
+            listener.start(queue: queue)
+        }
+        // A listener that fails later says so: unlogged, the page stops
+        // working and nothing says why.
         listener.stateUpdateHandler = { [label, port] state in
             if case let .failed(error) = state {
                 EventLog.enqueue(.bridge, "\(label) ws :\(port) failed: \(error.localizedDescription)")
             }
         }
-        listener.start(queue: queue)
     }
 }

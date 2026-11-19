@@ -193,7 +193,12 @@ nonisolated enum ConfigMaterializer {
         var files: [String: [String]] = [:]
         for game in ordered {
             guard let folder = game.folder else { continue }
-            for exe in Set(game.exes) { files["\(folder)/\(exe).env"] = ownLines(of: game, for: exe) }
+            for exe in Set(game.exes) {
+                // The bottle's own programs run from these folders, so a game
+                // installed under one of the names gets no file for them.
+                if bottlePrograms.contains(exe.lowercased()), bottleFolders.contains(folder.lowercased()) { continue }
+                files["\(folder)/\(exe).env"] = ownLines(of: game, for: exe)
+            }
         }
         for (exe, owners) in claimants {
             let file = "\(exe).env"
@@ -221,6 +226,9 @@ nonisolated enum ConfigMaterializer {
         "rundll32.exe", "start.exe", "conhost.exe", "plugplay.exe", "svchost.exe", "rpcss.exe",
         "winemenubuilder.exe",
     ]
+
+    /// The folders those programs run from, as a folder key spells them.
+    static let bottleFolders: Set<String> = ["steam", "windows", "system32", "syswow64", "bin", "cef", "cef.win64", "cef.win7x64"]
 
     /// A file that is one game's alone; a companion program never takes the
     /// loader (``GameConfig/isCompanionExecutable(_:)``).

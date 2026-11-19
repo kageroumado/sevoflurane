@@ -40,6 +40,13 @@ struct UntrustedInputTests {
         #expect(files["steam.exe.env"] == nil)
         #expect(files["trojan/steam.exe.env"] != nil)
         #expect(files["game.exe.env"] != nil)
+        // Installed in a folder named like the client's own, it would spell
+        // the client's folder file.
+        var namedSteam = game
+        namedSteam.folder = "steam"
+        let inSteam = ConfigMaterializer.appFiles([namedSteam])
+        #expect(inSteam["steam/steam.exe.env"] == nil)
+        #expect(inSteam["steam/game.exe.env"] != nil)
     }
 
     @Test

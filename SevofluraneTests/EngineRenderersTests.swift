@@ -535,6 +535,17 @@ struct D3DMetalInstallTests {
             try D3DMetalInstaller.vet(lib: swapped, version: "3.0", origin: .chosen)
         }
 
+        // The same name in another folder is another file: the record is
+        // of paths, so a genuine DLL beside a planted one vouches for nothing.
+        let record = ["1.0": ["wine/x86_64-windows/dxgi.dll": try FileDigest.sha256(of: swapped.appendingPathComponent("wine/x86_64-windows/dxgi.dll"))]]
+        try D3DMetalInstaller.vet(lib: swapped, version: "1.0", origin: .foundInFolder, records: record)
+        let shadowed = try lib(in: dir.appendingPathComponent("f"), [
+            "wine/x86_64-windows/dxgi.dll": pe, "wine/x86_64-unix/dxgi.dll": pe + Data([0xFF]),
+        ])
+        #expect(throws: D3DMetalInstaller.InstallError.self) {
+            try D3DMetalInstaller.vet(lib: shadowed, version: "1.0", origin: .chosen, records: record)
+        }
+
         // A version with no record: the user's own pick installs, a file a
         // folder watch found does not.
         let new = try lib(in: dir.appendingPathComponent("e"), ["wine/x86_64-windows/dxgi.dll": pe])
