@@ -14,12 +14,26 @@ import Observation
 final class SettingsStore {
     let scope: SettingScope
     private(set) var values: ConfigValues
+    /// The catalog's groups that offer a row at this level, each with its
+    /// rows. Whether a row is offered for a game can read Steam's app cache.
+    private(set) var groups: [(group: SettingGroup, settings: [Setting])]
+    /// What the fix list set on the game at its first launch; `nil` at the
+    /// bottle level and for a game it never touched.
+    private(set) var appliedFixes: AppliedFixes?
     @ObservationIgnored private let environment: any SettingsEnvironment
 
     init(scope: SettingScope, environment: any SettingsEnvironment = SettingsStore.processEnvironment) {
         self.scope = scope
         self.environment = environment
         values = environment.values(scope)
+        groups = Self.groups(for: scope)
+        appliedFixes = scope.game.flatMap { FixLedger.record(for: $0) }
+    }
+
+    private static func groups(for scope: SettingScope) -> [(group: SettingGroup, settings: [Setting])] {
+        SettingGroup.allCases
+            .map { ($0, SettingCatalog.settings(in: $0, at: scope.level, game: scope.game)) }
+            .filter { !$0.settings.isEmpty }
     }
 
     /// The store on disk, except in a process that must move nothing: the
@@ -64,9 +78,11 @@ final class SettingsStore {
         values = environment.values(scope)
     }
 
-    /// Reads the level back after a write that went around ``send(_:)``:
-    /// the fix list's undo.
-    func reload() {
+    /// Puts `keys` (all when `nil`) back as they were before the fix list, as
+    /// the notification's Undo does, and reads the game's values back.
+    func undoFixes(_ keys: Set<String>?) {
+        guard let game = scope.game else { return }
+        appliedFixes = FixLedger.undo(appID: game, keys: keys, inBackground: true)
         values = environment.values(scope)
     }
 }

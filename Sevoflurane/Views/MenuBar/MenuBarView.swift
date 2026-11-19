@@ -14,6 +14,8 @@ struct MenuBarView: View {
     let notifications: SteamNotifications
     let quickLaunch: QuickLaunchStore
     let graphics: GraphicsStore
+    /// The sharing and usage questions, asked once each.
+    let questions: ConsentQuestions
     /// The first-run assistant, while one is open or set aside.
     var setup: SetupWindow?
     var presentation = PopoverPresentation()
@@ -30,21 +32,11 @@ struct MenuBarView: View {
                 SetupUnfinishedNotice(setup: setup)
                 FooterBar(host: host, supervisor: supervisor, isSettingUp: true) { confirmingQuit = true }
             } else {
-                SupervisorNotice(host: host, supervisor: supervisor)
-                if let session = supervisor.session { SessionNotice(session: session) }
-                HostPressureNotice(supervisor: supervisor)
-                GamesColumn(
-                    host: host, supervisor: supervisor, graphics: graphics,
-                    quickLaunch: quickLaunch, presentation: presentation,
-                )
-                NotificationPermissionCard(notifications: notifications)
-                SharingQuestionCard()
-                UsageQuestionCard()
-                BottleIncompleteChip(summary: bottleSummary)
-                    .font(.system(size: 10))
-                    .padding(.horizontal, Theme.Space.sm)
-                SteamRow(host: host, supervisor: supervisor)
-                FooterBar(host: host, supervisor: supervisor, graphics: graphics) { confirmingQuit = true }
+                PopoverColumn(
+                    host: host, supervisor: supervisor, notifications: notifications, quickLaunch: quickLaunch,
+                    graphics: graphics, questions: questions, presentation: presentation,
+                    bottleSummary: bottleSummary,
+                ) { confirmingQuit = true }
             }
         }
         // Tighter than Propofol's `lg`: the rows carry their own inset.
@@ -98,6 +90,40 @@ struct MenuBarView: View {
         case 1: String(localized: "Friends · 1 new message")
         default: String(localized: "Friends · \(unreadChats) new messages")
         }
+    }
+}
+
+// MARK: - The column
+
+/// The popover with setup finished: the cards that need a word, what to
+/// play, the Steam client, and the app's own bar.
+private struct PopoverColumn: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    let notifications: SteamNotifications
+    let quickLaunch: QuickLaunchStore
+    let graphics: GraphicsStore
+    let questions: ConsentQuestions
+    let presentation: PopoverPresentation
+    let bottleSummary: String?
+    let onQuit: () -> Void
+
+    var body: some View {
+        SupervisorNotice(host: host, supervisor: supervisor)
+        if let session = supervisor.session { SessionNotice(session: session) }
+        HostPressureNotice(supervisor: supervisor)
+        GamesColumn(
+            host: host, supervisor: supervisor, graphics: graphics,
+            quickLaunch: quickLaunch, presentation: presentation,
+        )
+        NotificationPermissionCard(notifications: notifications)
+        SharingQuestionCard(questions: questions)
+        UsageQuestionCard(questions: questions)
+        BottleIncompleteChip(summary: bottleSummary)
+            .font(.system(size: 10))
+            .padding(.horizontal, Theme.Space.sm)
+        SteamRow(host: host, supervisor: supervisor)
+        FooterBar(host: host, supervisor: supervisor, graphics: graphics, onQuit: onQuit)
     }
 }
 
@@ -409,10 +435,10 @@ private struct NotificationPermissionCard: View {
 /// The community database's question for a player whose setup did not ask
 /// it, shown once a run exists and until answered.
 private struct SharingQuestionCard: View {
-    @State private var isAsking = Preferences.sharesRunStats == nil && RunLog.hasRecords()
+    let questions: ConsentQuestions
 
     var body: some View {
-        if isAsking {
+        if questions.asksSharing {
             NoticeCard(
                 symbol: "chart.bar.xaxis",
                 title: "Help other Mac players",
@@ -431,23 +457,17 @@ private struct SharingQuestionCard: View {
     }
 
     private func answer(_ shares: Bool) {
-        Preferences.sharesRunStats = shares
-        EventLog.shared.log(.app, shares ? "run statistics: sharing" : "run statistics: not sharing")
-        if shares {
-            Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
-        }
-        withAnimation { isAsking = false }
+        withAnimation { questions.answerSharing(shares) }
     }
 }
 
 /// Digoxin's question, whether this Mac is counted among users: asked once,
 /// after the community question is answered.
 private struct UsageQuestionCard: View {
-    @State private var isAsking = Preferences.usageCounting == nil
-        && !(Preferences.sharesRunStats == nil && RunLog.hasRecords())
+    let questions: ConsentQuestions
 
     var body: some View {
-        if isAsking {
+        if questions.asksUsage {
             NoticeCard(
                 symbol: "person.2",
                 title: "Count yourself in",
@@ -466,7 +486,6 @@ private struct UsageQuestionCard: View {
     }
 
     private func answer(_ tier: ConsentTier) {
-        UsageCounting.choose(tier)
-        withAnimation { isAsking = false }
+        withAnimation { questions.answerUsage(tier) }
     }
 }

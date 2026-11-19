@@ -40,12 +40,30 @@ protocol GraphicsEnvironment: AnyObject {
     ) async throws -> RendererVersions.Installed
     func removeRendererVersion(_ installed: RendererVersions.Installed) throws
     func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release]
+
+    /// The renderer the running client booted on; `nil` before a first boot.
+    func bootedRenderer() -> Renderer?
+    /// Whether a DXMT or DXVK pick differs from the one the client booted with.
+    func rendererVersionsChangedSinceBoot() -> Bool
+    /// Calls `onChange` each time a client boot records its selection, in
+    /// this process or the helper.
+    func watchBoots(_ onChange: @escaping @MainActor () -> Void)
 }
 
 extension GraphicsEnvironment {
     var isSimulation: Bool {
         false
     }
+
+    func bootedRenderer() -> Renderer? {
+        nil
+    }
+
+    func rendererVersionsChangedSinceBoot() -> Bool {
+        false
+    }
+
+    func watchBoots(_: @escaping @MainActor () -> Void) {}
 }
 
 /// The real one: the bottle's graphics configuration, and the engines and
@@ -140,5 +158,50 @@ final class LiveGraphicsEnvironment: GraphicsEnvironment {
     func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release] {
         let manifest = try? await EngineManifest.fetch()
         return await RendererVersions.releases(component, manifest: manifest)
+    }
+
+    func bootedRenderer() -> Renderer? {
+        BottleGraphics.bootedSelection()?.renderer
+    }
+
+    func rendererVersionsChangedSinceBoot() -> Bool {
+        BottleGraphics.rendererVersionsChangedSinceBoot()
+    }
+
+    func watchBoots(_ onChange: @escaping @MainActor () -> Void) {
+        bootWatch = PreferenceWatch(keys: BottleGraphics.bootRecordKeys, in: Preferences.shared, onChange: onChange)
+    }
+
+    private var bootWatch: PreferenceWatch?
+}
+
+/// Key-value observation of preference keys, which hears a write from any
+/// process sharing the suite.
+private final class PreferenceWatch: NSObject {
+    private let defaults: UserDefaults
+    private let keys: [String]
+    private let onChange: @MainActor () -> Void
+
+    init(keys: [String], in defaults: UserDefaults, onChange: @escaping @MainActor () -> Void) {
+        self.defaults = defaults
+        self.keys = keys
+        self.onChange = onChange
+        super.init()
+        for key in keys {
+            defaults.addObserver(self, forKeyPath: key, options: [], context: nil)
+        }
+    }
+
+    isolated deinit {
+        for key in keys {
+            defaults.removeObserver(self, forKeyPath: key)
+        }
+    }
+
+    override nonisolated func observeValue(
+        forKeyPath _: String?, of _: Any?, change _: [NSKeyValueChangeKey: Any]?,
+        context _: UnsafeMutableRawPointer?,
+    ) {
+        Task { @MainActor [weak self] in self?.onChange() }
     }
 }

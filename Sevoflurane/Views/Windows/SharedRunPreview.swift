@@ -3,12 +3,13 @@ import SwiftUI
 
 /// Exactly what one shared run sends, as JSON, behind a disclosure.
 struct SharedRunPreview: View {
-    var run = SharedRun.example(appVersion: StatsUploader.appVersion)
+    /// Built once: the sample reads this Mac's hardware.
+    private static let json = SharedRun.example(appVersion: StatsUploader.appVersion).json
 
     var body: some View {
         DisclosureGroup("Show exactly what is sent") {
             ScrollView {
-                Text(verbatim: run.json)
+                Text(verbatim: Self.json)
                     .font(.system(size: 11, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -145,6 +145,14 @@ final class HoYoStore {
         jobs[id]?.task?.cancel()
     }
 
+    /// Where an install goes when no folder is chosen: one named after the
+    /// game in ~/Games.
+    func defaultInstallFolder(for game: HoYoGame) -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: "Games")
+            .appending(path: game.displayName.replacingOccurrences(of: ":", with: ""))
+    }
+
     /// Lists a folder a game is already installed in.
     func addExisting(_ folder: URL) -> Bool {
         guard HoYoInstallation(folder: folder) != nil else { return false }
@@ -172,10 +180,14 @@ final class HoYoStore {
         guard jobs[id] == nil else { return }
         notes[id] = nil
         EventLog.shared.log(.update, "hoyo: \(label) started")
+        // One stream, read in order: ticks arrive from the download's own
+        // threads, and only the newest waiting one is worth drawing.
+        let (ticks, tick) = AsyncStream.makeStream(of: SophonProgress.self, bufferingPolicy: .bufferingNewest(1))
+        let relay = Task { [weak self] in
+            for await value in ticks { self?.jobs[id]?.progress = value }
+        }
         let task = Task {
-            let progress: SophonDownloader.ProgressHandler = { value in
-                Task { @MainActor in HoYoStore.shared.jobs[id]?.progress = value }
-            }
+            let progress: SophonDownloader.ProgressHandler = { tick.yield($0) }
             do {
                 let note = try await body(progress)
                 notes[id] = note
@@ -187,6 +199,8 @@ final class HoYoStore {
                 notes[id] = "\(error)"
                 EventLog.shared.log(.update, "hoyo: \(label) failed — \(error)")
             }
+            tick.finish()
+            await relay.value
             jobs[id] = nil
             if kind == .install { installing = nil }
             reload()

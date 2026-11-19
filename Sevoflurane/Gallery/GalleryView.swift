@@ -23,187 +23,205 @@
             VStack(alignment: .leading, spacing: Theme.Space.xl) {
                 Text(verbatim: "Sevoflurane UI Gallery")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
-
-                section("Menu bar popover") {
-                    ForEach(Fixtures.popovers, id: \.label) { fixture in
-                        tile(fixture.label) {
-                            MenuBarView(
-                                host: fixture.host,
-                                supervisor: fixture.supervisor,
-                                notifications: fixture.notifications,
-                                quickLaunch: Fixtures.quickLaunch,
-                                graphics: Fixtures.graphics,
-                            )
-                            .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
-                            .background(.background, in: Theme.cardShape)
-                        }
-                    }
-                }
-
-                section("Settings — the whole window", minimum: 740) {
-                    tile("Window") {
-                        SettingsView(
-                            provisioner: Fixtures.settings,
-                            graphics: Fixtures.graphics,
-                            storage: Fixtures.storage,
-                            engine: Fixtures.engine,
-                            shaders: Fixtures.shaders,
-                            compatibility: Fixtures.compatibility,
-                        )
-                        .frame(width: 800, height: 560)
-                    }
-                }
-
-                section("Settings — General") {
-                    tile("Open at login, the CLI, uninstall") {
-                        GeneralSettings(
-                            provisioner: Fixtures.settings,
-                            store: Fixtures.storage,
-                            highlighted: nil,
-                        )
-                        .frame(width: 460, height: 620)
-                    }
-                }
-
-                section("Settings — Graphics", minimum: 480) {
-                    ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
-                        tile(pane.scenario.title) {
-                            // Tall enough for the toolkit section below the
-                            // fold.
-                            GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
-                                .frame(width: 460, height: 620)
-                        }
-                    }
-                }
-
-                section("Settings — Storage", minimum: 480) {
-                    ForEach(Fixtures.storagePanes, id: \.scenario) { pane in
-                        tile(pane.scenario.title) {
-                            StorageSettings(store: pane.store, highlighted: nil)
-                                .frame(width: 460, height: 620)
-                        }
-                    }
-                }
-
-                // Each engine tile draws the whole pane: the switch at the top
-                // decides which bottle the sections below apply to.
-                section("Settings — Engine", minimum: 500) {
-                    ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
-                        tile(pane.scenario.title) {
-                            EngineSettings(
-                                store: pane.store,
-                                graphics: Fixtures.graphics,
-                                shaders: Fixtures.shaders,
-                                compatibility: Fixtures.compatibility,
-                                provisioner: pane.provisioner,
-                                highlighted: nil,
-                            )
-                            .frame(width: 480, height: 820)
-                        }
-                    }
-                }
-
-                section("Settings — Engine, dependencies", minimum: 500) {
-                    ForEach(Fixtures.compatibilityPanes, id: \.scenario) { pane in
-                        tile(pane.scenario.title) {
-                            EngineSettings(
-                                store: Fixtures.engine,
-                                graphics: Fixtures.graphics,
-                                shaders: Fixtures.shaders,
-                                compatibility: pane.store,
-                                provisioner: Fixtures.settings,
-                                highlighted: nil,
-                            )
-                            .frame(width: 480, height: 820)
-                        }
-                    }
-                }
-
-                section("Settings — HoYoverse", minimum: 520) {
-                    tile("Up to date, a patch out, an update running") {
-                        HoYoSettings(highlighted: nil, store: Fixtures.hoyo)
-                            .frame(width: 520, height: 640)
-                    }
-                }
-
-                section("Settings — Recovery", minimum: 500) {
-                    ForEach(Fixtures.repairs, id: \.label) { pane in
-                        tile(pane.label) {
-                            RecoverySettings(
-                                provisioner: pane.provisioner,
-                                compatibility: Fixtures.compatibility,
-                                supervisor: Fixtures.healthySupervisor,
-                                highlighted: nil,
-                            )
-                            .frame(width: 480, height: 820)
-                        }
-                    }
-                }
-
-                // The detail column of the real window: 800 less the sidebar.
-                section("Settings — Games, Diagnostics", minimum: 620) {
-                    tile("Games, this Mac's own list") {
-                        GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
-                            .frame(width: 610, height: 1100)
-                    }
-                    tile("Diagnostics") {
-                        DiagnosticsSettings(highlighted: nil)
-                            .frame(width: 610, height: 1100)
-                    }
-                }
-
-                section("Reports window", minimum: 800) {
-                    tile("This Mac's own runs") {
-                        ReportView()
-                            .frame(width: 780, height: 520)
-                    }
-                }
-
-                section("Settings — About") {
-                    tile("About") {
-                        AboutSettings(highlighted: nil)
-                            .frame(width: 420, height: 230)
-                    }
-                }
-
-                // Shown at the wizard's fixed window size, so the tile can be
-                // clicked through.
-                section("First-run assistant — every step", minimum: 700) {
-                    ForEach(Fixtures.wizardSteps, id: \.step) { entry in
-                        tile(entry.step.title) {
-                            wizard(entry.provisioner, startingAt: entry.step)
-                        }
-                    }
-                }
-
-                section("First-run assistant — every machine", minimum: 700) {
-                    ForEach(Fixtures.wizards, id: \.scenario) { entry in
-                        tile(entry.scenario.title) {
-                            wizard(entry.provisioner, startingAt: .welcome)
-                        }
-                    }
-                }
+                PopoverTiles()
+                SettingsTiles()
+                EngineTiles()
+                ToolTiles()
+                WizardTiles()
             }
             .padding(Theme.Space.xl)
         }
+    }
 
-        private func wizard(
-            _ provisioner: Provisioner, startingAt step: SetupView.Step,
-        ) -> some View {
-            SetupView(
-                provisioner: provisioner,
-                startingAt: step,
-                makeGraphics: { Fixtures.wizardGraphics },
-                onFinished: {},
-            )
-            .frame(height: SetupMetrics.windowSize.height)
-            .background(.background, in: Theme.cardShape)
-            .clipShape(Theme.cardShape)
+    /// The menu-bar popover in each client state.
+    private struct PopoverTiles: View {
+        var body: some View {
+            GallerySection("Menu bar popover") {
+                ForEach(Fixtures.popovers, id: \.label) { fixture in
+                    GalleryTile(fixture.label) {
+                        MenuBarView(
+                            host: fixture.host,
+                            supervisor: fixture.supervisor,
+                            notifications: fixture.notifications,
+                            quickLaunch: Fixtures.quickLaunch,
+                            graphics: Fixtures.graphics,
+                            questions: Fixtures.questions,
+                        )
+                        .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
+                        .background(.background, in: Theme.cardShape)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The settings window whole, then its General, Graphics and Storage panes.
+    private struct SettingsTiles: View {
+        var body: some View {
+            GallerySection("Settings — the whole window", minimum: 740) {
+                GalleryTile("Window") {
+                    SettingsView(
+                        provisioner: Fixtures.settings,
+                        graphics: Fixtures.graphics,
+                        storage: Fixtures.storage,
+                        engine: Fixtures.engine,
+                        shaders: Fixtures.shaders,
+                        compatibility: Fixtures.compatibility,
+                        diagnostics: Fixtures.diagnostics,
+                    )
+                    .frame(width: 800, height: 560)
+                }
+            }
+            GallerySection("Settings — General") {
+                GalleryTile("Open at login, the CLI, uninstall") {
+                    GeneralSettings(provisioner: Fixtures.settings, store: Fixtures.storage, highlighted: nil)
+                        .frame(width: 460, height: 620)
+                }
+            }
+            GallerySection("Settings — Graphics", minimum: 480) {
+                ForEach(Fixtures.graphicsPanes, id: \.scenario) { pane in
+                    GalleryTile(pane.scenario.title) {
+                        // Tall enough for the toolkit section below the fold.
+                        GraphicsSettings(store: pane.store, shaders: Fixtures.shaders, highlighted: nil)
+                            .frame(width: 460, height: 620)
+                    }
+                }
+            }
+            GallerySection("Settings — Storage", minimum: 480) {
+                ForEach(Fixtures.storagePanes, id: \.scenario) { pane in
+                    GalleryTile(pane.scenario.title) {
+                        StorageSettings(store: pane.store, highlighted: nil)
+                            .frame(width: 460, height: 620)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The Engine pane on each engine, then on each dependency state.
+    private struct EngineTiles: View {
+        var body: some View {
+            // Each engine tile draws the whole pane: the switch at the top
+            // decides which bottle the sections below apply to.
+            GallerySection("Settings — Engine", minimum: 500) {
+                ForEach(Fixtures.enginePanes, id: \.scenario) { pane in
+                    GalleryTile(pane.scenario.title) {
+                        EngineSettings(
+                            store: pane.store,
+                            graphics: Fixtures.graphics,
+                            shaders: Fixtures.shaders,
+                            compatibility: Fixtures.compatibility,
+                            provisioner: pane.provisioner,
+                            highlighted: nil,
+                        )
+                        .frame(width: 480, height: 820)
+                    }
+                }
+            }
+            GallerySection("Settings — Engine, dependencies", minimum: 500) {
+                ForEach(Fixtures.compatibilityPanes, id: \.scenario) { pane in
+                    GalleryTile(pane.scenario.title) {
+                        EngineSettings(
+                            store: Fixtures.engine,
+                            graphics: Fixtures.graphics,
+                            shaders: Fixtures.shaders,
+                            compatibility: pane.store,
+                            provisioner: Fixtures.settings,
+                            highlighted: nil,
+                        )
+                        .frame(width: 480, height: 820)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The panes for one job each: HoYoverse, Recovery, Games, Diagnostics,
+    /// the report window and About.
+    private struct ToolTiles: View {
+        var body: some View {
+            GallerySection("Settings — HoYoverse", minimum: 520) {
+                GalleryTile("Up to date, a patch out, an update running") {
+                    HoYoSettings(highlighted: nil, store: Fixtures.hoyo)
+                        .frame(width: 520, height: 640)
+                }
+            }
+            GallerySection("Settings — Recovery", minimum: 500) {
+                ForEach(Fixtures.repairs, id: \.label) { pane in
+                    GalleryTile(pane.label) {
+                        RecoverySettings(
+                            provisioner: pane.provisioner,
+                            compatibility: Fixtures.compatibility,
+                            supervisor: Fixtures.healthySupervisor,
+                            highlighted: nil,
+                        )
+                        .frame(width: 480, height: 820)
+                    }
+                }
+            }
+            // The detail column of the real window: 800 less the sidebar.
+            GallerySection("Settings — Games, Diagnostics", minimum: 620) {
+                GalleryTile("Games, this Mac's own list") {
+                    GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
+                        .frame(width: 610, height: 1100)
+                }
+                GalleryTile("Diagnostics") {
+                    DiagnosticsSettings(store: Fixtures.diagnostics, highlighted: nil)
+                        .frame(width: 610, height: 1100)
+                }
+            }
+            GallerySection("Reports window", minimum: 800) {
+                GalleryTile("This Mac's own runs") {
+                    ReportView()
+                        .frame(width: 780, height: 520)
+                }
+            }
+            GallerySection("Settings — About") {
+                GalleryTile("About") {
+                    AboutSettings(highlighted: nil)
+                        .frame(width: 420, height: 230)
+                }
+            }
+        }
+    }
+
+    /// The first-run assistant on every step, then on every machine. Shown at
+    /// the wizard's fixed window size, so a tile can be clicked through.
+    private struct WizardTiles: View {
+        var body: some View {
+            GallerySection("First-run assistant — every step", minimum: 700) {
+                ForEach(Fixtures.wizardSteps, id: \.step) { entry in
+                    GalleryTile(entry.step.title) { wizard(entry.store) }
+                }
+            }
+            GallerySection("First-run assistant — every machine", minimum: 700) {
+                ForEach(Fixtures.wizards, id: \.scenario) { entry in
+                    GalleryTile(entry.scenario.title) { wizard(entry.store) }
+                }
+            }
         }
 
-        private func section(
-            _ title: String, minimum: CGFloat = 360, @ViewBuilder _ content: () -> some View,
-        ) -> some View {
+        private func wizard(_ store: SetupStore) -> some View {
+            SetupView(store: store, onFinished: {})
+                .frame(height: SetupMetrics.windowSize.height)
+                .background(.background, in: Theme.cardShape)
+                .clipShape(Theme.cardShape)
+        }
+    }
+
+    /// A titled grid of tiles.
+    private struct GallerySection<Content: View>: View {
+        let title: String
+        let minimum: CGFloat
+        @ViewBuilder let content: () -> Content
+
+        init(_ title: String, minimum: CGFloat = 360, @ViewBuilder content: @escaping () -> Content) {
+            self.title = title
+            self.minimum = minimum
+            self.content = content
+        }
+
+        var body: some View {
             VStack(alignment: .leading, spacing: Theme.Space.md) {
                 Text(title)
                     .font(.system(.title2, design: .rounded).weight(.semibold))
@@ -217,8 +235,19 @@
                 }
             }
         }
+    }
 
-        private func tile(_ label: String, @ViewBuilder _ content: () -> some View) -> some View {
+    /// One surface in one state, under its label.
+    private struct GalleryTile<Content: View>: View {
+        let label: String
+        @ViewBuilder let content: () -> Content
+
+        init(_ label: String, @ViewBuilder content: @escaping () -> Content) {
+            self.label = label
+            self.content = content
+        }
+
+        var body: some View {
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
                 Text(label).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 content()
@@ -228,6 +257,10 @@
 
     /// The states the gallery draws.
     enum Fixtures {
+        /// The popover's questions as this Mac's answers leave them.
+        static let questions = ConsentQuestions.current()
+        static let diagnostics = DiagnosticsStore()
+
         /// Three installations: one current, one a patch behind, one updating.
         static let hoyo: HoYoStore = {
             func row(_ game: HoYoGame, _ path: String, _ version: String, _ kind: SophonDownloader.Plan.Kind, _ size: Int64) -> HoYoStore.Row {
@@ -446,33 +479,37 @@
 
         /// One wizard per fixture machine, each on its own provisioner so tiles
         /// advance independently.
-        static let wizards: [(scenario: SetupScenario, provisioner: Provisioner)] =
+        static let wizards: [(scenario: SetupScenario, store: SetupStore)] =
             SetupScenario.allCases.map { scenario in
                 // Paced: with no think time every stage completes between two
                 // frames and every scenario looks already provisioned.
-                (scenario, Provisioner(environment: DryRunSetupEnvironment(
+                (scenario, wizardStore(Provisioner(environment: DryRunSetupEnvironment(
                     scenario: scenario, stepDelay: .milliseconds(900),
-                )))
+                )), startingAt: .welcome))
             }
+
+        private static func wizardStore(_ provisioner: Provisioner, startingAt step: SetupStep) -> SetupStore {
+            SetupStore(provisioner: provisioner, startingAt: step, makeGraphics: { Fixtures.wizardGraphics })
+        }
 
         /// Every step of the assistant at once, each on a machine that reaches
         /// it: the bottle question needs more than one Steam, and the install
         /// step needs one still to do.
-        static let wizardSteps: [(step: SetupView.Step, provisioner: Provisioner)] =
-            SetupView.Step.allCases.map { step in
+        static let wizardSteps: [(step: SetupStep, store: SetupStore)] =
+            SetupStep.allCases.map { step in
                 let scenario: SetupScenario = switch step {
                 case .welcome, .engine: .freshMachine
                 case .bottle: .multipleBottles
                 case .steam: .licensedNoBottle
                 case .graphics, .options, .sharing, .done: .provisioned
                 }
-                return (step, Provisioner(
+                return (step, wizardStore(Provisioner(
                     previewActivity: step == .steam ? .working("Downloading Steam…") : .idle,
                     detection: scenario.fixture,
                     environment: DryRunSetupEnvironment(
                         scenario: scenario, stepDelay: .milliseconds(900),
                     ),
-                ))
+                ), startingAt: step))
             }
 
         static let settings = provisioner(.idle)

@@ -7,36 +7,13 @@ struct SettingSections: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
     /// The game the sections belong to, over the first of them.
-    let heading: String?
+    var heading: String?
     /// What the fix table says about that game.
-    let recommendation: KnownFixes.Recommendation
-    /// What the fix list set on that game at its first launch.
-    let appliedFixes: AppliedFixes?
-    /// Puts one key the fix list set back, by its stored name.
-    let undoFix: (String) -> Void
-    /// Read once per init: whether a row is offered for a game can read
-    /// Steam's app cache.
-    private let groups: [(group: SettingGroup, settings: [Setting])]
-
-    init(
-        store: SettingsStore, shaders: ShaderStore, highlighted: SettingsAnchor?, heading: String? = nil,
-        recommendation: KnownFixes.Recommendation = KnownFixes.Recommendation(fixes: []),
-        appliedFixes: AppliedFixes? = nil, undoFix: @escaping (String) -> Void = { _ in },
-    ) {
-        self.store = store
-        self.shaders = shaders
-        self.highlighted = highlighted
-        self.heading = heading
-        self.recommendation = recommendation
-        self.appliedFixes = appliedFixes
-        self.undoFix = undoFix
-        groups = SettingGroup.allCases
-            .map { ($0, SettingCatalog.settings(in: $0, at: store.level, game: store.scope.game)) }
-            .filter { !$0.settings.isEmpty }
-    }
+    var recommendation = KnownFixes.Recommendation(fixes: [])
 
     var body: some View {
         let level = store.level
+        let groups = store.groups
         ForEach(groups, id: \.group) { group, settings in
             Section {
                 ForEach(settings) { setting in
@@ -58,8 +35,8 @@ struct SettingSections: View {
     /// The fix list's mark for a row whose value it set and nobody changed since.
     private func fixMark(for setting: Setting) -> SettingRow.FixMark? {
         let key = setting.id.rawValue
-        guard let appliedFixes, appliedFixes.sets(key, in: store.values) else { return nil }
-        return SettingRow.FixMark(reason: appliedFixes.reasons) { undoFix(key) }
+        guard let appliedFixes = store.appliedFixes, appliedFixes.sets(key, in: store.values) else { return nil }
+        return SettingRow.FixMark(reason: appliedFixes.reasons) { store.undoFixes([key]) }
     }
 
     private static func footer(of group: SettingGroup, at level: SettingLevel) -> LocalizedStringResource? {

@@ -9,6 +9,10 @@ final class GraphicsStore {
     private(set) var selection: BottleGraphics.Selection
     private(set) var d3dMetalVersions: [D3DMetalInstaller.Installed]
     private(set) var activeD3DMetal: String?
+    /// The renderer the running client booted on; `nil` before a first boot.
+    private(set) var bootRenderer: Renderer?
+    /// Whether a DXMT or DXVK pick differs from the one the client booted with.
+    private(set) var rendererVersionsChangedSinceBoot = false
     private let environment: any GraphicsEnvironment
 
     init(environment: (any GraphicsEnvironment)? = nil) {
@@ -24,6 +28,29 @@ final class GraphicsStore {
                 defaultVersion: environment.defaultRendererVersion(component),
             )
         }
+        readBootRecord()
+        environment.watchBoots { [weak self] in self?.readBootRecord() }
+    }
+
+    /// The renderer the running client booted on, while it differs from the
+    /// chosen one: a change that waits for the next launch.
+    var bootedRenderer: Renderer? {
+        guard let bootRenderer, bootRenderer != selection.renderer else { return nil }
+        return bootRenderer
+    }
+
+    /// Rereads what the running client booted with.
+    private func readBootRecord() {
+        let renderer = environment.bootedRenderer()
+        if renderer != bootRenderer { bootRenderer = renderer }
+        let changed = environment.rendererVersionsChangedSinceBoot()
+        if changed != rendererVersionsChangedSinceBoot { rendererVersionsChangedSinceBoot = changed }
+    }
+
+    /// Whether this Mac can run D3DMetal at all: Apple's toolkit is built for
+    /// Apple silicon.
+    var macRunsD3DMetal: Bool {
+        MacHardware.isAppleSilicon
     }
 
     // MARK: - Renderer versions
@@ -73,6 +100,7 @@ final class GraphicsStore {
     func chooseRendererVersion(_ component: RendererVersions.Component, version: String?) {
         rendererVersions[component]?.chosen = version
         environment.chooseRendererVersion(component, version: version)
+        readBootRecord()
         EventLog.shared.log(.setup, "\(component.label): \(version ?? "the engine's own") from the next boot")
     }
 
@@ -190,6 +218,7 @@ final class GraphicsStore {
         if versions != d3dMetalVersions { d3dMetalVersions = versions }
         let active = environment.activeToolkit()?.version
         if active != activeD3DMetal { activeD3DMetal = active }
+        readBootRecord()
         publishTileRenderers()
     }
 
@@ -202,6 +231,8 @@ final class GraphicsStore {
         }
     }
 
+    /// Applies a selection; a failed write puts back what the bottle holds,
+    /// so the pickers never show a value that did not reach disk.
     func update(_ selection: BottleGraphics.Selection) {
         guard selection != self.selection else { return }
         self.selection = selection
@@ -215,10 +246,12 @@ final class GraphicsStore {
             )
         } catch {
             EventLog.shared.log(.setup, "graphics change failed: \(error)")
+            self.selection = environment.currentSelection()
         }
     }
 
-    /// `nil` means the engine's own (CrossOver's copy, no shadow tree).
+    /// `nil` means the engine's own (CrossOver's copy, no shadow tree). A
+    /// failed choice puts back the version in force.
     func chooseD3DMetal(version: String?) {
         activeD3DMetal = version
         defer { publishTileRenderers() }
@@ -226,6 +259,7 @@ final class GraphicsStore {
             try environment.chooseToolkit(version: version)
         } catch {
             EventLog.shared.log(.setup, "D3DMetal version change failed: \(error)")
+            activeD3DMetal = environment.activeToolkit()?.version
         }
     }
 

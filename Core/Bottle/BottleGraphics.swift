@@ -229,6 +229,9 @@ nonisolated enum BottleGraphics {
 
     private static let bootedKey = "bootedGraphics"
 
+    /// The preference keys every client spawn rewrites.
+    static let bootRecordKeys = [bootedKey, bootedRenderersKey]
+
     /// Records at every client spawn the selection games inherit and the
     /// engine whose wineserver is booted.
     static func recordBootedSelection() {

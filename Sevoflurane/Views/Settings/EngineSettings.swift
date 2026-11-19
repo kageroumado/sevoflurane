@@ -14,10 +14,9 @@ struct EngineSettings: View {
 
     /// The bottle picker's selection, seeded once the store has refreshed.
     @State private var bottleChoice = ""
-    /// The bottle level of the settings hierarchy: every game's defaults.
-    @State private var defaults = SettingsStore(scope: .bottle(SteamBottle.name))
 
     var body: some View {
+        let defaults = store.bottleDefaults
         Form {
             EngineSelectionSection(
                 store: store,

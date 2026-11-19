@@ -1,10 +1,10 @@
 import Propofol
 import SwiftUI
 
-/// The first-run assistant. Every step has a detected default; the user
-/// chooses only when the choice costs money (CrossOver) or is ambiguous.
+/// The first-run assistant: one page per ``SetupStep`` over a footer whose
+/// buttons move the store on.
 struct SetupView: View {
-    let provisioner: Provisioner
+    let store: SetupStore
     let onFinished: () -> Void
     /// Which of Steam's windows the finish button would show; the button
     /// waits until it exists. A simulated run says library.
@@ -14,85 +14,15 @@ struct SetupView: View {
     /// Fired once when provisioning completes, so the client starts behind
     /// the wizard and is loaded by the last page.
     var onProvisioned: () -> Void = {}
-    /// Stops the running client before the wizard moves to another bottle,
-    /// narrating through its argument; answers why it could not stop.
-    var stopClient: (_ narrate: (String) -> Void) async -> String? = { _ in nil }
     /// The finish that leaves Steam signed out: the app then runs Windows
     /// programs from Quick Launch, and Steam's sign-in waits until asked for.
     var onSkipSignIn: (() -> Void)?
-    /// Where the graphics step's store comes from. A dry run without one
-    /// skips that step.
-    var makeGraphics: (() -> GraphicsStore)?
     /// Asks the window for its tall height (`true`) or its usual one, set by
     /// ``SetupWindow``.
     var resizeWindow: (_ tall: Bool) -> Void = { _ in }
 
-    enum Step: String, CaseIterable {
-        case welcome
-        case engine
-        case bottle
-        case steam
-        case graphics
-        case options
-        case sharing
-        case done
-
-        var title: String {
-            switch self {
-            case .welcome: "Welcome"
-            case .engine: "Choose an engine"
-            case .bottle: "Choose a Steam"
-            case .steam: "Installing Steam"
-            case .graphics: "DirectX 12 games"
-            case .options: "Preferences"
-            case .sharing: "Community"
-            case .done: "Ready to play"
-            }
-        }
-    }
-
-    @State private var step: Step
-    @State private var openAtLogin = true
-    @State private var connectAgents = false
-    @State private var engineChoice: SetupEngineChoice = .builtIn
-    /// The engine tarball this copy of the app ships with, when it does.
-    @State private var bundledEngine: URL?
-    /// The bottle to adopt, or `nil` to build a fresh one.
-    @State private var bottleChoice: String?
-    @State private var newBottleName = SteamBottle.defaultName
-    @State private var downloadEverything = BottleDependencies.installsEverything
-    @State private var graphicsStore: GraphicsStore?
-    /// Whether this run found Steam already in its bottle when it began.
-    @State private var adoptsSteam = false
-    @State private var gptk = GPTkDownload()
-    /// The bottle a switch could not move to because Steam would not stop:
-    /// Try Again switches again rather than provisioning the old bottle.
-    @State private var unswitchedBottle: String?
-
-    /// `step` is for the gallery; a real run opens on the welcome.
-    init(
-        provisioner: Provisioner,
-        startingAt step: Step = .welcome,
-        steamWindow: @escaping () -> SetupSteamWindow = { .library },
-        onRepairHelper: (() -> Void)? = nil,
-        onProvisioned: @escaping () -> Void = {},
-        stopClient: @escaping (_ narrate: (String) -> Void) async -> String? = { _ in nil },
-        onSkipSignIn: (() -> Void)? = nil,
-        makeGraphics: (() -> GraphicsStore)? = nil,
-        onFinished: @escaping () -> Void,
-    ) {
-        self.provisioner = provisioner
-        self.steamWindow = steamWindow
-        self.onRepairHelper = onRepairHelper
-        self.onProvisioned = onProvisioned
-        self.stopClient = stopClient
-        self.onSkipSignIn = onSkipSignIn
-        self.makeGraphics = makeGraphics
-        self.onFinished = onFinished
-        _step = State(initialValue: step)
-        _engineChoice = State(initialValue: Engine.setupStartsOnCrossOver ? .crossover : .builtIn)
-        // Opening on the graphics step skips the transition that builds the store.
-        _graphicsStore = State(initialValue: step == .graphics ? makeGraphics?() : nil)
+    private var provisioner: Provisioner {
+        store.provisioner
     }
 
     var body: some View {
@@ -107,12 +37,7 @@ struct SetupView: View {
         // lights; inside the safe area the footer would be cut off.
         .ignoresSafeArea()
         .onChange(of: wantsTallWindow, initial: true) { _, tall in resizeWindow(tall) }
-        .task {
-            if !provisioner.isDryRun {
-                bundledEngine = EngineInstaller.bundledTarball()
-            }
-            await provisioner.refreshDetection()
-        }
+        .task { await store.detect() }
         .onChange(of: provisioner.activity) { _, activity in
             if activity == .done { onProvisioned() }
         }
@@ -134,25 +59,26 @@ struct SetupView: View {
     }
 
     @ViewBuilder private var page: some View {
-        switch step {
+        @Bindable var store = store
+        switch store.step {
         case .welcome:
             SetupWelcomeStep()
         case .engine:
-            SetupEngineStep(provisioner: provisioner, choice: $engineChoice, bundledEngine: bundledEngine)
+            SetupEngineStep(provisioner: provisioner, choice: $store.engineChoice, bundledEngine: store.bundledEngine)
         case .bottle:
             SetupBottleStep(
-                candidates: bottleCandidates,
-                choice: $bottleChoice,
-                newName: $newBottleName,
-                newNameObjection: newBottleObjection,
-                downloadEverything: $downloadEverything,
+                candidates: store.bottleCandidates,
+                choice: $store.bottleChoice,
+                newName: $store.newBottleName,
+                newNameObjection: store.newBottleObjection,
+                downloadEverything: $store.downloadEverything,
             )
         case .steam:
-            SetupInstallStep(provisioner: provisioner, isAdoptingSteam: adoptsSteam)
+            SetupInstallStep(provisioner: provisioner, isAdoptingSteam: store.adoptsSteam)
         case .graphics:
-            SetupGraphicsStep(download: gptk, store: graphicsStore, isSimulated: provisioner.isDryRun)
+            SetupGraphicsStep(download: store.gptk, store: store.graphicsStore, isSimulated: provisioner.isDryRun)
         case .options:
-            SetupOptionsStep(openAtLogin: $openAtLogin, installsCommand: $connectAgents)
+            SetupOptionsStep(openAtLogin: $store.openAtLogin, installsCommand: $store.connectAgents)
         case .sharing:
             SetupSharingStep()
         case .done:
@@ -171,32 +97,24 @@ struct SetupView: View {
     }
 
     @ViewBuilder private var secondaryActions: some View {
-        switch step {
-        case .engine where engineChoice == .builtIn:
+        switch store.step {
+        case .engine where store.engineChoice == .builtIn:
             Button(provisioner.engineTarball == nil ? "Choose an Engine File…" : "Change the Engine File…") {
                 chooseEngineFile()
             }
         case .engine:
             Link("Get CrossOver", destination: URL(string: "https://www.codeweavers.com/crossover")!)
-            Button("Check Again") {
-                Task { await provisioner.refreshDetection() }
-            }
-        case .steam where hasFailed:
+            Button("Check Again") { store.detectAgain() }
+        case .steam where store.hasFailed:
             if provisioner.engineInstallPending {
                 Button("Use a Downloaded Engine…") {
                     guard chooseEngineFile() else { return }
-                    Task { await provisioner.retry() }
+                    store.retry()
                 }
             }
-            Button("Try Again") {
-                if let unswitchedBottle {
-                    switchBottle(to: unswitchedBottle)
-                } else {
-                    Task { await provisioner.retry() }
-                }
-            }
+            Button("Try Again") { store.tryAgain() }
         case .sharing:
-            Button("Not Now") { answerSharing(false) }
+            Button("Not Now") { store.answerSharing(false) }
         case .done where steamWindow().isHelperDown:
             if let onRepairHelper {
                 Button("Repair Background Helper", action: onRepairHelper)
@@ -212,27 +130,27 @@ struct SetupView: View {
     }
 
     @ViewBuilder private var primaryAction: some View {
-        switch step {
+        switch store.step {
         case .welcome:
-            Button("Get Started") { advanceFromWelcome() }
+            Button("Get Started") { store.advanceFromWelcome() }
         case .engine:
-            Button("Continue") { advanceFromEngine() }
-                .disabled(engineChoice == .crossover && provisioner.detection?.usableCrossOver == nil)
+            Button("Continue") { store.advanceFromEngine() }
+                .disabled(store.engineChoice == .crossover && provisioner.detection?.usableCrossOver == nil)
         case .bottle:
-            Button("Continue") { advanceFromBottle() }
-                .disabled(bottleChoice == nil && newBottleObjection != nil)
+            Button("Continue") { store.advanceFromBottle() }
+                .disabled(store.bottleChoice == nil && store.newBottleObjection != nil)
         case .steam:
-            Button("Continue") { advanceFromSteam() }
+            Button("Continue") { store.advanceFromSteam() }
                 .disabled(provisioner.activity != .done)
         case .graphics:
-            Button(graphicsStore?.d3dMetalVersions.isEmpty == false ? "Continue" : "Skip for Now") {
-                step = .options
+            Button(store.graphicsStore?.d3dMetalVersions.isEmpty == false ? "Continue" : "Skip for Now") {
+                store.advanceFromGraphics()
             }
-            .disabled(gptk.isBusy)
+            .disabled(store.gptk.isBusy)
         case .options:
-            Button("Continue") { advanceFromOptions() }
+            Button("Continue") { store.advanceFromOptions() }
         case .sharing:
-            Button("Share Run Statistics") { answerSharing(true) }
+            Button("Share Run Statistics") { store.answerSharing(true) }
         case .done:
             switch steamWindow() {
             case .signIn:
@@ -246,162 +164,15 @@ struct SetupView: View {
         }
     }
 
-    // MARK: - What the steps ask
-
     private var wantsTallWindow: Bool {
-        step == .graphics && SetupGraphicsStep.hostsSignIn(gptk, isSimulated: provisioner.isDryRun)
-    }
-
-    private var usesManagedEngine: Bool {
-        if case .managed = Engine.active { true } else { false }
+        store.step == .graphics && SetupGraphicsStep.hostsSignIn(store.gptk, isSimulated: provisioner.isDryRun)
     }
 
     @discardableResult
     private func chooseEngineFile() -> Bool {
         guard let tarball = EngineFilePanel.choose() else { return false }
-        provisioner.engineTarball = tarball
+        store.useEngineFile(tarball)
         return true
-    }
-
-    /// The Steam installations already on the machine.
-    private var bottleCandidates: [SetupDetection.Bottle] {
-        provisioner.ownBottles.filter(\.hasSteam)
-    }
-
-    private var needsBottleChoice: Bool {
-        bottleCandidates.count > 1
-            || (bottleCandidates.first.map { $0.name != SteamBottle.defaultName } ?? false)
-    }
-
-    /// Why the typed name cannot be used. An existing bottle directory
-    /// belongs to whatever made it, so its name is refused.
-    private var newBottleObjection: String? {
-        let name = newBottleName.trimmingCharacters(in: .whitespaces)
-        if name.isEmpty { return String(localized: "Give the bottle a name.") }
-        if name.contains("/") || name.contains(":") {
-            return String(localized: "Use a name without / or : in it.")
-        }
-        if provisioner.ownBottles.contains(where: { $0.name == name }) {
-            return String(localized: "A bottle named “\(name)” already exists.")
-        }
-        return nil
-    }
-
-    /// Whether the bottle being set up already carries a Steam install, which
-    /// is checked and updated rather than downloaded.
-    private var isAdoptingSteam: Bool {
-        bottleCandidates.contains { $0.name == SteamBottle.name }
-    }
-
-    private var hasFailed: Bool {
-        if case .failed = provisioner.activity { true } else { false }
-    }
-
-    // MARK: - Moving on
-
-    private func advanceFromWelcome() {
-        guard provisioner.detection?.usableCrossOver != nil else {
-            step = .engine
-            return
-        }
-        advanceFromEngine()
-    }
-
-    private func advanceFromEngine() {
-        // Before anything reads it: the engine stage installs Dormison only
-        // when the stored choice asks for it or no CrossOver is usable.
-        if !provisioner.isDryRun {
-            Engine.chooseAtSetup(managed: engineChoice == .builtIn)
-        }
-        guard needsBottleChoice else {
-            beginProvisioning()
-            return
-        }
-        // Defaults to the stored bottle, or a new one by that name; never another bottle.
-        let stored = SteamBottle.name
-        if bottleCandidates.contains(where: { $0.name == stored }) {
-            bottleChoice = stored
-        } else {
-            bottleChoice = nil
-            newBottleName = stored
-        }
-        step = .bottle
-    }
-
-    private func advanceFromBottle() {
-        let name = bottleChoice ?? newBottleName.trimmingCharacters(in: .whitespaces)
-        EventLog.shared.log(
-            .setup, bottleChoice == nil ? "setup: creating bottle \(name)" : "setup: adopting bottle \(name)",
-        )
-        // Before the stage that reads it: provisioning starts on this press
-        // and installs the catalog it names.
-        if !provisioner.isDryRun {
-            BottleDependencies.installsEverything = downloadEverything
-        }
-        adoptsSteam = bottleCandidates.contains { $0.name == name }
-        switchBottle(to: name)
-    }
-
-    /// The step narrates the stop, which a client in another bottle needs
-    /// before the choice moves.
-    private func switchBottle(to name: String) {
-        step = .steam
-        Task {
-            guard await provisioner.chooseBottle(named: name, stoppingClient: stopClient) else {
-                unswitchedBottle = name
-                return
-            }
-            unswitchedBottle = nil
-            startProvisioning()
-        }
-    }
-
-    private func beginProvisioning() {
-        // Read before the first stage runs: a bottle that gets its Steam from
-        // this run has one by the end of it, and would read as adopted.
-        adoptsSteam = isAdoptingSteam
-        step = .steam
-        startProvisioning()
-    }
-
-    private func startProvisioning() {
-        if provisioner.activity == .idle {
-            Task { await provisioner.provisionAndConfigure() }
-        }
-    }
-
-    /// Offers D3DMetal for the managed engine on Apple silicon; CrossOver and
-    /// Intel Macs go straight to preferences.
-    private func advanceFromSteam() {
-        guard usesManagedEngine, MacHardware.isAppleSilicon, makeGraphics != nil || !provisioner.isDryRun else {
-            step = .options
-            return
-        }
-        if graphicsStore == nil {
-            graphicsStore = makeGraphics?() ?? GraphicsStore()
-        }
-        step = .graphics
-    }
-
-    private func advanceFromOptions() {
-        provisioner.setOpenAtLogin(openAtLogin)
-        if connectAgents, !provisioner.isDryRun {
-            Task {
-                if let failure = await AgentIntegration.install() {
-                    EventLog.shared.log(.app, "sevo CLI install: \(failure)")
-                }
-            }
-        }
-        step = Preferences.sharesRunStats == nil ? .sharing : .done
-    }
-
-    /// Asked once: an answer from an earlier setup stands.
-    private func answerSharing(_ shares: Bool) {
-        if !provisioner.isDryRun {
-            Preferences.sharesRunStats = shares
-            EventLog.shared.log(.app, shares ? "run statistics: sharing" : "run statistics: not sharing")
-        }
-        step = .done
     }
 }
 

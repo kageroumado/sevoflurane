@@ -110,7 +110,7 @@ private struct StatusChip: View {
 
     private var tooltip: String {
         var lines = ["\(supervisor.statusText) · \(host.status)"]
-        if let event = EventLog.shared.latest {
+        if let event = supervisor.latestEvent {
             let time = event.date.formatted(date: .omitted, time: .shortened)
             lines.append(String(localized: "last event \(time) · \(event.message)"))
         }

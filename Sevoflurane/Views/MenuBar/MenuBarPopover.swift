@@ -235,7 +235,7 @@ final class MenuBarPopover: NSObject, NSWindowDelegate {
         let content = NSHostingView(
             rootView: MenuBarView(
                 host: host, supervisor: supervisor, notifications: notifications,
-                quickLaunch: quickLaunch, graphics: graphics, setup: setup,
+                quickLaunch: quickLaunch, graphics: graphics, questions: ConsentQuestions.current(), setup: setup,
                 presentation: presentation,
             ),
         )

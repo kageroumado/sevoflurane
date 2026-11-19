@@ -31,6 +31,19 @@ final class SettingsNavigation {
         highlighted = nil
     }
 
+    /// Logs the pane the window shows.
+    func noteCategoryShown() {
+        EventLog.shared.log(.window, "settings: showing \(category.title)")
+    }
+
+    /// Logs the sidebar search starting or clearing.
+    func noteSearchChanged() {
+        EventLog.shared.log(
+            .window,
+            searchText.isEmpty ? "settings: sidebar search cleared" : "settings: sidebar search active",
+        )
+    }
+
     /// Settings › Diagnostics with the steps for a useful report lit.
     func showReportGuide() {
         category = .diagnostics

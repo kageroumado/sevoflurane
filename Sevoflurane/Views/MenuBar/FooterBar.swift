@@ -15,12 +15,6 @@ struct FooterBar: View {
     /// The ✕: asks first (``QuitConfirmation``), because quitting takes Steam
     /// and a running game down.
     var onQuit: () -> Void = { NSApplication.shared.terminate(nil) }
-    @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
-    @AppStorage(StreamerMode.isOnKey, store: Preferences.shared) private var streamerMode = false
-
-    private static var versionString: String {
-        AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "0.0")
-    }
 
     var body: some View {
         // One `GlassEffectContainer` over the whole bar, so the chips and glyph buttons
@@ -84,57 +78,7 @@ struct FooterBar: View {
             .accessibilityHidden(true)
             .overlay {
                 Menu {
-                    Button("Reload Steam UI", systemImage: "arrow.clockwise") { host.reloadAskedByUser() }
-                    Button("Restart Steam Client", systemImage: "arrow.triangle.2.circlepath") {
-                        supervisor.restartNow()
-                    }
-                    // Steam restarts leave the Windows session booted; this
-                    // reboots it too.
-                    Button("Restart Windows", systemImage: "power.circle") {
-                        supervisor.restartWindowsNow()
-                    }
-                    Divider()
-                    // The force rungs, for when a graceful restart is what is
-                    // stuck.
-                    Button("Force-Quit Steam", systemImage: "xmark.octagon", role: .destructive) {
-                        supervisor.forceQuit(.steam)
-                    }
-                    Button(
-                        "Force-Quit Everything", systemImage: "exclamationmark.octagon",
-                        role: .destructive,
-                    ) {
-                        supervisor.forceQuit(.everything)
-                    }
-                    Divider()
-                    Button("Open Event Log", systemImage: "doc.text") {
-                        NSWorkspace.shared.open(EventLog.fileURL)
-                    }
-                    debugModeItem
-                    Toggle(isOn: Binding(
-                        get: { streamerMode },
-                        set: { isOn in
-                            StreamerMode.isOn = isOn
-                            host.applyStreamerMode()
-                        },
-                    )) {
-                        Label("Streamer Mode", systemImage: "eye.slash")
-                    }
-                    .help("Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming.")
-                    Divider()
-                    Toggle(isOn: Binding(
-                        get: { autoUpdate },
-                        set: { isOn in
-                            autoUpdate = isOn
-                            SilentUpdates.shared.setAutoInstall(isOn)
-                        },
-                    )) {
-                        Label("Auto Update", systemImage: "arrow.down.circle")
-                    }
-                    .help("Install updates automatically while no game runs")
-                    Button("Check for Updates…", systemImage: "arrow.clockwise") {
-                        SilentUpdates.shared.checkOrInstallFromMenu()
-                    }
-                    Text("Version \(Self.versionString)")
+                    FooterActionItems(host: host, supervisor: supervisor)
                 } label: {
                     Color.clear.contentShape(.rect)
                 }
@@ -143,6 +87,75 @@ struct FooterBar: View {
                 .accessibilityLabel("More actions")
             }
             .help("Reload, restart, the event log, and updates")
+    }
+}
+
+// MARK: - Actions menu
+
+/// The items of the footer's actions menu: the client's restart and force
+/// rungs, the logs, Streamer Mode, and updates.
+private struct FooterActionItems: View {
+    let host: SteamWebHost
+    let supervisor: ClientSupervisor
+    @AppStorage("autoUpdate", store: Preferences.app) private var autoUpdate = true
+    @AppStorage(StreamerMode.isOnKey, store: Preferences.shared) private var streamerMode = false
+
+    private static var versionString: String {
+        AppVersion.displayed(from: Bundle.main.infoDictionary, fallback: "0.0")
+    }
+
+    var body: some View {
+        Button("Reload Steam UI", systemImage: "arrow.clockwise") { host.reloadAskedByUser() }
+        Button("Restart Steam Client", systemImage: "arrow.triangle.2.circlepath") {
+            supervisor.restartNow()
+        }
+        // Steam restarts leave the Windows session booted; this
+        // reboots it too.
+        Button("Restart Windows", systemImage: "power.circle") {
+            supervisor.restartWindowsNow()
+        }
+        Divider()
+        // The force rungs, for when a graceful restart is what is
+        // stuck.
+        Button("Force-Quit Steam", systemImage: "xmark.octagon", role: .destructive) {
+            supervisor.forceQuit(.steam)
+        }
+        Button(
+            "Force-Quit Everything", systemImage: "exclamationmark.octagon",
+            role: .destructive,
+        ) {
+            supervisor.forceQuit(.everything)
+        }
+        Divider()
+        Button("Open Event Log", systemImage: "doc.text") {
+            NSApp.sendAction(#selector(AppDelegate.showEventLog(_:)), to: nil, from: nil)
+        }
+        debugModeItem
+        Toggle(isOn: Binding(
+            get: { streamerMode },
+            set: { isOn in
+                StreamerMode.isOn = isOn
+                host.applyStreamerMode()
+            },
+        )) {
+            Label("Streamer Mode", systemImage: "eye.slash")
+        }
+        .help("Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming.")
+        Divider()
+        Toggle(isOn: Binding(
+            get: { autoUpdate },
+            set: { isOn in
+                autoUpdate = isOn
+                SilentUpdates.shared.setAutoInstall(isOn)
+            },
+        )) {
+            Label("Auto Update", systemImage: "arrow.down.circle")
+        }
+        .help("Install updates automatically while no game runs")
+        Button("Check for Updates…", systemImage: "arrow.clockwise") {
+            SilentUpdates.shared.checkOrInstallFromMenu()
+        }
+        Text("Version \(Self.versionString)")
     }
 
     /// The playtest switch, and, while a client is up, the restart that carries it to the

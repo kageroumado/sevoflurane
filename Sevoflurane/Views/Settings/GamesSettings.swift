@@ -17,6 +17,8 @@ struct GamesSettings: View {
     var requestedGame: Binding<SettingsNavigation.GameRequest?> = .constant(nil)
     /// What the fix table says about the selected game.
     @State private var recommendation = KnownFixes.Recommendation(fixes: [])
+    /// The selected game's settings, made when the selection changes.
+    @State private var form: SettingsStore?
 
     struct Entry: Identifiable, Equatable {
         let id: Int
@@ -26,12 +28,13 @@ struct GamesSettings: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            GameList(games: games, selected: $selected)
+            GameList(games: games, selected: Binding(get: { selected }, set: { select($0) }))
             Divider()
-            if let selected, let entry = games.first(where: { $0.id == selected }) {
+            if let selected, let entry = games.first(where: { $0.id == selected }),
+               let form, form.scope.game == entry.id {
                 GameForm(
-                    gameID: entry.id, name: entry.name, shaders: shaders, highlighted: highlighted,
-                    recommendation: recommendation,
+                    gameID: entry.id, name: entry.name, store: form, shaders: shaders,
+                    highlighted: highlighted, recommendation: recommendation,
                 )
                 // A store belongs to one game, so another game is another form.
                 .id(entry.id)
@@ -44,9 +47,6 @@ struct GamesSettings: View {
             takeRequest()
         }
         .onChange(of: requestedGame.wrappedValue) { takeRequest() }
-        .onChange(of: selected) { _, id in
-            select(id)
-        }
     }
 
     /// Selects the requested game. One never launched has no file and joins the
@@ -58,13 +58,23 @@ struct GamesSettings: View {
             games.append(Entry(id: request.id, name: request.name, exes: []))
             games.sort(by: Self.byName)
         }
-        selected = request.id
+        select(request.id)
     }
 
+    /// Selects a game and reads what its form shows; the same game again
+    /// keeps the form it has.
     private func select(_ id: Int?) {
+        selected = id
         recommendation = id.map {
             KnownFixes.recommended(for: $0, exes: GameConfig.game($0).exes ?? [])
         } ?? KnownFixes.Recommendation(fixes: [])
+        guard let id else {
+            form = nil
+            return
+        }
+        if form?.scope.game != id {
+            form = SettingsStore(scope: .game(id, bottle: SteamBottle.name))
+        }
     }
 
     /// By name, then id, so unnamed games keep a stable order.
@@ -81,11 +91,9 @@ struct GamesSettings: View {
                 Entry(id: id, name: values.name ?? "App \(id)", exes: values.exes ?? [])
             }
             .sorted(by: Self.byName)
-        if let selected, !games.contains(where: { $0.id == selected }) {
-            self.selected = nil
-        }
-        if selectsFirstGame, selected == nil { selected = games.first?.id }
-        select(selected)
+        var choice = selected.flatMap { id in games.contains { $0.id == id } ? id : nil }
+        if selectsFirstGame, choice == nil { choice = games.first?.id }
+        select(choice)
     }
 }
 
@@ -157,38 +165,22 @@ private struct GamesPlaceholder: View {
 private struct GameForm: View {
     let gameID: Int
     let name: String
+    let store: SettingsStore
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
     let recommendation: KnownFixes.Recommendation
-    @State private var store: SettingsStore
-    /// What the fix list set on this game at its first launch.
-    @State private var appliedFixes: AppliedFixes?
-
-    init(
-        gameID: Int, name: String, shaders: ShaderStore, highlighted: SettingsAnchor?,
-        recommendation: KnownFixes.Recommendation,
-    ) {
-        self.gameID = gameID
-        self.name = name
-        self.shaders = shaders
-        self.highlighted = highlighted
-        self.recommendation = recommendation
-        _store = State(initialValue: SettingsStore(scope: .game(gameID, bottle: SteamBottle.name)))
-        _appliedFixes = State(initialValue: FixLedger.record(for: gameID))
-    }
 
     var body: some View {
         Form {
             SettingSections(
                 store: store, shaders: shaders, highlighted: highlighted,
                 heading: name, recommendation: recommendation,
-                appliedFixes: appliedFixes, undoFix: { undoFixes([$0]) },
             )
             GameDLLOverridesSection(store: store)
             EnvironmentSection(store: store)
-            if let appliedFixes, !appliedFixes.keys(in: store.values).isEmpty {
+            if let appliedFixes = store.appliedFixes, !appliedFixes.keys(in: store.values).isEmpty {
                 FixListSection(fixes: appliedFixes, settings: appliedFixes.keys(in: store.values)) {
-                    undoFixes(nil)
+                    store.undoFixes(nil)
                 }
             }
             if let program = AdoptedPrograms.program(gameID) {
@@ -203,13 +195,6 @@ private struct GameForm: View {
         }
         .formStyle(.grouped)
         .highlightable(.gamesSettings, highlighted: highlighted)
-    }
-
-    /// Puts `keys` (all when `nil`) back as they were before the fix list, as
-    /// the notification's Undo does.
-    private func undoFixes(_ keys: Set<String>?) {
-        appliedFixes = FixLedger.undo(appID: gameID, keys: keys, inBackground: true)
-        store.reload()
     }
 }
 

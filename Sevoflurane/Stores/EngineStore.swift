@@ -43,6 +43,10 @@ final class EngineStore {
     /// last provisioning pass's.
     private(set) var standingFailure: String?
 
+    /// The active bottle's level of the settings hierarchy: every game's
+    /// defaults. Made again when the active bottle changes.
+    private(set) var bottleDefaults: SettingsStore
+
     private let provisioner: Provisioner
     private weak var supervisor: ClientSupervisor?
     private let environment: any EngineEnvironment
@@ -52,9 +56,17 @@ final class EngineStore {
         supervisor: ClientSupervisor?,
         environment: (any EngineEnvironment)? = nil,
     ) {
+        let environment = environment ?? LiveEngineEnvironment()
         self.provisioner = provisioner
         self.supervisor = supervisor
-        self.environment = environment ?? LiveEngineEnvironment()
+        self.environment = environment
+        bottleDefaults = SettingsStore(scope: .bottle(environment.activeBottle))
+    }
+
+    /// Points ``bottleDefaults`` at the active bottle.
+    private func followActiveBottle() {
+        guard bottleDefaults.scope.bottle != activeBottle else { return }
+        bottleDefaults = SettingsStore(scope: .bottle(activeBottle))
     }
 
     var activeEngine: Engine { environment.activeEngine }
@@ -150,6 +162,7 @@ final class EngineStore {
     }
 
     func refresh() async {
+        followActiveBottle()
         await provisioner.refreshDetection()
         rebuildOptions()
         if !isSwitching {
@@ -280,6 +293,7 @@ final class EngineStore {
             switchPhase = InterfaceCopy.localized("Stopping Steam…")
             await environment.stopClient(supervisor: supervisor)
             environment.choose(engine: engine, bottle: bottle)
+            followActiveBottle()
             EventLog.enqueue(.app, "switched to \(engine), bottle \(bottle)")
             switchPhase = InterfaceCopy.localized("Checking the new environment…")
             await provisioner.refreshDetection()

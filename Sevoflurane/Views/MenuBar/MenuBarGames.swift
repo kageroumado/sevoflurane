@@ -258,27 +258,7 @@ private struct GameRow: View {
             launch()
             withAnimation(.easeInOut(duration: 0.15)) { isLaunching = true }
         } label: {
-            HStack(spacing: Theme.Space.md) {
-                capsuleArt
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: game.name)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                    if let status {
-                        status.line
-                            .font(.system(size: 10))
-                            .foregroundStyle(status.isWarning ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
-                            .lineLimit(1)
-                            .transition(.opacity)
-                    }
-                }
-                Spacer(minLength: Theme.Space.sm)
-                trailing
-            }
-            // No horizontal inset: the art, the Open Steam button and the
-            // footer chips share the popover's padding as one edge.
-            .padding(.vertical, Theme.Space.xs)
-            .contentShape(Theme.innerShape)
+            label
         }
         .buttonStyle(PressableStyle())
         .accessibilityLabel(Text(verbatim: game.name))
@@ -297,34 +277,64 @@ private struct GameRow: View {
             withAnimation(.easeInOut(duration: 0.3)) { isLaunching = false }
         }
         .modifier(DockDrag(bundle: dockBundle))
-        .contextMenu {
-            // One-shot: the launch path restages the tree (or restarts, if the
-            // engine or sync must change) before the game starts.
-            Menu("Run with…") {
-                ForEach(renderers, id: \.self) { renderer in
-                    Button(renderer.label) { runWith(renderer) }
+        .contextMenu { menuItems }
+    }
+
+    /// The capsule art, the name over its status line, and the trailing
+    /// control.
+    private var label: some View {
+        HStack(spacing: Theme.Space.md) {
+            capsuleArt
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: game.name)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                if let status {
+                    status.line
+                        .font(.system(size: 10))
+                        .foregroundStyle(status.isWarning ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                        .lineLimit(1)
+                        .transition(.opacity)
                 }
             }
-            Divider()
-            // The pin stays listed when no longer offered, so the menu shows
-            // what the game is set to.
-            Picker("Always run with", selection: pinBinding) {
-                Text("Bottle default").tag(Renderer?.none)
-                ForEach(GraphicsStore.pinChoices(renderers, pinned: pinned), id: \.self) { renderer in
-                    Text(renderer.label).tag(Renderer?.some(renderer))
-                }
-            }
-            if macBuild != nil {
-                Picker("Play", selection: buildBinding) {
-                    ForEach(GameBuild.allCases, id: \.self) { build in
-                        Text(build.label).tag(build)
-                    }
-                }
-            }
-            Divider()
-            KeepInDockItem(bundle: dockBundle)
-            GameSettingsItem(id: game.id, name: game.name)
+            Spacer(minLength: Theme.Space.sm)
+            trailing
         }
+        // No horizontal inset: the art, the Open Steam button and the
+        // footer chips share the popover's padding as one edge.
+        .padding(.vertical, Theme.Space.xs)
+        .contentShape(Theme.innerShape)
+    }
+
+    /// The row's context menu: a one-off renderer, the pin, the build, the
+    /// Dock and the game's settings.
+    @ViewBuilder private var menuItems: some View {
+        // One-shot: the launch path restages the tree (or restarts, if the
+        // engine or sync must change) before the game starts.
+        Menu("Run with…") {
+            ForEach(renderers, id: \.self) { renderer in
+                Button(renderer.label) { runWith(renderer) }
+            }
+        }
+        Divider()
+        // The pin stays listed when no longer offered, so the menu shows
+        // what the game is set to.
+        Picker("Always run with", selection: pinBinding) {
+            Text("Bottle default").tag(Renderer?.none)
+            ForEach(GraphicsStore.pinChoices(renderers, pinned: pinned), id: \.self) { renderer in
+                Text(renderer.label).tag(Renderer?.some(renderer))
+            }
+        }
+        if macBuild != nil {
+            Picker("Play", selection: buildBinding) {
+                ForEach(GameBuild.allCases, id: \.self) { build in
+                    Text(build.label).tag(build)
+                }
+            }
+        }
+        Divider()
+        KeepInDockItem(bundle: dockBundle)
+        GameSettingsItem(id: game.id, name: game.name)
     }
 
     /// The line under the name: what the client is doing with the game, or what
@@ -527,26 +537,30 @@ private struct ProgramRow: View {
         }
         .modifier(DockDrag(bundle: dockBundle))
         .task(id: "\(entry.id) \(entry.name)") { dockBundle = await Self.readDockBundle(entry.id) }
-        .contextMenu {
-            Menu("Run with…") {
-                ForEach(renderers, id: \.self) { renderer in
-                    Button(renderer.label) { quickLaunch.launch(entry, renderer: renderer) }
-                }
+        .contextMenu { menuItems }
+    }
+
+    /// The program's context menu: a one-off renderer, the Dock, Steam's
+    /// library, and the entry's own management.
+    @ViewBuilder private var menuItems: some View {
+        Menu("Run with…") {
+            ForEach(renderers, id: \.self) { renderer in
+                Button(renderer.label) { quickLaunch.launch(entry, renderer: renderer) }
             }
-            Divider()
-            KeepInDockItem(bundle: dockBundle)
-            if SteamLibraryShortcuts.canList(entry.program) {
-                Toggle("Show in Steam's Library", isOn: Binding(
-                    get: { entry.program.inSteamLibrary == true },
-                    set: { quickLaunch.setInSteamLibrary($0, for: entry) },
-                ))
-            }
-            Button("Rename…") { draftName = entry.name }
-            Button("Show in Finder") { quickLaunch.showInFinder(entry) }
-            Button("Remove") { quickLaunch.remove(entry) }
-            Divider()
-            GameSettingsItem(id: entry.id, name: entry.name)
         }
+        Divider()
+        KeepInDockItem(bundle: dockBundle)
+        if SteamLibraryShortcuts.canList(entry.program) {
+            Toggle("Show in Steam's Library", isOn: Binding(
+                get: { entry.program.inSteamLibrary == true },
+                set: { quickLaunch.setInSteamLibrary($0, for: entry) },
+            ))
+        }
+        Button("Rename…") { draftName = entry.name }
+        Button("Show in Finder") { quickLaunch.showInFinder(entry) }
+        Button("Remove") { quickLaunch.remove(entry) }
+        Divider()
+        GameSettingsItem(id: entry.id, name: entry.name)
     }
 
     @concurrent

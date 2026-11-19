@@ -73,4 +73,108 @@ struct GraphicsStoreTests {
         #expect(GraphicsStore.pinChoices(offered, pinned: .dxvk) == offered)
         #expect(GraphicsStore.pinChoices(offered, pinned: nil) == offered)
     }
+
+    @Test
+    func `a renderer change that fails to reach the bottle puts the picker back`() {
+        let environment = RefusingGraphicsEnvironment()
+        let store = GraphicsStore(environment: environment)
+        let before = store.selection
+        var wanted = before
+        wanted.renderer = before.renderer == .dxvk ? .dxmt : .dxvk
+
+        store.update(wanted)
+
+        #expect(store.selection == before)
+        #expect(store.selection == environment.currentSelection())
+    }
+
+    @Test
+    func `a D3DMetal choice that fails puts back the version in force`() {
+        let store = GraphicsStore(environment: RefusingGraphicsEnvironment())
+        let before = store.activeD3DMetal
+        store.chooseD3DMetal(version: before == "3.0" ? "4.0 beta 2" : "3.0")
+        #expect(store.activeD3DMetal == before)
+    }
+}
+
+/// The simulated built-in engine with a toolkit, except that the bottle
+/// refuses every graphics write.
+@MainActor
+private final class RefusingGraphicsEnvironment: GraphicsEnvironment {
+    private let base = DemoGraphicsEnvironment(scenario: .builtInWithToolkit, stepDelay: .zero)
+    private struct Refused: Error {}
+
+    var isSimulation: Bool {
+        true
+    }
+
+    var engineHasOwnD3DMetal: Bool {
+        base.engineHasOwnD3DMetal
+    }
+
+    var engineName: String {
+        base.engineName
+    }
+
+    func hostedRenderers() -> [Renderer] {
+        base.hostedRenderers()
+    }
+
+    func currentSelection() -> BottleGraphics.Selection {
+        base.currentSelection()
+    }
+
+    func apply(_: BottleGraphics.Selection) throws {
+        throw Refused()
+    }
+
+    func installedToolkits() -> [D3DMetalInstaller.Installed] {
+        base.installedToolkits()
+    }
+
+    func activeToolkit() -> D3DMetalInstaller.Installed? {
+        base.activeToolkit()
+    }
+
+    func chooseToolkit(version _: String?) throws {
+        throw Refused()
+    }
+
+    func removeToolkit(_: D3DMetalInstaller.Installed) throws {
+        throw Refused()
+    }
+
+    func installToolkit(from source: URL, origin: D3DMetalInstaller.Origin) async throws -> D3DMetalInstaller.Installed {
+        try await base.installToolkit(from: source, origin: origin)
+    }
+
+    func installedRendererVersions(_ component: RendererVersions.Component) -> [RendererVersions.Installed] {
+        base.installedRendererVersions(component)
+    }
+
+    func chosenRendererVersion(_ component: RendererVersions.Component) -> String? {
+        base.chosenRendererVersion(component)
+    }
+
+    func defaultRendererVersion(_ component: RendererVersions.Component) -> String? {
+        base.defaultRendererVersion(component)
+    }
+
+    func chooseRendererVersion(_ component: RendererVersions.Component, version: String?) {
+        base.chooseRendererVersion(component, version: version)
+    }
+
+    func installRendererVersion(
+        _ component: RendererVersions.Component, from source: URL, version: String?, sha256: String?,
+    ) async throws -> RendererVersions.Installed {
+        try await base.installRendererVersion(component, from: source, version: version, sha256: sha256)
+    }
+
+    func removeRendererVersion(_ installed: RendererVersions.Installed) throws {
+        try base.removeRendererVersion(installed)
+    }
+
+    func rendererReleases(_ component: RendererVersions.Component) async -> [RendererVersions.Release] {
+        await base.rendererReleases(component)
+    }
 }

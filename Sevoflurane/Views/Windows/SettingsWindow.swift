@@ -83,24 +83,6 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let steam = host.map { host in
-            SteamActions(
-                openSteamSettings: { [weak host] in
-                    // Steam's settings open over the client's UI, so it comes up first.
-                    host?.showSteam()
-                    host?.executeSteamURL(URL(string: "steam://open/settings")!)
-                },
-                uninstall: { [weak host] appID in
-                    host?.showSteam()
-                    host?.executeSteamURL(URL(string: "steam://uninstall/\(appID)")!)
-                },
-                restartClient: { [weak supervisor] in supervisor?.restartNow() },
-                cancelStuckMenus: { [weak host] in host?.menuMirror?.cancelTracking() ?? [] },
-                applyCompatibilityStrip: { [weak host] in host?.applyCompatibilityStrip() },
-                applyUserStyles: { [weak host] in host?.applyUserStyles() },
-                applyStreamerMode: { [weak host] in host?.applyStreamerMode() },
-            )
-        }
         let controller = NSHostingController(
             rootView: SettingsView(
                 provisioner: provisioner,
@@ -109,7 +91,8 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
                 engine: engineStore,
                 shaders: makeShaders(),
                 compatibility: compatibilityStore,
-                steam: steam,
+                diagnostics: DiagnosticsStore(),
+                steam: steamActions(),
                 supervisor: supervisor,
                 showReports: showReports,
                 navigation: navigation,
@@ -149,6 +132,28 @@ final class SettingsWindow: NSObject, NSToolbarDelegate {
             }
         }
         return window
+    }
+
+    /// What the panes can ask of the running client; `nil` without one.
+    private func steamActions() -> SteamActions? {
+        host.map { host in
+            SteamActions(
+                openSteamSettings: { [weak host] in
+                    // Steam's settings open over the client's UI, so it comes up first.
+                    host?.showSteam()
+                    host?.executeSteamURL(URL(string: "steam://open/settings")!)
+                },
+                uninstall: { [weak host] appID in
+                    host?.showSteam()
+                    host?.executeSteamURL(URL(string: "steam://uninstall/\(appID)")!)
+                },
+                restartClient: { [weak supervisor] in supervisor?.restartNow() },
+                cancelStuckMenus: { [weak host] in host?.menuMirror?.cancelTracking() ?? [] },
+                applyCompatibilityStrip: { [weak host] in host?.applyCompatibilityStrip() },
+                applyUserStyles: { [weak host] in host?.applyUserStyles() },
+                applyStreamerMode: { [weak host] in host?.applyStreamerMode() },
+            )
+        }
     }
 
     /// Titles the window by its pane: an AppKit window takes no title from

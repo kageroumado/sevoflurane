@@ -6,13 +6,10 @@ import SwiftUI
 /// disk limits. The level reaches games at their next launch through the
 /// bottle's env files; level two takes itself off after one game.
 struct DiagnosticsSettings: View {
+    let store: DiagnosticsStore
     let highlighted: SettingsAnchor?
     /// Opens the report window; absent in the gallery.
     var showReports: (() -> Void)?
-
-    @State private var level = DiagnosticLevel.current
-    @State private var reportCount = 0
-    @State private var reportBytes = 0
 
     var body: some View {
         Form {
@@ -22,7 +19,11 @@ struct DiagnosticsSettings: View {
             capsSection
         }
         .formStyle(.grouped)
-        .task { refresh() }
+        .task { store.refresh() }
+    }
+
+    private var level: DiagnosticLevel {
+        store.level
     }
 
     // MARK: - The level
@@ -50,18 +51,12 @@ struct DiagnosticsSettings: View {
         } header: {
             Text("Recording")
         } footer: {
-            Text("A level reaches each game the next time it is launched. Debug mode restarts Steam, and ends when Sevoflurane quits.")
+            Text("A level reaches each game the next time it is launched. Debug mode reaches Steam when Steam restarts, and ends when Sevoflurane quits.")
         }
     }
 
     private var levelBinding: Binding<DiagnosticLevel> {
-        Binding(
-            get: { level },
-            set: { wanted in
-                level = DiagnosticLevel.set(wanted)
-                EventLog.shared.log(.app, "diagnostics \(level.summary)")
-            },
-        )
+        Binding(get: { store.level }, set: { store.setLevel($0) })
     }
 
     // MARK: - The guide
@@ -110,7 +105,7 @@ struct DiagnosticsSettings: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
-                Button("Show in Finder") { reveal() }
+                Button("Show in Finder") { store.revealReports() }
                 if let showReports {
                     Button("Open…") { showReports() }
                 }
@@ -126,9 +121,11 @@ struct DiagnosticsSettings: View {
     }
 
     private var reportsDetail: String {
-        guard reportCount > 0 else { return String(localized: "Every game you run gets one. Nothing collected yet.") }
-        let size = Int64(reportBytes).formatted(.byteCount(style: .file))
-        return String(localized: "\(reportCount) reports, \(size).")
+        guard store.reportCount > 0 else {
+            return String(localized: "Every game you run gets one. Nothing collected yet.")
+        }
+        let size = Int64(store.reportBytes).formatted(.byteCount(style: .file))
+        return String(localized: "\(store.reportCount) reports, \(size).")
     }
 
     // MARK: - The caps
@@ -155,21 +152,6 @@ struct DiagnosticsSettings: View {
         ("Collected reports", "200 MB"),
         ("Compressed reports", "500 MB"),
     ]
-
-    // MARK: - Actions
-
-    private func refresh() {
-        level = DiagnosticLevel.current
-        let reports = CrashCollector.reports()
-        reportCount = reports.count
-        reportBytes = reports.reduce(0) { $0 + $1.bytes }
-    }
-
-    private func reveal() {
-        let root = CrashCollector.root
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([root])
-    }
 }
 
 /// Debug mode beside the level it overrides: everything on, for one session.

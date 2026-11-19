@@ -14,25 +14,13 @@ struct GraphicsSettings: View {
     let shaders: ShaderStore
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
-    @State private var d3dMetalError: String?
-    @State private var isAddingD3DMetal = false
-    @State private var confirmingD3DMetalRemoval = false
-    @State private var showingGPTkDownload = false
-    @State private var gptk = GPTkDownload()
 
     private var graphics: Binding<BottleGraphics.Selection> {
         Binding(get: { store.selection }, set: { store.update($0) })
     }
 
-    /// The renderer the running Steam booted on, while it differs from the
-    /// chosen one.
-    private var bootedRenderer: Renderer? {
-        guard let booted = BottleGraphics.bootedSelection()?.renderer,
-              booted != store.selection.renderer else { return nil }
-        return booted
-    }
-
     var body: some View {
+        let bootedRenderer = store.bootedRenderer
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
@@ -96,13 +84,13 @@ struct GraphicsSettings: View {
     private var rendererVersionsSection: some View {
         Section {
             if !store.canHostD3DMetal {
-                dx12HostNotice
+                DX12HostNotice(macRunsD3DMetal: store.macRunsD3DMetal)
             }
-            d3dMetalRow
+            D3DMetalRow(store: store)
             ForEach(RendererVersions.Component.allCases) { component in
                 RendererVersionRow(store: store, component: component)
             }
-            if BottleGraphics.rendererVersionsChangedSinceBoot() {
+            if store.rendererVersionsChangedSinceBoot {
                 // The renderer picker above says this for a renderer change;
                 // a version change is the same restage.
                 HStack {
@@ -121,19 +109,55 @@ struct GraphicsSettings: View {
         } footer: {
             Text("A change applies the same way. Reset restores the engine's own version.")
         }
-        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
+}
 
-    /// The D3DMetal row, shaped like the two below: the picker, then a menu for
-    /// Apple's download, a disk image, and removal. An empty tag is CrossOver's
-    /// own copy or the placeholder. Never make the selection `String?`: that
-    /// crashes the compiler's IRGen.
-    private var d3dMetalRow: some View {
+/// Shown when no installed engine declares D3DMetal. Apple's toolkit calls
+/// pthread from PE code, so it needs a Wine that keeps GS on the thread's own
+/// data (CrossOver, and Dormison, whose GS base lives in the thread's TSD), and
+/// it runs only on Apple silicon. Added toolkits are kept.
+private struct DX12HostNotice: View {
+    let macRunsD3DMetal: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if macRunsD3DMetal {
+                Text("Update the engine for DirectX 12")
+                    .font(.callout.weight(.medium))
+                Text("In Engine settings, choose an engine that includes D3DMetal. Downloaded toolkits stay installed.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("DirectX 12 needs Apple silicon")
+                    .font(.callout.weight(.medium))
+                Text("D3DMetal runs only on Macs with Apple silicon.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// The D3DMetal row, shaped like the two below: the picker, then a menu for
+/// Apple's download, a disk image, and removal. An empty tag is CrossOver's
+/// own copy or the placeholder. Never make the selection `String?`: that
+/// crashes the compiler's IRGen.
+private struct D3DMetalRow: View {
+    let store: GraphicsStore
+    @State private var d3dMetalError: String?
+    @State private var isAddingD3DMetal = false
+    @State private var confirmingD3DMetalRemoval = false
+    @State private var showingGPTkDownload = false
+    @State private var gptk = GPTkDownload()
+
+    var body: some View {
         let selection = Binding<String>(
             get: { store.activeD3DMetal ?? "" },
             set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
         )
-        return VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Picker("D3DMetal", selection: selection) {
                     if store.engineHasOwnD3DMetal {
@@ -146,37 +170,7 @@ struct GraphicsSettings: View {
                     }
                 }
                 .disabled(isAddingD3DMetal || (store.d3dMetalVersions.isEmpty && !store.engineHasOwnD3DMetal))
-                Menu {
-                    Button("Get It from Apple…") { showingGPTkDownload = true }
-                    Button("Add from a Disk Image…") { addD3DMetal() }
-                    if let removable = removableD3DMetal {
-                        Divider()
-                        Button("Remove \(removable)…", role: .destructive) {
-                            confirmingD3DMetalRemoval = true
-                        }
-                    }
-                } label: {
-                    Label("More actions", systemImage: "ellipsis.circle")
-                        .labelStyle(.iconOnly)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("More actions")
-                .disabled(isAddingD3DMetal)
-                .confirmationDialog(
-                    "Remove D3DMetal \(removableD3DMetal ?? "")?",
-                    isPresented: $confirmingD3DMetalRemoval,
-                    titleVisibility: .visible,
-                ) {
-                    Button("Move to Trash", role: .destructive) {
-                        if let removable = removableD3DMetal {
-                            store.removeD3DMetal(version: removable)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("D3DMetal uses the newest installed version. Removing the last version disables DirectX 12 in Dormison.")
-                }
+                actionsMenu
             }
             if isAddingD3DMetal {
                 HStack(spacing: 8) {
@@ -199,20 +193,41 @@ struct GraphicsSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
     }
 
-    /// Shown when no installed engine declares D3DMetal. Apple's toolkit calls
-    /// pthread from PE code, so it needs a Wine that keeps GS on the thread's
-    /// own data (CrossOver, and Dormison, whose GS base lives in the thread's
-    /// TSD). Added toolkits are kept.
-    private var dx12HostNotice: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Update the engine for DirectX 12")
-                .font(.callout.weight(.medium))
-            Text("In Engine settings, choose an engine that includes D3DMetal. Downloaded toolkits stay installed.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// Apple's download, a disk image, and removal of the chosen version.
+    private var actionsMenu: some View {
+        Menu {
+            Button("Get It from Apple…") { showingGPTkDownload = true }
+            Button("Add from a Disk Image…") { addD3DMetal() }
+            if let removable = removableD3DMetal {
+                Divider()
+                Button("Remove \(removable)…", role: .destructive) {
+                    confirmingD3DMetalRemoval = true
+                }
+            }
+        } label: {
+            Label("More actions", systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("More actions")
+        .disabled(isAddingD3DMetal)
+        .confirmationDialog(
+            "Remove D3DMetal \(removableD3DMetal ?? "")?",
+            isPresented: $confirmingD3DMetalRemoval,
+            titleVisibility: .visible,
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let removable = removableD3DMetal {
+                    store.removeD3DMetal(version: removable)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("D3DMetal uses the newest installed version. Removing the last version disables DirectX 12 in Dormison.")
         }
     }
 
@@ -434,46 +449,7 @@ private struct RendererVersionRow: View {
                     }
                 }
                 .disabled(state.busy != nil)
-                Menu {
-                    Section("Download") {
-                        if state.downloadable.isEmpty {
-                            Text(state.releasesLoaded ? "No newer versions available" : "Looking…")
-                        }
-                        ForEach(state.downloadable) { release in
-                            Button(release.tested ? "\(release.version) · tested" : "\(release.version) · untested") {
-                                store.downloadRendererVersion(release)
-                            }
-                        }
-                    }
-                    Button("Add from Folder or Archive…") { addFromDisk() }
-                    if let chosen = state.chosen {
-                        Divider()
-                        Button("Reset to Engine's Own") {
-                            store.chooseRendererVersion(component, version: nil)
-                        }
-                        Button("Remove \(chosen)…", role: .destructive) { confirmingRemoval = true }
-                    }
-                } label: {
-                    Label("More actions", systemImage: "ellipsis.circle")
-                        .labelStyle(.iconOnly)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("More actions")
-                .disabled(state.busy != nil)
-                .confirmationDialog(
-                    "Remove \(component.label) \(state.chosen ?? "")?",
-                    isPresented: $confirmingRemoval, titleVisibility: .visible,
-                ) {
-                    Button("Move to Trash", role: .destructive) {
-                        if let chosen = state.chosen {
-                            store.removeRendererVersion(component, version: chosen)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("The engine's built-in version is used.")
-                }
+                actionsMenu
             }
             if let busy = state.busy {
                 HStack(spacing: 8) {
@@ -493,6 +469,50 @@ private struct RendererVersionRow: View {
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// The feed's releases, a release from disk, Reset and removal.
+    private var actionsMenu: some View {
+        Menu {
+            Section("Download") {
+                if state.downloadable.isEmpty {
+                    Text(state.releasesLoaded ? "No newer versions available" : "Looking…")
+                }
+                ForEach(state.downloadable) { release in
+                    Button(release.tested ? "\(release.version) · tested" : "\(release.version) · untested") {
+                        store.downloadRendererVersion(release)
+                    }
+                }
+            }
+            Button("Add from Folder or Archive…") { addFromDisk() }
+            if let chosen = state.chosen {
+                Divider()
+                Button("Reset to Engine's Own") {
+                    store.chooseRendererVersion(component, version: nil)
+                }
+                Button("Remove \(chosen)…", role: .destructive) { confirmingRemoval = true }
+            }
+        } label: {
+            Label("More actions", systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("More actions")
+        .disabled(state.busy != nil)
+        .confirmationDialog(
+            "Remove \(component.label) \(state.chosen ?? "")?",
+            isPresented: $confirmingRemoval, titleVisibility: .visible,
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let chosen = state.chosen {
+                    store.removeRendererVersion(component, version: chosen)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The engine's built-in version is used.")
         }
     }
 

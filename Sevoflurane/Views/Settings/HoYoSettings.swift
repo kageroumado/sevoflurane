@@ -212,9 +212,7 @@ private struct HoYoInstallSection: View {
 
     /// The chosen folder, or one named after the game in ~/Games.
     private var target: URL {
-        folder ?? FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Games")
-            .appending(path: game.displayName.replacingOccurrences(of: ":", with: ""))
+        folder ?? store.defaultInstallFolder(for: game)
     }
 
     private func choose() {

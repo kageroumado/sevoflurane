@@ -452,8 +452,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onSkipSignIn: (() -> Void)? = nil,
         onFinished: @escaping () -> Void,
     ) {
-        let view = SetupView(
+        let store = SetupStore(
             provisioner: provisioner,
+            stopClient: { [weak self] narrate in
+                await self?.supervisor.stopBeforeBottleSwitch(narrate: narrate)
+            },
+            makeGraphics: graphics,
+        )
+        let view = SetupView(
+            store: store,
+            onFinished: onFinished,
             // A simulated run starts no Steam; its finish opens straight away.
             steamWindow: { [weak self] in
                 provisioner.isDryRun ? .library : self?.setupSteamWindow ?? .starting
@@ -474,12 +482,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // the provisioning lease stands.
                 self?.supervisor.startAfterSetup()
             },
-            stopClient: { [weak self] narrate in
-                await self?.supervisor.stopBeforeBottleSwitch(narrate: narrate)
-            },
             onSkipSignIn: onSkipSignIn,
-            makeGraphics: graphics,
-            onFinished: onFinished,
         )
         setupWindow.present(view)
     }
@@ -675,6 +678,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showRecovery(_: Any?) {
         settingsWindow.showRecovery()
+    }
+
+    /// The app's event log, in the Mac's default viewer for text.
+    @objc
+    func showEventLog(_: Any?) {
+        NSWorkspace.shared.open(EventLog.fileURL)
     }
 
     /// Settings › Diagnostics on the report steps; waits behind an unfinished

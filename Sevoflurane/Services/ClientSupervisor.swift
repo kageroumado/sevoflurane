@@ -46,6 +46,11 @@ final class ClientSupervisor {
         health.displayStatusText
     }
 
+    /// The app's newest log line, which the status chip's tooltip carries.
+    var latestEvent: EventLog.Entry? {
+        EventLog.shared.latest
+    }
+
     /// Whether the menu-bar glyph carries the attention badge: a fault, or a
     /// Steam signed out by another sign-in.
     var needsAttention: Bool {

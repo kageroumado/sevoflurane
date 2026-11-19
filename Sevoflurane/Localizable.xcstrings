@@ -113,6 +113,16 @@
         }
       }
     },
+    "%@ belongs to another program, so Sevoflurane leaves it in place.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 属于另一个程序，Sevoflurane 会将其保留原样。"
+          }
+        }
+      }
+    },
     "%@ in %@": {
       "extractionState": "manual",
       "localizations": {
@@ -1096,12 +1106,12 @@
         }
       }
     },
-    "A level reaches each game the next time it is launched. Debug mode restarts Steam, and ends when Sevoflurane quits.": {
+    "A level reaches each game the next time it is launched. Debug mode reaches Steam when Steam restarts, and ends when Sevoflurane quits.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "诊断级别会在游戏下次启动时生效。调试模式会重新启动 Steam，并在退出 Sevoflurane 时结束。"
+            "value": "诊断级别会在游戏下次启动时生效。调试模式在 Steam 重新启动后对其生效，并在退出 Sevoflurane 时结束。"
           }
         }
       }
@@ -3126,6 +3136,16 @@
         }
       }
     },
+    "D3DMetal runs only on Macs with Apple silicon.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D3DMetal 只能在搭载 Apple 芯片的 Mac 上运行。"
+          }
+        }
+      }
+    },
     "D3DMetal uses the newest installed version. Removing the last version disables DirectX 12 in Dormison.": {
       "localizations": {
         "zh-Hans": {
@@ -3373,6 +3393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "DirectX 12 游戏"
+          }
+        }
+      }
+    },
+    "DirectX 12 needs Apple silicon": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DirectX 12 需要 Apple 芯片"
           }
         }
       }

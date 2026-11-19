@@ -28,6 +28,7 @@ struct SettingsView: View {
     let engine: EngineStore
     let shaders: ShaderStore
     let compatibility: CompatibilityStore
+    let diagnostics: DiagnosticsStore
     var steam: SteamActions?
     /// Stood down by the General pane's uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
@@ -52,6 +53,7 @@ struct SettingsView: View {
                 engine: engine,
                 shaders: shaders,
                 compatibility: compatibility,
+                diagnostics: diagnostics,
                 steam: steam,
                 highlighted: navigation.highlighted,
                 requestedGame: $navigation.requestedGame,
@@ -60,15 +62,8 @@ struct SettingsView: View {
             )
         }
         .navigationSplitViewStyle(.balanced)
-        .onChange(of: navigation.category, initial: true) { _, category in
-            EventLog.shared.log(.window, "settings: showing \(category.title)")
-        }
-        .onChange(of: navigation.searchText.isEmpty) { _, isEmpty in
-            EventLog.shared.log(
-                .window,
-                isEmpty ? "settings: sidebar search cleared" : "settings: sidebar search active",
-            )
-        }
+        .onChange(of: navigation.category, initial: true) { navigation.noteCategoryShown() }
+        .onChange(of: navigation.searchText.isEmpty) { navigation.noteSearchChanged() }
     }
 }
 
@@ -674,6 +669,7 @@ private struct SettingsPane: View {
     let engine: EngineStore
     let shaders: ShaderStore
     let compatibility: CompatibilityStore
+    let diagnostics: DiagnosticsStore
     let steam: SteamActions?
     let highlighted: SettingsAnchor?
     @Binding var requestedGame: SettingsNavigation.GameRequest?
@@ -707,7 +703,7 @@ private struct SettingsPane: View {
                     supervisor: supervisor, steam: steam, highlighted: highlighted,
                 )
             case .diagnostics:
-                DiagnosticsSettings(highlighted: highlighted, showReports: showReports)
+                DiagnosticsSettings(store: diagnostics, highlighted: highlighted, showReports: showReports)
             case .about: AboutSettings(highlighted: highlighted)
             }
         }
