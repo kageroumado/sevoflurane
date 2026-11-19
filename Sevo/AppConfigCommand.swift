@@ -2,10 +2,8 @@ import ArgumentParser
 import Foundation
 
 extension AppCommand {
-    /// One game's settings: what it resolves to and from which level, and
-    /// the game's own values. A value set here is written to the engine's
-    /// per-program env file for every exe
-    /// the game is known to run under.
+    /// One game's settings and the level each resolves from; values go to the
+    /// per-program env file of every exe the game is known to run under.
     struct Config: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "config",
@@ -64,8 +62,7 @@ extension AppCommand {
             }
             switch key {
             case "recommended":
-                // Read-only on purpose: a recommendation is something to judge,
-                // so it is printed and the user writes the key they agree with.
+                // Printed only: the user writes the keys they agree with.
                 print(Self.recommendedLines(appid, exes: GameConfig.game(appid).exes ?? []))
                 return
             case "detect":
@@ -240,8 +237,7 @@ extension AppCommand {
             GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root, change)
         }
 
-        /// Writes, changes or drops one DLL's load order for this game. An
-        /// empty table is removed rather than left as a key that says nothing.
+        /// Writes or drops one DLL's load order; an empty table is removed.
         private func setDLLOverride(_ value: String, bottle: String) throws {
             let parsed = try ConfigKeyParsing.dllOverride(value)
             GameConfig.update(game: appid, bottle: bottle, prefix: SteamBottle.root) { values in
@@ -272,14 +268,12 @@ extension AppCommand {
             }
         }
 
-        /// This game's own variables, one per line.
         private static func environmentLines(_ values: ConfigValues) -> String {
             let lines = UserEnvironment.lines(values.environment)
             return lines.isEmpty ? "none — the bottle's own variables apply" : lines.joined(separator: "\n")
         }
 
-        /// What the fix table says about this game: the keys it names, the
-        /// values it names them with, and the measurement behind each.
+        /// What the fix table recommends for this game, with each reason.
         private static func recommendedLines(_ appid: Int, exes: [String]) -> String {
             let recommendation = KnownFixes.recommended(for: appid, exes: exes)
             guard !recommendation.isEmpty else {
@@ -293,7 +287,6 @@ extension AppCommand {
             }.joined(separator: "\n")
         }
 
-        /// This game's own load orders, one per line.
         private static func overrideLines(_ values: ConfigValues) -> String {
             let table = values.dllOverrides ?? [:]
             guard !table.isEmpty else { return "none — the bottle's own overrides apply" }

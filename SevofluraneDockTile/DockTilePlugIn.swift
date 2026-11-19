@@ -1,15 +1,9 @@
 import AppKit
 
-/// A game's Dock tile while the game is not running.
-///
-/// The Dock loads this out of the game's own bundle (`NSDockTilePlugIn` in
-/// its Info.plist) once the tile is kept and the game has quit, in a process
-/// of the Dock's own. From there the tile gets a menu — Play, Play with a
-/// renderer, Game Settings — and a badge or a progress bar when the app has
-/// something to say about the game. The game's id is in the bundle's
-/// identifier; everything else is read from `tile.json` beside the bundle,
-/// which Sevoflurane writes, and every choice goes back to Sevoflurane as a
-/// `sevoflurane://` URL, since the Dock's process shares nothing else with it.
+/// A game's Dock tile while the game is not running, loaded by the Dock in its
+/// own process: a Play / Play with / Game Settings menu, and a badge or
+/// progress bar from `tile.json` beside the bundle. Choices go back as
+/// `sevoflurane://` URLs, the only channel to the app.
 @objc(DockTilePlugIn)
 final class DockTilePlugIn: NSObject, NSDockTilePlugIn {
     private var dockTile: NSDockTile?

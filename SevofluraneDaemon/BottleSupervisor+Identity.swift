@@ -1,16 +1,10 @@
 import Foundation
 
 extension BottleSupervisor {
-    /// Whether the client answering CDP may be adopted as this bottle's.
-    ///
-    /// Every cycle compares the bottle the client booted in with the
-    /// configured one, which costs two preference reads. With `sweep` it also
-    /// looks at the machine (``BottleIdentity/verify(configured:)``): at the
-    /// first sighting of a client and every eighth healthy cycle with no game up. A client of
-    /// another Sevoflurane bottle is stopped and the configured bottle's
-    /// started in its place; another Sevoflurane bottle's wineserver is
-    /// stopped; a client in a prefix outside Sevoflurane's bottles is left
-    /// alone and not adopted.
+    /// Whether the client answering CDP may be adopted as this bottle's. With
+    /// `sweep` it checks the machine (``BottleIdentity/verify(configured:)``):
+    /// another Sevoflurane bottle's client is replaced and its wineserver
+    /// stopped; a client outside Sevoflurane's bottles is left alone, unadopted.
     func confirmClientIdentity(sweep: Bool) async -> Bool {
         let configured = BottleTarget.configured
         if let booted = BootedBottle.target,

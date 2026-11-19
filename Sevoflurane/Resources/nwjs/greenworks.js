@@ -1,10 +1,5 @@
-// greenworks, answered from outside the bottle.
-//
-// The game is running in native macOS NW.js; its Steamworks connection lives
-// in sevo-steamstub.exe, still inside the wine prefix. This module presents
-// greenworks' API and forwards each call to the stub over loopback.
-//
-// preload.js installs it as the answer to every require of greenworks.
+// greenworks' API for a game in native macOS NW.js, forwarded over loopback
+// to sevo-steamstub.exe inside the wine prefix. preload.js installs it.
 
 'use strict';
 
@@ -276,9 +271,8 @@ greenworks.initAPI = function () {
   }
   const reply = ask({ op: 'init' });
   if (!reply.ok) return false;
-  // Every game dials the same default port, so a second game running at once
-  // reaches the first one's stub, whose Steamworks connection is holding a
-  // different app. Unlocking into it would credit the wrong game.
+  // A second game on the default port reaches the first one's stub;
+  // unlocking into it would credit the wrong game.
   const expected = parseInt(process.env.SEVO_STEAM_APPID, 10);
   if (expected > 0 && reply.appId !== expected) {
     log('the stub on port ' + port() + ' holds app ' + reply.appId + ', not ' + expected + '; refusing it');
@@ -493,11 +487,9 @@ try { process.versions.greenworks = greenworks._version; } catch (e) { /* frozen
 // page does, so the channel is up by the time the game asks for it.
 channel.connect();
 
-// greenworks has more API than the bridge carries (workshop, DLC, auth
-// tickets, lobbies). A game that calls one of those gets a function that logs
-// and answers nothing, where a missing property would throw a TypeError and
-// stop the game at boot. Only lower-camel-case names are answered this way;
-// anything else (symbols, `_private`, `then`, `default`) reads as absent.
+// Unbridged API (workshop, DLC, auth tickets, lobbies) answers with a logging
+// no-op, since a missing property would throw at boot. Only lower-camel-case
+// names; symbols, `_private`, `then` and `default` read as absent.
 const NOT_API = new Set(['then', 'toJSON', 'inspect', 'default', 'constructor']);
 module.exports = new Proxy(greenworks, {
   get(target, key, receiver) {

@@ -1,17 +1,12 @@
 import Foundation
 
-/// The lifecycle verbs. Mutating verbs route through the daemon's control
-/// endpoint so the restart ladder has one owner and the bottle has one parent;
-/// `--no-app` forces direct mode for debugging (with the daemon running it will
-/// fight the supervisor — that's what the flag is for).
+/// The lifecycle verbs. Mutating verbs go through the daemon's control
+/// endpoint so the ladder has one owner and the bottle one parent; `--no-app`
+/// drives directly and fights a running supervisor.
 ///
-/// Every verb answers an ``Outcome``, not void: the reply is the observation.
-/// The verdict is one of three words: `confirmed` the intended state was
-/// reached, `noEffect` nothing changed because it was already so,
-/// `unverifiable` the act may have landed but the wait ran out before it
-/// could be seen. A `throw` is reserved for a
-/// refusal that never began (unprovisioned, an endpoint that said no); a
-/// timeout is an observation, not an error.
+/// Every verb answers an ``Outcome``: `confirmed`, `noEffect` (already so), or
+/// `unverifiable` (the wait ran out). A `throw` is only for a refusal that
+/// never began; a timeout is an observation.
 nonisolated enum ClientOps {
     enum Failure: Error {
         case message(String)
@@ -50,9 +45,7 @@ nonisolated enum ClientOps {
             }
         }
         if await supervisionIsRunning(noApp: noApp) {
-            // The supervisor's verdict is read beside the client's own port: the
-            // verdict stands still while a restart ladder runs, so a client that
-            // died under one reads healthy until the ladder returns.
+            // The verdict stands still during a ladder, so the client's port is read too.
             let reportedHealthy = await (AppControl.status())?["health"] as? String == "healthy"
             let clientUp = await ClientLifecycle.probeClient() == .up
             guard await AppControl.post("/client/start") != nil else {
@@ -125,10 +118,8 @@ nonisolated enum ClientOps {
             )
     }
 
-    /// `windows` tears the whole fake Windows down — wineserver included — and
-    /// boots it fresh, rather than keeping it warm across the client restart.
-    /// A direct restart already brings everything down, so the flag only
-    /// changes the supervised path.
+    /// `windows` also restarts the wineserver; it changes only the supervised
+    /// path, since a direct restart brings everything down.
     static func restart(
         noApp: Bool, windows: Bool = false, progress: (String) -> Void,
     ) async throws -> Outcome {
@@ -146,12 +137,9 @@ nonisolated enum ClientOps {
         return try await start(noApp: true, progress: progress).renamed("restart")
     }
 
-    /// Trashes Steam's shader cache and brings the client back. Through the
-    /// daemon it is one verb — the supervisor stops the bottle, clears the
-    /// cache, and relaunches, so nothing holds the cache while it goes. Direct
-    /// mode stops the bottle and clears, leaving the relaunch to `sevo client
-    /// start` (there is no supervisor to bring it back). Never reaches saves or
-    /// game files: only `steamapps/shadercache` is removed.
+    /// Trashes `steamapps/shadercache` with the bottle down. Through the daemon
+    /// the client comes back in the same verb; direct mode leaves the relaunch
+    /// to `sevo client start`.
     static func clearShaderCache(noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
         if await supervisionIsRunning(noApp: noApp) {
             guard await AppControl.post("/bottle/clear-shader-cache", timeout: 120) != nil else {
@@ -174,13 +162,9 @@ nonisolated enum ClientOps {
         )
     }
 
-    /// `sevo engine use`: point the active engine (and optionally the bottle)
-    /// at `engine`, then restart under it. Through the daemon, because
-    /// `Engine.active` is cached per process and the daemon's copy is the one
-    /// that tears the old Windows down and assembles the new invocation — a
-    /// CLI that only wrote the shared preference would leave the process that
-    /// relaunches the client still on the old engine. `--no-app` drives the
-    /// client directly, for debugging.
+    /// `sevo engine use`: switches the engine (and optionally the bottle) and
+    /// restarts under it. Through the daemon, because `Engine.active` is cached
+    /// per process and the daemon's copy relaunches the client.
     static func useEngine(
         _ engine: Engine, version: String, bottle: String?,
         noApp: Bool, progress: (String) -> Void,
@@ -217,23 +201,20 @@ nonisolated enum ClientOps {
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                 )
             }
-            // The switch lands in the daemon's process; this one resolved
-            // `Engine.active` before it and reports the outcome from there.
+            // This process resolved `Engine.active` before the daemon's switch.
             Engine.active = engine
             progress("engine switch requested via the daemon — waiting for healthy")
             return await pollAppHealthy(intent: "engine use", progress: progress)
         }
-        // The stop runs under the old choice: its graceful ask, `wineserver -k`
-        // and sweeps address the active engine's prefix, and choosing first
-        // would leave the old client running beside the new one.
+        // Stop before choosing: the stop addresses the active engine's prefix,
+        // and choosing first would leave the old client running.
         _ = try await stop(noApp: true, progress: progress)
         Engine.choose(engine)
         if let bottle, !bottle.isEmpty { SteamBottle.choose(bottle) }
         try await ensureProvisioned()
         progress("engine set to \(version) — starting the client")
         let outcome = try await start(noApp: true, progress: progress).renamed("engine use")
-        // A restart always moves the client, so its verdict is about health,
-        // not about the switch; when nothing actually changed, say so.
+        // noEffect when the engine did not change.
         if alreadyActive, bottle == nil, outcome.verdict == .confirmed {
             return Outcome(
                 verdict: .noEffect,
@@ -290,9 +271,8 @@ nonisolated enum ClientOps {
         )
     }
 
-    /// The wedge playbook: probe → reload/restart ladder. Recover fixes a
-    /// *wedged* client; a client that simply isn't running is `client
-    /// start`'s job — a stopped client is a state, not a fault.
+    /// Fixes a wedged client: probe, then restart. A stopped client is
+    /// `client start`'s job.
     static func recover(deep: Bool, noApp: Bool, progress: (String) -> Void) async throws -> Outcome {
         let alive = await ClientLifecycle.bottleProcessIDs()
         guard !alive.isEmpty else {
@@ -346,9 +326,8 @@ nonisolated enum ClientOps {
 
     // MARK: - Waiting
 
-    /// Direct mode: CDP + SharedJSContext up is the bar (there is no page or
-    /// bridge without the app). A timeout is `unverifiable`, not a throw — the
-    /// client may still be coming up; the caller polls `sevo status`.
+    /// Direct mode: CDP + SharedJSContext up is the bar; a timeout is
+    /// `unverifiable`.
     static func pollClientUp(
         intent: String, timeout: Int = 180, progress: (String) -> Void,
     ) async -> Outcome {
@@ -370,11 +349,8 @@ nonisolated enum ClientOps {
         )
     }
 
-    /// Daemon mode: the supervisor's own healthy verdict (client + bridge +
-    /// page + services) is the bar. Two consecutive healthy reads: right
-    /// after a reload the *old* page still answers the services probe, so a
-    /// single healthy can be a stale-page flicker that re-degrades a probe
-    /// cycle later.
+    /// Daemon mode: two healthy verdicts in a row, since right after a reload
+    /// the old page still answers the services probe.
     static func pollAppHealthy(
         intent: String, timeout: Int = 300, progress: (String) -> Void,
     ) async -> Outcome {
@@ -446,22 +422,18 @@ nonisolated enum ClientOps {
 
     // MARK: - Adopted Windows programs
 
-    /// Starts an adopted program through the daemon, which is the bottle's
-    /// one parent. The observation is the spawn, not the program's own life:
-    /// a game has no exit worth waiting for.
+    /// Starts an adopted program through the daemon; the observation is the spawn.
     static func launchProgram(id: Int, renderer: String?) async throws -> Outcome {
         guard let entry = AdoptedPrograms.entry(id) else {
             throw Failure.message("no adopted program with id \(id) — sevo program list")
         }
         let query = renderer.map { "&renderer=\($0)" } ?? ""
-        // The daemon answers once the program has started. The first launch
-        // of a program that needs a steam.exe parent creates that parent's
-        // companion prefix first (`wineboot`, about 15 s), so allow for it.
+        // A first steam.exe-parent launch creates its companion prefix first
+        // (`wineboot`, about 15 s).
         guard let reply = await AppControl.postReply("/program/launch?id=\(id)\(query)", timeout: 240) else {
             throw Failure.message("the daemon would not start \(entry.name) — sevo status")
         }
-        // 409: it is starting or running already, which is what was asked
-        // for, so the observation says that rather than failing.
+        // 409: already starting or running, which is what was asked for.
         if reply.status == 409 {
             return Outcome(
                 verdict: .confirmed, intent: "program launch",

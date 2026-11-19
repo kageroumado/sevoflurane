@@ -25,24 +25,15 @@ enum ProgramLaunchRefusal: Error, Equatable {
     }
 }
 
-/// Starting a Windows program that Steam knows nothing about.
-///
-/// The supervisor owns every bottle process, adopted programs included, so
-/// these are its verbs rather than the app's or the CLI's: the app posts to
-/// `/program/launch` and the daemon is the parent that appears in the process
-/// tree, which is what lets the owner check and the restart ladder account for
-/// it.
+/// Starting a Windows program Steam knows nothing about: the daemon is its
+/// parent, as for every bottle process.
 extension BottleSupervisor {
     /// How long a spawned program has to appear in `pgrep` before a new request
     /// for it is taken as a new launch rather than the extra click.
     static let spawnSettles: Duration = .seconds(60)
 
-    /// Starts an adopted Windows program in the bottle.
-    ///
-    /// The env files are rewritten first, so the program's own window
-    /// treatment, upscaler and launcher bundle are on disk before the process
-    /// reads them, and the spawn goes through the same engine invocation as
-    /// everything else. Answers a refusal, or `nil` when the program started.
+    /// Starts an adopted Windows program, its env files written first.
+    /// Answers a refusal, or `nil` when it started.
     func launchProgram(id: Int, renderer explicit: Renderer? = nil) async -> ProgramLaunchRefusal? {
         guard let program = AdoptedPrograms.program(id) else {
             return .missing("no adopted program with id \(id)")
@@ -89,14 +80,9 @@ extension BottleSupervisor {
     }
 
     /// Starts a program that needs a `steam.exe` parent (``SteamParent``) in
-    /// the bottle's companion prefix, where no Steam client runs.
-    ///
-    /// The env files are written into the companion too, so the program's
-    /// own settings and launcher bundle reach it there exactly as they would
-    /// in the bottle. The working directory is the program's own folder,
-    /// which the parent passes on to it. The parent exits with the program's
-    /// own code, which is written to the Wine log for the run record
-    /// (``ProgramExit``): Steam's process log never names a program of ours.
+    /// the bottle's companion prefix. The parent's exit code, the program's,
+    /// goes to the run record through ``ProgramExit``: Steam's process log
+    /// never names our programs.
     private func launchUnderSteamParent(_ program: AdoptedProgram, id: Int) async -> String? {
         let name = program.url.lastPathComponent
         let engine = Engine.active
@@ -129,15 +115,10 @@ extension BottleSupervisor {
         return nil
     }
 
-    /// Lets the companion's wineserver from the last session go before a
-    /// game starts in it.
-    ///
-    /// Wine keeps a server up for a few seconds after its last process, and a
-    /// HoYoverse game started into that server takes the kernel-driver path
-    /// and dies about twenty seconds in, in `MHYPBase.dll`, where the same
-    /// launch into a fresh server plays. A server still holding a
-    /// program after ``SteamParent/lastSessionWait`` is left running and the
-    /// launch goes ahead.
+    /// Waits for the companion's previous wineserver to exit: a HoYoverse game
+    /// started into a lingering server takes the kernel-driver path and dies
+    /// about twenty seconds in, in `MHYPBase.dll`. After
+    /// ``SteamParent/lastSessionWait`` the launch goes ahead anyway.
     private func awaitLastSession(of name: String, environment: [String: String], engine: Engine) async {
         let started = ContinuousClock.now
         _ = await Subprocess.run(
@@ -150,12 +131,9 @@ extension BottleSupervisor {
         }
     }
 
-    /// Starts the frame-rate unlocker (``FPSUnlocker``) in the companion once
-    /// the game has been up for ``FPSUnlocker/delay``, and stops it when the
-    /// game is gone if it has not stopped by itself.
-    ///
-    /// Never before the game: an unlocker process that exists while the game
-    /// starts up makes it quit during its init.
+    /// Starts the frame-rate unlocker (``FPSUnlocker``) once the game has been
+    /// up for ``FPSUnlocker/delay``, and stops one that outlives the game.
+    /// Never before: an unlocker present during the game's init makes it quit.
     private func startUnlocker(
         _ unlocker: FPSUnlocker.Unlocker, beside program: AdoptedProgram, environment: [String: String],
     ) async {
@@ -186,12 +164,9 @@ extension BottleSupervisor {
         } else if !FPSUnlocker.configure(executable, game: program, target: target) {
             note("\(own) has no fps_config.json yet; it starts with its own frame rate")
         }
-        // Its window must never reach the screen: shown the moment it
-        // starts, it takes the foreground from the game, which then minimizes
-        // itself into the Dock at its next display-mode change, entering the
-        // world. The engine's dock shim keeps a process with
-        // SEVO_QUIET=1 off the screen and out of the Dock (Dormison's
-        // `sevo_dock_shim.c`); an engine without that knob shows the window.
+        // Never on screen: its window takes the foreground, and the game then
+        // minimizes itself at its next display-mode change. SEVO_QUIET=1 hides
+        // it on engines whose dock shim (`sevo_dock_shim.c`) has the knob.
         var quiet = environment
         quiet["SEVO_QUIET"] = "1"
         await ClientLifecycle.launchInBottle(
@@ -200,8 +175,7 @@ extension BottleSupervisor {
             directory: executable.deletingLastPathComponent(),
         )
         note("started \(own) beside \(game), aiming for \(target) fps")
-        // The unlocker quits with the game by itself; this is for the one
-        // that does not, which would hold the companion's wineserver up.
+        // One that outlives the game would hold the companion's wineserver up.
         while await Self.isRunning(game) {
             try? await Task.sleep(for: .seconds(10))
         }
@@ -258,11 +232,8 @@ extension BottleSupervisor {
         Task(name: "Announce app \(appID)'s fixes") { await app.announceFixesApplied(appID: appID) }
     }
 
-    /// Puts the renderer a launch asked for into the engine tree.
-    ///
-    /// A program launched outside Steam gets a process tree of its own, so the
-    /// renderer only has to be staged, never bounced: the DLLs it loads are
-    /// the ones on disk when it starts.
+    /// Stages the renderer a launch asked for; a program outside Steam has its
+    /// own process tree, so no client restart is needed.
     private func stageGraphics(for name: String, renderer explicit: Renderer?, appID: Int) {
         let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         guard let desired, desired != BottleGraphics.currentSelection().renderer else { return }

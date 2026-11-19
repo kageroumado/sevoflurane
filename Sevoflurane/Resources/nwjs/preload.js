@@ -1,9 +1,5 @@
-// NW.js node-main for games Sevoflurane runs natively.
-//
-// The runner points `node-main` at this file, so it runs in the Node context
-// before the game's page loads. It makes every require of greenworks — the
-// module, the platform .node binding, or a path into a vendored copy — return
-// greenworks.js beside it, which talks to sevo-steamstub.exe inside the bottle.
+// NW.js `node-main` for native runs: before the page loads, every require of
+// greenworks (module, .node binding, or vendored path) returns greenworks.js.
 
 'use strict';
 

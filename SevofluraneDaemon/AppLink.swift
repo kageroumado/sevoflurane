@@ -1,26 +1,16 @@
 import Foundation
 
-/// The daemon's half of the link to Sevoflurane.app.
-///
-/// The app posts facts to the control port and this dials the app's own
-/// listener back for the work only it can do — reloading the page, dismissing
-/// Steam's popups, opening the library. Most commands are statements, and what
-/// the daemon needs to know arrives as a fact the app posted when it changed;
-/// the few that answer — a popup sweep, the services check, a launch — say
-/// so in their return.
-///
-/// An app that is not attached is not an error. The daemon keeps the client
-/// alive without one, and the page half resumes when an app attaches again —
-/// which is exactly what "a crash must not take a running game down" means.
+/// The daemon's half of the link to Sevoflurane.app: the app posts facts to
+/// the control port, and this calls the app's listener for the work only it
+/// can do (the page, Steam's popups, the library). No app attached is not an
+/// error; the client stays up without one.
 @MainActor
 final class AppLink {
     private(set) var facts = PageFacts()
     private let log = EventLog.shared
 
-    /// Whether an app is attached and still alive. A crashed app posts no
-    /// farewell, so its exit is watched from the moment it attaches, and a
-    /// stale fact never keeps the daemon reloading a page that no longer
-    /// exists — nor does a later process that happens to reuse the pid.
+    /// Whether an app is attached and alive; its exit is watched from attach,
+    /// since a crashed app posts no farewell.
     var isAttached: Bool {
         facts.appPID > 0
     }
@@ -28,9 +18,7 @@ final class AppLink {
     /// Fires once when the attached app's process exits.
     private var exitWatch: DispatchSourceProcess?
 
-    /// The app said hello, or one of its facts changed. Answers whether this
-    /// is a different app process from the one that was attached — a relaunch
-    /// after a crash, or the first one of the session.
+    /// Takes the app's facts; answers whether this is a new app process.
     @discardableResult
     func attach(_ incoming: PageFacts) -> Bool {
         let isNew = incoming.appPID != facts.appPID
@@ -56,8 +44,7 @@ final class AppLink {
         if kill(pid, 0) != 0 { detach(reason: "the process is gone") }
     }
 
-    /// Forgets the app, so every page-side guard reads as "nobody is
-    /// rendering Steam" rather than as a page that stopped answering.
+    /// Forgets the app, so page guards read "no app", not "page not answering".
     func detach(reason: String) {
         guard facts.appPID > 0 else { return }
         log.log(.app, "Sevoflurane (pid \(facts.appPID)) detached: \(reason)")
@@ -73,9 +60,8 @@ final class AppLink {
         await post("/command?verb=\(command.rawValue)") != nil
     }
 
-    /// Runs a stop with the app told the client is going down: it asks for its
-    /// windows again on the way out, and those requests are answered with
-    /// nothing while the mark is on.
+    /// Runs a stop with the app told the client is going down, so the client's
+    /// window requests on the way out are answered with nothing.
     func duringClientStop<T>(_ body: () async -> T) async -> T {
         await send(.clientStopBegan)
         let result = await body()
@@ -83,9 +69,8 @@ final class AppLink {
         return result
     }
 
-    /// Asks the app to bring the bridge's connection to the client up, and
-    /// waits for the fact that says it did. A page is never booted into a
-    /// bridge that cannot yet reach the client.
+    /// Asks the app to connect the bridge to the client and waits for the
+    /// fact, so no page boots into an unconnected bridge.
     func connectToClient() async {
         guard isAttached else { return }
         await send(.connectToClient)
@@ -95,18 +80,15 @@ final class AppLink {
         }
     }
 
-    /// Hides whatever CEF windows the client has on screen, over the bridge's
-    /// connection, and answers what it hid — the sign-in window among them is
-    /// how the daemon learns the machine is waiting on a human.
+    /// Hides the client's CEF windows over the bridge and answers what it hid,
+    /// which is how the daemon sees the sign-in window.
     func sweepClientPopups(_ scope: PopupSweepScope) async -> [String] {
         guard isAttached,
               let data = await post("/popups/sweep?scope=\(scope.rawValue)") else { return [] }
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
-    /// Whether Steam's own stores have finished initializing. Nil when the app
-    /// cannot say — no app, or a bridge whose socket is closed — so the boot's
-    /// own clock decides what the silence means.
+    /// Whether Steam's stores finished initializing; nil when the app cannot say.
     func servicesReady() async -> Bool? {
         guard isAttached, let data = await post("/services/ready") else { return nil }
         struct Reply: Decodable { let ready: Bool? }
@@ -129,16 +111,13 @@ final class AppLink {
         _ = await post("/fixes/applied?appid=\(appID)")
     }
 
-    /// Mirrors the daemon's verdict into the app, so the menu bar moves with
-    /// the state machine rather than a poll behind it.
+    /// Mirrors the daemon's verdict into the app.
     func push(_ snapshot: SupervisorSnapshot) async {
         guard isAttached, let body = try? JSONEncoder().encode(snapshot) else { return }
         _ = await post("/state", body: body)
     }
 
-    /// Mirrors one log line into the app's in-memory trail. Both processes
-    /// append to the same file; this is what the menu-bar extra and the log
-    /// window read.
+    /// Mirrors one log line into the app's in-memory trail; the file has it already.
     func push(_ line: RemoteLogLine) async {
         guard isAttached, let body = try? JSONEncoder().encode(line) else { return }
         _ = await post("/log", body: body)
@@ -158,16 +137,9 @@ final class AppLink {
 
     // MARK: - Proxying
 
-    /// Passes one of the app's own verbs through from the control port. The
-    /// page, the windows and the benchmarks live in the app, and `sevo` should
-    /// not have to know that — it asks the control port for everything.
-    ///
-    /// The request goes to the link port whether or not an app is attached.
-    /// An app can be alive and answering there while this daemon has not
-    /// heard its facts yet — the seconds after a rebuild or a launchd
-    /// relaunch of the helper — and a person typing `sevo debug on` at that
-    /// moment is talking to a running app. Only a port nobody answers means
-    /// the app is not running.
+    /// Passes one of the app's verbs through from the control port, even with
+    /// no app attached: after a helper relaunch the app answers before its
+    /// facts arrive.
     func proxy(_ request: HTTPRequest) async -> HTTPResponse {
         var url = URLComponents()
         url.scheme = "http"
@@ -207,9 +179,7 @@ final class AppLink {
         static let command: TimeInterval = 15
         /// A proxied verb can be a benchmark or a window inventory.
         static let proxy: TimeInterval = 120
-        /// A verb for an app this daemon has not heard from: a refused
-        /// connection answers at once, and a live app answers its link port
-        /// within this even while it re-attaches.
+        /// For an app not attached: a refused connection fails at once.
         static let detachedProxy: TimeInterval = 10
     }
 

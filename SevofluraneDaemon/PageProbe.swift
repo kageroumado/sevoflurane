@@ -11,18 +11,10 @@ nonisolated enum PageProbe {
         case notAnswering(String)
     }
 
-    /// One probe covers the whole chain the UI depends on: app page → bridge
-    /// WebSocket → page eval and back. The bridge always answers HTTP 200 with
-    /// `ok: false` carrying the failure ("no page connected", eval timeout),
-    /// so an HTTP-level failure specifically means the bridge itself is down.
-    /// A bridge that refuses the control token counts as down too: reloading
-    /// the page cannot fix a token neither process can read.
-    ///
-    /// The expression asks Steam's own app object whether its stores finished
-    /// initializing. A bare eval is not enough: the page runs in the app's
-    /// WKWebView and keeps answering evals after the client's UI session dies
-    /// (steamwebhelper hang, regression to the login window) — a state where
-    /// CDP still lists SharedJSContext and the user sees a frozen splash.
+    /// Probes page → bridge → eval and back. The bridge answers HTTP 200 with
+    /// `ok: false` for page failures, so an HTTP failure or a 401 means the
+    /// bridge is down. It asks whether Steam's stores initialized, because the
+    /// page keeps answering evals after the client's UI session dies.
     static func state() async -> State {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"
@@ -44,10 +36,8 @@ nonisolated enum PageProbe {
         return .answering(servicesUp: reply.v?.contains("true") == true)
     }
 
-    /// What `steam.exe` itself answers: ``MainThreadProbe``'s questions, each
-    /// timed. Services stay initialized while its main thread is parked, and
-    /// the page keeps answering evals, so this is the one probe that sees it.
-    /// Nil when the page gives no answer at all.
+    /// ``MainThreadProbe``'s timed questions to `steam.exe`, the one probe that
+    /// sees its main thread parked; nil when the page gives no answer.
     static func nativeAnswers() async -> MainThreadProbe.Answer? {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(BridgePorts.steamUI)/__eval")!)
         request.httpMethod = "POST"

@@ -61,13 +61,11 @@ extension BottleSupervisor {
         pendingRestart = stamp
         clientFailures = 0
         clientShowsLoginWindow = false
-        // A pass that will launch is a fresh try, so the last one's verdict —
-        // a crash loop included — stops being the state to report.
+        // A fresh try clears the last verdict, a crash loop included.
         fault = nil
         log.log(.supervisor, "\(hasBeenHealthy ? "restarting" : "starting") client: \(reason)")
 
-        // Take the dead client's frozen windows off screen now, rather than
-        // leaving a dimmed, unresponsive library up for the whole teardown.
+        // Otherwise a dimmed, frozen library stays up through the teardown.
         await app.send(.dismissWindows)
 
         setRestartPhase("checking for a running client")
@@ -76,11 +74,9 @@ extension BottleSupervisor {
         let booted = BootedBottle.target
         let strays = await strayBottles(during: "restart", beside: booted)
         let targets = BottleTarget.stopSet(booted: booted, configured: .configured, strays: strays)
-        // Windows stays booted through a plain client restart — the ~20s
-        // machine boot is the biggest slice of a restart, and the resident
-        // wineserver only has to go when the next launch actually needs a
-        // different one: another engine's, new sync primitives (esync/msync
-        // are negotiated with the server at spawn), or another bottle's.
+        // Windows stays booted (its ~20 s boot is most of a restart) unless the
+        // next launch needs another wineserver: another engine, bottle, or sync
+        // mode (esync/msync are negotiated with the server at spawn).
         let windowsCanStay = !fullWindows && pendingSwitch == nil && !pendingShaderCacheClear
             && strays.isEmpty
             && BottleIdentity.windowsCanStay(
@@ -110,11 +106,9 @@ extension BottleSupervisor {
         await launchAfterStop(reason: reason, targets: targets)
     }
 
-    /// The engine the preferences and disk name now, when it differs from the
-    /// one this process resolved at its start: an engine the app installed
-    /// after the helper came up, which ``Engine/active`` never sees. Routed
-    /// through the held switch, so the stop still addresses the running
-    /// engine's prefix and its wineserver comes down with the client.
+    /// Picks up an engine the app installed after this process resolved
+    /// ``Engine/active``, through the held switch so the stop still addresses
+    /// the running engine.
     func adoptEngineInstalledSinceStart() {
         guard pendingSwitch == nil else { return }
         let fresh = Engine.resolveFromDisk()
@@ -123,11 +117,9 @@ extension BottleSupervisor {
         log.log(.supervisor, "engine resolves to \(fresh.description) now, where it was \(Engine.active.description); the restart switches to it")
     }
 
-    /// The bottle the preference names, when it differs from the one the
-    /// running client booted in: something wrote the choice under a live
-    /// client. The booted bottle is in every stop's reach, so this pass takes
-    /// its Windows down and launches in the configured one. Answers whether
-    /// the bottle moved.
+    /// Logs a bottle choice written under a live client; the pass stops the
+    /// booted bottle and launches in the configured one. Answers whether the
+    /// bottle moved.
     @discardableResult
     func adoptBottleChosenSinceBoot() -> Bool {
         let configured = BottleTarget.configured
@@ -145,11 +137,9 @@ extension BottleSupervisor {
     private func launchAfterStop(
         reason: String, targets: [BottleTarget] = BottleTarget.inScope,
     ) async {
-        // The launcher can time out and *still* spawn a client later; a
-        // steam.exe that survived the stop means launching now could stack a
-        // second instance on top of it. This guard plus `isRestarting` is the
-        // double-start defense: `-nocrashdialog` removed Steam's own watchdog,
-        // the only other writer that could race a relaunch.
+        // Never launch over a surviving steam.exe: a timed-out launcher can
+        // still spawn a client. This guard and `isRestarting` are the
+        // double-start defense (`-nocrashdialog` removes Steam's own watchdog).
         let leftovers = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe", in: targets)
         guard leftovers.isEmpty else {
             fault = .degraded("a steam.exe survived kill -9 — not launching a second client")
@@ -160,8 +150,7 @@ extension BottleSupervisor {
             return
         }
         if pendingShaderCacheClear { clearShaderCacheNow() }
-        // A quit that began during the stop has taken the client away from
-        // this ladder: it launches nothing.
+        // A quit that began during the stop wins.
         guard wantsClient, !isQuitting else { return }
         // The engine may have changed under this pass; the next one settles
         // what has to come down for it before anything is launched.
@@ -175,29 +164,18 @@ extension BottleSupervisor {
         log.log(.client, "launching the bottle client with CDP on :\(BridgePorts.cdp)")
         clientStartedAt = .now
         await ClientLifecycle.launchClient()
-        // The ladder's work ends with the spawn. Everything the client does
-        // next — CDP arriving, its services, its sign-in window, the page
-        // booting — is a state of the probe cycle, which has the guards and
-        // the cadence for it.
+        // The ladder ends at the spawn; the probe cycle owns the boot from here.
         enterBoot(.awaitingClient)
     }
 
     enum LadderWatchdog {
-        /// How long one pass of the ladder may take before it counts as
-        /// stalled: the stop's rungs are bounded (the CDP ask's cap, the
-        /// grace polls, the signals), the identity check's `lsof` has ten
-        /// seconds, and the launch returns at the spawn, so a pass past this
-        /// is waiting on something the client it is replacing holds.
+        /// How long one pass may take before it counts as stalled: every rung
+        /// is bounded, so a pass past this waits on something the old client holds.
         static let budget: Duration = .seconds(120)
     }
 
-    /// A pass past its budget is freed the one way that does not depend on
-    /// what it waits for: the client's processes go by `SIGKILL`, which
-    /// returns every wait on them — a DevTools session into a wedged
-    /// renderer, a shutdown ask its main thread will never serve — and the
-    /// pass goes on to its launch with nothing left to stop. The phase says
-    /// so while it happens, because the health verdict is this phase for as
-    /// long as the pass runs.
+    /// Frees a stalled pass by SIGKILLing the client's processes, which
+    /// returns every wait on them.
     private func freeStalledPass() async {
         let phase = restartPhase
         log.log(
@@ -236,11 +214,8 @@ extension BottleSupervisor {
         refreshHealth()
     }
 
-    /// Three restarts in ten minutes is the crash-loop signature; another
-    /// plain restart would only stack crash dumps. The proven response is one
-    /// hygiene pass — trash the Chromium cache, headless client repair — and
-    /// a crash loop that survives *that* gets `gaveUp`: the machine needs a
-    /// human.
+    /// Three restarts in ten minutes is a crash loop: one hygiene pass
+    /// (htmlcache purge, headless client repair), then `gaveUp`.
     private func escalateCrashLoop() async {
         let hygiene = PerfProbe.supervisor.beginInterval("CrashLoopHygiene")
         defer { PerfProbe.supervisor.endInterval("CrashLoopHygiene", hygiene) }

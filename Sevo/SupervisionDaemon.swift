@@ -1,17 +1,8 @@
 import Foundation
 
-/// Bringing `SevofluraneDaemon` up from a terminal.
-///
-/// The daemon is a `KeepAlive` LaunchAgent registered by Sevoflurane.app, so
-/// in ordinary use it is already running and this does nothing. It exists for
-/// the two moments it is not: a machine that has just been booted into a
-/// session where launchd has not started it yet, and a daemon someone stopped
-/// by hand while debugging.
-///
-/// Registering it is the app's job — `SMAppService` registers the agent from
-/// inside the bundle that ships it, and a CLI symlinked onto `PATH` is not
-/// that bundle. So a machine where nothing is registered is told to open
-/// Sevoflurane once, rather than being given a client with nothing watching it.
+/// Starts the `KeepAlive` LaunchAgent from a terminal when launchd has not
+/// started it yet or someone stopped it. Only the app can register it
+/// (`SMAppService` acts for the bundle that ships it).
 nonisolated enum SupervisionDaemon {
     enum Outcome: Equatable {
         case started

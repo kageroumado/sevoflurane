@@ -1,13 +1,8 @@
 import Foundation
 import Observation
 
-/// What the release feed has that this Mac does not — the engine and the
-/// renderer components — in the one place someone looks every day.
-///
-/// The app's own updater speaks for itself in the footer's version chip.
-/// Everything underneath it would otherwise be checked only by someone who
-/// opens a Settings pane already suspecting something, so the popover's gear
-/// carries a dot and says what is waiting.
+/// Newer engine and renderer components the release feed has, shown as a dot
+/// on the popover's gear; the app's own updater has the footer's version chip.
 @MainActor
 @Observable
 final class UpdateSummary {
@@ -23,9 +18,7 @@ final class UpdateSummary {
 
     private var hasChecked = false
 
-    /// One pass, the first time the popover opens. The manifest is a single
-    /// signed request and everything it is compared against is on disk, so
-    /// every popover after the first costs nothing.
+    /// One check, the first time the popover opens.
     func checkOnce() {
         guard !hasChecked else { return }
         hasChecked = true
@@ -39,10 +32,8 @@ final class UpdateSummary {
         }
     }
 
-    /// The feed's engine, named the way the picker
-    /// names it, when every managed engine on this Mac is older than it. A
-    /// Mac with none at all is not told: the engine picker already offers to
-    /// fetch one.
+    /// The feed's engine, as the picker names it, when every managed engine
+    /// here is older; nil with none, where the picker offers one.
     static func newerEngine(
         in manifest: EngineManifest, installed: [String],
     ) -> String? {
@@ -63,10 +54,8 @@ final class UpdateSummary {
         }
     }
 
-    /// The version of one component worth saying out loud: the newest the
-    /// feed names, when everything on this Mac is older than it. An engine
-    /// that declares no version of a component and has none added beside it
-    /// gives nothing to compare against, and so is told nothing.
+    /// The feed's newest version of a component when everything here is
+    /// older; nil with nothing to compare against.
     static func newerVersion(tested: [String], have: [String]) -> String? {
         guard !have.isEmpty, let newest = newest(of: tested), isNewer(newest, thanAll: have)
         else { return nil }

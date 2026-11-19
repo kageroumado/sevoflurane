@@ -1,13 +1,9 @@
 import ArgumentParser
 import Foundation
 
-/// Runs one Windows program in the bottle under the engine a game would get.
-///
-/// The launcher path for everything that is not the client: a game's own exe
-/// when Steam refuses to start it, a harness, `winecfg`. Steam's updater
-/// gates a launch on free disk space it may not have, and this reaches the
-/// installed build regardless — with the client up, the game still finds
-/// SteamAPI.
+/// Runs one Windows program in the bottle under the engine a game would get:
+/// a game Steam refuses to start (with the client up it still finds SteamAPI),
+/// a harness, `winecfg`.
 struct RunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
@@ -41,9 +37,7 @@ struct RunCommand: AsyncParsableCommand {
         guard first != "--help", first != "-h" else {
             throw CleanExit.helpRequest(self)
         }
-        // The client has a lifecycle with a restart ladder and a supervisor
-        // that owns it; a second launcher racing that is how a bottle ends up
-        // with two clients.
+        // Never start the client here: racing the supervisor makes two clients.
         guard !first.lowercased().hasSuffix("steam.exe") else {
             Sevo.printError("the client is the supervisor's to start — use sevo client start")
             throw SevoExit.badInvocation
@@ -71,12 +65,9 @@ struct RunCommand: AsyncParsableCommand {
     }
 }
 
-/// `sevo program`: the Windows programs added outside Steam — a visual novel
-/// bought elsewhere, a tool, an installer.
-///
-/// Adding one writes a record beside the Steam games, so every per-game
-/// setting, the launcher bundle and the Games pane reach it unchanged.
-/// Starting one goes through the daemon, which is the bottle's one parent.
+/// `sevo program`: Windows programs added outside Steam, recorded beside the
+/// Steam games so per-game settings reach them; starting one goes through the
+/// daemon.
 struct ProgramCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "program",
@@ -222,10 +213,8 @@ struct ProgramCommand: AsyncParsableCommand {
     }
 }
 
-/// The NW.js runtime store. Games are pointed at a runtime by
-/// `sevo app config <id> runner nwjs`, which fetches the release the game's
-/// own build calls for; this is the store behind it, and the way to fill it
-/// on a Mac that cannot reach `dl.nwjs.io`.
+/// The NW.js runtime store behind `sevo app config <id> runner nwjs`, and the
+/// way to fill it without `dl.nwjs.io`.
 struct NWJSCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "nwjs",
@@ -235,9 +224,7 @@ struct NWJSCommand: AsyncParsableCommand {
     @Argument(help: "list | add") var verb: String = "list"
     @Argument(help: "For add: an unpacked nwjs-v<version>-<flavor> folder, or the nwjs.app in one.")
     var path: String?
-    /// Not `--version`: the root command already owns that word, and a
-    /// subcommand that takes it over makes `sevo nwjs --version` mean two
-    /// things at once.
+    /// Never `--version`: the root command owns it.
     @Option(
         name: .customLong("release"),
         help: "For add: the NW.js version, when the folder's name does not say.",

@@ -4,15 +4,14 @@ import os
 
 /// The app's event trail: client, bridge, page, and window state transitions,
 /// written to a log file testers can send and mirrored into the menu-bar
-/// extra. The file is the answer to "the window froze and nothing said why".
+/// extra.
 @MainActor
 @Observable
 final class EventLog {
     static let shared = EventLog()
 
-    /// Where Console.app and testers look. A process that stands in for the
-    /// app (the test host, the gallery, a simulated boot) writes beside it, so
-    /// the log a bug report carries holds only what the app really did.
+    /// The log file; a test host, gallery or simulated boot writes a separate
+    /// one, so bug reports hold only the real app's lines.
     nonisolated static let fileURL = AppIdentity.logFile(isSimulatedProcess ? "simulated" : nil)
 
     private nonisolated static var isSimulatedProcess: Bool {
@@ -48,11 +47,9 @@ final class EventLog {
         recent.last
     }
 
-    /// Order-preserving entry point for nonisolated callers (the bridge
-    /// actor, subprocess handlers): entries land in the file and in `recent`
-    /// in the order they were enqueued. A `Task { @MainActor }` per line
-    /// would not guarantee that, and the file's purpose is a chronological
-    /// trail. Entries buffer until `shared` starts consuming.
+    /// Order-preserving entry point for nonisolated callers; a
+    /// `Task { @MainActor }` per line would reorder them. Entries buffer until
+    /// `shared` starts consuming.
     nonisolated static func enqueue(_ category: Category, _ message: String) {
         pipe.continuation.yield((category, message))
     }
@@ -69,8 +66,7 @@ final class EventLog {
 
     func log(_ category: Category, _ message: String) {
         logger.log("[\(category.rawValue, privacy: .public)] \(message, privacy: .public)")
-        // Mirrored as a signpost event so the app's own trail lines up
-        // against CPU and I/O in an Instruments recording.
+        // A signpost too, to line up with Instruments recordings.
         PerfProbe.events.emitEvent(
             "Log", "[\(category.rawValue, privacy: .public)] \(message, privacy: .public)",
         )
@@ -80,10 +76,8 @@ final class EventLog {
         if recent.count > Self.recentLimit {
             recent.removeFirst(recent.count - Self.recentLimit)
         }
-        // Window transitions are write-through: they are the lines that say
-        // what the app was showing, they are the last thing written before a
-        // crash or a kill, and there are few enough of them that the disk's
-        // answer is not a cost anyone can see.
+        // Window lines are write-through: the last thing written before a
+        // crash, and rare enough to cost nothing.
         Self.file.append(
             Self.line(category, message, at: entry.date),
             synchronously: category == .window || Self.flushMode == .synchronous,
@@ -91,14 +85,10 @@ final class EventLog {
         Self.mirror?(category, message, entry.date)
     }
 
-    /// Where a second process sends its lines. The daemon points this at the
-    /// app link, so the trail the menu-bar extra and the log window show is
-    /// the whole story and not just the half written in this process.
+    /// Where a second process sends its lines; the daemon points it at the app link.
     nonisolated(unsafe) static var mirror: ((Category, String, Date) -> Void)?
 
-    /// One line another process wrote, taken into this process's trail. The
-    /// file already has it — the writer appended it there — so this is the
-    /// in-memory half only.
+    /// Takes in a line another process already wrote to the file.
     func ingest(_ category: Category, _ message: String, at date: Date) {
         let entry = Entry(id: nextID, date: date, category: category, message: message)
         nextID += 1
@@ -108,12 +98,9 @@ final class EventLog {
         }
     }
 
-    /// Whether a line is on disk before the call that wrote it returns.
-    ///
-    /// A synchronous write costs the caller the disk's answer — tens of
-    /// milliseconds while a game installs — so it is not the default. A
-    /// Debug mode that wants every line to survive whatever happens next
-    /// turns it on for the whole app.
+    /// Whether a line is on disk before `log` returns. A synchronous write
+    /// costs tens of milliseconds while a game installs, so only Debug mode
+    /// turns it on.
     enum FlushMode {
         case asynchronous
         case synchronous
@@ -123,17 +110,14 @@ final class EventLog {
     /// reads it.
     nonisolated(unsafe) static var flushMode: FlushMode = .asynchronous
 
-    /// Blocks until every line written so far is on disk. The quit path and
-    /// the exception path call it: both are moments where nothing is left to
-    /// drain the queue.
+    /// Blocks until every line written so far is on disk, for the quit and
+    /// exception paths.
     nonisolated static func flush() {
         file.flush()
     }
 
-    /// Appends text that is on disk before this returns, in the queue's own
-    /// order behind whatever is already waiting. The exception path writes
-    /// through it rather than opening a second handle, which would seek to
-    /// an end the queue is still moving.
+    /// Appends text synchronously, behind whatever is queued; the exception
+    /// path uses it rather than a second handle.
     nonisolated static func writeThrough(_ text: String) {
         file.append(text, synchronously: true)
     }
@@ -146,27 +130,22 @@ final class EventLog {
     )
     private nonisolated static let file = LogFile(url: fileURL)
 
-    /// The only way a line reaches the log file: one timestamp, one format,
-    /// local time, newline included. Every writer goes through it — the
-    /// queued path here and the exception path in ``ExceptionWatch`` — so a
-    /// reader can sort the file by time and a grep for a moment finds
-    /// everything that happened in it.
+    /// The one line format every writer uses (here and ``ExceptionWatch``):
+    /// local timestamp, category, message, newline.
     nonisolated static func line(
         _ category: Category, _ message: String, at date: Date = .now,
     ) -> String {
         "\(stamp(date)) [\(category.rawValue)] \(message)\n"
     }
 
-    /// The log's moment format, for the places that carry a time without
-    /// being a line — the exception sidecar's own field.
+    /// The log's timestamp format, for the exception sidecar's field.
     nonisolated static func stamp(_ date: Date = .now) -> String {
         eventStamp.string(from: date)
     }
 }
 
-/// At file scope so both writers share it. `DateFormatter.string(from:)` is
-/// thread-safe for a formatter that is never mutated after construction,
-/// which is what this is.
+/// Shared by both writers; thread-safe because it is never mutated after
+/// construction.
 private nonisolated let eventStamp: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -174,15 +153,11 @@ private nonisolated let eventStamp: DateFormatter = {
     return formatter
 }()
 
-/// The on-disk log, written from a utility queue. A `write(2)` waits on the
-/// disk, and while a game installs or the compressor swaps, the disk answers
-/// in tens of milliseconds — on the main thread every log line would be a
-/// UI stall of that length.
+/// The on-disk log, written from a utility queue: a `write(2)` can take tens
+/// of milliseconds while a game installs.
 private final nonisolated class LogFile: Sendable {
-    /// Rotation threshold, the cap the diagnostics plan gives this trail. One
-    /// boot's worth of transitions is a few KB; a debug-mode session writing a
-    /// window inventory per adoption, or a level-two run writing the machine's
-    /// state every ten seconds, is the case this bounds.
+    /// Rotation threshold; one boot writes a few KB, debug and level-two runs
+    /// far more.
     private static let rotateOverBytes = 10_000_000
     /// How much is written between size checks: a `stat` per line would cost
     /// more than the write it guards.
@@ -218,9 +193,8 @@ private final nonisolated class LogFile: Sendable {
         }
     }
 
-    /// Moves the trail aside by copy and truncate rather than by renaming:
-    /// the handle stays open on the same inode, so a rename would leave every
-    /// subsequent line in a file nobody is reading. Runs on `queue`.
+    /// Rotates by copy and truncate: a rename would leave the open handle
+    /// writing to the moved file. Runs on `queue`.
     private func rotateIfLarge() {
         let manager = FileManager.default
         guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
@@ -231,8 +205,7 @@ private final nonisolated class LogFile: Sendable {
         try? handle?.truncate(atOffset: 0)
     }
 
-    /// Returns once the queue has run everything enqueued before the call:
-    /// the queue is serial, so an empty block behind them is the wait.
+    /// Returns once the serial queue has run everything enqueued before it.
     func flush() {
         queue.sync {}
     }
@@ -243,11 +216,8 @@ private final nonisolated class LogFile: Sendable {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true,
         )
-        // O_APPEND, not a one-time seek: several processes share this file
-        // (the app, a second harness instance, a test run), and a handle
-        // whose offset was fixed at open time overwrites whatever the others
-        // appended since. The kernel repositions an O_APPEND write to the
-        // real end every time.
+        // O_APPEND: several processes share this file, and a fixed offset
+        // would overwrite their lines.
         let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
         guard fd >= 0 else { return }
         handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)

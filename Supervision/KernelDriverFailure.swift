@@ -1,10 +1,8 @@
 import Foundation
 
-/// A Windows program that tried to load its own kernel driver: kernel
-/// anti-cheat, and some DRM. Wine runs no third-party drivers, so the
-/// driver's service fails to load. A program that requires it quits or waits
-/// with nothing on screen, and Wine's log is the only place that says why; a
-/// program that carries on without it draws as usual.
+/// A Windows program's kernel driver (anti-cheat, some DRM) that Wine could
+/// not load. A program that needs it quits or waits with nothing on screen,
+/// and only Wine's log says why.
 nonisolated enum KernelDriverFailure {
     /// The driver named in a failure line of Wine's log, like
     /// `HoYoKProtect.sys`, or `nil` when the text has none.
@@ -66,10 +64,8 @@ nonisolated enum KernelDriverFailure {
         return driver(in: text).map(Outcome.driverFailed) ?? .nothing
     }
 
-    /// Reads what Wine's log gained after `offset`, every few seconds for
-    /// ``watchFor``, and answers the driver that failed when the program
-    /// drew nothing by the end of it. A frame from the program ends the watch
-    /// with nothing to say.
+    /// Polls Wine's log after `offset` for ``watchFor``; answers the failed
+    /// driver when the program drew nothing, `nil` once it draws.
     static func watch(from offset: UInt64, program exe: String, log: URL = WineLog.fileURL) async -> String? {
         let clock = ContinuousClock()
         let deadline = clock.now + watchFor

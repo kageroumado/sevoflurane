@@ -28,16 +28,13 @@ struct DoctorCommand: AsyncParsableCommand {
     }
 }
 
-/// The one observation every mutating verb ends on and `status` prints alone:
-/// engine, bottle, client, bridge, app, as a line and as a dict. The verbs
-/// carry it as `state` so the reply is what actually happened, not that it was
-/// asked for.
+/// The observation every mutating verb ends on and `status` prints: engine,
+/// bottle, client, bridge, app, as a line and as a dict.
 enum StatusReport {
     static func build() async -> (dict: [String: Any], line: String) {
         let snapshot = await Doctor.snapshot()
         let d = snapshot.detection
-        // The engine in use, which is a choice, and only "NONE" when there is
-        // nothing on disk to choose from.
+        // "NONE" only when no engine is on disk.
         let engine = if d.crossover == nil, d.managedEngineVersions.isEmpty {
             "NONE"
         } else if case .crossover = Engine.active, let cx = d.crossover {
@@ -52,23 +49,18 @@ enum StatusReport {
         case .busy: "running, CDP too busy to answer"
         case .down: snapshot.bottleProcesses.isEmpty ? "stopped" : "up, CDP unreachable"
         }
-        // Two processes, two answers: supervision is the daemon that owns the
-        // bottle, and the app is the window onto it. Either can be down while
-        // the other works.
         let supervision = if let status = snapshot.appStatus {
             "running (\(status["health"] as? String ?? "?"))"
         } else {
             "not running"
         }
-        // Supervision above is the daemon; this is the app process. The daemon
-        // sees only an attached app, so a live-but-detached one is read off its
-        // own link port instead of inheriting the daemon's blind spot.
+        // The daemon sees only an attached app; a detached live one answers
+        // its own link port.
         let appState = AppRunState.classify(
             daemonReportsAttached: (snapshot.appStatus?["app"] as? String) == "running",
             appLinkAlive: snapshot.appLinkAlive,
         )
-        // A bottle missing a required dependency still runs games, so this is
-        // a note beside the client's state rather than a state of its own.
+        // A missing dependency is a note: the bottle still runs games.
         let incomplete = BottleReadiness.incompleteSummary()
         // The bottle the running client is in, which is the configured one
         // only when nothing moved the preference under it.
@@ -103,8 +95,7 @@ enum StatusReport {
         return (dict, line)
     }
 
-    /// Prints a verb's outcome the way `sevo client force-quit` prints its
-    /// own: the verdict, then the state the caller's model should hold now.
+    /// Prints a verb's verdict, then the resulting state.
     static func emit(_ outcome: ClientOps.Outcome, asJSON: Bool) async {
         let (dict, line) = await build()
         if asJSON {
@@ -121,10 +112,9 @@ enum StatusReport {
     }
 }
 
-/// The game window a launch produced, as an agent reads it: id, title, pid,
-/// and the frame twice — points (the click/move coordinate) and pixels (what a
-/// screenshot measures) — plus the Retina scale and which display, so a
-/// negative origin on a second display is legible rather than a surprise.
+/// The game window a launch produced, for an agent: id, title, pid, the frame
+/// in points (click coordinates) and pixels (screenshots), the Retina scale
+/// and the display.
 enum WindowReport {
     /// The game window the app reports right now, if any.
     static func currentWindow() async -> [String: Any]? {
@@ -134,10 +124,9 @@ enum WindowReport {
         return obj
     }
 
-    /// Polls the app for the launched game's window until it appears or the
-    /// timeout; `nil` when none showed (or the app is not running to observe
-    /// it). A window that was already up before the launch, or one owned by
-    /// an exe the store knows belongs to another game, is not this launch's.
+    /// Polls for the launched game's window; `nil` on timeout. A window up
+    /// before the launch, or one whose exe belongs to another game, is not
+    /// this launch's.
     static func awaitWindow(
         forApp appid: Int, before: [String: Any]?, timeout: Int, progress: (String) -> Void,
     ) async -> [String: Any]? {
@@ -204,10 +193,8 @@ struct StatusCommand: AsyncParsableCommand {
     }
 }
 
-/// Block until the client reaches a state, then report it — the time-holding
-/// verb. Default waits for healthy; `--gone`
-/// waits for it to be down. Either way the reply is the observed end state
-/// plus a verdict, never a bare "ok".
+/// Blocks until the client is healthy, or down with `--gone`, then reports
+/// the observed state and a verdict.
 struct WaitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "wait",
@@ -220,9 +207,7 @@ struct WaitCommand: AsyncParsableCommand {
     @Flag(name: .customLong("no-app")) var noApp = false
     @Flag(name: .customLong("json"), help: "Machine-readable observation.") var asJSON = false
 
-    /// What the report that follows the wait may add to it: the status line
-    /// asks the daemon and the process table, each bounded, and the whole
-    /// verb is bounded with them so no caller waits past what it asked for.
+    /// Seconds the closing status report may add, so the whole verb stays bounded.
     static let reportAllowance = 20
 
     func run() async throws {

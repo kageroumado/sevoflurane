@@ -1,18 +1,13 @@
 import Foundation
 
-/// The decision the app makes about the background helper it registered,
-/// derived from observations alone — the registration state, whether the
-/// control port answered, whether a rebuild was already tried this launch, and
-/// the two versions — so it can be exercised without touching Background Task
-/// Management or `SMAppService`.
+/// What the app does about its registered background helper, decided from
+/// observations alone so tests need no `SMAppService`.
 ///
-/// The stuck state this exists for: a Mac that once registered the daemon's
-/// label from a Development-signed local build keeps a Background Task
-/// Management record whose LightWeight Code Requirement is the Development one.
-/// The shipped Developer ID daemon then fails its launch constraint and never
-/// answers. Re-registering over an enabled record leaves that requirement in
-/// place; only `unregister()` then `register()` tears the record down and
-/// rebuilds the requirement from the current bundle's identity.
+/// The stuck state: a Mac that once registered the label from a
+/// Development-signed build keeps a Background Task Management record with the
+/// Development code requirement, and the Developer ID daemon then fails its
+/// launch constraint. Re-registering keeps that requirement; only
+/// `unregister()` then `register()` rebuilds it.
 nonisolated enum DaemonHeal {
     /// What the app observed about its background helper on one attach.
     struct Inputs: Equatable {
@@ -38,22 +33,15 @@ nonisolated enum DaemonHeal {
         /// Registered and enabled, yet silent: tear the record down and
         /// rebuild it from this bundle's identity, once.
         case rebuild
-        /// The rebuild already ran and the daemon is still silent — a stuck
-        /// state the user is shown, not one the app keeps retrying.
+        /// Still silent after the rebuild: shown to the user, not retried.
         case surfaceFailure
-        /// Answering, but older than this app or another build than the one
-        /// this app ships: relaunch it so the app is never driving a stale
-        /// helper. launchd keeps a daemon's process across an update of the
-        /// bundle it came from.
+        /// Answering, but older than this app or another build: relaunch it,
+        /// since launchd keeps a daemon's process across a bundle update.
         case restartStale
     }
 
-    /// What a manual `repair()` should do. Repair is the escape hatch for a
-    /// daemon that will not answer; run against one that is already answering
-    /// it would tear a healthy helper down and detach the running app for
-    /// nothing. So it rebuilds only when the daemon is silent — the same
-    /// signal `decide` splits `.none` from `.rebuild` on — unless the caller
-    /// forces a rebuild anyway.
+    /// What a manual `repair()` does: it rebuilds only a silent daemon unless
+    /// forced, since rebuilding a healthy one detaches the app for nothing.
     enum RepairAction: Equatable {
         /// The daemon is answering; leave it and the app's attachment alone.
         case alreadyHealthy
@@ -70,9 +58,8 @@ nonisolated enum DaemonHeal {
         return supervisionGaveUp ? .restartClient : .alreadyHealthy
     }
 
-    /// One step of the wait after a rebuild that came back: the new helper
-    /// knows nothing of the running app until the app's facts reach it, and a
-    /// repair reports success only once the helper says the app is attached.
+    /// One step of the wait after a rebuild: a repair succeeds only once the
+    /// new helper reports the app attached.
     enum RepairAttach: Equatable {
         /// The helper reports the app attached; the repair is done.
         case attached
@@ -81,8 +68,7 @@ nonisolated enum DaemonHeal {
         /// Say hello again: the first one may have reached the helper that
         /// was on its way out.
         case helloAgain
-        /// The helper has not taken the app within the budget; the repair
-        /// reports that instead of leaving the app detached and silent.
+        /// The helper has not taken the app within the budget.
         case timedOut
     }
 
@@ -104,8 +90,7 @@ nonisolated enum DaemonHeal {
                AppVersion.isOlder(daemonVersion, than: inputs.appVersion) {
                 return .restartStale
             }
-            // A daemon that reports no build predates the report, which makes
-            // it another build than any this app ships.
+            // A daemon that reports no build is another build than this app ships.
             if let bundled = inputs.bundledDaemonBuild, inputs.daemonBuild ?? "" != bundled {
                 return .restartStale
             }

@@ -2,19 +2,11 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-/// What a Windows executable says about itself: the icons in its resource
-/// section and the strings in its version resource.
-///
-/// A PE image keeps both in one tree hanging off the optional header's
-/// resource data directory, three levels deep — type, name, language — with a
-/// leaf that names a range by relative virtual address. Reading it takes no
-/// Wine and no bottle, so the app can describe a program before it has ever
-/// run one, and the Quick Look extension can draw its icon inside the sandbox.
-///
-/// The icon group is walked the way `macdrv_app_icon` walks it in the Mac
-/// driver: the lowest-numbered `RT_GROUP_ICON` names the images that make up
-/// the application icon, and each named `RT_ICON` is a PNG or a Windows DIB
-/// with an AND mask under it.
+/// The icons and version strings in a Windows executable's resource tree
+/// (type, name, language), read without Wine, so the Quick Look extension can
+/// use it in its sandbox. The icon group is walked as the Mac driver's
+/// `macdrv_app_icon` walks it: the lowest-numbered `RT_GROUP_ICON` names the
+/// `RT_ICON` images, each a PNG or a DIB with an AND mask.
 nonisolated enum PEResources {
     /// One image out of the file's icon group, at its own size.
     struct Icon: Sendable, Equatable {
@@ -40,8 +32,7 @@ nonisolated enum PEResources {
         var fileVersion: String? {
             versionStrings["FileVersion"]
         }
-        /// The version the product declares, falling back to the file's own —
-        /// the two differ only where a build stamps them separately.
+        /// The product version, else the file version.
         var productVersion: String? {
             versionStrings["ProductVersion"] ?? fileVersion
         }
@@ -49,9 +40,7 @@ nonisolated enum PEResources {
             versionStrings["CompanyName"]
         }
 
-        /// The image worth drawing: the widest, and the PNG of two at the
-        /// same width, whose compressed form carries the 8-bit alpha the DIB
-        /// beside it usually flattens.
+        /// The widest image, preferring a PNG at equal width for its 8-bit alpha.
         var largestIcon: Icon? {
             icons.max { first, second in
                 first.pixels == second.pixels
@@ -116,8 +105,7 @@ nonisolated enum PEResources {
         return u32(signature, 0) == 0x0000_4550
     }
 
-    /// The icon as Core Graphics sees it, decoding a PNG entry through
-    /// ImageIO and a DIB entry by hand.
+    /// The icon as a `CGImage`.
     static func image(of icon: Icon) -> CGImage? {
         if icon.isPNG {
             guard let source = CGImageSourceCreateWithData(icon.data as CFData, nil) else {

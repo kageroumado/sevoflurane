@@ -2,18 +2,10 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-/// Draws a Windows program's icon the way macOS draws an app's: a neutral
-/// platter in the system icon shape, with the program's own artwork resting
-/// on top of it.
-///
-/// A Windows icon is a bare square raster, and a bare square beside the
-/// rounded tiles of every other app reads as a broken image rather than a
-/// different platform. The square is cut to the icon grid's corner — 185.4
-/// units of radius on an 824-unit side — and the result carries an alpha
-/// channel, which is what makes LaunchServices treat it as an icon it may
-/// shape rather than a picture it must show whole. Artwork that fills its
-/// square (box art, a portrait) fills the shape; a glyph with clear space
-/// around it is inset onto a gray platter, the way a Mac app's glyph sits.
+/// Draws a Windows program's icon the way macOS draws an app's: the system
+/// icon shape, filled by artwork that fills its square, or with a glyph inset
+/// on a gray platter. The result carries alpha, which is what makes
+/// LaunchServices treat it as an icon it may shape.
 nonisolated enum IconShaping {
     /// Named in every cached render, so a change to the drawing re-renders
     /// each icon once.

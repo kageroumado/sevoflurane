@@ -1,25 +1,17 @@
 import Foundation
 
 extension BottleSupervisor {
-    /// Starts a game, restarting the client first when that game asks for a
-    /// renderer the running session does not have.
-    ///
-    /// A renderer the env files can carry reaches the game on its own, in its
-    /// per-program file; every other one reaches it through the environment of
-    /// the process tree Steam already lives in, so it takes a new tree. The
-    /// menu bar says so before the click; this is the click.
-    ///
-    /// Answers whether the app took the launch. With no app attached the
-    /// bottle is still made ready, and the caller starts the game itself.
+    /// Starts a game, restarting the client first when its renderer needs a
+    /// new process tree (one the env files cannot carry). Answers whether the
+    /// app took the launch; with no app attached the bottle is still made ready.
     @discardableResult
     func launch(
         appID: Int, name: String, renderer explicit: Renderer? = nil, option: Int? = nil,
     ) async -> Bool {
         // Ahead of the renderer below: a first launch's fixes can pick it.
         await prepareLaunch(appID: appID)
-        // The renderer this launch has to move the bottle onto — an explicit
-        // "Run with X" wins over the game's own choice, and neither persists
-        // past the launch beyond the bottle default it sets.
+        // An explicit "Run with X" wins over the game's own choice; it persists
+        // only as the bottle default it sets.
         let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         if let desired, desired != BottleGraphics.currentSelection().renderer {
             do {
@@ -52,9 +44,8 @@ extension BottleSupervisor {
                 return false
             }
         } else if change.restage {
-            // Hot: only the renderer or D3DMetal version moved. Restage the
-            // tree under the running client; the game loads the new DLLs when
-            // it launches, and the booted record now matches.
+            // Only the renderer or D3DMetal moved: restage under the running
+            // client, and the game loads the new DLLs at launch.
             log.log(.client, "restaging graphics for \(name) without a restart")
             if let note = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
                 log.log(.client, note)
@@ -64,10 +55,8 @@ extension BottleSupervisor {
         return await app.launchGame(appID: appID, option: option)
     }
 
-    /// The menu-bar button and the control endpoint: restarts
-    /// unconditionally, with a fresh crash-loop budget — the user asking is
-    /// what distinguishes "try again" from a loop. A ladder already in flight
-    /// runs again rather than being fought or refused.
+    /// Restarts unconditionally with a fresh crash-loop budget, because a
+    /// person asked. A ladder in flight runs again.
     func restartNow(reason: String = "manual restart from the menu bar") {
         setPaused(false, note: "auto-restart resumed (manual restart)")
         recentRestarts.removeAll()
@@ -78,9 +67,8 @@ extension BottleSupervisor {
     }
 
     /// Moves the client onto another engine, and optionally another bottle.
-    /// The choice is held until the ladder has stopped the running client, so
-    /// the stop's graceful ask and `wineserver -k` go through the engine the
-    /// client runs on; the booted bottle is in the stop's reach either way.
+    /// The choice is held until the ladder stops the running client, so the
+    /// stop goes through the engine it runs on.
     func switchEngine(to engine: Engine, bottle: String?) {
         pendingSwitch = EngineSwitch(engine: engine, bottle: bottle)
         restartNow(reason: "engine switched to \(engine.description)")
@@ -105,8 +93,7 @@ extension BottleSupervisor {
         return true
     }
 
-    /// The heavier menu-bar restart: the whole fake Windows comes down and
-    /// boots fresh — for when the machine itself is suspect, not just Steam.
+    /// Restarts with the whole Windows machine brought down and booted fresh.
     func restartWindowsNow() {
         setPaused(false, note: "auto-restart resumed (Windows restart)")
         recentRestarts.removeAll()
@@ -119,10 +106,8 @@ extension BottleSupervisor {
         }
     }
 
-    /// The escape hatch when a graceful restart is itself hung: SIGKILL the
-    /// Steam client straight away, then bring it back clean. `everything`
-    /// takes the whole fake machine — games and services included — down
-    /// first. The crash-loop budget resets because the user asked.
+    /// SIGKILLs the Steam client, or with `everything` the whole machine,
+    /// games included, and brings it back with a fresh crash-loop budget.
     func forceQuit(_ scope: ClientLifecycle.ForceScope) {
         setPaused(false, note: "auto-restart resumed (force-quit and restart)")
         recentRestarts.removeAll()
@@ -141,14 +126,9 @@ extension BottleSupervisor {
         }
     }
 
-    /// Trashes Steam's shader cache and brings the client back: the bottle
-    /// comes down first so nothing holds the cache, it is cleared, then the
-    /// client relaunches if one is still wanted. Only `steamapps/shadercache`
-    /// is removed — saves and game files stay — and Steam rebuilds it.
-    ///
-    /// With a client wanted it is one ladder pass, clearing between the stop
-    /// and the launch, so neither the probe cycle nor another ladder can start
-    /// a client over the cache while it goes.
+    /// Trashes `steamapps/shadercache` with the bottle down and relaunches a
+    /// wanted client. With a client wanted it is one ladder pass, cleared
+    /// between stop and launch, so nothing starts a client over the cache.
     func clearShaderCache() {
         recentRestarts.removeAll()
         hygieneTried = false
@@ -187,9 +167,7 @@ extension BottleSupervisor {
         guard !isQuitting, !isRestarting else { return }
         endBoot()
         setPaused(true, note: "auto-restart paused (sevo client stop)")
-        // A deliberate stop should look like one: the app's own library
-        // window comes down first (left up it freezes dimmed over the whole
-        // stop), and the client's shutdown dialog is hidden as it exits.
+        // The library window goes first, or it freezes dimmed over the stop.
         await app.send(.dismissWindows)
         await app.duringClientStop {
             await ClientLifecycle.stopAll(gracePolls: 10, hidingPopups: true)
@@ -198,13 +176,9 @@ extension BottleSupervisor {
     }
 
     /// Whether the bottle is not ready for a client: setup holds it
-    /// (``ProvisioningLease``) — its installers and updater are running there,
-    /// and a client started now would boot under them — or it has no
-    /// `Steam.exe`, or the last setup pass for this engine and bottle stopped
-    /// at a stage that leaves nothing to start, and nobody has retried it or
-    /// asked for the client anyway (Settings › Engine). The verdict names the
-    /// reason, because a client that never comes up is otherwise a mystery;
-    /// the log says it once per failure rather than once per probe.
+    /// (``ProvisioningLease``), it has no `Steam.exe`, or the last setup pass
+    /// stopped where nothing can start. The verdict names the reason; the log
+    /// says it once per failure.
     func provisioningBlocksStart(reason: String) -> Bool {
         let provisioning = ProvisioningLease.onConfiguredBottle.map {
             "setup is still installing Steam in bottle \($0.name)"
@@ -231,8 +205,7 @@ extension BottleSupervisor {
     /// it is not already up — the supervisor's ladder, not a bare launch.
     func startForControl() {
         setPaused(false, note: "auto-restart resumed (sevo client start)")
-        // A start asked for by a person begins a fresh count, as a manual restart does: kept,
-        // the crash-loop budget the ladder gave up on gives up again at the first rung.
+        // A fresh count, or a ladder that gave up gives up again at the first rung.
         recentRestarts.removeAll()
         hygieneTried = false
         if case .gaveUp = fault {
@@ -246,20 +219,10 @@ extension BottleSupervisor {
         }
     }
 
-    /// Quit teardown: quitting Sevoflurane quits Steam. Stops wanting a client
-    /// so nothing relaunches it, then brings every bottle process down — the
-    /// client's processes are launched detached, so without this they outlive
-    /// the session (and a leaked webhelper window parks a dead icon in the
-    /// Dock). Reached only from `/quit` and `SIGTERM`: a bottle that nobody
-    /// asked to come down keeps running, which is the whole of what surviving
-    /// an app crash means.
-    ///
-    /// The stop reaches the bottle the client booted in, the configured one,
-    /// and every other Sevoflurane bottle with a wineserver running, and the
-    /// survivor check looks in all of them.
-    ///
-    /// The daemon itself stays up and idle afterwards — it still answers
-    /// `sevo status`, and the next ask starts a client again.
+    /// Quit teardown: stops wanting a client, then brings down the booted, the
+    /// configured and every other Sevoflurane bottle with a wineserver up. The
+    /// client's processes are launched detached and would outlive the session
+    /// otherwise. Reached only from `/quit` and `SIGTERM`; the daemon stays up.
     func shutdownForQuit() async {
         guard !isQuitting else { return }
         isQuitting = true
@@ -267,10 +230,7 @@ extension BottleSupervisor {
         endBoot()
         refreshHealth()
         log.log(.supervisor, "quit: bringing the bottle down")
-        // The last thing a user sees of this app is the teardown, so the
-        // popup sweep runs here too: the client puts up "Shutting down
-        // Steam…" on its way out, and a quit is the one moment nothing else
-        // is left to hide it.
+        // Hides the client's "Shutting down Steam…" popup.
         await app.send(.dismissWindowsForQuit)
         let booted = BootedBottle.target
         let strays = await strayBottles(during: "quit", beside: booted)
@@ -302,8 +262,7 @@ extension BottleSupervisor {
         // A switch the quit overtook lands now, with the old bottle down,
         // so the next start boots the engine that was asked for.
         applyPendingSwitch()
-        // The next client is a start: the one this session saw is gone on
-        // purpose, and the daemon outlives the app that asked.
+        // The next client is a fresh start, not a recovery.
         hasSeenClientUp = false
         hasBeenHealthy = false
         isQuitting = false

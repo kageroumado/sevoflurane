@@ -1,13 +1,8 @@
 import Foundation
 
-/// A game's own bundle kept in the Dock, beside the apps the user keeps
-/// there, and the Games folder beside the Dock's other folders.
-///
-/// The Dock has no API for adding a tile; its kept apps are the
-/// `persistent-apps` array in its preferences and its folders the
-/// `persistent-others` one, read when it starts. A tile written there needs
-/// only its file URL, and the Dock fills in the rest (label, bookmark,
-/// bundle id) on the restart that makes it read the array.
+/// Keeps game bundles and the Games folder in the Dock. The Dock has no API:
+/// tiles go in its `persistent-apps` and `persistent-others` preferences,
+/// which it reads at restart, filling in everything but the file URL.
 nonisolated enum DockTiles {
     private static let domain = "com.apple.dock"
     private static let key = "persistent-apps"
@@ -39,9 +34,8 @@ nonisolated enum DockTiles {
         write(remaining)
     }
 
-    /// Points a kept tile at the bundle's new name — a renamed game rebuilds
-    /// its bundle under the new title, and the tile kept for the old one
-    /// would show a question mark.
+    /// Points a kept tile at a renamed game's new bundle, or it shows a
+    /// question mark.
     static func replace(_ old: URL, with new: URL) {
         lock.lock()
         defer { lock.unlock() }
@@ -61,9 +55,8 @@ nonisolated enum DockTiles {
         return tiles(othersKey).contains { path(of: $0) == wanted }
     }
 
-    /// Keeps the folder beside the Dock's other folders: a stack whose face
-    /// is the newest item, in a grid, newest first — the last played game
-    /// is the one on top. A folder already kept is left as the user set it.
+    /// Keeps the folder as a grid stack, newest first, so the last played game
+    /// is on top; one already kept is left as the user set it.
     static func keepFolder(_ folder: URL, label: String) {
         lock.lock()
         defer { lock.unlock() }

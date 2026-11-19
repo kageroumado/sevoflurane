@@ -190,10 +190,8 @@ struct AppCommand: AsyncParsableCommand {
         }
     }
 
-    /// Looks at a game's files again and records what they are: the NW.js
-    /// build it ships, if any. The app does this for the whole installed
-    /// library at every client start, so this is for a game that has just
-    /// been installed or updated.
+    /// Re-reads a game's files for the NW.js build it ships; the app does this
+    /// for the whole library at every client start.
     struct Detect: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "detect",
@@ -298,10 +296,9 @@ struct AppCommand: AsyncParsableCommand {
             }
         }
 
-        /// Asks for the launch where the launch-option question can be answered:
-        /// through the daemon and the app when they are up, so its own chooser
-        /// or the `--option` given here answers Steam; otherwise in the
-        /// client's own context, where only an option given here can.
+        /// Asks for the launch through the daemon and app when up, where their
+        /// chooser or `--option` answers Steam; otherwise in the client, where
+        /// only `--option` can.
         @discardableResult
         private func requestLaunch() async throws -> SteamOps.LaunchRoute {
             let index = try await steamIndex(ofOption: option)
@@ -318,10 +315,8 @@ struct AppCommand: AsyncParsableCommand {
             return route
         }
 
-        /// A game installed only by another of the account's Steam clients —
-        /// a native Mac Steam, another PC — shows as installed in Steam's
-        /// library, and launching it here fails at its app ticket and offers
-        /// an install. Said up front, with exit 1.
+        /// A game installed only by another of the account's Steam clients shows
+        /// as installed but fails here at its app ticket; refused with exit 1.
         private func refuseUnlessInstalledHere() async throws {
             guard let info = try? await SteamOps.appInfo(appid),
                   let overview = Sevo.jsonObject(info),
@@ -370,10 +365,8 @@ struct AppCommand: AsyncParsableCommand {
             return true
         }
 
-        /// Steam refuses a second game while it believes one is running, and
-        /// it believes that of any game whose entry outlived its process — so
-        /// a non-empty list before the ask is the likeliest reason the launch
-        /// that follows does nothing at all.
+        /// Steam refuses a second game while it lists one as running, even one
+        /// whose process is gone.
         private func warnAboutRunningApps() async {
             let running = await (try? SteamOps.runningApps()) ?? []
             guard !running.isEmpty else { return }
@@ -406,20 +399,16 @@ struct AppCommand: AsyncParsableCommand {
 
         func run() async throws {
             try await handlingFailures {
-                // The word goes down first: the recorder reads it when the
-                // exit that follows is seen. The game's own processes end
-                // before Steam is asked, whole, so the ask finds nothing to
-                // tear down thread by thread (``GameEnding``).
+                // The stop note goes first, for the recorder. The game's
+                // processes end before Steam is asked, so it tears nothing
+                // down thread by thread (``GameEnding``).
                 RunLog.noteStopRequest(forApp: appid, by: .tool)
                 if let ended = await GameEnding.end(appID: appid).summary {
                     narrate(ended, asJSON: asJSON)
                 }
                 try await SteamOps.terminate(appid, notingStop: false)
-                // On an engine whose shim execs NW.js in place (r12 and
-                // earlier), a native run has left the bottle and the client's
-                // terminate only drops its record, so the process itself is
-                // asked here. A newer engine runs it under the native
-                // supervisor, which the client's terminate already ends.
+                // Engines r12 and earlier exec NW.js in place, where the
+                // client's terminate only drops its record.
                 let native = GameConfig.game(appid).runsNatively
                     ? NWJSRunner.terminate(appID: appid) : []
                 narrate(
@@ -444,10 +433,7 @@ struct AppCommand: AsyncParsableCommand {
                 if !sighting.isGone, sighting.processes.isEmpty {
                     verdict = .stillRunning
                 } else if !sighting.isGone {
-                    // The record and the processes are separate survivors: a
-                    // stale entry is what makes every later RunGame a silent
-                    // no-op, and only the client clears it, so what can be
-                    // signaled here is the tree.
+                    // Only the client clears a stale entry; this signals the tree.
                     for pid in sighting.processes { kill(pid, SIGKILL) }
                     narrate(
                         "it did not go — SIGKILL'd \(sighting.processes.count) "
@@ -523,10 +509,8 @@ struct AppCommand: AsyncParsableCommand {
             case let .failed(reason):
                 throw ClientOps.Failure.message("Steam for Mac's copy was not cloned: \(reason)")
             }
-            // Steam shows a mapping it took in the game's details within a
-            // few seconds; an install started before that takes Windows depots.
-            // The details exist only once something asks for them, as a game's
-            // page does.
+            // An install started before the details show the mapping takes
+            // Windows depots; the details exist only once requested.
             let tool = JSLiteral.string(SteamPlayMacOS.toolName)
             let mapped = try await SteamJS.eval("""
             (async () => {
@@ -611,8 +595,7 @@ struct DownloadsCommand: AsyncParsableCommand {
             }
         }
 
-        /// Steam's overview as a sentence: the app, the state, how far along
-        /// and how fast. The snapshot itself carries two minutes of history.
+        /// Steam's download overview as one sentence.
         static func summary(of snapshot: String) -> String {
             guard let overview = (try? JSONSerialization.jsonObject(with: Data(snapshot.utf8))) as? [String: Any]
             else { return "no answer from Steam's download queue" }

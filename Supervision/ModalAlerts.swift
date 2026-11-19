@@ -1,15 +1,10 @@
 import Foundation
 
-/// Where a modal alert the app raises by itself runs: a turn of the main run
-/// loop of its own.
+/// Runs a modal alert on a main run-loop turn of its own.
 ///
-/// Never from a `DispatchQueue.main` block or a main-actor task: the main
-/// queue runs one block at a time, so a modal loop inside one holds back
-/// every other main-queue block and main-actor job until the alert closes.
-/// The control endpoint and the helper's link are among them, so while a
-/// question waits for its answer `sevo status` reports the app and the helper
-/// as not running. A run-loop turn is outside the queue, and the modal loop
-/// drains it as usual.
+/// Never from a `DispatchQueue.main` block or a main-actor task: a modal loop
+/// there holds back every main-queue job, the control endpoint and helper
+/// link included, until it closes.
 @MainActor
 enum ModalAlerts {
     static func present(_ alert: @escaping @MainActor () -> Void) {

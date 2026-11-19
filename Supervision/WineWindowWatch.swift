@@ -3,19 +3,13 @@ import Darwin
 import Foundation
 import os
 
-/// Detects visible windows belonging to the bottle's Wine processes.
+/// Detects visible windows of the bottle's Wine processes.
 ///
-/// In normal operation the bottled client is `-silent` and windowless, so any
-/// on-screen Wine window is an anomaly — most often Steam's own watchdog
-/// dialog (`CRescueDialog` in steamui.dll, "Steamwebhelper is not
-/// responding"), occasionally an update/EULA dialog. The supervisor treats
-/// such a window as a symptom to log and, when probes are failing too, as
-/// confirmation that the client is wedged; it is never clicked.
-///
-/// Matching starts from the window owner name, which CGWindowList provides
-/// without any permission, and resolves to the Windows program the owning
-/// process is running. Window titles need Screen Recording and are used only
-/// when present.
+/// The `-silent` client is windowless, so an on-screen Wine window is most
+/// often Steam's watchdog dialog (`CRescueDialog` in steamui.dll,
+/// "Steamwebhelper is not responding") or an update/EULA dialog: a symptom,
+/// never clicked. Matching uses the owner name, which needs no permission;
+/// titles need Screen Recording and are used only when present.
 nonisolated enum WineWindowWatch {
     struct Window: Equatable, Sendable {
         let owner: String
@@ -25,19 +19,16 @@ nonisolated enum WineWindowWatch {
         let height: Int
     }
 
-    /// Owner names that mean "some Windows program in the bottle": the unix
-    /// binary the engine's loader is called, which reveals nothing about
-    /// which program is inside it. `windowsProgram(of:)` answers that.
+    /// Owner names of the engine's loader, which say nothing of the program
+    /// inside it (`windowsProgram(of:)` does).
     private static let bottleLoaders: Set<String> = [
         "wine", "wine64", "wine-preloader", "wine64-preloader",
     ]
 
     /// A window's program and what named it.
     struct Program: Equatable, Sendable {
-        /// Where the name came from, which is also how much it is worth: the
-        /// first four say which game a process runs, from the bottle's or the
-        /// engine's own records, while `owner` is whatever macOS calls the
-        /// window's application.
+        /// Where the name came from: the first four from the bottle's or the
+        /// engine's records, `owner` from what macOS calls the application.
         enum Source: Equatable, Sendable {
             /// The process is the engine's loader; the name is its command line.
             case loader
@@ -66,18 +57,13 @@ nonisolated enum WineWindowWatch {
         }
     }
 
-    /// The program behind an on-screen window, lowercased: the owner
-    /// name when the engine reports one, otherwise the program inside the
-    /// loader process. `sessions` are the running macOS builds, read once per
-    /// pass over the window list (``NativeSessions/live(inBottle:machine:removingStale:)``).
+    /// The program behind an on-screen window, lowercased. `sessions` are the
+    /// running macOS builds, read once per pass over the window list.
     static func program(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> String? {
         resolve(owner: owner, pid: pid, sessions: sessions)?.name
     }
 
-    /// As ``program(owner:pid:sessions:)``, and says which of the supplies
-    /// answered — what a launch's log line needs to report that a game came
-    /// up through its own bundle, and what a window's consumers need to tell
-    /// a macOS build from a Mac application.
+    /// As ``program(owner:pid:sessions:)``, and says which source answered.
     static func resolve(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
         if let build = macOSBuild(of: pid, sessions: sessions) {
             return build
@@ -86,9 +72,8 @@ nonisolated enum WineWindowWatch {
         if bottleLoaders.contains(name) {
             return windowsProgram(of: pid).map { Program(name: $0, source: .loader) }
         }
-        // A process's arguments cost a KERN_ARGMAX buffer each and this is
-        // asked of every window on screen, so nothing is asked of the kernel
-        // until there is a bundle or a wrapper to find.
+        // Arguments cost a KERN_ARGMAX buffer per window: read them only when a
+        // bundle or wrapper exists.
         guard GameLaunchers.hasBundles || NWJSRunner.hasWrappers else {
             return Program(name: name, source: .owner)
         }
@@ -99,25 +84,17 @@ nonisolated enum WineWindowWatch {
         if let native = nativeProgram(fields) {
             return Program(name: native, source: .native)
         }
-        // A bottle process macOS names after something else: the dock shim
-        // renames the application, and a game running on the engine's own
-        // loader is then neither one of the loader names nor a bundle path.
-        // Its command line still says which Windows program it is, and a Mac
-        // application's first argument does not end in `.exe`.
+        // The dock shim renames a loader process; its first argument still
+        // names the Windows program, and a Mac application's never ends in `.exe`.
         if let windows = windowsProgram(fields), windows.hasSuffix(".exe") {
             return Program(name: windows, source: .loader)
         }
         return Program(name: name, source: .owner)
     }
 
-    /// The macOS build a process belongs to, from the native supervisor's
-    /// session files: the game itself or any process in its group, wherever
-    /// its Steam library is. `nil` for every other process, Mac applications
-    /// with an `.app` of their own included.
-    ///
-    /// A native NW.js run has a session too, since the same supervisor holds
-    /// Steam's waiter for it; its bundle sits under ``NWJSRunner/root``, and
-    /// its windows stay named after the game's exe (``nativeProgram(_:)``).
+    /// The macOS build a process or its group belongs to, from the native
+    /// supervisor's session files. NW.js sessions are left out: their windows
+    /// stay named after the game's exe (``nativeProgram(_:)``).
     static func macOSBuild(of pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
         NativeSessions.session(owning: pid, in: sessions.filter { !$0.isNWJS }).map {
             Program(name: $0.name, source: .macOSBuild, appID: $0.appID)
@@ -131,13 +108,8 @@ nonisolated enum WineWindowWatch {
         return windowsProgram(fields)
     }
 
-    /// The exe a native run stands in for, or `nil` for a window that is not
-    /// one. A game Sevoflurane runs outside the bottle (``NWJSRunner``) is
-    /// started with its own wrapper directory as the first argument, and that
-    /// directory is named after the app id — so the command line says which
-    /// game the window belongs to, whatever the process ended up being called.
-    /// The process carries the game's name too: a native run is exec'd through
-    /// a bundle named after it.
+    /// The exe a native NW.js run (``NWJSRunner``) stands in for: its first
+    /// argument is its wrapper directory, named after the app id.
     private static func nativeProgram(_ fields: [String]) -> String? {
         guard fields.count >= 3, fields[2].hasPrefix(NWJSRunner.root.path),
               let appID = Int(URL(fileURLWithPath: fields[2]).lastPathComponent),
@@ -158,18 +130,13 @@ nonisolated enum WineWindowWatch {
         name.hasSuffix(".exe") && !gameInfrastructureOwners.contains(name)
     }
 
-    /// Wine's plumbing: an on-screen `.exe` window owned by none of these is
-    /// a game. `GameLaunchWatch` uses the same set to spot a launch's first
-    /// window.
+    /// Wine's and Steam's plumbing; `GameLaunchWatch` uses the same set.
     static let gameInfrastructureOwners = clientOwners.union(bottleOwners).union(GameExecutables.windowsTools)
 
-    /// Steam's own processes in the bottle: the client, its helpers, and the
-    /// probes it runs at boot and from Help ▸ System Information. Each probe
-    /// loads the Mac driver and some order a window, so one that runs during
-    /// a launch reads as the game's own process unless it is named here
-    /// (unnamed, `steamsysinfo.exe` records as a 166 s run). The
-    /// same list the engine's dock shim keeps off the screen (dormison
-    /// `sevo_dock_shim.c`, `is_steam_infrastructure`).
+    /// Steam's processes in the bottle, its boot and System Information probes
+    /// included: a probe that orders a window during a launch otherwise reads
+    /// as the game (`steamsysinfo.exe` as a 166 s run). The same list as
+    /// dormison's `sevo_dock_shim.c` (`is_steam_infrastructure`).
     private static let clientOwners: Set<String> = [
         "steam.exe", "steamwebhelper.exe", "steamservice.exe",
         "steamerrorreporter.exe", "steamerrorreporter64.exe",
@@ -185,11 +152,9 @@ nonisolated enum WineWindowWatch {
         "streaming_client.exe", "drivers.exe",
     ]
 
-    /// Wine's own services, and the programs Sevoflurane runs in the bottle
-    /// beside the client. Each of these can put a window on screen for a
-    /// moment — a service starting, the Discord relay reconnecting — and a
-    /// window of theirs is not a game starting: taken for one, it holds the
-    /// display awake and spends the launch's activation right on nothing.
+    /// Wine's services and Sevoflurane's own bottle programs, whose brief
+    /// windows would otherwise hold the display awake and spend a launch's
+    /// activation right.
     private static let bottleOwners: Set<String> = [
         "services.exe", "winedevice.exe", "plugplay.exe", "svchost.exe",
         "rpcss.exe", "wineboot.exe", "winemenubuilder.exe", "start.exe",
@@ -204,9 +169,8 @@ nonisolated enum WineWindowWatch {
     /// game window if one is up.
     struct Scan: Sendable {
         let wineWindows: [Window]
-        /// The first game window the pass found. It names what holds the
-        /// display awake, so a window mistaken for a game's says which
-        /// program it belonged to.
+        /// The largest game window the pass found; it names what holds the
+        /// display awake.
         let game: Window?
 
         var gameWindowUp: Bool { game != nil }
@@ -221,9 +185,8 @@ nonisolated enum WineWindowWatch {
         min(width, height) < smallestGameWindowSide
     }
 
-    /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous round trip
-    /// to the window server, which answers in its own time on a busy host —
-    /// on the main thread that time would be a UI stall every probe cycle.
+    /// `@concurrent`: `CGWindowListCopyWindowInfo` is a synchronous
+    /// window-server round trip, slow on a busy host.
     @concurrent
     static func scan() async -> Scan {
         let interval = PerfProbe.system.beginInterval("WineWindowScan")
@@ -274,18 +237,13 @@ nonisolated enum WineWindowWatch {
         /// Top-left-origin bounds as CGWindowList reports them; convert with
         /// `SteamScreenSpace.appKitOrigin(steamX:steamY:size:)`.
         let bounds: CGRect
-        /// The window's CGWindow level (`kCGWindowLayer`). A frontmost Wine
-        /// game raises itself far above normal windows and drops below them
-        /// when backgrounded, so the overlay is leveled at `layer + 1` to
-        /// ride just above it rather than at a fixed floating level.
+        /// The window's `kCGWindowLayer`; the overlay sits at `layer + 1`
+        /// because a Wine game's level changes as it gains and loses the front.
         let layer: Int
     }
 
-    /// The largest on-screen game window (``Program/isGame``: a macOS build's,
-    /// or an `.exe` window owned by none of the client's infrastructure), or
-    /// `nil` when no game window is up. Windows at
-    /// every level are considered: a frontmost fullscreen game is not at level
-    /// zero, which is exactly when the overlay needs to find it.
+    /// The largest on-screen game window, at any level: a frontmost
+    /// fullscreen game is not at level zero.
     @concurrent
     static func gameWindow() async -> GameWindow? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -318,14 +276,9 @@ nonisolated enum WineWindowWatch {
         return best
     }
 
-    /// The Windows program a bottle process is running, lowercased and
-    /// stripped to its file name.
-    ///
-    /// Wine rewrites `argv` to the Windows command line, so a process whose
-    /// executable on disk is the engine's `wine` reports
-    /// `C:\Program Files (x86)\Steam\steam.exe` as its first argument. That
-    /// rewrite is the only thing that distinguishes Steam's infrastructure
-    /// from a game once both run under the same loader binary.
+    /// The Windows program a bottle process runs, as a lowercased file name:
+    /// Wine rewrites `argv` to the Windows command line
+    /// (`C:\Program Files (x86)\Steam\steam.exe`).
     private static func windowsProgram(of pid: pid_t) -> String? {
         windowsProgram(arguments(of: pid))
     }

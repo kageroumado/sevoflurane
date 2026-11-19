@@ -3,32 +3,15 @@ import Foundation
 /// Programs that only start as a child of `C:\windows\system32\steam.exe`, in
 /// a prefix where no other `steam.exe` runs: HoYoverse's games.
 ///
-/// These games load a kernel anti-cheat driver (`HoYoKProtect.sys`, which
-/// imports `WDFLDR.SYS`) that no Wine can load. When they try, the load fails
-/// with `c0000142`, the game writes `driverError.log` beside itself
-/// (`initDriver Failed: Error [4,1114,0]`) and quits within about twenty
-/// seconds, before its graphics device or its Unity log exist. They skip the
-/// driver when their parent is a `steam.exe` in system32 and every `steam.exe`
-/// they can see lives there too, which is the arrangement Proton's own
-/// `steam.exe` gives them and the one every Linux and macOS launcher for these
-/// games relies on.
-///
-/// A bottle cannot give them that: it always runs the real Steam client from
-/// `Program Files (x86)\Steam`, and that process alone sends the game down the
-/// driver path, whoever its parent is. Measured on Dormison r18 with
-/// GenshinImpact, 2026-09:
-///
-/// - parent `system32\steam.exe`, no other `steam.exe`: no driver, plays;
-/// - the same with a second `steam.exe` in system32: plays;
-/// - the same with a `steam.exe` anywhere else, or the Steam client running,
-///   or the Steam client itself as the parent: driver, dies;
-/// - `start /unix` without that parent: driver, dies, in any prefix.
-///
-/// So these programs run in a companion prefix beside the bottle, with Steam
-/// nowhere in it, started by the app's own `steam-parent.exe` installed as
-/// that prefix's `system32\steam.exe`. A bare prefix is enough: the trials
-/// played in one made by `wineboot -i` a minute earlier. The engine, the
-/// renderer staging and the per-game settings are the bottle's own.
+/// Otherwise they load a kernel anti-cheat driver (`HoYoKProtect.sys`, which
+/// imports `WDFLDR.SYS`) that no Wine can load, write `driverError.log`
+/// (`initDriver Failed: Error [4,1114,0]`) and quit within about twenty
+/// seconds. A `steam.exe` outside system32, the running Steam client, or
+/// `start /unix` without that parent all send them down the driver path
+/// (measured on Dormison r18 with GenshinImpact, 2026-09). So they run in a
+/// companion prefix with no Steam in it, under the app's `steam-parent.exe`
+/// installed as its `system32\steam.exe`; a bare `wineboot -i` prefix is
+/// enough, and the engine, renderer staging and settings are the bottle's.
 nonisolated enum SteamParent {
     /// The executables, lowercased, that get the parent. The same list the
     /// Linux runners start through their steam.exe stub.
@@ -46,10 +29,8 @@ nonisolated enum SteamParent {
         executables.contains(program.url.lastPathComponent.lowercased())
     }
 
-    /// Where companion prefixes live. Outside `Bottles` on purpose: the
-    /// supervisor stops any client or wineserver of another bottle it finds
-    /// there, and a companion is not a bottle, nor one the setup assistant
-    /// should offer.
+    /// Where companion prefixes live: outside `Bottles`, where the supervisor
+    /// would stop their wineservers as stray bottles.
     static let root = SteamBottle.companionsRoot
 
     /// The companion prefix of one bottle.
@@ -65,11 +46,8 @@ nonisolated enum SteamParent {
         prefix.appendingPathComponent("drive_c/windows/system32/steam.exe")
     }
 
-    /// The argument list that starts a program under the parent.
-    ///
-    /// The program is named by its `Z:` path, which the prefix maps to the
-    /// Mac's root, and the parent passes the rest of its command line on
-    /// untouched, so each argument stays its own token.
+    /// The argument list that starts a program under the parent, which passes
+    /// its command line on untouched.
     static func invocation(_ program: AdoptedProgram) -> [String] {
         [#"C:\windows\system32\steam.exe"#, windowsPath(program.path)] + program.arguments
     }
@@ -99,10 +77,8 @@ nonisolated enum SteamParent {
         let prefix = prefix(for: bottle)
         let manager = FileManager.default
         if let stale = serverEngine(of: prefix), stale != engine {
-            // A program the last launch started outlived an engine switch, and
-            // the bottle's teardown never reaches the companion. The new
-            // engine's processes cannot join that server, so it goes, with
-            // whatever still runs on it.
+            // The bottle's teardown never reaches the companion, and the new
+            // engine's processes cannot join an old engine's server.
             await ClientLifecycle.killWineservers([BottleTarget(prefix: prefix, engine: stale)])
             await EventLog.shared.log(.client, "stopped \(bottle)'s companion prefix, still running on \(stale.description)")
         }

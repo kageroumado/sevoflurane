@@ -172,8 +172,7 @@ struct EngineCommand: AsyncParsableCommand {
                 D3DMetalInstaller.choose(version: entry.version)
             }
             let launcher = CrossOverShadow.preparedLauncher()
-            // Games spawn inside the client, which staged its toolkit when it
-            // booted: the choice reaches them with the client's next boot.
+            // The choice reaches games at the client's next boot.
             print("D3DMetal for \(label): \(use == "own" ? "the engine's own" : use)"
                 + (launcher == nil ? "" : ", shadow tree ready")
                 + " — in the client from its next boot: sevo client restart")
@@ -191,9 +190,7 @@ struct EngineCommand: AsyncParsableCommand {
                 print(entry.version + note)
             }
             if active == nil, !installed.isEmpty { print("the engine's own  (selected)") }
-            // The on-disk truth: what a game actually loads, both halves,
-            // independent of what the picker recorded. A crossed tree here is
-            // the silent 14 s boot death.
+            // What a game actually loads; a crossed tree is the silent 14 s boot death.
             if let tree, !installed.isEmpty {
                 let placement = D3DMetalInstaller.placement(inEngine: tree)
                 if let macOS = placement.macOS, placement.halvesAgree {
@@ -221,10 +218,8 @@ struct EngineCommand: AsyncParsableCommand {
         }
     }
 
-    /// Downloads and installs the release the feed names — the CLI face of
-    /// the wizard's built-in-engine stage — or, with `--file`, installs
-    /// the tarball or engine folder on disk, the route for a Mac the release
-    /// feed does not reach and for a tree built here.
+    /// Installs the feed's release, or with `--file` a tarball or engine
+    /// folder on disk.
     private func install() async throws {
         if let file {
             let source = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)

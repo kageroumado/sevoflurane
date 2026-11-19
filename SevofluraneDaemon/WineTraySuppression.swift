@@ -16,21 +16,13 @@ extension BottleSupervisor {
         }.map(\.processIdentifier)
     }
 
-    /// Ends the bottle's `explorer.exe`, the only process that can turn Steam's
-    /// Windows tray icon into a macOS status item.
+    /// Ends the bottle's `explorer.exe`, the only process that turns Steam's
+    /// tray icon into a macOS status item; the client works without it.
     ///
-    /// Neither `ShowSystray` nor `NoTrayItemsDisplay` can stop it: decompiling
-    /// CrossOver 26.3's explorer.exe shows `handle_incoming` forwarding every
-    /// `NIM_ADD` to the display driver (`NtUserMessageCall … 0x306`) and
-    /// returning before `show_icon`, which is where both registry gates are
-    /// read. The driver then owns a real `NSStatusItem` we cannot reach. So the
-    /// suppression is the process itself — the bottled client neither needs nor
-    /// notices its absence (verified live: full CDP target list, working UI).
-    ///
-    /// Only called once the client is fully up: explorer also owns the desktop
-    /// during startup, and killing it there stops the client from starting at
-    /// all (measured — CDP never arrived within 180s). Skipped while a game is
-    /// running for the same reason, untested there.
+    /// The `ShowSystray` and `NoTrayItemsDisplay` registry gates cannot stop
+    /// it: CrossOver 26.3's `handle_incoming` forwards every `NIM_ADD` to the
+    /// driver before reading them. Only once the client is up and no game
+    /// runs: killed during startup, the client never starts (no CDP in 180 s).
     nonisolated static func suppressWineTray() async {
         guard await Subprocess.run("/usr/bin/pgrep", ["-f", "explorer.exe /desktop"]).status == 0 else {
             return

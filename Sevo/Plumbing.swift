@@ -12,10 +12,8 @@ nonisolated enum SevoExit {
 }
 
 nonisolated enum Sevo {
-    /// The version of the app this executable shipped in (`Sevoflurane.app/
-    /// Contents/Helpers/sevo`) as a person reads it, "1.0 beta 1 (1)", which
-    /// is what a bug report should name; a copy run from outside an app
-    /// bundle says so.
+    /// The containing app's version as a person reads it, "1.0 beta 1 (1)";
+    /// "development build" outside an app bundle.
     static let version: String = {
         guard let info = appInfo(), let marketing = info["CFBundleShortVersionString"] as? String
         else { return "development build" }
@@ -55,11 +53,9 @@ nonisolated enum Sevo {
     }
 }
 
-/// Talks to the supervision daemon's control endpoint (loopback :8764), which
-/// also proxies the app's own verbs. `nil` from `get` means supervision is not
-/// running — `sevo client start` brings it up, and `--no-app` drives
-/// ``ClientLifecycle`` directly for debugging. Every request carries
-/// ``ControlToken``, which both ports require.
+/// Talks to the daemon's control endpoint, which also proxies the app's verbs;
+/// `nil` means supervision is not running. Every request carries
+/// ``ControlToken``.
 nonisolated enum AppControl {
     static func get(_ path: String, timeout: TimeInterval = 3) async -> Data? {
         await request(path, method: "GET", timeout: timeout)
@@ -119,10 +115,8 @@ nonisolated enum AppControl {
         return data
     }
 
-    /// The app's own link port, for the verbs only the app can serve. The
-    /// daemon's control port cannot proxy these when the reason they are
-    /// needed is that the daemon will not launch, so they go straight to the
-    /// app. `nil` when no app is running to answer.
+    /// A POST to the app's own link port, for verbs needed while the daemon is
+    /// down; `nil` when no app answers.
     static func appLinkPost(
         _ path: String, timeout: TimeInterval = 60,
     ) async -> (status: Int, body: Data)? {
@@ -155,11 +149,8 @@ nonisolated enum AppControl {
         return (http.statusCode, data)
     }
 
-    /// Whether the app process is answering its own link port, regardless of
-    /// whether the daemon still holds its attachment. A detached-but-alive app
-    /// — the window after a daemon rebuild, before the app re-posts its facts —
-    /// answers here while the daemon's `/status` reports it gone. Any HTTP
-    /// reply is proof of life; the `/game/window` read is side-effect-free.
+    /// Whether the app answers its own link port, attached or not; any HTTP
+    /// reply counts, and `/game/window` has no side effects.
     static func appIsAlive(timeout: TimeInterval = 2) async -> Bool {
         guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.appLink)/game/window") else {
             return false
@@ -188,10 +179,8 @@ nonisolated enum AppControl {
     }
 }
 
-/// One-shot JavaScript evaluation against the bottled client's
-/// `SharedJSContext` — the same channel the bridge uses, opened fresh per
-/// invocation. Works whether or not the app is running; only needs the
-/// client's CDP port.
+/// One-shot JavaScript in the bottled client's `SharedJSContext` over CDP;
+/// needs no app.
 nonisolated enum SteamJS {
     static func eval(_ expression: String) async throws -> String? {
         let client = CDPClient(onPush: { _ in })

@@ -13,9 +13,8 @@ struct ClientCommand: AsyncParsableCommand {
         ],
     )
 
-    /// The escape hatch when a graceful stop is itself hung. Every field of
-    /// the reply is observed after the fact — the caller's model updates from
-    /// what actually happened, not from "done".
+    /// The escape hatch when a graceful stop hangs; the reply is observed
+    /// after the fact.
     struct ForceQuit: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             commandName: "force-quit",
@@ -42,8 +41,7 @@ struct ClientCommand: AsyncParsableCommand {
                 ["all", "everything"].contains(scope) ? .everything : .steam
             let scopeName = force == .everything ? "everything" : "steam"
             let before = await ClientLifecycle.bottleProcessIDs()
-            // Names have to be read before the kill — a dead pid has no `ps`
-            // entry — so the reply can still say what it killed.
+            // Read names before the kill: a dead pid has no `ps` entry.
             let beforeNames = await ClientLifecycle.processNames(before)
             let routed = await ClientOps.supervisionIsRunning(noApp: noApp)
             if routed {
@@ -51,8 +49,6 @@ struct ClientCommand: AsyncParsableCommand {
             } else {
                 _ = await ClientLifecycle.forceQuit(force)
             }
-            // Observe the kill settling and, when routed, the client coming
-            // back — the reply carries the after-state, not an assumption.
             var after = before
             var clientState = ClientLifecycle.ClientState.down
             for _ in 0 ..< 12 {
@@ -64,9 +60,7 @@ struct ClientCommand: AsyncParsableCommand {
             }
             let afterSet = Set(after), beforeSet = Set(before)
             let killed = before.filter { !afterSet.contains($0) }
-            // Still running: for 'steam' these are the Windows hosts left
-            // booted by design; for 'all' anything here is a kill that did
-            // not take. Neutral name — the scope decides which it is.
+            // For 'steam', the Windows hosts left booted; for 'all', kills that did not take.
             let stillRunning = before.filter { afterSet.contains($0) }
             let recovered = after.filter { !beforeSet.contains($0) }
             // killed/still-running from the pre-kill read, recovered from a live one.
@@ -280,11 +274,8 @@ struct DaemonCommand: AsyncParsableCommand {
         subcommands: [Repair.self],
     )
 
-    /// Rebuilds the background helper's registration — the fix for a helper
-    /// that will not launch because a stale Background Task Management record
-    /// still carries a Development code requirement. Only the app can do it
-    /// (`SMAppService` acts for the bundle that registered the helper), so
-    /// this asks the running app rather than the daemon, which is exactly
+    /// Rebuilds the helper's registration (``DaemonHeal``) through the running
+    /// app: only the registering bundle's `SMAppService` can, and the daemon is
     /// what is down.
     struct Repair: AsyncParsableCommand {
         static let configuration = CommandConfiguration(

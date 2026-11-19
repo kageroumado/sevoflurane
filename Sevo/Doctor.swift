@@ -1,9 +1,8 @@
 import Foundation
 
-/// The support story: every environment detection plus client/bridge/daemon
-/// health, one ✔/✖ line each. `--json` is what a user
-/// pastes into an issue — no secrets (no account names, no tokens; bottle
-/// paths are fine).
+/// Every environment check plus client, bridge and daemon health, one ✔/✖
+/// line each. `--json` is pasted into issues, so it carries no tokens or
+/// account names.
 nonisolated enum Doctor {
     struct Check {
         let id: String
@@ -213,8 +212,7 @@ nonisolated enum Doctor {
     /// Discord, the CLI symlink, the crash-dump rate and the client update pin.
     private static func hostChecks(from s: Snapshot) -> [Check] {
         var checks: [Check] = []
-        // Discord being closed is a state, not a fault: the check reports what
-        // presence has to work with and never fails the run.
+        // Informational: Discord being closed never fails the run.
         checks.append(Check(
             id: "discord", ok: true,
             label: DiscordPresence.isDiscordRunning()

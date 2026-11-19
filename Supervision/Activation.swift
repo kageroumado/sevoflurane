@@ -1,11 +1,7 @@
 import AppKit
 
-/// The AppKit calls an activation makes.
-///
-/// The order of the calls and the budget behind them are the parts that can be
-/// wrong, and a window server is not something a test can have, so the
-/// sequence is written against this protocol and checked against a recording
-/// double.
+/// The AppKit calls an activation makes, behind a protocol so tests can check
+/// their order against a recording double.
 @MainActor
 protocol ActivationSurface {
     var appIsActive: Bool { get }
@@ -26,16 +22,13 @@ protocol ActivationSurface {
     func log(_ line: String)
 }
 
-/// Brings a foreign process — or this app's own windows — to the front.
+/// Brings a foreign process, or this app's windows, to the front.
 ///
 /// Since macOS 14 an app may activate another only while it holds the
-/// activation right: it is itself active, or another app has yielded to it. A
-/// menu-bar app sitting at `.accessory` whose only UI is a non-activating
-/// panel holds nothing, and the window server declines the request outright.
-/// So the right is taken first — the user's click is what grants it — then
-/// yielded to the target, then spent. A game that replaces its first window
-/// (a splash, then the real one) takes the activation down with it, which is
-/// what the retry budget is for.
+/// activation right, which an `.accessory` app with a non-activating panel
+/// lacks. So the right is taken while the user's click grants it, yielded to
+/// the target, then spent; the retry budget covers a game that replaces its
+/// first window.
 @MainActor
 struct Activation {
     /// How long the yield-and-activate pair is retried before giving up.
@@ -48,11 +41,8 @@ struct Activation {
     /// One attempt, plus a retry every ``retryEvery`` for ``retryBudget``.
     static let attemptLimit = 1 + retryBudgetMilliseconds / retryEveryMilliseconds
 
-    /// How many declined attempts in a row, with the same foreign process in
-    /// front after each, end the retries early. Cooperative activation on
-    /// macOS 14 and later declines while the user is in another app; the same
-    /// answer three times with the same pid in front means they are staying
-    /// there, and the rest of the budget would only fill the log.
+    /// Declined attempts in a row, with the same foreign process in front,
+    /// that end the retries: the user is staying in that app.
     static let declinedStreakLimit = 3
 
     private let surface: any ActivationSurface
@@ -74,10 +64,8 @@ struct Activation {
         return true
     }
 
-    /// Brings this app's own windows forward. `activateSelfWithAllWindows`
-    /// backs up ``ActivationSurface/activateSelf()``, which cooperative
-    /// activation can decline when the request comes from a menu-bar popover
-    /// rather than a window of ours.
+    /// Brings this app's windows forward; the all-windows call backs up
+    /// `activateSelf()`, which is declined from a menu-bar popover.
     func bringAppForward() {
         if surface.appPolicy != .regular { surface.promoteToRegular() }
         surface.activateSelf()
@@ -86,10 +74,7 @@ struct Activation {
 
     /// Brings `pid` to the front.
     ///
-    /// - Parameter subject: how the target is named in the log; every attempt
-    ///   records this app's activation state, what the call returned and who
-    ///   ended up in front, because a bare "declined" says nothing about
-    ///   which of the three preconditions was missing.
+    /// - Parameter subject: how the target is named in the log.
     /// - Returns: whether `pid` is frontmost when this returns. `false` comes
     ///   early when a foreign process keeps the front through
     ///   ``declinedStreakLimit`` declined attempts.

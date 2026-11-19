@@ -1,9 +1,8 @@
 import ArgumentParser
 import Foundation
 
-/// The switches that are one env key each, by the name the command line
-/// calls them. One table, so the two config commands, their help and their
-/// JSON cannot name different sets.
+/// The one-env-key switches by command-line name: one table for both config
+/// commands, their help and their JSON.
 enum ConfigSwitches {
     struct Entry: Sendable {
         let key: String
@@ -136,8 +135,7 @@ enum ConfigKeyParsing {
     }
 
     /// One `<dll>=<mode>` pair for a game's own load order, `<dll>=` to drop
-    /// the entry, or `inherit` to drop the whole table. The modes are Wine's
-    /// own spelling, so what is typed is what the registry holds.
+    /// the entry, or `inherit` to drop the whole table, in Wine's own spelling.
     static let overrideModes = ["n,b", "b,n", "n", "b", ""]
 
     static func dllOverride(_ value: String) throws -> (dll: String, mode: String?)? {
@@ -275,8 +273,7 @@ struct BottleCommand: AsyncParsableCommand {
     /// Reads or writes the graphics knobs the app's Settings › Graphics pane
     /// drives, against the same store (`Core/BottleGraphics.swift`).
     private func config() async throws {
-        // Debug mode folds its own channels into what a game carries, so the
-        // effective set the operator sees has to account for its file.
+        // Debug mode adds its own Wine channels to the effective set.
         let debugMode = DebugMode.isWritten(prefix: SteamBottle.root)
         guard let key = key.map(Self.canonicalKey) else {
             printEveryKey(debugMode: debugMode)
@@ -338,7 +335,6 @@ struct BottleCommand: AsyncParsableCommand {
         ], pretty: true))
     }
 
-    /// One key's value.
     private func printKey(_ key: String, debugMode: Bool) throws {
         switch key {
         case "renderer": print(current().renderer.rawValue)
@@ -370,29 +366,18 @@ struct BottleCommand: AsyncParsableCommand {
     private func setPresenterKey(_ key: String, to value: String) async throws -> Bool {
         switch key {
         case "windows":
-            // The built-in engine's window treatment at the bottle level;
-            // `WindowTreatment.help` carries the rungs, and a game overrides
-            // the bottle through `sevo app config`.
             let treatment = try ConfigKeyParsing.windows(value)
             updateBottle { $0.windows = treatment }
             print("windows \(Self.windowsSummary) — \(Self.gameReach)")
         case "upscaler":
-            // The presenter's upscaler at the bottle level: `off`, `lanczos`,
-            // `metalfx`, a shader package's name, or `inherit`.
             let upscaler = try await ConfigKeyParsing.upscaler(value)
             updateBottle { $0.upscaler = upscaler }
             print("upscaler \(Self.upscalerSummary) — \(Self.gameReach)")
         case "filter":
-            // How the upscaler's last pass reaches the window: `nearest`,
-            // `bilinear`, `lanczos`, or `inherit`.
             let filter = try ConfigKeyParsing.filter(value)
             updateBottle { $0.filter = filter }
             print("filter \(Self.filterSummary) — \(Self.gameReach)")
         case "mouse":
-            // What a game holding the cursor for mouse-look is given as
-            // movement: `system` for the pointer curve everything else on the
-            // Mac gets, `linear` for the mouse's own displacement, or
-            // `inherit` for the global default.
             let curve = try ConfigKeyParsing.mouse(value)
             updateBottle { $0.mouse = curve }
             print("mouse \(Self.mouseSummary) — \(Self.gameReach)")
@@ -412,8 +397,6 @@ struct BottleCommand: AsyncParsableCommand {
             updateBottle { $0[keyPath: path] = flag }
             print("\(key) \(Self.switchSummary(key)) — \(Self.gameReach)")
         case "processors":
-            // How many processors every game in the bottle is told of: `all`,
-            // a count, or `inherit` for the global default.
             let processors = try ConfigKeyParsing.processors(value)
             updateBottle { $0.processors = processors }
             print("processors \(Self.processorsSummary) — \(Self.gameReach)")
@@ -442,17 +425,12 @@ struct BottleCommand: AsyncParsableCommand {
             await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
             print("retina \(Self.retinaSummary) — \(Self.gameReach)")
         case "emulate-modeset":
-            // Whether a game that switches the display mode has the switch
-            // faked and its picture put in a window it can be resized in.
             let modeset = try ConfigKeyParsing.flag(value, key: "emulate-modeset")
             updateBottle { $0.emulateModeset = modeset }
             await ConfigRegistry.settle(bottle: SteamBottle.name, prefix: SteamBottle.root)
             print("emulate-modeset \(Self.modesetSummary) — \(Self.gameReach)")
         case "wine-debug":
-            // `on` adds every library load to the errors and exceptions the
-            // log always keeps, `off` returns to those alone, anything else
-            // is Wine's own channel syntax, e.g. `+seh,+loaddll`. Read by the
-            // next client start, and inherited by every game it launches.
+            // Anything but on/off is Wine's channel syntax (`+seh,+loaddll`).
             switch value {
             case "on", "off": WineLog.setDiagnosing(value == "on")
             default: WineLog.setChannels(value)
@@ -512,14 +490,11 @@ struct BottleCommand: AsyncParsableCommand {
         + "retina | emulate-modeset | processors | \(ConfigSwitches.names) | \(ConfigSwitches.counterNames) | "
         + "video-decoding | wine-debug)"
 
-    /// The key a setting is stored and scripted under. The listing labels the
-    /// sync switch `msync+`, its name everywhere a person reads it, so that
-    /// label works as the key too; `msync` stays the key JSON and scripts use.
+    /// The stored key: the listing's label `msync+` also names `msync`.
     static func canonicalKey(_ key: String) -> String {
         key == "msync+" ? "msync" : key
     }
 
-    /// One switch's resolved value and where it comes from.
     static func switchSummary(_ key: String) -> String {
         guard let resolved = ConfigSwitches.resolved(key, bottle: SteamBottle.name, game: nil)
         else { return "unknown" }
@@ -533,58 +508,47 @@ struct BottleCommand: AsyncParsableCommand {
         return "\(resolved.value) (\(resolved.source))"
     }
 
-    /// Whether a display-mode switch is faked, and where that comes from.
     static var modesetSummary: String {
         let resolved = GameConfig.emulateModeset(bottle: SteamBottle.name)
         return "\(resolved.value) (\(resolved.source))"
     }
 
-    /// How many processors the bottle's games are told of, and where that
-    /// comes from.
     static var processorsSummary: String {
         let resolved = GameConfig.processors(bottle: SteamBottle.name)
         return "\(ConfigKeyParsing.processorsLabel(resolved.value)) (\(resolved.source))"
     }
 
-    /// What the bottle's frame rate counter shows, and where that comes from.
     static var overlaySummary: String {
         let resolved = GameConfig.overlayDetail(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
-    /// The bottle's frame rate limit, and where that comes from.
     static var frameRateLimitSummary: String {
         let resolved = GameConfig.frameRateLimit(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
-    /// The bottle's video decoding, and where that comes from.
     static var videoDecodingSummary: String {
         let resolved = GameConfig.videoDecoding(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
-    /// The bottle's window treatment, where it comes from, and what it
-    /// covers — the rung a reader cannot compare against its neighbors
-    /// without being told what those are.
+    /// The bottle's window treatment, its source, and what the rung covers.
     static var windowsSummary: String {
         let resolved = GameConfig.windows(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source)) — \(resolved.value.summary)"
     }
 
-    /// The bottle's upscaler and where it comes from.
     static var upscalerSummary: String {
         let resolved = GameConfig.upscaler(bottle: SteamBottle.name)
         return "\(resolved.value) (\(resolved.source))"
     }
 
-    /// The bottle's final filter and where it comes from.
     static var filterSummary: String {
         let resolved = GameConfig.filter(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"
     }
 
-    /// The bottle's mouse curve and where it comes from.
     static var mouseSummary: String {
         let resolved = GameConfig.mouse(bottle: SteamBottle.name)
         return "\(resolved.value.rawValue) (\(resolved.source))"

@@ -13,19 +13,15 @@ extension BottleSupervisor {
     }
 
     /// Whether a client that probes healthy has stopped answering on its main
-    /// thread: its services stay initialized and its page keeps answering while
-    /// that thread waits forever. The stall is sampled to a file beside the log
-    /// first, since the restart leaves nothing else to read. A stuck client
-    /// with no game running is restarted; with a game running it is reported,
-    /// since a restart takes Steam away from the game.
+    /// thread. The stall is sampled beside the log first; then the client is
+    /// restarted, or only reported while a game runs.
     func clientMainThreadIsStuck() async -> Bool {
         guard Date.now.timeIntervalSince(lastNativeProbe) >= MainThreadProbe.every else {
             return nativeSilences >= MainThreadProbe.silencesToAct
         }
         lastNativeProbe = .now
         guard let answer = await PageProbe.nativeAnswers() else {
-            // The page not answering is the page probe's case, not a stall;
-            // said once per streak so a page that is reloading does not fill the log.
+            // The page probe's case, logged once per streak.
             if !nativeProbeUnanswered {
                 nativeProbeUnanswered = true
                 log.log(.client, "the page gave no answer to the main-thread probe — asked again at the next probe")
@@ -61,10 +57,8 @@ extension BottleSupervisor {
         return true
     }
 
-    /// Asks msync+ for a lost-wake sweep before a stuck client is restarted or reported:
-    /// a game that exited while it set an object steam.exe waits on leaves that thread
-    /// asleep, and the sweep wakes it where a restart would take the client away. True
-    /// when it woke something, and the next probe asks the client again.
+    /// Asks msync+ to wake threads a dead game left asleep before a stuck
+    /// client is restarted; true when it woke something.
     private func sweptLostWakes() async -> Bool {
         guard case let .swept(report) = await MsyncSweep.run(), report.lostWakes > 0 else { return false }
         for line in report.lines { log.log(.client, line) }

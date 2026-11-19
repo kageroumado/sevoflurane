@@ -219,8 +219,7 @@ struct RunsCommand: AsyncParsableCommand {
         }
     }
 
-    /// The record as it sits on disk, plus what the app recognizes in it — a
-    /// caller reading JSON wants the match without repeating the table.
+    /// The record as on disk, plus its known failure.
     static func row(_ record: RunRecord) -> [String: Any] {
         var row = (try? JSONEncoder().encode(record))
             .flatMap { Sevo.jsonObject(String(decoding: $0, as: UTF8.self)) } ?? [:]
@@ -288,12 +287,9 @@ struct LogsCommand: AsyncParsableCommand {
 
 // MARK: - debug mode
 
-/// `sevo debug` — the playtest switch, as a scripted playtest reaches it.
-///
-/// The mode is a session of the running app: it holds the state, it flushes
-/// its own log line by line while it is on, and it turns everything off when
-/// it quits. So `on` needs the app, and only `off` can act without it — to
-/// clear the env file a killed session left in the bottle.
+/// `sevo debug`: the playtest switch. The mode is a session of the running
+/// app, so `on` needs the app; `off` also clears the env file a killed
+/// session left in the bottle.
 struct DebugCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "debug",
@@ -360,10 +356,8 @@ struct DebugCommand: AsyncParsableCommand {
         }
     }
 
-    /// The app's answer to one debug verb, through the helper and else from
-    /// the app's own link port. The helper is silent while it is being
-    /// replaced, and an app it has not heard from yet is still the one that
-    /// owns the switch. `nil` only when no app answers on either port.
+    /// The app's answer to one debug verb through the helper, else the app's
+    /// link port (the helper is silent while replaced); `nil` when neither answers.
     fileprivate static func ask(_ path: String, method: String) async -> Data? {
         let isRead = method == "GET"
         if let viaHelper = isRead ? await AppControl.get(path) : await AppControl.post(path) {

@@ -1,20 +1,13 @@
 import Foundation
 
-/// A frame-rate unlocker for Genshin Impact, started beside the game in the
-/// companion prefix it runs in (``SteamParent``).
+/// A frame-rate unlocker for Genshin Impact, which caps itself at 60 fps,
+/// started beside it in the companion prefix (``SteamParent``): the engine's
+/// own (``ownName``), or an executable chosen in Settings › Games.
 ///
-/// Genshin caps itself at 60 fps on PC; the unlockers the community use
-/// (`unlockfps_nc.exe`, genshin-fps-unlock, MIT) find the running game and
-/// raise the cap in its memory. The engine carries one of its own
-/// (``ownName``), started with Genshin once Settings › Games switches it on;
-/// an executable chosen there is used instead.
-///
-/// It has to run in the game's own prefix, on the game's engine and with the
-/// same environment: a Wine process only sees the processes of its own
-/// wineserver, and one started without `WINEMSYNC` beside an msync server
-/// dies at once (`msync_init Server is running with WINEMSYNC but this
-/// process is not`). Measured 2026-09-26 on Dormison r19: started 30 s after
-/// the game, it held 120 fps (1 % low 88) where the game alone held 60.
+/// It must share the game's prefix, engine and environment: a Wine process
+/// sees only its own wineserver's processes, and one without `WINEMSYNC`
+/// beside an msync server dies at once. Measured 2026-09-26 on Dormison r19:
+/// 120 fps (1 % low 88) where the game alone held 60.
 nonisolated enum FPSUnlocker {
     /// The executables, lowercased, it is started beside. Genshin's global and
     /// Chinese builds; the other HoYoverse games offer 120 fps in their own
@@ -27,9 +20,8 @@ nonisolated enum FPSUnlocker {
 
     static let defaultTarget = 120
 
-    /// How long after the game's process appears the unlocker starts: the
-    /// delay the launcher it was measured with used. Started while the game
-    /// still loads, it can attach before the value it patches exists.
+    /// How long after the game appears the unlocker starts; earlier, the
+    /// value it patches may not exist yet.
     static let delay: Duration = .seconds(30)
 
     /// How long the game gets to appear before the unlocker gives up on it.
@@ -94,13 +86,10 @@ nonisolated enum FPSUnlocker {
 
     // MARK: - Its own configuration
 
-    /// Points the unlocker's `fps_config.json`, beside its executable, at this
-    /// game and this frame rate, and keeps it from starting the game itself:
-    /// a game the unlocker starts has the unlocker as its parent, not
-    /// `steam.exe`, and takes the kernel-driver path.
-    ///
-    /// Keys the file has and this does not name are kept as they are. A file
-    /// that is not there is left for the unlocker to write on its first run.
+    /// Points the unlocker's `fps_config.json` at this game and rate, with
+    /// `AutoStart` off: a game the unlocker starts has the wrong parent and
+    /// takes the kernel-driver path. Other keys are kept; a missing file is
+    /// left for the unlocker to write.
     @discardableResult
     static func configure(_ unlocker: URL, game: AdoptedProgram, target: Int) -> Bool {
         let url = unlocker.deletingLastPathComponent().appendingPathComponent("fps_config.json")

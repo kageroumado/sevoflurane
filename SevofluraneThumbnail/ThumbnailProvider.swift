@@ -2,17 +2,9 @@ import CoreGraphics
 import Foundation
 import QuickLookThumbnailing
 
-/// Draws the Quick Look thumbnail of a Windows executable: its own icon, across
-/// the whole thumbnail.
-///
-/// Finder shows a `.exe` as a generic document, which makes a folder of games
-/// unreadable. The picture is already in the file — `PEResources` reads the
-/// icon group without running anything. Finder frames a file's thumbnail
-/// itself, so the icon is drawn bare, the way a document's preview is; the
-/// platter an adopted program's Dock tile carries belongs to apps.
-///
-/// The extension is sandboxed and is handed the file it may read, which is
-/// all this needs: no bottle, no Wine, no network.
+/// Draws a Windows executable's Quick Look thumbnail: its own icon, read by
+/// `PEResources` and drawn bare across the thumbnail (the Dock tile's platter
+/// belongs to apps). The sandboxed extension needs only the file it is handed.
 final nonisolated class ThumbnailProvider: QLThumbnailProvider {
     override func provideThumbnail(
         for request: QLFileThumbnailRequest,
@@ -39,15 +31,10 @@ final nonisolated class ThumbnailProvider: QLThumbnailProvider {
 }
 
 private nonisolated extension QLThumbnailReply {
-    /// Asks Finder to show the thumbnail without the white rounded frame it
-    /// puts around a document's picture. A Windows icon carries its own shape
-    /// and transparency, and framed it reads as a photo of an icon.
-    ///
-    /// The reply's `iconFlavor` is private: the old generator API's
-    /// `kQLThumbnailPropertyIconFlavorKey`, where 0 is the plain flavor, the one
-    /// `QLIconModeRenderer` draws with a shadow and no frame. Every other value
-    /// frames it, and an unset reply is framed. Checked before it is set, so a
-    /// release that renames it costs the frame, never the thumbnail.
+    /// Asks Finder to draw the thumbnail without its white document frame.
+    /// `iconFlavor` is private (`kQLThumbnailPropertyIconFlavorKey`; 0 is the
+    /// unframed flavor, unset is framed), so it is checked first: a rename
+    /// costs the frame, never the thumbnail.
     func drawsBare() {
         guard responds(to: NSSelectorFromString("setIconFlavor:")) else { return }
         setValue(0, forKey: "iconFlavor")

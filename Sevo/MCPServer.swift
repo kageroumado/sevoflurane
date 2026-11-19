@@ -19,10 +19,8 @@ struct MCPCommand: AsyncParsableCommand {
     }
 }
 
-/// A hand-rolled MCP stdio server (newline-delimited JSON-RPC 2.0): the
-/// protocol subset a tools+resources server needs is small, and the official
-/// SDK would be the CLI's only heavyweight dependency. Tools are thin
-/// wrappers over the same operations the CLI verbs call.
+/// A hand-rolled MCP stdio server (newline-delimited JSON-RPC 2.0), sparing
+/// the CLI the SDK dependency; tools wrap the CLI's operations.
 final class MCPServer {
     let allowEval = ProcessInfo.processInfo.environment["SEVO_MCP_ALLOW_EVAL"] == "1"
 
@@ -146,8 +144,7 @@ final class MCPServer {
         }
     }
 
-    /// A mutating verb's reply, MCP-flavored: the narration, the verdict, and
-    /// the state the agent's model should hold now — the observation, not "ok".
+    /// A mutating verb's reply: narration, verdict and resulting state.
     static func observed(_ outcome: ClientOps.Outcome, progress: [String]) async -> String {
         let (_, line) = await StatusReport.build()
         return (progress + [

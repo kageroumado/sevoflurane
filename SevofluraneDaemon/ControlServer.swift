@@ -1,16 +1,9 @@
 import Foundation
 
-/// The daemon half of the `sevo` contract: a loopback HTTP endpoint the CLI —
-/// and through it, agents — uses to drive supervision. A verb keeps its path
-/// and its JSON wherever it is served, so `sevo` never needs to know which
-/// process answers it.
-///
-/// Verbs that need the page rather than the client are proxied to the app
-/// (``AppLink/proxy(_:)``) and answer 409 when no app is running. Programs of
-/// this account are trusted; web pages and other accounts are not.
-/// ``LoopbackGate/control`` refuses any request that carries a browser's
-/// `Origin` or a foreign `Host`, and answers 401 to one without this
-/// account's ``ControlToken``, before any verb runs.
+/// The daemon's loopback endpoint for `sevo` and agents. Page verbs are proxied
+/// to the app (``AppLink/proxy(_:)``) and answer 409 with no app.
+/// ``LoopbackGate/control`` refuses browsers and requests without this
+/// account's ``ControlToken`` before any verb runs.
 @MainActor
 final class ControlServer {
     private let supervisor: BottleSupervisor
@@ -117,9 +110,7 @@ final class ControlServer {
             guard let facts = try? JSONDecoder().decode(PageFacts.self, from: request.body) else {
                 return .error(400, "expected a PageFacts body")
             }
-            // `hello` tells the app whether this daemon had it already: an
-            // app that believed itself attached and is greeted as new has
-            // posted to a daemon that was rebuilt or relaunched under it.
+            // `hello` tells the app this daemon is new to it (rebuilt or relaunched).
             let isNew = app.attach(facts)
             if isNew {
                 supervisor.appDidAttach()
@@ -134,10 +125,8 @@ final class ControlServer {
         }
     }
 
-    /// Everything that moves the client or the bottle. One owner, one door:
-    /// ``ClientVerb/admit(method:path:wantClient:)`` names the verb before the
-    /// supervisor hears of the request, so a request it refuses changes
-    /// nothing.
+    /// Everything that moves the client or the bottle; a request
+    /// ``ClientVerb/admit(method:path:wantClient:)`` refuses changes nothing.
     private func clientVerb(_ request: HTTPRequest) async -> HTTPResponse {
         switch ClientVerb.admit(method: request.method, path: request.path, wantClient: { reason in
             supervisor.wantClient(because: reason)
@@ -157,9 +146,7 @@ final class ControlServer {
             supervisor.showLibraryWhenHealthy()
             return Self.json(#"{"ok":true}"#)
         case .wake:
-            // The app sees some deaths first — the bridge's transport closes
-            // four seconds before the launcher exits — so it says so rather
-            // than leaving the cycle to notice at its next tick.
+            // The app sees some deaths first, such as the bridge's transport closing.
             supervisor.wake(.control("Sevoflurane saw something change"))
             return Self.json(#"{"ok":true}"#)
         case .start:
@@ -174,9 +161,8 @@ final class ControlServer {
             supervisor.forceQuit(scope)
             return Self.json(#"{"ok":true,"note":"force-quit begun; poll /status"}"#)
         case .quit:
-            // The quit contract: the app asks once, on its way out, and the
-            // bottle comes down with it. A crash sends nothing, which is why
-            // a crash leaves the game running.
+            // The app asks once on its way out; a crash sends nothing and
+            // leaves the game running.
             await onQuit()
             return Self.json(#"{"ok":true,"note":"bottle down"}"#)
         case .clearShaderCache:
@@ -215,14 +201,9 @@ final class ControlServer {
         return Self.json(#"{"ok":true,"note":"client stopped; auto-restart paused"}"#)
     }
 
-    /// Starts a game, restarting the client first when the game is pinned to
-    /// a renderer the running session does not have. The restart is why this
-    /// is the daemon's verb and not the app's: nothing outside the supervisor
-    /// launches or kills bottle processes. `option` answers Steam's
-    /// launch-option question ahead of it.
-    ///
-    /// `delivered` is false when no app took the launch: the bottle is ready
-    /// for the game, and the caller starts it in the client itself.
+    /// Starts a game, restarting the client first when its renderer needs it.
+    /// `option` answers Steam's launch-option question; `delivered` is false
+    /// when no app took the launch and the caller starts it itself.
     private func launchGame(query: String) async -> HTTPResponse {
         guard let appID = Int(Self.value(of: "appid", in: query)) else {
             return .error(400, "pass ?appid=<steam app id>")
@@ -250,12 +231,8 @@ final class ControlServer {
         return Self.json(#"{"ok":true,"note":"program started"}"#)
     }
 
-    /// Runs one Windows program once, by path, keeping no record of it. The
-    /// body is the macOS path and then its arguments, one per line, because a
-    /// path holds characters a query string would have to survive.
-    ///
-    /// The reply waits for the program by default, which is what an installer
-    /// is asked for; `?wait=0` answers as soon as it is spawned.
+    /// Runs one Windows program once, unrecorded. The body is the macOS path
+    /// then its arguments, one per line. Waits for it unless `?wait=0`.
     private func runProgram(_ request: HTTPRequest) async -> HTTPResponse {
         let tokens = Self.programLines(request.body)
         guard let path = tokens.first else {
@@ -276,10 +253,8 @@ final class ControlServer {
         return Self.json(body)
     }
 
-    /// One Windows program run to completion inside the bottle — a dependency
-    /// installer, a `reg` edit. The program list is the request body, one
-    /// argument per line, because a Windows path holds characters a query
-    /// string would have to survive.
+    /// Runs one Windows program to completion in the bottle; the body is one
+    /// argument per line.
     private func runInBottle(_ request: HTTPRequest) async -> HTTPResponse {
         let program = Self.programLines(request.body)
         guard !program.isEmpty else { return .error(400, "expected one argument per body line") }
@@ -305,16 +280,9 @@ final class ControlServer {
             .map(String.init)
     }
 
-    /// Switch the active Wine engine (and optionally the bottle), then restart
-    /// the client under it — the control face of Settings › Engine's Apply.
-    ///
-    /// `Engine.choose` has to run in this process, because `Engine.active` is
-    /// cached per process: a caller that only wrote the shared preference
-    /// would leave the process that relaunches the client on the old engine.
-    /// The supervisor makes the choice between its ladder's stop and launch,
-    /// so the stop still addresses the old engine's prefix and wineserver. A
-    /// switch during a restart is taken as well: the ladder abandons the boot
-    /// it is waiting on and runs again under the new engine.
+    /// Switches the engine (and optionally the bottle) and restarts the client.
+    /// It runs here because `Engine.active` is cached per process; the
+    /// supervisor applies it between the ladder's stop and launch.
     private func useEngine(query: String) -> HTTPResponse {
         let version = Self.value(of: "version", in: query)
         guard !version.isEmpty else {

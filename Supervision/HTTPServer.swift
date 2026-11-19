@@ -64,8 +64,7 @@ nonisolated struct HTTPResponse: Sendable {
 }
 
 /// A minimal loopback HTTP/1.1 server on Network.framework: keep-alive, one
-/// async handler, no TLS, no ranges — the surface Steam's UI bundle and the
-/// art cache actually exercise. Listens on 127.0.0.1 only.
+/// async handler, 127.0.0.1 only.
 final nonisolated class HTTPServer: Sendable {
     private let listener: NWListener
     private let handler: @Sendable (HTTPRequest) async -> HTTPResponse
@@ -83,12 +82,9 @@ final nonisolated class HTTPServer: Sendable {
 
     private let port: UInt16
 
-    /// - Parameter exclusive: Whether the port is held alone, refusing a second
-    ///   listener. Reuse is the default because the bridge's asset and art
-    ///   servers are harmless twins. It is wrong for anything that owns state:
-    ///   two listeners on the control port means the kernel hands each request
-    ///   to whichever it likes, and "one supervisor owns the bottle" becomes a
-    ///   coin toss.
+    /// - Parameter exclusive: Whether the port is held alone. Required for
+    ///   anything that owns state: two listeners on the control port would
+    ///   split requests between two supervisors.
     init(
         port: UInt16,
         gate: LoopbackGate,
@@ -116,13 +112,10 @@ final nonisolated class HTTPServer: Sendable {
         listener.start(queue: queue)
     }
 
-    /// Starts and answers once the port is held — or throws, naming the port,
-    /// when something else already holds it. An exclusive listener's failure
-    /// arrives on the listener's state handler rather than out of `start()`,
-    /// so a caller that must not run half-alive has to wait for it. A
-    /// listener that is cancelled, or has not bound within ``bindBudget``,
-    /// fails the same way and is cancelled. A listener waiting on the
-    /// network is given the budget to recover.
+    /// Starts and returns once the port is held, or throws when another
+    /// process holds it, the listener is cancelled, or it has not bound within
+    /// ``bindBudget``. An exclusive listener's failure arrives only on its
+    /// state handler.
     func startWaitingForThePort() async throws {
         let outcome = Outcome()
         do {
@@ -222,11 +215,9 @@ final nonisolated class HTTPServer: Sendable {
         }
     }
 
-    /// Accumulates bytes until `buffer` holds one whole request, then hands
-    /// it over with the bytes read past its end. Every other outcome ends the
-    /// connection here: a peer that closes or errors is cancelled, and a
-    /// request the parser rejects is answered with its status and
-    /// `Connection: close` before the cancel.
+    /// Accumulates bytes until `buffer` holds a whole request. A closed or
+    /// errored peer is cancelled; a rejected request is answered with
+    /// `Connection: close` first.
     private static func readRequest(
         _ connection: NWConnection,
         buffer: Data,

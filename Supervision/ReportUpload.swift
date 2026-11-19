@@ -1,13 +1,9 @@
 import Foundation
 
-/// Sends a report zip to the Sevoflurane developers.
-///
-/// The zip is the request body, whole; the installation's token and the
-/// app's version ride as headers. The answer is a status and nothing else:
-/// the endpoint stores bytes, and this code reads nothing back from it.
+/// Sends a report zip, whole, as the request body, with the install token and
+/// app version as headers; only the status is read.
 nonisolated struct ReportUpload: Sendable {
-    /// Where reports go: the droplet behind
-    /// Caddy, which writes the bytes to disk and answers 204.
+    /// Where reports go: Caddy on the droplet writes the bytes and answers 204.
     static let endpoint = URL(string: "https://reports.kagerou.glass/v1/sevoflurane")!
     /// The largest zip the endpoint accepts. Checked here first, so a report
     /// that could not be taken never leaves the machine.
@@ -18,8 +14,7 @@ nonisolated struct ReportUpload: Sendable {
     enum Outcome: Equatable, Sendable {
         /// The endpoint stored the report.
         case accepted
-        /// The endpoint answered with a status that says it did not — too
-        /// large, too many, or a server that is not itself.
+        /// Any other status.
         case refused(status: Int)
     }
 

@@ -2,30 +2,17 @@ import Foundation
 
 /// Who may talk to one of the app's loopback ports.
 ///
-/// Binding to 127.0.0.1 keeps other machines out, and every web page the
-/// user opens is still a local client. A page can post a CORS-simple request
-/// to any port without a preflight and open a WebSocket to any port with no
-/// CORS at all; after a DNS rebind it can also read the replies. The gate
-/// answers both from the request's own headers:
+/// Every web page is a local client: it can post CORS-simple requests and open
+/// WebSockets to any port, and read replies after a DNS rebind. So `Host` must
+/// name this port on `127.0.0.1` or `localhost` (a rebind arrives under the
+/// attacker's name), and an `Origin` must be one of the port's own callers;
+/// the CLI, the daemon, `URLSession` and `curl` send none.
 ///
-/// - `Host` names this port on `127.0.0.1` or `localhost`. A rebound name
-///   arrives under the attacker's host name, so the rebind is refused here.
-/// - `Origin`, which every browser sends on cross-origin requests and on
-///   every WebSocket handshake, is one of the port's own callers. The CLI, the
-///   daemon, `URLSession` and `curl` send none, and are admitted.
-///
-/// Headers are the sender's to choose, so they hold back a browser and
-/// nothing else: any process of any account on this Mac can write the request
-/// the CLI writes. The ports that act for the user — the daemon's control
-/// endpoint, the app's link port and the page's `/__eval` — also require
-/// ``ControlToken``, which only this account can read. A web page cannot send
-/// it either: it is a custom header, and a cross-origin page can set one only
-/// after a CORS preflight, which these servers never answer.
-///
-/// The page's and the client's sockets, the page's bundle and the art stay
-/// behind `Host` and `Origin` alone. Their callers are WebKit and CEF, which
-/// send no header of ours, and a secret handed to a page these ports serve
-/// would be served to any local reader of the same ports.
+/// Headers stop only browsers. The ports that act for the user (control, app
+/// link, `/__eval`) also require ``ControlToken``, readable only by this
+/// account; a page cannot send that custom header without a CORS preflight,
+/// which these servers never answer. The sockets, the bundle and the art stay
+/// behind `Host` and `Origin` alone: WebKit and CEF send no header of ours.
 nonisolated struct LoopbackGate: Sendable {
     let port: UInt16
     /// The origins this port's legitimate browser callers send.
