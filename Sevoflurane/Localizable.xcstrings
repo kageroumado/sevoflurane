@@ -113,6 +113,17 @@
         }
       }
     },
+    "%@ in %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@，位于 %2$@"
+          }
+        }
+      }
+    },
     "%@ — %@ is out, a patch of up to %@": {
       "localizations": {
         "en": {
@@ -8670,13 +8681,13 @@
         }
       }
     },
-    "Send the report to the Sevoflurane developers? It contains: the run summary, Wine's exception record, the game's own crash log, with paths and account names removed.": {
+    "Send the report to the Sevoflurane developers? It contains: this run's record and settings, the game's own crash logs, and the app's, Wine's and Steam's logs, with paths, account names and Steam ids removed.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "要向 Sevoflurane 开发者发送报告吗？报告包含运行摘要、Wine 异常记录和游戏崩溃日志。路径和账号名称已移除。"
+            "value": "要向 Sevoflurane 开发者发送报告吗？报告包含本次运行的记录和设置、游戏自身的崩溃日志，以及 App、Wine 和 Steam 的日志。路径、账号名称和 Steam ID 已移除。"
           }
         }
       }

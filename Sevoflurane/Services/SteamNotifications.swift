@@ -210,12 +210,24 @@ final class SteamNotifications {
         }
     }
 
+    private static let maximumAvatarBytes = 4 << 20
+
+    nonisolated static func isAvatarHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return ["steamstatic.com", "steamcdn-a.akamaihd.net", "steamusercontent.com"]
+            .contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
     /// The sender's avatar as a file, which `UserNotifications` moves into its own store.
     private static func attachment(for notification: SteamNotification) async
         -> UNNotificationAttachment? {
+        // The address comes with the notification, a friend's message
+        // included: only Steam's own image hosts are fetched, and only an
+        // image's worth of bytes kept.
         guard let url = URL(string: notification.icon),
-              url.scheme == "https",
-              let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+              url.scheme == "https", isAvatarHost(url.host()),
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              data.count <= maximumAvatarBytes else { return nil }
         let file = FileManager.default.temporaryDirectory
             .appending(path: "sevo-avatar-\(notification.id)-\(UUID().uuidString).jpg")
         guard (try? data.write(to: file)) != nil else { return nil }

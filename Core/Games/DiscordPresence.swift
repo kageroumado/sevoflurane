@@ -289,9 +289,17 @@ actor DiscordPresence {
         let header = try receive(exactly: 8)
         let opcode = header.prefix(4).littleEndianUInt32
         let length = header.dropFirst(4).littleEndianUInt32
+        // Discord's replies are a few hundred bytes of JSON; the length is
+        // the peer's word, and it is allocated before a byte arrives.
+        guard length <= Self.maximumFrameBytes else {
+            end()
+            throw Failure.connectionLost
+        }
         let payload = length > 0 ? try receive(exactly: Int(length)) : Data()
         return (Opcode(rawValue: opcode) ?? .close, payload)
     }
+
+    private static let maximumFrameBytes: UInt32 = 1 << 20
 
     private func receive(exactly count: Int) throws -> Data {
         guard let socket else { throw Failure.connectionLost }

@@ -55,8 +55,13 @@ nonisolated enum ReparseLinks {
             else { continue }
             let parent = file.deletingLastPathComponent().resolvingSymlinksInPath()
             let link = parent.appendingPathComponent(String(name.dropLast()))
-            let resolved = parent.appendingPathComponent(target).standardizedFileURL.path
-            guard resolved == root || resolved.hasPrefix(root + "/") else { continue }
+            let aimed = parent.appendingPathComponent(target).standardizedFileURL
+            // By spelling and by what the path opens: a folder on the way
+            // can itself be a link out of the tree.
+            let resolved = aimed.path
+            let opened = aimed.resolvingSymlinksInPath().path
+            guard resolved == root || resolved.hasPrefix(root + "/"),
+                  opened == root || opened.hasPrefix(root + "/") else { continue }
             var status = stat()
             if lstat(link.path, &status) == 0 {
                 guard status.st_mode & S_IFMT == S_IFLNK,

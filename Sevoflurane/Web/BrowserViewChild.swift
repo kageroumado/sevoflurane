@@ -56,8 +56,11 @@ final class BrowserViewChild: NSObject {
         configuration.applicationNameForUserAgent = "Valve Steam Client"
         var scripts: [WKUserScript] = []
         if let mask = StreamerMask.script(for: .current) {
+            // In a world of its own: the script holds the real account
+            // names, and in the page's world a page could take them from it
+            // by wrapping any built-in the script calls.
             scripts.append(WKUserScript(
-                source: mask, injectionTime: .atDocumentEnd, forMainFrameOnly: false,
+                source: mask, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: Self.maskWorld,
             ))
         }
         // The Mac compatibility strip on store game pages. It asks for its
@@ -76,10 +79,13 @@ final class BrowserViewChild: NSObject {
         configuration.userContentController.addScriptMessageHandler(
             StoreCompatHandler(), contentWorld: .page, name: SteamCompatBadge.storeHandler,
         )
+        // A new window needs a click: these are web pages, and each window
+        // they ask for opens in the default browser.
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isHidden = true
         webView.allowsBackForwardNavigationGestures = true
-        webView.isInspectable = true
+        webView.isInspectable = WebInspection.isAllowed
         // Steam's tracking placeholders are empty pages, and WebKit's opaque
         // default background flashes white under every internal route.
         if webView.responds(to: Selector(("_setDrawsBackground:"))) {
@@ -237,13 +243,34 @@ final class BrowserViewChild: NSObject {
     }
 }
 
+extension BrowserViewChild {
+    static let maskWorld = WKContentWorld.world(name: "sevoflurane.mask")
+}
+
+/// Whether Safari's inspector may attach to the app's web views. They hold a
+/// signed-in Steam session, so a shipped build opens them only in Debug mode.
+@MainActor
+enum WebInspection {
+    static var isAllowed: Bool {
+        #if DEBUG
+            true
+        #else
+            DebugModeSwitch.shared.isOn
+        #endif
+    }
+}
+
 extension BrowserViewChild: WKNavigationDelegate {
     func webView(
         _: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
     ) async
         -> WKNavigationActionPolicy {
-        steamNavigationPolicy(for: navigationAction.request.url, host: host)
+        let source = navigationAction.sourceFrame
+        return steamNavigationPolicy(
+            for: navigationAction.request.url, host: host,
+            runsSteamLinks: source.isMainFrame && WebSessionCookies.isSteamDomain(source.securityOrigin.host),
+        )
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
@@ -326,6 +353,7 @@ private final class StoreCompatHandler: NSObject, WKScriptMessageHandlerWithRepl
         _: WKUserContentController, didReceive message: WKScriptMessage,
     ) async -> (Any?, String?) {
         guard message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.protocol == "https",
               message.frameInfo.securityOrigin.host == "store.steampowered.com",
               let body = message.body as? [String: Any] else { return (nil, "refused") }
         if let link = body["open"] as? String {

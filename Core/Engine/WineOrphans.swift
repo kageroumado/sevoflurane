@@ -109,9 +109,15 @@ nonisolated enum WineOrphans {
 
     /// Whether another process holds a write lock on the file; `F_GETLK` takes none.
     static func isLockHeld(at path: String) -> Bool {
-        let descriptor = open(path, O_RDWR)
+        // `/tmp` is every account's: only this account's own plain file
+        // counts, opened without following a link or waiting on a FIFO.
+        let descriptor = open(path, O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else { return false }
         defer { close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFREG else {
+            return false
+        }
         var request = flock()
         request.l_type = Int16(F_WRLCK)
         request.l_whence = Int16(SEEK_SET)

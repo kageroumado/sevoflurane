@@ -23,7 +23,9 @@ nonisolated enum MachOIdentity {
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
         return data.withUnsafeBytes { buffer -> String? in
             guard let base = buffer.baseAddress, buffer.count >= MemoryLayout<mach_header_64>.size else { return nil }
-            guard let offset = sliceOffset(base, size: buffer.count) else { return nil }
+            // The offset is the file's word; the header is read only inside the file.
+            guard let offset = sliceOffset(base, size: buffer.count), offset >= 0,
+                  offset <= buffer.count - MemoryLayout<mach_header_64>.size else { return nil }
             let header = (base + offset).loadUnaligned(as: mach_header_64.self)
             guard header.magic == MH_MAGIC_64,
                   offset + MemoryLayout<mach_header_64>.size + Int(header.sizeofcmds) <= buffer.count else { return nil }
@@ -85,6 +87,7 @@ nonisolated enum MachOIdentity {
             guard consumed + MemoryLayout<load_command>.size <= limit else { return nil }
             let command = cursor.loadUnaligned(as: load_command.self)
             if command.cmd == UInt32(LC_UUID) {
+                guard consumed + MemoryLayout<load_command>.size + MemoryLayout<uuid_t>.size <= limit else { return nil }
                 let bytes = (cursor + MemoryLayout<load_command>.size).loadUnaligned(as: uuid_t.self)
                 return UUID(uuid: bytes).uuidString
             }

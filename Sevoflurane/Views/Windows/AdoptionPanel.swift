@@ -103,6 +103,11 @@ private struct AdoptionView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                Text(model.location)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Text(model.verdict.summary)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)

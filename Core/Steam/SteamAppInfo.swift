@@ -146,6 +146,9 @@ nonisolated enum SteamAppInfo {
         mutating func stringTable() -> [String]? {
             guard let count = u32() else { return nil }
             var strings: [String] = []
+            // Each string is at least its terminator, so the count the
+            // file states cannot exceed the bytes it has left.
+            guard Int(count) <= data.count - position else { return nil }
             strings.reserveCapacity(Int(count))
             for _ in 0 ..< count {
                 guard let string = cString() else { return nil }
@@ -155,11 +158,15 @@ nonisolated enum SteamAppInfo {
         }
 
         /// A table up to its end marker (type 8).
-        mutating func table(strings: [String]?) -> [String: Value]? {
+        mutating func table(strings: [String]?, depth: Int = 0) -> [String: Value]? {
+            // Steam nests a handful deep; a file nesting without end would
+            // run the stack out.
+            guard depth <= Self.maximumDepth else { return nil }
             var table: [String: Value] = [:]
             while let type = u8() {
                 if type == 8 { return table }
-                guard let key = key(strings: strings), let value = value(of: type, strings: strings) else { return nil }
+                guard let key = key(strings: strings),
+                      let value = value(of: type, strings: strings, depth: depth) else { return nil }
                 table[key] = value
             }
             return nil
@@ -173,9 +180,11 @@ nonisolated enum SteamAppInfo {
 
         /// Types: 0 table, 1 string, 2 int32, 3 float (kept as its bits),
         /// 7 uint64, 10 int64.
-        private mutating func value(of type: UInt8, strings: [String]?) -> Value? {
+        private static let maximumDepth = 64
+
+        private mutating func value(of type: UInt8, strings: [String]?, depth: Int) -> Value? {
             switch type {
-            case 0: table(strings: strings).map(Value.table)
+            case 0: table(strings: strings, depth: depth + 1).map(Value.table)
             case 1: cString().map(Value.string)
             case 2: u32().map { .number(Int64(Int32(bitPattern: $0))) }
             case 3: u32().map { .number(Int64($0)) }

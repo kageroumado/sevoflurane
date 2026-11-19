@@ -239,6 +239,7 @@ nonisolated enum PEResources {
         guard let types = children(of: data, at: root).first(where: { $0.id == type }),
               types.isDirectory else { return [:] }
         var result: [Int: Data] = [:]
+        var copied = 0
         for name in children(of: data, at: root + types.offset) {
             guard let id = name.id else { continue }
             // The language level: the first entry is the one taken.
@@ -248,10 +249,18 @@ nonisolated enum PEResources {
             guard let leafNode, let bytes = leaf(
                 of: data, root: root, offset: leafNode.offset, sections: sections,
             ) else { continue }
+            // Entries may all name the same bytes, so a small file can ask
+            // for gigabytes of copies; no icon set comes near this.
+            copied += bytes.count
+            guard copied <= maximumResourceBytes else { break }
             result[id] = bytes
         }
         return result
     }
+
+    private static let maximumResourceBytes = 64 << 20
+    /// A version string longer than this is not one.
+    private static let maximumStringUnits = 4096
 
     private static func firstResource(
         ofType type: Int, in data: Data, root: Int, sections: [Section],
@@ -463,7 +472,7 @@ nonisolated enum PEResources {
     private static func utf16String(_ data: Data, at offset: Int) -> (String, Int) {
         var units: [UInt16] = []
         var cursor = offset
-        while let unit = u16(data, cursor) {
+        while units.count < maximumStringUnits, let unit = u16(data, cursor) {
             cursor += 2
             if unit == 0 { break }
             units.append(UInt16(unit))

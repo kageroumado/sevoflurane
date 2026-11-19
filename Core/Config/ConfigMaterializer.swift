@@ -183,7 +183,12 @@ nonisolated enum ConfigMaterializer {
         let ordered = games.sorted { $0.appID < $1.appID }
         var claimants: [String: [GameFiles]] = [:]
         for game in ordered {
-            for exe in Set(game.exes) { claimants[exe, default: []].append(game) }
+            // A game that ships a program of the bottle's own name gets only
+            // its folder's file: the bare one is read by the bottle's own
+            // `steam.exe`, which would start with that game's settings.
+            for exe in Set(game.exes) where !bottlePrograms.contains(exe.lowercased()) {
+                claimants[exe, default: []].append(game)
+            }
         }
         var files: [String: [String]] = [:]
         for game in ordered {
@@ -209,6 +214,14 @@ nonisolated enum ConfigMaterializer {
         return files
     }
 
+    /// Programs the bottle runs for itself, by the name their env file has.
+    static let bottlePrograms: Set<String> = [
+        "steam.exe", "steamwebhelper.exe", "steamservice.exe", "steamerrorreporter.exe",
+        "gameoverlayui.exe", "explorer.exe", "services.exe", "winedevice.exe", "wineboot.exe",
+        "rundll32.exe", "start.exe", "conhost.exe", "plugplay.exe", "svchost.exe", "rpcss.exe",
+        "winemenubuilder.exe",
+    ]
+
     /// A file that is one game's alone; a companion program never takes the
     /// loader (``GameConfig/isCompanionExecutable(_:)``).
     private static func ownLines(of game: GameFiles, for exe: String) -> [String] {
@@ -222,8 +235,7 @@ nonisolated enum ConfigMaterializer {
         String(folder.map { $0.isASCII ? Character($0.lowercased()) : $0 })
     }
 
-    /// Adds the Steam Play switch (``SteamPlayMacOS``) to `steam.exe`'s file,
-    /// keeping any lines a game shipping its own `steam.exe` put there.
+    /// Adds the Steam Play switch (``SteamPlayMacOS``) to `steam.exe`'s file.
     static func withClientFile(_ files: [String: [String]], steamPlay: Bool) -> [String: [String]] {
         guard steamPlay else { return files }
         var files = files
@@ -471,6 +483,11 @@ nonisolated enum ConfigMaterializer {
     static func writeFiles(_ files: [String: [String]], in dir: URL) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         for (file, lines) in files {
+            // A key is `<exe>.env` or `<folder>/<exe>.env`, both names from a
+            // game's own files: one that climbs out of `dir` is not written.
+            let parts = file.split(separator: "/", omittingEmptySubsequences: false)
+            guard (1 ... 2).contains(parts.count), !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." })
+            else { continue }
             let url = dir.appendingPathComponent(file)
             if file.contains("/") {
                 try? FileManager.default.createDirectory(
@@ -482,9 +499,22 @@ nonisolated enum ConfigMaterializer {
     }
 
     private static func write(_ lines: [String], to url: URL) {
-        let text = ([header] + lines).joined(separator: "\n") + "\n"
+        let text = ([header] + lines.map(singleLine)).joined(separator: "\n") + "\n"
         if let existing = try? String(contentsOf: url, encoding: .utf8), existing == text { return }
         try? text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// One entry as one line. A game's or program's name goes into its file,
+    /// and a line break in it would add a line of the name's choosing, past
+    /// every check on which variables a file may set.
+    static func singleLine(_ line: String) -> String {
+        guard line.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F || $0.value == 0x2028 || $0.value == 0x2029 })
+        else { return line }
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: line.unicodeScalars.map { scalar in
+            scalar.value < 0x20 || scalar.value == 0x7F || scalar.value == 0x2028 || scalar.value == 0x2029 ? " " : scalar
+        })
+        return String(scalars)
     }
 
     /// Removes our files under `dir` not in `wanted`, and folders left empty.

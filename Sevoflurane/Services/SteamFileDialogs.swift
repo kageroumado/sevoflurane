@@ -110,8 +110,7 @@ enum DesktopShortcuts {
             return false
         }
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
-        let fileName = String(name.map { $0 == "/" || $0 == ":" ? "-" : $0 })
-        let alias = desktop.appendingPathComponent(fileName)
+        let alias = Self.aliasURL(named: name, in: desktop)
         do {
             let data = try bundle.bookmarkData(
                 options: .suitableForBookmarkFile, includingResourceValuesForKeys: nil, relativeTo: nil,
@@ -124,5 +123,20 @@ enum DesktopShortcuts {
             EventLog.shared.log(.client, "desktop shortcut for \(name): could not write the alias — \(error.localizedDescription)")
             return false
         }
+    }
+
+    /// Where a game's alias goes. The name is the game's own, so it is kept
+    /// from hiding the file or replacing one the person put there: an alias
+    /// we wrote before is rewritten, anything else is left and the alias
+    /// takes a name beside it.
+    nonisolated static func aliasURL(named name: String, in folder: URL) -> URL {
+        var fileName = String(name.map { $0 == "/" || $0 == ":" || $0.isNewline ? "-" : $0 })
+        while fileName.hasPrefix(".") { fileName.removeFirst() }
+        if fileName.isEmpty { fileName = "Game" }
+        let wanted = folder.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: wanted.path),
+              (try? wanted.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile != true
+        else { return wanted }
+        return folder.appendingPathComponent("\(fileName) (Sevoflurane)")
     }
 }

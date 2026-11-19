@@ -36,7 +36,9 @@ enum AgentIntegration {
         guard FileManager.default.fileExists(atPath: cli) else {
             return "the bundled sevo binary is missing"
         }
-        let command = "mkdir -p /usr/local/bin && ln -sf \(shellQuoted(cli)) \(symlinkPath)"
+        // -h: replace a link at that path, never follow one into whatever
+        // directory it points at. This runs as root.
+        let command = "mkdir -p /usr/local/bin && ln -sfh \(shellQuoted(cli)) \(symlinkPath)"
         if let failure = await runPrivileged(command) {
             return failure
         }

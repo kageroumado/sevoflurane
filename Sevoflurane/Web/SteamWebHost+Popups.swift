@@ -11,7 +11,7 @@ extension SteamWebHost {
         webView.uiDelegate = coordinator
         webView.allowsBackForwardNavigationGestures = false
         // Safari's inspector cannot attach without this.
-        webView.isInspectable = true
+        webView.isInspectable = WebInspection.isAllowed
         // WebKit's opaque base flashes white on every popup and blocks menu
         // transparency.
         if webView.responds(to: Selector(("_setDrawsBackground:"))) {

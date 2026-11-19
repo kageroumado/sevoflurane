@@ -70,6 +70,13 @@ final class AdoptionModel {
             .nilWhenEmpty
     }
 
+    /// The file itself, which the name and icon above are not: both come
+    /// from inside the program, and a download can call itself anything.
+    var location: String {
+        let folder = (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+        return String(localized: "\(url.lastPathComponent) in \(folder)")
+    }
+
     var destination: String {
         String(localized: "Runs in the \(SteamBottle.name) bottle on \(Engine.active.description).")
     }

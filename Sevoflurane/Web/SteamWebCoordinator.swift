@@ -75,14 +75,20 @@ extension SteamWebCoordinator: WKUIDelegate {
 /// traffic passes, `steam://` routes back into the client, and any other
 /// scheme is cancelled, since WKWebView would hand it to LaunchServices and
 /// launch the real Mac Steam app.
+///
+/// `runsSteamLinks` is false for a `steam://` link from anywhere but a Steam
+/// page's own main frame: an embedded frame or a site the view was led to
+/// has no business sending the client commands.
 @MainActor
-func steamNavigationPolicy(for url: URL?, host: SteamWebHost?) -> WKNavigationActionPolicy {
+func steamNavigationPolicy(
+    for url: URL?, host: SteamWebHost?, runsSteamLinks: Bool = true,
+) -> WKNavigationActionPolicy {
     guard let url, let scheme = url.scheme?.lowercased() else { return .allow }
     switch scheme {
     case "http", "https", "about", "blob", "data":
         return .allow
     case "steam":
-        host?.executeSteamURL(url)
+        if runsSteamLinks { host?.executeSteamURL(url) }
         return .cancel
     default:
         return .cancel

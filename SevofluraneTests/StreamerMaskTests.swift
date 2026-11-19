@@ -11,7 +11,7 @@ struct StreamerMaskTests {
     private func settings(isOn: Bool = true, name: String = "Player") -> StreamerMode.Settings {
         StreamerMode.Settings(
             isOn: isOn, displayName: name, avatarDataURI: Monogram.dataURI(for: name),
-            knownNames: ["kirie_kagarino", name],
+            knownNames: ["account_name", name],
         )
     }
 
