@@ -264,13 +264,20 @@ final class CrashPromptModel {
 
     /// Trashes a zip built only to be shown, so declining leaves nothing in
     /// Reports.
+    ///
+    /// The close button lands here too. Once Send was pressed the zip is the
+    /// user's: an upload under way finishes, and a refused or failed one stays
+    /// in Reports, as the panel says.
     func decline() {
-        let building = preparing
-        Task(name: "Trash the declined crash report") {
-            guard let zip = await building?.value else { return }
-            try? FileManager.default.trashItem(at: zip, resultingItemURL: nil)
+        let shownOnly = sending == nil && (stage == .asking || stage == .preparing)
+        if shownOnly {
+            let building = preparing
+            Task(name: "Trash the declined crash report") {
+                guard let zip = await building?.value else { return }
+                try? FileManager.default.trashItem(at: zip, resultingItemURL: nil)
+            }
+            zip = nil
         }
-        zip = nil
         onFinish?(neverAskAgain)
     }
 

@@ -233,7 +233,7 @@ nonisolated struct MinidumpMetadata: Sendable, Equatable {
     private static let moduleRecordBytes = 108
     /// `MINIDUMP_MODULE.ModuleNameRva`, after the base, size, checksum and
     /// timestamp that open the record.
-    private static let moduleNameField = 24
+    private static let moduleNameField = 20
     private static let moduleListStream: UInt32 = 4
     private static let maximumStreams = 64
     private static let maximumModules = 512

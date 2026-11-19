@@ -30,8 +30,6 @@ nonisolated struct SophonManifest: Sendable {
 
     let files: [File]
 
-    init(files: [File]) { self.files = files }
-
     init(decoding data: Data) throws {
         var files: [File] = []
         for field in try ProtobufReader.fields(data) where field.number == 1 {

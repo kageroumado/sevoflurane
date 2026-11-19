@@ -182,10 +182,26 @@ nonisolated enum AppControl {
 /// One-shot JavaScript in the bottled client's `SharedJSContext` over CDP;
 /// needs no app.
 nonisolated enum SteamJS {
+    /// How long one evaluation may take: a client whose main thread is wedged
+    /// keeps its socket open and never answers a promise.
+    static let timeout: Duration = .seconds(30)
+
     static func eval(_ expression: String) async throws -> String? {
         let client = CDPClient(onPush: { _ in })
-        try await client.connect(port: BridgePorts.cdp)
-        return try await client.evaluate(expression)
+        do {
+            let value = try await withDeadline(timeout) {
+                try await client.connect(port: BridgePorts.cdp)
+                return try await client.evaluate(expression)
+            }
+            await client.disconnect()
+            return value
+        } catch is DeadlineExceeded {
+            await client.disconnect()
+            throw CDPClient.Failure.unanswered("no answer within \(timeout.components.seconds) s")
+        } catch {
+            await client.disconnect()
+            throw error
+        }
     }
 }
 

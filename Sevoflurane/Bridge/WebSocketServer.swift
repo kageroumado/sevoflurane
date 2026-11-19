@@ -102,8 +102,12 @@ final nonisolated class WSConnection: Sendable {
 final nonisolated class WebSocketServer: Sendable {
     private let listener: NWListener
     let queue: DispatchQueue
+    private let label: String
+    private let port: UInt16
 
     init(port: UInt16, label: String, gate: LoopbackGate, maxMessageSize: Int = 1 << 20) throws {
+        self.label = label
+        self.port = port
         queue = DispatchQueue(label: "sevo.ws.\(label)", qos: .userInitiated)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
@@ -141,6 +145,13 @@ final nonisolated class WebSocketServer: Sendable {
     func start(onConnection: @escaping @Sendable (WSConnection) -> Void) {
         listener.newConnectionHandler = { connection in
             onConnection(WSConnection(connection))
+        }
+        // A port another process holds fails here, after `start` returned;
+        // unlogged, the page never boots and nothing says why.
+        listener.stateUpdateHandler = { [label, port] state in
+            if case let .failed(error) = state {
+                EventLog.enqueue(.bridge, "\(label) ws :\(port) failed: \(error.localizedDescription)")
+            }
         }
         listener.start(queue: queue)
     }

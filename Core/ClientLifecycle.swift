@@ -779,7 +779,7 @@ nonisolated enum ClientLifecycle {
             log(exitLine(of: name, status: status, stopRequestedAt: stopRequestedAt))
             // A signal's number is no exit code of the program's.
             if let programExit, finished.terminationReason == .exit {
-                trail.write(Data((ProgramExit.line(programExit, status: status) + "\n").utf8))
+                try? trail.write(contentsOf: Data((ProgramExit.line(programExit, status: status) + "\n").utf8))
             }
             try? trail.close()
         }

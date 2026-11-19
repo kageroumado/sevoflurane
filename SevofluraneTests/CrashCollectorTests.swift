@@ -561,7 +561,7 @@ struct CrashCollectorTests {
         for name in modules {
             var record = Data(repeating: 0, count: moduleRecordBytes)
             let rva = UInt32(nameOffset).littleEndian.data
-            record.replaceSubrange(24 ..< 28, with: rva)
+            record.replaceSubrange(20 ..< 24, with: rva) // ModuleNameRva
             data += record
             let units = Array(name.utf16)
             names += UInt32(units.count * 2).littleEndian.data

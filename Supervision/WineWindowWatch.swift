@@ -57,12 +57,6 @@ nonisolated enum WineWindowWatch {
         }
     }
 
-    /// The program behind an on-screen window, lowercased. `sessions` are the
-    /// running macOS builds, read once per pass over the window list.
-    static func program(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> String? {
-        resolve(owner: owner, pid: pid, sessions: sessions)?.name
-    }
-
     /// As ``program(owner:pid:sessions:)``, and says which source answered.
     static func resolve(owner: String, pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
         if let build = macOSBuild(of: pid, sessions: sessions) {

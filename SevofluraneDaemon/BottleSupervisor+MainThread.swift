@@ -31,9 +31,18 @@ extension BottleSupervisor {
         nativeProbeUnanswered = false
         guard answer.stuck else {
             nativeSilences = 0
+            stuckReported = false
             return false
         }
         nativeSilences += 1
+        if stuckReported {
+            // Swept, sampled and reported already: the restart waits for the game.
+            if await Self.isGameRunning() { return true }
+            stuckReported = false
+            nativeSilences = 0
+            await restartClient(reason: "steam.exe stopped answering on its main thread")
+            return true
+        }
         log.log(
             .client,
             "steam.exe left a main-thread question unanswered: \(answer.silent.joined(separator: ", ")) "
@@ -45,6 +54,7 @@ extension BottleSupervisor {
             log.log(.client, "sampled the stuck steam.exe to \(sample.path)")
         }
         if await Self.isGameRunning() {
+            stuckReported = true
             fault = .degraded("Steam stopped answering — restart the client when the game is done")
             transition(
                 logging: .supervisor,

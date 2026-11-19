@@ -11,7 +11,7 @@ nonisolated enum ThreadActivity {
     static let usageScale = 1000
 
     /// 60 % of one core.
-    static let busyThreshold = 600
+    static let busyThreshold = usageScale * 6 / 10
 
     /// The most thread handles one read lists.
     static let maximumThreads = 1024

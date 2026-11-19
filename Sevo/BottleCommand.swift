@@ -456,11 +456,13 @@ struct BottleCommand: AsyncParsableCommand {
             }
             selection.renderer = renderer
         case "msync":
-            guard let flag = Bool(value) else {
-                Sevo.printError("msync must be true or false")
+            switch value {
+            case "on", "true", "yes": selection.msync = true
+            case "off", "false", "no": selection.msync = false
+            default:
+                Sevo.printError("msync must be on or off")
                 throw SevoExit.badInvocation
             }
-            selection.msync = flag
         default:
             Sevo.printError("unknown key '\(key)' \(Self.keys)")
             throw SevoExit.badInvocation

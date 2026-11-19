@@ -227,7 +227,8 @@ struct WaitCommand: AsyncParsableCommand {
                 return outcome
             }
         } catch is DeadlineExceeded {
-            throw ClientOps.Failure.message("wait: still not \(gone ? "gone" : "healthy") after \(timeout)s, and the report itself stalled — sevo doctor")
+            Sevo.printError("wait: still not \(gone ? "gone" : "healthy") after \(timeout)s, and the report itself stalled — sevo doctor")
+            throw ExitCode(2)
         }
         // A wait that ends on its clock is a failure to the caller: a script
         // that waited for healthy must not go on as if it got it.

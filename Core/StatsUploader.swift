@@ -143,12 +143,12 @@ actor StatsUploader {
         var reports = StatsStore.readReportQueue().filter { $0.queued > cutoff }
         StatsStore.writeReportQueue(reports)
         do {
-            try await drain(&runs, batchSize: Self.batchSize, kind: "runs") { StatsStore.writeQueue($0) } send: { batch, identity in
+            try await drain(&runs, batchSize: Self.batchSize, kind: "runs") { StatsStore.readQueue() } persist: { StatsStore.writeQueue($0) } send: { batch, identity in
                 try await self.send(batch.map(\.run), as: identity)
             } tally: { state, accepted in
                 state.sentRuns += accepted
             }
-            try await drain(&reports, batchSize: Self.reportBatchSize, kind: "reports") { StatsStore.writeReportQueue($0) } send: { batch, identity in
+            try await drain(&reports, batchSize: Self.reportBatchSize, kind: "reports") { StatsStore.readReportQueue() } persist: { StatsStore.writeReportQueue($0) } send: { batch, identity in
                 try await self.send(batch, as: identity)
             } tally: { state, accepted in
                 state.sentReports = (state.sentReports ?? 0) + accepted
@@ -164,6 +164,7 @@ actor StatsUploader {
     /// are capped at 4 KB and cannot shrink.
     private func drain<Item>(
         _ queue: inout [Item], batchSize: Int, kind: String,
+        load: () -> [Item],
         persist: ([Item]) -> Void,
         send: ([Item], StatsIdentity) async throws -> Int,
         tally: (inout StatsStore.State, Int) -> Void,
@@ -182,7 +183,9 @@ actor StatsUploader {
             } catch Failure.refused(status: 413, reason: _) {
                 Self.log("the server called one of the \(kind) too large (413); dropped")
             }
-            queue.removeFirst(batch.count)
+            // The actor runs `enqueue` while a send is awaited, so the file can
+            // hold items this copy lacks: the batch comes off the file's head.
+            queue = Array(load().dropFirst(batch.count))
             persist(queue)
             var state = StatsStore.readState()
             tally(&state, accepted)

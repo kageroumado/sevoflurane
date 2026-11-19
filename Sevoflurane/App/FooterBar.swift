@@ -84,7 +84,7 @@ struct FooterBar: View {
             .accessibilityHidden(true)
             .overlay {
                 Menu {
-                    Button("Reload Steam UI", systemImage: "arrow.clockwise") { host.reload() }
+                    Button("Reload Steam UI", systemImage: "arrow.clockwise") { host.reloadAskedByUser() }
                     Button("Restart Steam Client", systemImage: "arrow.triangle.2.circlepath") {
                         supervisor.restartNow()
                     }

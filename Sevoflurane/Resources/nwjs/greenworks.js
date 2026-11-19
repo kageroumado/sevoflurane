@@ -61,20 +61,25 @@ const channel = {
     const socket = net.connect(port(), '127.0.0.1');
     this.socket = socket;
     socket.on('connect', () => {
+      if (socket !== this.socket) return;
       socket.pause();
       const fd = socket._handle && socket._handle.fd;
       if (typeof fd !== 'number' || fd < 0) {
         log('the socket exposes no descriptor; Steam calls will report failure');
-        socket.destroy();
+        this.reject();
         return;
       }
       this.fd = fd;
       this.connected = true;
       log('connected to the stub on port ' + port());
+      // A reconnect after the game initialized Steamworks: the stub holds no
+      // session for this connection until it is asked again.
+      if (state.ready && !handshake()) return;
       greenworks.emit('steam-servers-connected');
     });
-    socket.on('error', () => this.drop());
-    socket.on('close', () => this.drop());
+    // Events of a socket this channel already let go of change nothing.
+    socket.on('error', () => { if (socket === this.socket) this.drop(); });
+    socket.on('close', () => { if (socket === this.socket) this.drop(); });
     // The open socket never keeps the game's process alive: it exits whenever it likes.
     socket.unref();
   },
@@ -91,16 +96,20 @@ const channel = {
     if (socket) socket.destroy();
   },
 
+  // Lets go of the socket and dials again. A connection that was up starts a
+  // fresh round of attempts: one failed request must not end Steam for the run.
   drop() {
+    const socket = this.socket;
     const wasConnected = this.connected;
     this.connected = false;
     this.fd = -1;
     this.socket = null;
     this.rx = '';
+    if (socket) socket.destroy();
     if (wasConnected) {
-      log('the stub closed the connection');
+      log('lost the connection to the stub; dialing again');
       greenworks.emit('steam-servers-disconnected');
-      return;
+      this.attempts = 0;
     }
     if (this.attempts < CONNECT_ATTEMPTS) setTimeout(() => this.connect(), CONNECT_RETRY_MS).unref();
   },
@@ -263,16 +272,12 @@ function relay(message, errorCallback, onSuccess) {
   });
 }
 
-greenworks.initAPI = function () {
-  if (state.ready) return true;
-  if (!channel.connected) {
-    channel.connect();
-    return false;
-  }
+// The stub's init handshake on the open channel, which also checks the stub
+// holds this game: a second game on the default port reaches the first one's
+// stub, and unlocking into it would credit the wrong game.
+function handshake() {
   const reply = ask({ op: 'init' });
   if (!reply.ok) return false;
-  // A second game on the default port reaches the first one's stub;
-  // unlocking into it would credit the wrong game.
   const expected = parseInt(process.env.SEVO_STEAM_APPID, 10);
   if (expected > 0 && reply.appId !== expected) {
     log('the stub on port ' + port() + ' holds app ' + reply.appId + ', not ' + expected + '; refusing it');
@@ -284,6 +289,16 @@ greenworks.initAPI = function () {
   state.appId = reply.appId || 0;
   state.language = reply.language || '';
   state.personaName = reply.personaName || '';
+  return true;
+}
+
+greenworks.initAPI = function () {
+  if (state.ready) return true;
+  if (!channel.connected) {
+    channel.connect();
+    return false;
+  }
+  if (!handshake()) return false;
   log('Steamworks ready for app ' + state.appId + ' as ' + state.personaName);
   return true;
 };

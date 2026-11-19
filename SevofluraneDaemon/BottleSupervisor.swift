@@ -238,6 +238,9 @@ final class BottleSupervisor {
     /// Whether the last main-thread probe got no answer from the page, so the
     /// next one that does not is not logged again.
     var nativeProbeUnanswered = false
+    /// Whether the current stall was already swept, sampled and reported
+    /// during a game, so later probes neither repeat that nor log it again.
+    var stuckReported = false
     var isRestarting = false
     /// A restart asked for mid-ladder, with its reason; the ladder runs again
     /// from the top instead of finishing the old boot.

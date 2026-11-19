@@ -36,7 +36,9 @@ extension SteamBridge {
     /// UI creates its desktop window hidden until `showSteam` shows it.
     private func liveSearch() async throws -> String {
         let cdp = try await ensureCDP()
-        let search = try await cdp.evaluate("location.search") ?? ""
+        let search = try await withDeadline(ClientLifecycle.cdpCallCap) {
+            try await cdp.evaluate("location.search")
+        } ?? ""
         let kept = search.trimmingCharacters(in: CharacterSet(charactersIn: "?"))
             .components(separatedBy: "&")
             .filter { !$0.isEmpty }
@@ -53,7 +55,7 @@ extension SteamBridge {
         // property makes it call methods that do not exist.
         var shape = "{}"
         if let cdp = try? await ensureCDP(),
-           let snapshot = try? await cdp.evaluate(BridgeJS.shape) {
+           let snapshot = try? await withDeadline(ClientLifecycle.cdpCallCap, { try await cdp.evaluate(BridgeJS.shape) }) {
             shape = snapshot
         }
         let injected = "<head>"

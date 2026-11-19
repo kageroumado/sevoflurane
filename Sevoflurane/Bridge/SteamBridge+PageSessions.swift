@@ -202,8 +202,13 @@ extension SteamBridge {
             ws.send(text: Self.resultReply(rid: rid, outcome: ["ok": true, "v": NSNull()]))
             return
         }
+        // A shortcut's game id is 64-bit with its top bit set, past Int: read
+        // as text and mapped to the adopted program the run is recorded under.
         if path == "SteamClient.Apps.TerminateApp",
-           let appID = (request["args"] as? [Any])?.first.flatMap({ ($0 as? NSNumber)?.intValue ?? Int("\($0)") }) {
+           let raw = (request["args"] as? [Any])?.first.map({ ($0 as? NSNumber)?.stringValue ?? "\($0)" }),
+           let appID = SteamShortcuts.appID(
+               fromSteam: raw, aliases: SteamShortcuts.aliases(AdoptedPrograms.all()),
+           ) {
             // Every stop asked for in the page passes here.
             RunLog.noteStopRequest(forApp: appID, by: .player)
             // Ending the processes first (bounded; a holdout is killed) leaves
@@ -397,8 +402,10 @@ extension SteamBridge {
             task.cancel()
         }
         let orphaned = registrations.filter { $0.value.owner == id }.map(\.key)
+        // Bounded like `abandonRegistration`: a wedged client must not keep the
+        // dead page's tunnels open.
         if let cdp, await !cdp.isClosed {
-            try? await unregister(orphaned, cdp: cdp)
+            _ = try? await withDeadline(.seconds(5)) { try await self.unregister(orphaned, cdp: cdp) }
         }
         for handle in orphaned {
             registrations.removeValue(forKey: handle)

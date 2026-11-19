@@ -184,12 +184,19 @@ struct HoYoCommand: AsyncParsableCommand {
                 if !problems.isEmpty { throw SevoExit.failed }
                 return
             }
-            let repairMeter = ProgressLine()
+            // With --json the object above is the whole of stdout.
+            let repairMeter = asJSON ? nil : ProgressLine()
             try await HoYoCommand.failing {
-                try await SophonDownloader().repair(installation, paths: Set(problems.map(\.path)), progress: repairMeter.show)
+                try await SophonDownloader().repair(installation, paths: Set(problems.map(\.path))) {
+                    repairMeter?.show($0)
+                }
             }
-            repairMeter.end()
-            print("repaired \(problems.count) files")
+            repairMeter?.end()
+            if asJSON {
+                Sevo.printError("repaired \(problems.count) files")
+            } else {
+                print("repaired \(problems.count) files")
+            }
         }
     }
 

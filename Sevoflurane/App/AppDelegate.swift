@@ -629,7 +629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func reloadSteamUI(_: Any?) {
-        host.reload()
+        host.reloadAskedByUser()
     }
 
     /// Flips Streamer Mode from the app menu.

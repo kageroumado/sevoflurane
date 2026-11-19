@@ -53,6 +53,9 @@ extension BottleSupervisor {
 
         recentRestarts.removeAll { $0.timeIntervalSinceNow < -600 }
         guard recentRestarts.count < 3 else {
+            // The repair runs for minutes under its own timeout; the ladder's
+            // watchdog would force-quit the updater it is waiting on.
+            watchdog.cancel()
             await escalateCrashLoop()
             return
         }

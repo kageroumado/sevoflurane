@@ -104,7 +104,9 @@ nonisolated enum WineLog {
         guard descriptor >= 0 else { return nil }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         let stamp = ISO8601DateFormatter().string(from: .now)
-        handle.write(Data("==== \(stamp) \(label) (WINEDEBUG=\(channels))\n".utf8))
+        // The throwing write: `write(_:)` raises an Objective-C exception on a
+        // full disk, which ends the process. A header that does not land is lost.
+        try? handle.write(contentsOf: Data("==== \(stamp) \(label) (WINEDEBUG=\(channels))\n".utf8))
         return handle
     }
 

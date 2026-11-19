@@ -515,7 +515,23 @@ final class SteamWebHost {
     /// view's configuration, and text it already rewrote cannot be restored.
     func applyStreamerMode() {
         guard context != nil else { return }
+        guard !isAwaitingSignIn else {
+            EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — applies at the next reload; "
+                + "reloading at the login window would quit Steam")
+            return
+        }
         EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — reloading the UI page")
+        reload()
+    }
+
+    /// A reload a person asked for. Refused at the login window: a reload
+    /// detaches the login popup, Steam reads that as the user closing it, and
+    /// quits.
+    func reloadAskedByUser() {
+        guard !isAwaitingSignIn else {
+            EventLog.shared.log(.page, "reload asked for at the login window — refused, it would quit Steam")
+            return
+        }
         reload()
     }
 
