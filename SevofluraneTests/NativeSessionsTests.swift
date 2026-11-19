@@ -6,12 +6,28 @@ import Testing
 struct NativeSessionsTests {
     private static func file(
         appID: String = "1309000", supervisor: Int = 12345, game: Int = 12346, version: Int = 1,
+        bundle: String = "/Volumes/Games/SteamLibrary/steamapps/common/Game/Game.app",
     ) -> Data {
         Data("""
         {"version":\(version),"appid":"\(appID)","supervisor":\(supervisor),"game":\(game),"pgid":\(game),\
-        "executable":"/Volumes/Games/SteamLibrary/steamapps/common/Game/Game.app/Contents/MacOS/Game",\
-        "bundle":"/Volumes/Games/SteamLibrary/steamapps/common/Game/Game.app","started":1760112345}
+        "executable":"\(bundle)/Contents/MacOS/Game",\
+        "bundle":"\(bundle)","started":1760112345}
         """.utf8)
+    }
+
+    /// The supervisor holds Steam's waiter for a native NW.js run too; its
+    /// windows stay the game exe's, so window recognition skips its session.
+    @Test
+    func `a native NW_js session is told apart from a macOS build`() throws {
+        let build = try #require(NativeSessions.parse(Self.file()))
+        let nwjs = try #require(NativeSessions.parse(Self.file(
+            appID: "3454010", supervisor: 20, game: 21,
+            bundle: NWJSRunner.bundleDirectory(appID: 3454010).appendingPathComponent("Demo.app").path,
+        )))
+        #expect(!build.isNWJS)
+        #expect(nwjs.isNWJS)
+        #expect(WineWindowWatch.macOSBuild(of: 21, sessions: [build, nwjs]) == nil)
+        #expect(WineWindowWatch.macOSBuild(of: 12346, sessions: [build, nwjs])?.name == "game.app")
     }
 
     @Test

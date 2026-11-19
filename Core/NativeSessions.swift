@@ -48,6 +48,14 @@ nonisolated enum NativeSessions {
             URL(fileURLWithPath: bundle).lastPathComponent.lowercased()
         }
 
+        /// Whether the session is a native NW.js run (``NWJSRunner``) rather
+        /// than a macOS build: its bundle, or the runtime binary when it has
+        /// none, lives under the runner's own folders.
+        var isNWJS: Bool {
+            bundle.hasPrefix(NWJSRunner.root.path + "/")
+                || bundle.hasPrefix(NWJSRuntime.root.path + "/")
+        }
+
         /// Whether a process belongs to this game: the game itself, or any
         /// process still in its group.
         func owns(pid: pid_t, processGroup group: pid_t?) -> Bool {

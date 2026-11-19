@@ -155,9 +155,12 @@ extension AppDelegate {
         }
     }
 
-    /// A game on the native NW.js runner is a macOS process Steam does not
-    /// track, and the client sends no lifetime edge for it: the run ends when
-    /// its processes are gone. `ps` runs off the main actor.
+    /// A game on the native NW.js runner is a macOS process, and on an engine
+    /// whose shim execs NW.js in place (r12 and earlier) Steam never tracks it
+    /// and the client sends no lifetime edge: the run ends when its processes
+    /// are gone. A newer engine gives Steam a waiter to track, and whichever of
+    /// its edge and this check comes first closes the run. `ps` runs off the
+    /// main actor.
     private static func checkNativeRuns(_ recorder: RunRecorder) async {
         for appID in recorder.nativeRuns {
             let alive = await Task.detached(name: "Look for the native game's processes") {

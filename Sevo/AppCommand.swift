@@ -414,10 +414,12 @@ struct AppCommand: AsyncParsableCommand {
                 if let ended = await GameEnding.end(appID: appid).summary {
                     narrate(ended, asJSON: asJSON)
                 }
-                try await SteamOps.terminate(appid)
-                // A game on the native runner left the bottle at its first
-                // instruction, so the client's terminate only drops its
-                // record — the process itself is asked here.
+                try await SteamOps.terminate(appid, notingStop: false)
+                // On an engine whose shim execs NW.js in place (r12 and
+                // earlier), a native run has left the bottle and the client's
+                // terminate only drops its record, so the process itself is
+                // asked here. A newer engine runs it under the native
+                // supervisor, which the client's terminate already ends.
                 let native = GameConfig.game(appid).runsNatively
                     ? NWJSRunner.terminate(appID: appid) : []
                 narrate(
@@ -432,7 +434,7 @@ struct AppCommand: AsyncParsableCommand {
                 if !sighting.isGone, sighting.steamListsIt, sighting.processes.isEmpty {
                     // An entry with no process behind it is one the client lost
                     // track of, and only the client clears it: ask once more.
-                    try await SteamOps.terminate(appid)
+                    try await SteamOps.terminate(appid, notingStop: false)
                     narrate(
                         "Steam still lists \(appid) with no process behind it — asked the client once more",
                         asJSON: asJSON,

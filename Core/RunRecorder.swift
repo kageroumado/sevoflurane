@@ -615,7 +615,7 @@ final nonisolated class RunRecorder {
             nativeSeen.insert(appID)
             nativeUnseen[appID] = nil
         } else if nativeSeen.remove(appID) != nil {
-            // No exit code exists for a process Steam never tracked: it was
+            // The native processes carry no exit code here: the run was
             // asked to stop, or the player closed it.
             let stop = RunLog.takeStopRequest(forApp: appID, in: runs)
             close(appID: appID, kind: stop.map(RunInProgress.stoppedKind) ?? gone)

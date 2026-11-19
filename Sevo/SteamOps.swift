@@ -129,8 +129,11 @@ nonisolated enum SteamOps {
         try await SteamJS.eval(LaunchOptions.listScript(appID: appid)) ?? "[]"
     }
 
-    static func terminate(_ appid: Int) async throws {
-        RunLog.noteStopRequest(forApp: appid, by: .tool)
+    /// Asks the client to end `appid`. `notingStop` leaves the word that the
+    /// ending was asked for; a caller that already left it passes false, since
+    /// a second word outlives the run and labels the next one's ending.
+    static func terminate(_ appid: Int, notingStop: Bool = true) async throws {
+        if notingStop { RunLog.noteStopRequest(forApp: appid, by: .tool) }
         _ = try await SteamJS.eval(
             "SteamClient.Apps.TerminateApp('\(appid)', false); 'ok'",
         )

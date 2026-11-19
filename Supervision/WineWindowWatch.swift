@@ -114,8 +114,12 @@ nonisolated enum WineWindowWatch {
     /// session files: the game itself or any process in its group, wherever
     /// its Steam library is. `nil` for every other process, Mac applications
     /// with an `.app` of their own included.
+    ///
+    /// A native NW.js run has a session too, since the same supervisor holds
+    /// Steam's waiter for it; its bundle sits under ``NWJSRunner/root``, and
+    /// its windows stay named after the game's exe (``nativeProgram(_:)``).
     static func macOSBuild(of pid: pid_t, sessions: [NativeSessions.Session]) -> Program? {
-        NativeSessions.session(owning: pid, in: sessions).map {
+        NativeSessions.session(owning: pid, in: sessions.filter { !$0.isNWJS }).map {
             Program(name: $0.name, source: .macOSBuild, appID: $0.appID)
         }
     }
