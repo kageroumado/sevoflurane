@@ -190,7 +190,7 @@ extension StallWatch.State {
     var tint: Color {
         switch self {
         case .running: .green
-        case .idle: .secondary
+        case .idle, .atRest: .secondary
         case .stopped: .orange
         case .stalled, .notAnswering: .red
         }

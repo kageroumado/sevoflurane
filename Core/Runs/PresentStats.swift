@@ -322,6 +322,16 @@ final nonisolated class PresentStats: @unchecked Sendable {
         return max(0, uptime - beat)
     }
 
+    /// How many frames a process has put on screen; nil without a live page.
+    static func presents(
+        of pid: pid_t, in directory: URL = SteamBottle.root.appendingPathComponent(".sevo/run"),
+    ) -> UInt64? {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("\(pid).stats")),
+              let page = page(from: data), page.alive
+        else { return nil }
+        return page.drawables > 0 ? page.drawables : page.frames
+    }
+
     /// Every page in a bottle's run directory, stale ones dropped.
     static func pages(in directory: URL) -> [Page] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []

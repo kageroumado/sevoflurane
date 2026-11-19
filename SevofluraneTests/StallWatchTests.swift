@@ -4,7 +4,7 @@ import Testing
 
 /// The stall watchdog, driven against a process tree that exists only in this
 /// test: a clock that jumps, CPU counters that stop, a `SIGSTOP` that is not
-/// one, and a game whose frames nothing counts.
+/// one, and windows that answer, stay silent or are not there.
 ///
 /// Every rung of the ladder is checked by what it signalled, because the
 /// signals are the only thing about the ladder that a person would notice.
@@ -18,6 +18,10 @@ struct StallWatchTests {
         var names: [pid_t: String] = [:]
         var presents: [pid_t: UInt64] = [:]
         var mainThreadSilence: [pid_t: TimeInterval] = [:]
+        /// What the windows say when asked, by executable; nil when the
+        /// asking cannot be put. Empty: no program has a window.
+        var windows: [String: WindowProbe.Verdict]? = [:]
+        var askings = 0
         var signals: [(pid: pid_t, signal: Int32)] = []
         var lines: [String] = []
         var now: TimeInterval = 1000
@@ -37,6 +41,11 @@ struct StallWatchTests {
             probes.name = { [self] in names[$0] }
             probes.presents = { [self] in presents[$0] }
             probes.mainThreadSilence = { [self] in mainThreadSilence[$0] }
+            probes.dialogs = { [] }
+            probes.windows = { [self] in
+                askings += 1
+                return windows
+            }
             probes.signal = { [self] pid, signal in
                 signals.append((pid, signal))
                 if signal == SIGCONT { stopped.remove(pid) }
@@ -89,6 +98,20 @@ struct StallWatchTests {
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: Data(text.utf8))
+    }
+
+    /// Runs the watch for `seconds` of the machine's clock, a pass every
+    /// sample interval, letting each asking of the windows land in between.
+    private func run(
+        _ watch: StallWatch, on machine: Machine, for seconds: TimeInterval, busy: [pid_t] = [],
+    ) async throws {
+        var elapsed: TimeInterval = 0
+        while elapsed < seconds {
+            machine.advance(2, busy: busy)
+            elapsed += 2
+            watch.sample()
+            try await Task.sleep(for: .milliseconds(1))
+        }
     }
 
     private func scratch() throws -> URL {
@@ -240,7 +263,34 @@ struct StallWatchTests {
     }
 
     @Test
-    func `a game nothing counts frames for is named and left alone`() throws {
+    func `a game waiting for its player is never ended and never recorded as stalled`() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        // A visual novel on a line of text: no processor time, no frames,
+        // and a window that takes a message the moment it is sent one.
+        machine.presents = [900: 4242]
+        machine.windows = ["game.exe": .answers]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        let recorder = try recorder(in: root, appID: 480, pid: 900)
+        watch.recorder = recorder
+
+        watch.sample()
+        try await run(watch, on: machine, for: 20 * 60)
+
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+        #expect(watch.processes.first?.state == .atRest)
+        #expect(machine.lines.count { $0.contains("is at rest") } == 1)
+        #expect(RunLog.armedRuns(in: root).first?.record.stalls?.isEmpty ?? true)
+        // Each asking starts a program in the bottle, so a game at rest is
+        // asked every five minutes, not every sample.
+        #expect((2 ... 6).contains(machine.askings), "\(machine.askings) askings in twenty minutes")
+    }
+
+    @Test
+    func `a still game with no window to ask is left alone`() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let machine = Machine()
@@ -250,18 +300,32 @@ struct StallWatchTests {
         watch.recorder = try recorder(in: root, appID: 480, pid: 900)
 
         watch.sample()
-        machine.advance(StallWatch.Rules.candidateAfter + 2)
-        watch.sample()
-        machine.advance(StallWatch.Rules.killAfter + 2)
-        watch.sample()
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter * 2)
 
         #expect(!machine.signals.contains { $0.signal == SIGKILL })
-        #expect(machine.lines.contains { $0.contains("nothing counts its frames") })
-        #expect(!StallWatch.killsOnCPUAlone)
+        #expect(machine.lines.count { $0.contains("has no window to ask") } == 1)
     }
 
     @Test
-    func `a game whose frames stopped is killed and its run ends as a watchdog kill`()
+    func `windows that cannot be asked end nothing`() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        machine.cpuNanoseconds = [900: 0]
+        machine.names = [900: "game.exe"]
+        machine.windows = nil
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+
+        watch.sample()
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter * 2)
+
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+        #expect(watch.processes.first?.state == .stalled)
+    }
+
+    @Test
+    func `a still game whose window never answers is ended and its run closes as a watchdog kill`()
         async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -269,19 +333,18 @@ struct StallWatchTests {
         machine.cpuNanoseconds = [900: 0, 901: 0]
         machine.names = [900: "game.exe", 901: "child.exe"]
         machine.children = [900: [901]]
-        // The counter exists and has stopped moving, which is the evidence the
-        // kill rung waits for.
-        machine.presents = [900: 4242]
+        machine.windows = ["game.exe": .deaf]
         let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
         let recorder = try recorder(in: root, appID: 480, pid: 900)
         watch.recorder = recorder
 
         watch.sample()
-        machine.advance(StallWatch.Rules.candidateAfter + 2)
-        watch.sample()
-        machine.advance(StallWatch.Rules.killAfter + 2)
-        watch.sample()
+        // Still, and unanswered for less than the minute it is given.
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter / 2)
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+        #expect(machine.lines.count { $0.contains("its window does not answer") } == 1)
 
+        try await run(watch, on: machine, for: StallWatch.Rules.killAfter)
         #expect(machine.signals.contains { $0.signal == SIGKILL && $0.pid == 900 })
         #expect(machine.signals.contains { $0.signal == SIGKILL && $0.pid == 901 })
 
@@ -294,34 +357,71 @@ struct StallWatchTests {
     }
 
     @Test
-    func `a stall after a recovery waits its own time before the kill`() throws {
+    func `a silent window ends nothing while anything in the game is at work`() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machine = Machine()
+        // A launcher that waits on the game it started, without pumping.
+        machine.cpuNanoseconds = [900: 0, 901: 0]
+        machine.names = [900: "game.exe", 901: "client.exe"]
+        machine.children = [900: [901]]
+        machine.windows = ["game.exe": .deaf]
+        let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
+        watch.recorder = try recorder(in: root, appID: 480, pid: 900)
+
+        watch.sample()
+        try await run(
+            watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter * 3, busy: [901],
+        )
+        #expect(!machine.signals.contains { $0.signal == SIGKILL })
+
+        // The child stops too: now nothing moves, and the game is ended.
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.askWindowsEvery * 2)
+        #expect(machine.signals.contains { $0.signal == SIGKILL && $0.pid == 900 })
+    }
+
+    @Test
+    func `a window that answers again starts the count over`() async throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let machine = Machine()
         machine.cpuNanoseconds = [900: 0]
         machine.names = [900: "game.exe"]
-        machine.presents = [900: 4242]
+        machine.windows = ["game.exe": .deaf]
         let watch = try StallWatch(probes: machine.probes(), chronicleURL: chronicle(in: root))
         watch.recorder = try recorder(in: root, appID: 480, pid: 900)
 
-        // A first stall, shorter than the kill rung.
+        // Unanswered for most of the minute: a connection timing out on the
+        // window's thread.
         watch.sample()
-        machine.advance(StallWatch.Rules.candidateAfter + 2)
-        watch.sample()
-        machine.advance(StallWatch.Rules.killAfter / 2)
-        watch.sample()
-        // It moves again for a while.
-        for _ in 0 ..< 3 {
-            machine.advance(2, busy: [900])
-            watch.sample()
-        }
-        // A second stall: its ladder starts now, not at the first one.
-        machine.advance(StallWatch.Rules.candidateAfter + 2)
-        watch.sample()
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter - 20)
+        // It comes back and works for a while.
+        machine.windows = ["game.exe": .answers]
+        try await run(watch, on: machine, for: 6, busy: [900])
+        // Silent again: its minute starts now, not at the first silence.
+        machine.windows = ["game.exe": .deaf]
+        try await run(watch, on: machine, for: StallWatch.Rules.candidateAfter + StallWatch.Rules.killAfter - 20)
         #expect(!machine.signals.contains { $0.signal == SIGKILL })
-        machine.advance(StallWatch.Rules.killAfter + 2)
-        watch.sample()
+        try await run(watch, on: machine, for: 20 + StallWatch.Rules.askWindowsEvery * 2)
         #expect(machine.signals.contains { $0.signal == SIGKILL && $0.pid == 900 })
+    }
+
+    @Test
+    func `the probe's lines become one verdict per program`() {
+        let output = """
+        0024:fixme:msg:pack_message msg 14 (WM_ERASEBKGND) not supported yet
+        1600\t1\thang.exe
+        1608\t0\tHung.exe
+        1612\t0\tTwo Windows.exe
+        1612\t1\tTwo Windows.exe
+        1700\t1\tゲーム.exe
+        not\ta\tline
+        """
+        let verdicts = WindowProbe.verdicts(in: output)
+        #expect(verdicts == [
+            "hang.exe": .answers, "hung.exe": .deaf, "two windows.exe": .answers, "ゲーム.exe": .answers,
+        ])
+        #expect(WindowProbe.verdicts(in: "").isEmpty)
     }
 
     @Test

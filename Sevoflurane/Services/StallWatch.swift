@@ -5,11 +5,15 @@ import Observation
 /// unwedges a game that has stopped doing anything.
 ///
 /// The signal is a process's CPU time (`proc_pid_rusage` every
-/// ``Rules/sampleEvery``) and the driver's present counter where it exists. A
-/// process with no CPU and no presents for ``Rules/candidateAfter`` is a
-/// stall candidate. Each rung of the ladder is written into the run record:
-/// release what is ours, `SIGCONT` the tree, wait, then kill. Client
-/// processes are the supervisor's. The process monitor shows these samples.
+/// ``Rules/sampleEvery``) and the driver's present counter. A game process
+/// with no CPU and no new frame for ``Rules/candidateAfter`` is still, which
+/// is two different things: a game waiting for its player, and a game that
+/// has hung. Its window tells them apart (``WindowProbe``): one that answers
+/// is at rest and is left alone for as long as it likes. One that does not
+/// answer, in a tree where nothing else moves either, is ended after
+/// ``Rules/killAfter``. Before that the ladder names a dialog it is waiting
+/// behind and continues a stopped tree. Client processes are the
+/// supervisor's. The process monitor shows these samples.
 @MainActor
 @Observable
 final class StallWatch {
@@ -19,8 +23,16 @@ final class StallWatch {
         static let sampleEvery: Duration = .seconds(2)
         /// No CPU for this long makes a process a stall candidate.
         static let candidateAfter: TimeInterval = 15
-        /// How long a game gets after the release rungs before it is killed.
-        static let killAfter: TimeInterval = 15
+        /// How long a still game's window may go unanswered before the game
+        /// is ended. A minute covers a connection that times out on the
+        /// window's own thread.
+        static let killAfter: TimeInterval = 60
+        /// How often the windows are asked again while a still game's has
+        /// not answered.
+        static let askWindowsEvery: TimeInterval = 15
+        /// How often a game at rest is asked again. Rarely: each asking
+        /// starts a program in the bottle.
+        static let askRestingEvery: TimeInterval = 300
         /// Below this share of one core a process counts as idle: a spin-wait
         /// at a few micros a second is not progress.
         static let idleCPUShare = 0.005
@@ -60,6 +72,9 @@ final class StallWatch {
         case stopped
         /// No CPU and no present for ``Rules/candidateAfter``.
         case stalled
+        /// As still as a stalled one, with a window that answers or none to
+        /// ask: a game waiting for its player.
+        case atRest = "at rest"
         /// The window's main thread has stopped while the process runs on.
         case notAnswering = "not answering"
     }
@@ -114,10 +129,13 @@ final class StallWatch {
         var isStopped: @Sendable (pid_t) -> Bool = { ProcessUsage.isStopped(pid: $0) }
         var children: @Sendable (pid_t) -> [pid_t] = { ProcessUsage.children(of: $0) }
         var name: @Sendable (pid_t) -> String? = { ProcessUsage.name(of: $0) }
-        /// A present count, which the kill rung needs before it may kill. The
-        /// app answers `nil`: a still picture presents nothing and is not a
-        /// stall (``killsOnCPUAlone``).
-        var presents: @Sendable (pid_t) -> UInt64? = { _ in nil }
+        /// Frames the process has put on screen; one that draws is moving
+        /// even at no measurable CPU.
+        var presents: @Sendable (pid_t) -> UInt64? = { pid in
+            PresentStats.presents(of: pid) ?? PresentStats.presents(
+                of: pid, in: SteamBottle.companion.appendingPathComponent(".sevo/run"),
+            )
+        }
         var mainThreadSilence: @Sendable (pid_t) -> TimeInterval? = { pid in
             // A HoYoverse game's page is written in the companion prefix.
             PresentStats.mainThreadSilence(of: pid) ?? PresentStats.mainThreadSilence(
@@ -133,12 +151,10 @@ final class StallWatch {
         var log: @Sendable (String) -> Void = { EventLog.enqueue(.app, $0) }
         /// The client's Wine windows on screen, which the dialog rung reads.
         var dialogs: @Sendable () async -> [WineWindowWatch.Window] = { await WineWindowWatch.scan().wineWindows }
+        /// Which programs' windows answer, by lowercased executable name; nil
+        /// when they could not be asked.
+        var windows: @Sendable () async -> [String: WindowProbe.Verdict]? = { await WindowProbe.ask() }
     }
-
-    /// Whether a game may be killed when nothing says whether it presented.
-    /// False: a download wait, a cut scene decoded elsewhere or a dialog all
-    /// read as zero CPU, so the kill is left to the user.
-    static let killsOnCPUAlone = false
 
     private let probes: Probes
     private let chronicleURL: URL
@@ -203,15 +219,30 @@ final class StallWatch {
             if let appID = process.appID { note(appID: appID, for: Rules.notAnsweringAfter, unwedged: "not answering") }
             onNotAnswering?(process)
         }
-        // The kill rung measures one stall, so a process that moved or left restarts its ladder.
-        let stalled = Set(found.filter { $0.state == .stalled }.map(\.pid))
-        laddersBegan = laddersBegan.filter { stalled.contains($0.key) }
-        leftAlone.formIntersection(stalled)
-        reportedDialogs = reportedDialogs.filter { stalled.contains($0.key) }
-        for process in found where process.state == .stalled {
+        // A ladder measures one stillness, so a process that moved or left restarts its own.
+        let still = found.filter { isStill($0, at: now) }
+        let stillPIDs = Set(still.map(\.pid))
+        laddersBegan = laddersBegan.filter { stillPIDs.contains($0.key) }
+        restingSince = restingSince.filter { stillPIDs.contains($0.key) }
+        deafSince = deafSince.filter { stillPIDs.contains($0.key) }
+        reportedDialogs = reportedDialogs.filter { stillPIDs.contains($0.key) }
+        wantsWindowAnswers = false
+        for process in still {
             climb(for: process, at: now)
         }
-        if found.contains(where: { $0.state == .stalled }) { refreshDialogs() }
+        if !still.isEmpty { refreshDialogs() }
+        if wantsWindowAnswers { askWindows(at: now) }
+    }
+
+    /// Whether a process has gone ``Rules/candidateAfter`` without CPU or a
+    /// frame. One whose main thread is also silent counts: it is the most
+    /// still of all.
+    private func isStill(_ process: Process, at now: TimeInterval) -> Bool {
+        switch process.state {
+        case .stalled, .atRest: true
+        case .notAnswering: tracked[process.pid].map { now - $0.lastMoved >= Rules.candidateAfter } ?? false
+        case .running, .idle, .stopped: false
+        }
     }
 
     /// Ends a run whose process has been gone for ``Rules/clientStopGrace``
@@ -339,7 +370,8 @@ final class StallWatch {
         // Asked: a stopped process looks stalled from the CPU counter alone.
         if probes.isStopped(pid) { return .stopped }
         if moved { return .running }
-        return still >= Rules.candidateAfter ? .stalled : .idle
+        guard still >= Rules.candidateAfter else { return .idle }
+        return restingSince[pid] == nil ? .stalled : .atRest
     }
 
     private func role(of name: String, pid: pid_t) -> Role {
@@ -378,11 +410,19 @@ final class StallWatch {
         }
     }
 
-    /// When each stalled process's ladder began, so the kill rung waits its
-    /// own ``Rules/killAfter``.
+    /// When each still process's ladder began: an answer from before it says
+    /// nothing about this stillness.
     private var laddersBegan: [pid_t: TimeInterval] = [:]
-    /// Processes already reported as still and left alone.
-    private var leftAlone: Set<pid_t> = []
+    /// When each still process was last found at rest, with a window that
+    /// answers or none to ask: it is left alone until asked again.
+    private var restingSince: [pid_t: TimeInterval] = [:]
+    /// Since when each still process's window has gone unanswered.
+    private var deafSince: [pid_t: TimeInterval] = [:]
+    /// What the windows said at the last asking, and when it was put.
+    private var windowAnswers: (askedAt: TimeInterval, verdicts: [String: WindowProbe.Verdict])?
+    private var isAskingWindows = false
+    /// Set during a pass by a process that needs a newer answer.
+    private var wantsWindowAnswers = false
     /// The dialog each stalled process was last reported behind: a dialog
     /// that stays up is written into the run once, not on every sample.
     private var reportedDialogs: [pid_t: String] = [:]
@@ -414,25 +454,81 @@ final class StallWatch {
             return
         }
 
-        // 3. Kill only when the present counter says the game drew nothing.
-        guard stalledFor >= Rules.killAfter else { return }
-        guard Self.killsOnCPUAlone || process.presents != nil else {
-            // Once per process: a crash handler sits still all session.
-            if leftAlone.insert(process.pid).inserted {
-                note(appID: appID, for: stalledFor, unwedged: nil)
-                probes.log(
-                    "stall: \(process.name) has been still for \(Int(stalledFor)) s; "
-                        + "nothing counts its frames, so it is left alone",
-                )
-            }
-            laddersBegan[process.pid] = nil
+        // 3. Ask its window. A game that answers is waiting for its player.
+        let rested = restingSince[process.pid]
+        if let rested, now - rested < Rules.askRestingEvery { return }
+        // An answer counts when it was asked for during this stillness, and
+        // after the last one this process was settled by.
+        guard let asked = windowAnswers, asked.askedAt >= began, rested.map({ asked.askedAt > $0 }) ?? true else {
+            wantsWindowAnswers = true
             return
         }
-        for pid in tree { probes.signal(pid, SIGKILL) }
-        note(appID: appID, for: stalledFor, unwedged: "sigkill")
-        probes.log("stall: killed \(tree.count) processes under \(process.name)")
-        laddersBegan[process.pid] = nil
-        if let appID { recorder?.close(appID: appID, kind: .watchdog) }
+        switch asked.verdicts[process.name.lowercased()] {
+        case .answers:
+            if restingSince[process.pid] == nil {
+                probes.log("stall: \(process.name) is at rest — no processor time and no frames, and its window answers")
+            }
+            restingSince[process.pid] = asked.askedAt
+            deafSince[process.pid] = nil
+        case nil:
+            // No window on screen: a crash handler sits like this all session.
+            if restingSince[process.pid] == nil {
+                probes.log("stall: \(process.name) is still and has no window to ask, so it is left alone")
+            }
+            restingSince[process.pid] = asked.askedAt
+            deafSince[process.pid] = nil
+        case .deaf:
+            let since = deafSince[process.pid] ?? asked.askedAt
+            if deafSince[process.pid] == nil {
+                deafSince[process.pid] = since
+                probes.log(
+                    "stall: \(process.name) is still and its window does not answer — ended in "
+                        + "\(Int(Rules.killAfter)) s unless something in the game moves",
+                )
+            }
+            restingSince[process.pid] = nil
+            // 4. End it once the window has stayed unanswered and nothing in the game has moved.
+            guard asked.askedAt - since >= Rules.killAfter, everythingIsStill(around: process, appID: appID, at: now) else {
+                wantsWindowAnswers = true
+                return
+            }
+            for pid in tree { probes.signal(pid, SIGKILL) }
+            note(appID: appID, for: stalledFor, unwedged: "sigkill")
+            probes.log(
+                "stall: ended \(process.name) and \(tree.count - 1) under it — still for \(Int(stalledFor)) s "
+                    + "with a window that never answered",
+            )
+            laddersBegan[process.pid] = nil
+            deafSince[process.pid] = nil
+            if let appID { recorder?.close(appID: appID, kind: .watchdog) }
+        }
+    }
+
+    /// Whether every process of the game is still: the one judged, its
+    /// children, and the run's whole tree. A launcher waiting on a busy game,
+    /// or a game waiting on its installer, is at work.
+    private func everythingIsStill(around process: Process, appID: Int?, at now: TimeInterval) -> Bool {
+        var members = Set(tree(under: [process.pid]))
+        if let appID, let root = runningPIDs[appID] { members.formUnion(tree(under: [root])) }
+        return processes.filter { members.contains($0.pid) }.allSatisfy { isStill($0, at: now) }
+    }
+
+    /// Asks the windows again, one asking at a time and no more often than
+    /// ``Rules/askWindowsEvery``.
+    private func askWindows(at now: TimeInterval) {
+        guard !isAskingWindows else { return }
+        if let last = windowAnswers, now - last.askedAt < Rules.askWindowsEvery { return }
+        isAskingWindows = true
+        let ask = probes.windows
+        let clock = probes.now
+        Task(name: "Ask the game windows") { [weak self] in
+            let askedAt = clock()
+            let verdicts = await ask()
+            guard let self else { return }
+            isAskingWindows = false
+            // An asking that could not be put says nothing; the next pass asks again.
+            windowAnswers = verdicts.map { (askedAt, $0) }
+        }
     }
 
     /// The app id of the run whose process is an ancestor of this pid.

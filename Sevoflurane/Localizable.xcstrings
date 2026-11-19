@@ -5277,6 +5277,17 @@
         }
       }
     },
+    "at rest": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待机"
+          }
+        }
+      }
+    },
     "idle": {
       "extractionState": "manual",
       "localizations": {
