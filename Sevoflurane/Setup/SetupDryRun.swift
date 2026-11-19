@@ -131,7 +131,6 @@
         let wantsManagedEngine = false
 
         private(set) var state: SetupDetection
-        private let scenario: SetupScenario
         /// Per-stage think time; tests pass `.zero`.
         private let stepDelay: Duration
         private var loginItem = true
@@ -155,7 +154,6 @@
             stepDelay: Duration = .seconds(2),
             detection: SetupDetection? = nil,
         ) {
-            self.scenario = scenario
             self.stepDelay = stepDelay
             installerFailures = scenario == .installerFails ? .max : 0
             // The Engine pane passes its own detection so a re-detect agrees

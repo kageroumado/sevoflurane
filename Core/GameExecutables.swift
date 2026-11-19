@@ -12,10 +12,14 @@ nonisolated enum GameExecutables {
     /// Deep enough for Unreal's `<Project>/Binaries/Win64/Game-Win64-Shipping.exe`.
     private static let maxDepth = 3
     /// Games ship their tools beside the game; the tools are not the game.
+    /// Each names a tool whole: a bare "crash" or "eac" would also drop
+    /// Crashlands.exe and PeaceWalker.exe.
     private static let excludedFragments = [
-        "unins", "crash", "report", "redist", "vc_redist", "vcredist", "dxsetup",
-        "directx", "dotnet", "setup", "install", "uninstall", "cleanup", "updater",
-        "ue4prereq", "ueprereq", "easyanticheat", "eac", "battleye",
+        "unins", "crashhandler", "crash_handler", "crashreport", "crash_report", "crashpad",
+        "crashsender", "crashupload", "bugreport", "reportclient", "redist", "vc_redist",
+        "vcredist", "dxsetup", "directx", "dotnet", "setup", "install", "cleanup", "updater",
+        "ue4prereq", "ueprereq", "easyanticheat", "eac_launcher", "eaclauncher", "eac_setup",
+        "battleye",
     ]
 
     /// Records the install directory's new executables; answers whether any.

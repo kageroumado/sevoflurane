@@ -206,6 +206,25 @@ struct NWJSDetectionTests {
         #expect(NWJSGames.referenceBalance(of: "load", in: "function load(f) {}; reload('x');") == 0)
     }
 
+    /// Braces inside strings and comments do not close a function, so a call
+    /// after one stays credited to the function it sits in, and a top-level call
+    /// after a closed function stays top-level.
+    @Test
+    func `braces in strings and comments do not move a call between scopes`() {
+        let inside = """
+        Store.save = function(file) {
+            var close = "}"; // a } in a comment
+            /* and } here */ steamworks.saveTextToFile(file, '');
+        };
+        """
+        #expect(NWJSGames.cloudCallers(in: inside) == ["save"])
+        let after = """
+        function load(file) { var open = '{'; return file; }
+        steamworks.saveFilesToCloud(['a']);
+        """
+        #expect(NWJSGames.cloudCallers(in: after) == [nil])
+    }
+
     /// Every way a script reaches a cloud call is a mention: bracket access
     /// and a space before the parenthesis included.
     @Test

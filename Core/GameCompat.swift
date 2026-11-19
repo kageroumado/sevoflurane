@@ -302,7 +302,9 @@ nonisolated enum GameCompatVerdict {
         }
         if let wiki, let evidence = wikiEvidence(wiki) {
             if evidence.capped {
-                return GameCompatBadge(tier: .silver, reason: evidence.reason + caveat)
+                // Capped, never raised: a better column at "runs" stays Bronze.
+                let tier = rank(evidence.tier)! > rank("playable")! ? "playable" : evidence.tier
+                return GameCompatBadge(tier: GameCompatBadge.Tier(wiki: tier) ?? .silver, reason: evidence.reason + caveat)
             }
             return badge(tier: evidence.tier, blocker: blocker, reason: evidence.reason, caveat: caveat)
         }

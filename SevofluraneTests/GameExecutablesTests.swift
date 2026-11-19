@@ -83,5 +83,15 @@ struct GameExecutablesTests {
         #expect(!GameExecutables.isGameLike("dxsetup.exe"))
         #expect(GameExecutables.isGameLike("siglusengine_steam.exe"))
         #expect(GameExecutables.isGameLike("planetarian.exe"))
+        // Games whose names contain a tool word.
+        #expect(GameExecutables.isGameLike("crashlands.exe"))
+        #expect(GameExecutables.isGameLike("crashbandicootnsanetrilogy.exe"))
+        #expect(GameExecutables.isGameLike("peacewalker.exe"))
+        #expect(GameExecutables.isGameLike("preacher.exe"))
+        // The tools themselves.
+        #expect(!GameExecutables.isGameLike("unitycrashhandler64.exe"))
+        #expect(!GameExecutables.isGameLike("crashreportclient.exe"))
+        #expect(!GameExecutables.isGameLike("eaclauncher.exe"))
+        #expect(!GameExecutables.isGameLike("unins000.exe"))
     }
 }

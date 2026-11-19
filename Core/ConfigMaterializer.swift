@@ -101,7 +101,7 @@ nonisolated enum ConfigMaterializer {
         // A recorded tool that is no game executable would start through the
         // game's bundle, with its settings, from any launch.
         let exes = (values.exes ?? []).filter(GameExecutables.isRecordable)
-        var game = GameFiles(appID: appID, settings: gameLines(appID, values, bottle: name), exes: exes)
+        var game = GameFiles(appID: appID, settings: gameLines(appID, values, bottle: name, engine: engine.root), exes: exes)
         if let title = values.name, !values.runsNatively,
            let loader = GameLaunchers.materialize(
                appID: appID, title: title, engine: engine,

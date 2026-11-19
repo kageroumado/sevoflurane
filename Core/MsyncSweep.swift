@@ -33,7 +33,11 @@ nonisolated enum MsyncSweep {
     private static let marker = Data("sevo:msync sweep ".utf8)
 
     static func supports(_ engine: Engine) -> Bool {
-        guard let binary = try? Data(contentsOf: engine.wineserverURL, options: .mappedIfSafe) else { return false }
+        supports(binaryAt: engine.wineserverURL)
+    }
+
+    static func supports(binaryAt url: URL) -> Bool {
+        guard let binary = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
         return binary.range(of: marker) != nil
     }
 
@@ -44,6 +48,12 @@ nonisolated enum MsyncSweep {
         }
         guard let pid = await ClientLifecycle.bottleProcessIDs(matching: "wineserver", in: [target]).first else {
             return .noServer
+        }
+        // The running server, which can be another engine's after a switch that
+        // waits for a restart: one without the sweep dies of the signal.
+        guard let running = WineOrphans.executablePath(of: pid),
+              supports(binaryAt: URL(fileURLWithPath: running)) else {
+            return .unsupported("the running wineserver has no lost-wake sweep")
         }
         let report = target.prefix.appending(path: reportName)
         let sent = Date.now

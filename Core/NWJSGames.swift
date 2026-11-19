@@ -193,33 +193,67 @@ nonisolated enum NWJSGames {
                 return (NSMaxRange(match.range), String(text[range]))
             }
 
-        let open = UInt16(UInt8(ascii: "{")), close = UInt16(UInt8(ascii: "}"))
+        func unit(_ character: Unicode.Scalar) -> UInt16 { UInt16(character.value) }
+        let open = unit("{"), close = unit("}"), slash = unit("/"), star = unit("*")
+        let backslash = unit("\\"), newline = unit("\n")
+        let quotes: Set<UInt16> = [unit("'"), unit("\""), unit("`")]
+        // Braces count only in code: one inside a string or a comment would
+        // close a function early and credit its calls to the scope around it.
+        enum Lexical { case code, string(UInt16), lineComment, blockComment }
+        var lexical = Lexical.code
         var callers: [String?] = []
         var stack: [(name: String, depth: Int)] = []
         var pending: String?
         var depth = 0
         var nextDefinition = 0
         var nextMention = 0
-        for (offset, unit) in utf16.enumerated() {
+        var offset = 0
+        while offset < utf16.count {
             while nextDefinition < definitions.count, definitions[nextDefinition].end <= offset {
                 pending = definitions[nextDefinition].name
                 nextDefinition += 1
             }
-            while nextMention < mentions.count, mentions[nextMention] == offset {
+            while nextMention < mentions.count, mentions[nextMention] <= offset {
                 callers.append(stack.last?.name)
                 nextMention += 1
             }
             if nextMention == mentions.count { break }
-            if unit == open {
-                depth += 1
-                if let name = pending {
-                    stack.append((name, depth))
-                    pending = nil
+            let current = utf16[offset]
+            let next = offset + 1 < utf16.count ? utf16[offset + 1] : 0
+            switch lexical {
+            case let .string(quote):
+                if current == backslash {
+                    offset += 1
+                } else if current == quote {
+                    lexical = .code
                 }
-            } else if unit == close {
-                if stack.last?.depth == depth { stack.removeLast() }
-                depth -= 1
+            case .lineComment:
+                if current == newline { lexical = .code }
+            case .blockComment:
+                if current == star, next == slash {
+                    lexical = .code
+                    offset += 1
+                }
+            case .code:
+                if current == slash, next == slash {
+                    lexical = .lineComment
+                } else if current == slash, next == star {
+                    lexical = .blockComment
+                    offset += 1
+                } else if quotes.contains(current) {
+                    lexical = .string(current)
+                } else if current == open {
+                    depth += 1
+                    if let name = pending {
+                        stack.append((name, depth))
+                        pending = nil
+                    }
+                } else if current == close {
+                    if stack.last?.depth == depth { stack.removeLast() }
+                    depth -= 1
+                }
             }
+            offset += 1
         }
         return callers
     }

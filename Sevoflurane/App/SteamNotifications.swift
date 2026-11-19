@@ -64,6 +64,9 @@ final class SteamNotifications {
 
     @ObservationIgnored private let center: UNUserNotificationCenter?
     @ObservationIgnored private var delegate: Forwarder?
+    /// Rereads the permission whenever the app comes forward, which is how a
+    /// person returns from changing it in System Settings.
+    @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
 
     init() {
         // `UNUserNotificationCenter.current()` traps in a process with no
@@ -99,6 +102,13 @@ final class SteamNotifications {
         center.delegate = forwarder
         center.setNotificationCategories([Self.fixesCategory, Self.sessionCategory])
         Task(name: "Read notification authorization") { await refreshAuthorization() }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main,
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                Task(name: "Reread notification authorization") { await self?.refreshAuthorization() }
+            }
+        }
     }
 
     func refreshAuthorization() async {

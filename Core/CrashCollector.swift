@@ -456,7 +456,8 @@ nonisolated enum CrashCollector {
             }
             .sorted { $0.modified < $1.modified }
         var total = entries.reduce(0) { $0 + $1.bytes }
-        while total > budget, !entries.isEmpty {
+        // The newest stays even alone over budget: it is the one just written.
+        while total > budget, entries.count > 1 {
             let oldest = entries.removeFirst()
             try? manager.removeItem(at: oldest.url)
             total -= oldest.bytes
@@ -470,7 +471,8 @@ nonisolated enum CrashCollector {
         var reports = self.reports(in: root)
         var total = reports.reduce(0) { $0 + $1.bytes }
         guard total > budget else { return }
-        while total > budget, !reports.isEmpty {
+        // The newest stays even alone over budget: it is the report being collected.
+        while total > budget, reports.count > 1 {
             let oldest = reports.removeFirst()
             try? FileManager.default.removeItem(at: oldest.url)
             total -= oldest.bytes

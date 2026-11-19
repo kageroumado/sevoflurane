@@ -89,6 +89,9 @@ struct GameCompatTests {
         // Two passes that disagree withhold Verified too.
         let split = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "playable", wine: "perfect"), proton: nil)
         #expect(split.state == .playable)
+        // The cap never raises: a better column that only runs stays Bronze.
+        let low = GameCompatVerdict.mac(antiCheat: nil, wiki: wiki(crossover: "menu", wine: "runs"), proton: nil)
+        #expect(low.tier == .bronze)
     }
 
     @Test

@@ -161,6 +161,7 @@ final class StorageStore {
             }
         } catch {
             EventLog.shared.log(.setup, "could not remove \(entry.name): \(error)")
+            problem = "couldn't remove \(entry.name): \(error)"
         }
     }
 
