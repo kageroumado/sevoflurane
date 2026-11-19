@@ -287,6 +287,17 @@ nonisolated enum Doctor {
         return checks
     }
 
+    /// The daemon's status without the Steam account name it carries in
+    /// `signedInElsewhere`, which the app needs and a pasted report must not show.
+    static func withoutAccount(_ status: [String: Any]?) -> [String: Any]? {
+        guard var status else { return nil }
+        if var loss = status["signedInElsewhere"] as? [String: Any] {
+            loss["account"] = nil
+            status["signedInElsewhere"] = loss
+        }
+        return status
+    }
+
     static func jsonReport(from s: Snapshot, checks: [Check]) -> [String: Any] {
         var report: [String: Any] = [
             "sevo": Sevo.version,
@@ -298,7 +309,7 @@ nonisolated enum Doctor {
             "dependencies": s.dependencies,
         ]
         report["provisioning"] = s.provision?.dictionary ?? NSNull()
-        report["app"] = s.appStatus ?? ["app": "not running"]
+        report["app"] = Self.withoutAccount(s.appStatus) ?? ["app": "not running"]
         report["app_state"] = AppRunState.classify(
             daemonReportsAttached: (s.appStatus?["app"] as? String) == "running",
             appLinkAlive: s.appLinkAlive,

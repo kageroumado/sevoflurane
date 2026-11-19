@@ -249,14 +249,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Takes the daemon link port, stocks the shader store, then runs setup or
     /// brings the client up.
     private func startServices() {
-        // Up before provisioning, so the daemon can reach the page while the
-        // setup wizard waits.
-        Task(name: "Take the daemon link port") {
+        Task(name: "Start services") {
+            // First, and everything else waits on it: the port is how a second
+            // copy finds out, and that copy must not touch the bottle, the
+            // engines or the shared folders the first one is using. Up before
+            // provisioning, so the daemon can reach the page while the setup
+            // wizard waits.
             guard await self.appLinkServer.start() else {
                 self.reportAnotherCopyIsRunning()
                 return
             }
+            self.startServicesHoldingThePort()
         }
+    }
+
+    private func startServicesHoldingThePort() {
         // Before any game could be launched naming one. Detached: it copies
         // files.
         Task.detached(name: "Copy bundled shader packages") {
@@ -341,12 +348,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reportAnotherCopyIsRunning() {
         guard !isDuplicate else { return }
         isDuplicate = true
-        let alert = NSAlert()
-        alert.messageText = "Sevoflurane is already running"
-        alert.informativeText = "Another copy of Sevoflurane holds its ports. "
-            + "Quit that copy, then open this one again."
-        alert.runModal()
-        NSApp.terminate(nil)
+        // Callers are Tasks: a modal or a terminate inside a main-queue job
+        // freezes every other MainActor job until it returns.
+        ModalAlerts.present {
+            let alert = NSAlert()
+            alert.messageText = "Sevoflurane is already running"
+            alert.informativeText = "Another copy of Sevoflurane holds its ports. "
+                + "Quit that copy, then open this one again."
+            alert.runModal()
+            NSApp.terminate(nil)
+        }
     }
 
     private(set) var isRuntimeStarted = false

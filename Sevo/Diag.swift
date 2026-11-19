@@ -184,7 +184,7 @@ struct DiagCommand: AsyncParsableCommand {
         ]
         return Diagnostics.FaceReport(
             doctor: Sevo.json(Doctor.jsonReport(from: snapshot, checks: checks), pretty: true),
-            status: snapshot.appStatus.map { Sevo.json($0, pretty: true) },
+            status: Doctor.withoutAccount(snapshot.appStatus).map { Sevo.json($0, pretty: true) },
             bottleState: Sevo.json(bottleState, pretty: true),
             host: ["sevo": Sevo.version],
         )

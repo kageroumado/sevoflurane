@@ -5,6 +5,18 @@ import Testing
 /// Finding Wine processes whose wineserver is gone: naming the prefix, naming its server
 /// directory the way ntdll does, reading the server's lock, and the two-sighting rule.
 struct WineOrphansTests {
+    /// The test process's own block, as the kernel kept it at exec: its
+    /// arguments end where its environment begins.
+    @Test
+    func `a process's arguments and environment read back apart`() throws {
+        let pid = getpid()
+        let read = try #require(WineOrphans.processArguments(of: pid))
+        #expect(read.arguments.count == Int(CommandLine.argc))
+        #expect(!read.arguments.contains { $0.contains("=") && $0.hasPrefix("PATH=") })
+        #expect(WineOrphans.environmentValue("PATH", of: pid) != nil)
+        #expect(WineOrphans.environmentValue("SEVO_NO_SUCH_VARIABLE", of: pid) == nil)
+    }
+
     @Test
     func `a working directory inside drive_c names the prefix above it`() {
         #expect(WineOrphans.prefix(containing: "/Users/k/pfx/drive_c/windows/system32") == "/Users/k/pfx")

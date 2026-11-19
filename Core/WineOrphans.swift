@@ -29,13 +29,19 @@ nonisolated enum WineOrphans {
         return allProcessIDs().compactMap { pid -> Orphan? in
             guard pid != getpid(), let executable = executablePath(of: pid),
                   roots.contains(where: { !$0.isEmpty && executable.hasPrefix($0 + "/") }),
-                  !executable.hasSuffix("/wineserver"),
-                  let directory = workingDirectory(of: pid),
-                  let prefix = prefix(containing: directory)
+                  !executable.hasSuffix("/wineserver")
             else { return nil }
-            let alive = serverAlive[prefix] ?? isServerAlive(forPrefix: prefix)
-            serverAlive[prefix] = alive
-            guard !alive else { return nil }
+            // Every prefix the process can be read as: a game linked in from
+            // another bottle has its working directory resolved through the
+            // link into that bottle, while its environment names its own. It
+            // is an orphan only when none of them has a live server.
+            let candidates = prefixes(of: pid)
+            guard let prefix = candidates.first else { return nil }
+            for candidate in candidates {
+                let alive = serverAlive[candidate] ?? isServerAlive(forPrefix: candidate)
+                serverAlive[candidate] = alive
+                if alive { return nil }
+            }
             return Orphan(
                 pid: pid, executable: executable, prefix: prefix,
                 command: commandLine(of: pid) ?? (executable as NSString).lastPathComponent,
@@ -51,6 +57,21 @@ nonisolated enum WineOrphans {
     }
 
     // MARK: - The prefix and its server
+
+    /// The process's `WINEPREFIX` when it names a prefix on disk, then the prefix its
+    /// working directory lies in, without repeats.
+    static func prefixes(of pid: pid_t) -> [String] {
+        var found: [String] = []
+        if let named = environmentValue("WINEPREFIX", of: pid),
+           FileManager.default.fileExists(atPath: (named as NSString).appendingPathComponent("system.reg")) {
+            found.append((named as NSString).standardizingPath)
+        }
+        if let directory = workingDirectory(of: pid), let prefix = prefix(containing: directory),
+           !found.contains(prefix) {
+            found.append(prefix)
+        }
+        return found
+    }
 
     /// The prefix a working directory lies in: the nearest ancestor holding `system.reg`, or
     /// the parent of a `drive_c` or `dosdevices` component.
@@ -116,25 +137,44 @@ nonisolated enum WineOrphans {
 
     /// The process's `argv`, joined, as `KERN_PROCARGS2` holds it.
     static func commandLine(of pid: pid_t) -> String? {
+        guard let arguments = processArguments(of: pid)?.arguments else { return nil }
+        let line = arguments.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        return line.isEmpty ? nil : line
+    }
+
+    /// One variable of the process's environment, as `KERN_PROCARGS2` holds it. Wine
+    /// writes the Windows command line over `argv`, which can run into this area,
+    /// so a caller checks the value before trusting it.
+    static func environmentValue(_ name: String, of pid: pid_t) -> String? {
+        let key = name + "="
+        return processArguments(of: pid)?.environment
+            .first { $0.hasPrefix(key) }
+            .map { String($0.dropFirst(key.count)) }
+    }
+
+    /// `argv` and `envp` from `KERN_PROCARGS2`: argc, the executable path, NUL
+    /// padding, then the arguments and the environment, one NUL apart.
+    static func processArguments(of pid: pid_t) -> (arguments: [String], environment: [String])? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
         var buffer = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
         let argc = buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
-        // argc, the executable path, NUL padding, then the arguments one NUL apart.
         var index = MemoryLayout<Int32>.size
         while index < size, buffer[index] != 0 { index += 1 }
         while index < size, buffer[index] == 0 { index += 1 }
-        var arguments: [String] = []
-        while index < size, arguments.count < Int(argc) {
+        var strings: [String] = []
+        while index < size {
             let start = index
             while index < size, buffer[index] != 0 { index += 1 }
-            arguments.append(String(decoding: buffer[start ..< index], as: UTF8.self))
+            // The environment ends at the first empty string.
+            if index == start, strings.count >= Int(argc) { break }
+            strings.append(String(decoding: buffer[start ..< index], as: UTF8.self))
             index += 1
         }
-        let line = arguments.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        return line.isEmpty ? nil : line
+        let count = min(Int(argc), strings.count)
+        return (Array(strings.prefix(count)), Array(strings.dropFirst(count)))
     }
 
     /// The vnode paths of the process's open files, read through `libproc`. Never `lsof`: it

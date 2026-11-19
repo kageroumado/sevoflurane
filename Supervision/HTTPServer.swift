@@ -105,11 +105,73 @@ final nonisolated class HTTPServer: Sendable {
 
     func start() {
         let gated = Self.gated(handler, by: gate)
-        listener.newConnectionHandler = { [queue] connection in
+        let open = OpenConnections()
+        listener.newConnectionHandler = { [queue, port] connection in
+            guard open.enter() else {
+                open.noteRefused(port: port)
+                connection.cancel()
+                return
+            }
+            let left = Once()
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .failed, .cancelled: if left.first() { open.leave() }
+                default: break
+                }
+            }
             connection.start(queue: queue)
             Self.serve(connection, handler: gated, leftover: Data())
         }
         listener.start(queue: queue)
+    }
+
+    /// How many connections one server holds open at once. Any local process
+    /// can connect before the gate sees a request, so each one is bounded.
+    static let connectionLimit = 64
+    /// How long a connection may take to deliver a whole request, counted
+    /// from when the server starts waiting for it; a handler's own time is
+    /// not counted.
+    static let requestDeadline: Duration = .seconds(30)
+
+    private final class OpenConnections: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        private var refusalLogged = false
+
+        func enter() -> Bool {
+            lock.withLock {
+                guard count < HTTPServer.connectionLimit else { return false }
+                count += 1
+                return true
+            }
+        }
+
+        func leave() {
+            lock.withLock { count -= 1 }
+        }
+
+        /// Said once per server, so a flood does not fill the log.
+        func noteRefused(port: UInt16) {
+            let first = lock.withLock {
+                defer { refusalLogged = true }
+                return !refusalLogged
+            }
+            if first {
+                EventLog.enqueue(.bridge, ":\(port) holds \(HTTPServer.connectionLimit) connections; refusing more")
+            }
+        }
+    }
+
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+
+        func first() -> Bool {
+            lock.withLock {
+                defer { done = true }
+                return !done
+            }
+        }
     }
 
     /// Starts and returns once the port is held, or throws when another
@@ -201,7 +263,17 @@ final nonisolated class HTTPServer: Sendable {
         handler: @escaping @Sendable (HTTPRequest) async -> HTTPResponse,
         leftover: Data,
     ) {
+        // The deadline and the request race for one claim: a request that
+        // arrives late finds its connection already cancelled, and one that
+        // arrives in time cancels the sleep.
+        let claim = Once()
+        let deadline = Task {
+            try? await Task.sleep(for: requestDeadline)
+            if !Task.isCancelled, claim.first() { connection.cancel() }
+        }
         readRequest(connection, buffer: leftover) { request, remainder in
+            guard claim.first() else { return }
+            deadline.cancel()
             Task {
                 let response = await handler(request)
                 connection.send(content: wire(response, isHead: request.method == "HEAD"), completion: .contentProcessed { error in

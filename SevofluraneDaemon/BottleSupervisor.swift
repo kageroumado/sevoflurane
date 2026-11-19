@@ -352,8 +352,10 @@ final class BottleSupervisor {
         // The page the app just booted needs time to reach the bridge before
         // an unanswered probe means anything.
         lastPageRecovery = .now
+        // One buffered wake: a burst that lands during a cycle runs one more
+        // cycle, not one per wake. `probe()` reads the world, never the reason.
         let (wakes, continuation) = AsyncStream<Wake>.makeStream(
-            bufferingPolicy: .bufferingNewest(8),
+            bufferingPolicy: .bufferingNewest(1),
         )
         wakeups = continuation
         // The launcher's termination handler runs on its own queue.
@@ -364,11 +366,8 @@ final class BottleSupervisor {
         }
         log.log(.supervisor, "supervision started (probing CDP :\(BridgePorts.cdp), bridge :\(BridgePorts.steamUI))")
         loop = Task(name: "Client supervision") { [weak self] in
-            for await reason in wakes {
+            for await _ in wakes {
                 guard let self else { return }
-                if let note = reason.note {
-                    log.log(.supervisor, "probe cycle woken: \(note)")
-                }
                 await probe()
                 scheduleTick()
             }
@@ -395,9 +394,12 @@ final class BottleSupervisor {
         wake(.control(reason))
     }
 
-    /// Runs a cycle as soon as the current one ends. The stream keeps the
-    /// newest eight wakes, and each one it keeps runs a cycle of its own.
+    /// Runs a cycle as soon as the current one ends; wakes that arrive during
+    /// a cycle share the next one. Each is logged as it arrives.
     func wake(_ reason: Wake) {
+        if let note = reason.note {
+            log.log(.supervisor, "probe cycle woken: \(note)")
+        }
         wakeups?.yield(reason)
     }
 

@@ -143,7 +143,14 @@ nonisolated enum GameEnding {
         // `pgrep` matches anywhere in the command line, so only candidates
         // whose argv[0] last component is one of the names are kept.
         let listing = await Subprocess.run("/usr/bin/pgrep", WineProcessList.pgrepArguments).output
-        let exact = Set(names.flatMap { WineProcessList.pids(named: $0, inPgrepLong: listing) })
+        // Many games share an exe name (every RPG Maker game ships `game.exe`):
+        // a process whose path runs through another game's folder is that game's.
+        let folder = AdoptedPrograms.isAdopted(appID)
+            ? nil : SharedGames.installDirectory(appID: appID)?.lastPathComponent
+        let wanted = Set(names.map { $0.lowercased() })
+        let exact = Set(WineProcessList.entries(fromPgrepLong: listing)
+            .filter { wanted.contains($0.name) && folder.map($0.lies(inFolderNamed:)) ?? true }
+            .map(\.pid))
         guard !exact.isEmpty else { return [] }
         let patterns = names.map { NSRegularExpression.escapedPattern(for: $0) }
         return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns).filter(exact.contains)

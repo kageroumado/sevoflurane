@@ -222,10 +222,26 @@ final class LiveSetupEnvironment: SetupEnvironment {
 
     func downloadSteamInstaller(intoBottle name: String) async throws {
         let bottleURL = Engine.active.bottlesRoot.appendingPathComponent(name)
-        let (temp, _) = try await URLSession.shared.download(from: Self.steamSetupURL)
+        let (temp, response) = try await URLSession.shared.download(from: Self.steamSetupURL)
+        // A failed fetch must throw here, as a network error: an error page
+        // saved as the installer fails the install, and that rebuilds the bottle.
+        // A captive portal answers 200 with HTML, so the PE signature is checked too.
+        if let http = response as? HTTPURLResponse, !(200 ..< 300).contains(http.statusCode) {
+            try? FileManager.default.removeItem(at: temp)
+            throw InstallerDownloadFailed(description: String(localized: "Steam's installer could not be downloaded (HTTP \(http.statusCode))"))
+        }
+        let head = try? FileHandle(forReadingFrom: temp).read(upToCount: 2)
+        guard head == Data("MZ".utf8) else {
+            try? FileManager.default.removeItem(at: temp)
+            throw InstallerDownloadFailed(description: String(localized: "Steam's installer download is not a Windows program; check the network"))
+        }
         let setup = bottleURL.appendingPathComponent("drive_c/SteamSetup.exe")
         try? FileManager.default.removeItem(at: setup)
         try FileManager.default.moveItem(at: temp, to: setup)
+    }
+
+    struct InstallerDownloadFailed: Error, CustomStringConvertible {
+        let description: String
     }
 
     /// Polls `system.reg` until it stops changing: `wineboot` returns before

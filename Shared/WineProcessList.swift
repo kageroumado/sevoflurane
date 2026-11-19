@@ -12,6 +12,16 @@ nonisolated enum WineProcessList {
         let pid: pid_t
         /// The executable's file name, lowercased: `steam.exe`.
         let name: String
+        /// The executable as the command line names it, lowercased, with `/` for
+        /// every separator: `c:/program files (x86)/steam/steam.exe`.
+        var path: String = ""
+
+        /// Whether the path runs through a folder named `folder`, compared
+        /// without case. A bare name, with no folder to compare, answers true.
+        func lies(inFolderNamed folder: String) -> Bool {
+            guard path.contains("/") else { return true }
+            return path.contains("/" + folder.lowercased() + "/")
+        }
     }
 
     /// The arguments that produce the output ``entries(fromPgrepLong:)``
@@ -37,6 +47,7 @@ nonisolated enum WineProcessList {
         guard let exe = command.range(of: ".exe", options: .caseInsensitive) else { return nil }
         let path = command[..<exe.upperBound]
         let name = path.split(whereSeparator: { $0 == "\\" || $0 == "/" }).last.map(String.init) ?? String(path)
-        return Entry(pid: pid, name: name.lowercased())
+        let unified = path.lowercased().replacingOccurrences(of: "\\", with: "/")
+        return Entry(pid: pid, name: name.lowercased(), path: unified)
     }
 }

@@ -81,7 +81,7 @@ enum StatusReport {
             "app_attached": appState == .attached,
             "dump_rate_10m": snapshot.dumpCount,
             "client_pinned": snapshot.pinned,
-            "signed_in_elsewhere": snapshot.appStatus?["signedInElsewhere"] ?? NSNull(),
+            "signed_in_elsewhere": Doctor.withoutAccount(snapshot.appStatus)?["signedInElsewhere"] ?? NSNull(),
         ]
         var line = "engine \(engine) · "
             + BottleIdentity.statusText(clientBottle: clientBottle, configured: SteamBottle.name, steamInstalled: steamOK)

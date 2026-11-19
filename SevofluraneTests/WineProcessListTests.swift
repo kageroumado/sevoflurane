@@ -18,14 +18,25 @@ struct WineProcessListTests {
     @Test
     func `parses pgrep long output`() {
         let entries = WineProcessList.entries(fromPgrepLong: output)
-        #expect(entries == [
-            .init(pid: 96374, name: "steam.exe"),
-            .init(pid: 96375, name: "sevo-discord-bridge.exe"),
-            .init(pid: 11144, name: "start.exe"),
-            .init(pid: 20001, name: "mygame.exe"),
-            .init(pid: 20002, name: "game.exe"),
-            .init(pid: 20003, name: "c++.exe"),
+        #expect(entries.map(\.pid) == [96374, 96375, 11144, 20001, 20002, 20003])
+        #expect(entries.map(\.name) == [
+            "steam.exe", "sevo-discord-bridge.exe", "start.exe", "mygame.exe", "game.exe", "c++.exe",
         ])
+        #expect(entries[0].path == "c:/program files (x86)/steam/steam.exe")
+    }
+
+    /// Two RPG Maker games both run `game.exe`; the folder its path runs
+    /// through says whose it is. A bare name cannot be placed and stays a match.
+    @Test
+    func `a process is placed in a game folder by its path`() {
+        let listing = """
+        30001 C:\\Program Files (x86)\\Steam\\steamapps\\common\\OMORI\\www\\..\\Game.exe
+        30002 C:\\Program Files (x86)\\Steam\\steamapps\\common\\Demons Roots\\Game.exe
+        30003 game.exe
+        """
+        let entries = WineProcessList.entries(fromPgrepLong: listing)
+        #expect(entries.filter { $0.lies(inFolderNamed: "Demons Roots") }.map(\.pid) == [30002, 30003])
+        #expect(entries.filter { $0.lies(inFolderNamed: "omori") }.map(\.pid) == [30001, 30003])
     }
 
     @Test
