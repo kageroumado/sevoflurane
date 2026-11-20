@@ -903,6 +903,12 @@
     host.__sevoBV = host.__sevoBV || {};
     host.__sevoBV[id] = fire;
     send("create", [JSON.stringify(params || {})]);
+    /* CEF loads `strInitialURL` itself. The overlay's browser names its page
+       only there and waits for `finished-request` behind a spinner. */
+    var initialURL = params && params.strInitialURL;
+    if (typeof initialURL === "string" && /^https?:\/\//i.test(initialURL)) {
+      send("load", [initialURL]);
+    }
 
     var view = {
       on: function (ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },

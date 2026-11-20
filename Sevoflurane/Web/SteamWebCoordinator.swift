@@ -152,7 +152,7 @@ extension SteamWebCoordinator: WKScriptMessageHandlerWithReply {
         }
         let args = body["args"] as? [Any] ?? []
         if function == "__openFileDialog" {
-            return (await Self.openFileDialog(args, over: webView.window), nil)
+            return await (Self.openFileDialog(args, over: webView.window), nil)
         }
         return (window.perform(function, args), nil)
     }

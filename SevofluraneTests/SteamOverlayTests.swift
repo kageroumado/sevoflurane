@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Sevoflurane
@@ -91,5 +92,14 @@ struct GameProgramTests {
         // Not an executable window at all.
         #expect(!WineWindowWatch.isGameProgram("steam_osx"))
         #expect(!WineWindowWatch.isGameProgram(""))
+    }
+
+    @Test
+    func `a panel opened from the overlay is centered in the game and never larger than it`() {
+        let game = NSRect(x: 344, y: 226, width: 1871, height: 1084)
+        let workshop = SteamWindow.frame(of: NSSize(width: 1280, height: 1024), centeredIn: game)
+        #expect(workshop == NSRect(x: 639.5, y: 256, width: 1280, height: 1024))
+        let small = NSRect(x: 100, y: 100, width: 800, height: 600)
+        #expect(SteamWindow.frame(of: NSSize(width: 1280, height: 1024), centeredIn: small) == small)
     }
 }

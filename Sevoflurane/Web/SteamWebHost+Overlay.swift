@@ -5,6 +5,13 @@ extension SteamWebHost {
     /// non-activating panels so the game keeps focus.
     var isOverlayActive: Bool { overlayActive }
 
+    /// Where the overlay is on screen while it is up, for the panels opened
+    /// from it.
+    var overlayFrame: NSRect? {
+        guard overlayActive else { return nil }
+        return popups.values.first { $0.role == .gameOverlay }?.nsWindow?.frame
+    }
+
     /// The level of such a popup: the game's level + 2, above the overlay.
     /// `nil` when no overlay is up.
     var overlayChildLevel: Int? { overlayGame.map { $0.layer + 2 } }
@@ -24,6 +31,10 @@ extension SteamWebHost {
         guard active else {
             removeOverlayFrontObserver()
             removeOverlayKeyMonitor()
+            // An active app gives key to its next window when its key window
+            // is ordered out, and Steam's own window would come forward over
+            // the game, switching Spaces under a full-screen one.
+            if NSApp.isActive { NSApp.deactivate() }
             overlay.hideOverlay()
             // Closed: Steam restores a child left open at the next activation.
             for child in overlayChildren {
@@ -41,6 +52,7 @@ extension SteamWebHost {
             return
         }
         overlayAppID = appID
+        overlayShowings += 1
         Task(name: "Show Steam overlay") { [weak self] in
             let game = await WineWindowWatch.gameWindow()
             guard let self, overlayActive else { return }
@@ -67,12 +79,14 @@ extension SteamWebHost {
     private func closeOverlay() {
         guard overlayActive, !overlayAppID.isEmpty else { return }
         let appID = overlayAppID
+        let showing = overlayShowings
         Task(name: "Close Steam overlay") {
             _ = await evaluateInContext("SteamClient.Overlay.SetOverlayState(\(JSLiteral.string(appID)), 0)")
         }
         Task(name: "Hide an overlay Steam left up") { [weak self] in
             try? await Task.sleep(for: Self.overlayClosesWithin)
-            guard let self, overlayActive, overlayAppID == appID else { return }
+            // Closed and opened again meanwhile: that showing is not this one's to hide.
+            guard let self, overlayActive, overlayShowings == showing else { return }
             EventLog.shared.log(.window, "Steam did not close the overlay when asked; hiding it and returning to the game")
             noteOverlayActivated(active: false, appID: appID)
         }

@@ -113,6 +113,11 @@ final class SteamWindow: NSObject {
             // the panel vanish at once.
             window.level = NSWindow.Level(rawValue: childLevel)
             window.hidesOnDeactivate = false
+            // Steam places the panel for a screen-sized overlay; here the
+            // overlay is the game's frame.
+            if let overlay = host?.overlayFrame {
+                window.setFrame(Self.frame(of: window.frame.size, centeredIn: overlay), display: false)
+            }
         }
         if role == .menu || role == .gameOverlay {
             // Ordered in at alpha 0 (chrome sets it) so the page renders.
@@ -555,6 +560,15 @@ final class SteamWindow: NSObject {
         // The game hides the cursor, and its ShowCursor hook acts only inside
         // the game.
         NSCursor.unhide()
+    }
+
+    /// A panel of `size` centered in `bounds`, shrunk to fit inside it.
+    nonisolated static func frame(of size: NSSize, centeredIn bounds: NSRect) -> NSRect {
+        let fitted = NSSize(width: min(size.width, bounds.width), height: min(size.height, bounds.height))
+        return NSRect(
+            x: bounds.midX - fitted.width / 2, y: bounds.midY - fitted.height / 2,
+            width: fitted.width, height: fitted.height,
+        )
     }
 
     /// Orders an overlay child popup in or out with the overlay.

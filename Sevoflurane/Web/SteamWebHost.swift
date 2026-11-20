@@ -333,6 +333,9 @@ final class SteamWebHost {
     @ObservationIgnored var overlayActive = false
     @ObservationIgnored var overlayGame: WineWindowWatch.GameWindow?
     @ObservationIgnored var overlayAppID = ""
+    /// Counts the overlay's activations, so work begun for one showing can
+    /// tell it has been closed and opened again since.
+    @ObservationIgnored var overlayShowings = 0
     /// The install wizard's latest state and update count, so a delayed check
     /// can tell whether the wizard moved on.
     @ObservationIgnored var installWizardState = 0
