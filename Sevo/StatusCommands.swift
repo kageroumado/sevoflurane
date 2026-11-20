@@ -31,6 +31,13 @@ struct DoctorCommand: AsyncParsableCommand {
 /// The observation every mutating verb ends on and `status` prints: engine,
 /// bottle, client, bridge, app, as a line and as a dict.
 enum StatusReport {
+    /// The engine as the status line names it: the configured one, led by
+    /// the one the running client booted on while the two differ.
+    static func engineText(configured: String, running: String?) -> String {
+        guard let running else { return configured }
+        return "\(running) (\(configured) from the next client start)"
+    }
+
     static func build() async -> (dict: [String: Any], line: String) {
         let snapshot = await Doctor.snapshot()
         let d = snapshot.detection
@@ -66,8 +73,11 @@ enum StatusReport {
         // only when nothing moved the preference under it.
         let running = snapshot.clientState != .down || !snapshot.bottleProcesses.isEmpty
         let clientBottle = running ? await BottleIdentity.clientBottleName() : nil
+        let bootedEngine = running ? BootedBottle.target?.engine : nil
+        let runningEngine = bootedEngine.flatMap { $0 == Engine.active ? nil : $0.description }
         let dict: [String: Any] = [
             "engine": engine,
+            "engine_running": runningEngine ?? engine,
             "bottle": SteamBottle.name,
             "client_bottle": clientBottle ?? NSNull(),
             "steam_installed": steamOK,
@@ -83,7 +93,7 @@ enum StatusReport {
             "client_pinned": snapshot.pinned,
             "signed_in_elsewhere": snapshot.appStatus?["signedInElsewhere"] ?? NSNull(),
         ]
-        var line = "engine \(engine) · "
+        var line = "engine \(engineText(configured: engine, running: runningEngine)) · "
             + BottleIdentity.statusText(clientBottle: clientBottle, configured: SteamBottle.name, steamInstalled: steamOK)
             + " · client \(client) · bridge \(snapshot.bridgeUp ? "up" : "down")"
             + " · supervision \(supervision) · app \(appState.rawValue)"

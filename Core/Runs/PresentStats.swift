@@ -82,7 +82,7 @@ final nonisolated class PresentStats: @unchecked Sendable {
     @discardableResult
     func disarm(appID: Int) -> RunRecord.FrameRate? {
         lock.lock()
-        var run = armed.removeValue(forKey: appID)
+        let run = armed.removeValue(forKey: appID)
         let idle = armed.isEmpty
         run?.trace?.close()
         lock.unlock()
