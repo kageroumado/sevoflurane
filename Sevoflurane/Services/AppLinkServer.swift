@@ -17,6 +17,8 @@ final class AppLinkServer {
     /// Posts the notification with Undo after the helper applied a first
     /// launch's fixes to this app id.
     var onFixesApplied: ((Int) -> Void)?
+    /// A program's id and the kernel driver Wine could not load for it.
+    var onKernelDriverFailed: ((Int, String) -> Void)?
 
     init(supervisor: ClientSupervisor, host: SteamWebHost, bridge: SteamBridge, presentStats: PresentStats) {
         self.supervisor = supervisor
@@ -68,6 +70,13 @@ final class AppLinkServer {
                 return .error(400, "pass ?appid=<app id>")
             }
             onFixesApplied?(appID)
+            return Self.json(#"{"ok":true}"#)
+        case ("POST", "/program/driver-failed"):
+            let driver = Self.value(of: "driver", in: request.query)
+            guard let id = Int(Self.value(of: "id", in: request.query)), !driver.isEmpty else {
+                return .error(400, "pass ?id=<program id>&driver=<name>")
+            }
+            onKernelDriverFailed?(id, driver)
             return Self.json(#"{"ok":true}"#)
         case ("POST", "/state"):
             guard let snapshot = try? JSONDecoder()

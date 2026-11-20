@@ -86,7 +86,6 @@ final class QuickLaunchStore {
         let ticket = launchHooks?.pressed(entry.id) ?? nil
         let query = renderer.map { "&renderer=\($0.rawValue)" } ?? ""
         Task(name: "Launch \(entry.name)") {
-            let logOffset = KernelDriverFailure.size()
             // Long enough for a first launch that creates a companion prefix (SteamParent).
             guard let reply = await DaemonService.postReply(
                 "/program/launch?id=\(entry.id)\(query)", timeout: 240,
@@ -117,18 +116,18 @@ final class QuickLaunchStore {
                 return
             }
             launchHooks?.started(entry.id)
-            guard let driver = await KernelDriverFailure.watch(
-                from: logOffset, program: entry.program.url.lastPathComponent,
-            ) else { return }
-            EventLog.shared.log(
-                .client, "\(entry.name) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load",
-            )
-            // One alert per program at a time.
-            guard Self.explaining.insert(entry.name).inserted else { return }
-            ModalAlerts.present {
-                Self.explainKernelDriver(driver, program: entry.name)
-                Self.explaining.remove(entry.name)
-            }
+        }
+    }
+
+    /// Explains a program the helper saw draw nothing after its kernel
+    /// driver failed to load, however it was started. One alert per program
+    /// at a time.
+    static func explainKernelDriverFailure(_ driver: String, programID: Int) {
+        guard let name = AdoptedPrograms.entry(programID)?.name,
+              explaining.insert(name).inserted else { return }
+        ModalAlerts.present {
+            explainKernelDriver(driver, program: name)
+            explaining.remove(name)
         }
     }
 

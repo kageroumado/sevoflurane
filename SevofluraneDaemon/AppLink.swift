@@ -111,6 +111,14 @@ final class AppLink {
         _ = await post("/fixes/applied?appid=\(appID)")
     }
 
+    /// Tells the app a program started here drew nothing after its kernel
+    /// driver failed to load, so it explains why.
+    func announceKernelDriverFailure(programID: Int, driver: String) async {
+        guard isAttached,
+              let name = driver.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return }
+        _ = await post("/program/driver-failed?id=\(programID)&driver=\(name)")
+    }
+
     /// Mirrors the daemon's verdict into the app.
     func push(_ snapshot: SupervisorSnapshot) async {
         guard isAttached, let body = try? JSONEncoder().encode(snapshot) else { return }

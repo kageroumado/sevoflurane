@@ -66,17 +66,31 @@ extension BottleSupervisor {
         await prepareLaunch(appID: id)
         stageGraphics(for: name, renderer: explicit, appID: id)
         programsSpawnedAt[id] = .now
+        let logOffset = KernelDriverFailure.size()
         if SteamParent.wants(program) {
             if let refusal = await launchUnderSteamParent(program, id: id) {
                 programsSpawnedAt[id] = nil
                 return .failed(refusal)
             }
+            watchForKernelDriverFailure(name, id: id, from: logOffset)
             return nil
         }
         ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
         await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
         note("started \(program.url.lastPathComponent) in \(SteamBottle.name)")
+        watchForKernelDriverFailure(name, id: id, from: logOffset)
         return nil
+    }
+
+    /// Reads Wine's log for a minute after a program starts. A kernel driver
+    /// that failed to load while nothing of the program drew is noted, and
+    /// the app explains it.
+    private func watchForKernelDriverFailure(_ exe: String, id: Int, from offset: UInt64) {
+        Task(name: "Watch \(exe) for a kernel driver failure") {
+            guard let driver = await KernelDriverFailure.watch(from: offset, program: exe) else { return }
+            note("\(exe) showed no window; it tried to load the kernel driver \(driver), which Wine cannot load")
+            await app.announceKernelDriverFailure(programID: id, driver: driver)
+        }
     }
 
     /// Starts a program that needs a `steam.exe` parent (``SteamParent``) in

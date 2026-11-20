@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
         )
         server.onFixesApplied = { [weak self] appID in self?.announceFixesApplied(appID: appID) }
+        server.onKernelDriverFailed = { id, driver in
+            QuickLaunchStore.explainKernelDriverFailure(driver, programID: id)
+        }
         return server
     }()
     private var menuMirror: SteamMenuMirror?
