@@ -309,8 +309,9 @@ private struct GameRow: View {
     /// The row's context menu: a one-off renderer, the pin, the build, the
     /// Dock and the game's settings.
     @ViewBuilder private var menuItems: some View {
-        // One-shot: the launch path restages the tree (or restarts, if the
-        // engine or sync must change) before the game starts.
+        // For this run: the launch path restages the tree (or restarts, if
+        // the engine or sync must change) before the game starts, and the
+        // run's end hands the bottle back its own renderer.
         Menu("Run with…") {
             ForEach(renderers, id: \.self) { renderer in
                 Button(renderer.label) { runWith(renderer) }

@@ -29,6 +29,43 @@ struct GameRendererTests {
     }
 
     @Test
+    func `a launch's renderer holds the bottle until its own run ends`() throws {
+        let held = try #require(BottleGraphics.LaunchRenderer.starting(
+            .dxvk, forApp: 730, current: .dxmt, inFlight: nil,
+        ))
+        #expect(held == BottleGraphics.LaunchRenderer(appID: 730, renderer: .dxvk, restore: .dxmt))
+        #expect(held.rendererToRestore(afterRunOf: 440, current: .dxvk) == nil)
+        #expect(held.rendererToRestore(afterRunOf: 730, current: .dxvk) == .dxmt)
+    }
+
+    @Test
+    func `a renderer picked during the run stays when the run ends`() {
+        let held = BottleGraphics.LaunchRenderer(appID: 730, renderer: .dxvk, restore: .dxmt)
+        #expect(held.rendererToRestore(afterRunOf: 730, current: .d3dmetal) == nil)
+    }
+
+    @Test
+    func `a second launch keeps the first one's renderer to return to`() throws {
+        let first = BottleGraphics.LaunchRenderer(appID: 730, renderer: .dxvk, restore: .dxmt)
+        let second = try #require(BottleGraphics.LaunchRenderer.starting(
+            .d3dmetal, forApp: 440, current: .dxvk, inFlight: first,
+        ))
+        #expect(second.restore == .dxmt)
+        // Back onto the bottle's own renderer: nothing is left to hand back.
+        #expect(BottleGraphics.LaunchRenderer.starting(
+            .dxmt, forApp: 440, current: .dxvk, inFlight: first,
+        ) == nil)
+    }
+
+    @Test
+    func `a launch's renderer reads back from its stored form`() {
+        let held = BottleGraphics.LaunchRenderer(appID: 2_000_000_001, renderer: .d3dmetal, restore: .dxmt)
+        #expect(BottleGraphics.LaunchRenderer(stored: held.stored) == held)
+        #expect(BottleGraphics.LaunchRenderer(stored: "730|dxvk") == nil)
+        #expect(BottleGraphics.LaunchRenderer(stored: "730|vulkan9|dxmt") == nil)
+    }
+
+    @Test
     func `the layers with a builtin-flavored payload travel in an env file`() {
         #expect(EngineRenderers.supportsPerGame(.dxmt))
         #expect(EngineRenderers.supportsPerGame(.dxvk))

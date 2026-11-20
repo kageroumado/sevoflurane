@@ -113,8 +113,11 @@ nonisolated enum BottleGraphics {
         return selection
     }
 
-    /// Writes a selection wherever the active engine keeps it.
+    /// Writes a selection wherever the active engine keeps it. A choice made
+    /// here is the bottle's own, so a launch's renderer still in flight
+    /// (``LaunchRenderer``) has nothing left to hand back.
     static func applyToActiveEngine(_ selection: Selection) throws {
+        Preferences.shared.removeObject(forKey: launchRendererKey)
         if Engine.active.isCrossOver {
             try apply(selection, toBottle: SteamBottle.root)
         } else {
@@ -142,13 +145,97 @@ nonisolated enum BottleGraphics {
         return wanted == booted ? nil : wanted
     }
 
-    /// The renderer a launch moves the bottle onto: a one-off `explicit`
-    /// "Run with", else the game's own choice when its env file cannot carry
-    /// it.
+    /// The renderer a launch moves the bottle onto for the length of the run:
+    /// an `explicit` "Run with", else the game's own choice when its env file
+    /// cannot carry it.
     static func rendererToStage(forApp appID: Int, explicit: Renderer?) -> Renderer? {
         if let explicit { return explicit }
         guard !perGameRendererIsLive(forApp: appID) else { return nil }
         return GameConfig.game(appID).renderer
+    }
+
+    // MARK: - A launch's renderer
+
+    /// The bottle on a renderer for one run: `renderer` holds it until the
+    /// run of `appID` ends, then `restore` comes back.
+    struct LaunchRenderer: Equatable, Sendable {
+        var appID: Int
+        var renderer: Renderer
+        var restore: Renderer
+
+        /// `<appid>|<renderer>|<restore>`, as kept in the preferences.
+        init?(stored: String) {
+            let parts = stored.split(separator: "|", omittingEmptySubsequences: false)
+            guard parts.count == 3, let appID = Int(parts[0]),
+                  let renderer = Renderer(rawValue: String(parts[1])),
+                  let restore = Renderer(rawValue: String(parts[2])) else { return nil }
+            self.init(appID: appID, renderer: renderer, restore: restore)
+        }
+
+        init(appID: Int, renderer: Renderer, restore: Renderer) {
+            self.appID = appID
+            self.renderer = renderer
+            self.restore = restore
+        }
+
+        var stored: String {
+            "\(appID)|\(renderer.rawValue)|\(restore.rawValue)"
+        }
+
+        /// What a launch of `appID` on `renderer` leaves in flight. A launch
+        /// made while another's renderer holds the bottle keeps that one's
+        /// renderer to return to; a launch back onto it leaves nothing.
+        static func starting(
+            _ renderer: Renderer, forApp appID: Int, current: Renderer, inFlight: LaunchRenderer?,
+        ) -> LaunchRenderer? {
+            let restore = inFlight?.restore ?? current
+            return renderer == restore ? nil : LaunchRenderer(appID: appID, renderer: renderer, restore: restore)
+        }
+
+        /// The renderer the bottle returns to when a run of `appID` ends:
+        /// none for another game's run, or once the bottle has left the
+        /// launch's renderer.
+        func rendererToRestore(afterRunOf appID: Int, current: Renderer) -> Renderer? {
+            appID == self.appID && current == renderer ? restore : nil
+        }
+    }
+
+    private static let launchRendererKey = "launchRenderer"
+
+    static func launchRendererInFlight() -> LaunchRenderer? {
+        Preferences.shared.string(forKey: launchRendererKey).flatMap(LaunchRenderer.init(stored:))
+    }
+
+    /// Moves the bottle onto `renderer` for one run of `appID`; the caller
+    /// stages the tree. ``endLaunchRenderer(afterRunOf:)`` hands it back.
+    static func beginLaunchRenderer(_ renderer: Renderer, forApp appID: Int) throws {
+        let current = currentSelection()
+        let inFlight = launchRendererInFlight()
+        try applyToActiveEngine(Selection(renderer: renderer, msync: current.msync, gpu: current.gpu))
+        let record = LaunchRenderer.starting(
+            renderer, forApp: appID, current: current.renderer, inFlight: inFlight,
+        )
+        Preferences.shared.set(record?.stored, forKey: launchRendererKey)
+    }
+
+    /// Returns the bottle to its own renderer once the run a launch moved it
+    /// for has ended, restaging the tree, and answers a line for the log.
+    @discardableResult
+    static func endLaunchRenderer(afterRunOf appID: Int) -> String? {
+        guard let inFlight = launchRendererInFlight(), inFlight.appID == appID else { return nil }
+        let current = currentSelection()
+        guard let restore = inFlight.rendererToRestore(afterRunOf: appID, current: current.renderer) else {
+            Preferences.shared.removeObject(forKey: launchRendererKey)
+            return nil
+        }
+        do {
+            try applyToActiveEngine(Selection(renderer: restore, msync: current.msync, gpu: current.gpu))
+        } catch {
+            return "could not return the bottle to \(restore.label) after app \(appID): \(error)"
+        }
+        reconcileManagedTree()
+        recordBootedSelection()
+        return "the bottle is back on \(restore.label) now that app \(appID), started on \(inFlight.renderer.label), has ended"
     }
 
     // MARK: - Desired vs booted

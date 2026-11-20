@@ -232,18 +232,14 @@ extension BottleSupervisor {
         Task(name: "Announce app \(appID)'s fixes") { await app.announceFixesApplied(appID: appID) }
     }
 
-    /// Stages the renderer a launch asked for; a program outside Steam has its
-    /// own process tree, so no client restart is needed.
+    /// Stages the renderer a launch asked for, which holds the bottle until
+    /// the program's run ends; a program outside Steam has its own process
+    /// tree, so no client restart is needed.
     private func stageGraphics(for name: String, renderer explicit: Renderer?, appID: Int) {
         let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         guard let desired, desired != BottleGraphics.currentSelection().renderer else { return }
         do {
-            let current = BottleGraphics.currentSelection()
-            try BottleGraphics.applyToActiveEngine(
-                BottleGraphics.Selection(
-                    renderer: desired, msync: current.msync, gpu: current.gpu,
-                ),
-            )
+            try BottleGraphics.beginLaunchRenderer(desired, forApp: appID)
         } catch {
             note("could not set \(desired.label) for \(name): \(error)")
             return

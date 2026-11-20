@@ -10,17 +10,12 @@ extension BottleSupervisor {
     ) async -> Bool {
         // Ahead of the renderer below: a first launch's fixes can pick it.
         await prepareLaunch(appID: appID)
-        // An explicit "Run with X" wins over the game's own choice; it persists
-        // only as the bottle default it sets.
+        // An explicit "Run with X" wins over the game's own choice. Either
+        // holds the bottle for this run; the run's end hands it back.
         let desired = BottleGraphics.rendererToStage(forApp: appID, explicit: explicit)
         if let desired, desired != BottleGraphics.currentSelection().renderer {
             do {
-                let current = BottleGraphics.currentSelection()
-                try BottleGraphics.applyToActiveEngine(
-                    BottleGraphics.Selection(
-                        renderer: desired, msync: current.msync, gpu: current.gpu,
-                    ),
-                )
+                try BottleGraphics.beginLaunchRenderer(desired, forApp: appID)
             } catch {
                 log.log(.client, "could not set \(desired.label) for \(name): \(error)")
             }

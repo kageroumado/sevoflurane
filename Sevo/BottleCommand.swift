@@ -468,7 +468,7 @@ struct BottleCommand: AsyncParsableCommand {
             throw SevoExit.badInvocation
         }
         do {
-            try apply(selection)
+            try BottleGraphics.applyToActiveEngine(selection)
         } catch {
             Sevo.printError("\(error)")
             throw SevoExit.failed
@@ -562,15 +562,6 @@ struct BottleCommand: AsyncParsableCommand {
         Engine.active.supportsEnvFiles
             ? "in games from their next launch"
             : "in games started after the client's next boot: sevo client restart"
-    }
-
-    private func apply(_ selection: BottleGraphics.Selection) throws {
-        switch Engine.active {
-        case .crossover, .crossoverPreview:
-            try BottleGraphics.apply(selection, toBottle: SteamBottle.root)
-        case .managed:
-            BottleGraphics.setManagedSelection(selection)
-        }
     }
 
     private func list() async throws {
