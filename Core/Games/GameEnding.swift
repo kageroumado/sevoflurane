@@ -148,13 +148,25 @@ nonisolated enum GameEnding {
         let folder = AdoptedPrograms.isAdopted(appID)
             ? nil : SharedGames.installDirectory(appID: appID)?.lastPathComponent
         let wanted = Set(names.map { $0.lowercased() })
-        let exact = Set(WineProcessList.entries(fromPgrepLong: listing)
+        let entries = WineProcessList.entries(fromPgrepLong: listing)
+        let exact = Set(entries
             .filter { wanted.contains($0.name) && folder.map($0.lies(inFolderNamed:)) ?? true }
             .map(\.pid))
         guard !exact.isEmpty else { return [] }
         let patterns = names.map { NSRegularExpression.escapedPattern(for: $0) }
-        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns, in: BottleTarget.gameScope)
+        let scoped = await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns, in: BottleTarget.gameScope)
             .filter(exact.contains)
+        let own = AdoptedPrograms.program(appID).map { processes(startedFrom: $0.path, in: entries) } ?? []
+        return scoped + own.filter { !scoped.contains($0) }
+    }
+
+    /// The processes started from the program at the macOS path `path`, which
+    /// Wine shows under `Z:`. A program kept outside the bottle runs from its
+    /// own folder and holds no file in the prefix, so nothing else ties its
+    /// process to the bottle.
+    static func processes(startedFrom path: String, in entries: [WineProcessList.Entry]) -> [pid_t] {
+        let shown = "z:" + path.lowercased()
+        return entries.filter { $0.path == shown }.map(\.pid)
     }
 
     static func executableNames(ofApp appID: Int) -> [String] {

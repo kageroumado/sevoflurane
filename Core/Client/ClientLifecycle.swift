@@ -125,8 +125,8 @@ nonisolated enum ClientLifecycle {
 
     /// The pids among `candidates` that belong to one of `targets`: by working
     /// directory (a prefix or its wineserver directory), else by open files
-    /// through `libproc`, since every Wine process holds a file inside its
-    /// prefix.
+    /// through `libproc`. A program started from a folder outside the prefix
+    /// shows neither; ``GameEnding`` knows it by its own path.
     private static func inBottle(_ candidates: [pid_t], targets: [BottleTarget]) async -> [pid_t] {
         guard !candidates.isEmpty, !targets.isEmpty else { return [] }
         let roots = bottleRoots(targets)

@@ -46,4 +46,16 @@ struct WineProcessListTests {
         #expect(WineProcessList.pids(named: "c++.exe", inPgrepLong: output) == [20003])
         #expect(WineProcessList.pids(named: "Game", inPgrepLong: output).isEmpty)
     }
+
+    @Test
+    func `a program kept outside the bottle is found by its own path`() {
+        let listing = """
+        501 Z:\\Volumes\\Games\\Tools\\Hang.exe idle
+        502 Z:\\Volumes\\Games\\Other\\hang.exe
+        503 C:\\Program Files (x86)\\Steam\\steam.exe -silent
+        """
+        let entries = WineProcessList.entries(fromPgrepLong: listing)
+        #expect(GameEnding.processes(startedFrom: "/Volumes/Games/Tools/hang.exe", in: entries) == [501])
+        #expect(GameEnding.processes(startedFrom: "/Volumes/Games/Missing/hang.exe", in: entries).isEmpty)
+    }
 }
