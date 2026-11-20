@@ -568,9 +568,18 @@ final class SteamWebHost {
     /// it boots.
     func dismissWindows(reason: SteamWindow.DetachReason = .pageTeardown) {
         guard desktop != nil || !popups.isEmpty else { return }
+        // A desktop window on screen comes back when the fresh client's page
+        // adopts it, in front only if the app was in front: a restart nobody
+        // asked for must not take the keyboard from another app.
+        let wasShowingDesktop = reason == .pageTeardown
+            && (desktop?.nsWindow?.isVisible == true || desktopShowIsPending)
         detachPopups(reason: reason)
         desktop = nil
         desktopWasClosed = true
+        if wasShowingDesktop {
+            desktopShowIsPending = true
+            pendingShowActivates = NSApp.isActive
+        }
         status = "reconnecting"
     }
 
@@ -617,6 +626,7 @@ final class SteamWebHost {
         // Steam re-creates its desktop window hidden, so the request is held
         // until the adoption.
         desktopShowIsPending = true
+        pendingShowActivates = true
         if desktopWasClosed {
             EventLog.shared.log(
                 .window,
@@ -637,6 +647,11 @@ final class SteamWebHost {
     /// Whether a ``showSteam`` is waiting for the desktop window the page is
     /// building. Cleared by that adoption, and by a close.
     private var desktopShowIsPending = false
+
+    /// Whether the pending show brings the window to the front: true for a
+    /// show someone asked for, and for a window that was in front when its
+    /// client restarted.
+    private var pendingShowActivates = true
 
     /// Closes the desktop window as its close button does, for the control
     /// endpoint.
@@ -749,7 +764,8 @@ final class SteamWebHost {
         if desktopShowIsPending {
             desktopShowIsPending = false
             routeDesktop()
-            window.show(activating: true)
+            window.show(activating: pendingShowActivates)
+            pendingShowActivates = true
             reopenInstallWizardIfNeeded()
         }
     }
