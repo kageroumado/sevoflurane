@@ -436,6 +436,16 @@ final class SteamWindow: NSObject {
     /// screen until something the user did asks for it.
     private(set) var heldForNotification = false
 
+    /// Until when Steam's own show and focus calls leave another app in
+    /// front: set for a window that came back after its client restarted
+    /// while the user was elsewhere, since the booting page asks for focus.
+    var staysBehindUntil: ContinuousClock.Instant?
+
+    private var staysBehind: Bool {
+        guard let staysBehindUntil, !NSApp.isActive else { return false }
+        return ContinuousClock.now < staysBehindUntil
+    }
+
     func show(activating: Bool) {
         realize()
         // The overlay is shown only through overlay activation, never by the
@@ -480,7 +490,7 @@ final class SteamWindow: NSObject {
             window.alphaValue = 1
             window.ignoresMouseEvents = false
         }
-        guard activating else {
+        guard activating, !staysBehind else {
             window.orderFront(nil)
             attachDialogToDesktop()
             return

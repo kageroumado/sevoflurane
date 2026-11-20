@@ -528,8 +528,11 @@ final class SteamWebHost {
     func applyStreamerMode() {
         guard context != nil else { return }
         guard !isAwaitingSignIn else {
-            EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — applies at the next reload; "
-                + "reloading at the login window would quit Steam")
+            EventLog.shared.log(
+                .page,
+                "streamer mode \(StreamerMode.isOn ? "on" : "off") — applies at the next reload; "
+                    + "reloading at the login window would quit Steam",
+            )
             return
         }
         EventLog.shared.log(.page, "streamer mode \(StreamerMode.isOn ? "on" : "off") — reloading the UI page")
@@ -653,6 +656,10 @@ final class SteamWebHost {
     /// client restarted.
     private var pendingShowActivates = true
 
+    /// How long after its adoption a booting desktop page goes on asking for
+    /// focus.
+    private static let bootingPageAsksForFocus: Duration = .seconds(20)
+
     /// Closes the desktop window as its close button does, for the control
     /// endpoint.
     func closeSteam() {
@@ -764,6 +771,7 @@ final class SteamWebHost {
         if desktopShowIsPending {
             desktopShowIsPending = false
             routeDesktop()
+            if !pendingShowActivates { window.staysBehindUntil = .now + Self.bootingPageAsksForFocus }
             window.show(activating: pendingShowActivates)
             pendingShowActivates = true
             reopenInstallWizardIfNeeded()
