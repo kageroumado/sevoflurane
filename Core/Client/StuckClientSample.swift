@@ -20,7 +20,7 @@ nonisolated enum StuckClientSample {
     /// Samples the bottle's `steam.exe` and answers where the sample landed,
     /// or `nil` when there was no client to sample or the sampler failed.
     static func capture() async -> URL? {
-        guard let pid = await ClientLifecycle.bottleProcessIDs(matching: "steam.exe").first else { return nil }
+        guard let pid = await ClientLifecycle.clientProcessIDs().first else { return nil }
         let destination = file()
         let result = await Subprocess.run(
             "/usr/bin/sample", ["\(pid)", "\(seconds)", "-file", destination.path],

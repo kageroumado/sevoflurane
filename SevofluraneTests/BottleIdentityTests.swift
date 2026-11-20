@@ -259,4 +259,11 @@ struct BottleIdentityTests {
                 == "bottle Retest26 (no steam)",
         )
     }
+
+    @Test
+    func `the client starts with the switch that keeps its service alive when the overlay opens`() {
+        #expect(ClientLifecycle.clientSwitches.contains("-disable-overlay-gpu-pri"))
+        // `clientProcessIDs` finds the client by these two, in this order.
+        #expect(ClientLifecycle.clientSwitches.first == "-silent")
+    }
 }

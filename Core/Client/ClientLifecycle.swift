@@ -86,13 +86,38 @@ nonisolated enum ClientLifecycle {
         }
     }
 
+    /// The switches every client launch carries.
+    ///
+    /// - `-nocrashdialog`: the client relaunches a wedged webhelper itself
+    ///   instead of showing its VGUI "not responding" dialog.
+    /// - `-disable-overlay-gpu-pri`: when the in-game overlay comes up, Steam
+    ///   has its service raise the web helper's GPU priority through
+    ///   `gdi32!D3DKMTSetProcessSchedulingPriorityClass`. Wine has no such
+    ///   export, so `steamservice.exe` aborts, the engine thread waits on it
+    ///   for good, and the overlay and every Steam call go dead.
+    static let clientSwitches = [
+        "-silent",
+        "-nocrashdialog",
+        "-disable-overlay-gpu-pri",
+        "-cef-enable-debugging",
+        "-devtools-port",
+        String(BridgePorts.cdp),
+    ]
+
     /// Whether a client process of these bottles exists at all, matched by
     /// this app's own launch line (`Steam.exe -silent`) and scoped like
     /// ``bottleProcessIDs(matchingAnyOf:in:)``. The probe's failure path uses
     /// it to separate "CDP is slow" from "nothing is running".
     static func clientProcessAlive(in targets: [BottleTarget] = BottleTarget.inScope) async -> Bool {
+        await !clientProcessIDs(in: targets).isEmpty
+    }
+
+    /// The client's own processes in these bottles, matched by this app's
+    /// launch line. The name alone also matches every `steamwebhelper.exe`,
+    /// whose command line carries `-steampath=…\Steam.exe`.
+    static func clientProcessIDs(in targets: [BottleTarget] = BottleTarget.inScope) async -> [pid_t] {
         let out = await Subprocess.run("/usr/bin/pgrep", ["-f", "Steam.exe -silent"]).output
-        return await !inBottle(processIDs(in: out), targets: targets).isEmpty
+        return await inBottle(processIDs(in: out), targets: targets)
     }
 
     // MARK: - Processes
@@ -442,18 +467,10 @@ nonisolated enum ClientLifecycle {
             log(note)
         }
         let process = Process()
-        // -nocrashdialog: the client relaunches a wedged webhelper itself
-        // instead of showing its VGUI "not responding" dialog.
         let invocation = Engine.active.wineInvocation(
             bottle: SteamBottle.name, wait: .none,
-            program: [
-                SteamBottle.exeWindowsPath,
-                "-silent",
-                "-nocrashdialog",
-                "-cef-enable-debugging",
-                "-devtools-port",
-                String(BridgePorts.cdp),
-            ] + Engine.active.cefArguments + extraClientArguments,
+            program: [SteamBottle.exeWindowsPath] + clientSwitches
+                + Engine.active.cefArguments + extraClientArguments,
         )
         process.executableURL = invocation.executable
         process.arguments = invocation.arguments

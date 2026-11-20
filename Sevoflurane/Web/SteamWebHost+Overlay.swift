@@ -56,13 +56,25 @@ extension SteamWebHost {
         }
     }
 
+    /// How long Steam has to report the overlay closed after being asked.
+    private static let overlayClosesWithin: Duration = .seconds(2)
+
     /// Closes the overlay through Steam, as "Back to Game" does; Steam's
-    /// `RegisterForOverlayActivated(false)` then drives the hide.
+    /// `RegisterForOverlayActivated(false)` then drives the hide. A Steam
+    /// that has stopped answering never reports it, and the panel would keep
+    /// the game's input for good, so past ``overlayClosesWithin`` the overlay
+    /// is hidden here.
     private func closeOverlay() {
         guard overlayActive, !overlayAppID.isEmpty else { return }
         let appID = overlayAppID
         Task(name: "Close Steam overlay") {
             _ = await evaluateInContext("SteamClient.Overlay.SetOverlayState(\(JSLiteral.string(appID)), 0)")
+        }
+        Task(name: "Hide an overlay Steam left up") { [weak self] in
+            try? await Task.sleep(for: Self.overlayClosesWithin)
+            guard let self, overlayActive, overlayAppID == appID else { return }
+            EventLog.shared.log(.window, "Steam did not close the overlay when asked; hiding it and returning to the game")
+            noteOverlayActivated(active: false, appID: appID)
         }
     }
 
