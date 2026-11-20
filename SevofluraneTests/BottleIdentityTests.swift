@@ -47,6 +47,13 @@ struct BottleIdentityTests {
     }
 
     @Test
+    func `a game's processes are also looked up in the companion prefix`() {
+        let paths = BottleTarget.gameScope.map(\.path)
+        #expect(paths.contains(BottleTarget(prefix: SteamBottle.companion, engine: Engine.active).path))
+        #expect(paths.contains(BottleTarget.configured.path))
+    }
+
+    @Test
     func `a quit reaches strays after the booted and the configured bottle, each once`() {
         let set = BottleTarget.stopSet(
             booted: Self.target(Self.steam), configured: Self.target(Self.retest),

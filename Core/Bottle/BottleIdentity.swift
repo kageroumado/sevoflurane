@@ -35,6 +35,16 @@ nonisolated struct BottleTarget: Equatable, Sendable {
         stopSet(booted: BootedBottle.target, configured: configured)
     }
 
+    /// Where a game's processes are looked up: ``inScope`` and the Steam
+    /// bottle's companion prefix, where a program that needs a `steam.exe`
+    /// parent runs.
+    static var gameScope: [BottleTarget] {
+        stopSet(
+            booted: BootedBottle.target, configured: configured,
+            strays: [BottleTarget(prefix: SteamBottle.companion, engine: Engine.active)],
+        )
+    }
+
     /// The booted bottle, the configured one and any strays, each once; the
     /// booted one leads because its engine holds a shared prefix.
     static func stopSet(

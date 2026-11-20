@@ -153,7 +153,8 @@ nonisolated enum GameEnding {
             .map(\.pid))
         guard !exact.isEmpty else { return [] }
         let patterns = names.map { NSRegularExpression.escapedPattern(for: $0) }
-        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns).filter(exact.contains)
+        return await ClientLifecycle.bottleProcessIDs(matchingAnyOf: patterns, in: BottleTarget.gameScope)
+            .filter(exact.contains)
     }
 
     static func executableNames(ofApp appID: Int) -> [String] {
