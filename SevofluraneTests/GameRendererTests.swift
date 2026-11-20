@@ -58,6 +58,16 @@ struct GameRendererTests {
     }
 
     @Test
+    func `a launch's run is over once its processes were seen and are gone, or never came`() {
+        let late = BottleGraphics.launchAppearsWithin + .seconds(1)
+        #expect(!BottleGraphics.launchRunIsOver(running: true, seenRunning: true, waited: late))
+        #expect(BottleGraphics.launchRunIsOver(running: false, seenRunning: true, waited: .seconds(30)))
+        // Steam is still syncing or updating the game: nothing has started yet.
+        #expect(!BottleGraphics.launchRunIsOver(running: false, seenRunning: false, waited: .seconds(30)))
+        #expect(BottleGraphics.launchRunIsOver(running: false, seenRunning: false, waited: late))
+    }
+
+    @Test
     func `a launch's renderer reads back from its stored form`() {
         let held = BottleGraphics.LaunchRenderer(appID: 2_000_000_001, renderer: .d3dmetal, restore: .dxmt)
         #expect(BottleGraphics.LaunchRenderer(stored: held.stored) == held)

@@ -202,12 +202,23 @@ nonisolated enum BottleGraphics {
 
     private static let launchRendererKey = "launchRenderer"
 
+    /// How long a launch has to show a process before its renderer is handed
+    /// back anyway: Steam can sync and update a game for minutes first.
+    static let launchAppearsWithin: Duration = .seconds(600)
+
+    /// Whether the run a launch's renderer was held for is over: its
+    /// processes were seen and are gone, or none appeared in time.
+    static func launchRunIsOver(running: Bool, seenRunning: Bool, waited: Duration) -> Bool {
+        !running && (seenRunning || waited > launchAppearsWithin)
+    }
+
     static func launchRendererInFlight() -> LaunchRenderer? {
         Preferences.shared.string(forKey: launchRendererKey).flatMap(LaunchRenderer.init(stored:))
     }
 
     /// Moves the bottle onto `renderer` for one run of `appID`; the caller
-    /// stages the tree. ``endLaunchRenderer(afterRunOf:)`` hands it back.
+    /// stages the tree, and the helper hands the bottle back with
+    /// ``endLaunchRenderer(afterRunOf:)`` once the game's processes are gone.
     static func beginLaunchRenderer(_ renderer: Renderer, forApp appID: Int) throws {
         let current = currentSelection()
         let inFlight = launchRendererInFlight()

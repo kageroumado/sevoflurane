@@ -261,6 +261,42 @@ extension BottleSupervisor {
         if let staged = BottleGraphics.stagingNote(BottleGraphics.reconcileManagedTree()) {
             note(staged)
         }
+        watchLaunchRenderer()
+    }
+
+    /// Watches the game a launch moved the bottle's renderer for
+    /// (``BottleGraphics/LaunchRenderer``) and hands the bottle back once the
+    /// game's processes are gone. One watch at a time: it follows the record,
+    /// so a second launch's renderer is picked up by the watch already running.
+    func watchLaunchRenderer() {
+        guard launchRendererWatch == nil, BottleGraphics.launchRendererInFlight() != nil else { return }
+        launchRendererWatch = Task(name: "Hand the bottle back its renderer") { [weak self] in
+            let clock = ContinuousClock()
+            var watched: BottleGraphics.LaunchRenderer?
+            var seenRunning = false
+            var since = clock.now
+            while !Task.isCancelled {
+                // A choice made in Settings or by the CLI clears the record.
+                guard let inFlight = BottleGraphics.launchRendererInFlight() else { break }
+                if inFlight != watched {
+                    watched = inFlight
+                    seenRunning = false
+                    since = clock.now
+                }
+                let running = await !GameEnding.processes(ofApp: inFlight.appID).isEmpty
+                seenRunning = seenRunning || running
+                if BottleGraphics.launchRunIsOver(
+                    running: running, seenRunning: seenRunning, waited: clock.now - since,
+                ) {
+                    if let note = BottleGraphics.endLaunchRenderer(afterRunOf: inFlight.appID) {
+                        EventLog.shared.log(.client, note)
+                    }
+                    break
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+            self?.launchRendererWatch = nil
+        }
     }
 
     private func note(_ message: String) {

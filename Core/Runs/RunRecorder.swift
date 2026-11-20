@@ -94,7 +94,6 @@ nonisolated struct RunInProgress: Sendable {
         record.exit = RunRecord.Exit(kind: ended, code: code)
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
-        if let note = BottleGraphics.endLaunchRenderer(afterRunOf: record.appid) { RunRecorder.log(note) }
         RunRecorder.didClose(record)
         RunRecorder.didRecord?(record, wineTail)
     }

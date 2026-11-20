@@ -16,6 +16,7 @@ extension BottleSupervisor {
         if let desired, desired != BottleGraphics.currentSelection().renderer {
             do {
                 try BottleGraphics.beginLaunchRenderer(desired, forApp: appID)
+                watchLaunchRenderer()
             } catch {
                 log.log(.client, "could not set \(desired.label) for \(name): \(error)")
             }

@@ -34,6 +34,8 @@ final class BottleSupervisor {
     /// minute passes, a new request is an extra click: the process takes
     /// seconds to appear under Rosetta.
     var programsSpawnedAt: [Int: ContinuousClock.Instant] = [:]
+    /// The watch that hands the bottle back its renderer (``watchLaunchRenderer()``).
+    var launchRendererWatch: Task<Void, Never>?
     /// Seconds into a boot before Wine's log is read for "cannot connect":
     /// a launcher that cannot reach its server says so within a few seconds.
     static let staleServerCheckAfter = 12
@@ -348,6 +350,8 @@ final class BottleSupervisor {
     private var pendingTick: Task<Void, Never>?
 
     func start() {
+        // A launch's renderer from before this helper started still holds the bottle.
+        watchLaunchRenderer()
         guard loop == nil else { return }
         // The page the app just booted needs time to reach the bridge before
         // an unanswered probe means anything.
