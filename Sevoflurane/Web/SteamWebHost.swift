@@ -210,7 +210,7 @@ final class SteamWebHost {
         context?.webView.evaluateJavaScript(
             forgettingChoice
                 ? LaunchOptions.forgetAndRunScript(appID: appID)
-                : "SteamClient.Apps.RunGame(String(\(appID)), '', -1, 100)",
+                : SteamSurface.Call.runGame.invocation("String(\(appID))", "''", "-1", "100"),
         )
     }
 

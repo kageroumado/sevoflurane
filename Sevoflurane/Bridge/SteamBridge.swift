@@ -312,7 +312,7 @@ actor SteamBridge {
         guard let cdp, await !cdp.isClosed else { return false }
         let answer = try? await withDeadline(ClientLifecycle.cdpCallCap) {
             try await cdp.evaluate(
-                "SteamClient.Apps.TerminateApp(\(JSLiteral.string(gameID)), false), \"sent\"",
+                "\(SteamSurface.Call.terminateApp.invocation(JSLiteral.string(gameID), "false")), \"sent\"",
             )
         }
         return answer != nil

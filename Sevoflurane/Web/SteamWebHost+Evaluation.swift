@@ -28,7 +28,7 @@ extension SteamWebHost {
             )
             if handled == nil || handled == "0" {
                 _ = await evaluateInContext(
-                    "SteamClient.URL.ExecuteSteamURL(\(literal)), \"sent\"",
+                    "\(SteamSurface.Call.executeSteamURL.invocation(literal)), \"sent\"",
                 )
             }
         }

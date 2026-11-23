@@ -54,6 +54,11 @@ nonisolated enum SteamWindowRole {
         /// (`contextmenu_10`, `notificationtoasts_1_desktop`).
         case prefix(String)
 
+        /// The match for one of Steam's popup names (``SteamSurface/Popup``).
+        static func named(_ popup: SteamSurface.Popup) -> NameMatch {
+            popup.isWholeName ? .exact(popup.rawValue) : .prefix(popup.rawValue)
+        }
+
         func matches(base: String) -> Bool {
             switch self {
             case let .exact(name): base == name
@@ -66,23 +71,23 @@ nonisolated enum SteamWindowRole {
     /// ``init(popupName:)`` and by the twin sweep. Fixed bases come first, so
     /// a prefix cannot take a name a fixed base claims.
     static let names: [(match: NameMatch, role: SteamWindowRole)] = [
-        (.exact("SP Desktop"), .desktop),
-        (.exact("SP BPM"), .bigPicture),
-        (.exact("SP DesktopLoginWindow"), .login),
-        (.exact("SP Keyboard"), .keyboard),
-        (.exact("SP Controller Configurator"), .controllerConfig),
-        (.prefix("contextmenu_"), .menu),
-        (.prefix("friendslist"), .friends),
-        (.prefix("chat_"), .chat),
-        (.prefix("notificationtoasts"), .toast),
-        (.prefix("desktopoverlay"), .gameOverlay),
-        (.prefix("gamepadoverlay"), .gameOverlay),
-        (.prefix("PopupWindow_"), .dialog),
+        (.named(.desktop), .desktop),
+        (.named(.bigPicture), .bigPicture),
+        (.named(.login), .login),
+        (.named(.keyboard), .keyboard),
+        (.named(.controllerConfigurator), .controllerConfig),
+        (.named(.contextMenu), .menu),
+        (.named(.friendsList), .friends),
+        (.named(.chat), .chat),
+        (.named(.notificationToasts), .toast),
+        (.named(.desktopOverlay), .gameOverlay),
+        (.named(.gamepadOverlay), .gameOverlay),
+        (.named(.popupWindow), .dialog),
     ]
 
     /// A popup's name before its `_uid<pid>` suffix.
     static func base(ofPopupNamed popupName: String) -> String {
-        guard let range = popupName.range(of: "_uid") else { return popupName }
+        guard let range = popupName.range(of: SteamSurface.popupInstanceMarker) else { return popupName }
         return String(popupName[..<range.lowerBound])
     }
 
@@ -100,7 +105,7 @@ nonisolated enum SteamWindowRole {
     /// desktop UI, and a game's overlay stamps the game's pid
     /// (`friendslist_uid2220`).
     static func instanceUID(ofPopupNamed popupName: String) -> Int {
-        guard let range = popupName.range(of: "_uid", options: .backwards) else { return 0 }
+        guard let range = popupName.range(of: SteamSurface.popupInstanceMarker, options: .backwards) else { return 0 }
         return Int(popupName[range.upperBound...]) ?? 0
     }
 

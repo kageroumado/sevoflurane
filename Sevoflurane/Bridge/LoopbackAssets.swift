@@ -17,7 +17,7 @@ import Synchronization
 /// server's own. Anything else is the head of a URL, and moves under
 /// ``pathPrefix`` where the bridge can answer it.
 nonisolated enum LoopbackAssets {
-    static let clientOrigin = "https://steamloopback.host"
+    static let clientOrigin = "https://" + SteamSurface.loopbackHost
 
     /// The path under which the bridge answers what CEF serves at
     /// ``clientOrigin``.

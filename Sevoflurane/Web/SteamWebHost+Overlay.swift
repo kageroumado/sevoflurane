@@ -81,7 +81,7 @@ extension SteamWebHost {
         let appID = overlayAppID
         let showing = overlayShowings
         Task(name: "Close Steam overlay") {
-            _ = await evaluateInContext("SteamClient.Overlay.SetOverlayState(\(JSLiteral.string(appID)), 0)")
+            _ = await evaluateInContext(SteamSurface.Call.setOverlayState.invocation(JSLiteral.string(appID), "0"))
         }
         Task(name: "Hide an overlay Steam left up") { [weak self] in
             try? await Task.sleep(for: Self.overlayClosesWithin)

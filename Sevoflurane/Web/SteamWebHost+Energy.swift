@@ -58,9 +58,9 @@ extension SteamWebHost {
             // The baseline goes only once Steam took it back: a page that is
             // not ready keeps it for the next pass.
             let restored = await evaluateInContext(Self.setRenderSettingsScript(
-                lowPerf: values["library_low_perf_mode"] ?? false,
-                reduceMotion: values["accessibility_reduce_motion"] ?? false,
-                smoothScroll: values["smooth_scroll_webviews"] ?? true,
+                lowPerf: values[SteamSurface.Setting.lowPerformanceMode.rawValue] ?? false,
+                reduceMotion: values[SteamSurface.Setting.reduceMotion.rawValue] ?? false,
+                smoothScroll: values[SteamSurface.Setting.smoothScroll.rawValue] ?? true,
             ))
             guard restored == "ok" else {
                 EventLog.shared.log(.app, "restoring Steam's rendering failed (\(restored ?? "no answer")) — kept for the next pass")

@@ -64,7 +64,7 @@ nonisolated struct LoopbackGate: Sendable {
     /// CEF serves from the client's own origin.
     /// `LoopbackAssets.clientOrigin`, spelled out: the daemon compiles this
     /// file without the bridge.
-    static let relayWS = LoopbackGate(port: BridgePorts.relayWS, origins: ["https://steamloopback.host"])
+    static let relayWS = LoopbackGate(port: BridgePorts.relayWS, origins: ["https://" + SteamSurface.loopbackHost])
     /// Capsule art, read by the menu bar through `URLSession`.
     static let art = LoopbackGate(port: BridgePorts.art, origins: [], needsSession: true)
     /// The daemon's control endpoint: `sevo`, the app, and the Tools scripts.

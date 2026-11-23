@@ -478,7 +478,7 @@ final class SteamMenuMirror: NSObject {
         (function () {
           var doc = null;
           g_PopupManager.m_mapPopups.forEach(function (v) {
-            if (v.m_strTitle === \(JSLiteral.string(rootTitle + " Root Menu"))) {
+            if (v.m_strTitle === \(JSLiteral.string(rootTitle + SteamSurface.rootMenuTitleSuffix))) {
               var p = v.m_popup;
               if (p && !p.closed) doc = p.document;
             }

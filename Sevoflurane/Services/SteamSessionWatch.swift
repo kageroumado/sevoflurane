@@ -110,7 +110,7 @@ final class SteamSessionWatch {
         reconnectedFor = loss
         EventLog.shared.log(.client, "reconnecting Steam: \(reason)")
         Task(name: "Reconnect Steam") {
-            let answer = await bridge.evaluateInClient("SteamClient.User.Reconnect(), \"sent\"")
+            let answer = await bridge.evaluateInClient("\(SteamSurface.Call.reconnect.invocation()), \"sent\"")
             if answer == nil {
                 EventLog.shared.log(.client, "Steam did not take the reconnect: the bridge has no connection to the client")
             }

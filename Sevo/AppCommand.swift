@@ -282,7 +282,7 @@ struct AppCommand: AsyncParsableCommand {
                 } else if stuckInSync {
                     print("app launch: no effect — Steam kept \(appid) at Synchronizing and dropped the launch"
                         + " (sevo client restart)")
-                } else if waitingFor == "ShowLaunchOption" {
+                } else if waitingFor == SteamSurface.launchOptionRequest {
                     print("app launch: no effect — Steam is waiting at its launch-option chooser"
                         + (option == nil ? " (pass --option <n>; sevo app info numbers them)"
                             : "; option \(option!) never reached it (sevo diag save)"))

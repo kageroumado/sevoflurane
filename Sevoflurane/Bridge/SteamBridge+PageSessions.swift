@@ -179,7 +179,7 @@ extension SteamBridge {
             ws.send(text: Self.resultReply(rid: rid, outcome: outcome))
             return
         }
-        if path == "SteamClient.Apps.RunGame" {
+        if path == SteamSurface.Call.runGame.path {
             // Every launch passes here. Ready the launch first (a first
             // launch's fixes can pick the renderer), then restage the renderer
             // tree before Steam sees the call, so a Settings change applies to
@@ -197,12 +197,12 @@ extension SteamBridge {
             await adoptLaunchCommand(beforeRunning: request, cdp: cdp)
             onGameLaunch?()
         }
-        if path == "SteamClient.Apps.SetAppLaunchOptions" {
+        if path == SteamSurface.Call.setAppLaunchOptions.path {
             request = await adoptingLaunchCommand(in: request)
         }
         // Single-game wizards only: a collection install gets no per-game
         // warnings.
-        if path == "SteamClient.Installs.OpenInstallWizard", let installGate,
+        if path == SteamSurface.Call.openInstallWizard.path, let installGate,
            let appIDs = (request["args"] as? [Any])?.first as? [Any], appIDs.count == 1,
            let appID = (appIDs[0] as? NSNumber)?.intValue,
            await !installGate(appID) {
@@ -212,7 +212,7 @@ extension SteamBridge {
         }
         // A shortcut's game id is 64-bit with its top bit set, past Int: read
         // as text and mapped to the adopted program the run is recorded under.
-        if path == "SteamClient.Apps.TerminateApp",
+        if path == SteamSurface.Call.terminateApp.path,
            let raw = (request["args"] as? [Any])?.first.map({ ($0 as? NSNumber)?.stringValue ?? "\($0)" }),
            let appID = SteamShortcuts.appID(
                fromSteam: raw, aliases: SteamShortcuts.aliases(AdoptedPrograms.all()),
@@ -266,13 +266,13 @@ extension SteamBridge {
     private static func answersOnTheMac(path: String, request: [String: Any]) async -> [String: Any]? {
         let argument = (request["args"] as? [Any])?.first
         switch path {
-        case "SteamClient.System.OpenFileDialog":
+        case SteamSurface.Call.openFileDialog.path:
             let options = SteamFileDialogs.Options(argument as? [String: Any] ?? [:])
             guard let chosen = await SteamFileDialogs.choose(options) else {
                 return ["ok": false, "e": ["result": SteamFileDialogs.cancelledResult, "message": "cancelled"]]
             }
             return ["ok": true, "v": chosen]
-        case "SteamClient.Apps.CreateDesktopShortcutForApp":
+        case SteamSurface.Call.createDesktopShortcutForApp.path:
             guard let appID = argument.flatMap({ Int("\($0)") }),
                   await DesktopShortcuts.take(appID: appID) else { return nil }
             return ["ok": true, "v": NSNull()]
@@ -284,7 +284,7 @@ extension SteamBridge {
     /// Whether a `RunGame` goes to Steam for Mac (``MacBuildHandoff``) or a
     /// companion's partner (``CompanionHandoff``) instead of the client.
     private static func handsOffToSteamForMac(path: String, request: [String: Any]) async -> Bool {
-        guard path == "SteamClient.Apps.RunGame",
+        guard path == SteamSurface.Call.runGame.path,
               let appID = (request["args"] as? [Any])?.first.flatMap({ Int("\($0)") }) else { return false }
         if await MacBuildHandoff.takeRunGame(appID: appID) { return true }
         return await CompanionHandoff.takeRunGame(appID: appID)

@@ -208,31 +208,39 @@ final class SteamWindow: NSObject {
     var titleObservation: NSKeyValueObservation?
 
     // swiftlint:disable cyclomatic_complexity function_body_length
-    /// Answers one `SteamClient.Window` call. The return value resolves the
-    /// page's promise, so it must stay JSON-representable. One case per call
-    /// the shim routes here.
+    /// Answers one call the shim routes here: a `SteamClient.Window` method,
+    /// or a message of the app's own. The return value resolves the page's
+    /// promise, so it must stay JSON-representable.
     func perform(_ function: String, _ args: [Any]) -> Any? {
-        switch function {
-        case "ShowWindow", "SetKeyFocus", "MarkLastFocused", "SetForegroundWindow":
+        if let call = SteamSurface.WindowCall(rawValue: function) { return answer(call, args) }
+        performOwn(function, args)
+        return nil
+    }
+
+    /// Answers one of Steam's own window calls (``SteamSurface/WindowCall``).
+    private func answer(_ call: SteamSurface.WindowCall, _ args: [Any]) -> Any? {
+        let function = call.rawValue
+        switch call {
+        case .showWindow, .setKeyFocus, .markLastFocused, .setForegroundWindow:
             show(activating: true)
-        case "BringToFront":
+        case .bringToFront:
             // `k_EWindowBringToFrontWithoutForcingOS` (2) marks
             // `bNoFocusWhenShown` windows (hover supernavs); giving those key
             // blurs the desktop, which dismisses the menu 30ms after it opens.
             show(activating: (args.first as? NSNumber)?.intValue != 2)
-        case "HideWindow":
+        case .hideWindow:
             hide()
-        case "Close":
+        case .close:
             close()
-        case "Minimize":
+        case .minimize:
             // Steam minimizes a chat it opened for a message; a never-shown
             // window would become a phantom in the Dock.
             if !heldForNotification { window?.miniaturize(nil) }
-        case "ToggleMaximize":
+        case .toggleMaximize:
             window?.zoom(nil)
-        case "ToggleFullScreen":
+        case .toggleFullScreen:
             window?.toggleFullScreen(nil)
-        case "MoveTo", "MoveToLocation":
+        case .moveTo, .moveToLocation:
             // The third argument (the monitor's scale factor, for Windows'
             // physical pixels) is dropped: AppKit points are the page's units.
             // Dialogs are placed by the app; Steam would put them bottom-left.
@@ -240,13 +248,13 @@ final class SteamWindow: NSObject {
                let point = geometry(args, at: 0 ..< 2, from: function) {
                 moveTo(x: Self.clampedOffset(point[0]), y: Self.clampedOffset(point[1]))
             }
-        case "ResizeTo":
+        case .resizeTo:
             // The overlay follows the game's frame, not Steam's full-screen size.
             if role != .gameOverlay, let size = geometry(args, at: 0 ..< 2, from: function) {
                 let size = Self.clampedSize(width: size[0], height: size[1])
                 resizeTo(width: size.width, height: size.height)
             }
-        case "PositionWindowRelative":
+        case .positionWindowRelative:
             if !isParked, role != .gameOverlay, let frame = geometry(args, at: 1 ..< 5, from: function) {
                 let size = Self.clampedSize(width: frame[2], height: frame[3])
                 positionRelative(
@@ -257,39 +265,46 @@ final class SteamWindow: NSObject {
                     height: size.height,
                 )
             }
-        case "SetMinSize":
+        case .setMinSize:
             if let size = geometry(args, at: 0 ..< 2, from: function) {
                 minimumSize = Self.clampedSize(width: size[0], height: size[1])
                 window?.contentMinSize = minimumSize ?? .zero
             }
-        case "SetMaxSize":
+        case .setMaxSize:
             if let size = geometry(args, at: 0 ..< 2, from: function) {
                 maximumSize = Self.clampedSize(width: size[0], height: size[1])
                 window?.contentMaxSize = maximumSize ?? .zero
             }
-        case "SetHideOnClose":
+        case .setHideOnClose:
             hidesOnClose = args.first as? Bool ?? false
-        case "SetWindowFlashing":
+        case .setWindowFlashing:
             if args.first as? Bool ?? false {
                 NSApp.requestUserAttention(.informationalRequest)
             }
-        case "IsWindowMinimized":
+        case .isWindowMinimized:
             return window?.isMiniaturized ?? false
-        case "IsWindowMaximized":
+        case .isWindowMaximized:
             return window?.isZoomed ?? false
-        case "GetWindowDimensions", "GetWindowDetails":
+        case .getWindowDimensions, .getWindowDetails:
             return dimensions()
-        case "GetDefaultMonitorDimensions":
+        case .getDefaultMonitorDimensions:
             return monitorDimensions()
-        case "GetMousePositionDetails":
+        case .getMousePositionDetails:
             let point = SteamScreenSpace.steamMouseLocation
             return ["x": point.x, "y": point.y]
-        case "DefaultMonitorHasFullscreenWindow":
+        case .defaultMonitorHasFullscreenWindow:
             return false
-        case "GetWindowRestoreDetails":
+        case .getWindowRestoreDetails:
             // An opaque token Steam hands back to `PositionWindowRelative` to
             // name the window a menu is placed against.
             return name
+        }
+        return nil
+    }
+
+    /// Takes one message of the shim or of an injected script.
+    private func performOwn(_ function: String, _ args: [Any]) {
+        switch function {
         case "__adopt":
             adopt(name: string(args, 0), parameters: string(args, 1))
         case "__dragRegions":
@@ -370,11 +385,10 @@ final class SteamWindow: NSObject {
                 args: Array(args.dropFirst(2)),
             )
         default:
-            // Window-manager calls with no AppKit counterpart (compositing
-            // mode, gamepad display scale, VR overlays).
+            // Steam's window-manager calls with no AppKit counterpart
+            // (``SteamSurface/WindowCall/unanswered``).
             break
         }
-        return nil
     }
 
     // swiftlint:enable cyclomatic_complexity function_body_length
@@ -848,7 +862,7 @@ extension SteamWindow: NSWindowDelegate {
     }
 
     func windowDidResize(_: Notification) {
-        notifyPage("window_resized")
+        notifyPage(SteamSurface.windowResizedMessage)
     }
 
     func windowDidMove(_: Notification) {

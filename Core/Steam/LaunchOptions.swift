@@ -121,12 +121,12 @@ nonisolated enum LaunchOptions {
 
     /// Answers a `ShowLaunchOption` request with one option.
     static func continueScript(actionID: Int, index: Int) -> String {
-        "SteamClient.Apps.ContinueGameAction(\(actionID), \(JSLiteral.string(String(index)))); \"sent\""
+        "\(SteamSurface.Call.continueGameAction.invocation("\(actionID)", JSLiteral.string(String(index)))); \"sent\""
     }
 
     /// Abandons the launch at its `ShowLaunchOption` request.
     static func cancelScript(actionID: Int) -> String {
-        "SteamClient.Apps.CancelGameAction(\(actionID)); \"sent\""
+        "\(SteamSurface.Call.cancelGameAction.invocation("\(actionID)")); \"sent\""
     }
 
     /// Starts an app after clearing its remembered option, so Steam asks again; answers

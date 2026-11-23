@@ -62,7 +62,7 @@ nonisolated enum SteamOps {
 
     static func launch(_ appid: Int) async throws {
         _ = try await SteamJS.eval(
-            "SteamClient.Apps.RunGame('\(appid)', '', -1, 100); 'ok'",
+            "\(SteamSurface.Call.runGame.invocation("'\(appid)'", "''", "-1", "100")); 'ok'",
         )
     }
 
@@ -133,7 +133,7 @@ nonisolated enum SteamOps {
     static func terminate(_ appid: Int, notingStop: Bool = true) async throws {
         if notingStop { RunLog.noteStopRequest(forApp: appid, by: .tool) }
         _ = try await SteamJS.eval(
-            "SteamClient.Apps.TerminateApp('\(appid)', false); 'ok'",
+            "\(SteamSurface.Call.terminateApp.invocation("'\(appid)'", "false")); 'ok'",
         )
     }
 
@@ -162,7 +162,7 @@ nonisolated enum SteamOps {
     }
 
     static func verify(_ appid: Int) async throws {
-        _ = try await SteamJS.eval("SteamClient.Apps.VerifyApp(\(appid)); 'ok'")
+        _ = try await SteamJS.eval("\(SteamSurface.Call.verifyApp.invocation("\(appid)")); 'ok'")
     }
 
     /// The promptless install flow: open the wizard for the appid, wait until it
@@ -221,7 +221,7 @@ nonisolated enum SteamOps {
     static func uninstall(_ appid: Int) async throws {
         _ = try await SteamJS.eval(
             // The second argument is the client the uninstall is for, "0" being this one.
-            "SteamClient.Installs.OpenUninstallWizard([\(appid)], \"0\", true); 'ok'",
+            "\(SteamSurface.Call.openUninstallWizard.invocation("[\(appid)]", SteamSurface.thisClient, "true")); 'ok'",
         )
     }
 
@@ -257,14 +257,14 @@ nonisolated enum SteamOps {
     static func setDownloadsEnabled(_ enabled: Bool) async throws {
         _ = try await SteamJS.eval(
             // The second argument is the client the downloads are on, "0" being this one.
-            "SteamClient.Downloads.EnableAllDownloads(\(enabled), \"0\"); 'ok'",
+            "\(SteamSurface.Call.enableAllDownloads.invocation("\(enabled)", SteamSurface.thisClient)); 'ok'",
         )
     }
 
     /// `set_download_throttle` in KB/s; 0 turns throttling off.
     static func throttle(_ kbps: Int) async throws {
         _ = try await SteamJS.eval(
-            "SteamClient.Console.ExecCommand('set_download_throttle \(kbps)'); 'ok'",
+            "\(SteamSurface.Call.execCommand.invocation("'set_download_throttle \(kbps)'")); 'ok'",
         )
     }
 }

@@ -228,6 +228,6 @@ nonisolated extension SteamLaunchCommand {
     }
 
     static func storeScript(appID: Int, options: String) -> String {
-        "SteamClient.Apps.SetAppLaunchOptions(\(appID), \(JSLiteral.string(options))); \"stored\""
+        "\(SteamSurface.Call.setAppLaunchOptions.invocation("\(appID)", JSLiteral.string(options))); \"stored\""
     }
 }

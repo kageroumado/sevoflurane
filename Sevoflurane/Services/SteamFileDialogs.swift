@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 @MainActor
 enum SteamFileDialogs {
     /// Steam's `EResult` for a dismissed dialog.
-    nonisolated static let cancelledResult = 52
+    nonisolated static let cancelledResult = SteamSurface.cancelledResult
 
     /// What the page asked for, read off the call's one argument.
     struct Options: Sendable {
