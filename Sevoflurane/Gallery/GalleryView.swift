@@ -39,11 +39,18 @@
         /// A pane that fills what it is given instead of scrolling; the others
         /// are written at their content's height.
         var fixedHeight: CGFloat?
+        /// A whole pane, which `Tools/settings-guides.py` measures; a popover or
+        /// a pane cut by its window is written as `view-<name>.png` instead.
+        var isWholePane = true
         let view: AnyView
 
-        init(_ id: String, fixedHeight: CGFloat? = nil, @ViewBuilder view: () -> some View) {
+        init(
+            _ id: String, fixedHeight: CGFloat? = nil, isWholePane: Bool = true,
+            @ViewBuilder view: () -> some View,
+        ) {
             self.id = id
             self.fixedHeight = fixedHeight
+            self.isWholePane = isWholePane
             self.view = AnyView(view())
         }
     }
@@ -75,7 +82,14 @@
                 },
                 GalleryPane("graphics") {
                     GraphicsSettings(
-                        store: Fixtures.graphics, shaders: Fixtures.shaders, steam: steam, highlighted: nil,
+                        store: Fixtures.graphics, shaders: Fixtures.shaders, defaults: Fixtures.bottleDefaults,
+                        steam: steam, highlighted: nil,
+                    )
+                },
+                GalleryPane("graphics-restart") {
+                    GraphicsSettings(
+                        store: Fixtures.graphicsAwaitingRestart, shaders: Fixtures.shaders, steam: steam,
+                        highlighted: nil,
                     )
                 },
                 GalleryPane("graphics-no-toolkit") {
@@ -156,11 +170,88 @@
                     DiagnosticsSettings(store: Fixtures.diagnostics, highlighted: nil, showReports: {})
                 },
                 GalleryPane("about", fixedHeight: 518) { AboutSettings(highlighted: nil) },
+                GalleryPane("kit") { SettingsKitGallery() },
+                GalleryPane("general-automation") {
+                    GeneralSettings(
+                        provisioner: Fixtures.settings, store: Fixtures.storage, steam: steam,
+                        highlighted: nil, supervisor: Fixtures.healthySupervisor,
+                        automationFixture: AgentIntegration.Harness.allCases,
+                    )
+                },
+                GalleryPane("engine-switching") {
+                    EngineSettings(
+                        store: Fixtures.switchingEngine.store, graphics: Fixtures.graphics,
+                        shaders: Fixtures.shaders, compatibility: Fixtures.compatibility,
+                        provisioner: Fixtures.switchingEngine.provisioner, highlighted: nil,
+                    )
+                },
+                GalleryPane("engine-switch-failed") {
+                    EngineSettings(
+                        store: Fixtures.failedEngine.store, graphics: Fixtures.graphics,
+                        shaders: Fixtures.shaders, compatibility: Fixtures.compatibility,
+                        provisioner: Fixtures.failedEngine.provisioner, highlighted: nil,
+                    )
+                },
+                GalleryPane("games-fixes") {
+                    GamesSettings(
+                        shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true,
+                        fixtureGames: Fixtures.games.map { .init(id: $0.id, name: $0.name, exes: ["game.exe"]) },
+                        fixtureForm: Fixtures.fixedGame, showsProgramSections: true,
+                    )
+                },
+                GalleryPane("hoyoverse-installing") {
+                    HoYoSettings(highlighted: nil, store: Fixtures.hoyoInstalling)
+                },
+                // A window shorter than the pane, opened on a row far down it and
+                // then sent to another: the form scrolls to each.
+                GalleryPane("jump-on-appear", fixedHeight: 420, isWholePane: false) {
+                    RecoverySettings(
+                        provisioner: Fixtures.settings, compatibility: Fixtures.compatibility,
+                        supervisor: Fixtures.healthySupervisor, steam: steam, highlighted: .recoveryWinecfg,
+                    )
+                },
+                GalleryPane("jump-later", fixedHeight: 420, isWholePane: false) {
+                    JumpHarness(steam: steam)
+                },
+                GalleryPane("help-renderers", fixedHeight: 520, isWholePane: false) {
+                    SettingsHelpPopover(help: SettingCopy.renderers(Renderer.allCases))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                },
+                GalleryPane("help-usage", fixedHeight: 520, isWholePane: false) {
+                    SettingsHelpPopover(help: .usageCount)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                },
+                GalleryPane("help-archive", fixedHeight: 520, isWholePane: false) {
+                    SettingsHelpPopover(help: .diagnosticsArchive)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                },
+                GalleryPane("help-windows", fixedHeight: 620, isWholePane: false) {
+                    SettingsHelpPopover(help: SettingCopy.windows.help ?? .usageCount)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                },
             ]
         }
     }
 
     /// The menu-bar popover in each client state.
+    /// The Recovery pane, sent to a row past its window's end a moment after
+    /// it appears, as a jump from one of its own rows does.
+    private struct JumpHarness: View {
+        let steam: SteamActions
+        @State private var highlighted: SettingsAnchor?
+
+        var body: some View {
+            RecoverySettings(
+                provisioner: Fixtures.settings, compatibility: Fixtures.compatibility,
+                supervisor: Fixtures.healthySupervisor, steam: steam, highlighted: highlighted,
+            )
+            .task {
+                try? await Task.sleep(for: .seconds(1))
+                highlighted = .recoveryClearShaderCache
+            }
+        }
+    }
+
     private struct PopoverTiles: View {
         var body: some View {
             GallerySection("Menu bar popover") {
@@ -649,6 +740,77 @@
         static let storage = StorageStore(
             environment: DemoStorageEnvironment(scenario: .library),
         )
+        /// The bottle's defaults, in memory like every gallery store.
+        static let bottleDefaults = SettingsStore(scope: .bottle(SteamBottle.name))
+        /// A client that booted on another renderer, with a version changed since.
+        static let graphicsAwaitingRestart: GraphicsStore = {
+            let store = GraphicsStore(environment: DemoGraphicsEnvironment(scenario: .builtInWithToolkit))
+            let other = store.availableRenderers.first { $0 != store.selection.renderer } ?? .wined3d
+            store.stageBoot(on: other, versionsChanged: true)
+            return store
+        }()
+        /// A switch under way, and one that failed and left Steam unable to start.
+        static let switchingEngine = stagedEngine {
+            $0.stage(switching: "Downloading Dormison r14…", fraction: 0.42)
+        }
+        static let failedEngine = stagedEngine {
+            $0.stage(
+                switching: nil, failure: "The engine’s signature does not match its release.", blocksClient: true,
+            )
+        }
+
+        private static func stagedEngine(_ stage: (EngineStore) -> Void) -> EnginePane {
+            let scenario = DemoEngineEnvironment.Scenario.builtInOnly
+            let provisioner = Provisioner(
+                previewActivity: .idle,
+                detection: scenario.detection,
+                environment: DryRunSetupEnvironment(scenario: .provisioned, stepDelay: .zero, detection: scenario.detection),
+            )
+            let store = EngineStore(
+                provisioner: provisioner, supervisor: nil, environment: DemoEngineEnvironment(scenario: scenario),
+            )
+            stage(store)
+            return EnginePane(scenario: scenario, provisioner: provisioner, store: store)
+        }
+
+        /// A game the fix list set two values on, with a DLL override and a
+        /// variable of its own.
+        static let fixedGame: SettingsStore = {
+            let scope = SettingScope.game(games[0].id, bottle: SteamBottle.name)
+            var fixed = ConfigValues.empty
+            fixed.processors = 4
+            fixed.videoDecoding = .software
+            var values = fixed
+            values.dllOverrides = ["dinput8": "n,b", "version": "b"]
+            values.environment = ["DXVK_HUD": "fps", "WINEDLLOVERRIDES": "winmm=n,b"]
+            return SettingsStore(
+                scope: scope,
+                environment: InMemorySettingsEnvironment(seed: [.bottle(SteamBottle.name): .empty, scope: values]),
+                fixtureFixes: AppliedFixes(
+                    fixes: [
+                        .init(title: "Unity 5 worker threads", reason: "Unity 5 starts a busy worker for every processor."),
+                        .init(title: "Intro video", reason: "Its intro video stays blank on the hardware decoder."),
+                    ],
+                    applied: fixed, previous: .empty, date: .now,
+                ),
+            )
+        }()
+
+        /// One installation, and an install of another game under way.
+        static let hoyoInstalling: HoYoStore = {
+            let folder = URL(fileURLWithPath: "/Users/you/Games/Zenless Zone Zero")
+            return HoYoStore(
+                fixtureRows: hoyo.rows.filter { $0.installation.game == .genshin },
+                jobs: [folder.standardizedFileURL.path: HoYoStore.Job(
+                    kind: .install,
+                    progress: SophonProgress(
+                        phase: .downloading, bytesDone: 31_400_000_000, bytesTotal: 98_700_000_000,
+                        filesDone: 2811, filesTotal: 9402,
+                    ),
+                )],
+                installing: (.zenless, folder),
+            )
+        }()
         static let shaders = ShaderStore(simulated: true)
         /// Two adopted programs, so the Quick Launch group draws with rows.
         static let quickLaunch = QuickLaunchStore(simulated: [

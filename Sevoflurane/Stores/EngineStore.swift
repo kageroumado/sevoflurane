@@ -72,7 +72,20 @@ final class EngineStore {
     var activeEngine: Engine { environment.activeEngine }
     var activeBottle: String { environment.activeBottle }
 
-    /// Whether the staged pair differs from what's running.
+    // Whether the staged pair differs from what's running.
+    #if DEBUG
+        /// Puts the store where the gallery draws it: a switch under way, or
+        /// one that failed and stands.
+        func stage(switching phase: String?, fraction: Double? = nil, failure: String? = nil, blocksClient: Bool = false) {
+            isSwitching = phase != nil
+            switchPhase = phase
+            engineFetchFraction = fraction
+            switchError = failure
+            standingFailure = failure
+            clientStartIsBlocked = blocksClient
+        }
+    #endif
+
     var hasChanges: Bool {
         stagedEngine != activeEngine || stagedBottle != activeBottle
     }
@@ -227,7 +240,7 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .crossover,
                 label: String(localized: "CrossOver \(crossover.version)"),
-                detail: crossover.licensed ? "Licensed" : "Trial",
+                detail: crossover.licensed ? "Licensed." : "Trial.",
             ))
         }
         if let preview = detection.usableCrossOverPreview {
@@ -242,7 +255,7 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .managed(version: version),
                 label: Engine.managedDisplayName(version),
-                detail: "Sevoflurane's own Wine engine",
+                detail: "Sevoflurane’s own Wine engine.",
             ))
         }
         if detection.managedEngineVersions.isEmpty {
@@ -251,7 +264,7 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .managed(version: ""),
                 label: "Dormison",
-                detail: "Sevoflurane's own Wine engine. Downloads about 230 MB when you switch.",
+                detail: "Sevoflurane’s own Wine engine. Downloads about 230 MB when you switch.",
             ))
         }
         options = built

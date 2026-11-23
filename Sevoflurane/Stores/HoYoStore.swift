@@ -49,11 +49,15 @@ final class HoYoStore {
     private init() { isFixture = false }
 
     #if DEBUG
-        init(fixtureRows: [Row], jobs: [String: Job] = [:], notes: [String: String] = [:]) {
+        init(
+            fixtureRows: [Row], jobs: [String: Job] = [:], notes: [String: String] = [:],
+            installing: (game: HoYoGame, folder: URL)? = nil,
+        ) {
             isFixture = true
             rows = fixtureRows
             self.jobs = jobs
             self.notes = notes
+            self.installing = installing
         }
     #endif
 

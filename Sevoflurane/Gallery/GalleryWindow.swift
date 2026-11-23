@@ -110,7 +110,8 @@
 
         /// Each Settings pane as `pane-<name>.png`: the real window's detail
         /// width and the pane's whole height, so a row can be measured in the
-        /// column it is read in.
+        /// column it is read in. A popover's content, or a pane in a window
+        /// shorter than itself, is `view-<name>.png`.
         private static func writePanes(to directory: URL, appearance: NSAppearance?) async -> Int {
             let width = GalleryView.detailWidth
             let hosts = GalleryView.settingsPanes.map { pane in
@@ -139,7 +140,9 @@
                 guard let bitmap = entry.host.bitmapImageRepForCachingDisplay(in: rect) else { continue }
                 entry.host.cacheDisplay(in: rect, to: bitmap)
                 try? bitmap.representation(using: .png, properties: [:])?
-                    .write(to: directory.appendingPathComponent("pane-\(entry.pane.id).png"))
+                    .write(to: directory.appendingPathComponent(
+                        "\(entry.pane.isWholePane ? "pane" : "view")-\(entry.pane.id).png",
+                    ))
             }
             return hosts.count
         }

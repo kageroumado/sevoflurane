@@ -30,6 +30,15 @@ final class SettingsStore {
         appliedFixes = scope.game.flatMap { FixLedger.record(for: $0) }
     }
 
+    #if DEBUG
+        /// A game's store that holds what the fix list is said to have set,
+        /// for the gallery.
+        convenience init(scope: SettingScope, environment: any SettingsEnvironment, fixtureFixes: AppliedFixes) {
+            self.init(scope: scope, environment: environment)
+            appliedFixes = fixtureFixes
+        }
+    #endif
+
     private static func groups(for scope: SettingScope) -> [(group: SettingGroup, settings: [Setting])] {
         SettingGroup.allCases
             .map { ($0, SettingCatalog.settings(in: $0, at: scope.level, game: scope.game)) }

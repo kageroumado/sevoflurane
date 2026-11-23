@@ -39,6 +39,15 @@ final class GraphicsStore {
         return bootRenderer
     }
 
+    #if DEBUG
+        /// Puts the store where the gallery draws it: a client that booted on
+        /// another renderer, with a renderer version changed since.
+        func stageBoot(on renderer: Renderer, versionsChanged: Bool) {
+            bootRenderer = renderer
+            rendererVersionsChangedSinceBoot = versionsChanged
+        }
+    #endif
+
     /// Rereads what the running client booted with.
     private func readBootRecord() {
         let renderer = environment.bootedRenderer()
