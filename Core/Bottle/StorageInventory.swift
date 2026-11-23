@@ -78,7 +78,7 @@ nonisolated enum StorageInventory {
             ),
             Entry(
                 id: "bottle",
-                name: "Windows environment",
+                name: "Bottle",
                 detail: "The Windows drive Steam runs inside.",
                 url: bottle,
                 bytes: -1,
@@ -86,13 +86,13 @@ nonisolated enum StorageInventory {
             ),
             Entry(
                 id: "companions",
-                name: "Companion Windows",
-                detail: "A second Windows drive beside the bottle, without Steam, for HoYoverse\u{2019}s games.",
+                name: "Companion bottle",
+                detail: "A second bottle, without Steam, for HoYoverse games.",
                 // `SteamParent.root`, which the CLI does not compile.
                 url: AppIdentity.supportFolder
                     .appendingPathComponent("Companions"),
                 bytes: -1,
-                removal: .regenerated("Made again the next time one of those games starts; it asks you to sign in again."),
+                removal: .regenerated("Made again when a HoYoverse game starts; you sign in again."),
             ),
         ]
     }
@@ -104,7 +104,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "engines",
                 name: "Dormison engines",
-                detail: "Sevoflurane's own Wine engines, one folder per version.",
+                detail: "Sevoflurane’s own Wine engines, one folder per version.",
                 url: support.appendingPathComponent("Engines"),
                 bytes: -1,
                 removal: .permanent("Setup downloads one again if you need it."),
@@ -112,10 +112,10 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "renderers",
                 name: "Renderer versions",
-                detail: "DXMT and DXVK versions added beside the engine's own.",
+                detail: "DXMT and DXVK versions added beside the engine’s own.",
                 url: RendererVersions.root,
                 bytes: -1,
-                removal: .permanent("Settings › Graphics downloads or adds them again."),
+                removal: .permanent("You can download or add them again."),
             ),
             Entry(
                 id: "shaders",
@@ -123,11 +123,11 @@ nonisolated enum StorageInventory {
                 detail: "Extra upscalers downloaded for Dormison.",
                 url: ShaderPackages.root,
                 bytes: -1,
-                removal: .permanent("Settings › Graphics downloads them again."),
+                removal: .permanent("You can download them again."),
             ),
             Entry(
                 id: "toolkits",
-                name: "Apple's Game Porting Toolkit",
+                name: "Apple’s Game Porting Toolkit",
                 detail: "The DirectX 12 translator versions you added.",
                 url: support.appendingPathComponent("D3DMetal"),
                 bytes: -1,

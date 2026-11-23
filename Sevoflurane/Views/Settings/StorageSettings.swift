@@ -1,4 +1,3 @@
-import Propofol
 import SwiftUI
 
 // MARK: - Storage
@@ -12,20 +11,25 @@ struct StorageSettings: View {
 
     var body: some View {
         let breakdown = store.breakdown
-        return Form {
+        SettingsForm(highlighted: highlighted) {
             if let volume = store.volume, let breakdown {
-                Section {
-                    StorageVolumeOverview(volume: volume, breakdown: breakdown)
+                SettingsSection(
+                    title: "\(volume.name)",
+                    value: String(localized: "\(Self.size(volume.used)) of \(Self.size(volume.capacity)) used"),
+                ) {
+                    StorageVolumeOverview(breakdown: breakdown, legend: legend(of: breakdown))
                 }
             }
-            Section {
+            SettingsSection(
+                title: "Sevoflurane", value: Self.size(store.total), isWorking: store.isMeasuring,
+                footer: "Caches and downloads move to the Trash. Uninstall games in Steam.",
+            ) {
                 ForEach(store.entries) { entry in
                     let dot = breakdown?.kind(of: entry)?.color
                     if entry.id == StorageInventory.Entry.gamesID, !store.games.isEmpty {
                         row(entry, dot: dot, isExpanded: $showsGames)
                         if showsGames { gameList }
-                    } else if entry.id == StorageInventory.Entry.programsID,
-                              !store.programs.isEmpty {
+                    } else if entry.id == StorageInventory.Entry.programsID, !store.programs.isEmpty {
                         row(entry, dot: dot, isExpanded: $showsPrograms)
                         if showsPrograms { programList }
                     } else if entry.id != StorageInventory.Entry.programsID {
@@ -33,9 +37,9 @@ struct StorageSettings: View {
                     }
                 }
                 if store.needsClientRestart, let steam {
-                    ActionRow(
-                        title: "Links changed",
-                        caption: String(localized: "Restart Steam to see linked and unlinked games."),
+                    SettingsAction(
+                        title: "Linked games",
+                        caption: String(localized: "Steam shows linked and unlinked games after it restarts."),
                     ) {
                         Button("Restart Steam") {
                             store.applyPendingLinks()
@@ -45,154 +49,117 @@ struct StorageSettings: View {
                     }
                 }
                 if let error = store.problem {
-                    Text(error).font(.callout).foregroundStyle(.orange)
+                    SettingsNotice(.failure, error)
                 }
-            } header: {
-                StorageOwnTotalHeader(total: store.total, isMeasuring: store.isMeasuring)
-            } footer: {
-                Text("Caches and downloads move to the Trash. Uninstall games in Steam.")
             }
             StorageLibrariesSection(libraries: store.libraries, steam: steam)
             sharingSection
         }
-        .formStyle(.grouped)
         .task { await store.measure() }
+    }
+
+    /// The bar's segments in the order the rows list their entries, with the
+    /// group and everything else last.
+    private func legend(of breakdown: StorageBreakdown) -> [StorageBreakdown.Segment] {
+        let order = Dictionary(
+            store.entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first },
+        )
+        return breakdown.segments.enumerated()
+            .sorted { ($0.element.id.rank(in: order), $0.offset) < ($1.element.id.rank(in: order), $1.offset) }
+            .map(\.element)
     }
 
     /// Sizes as Steam accounts for them, so a row here matches what the
     /// client shows for the same game.
     private var gameList: some View {
-        VStack(spacing: 4) {
+        SettingsSublist {
             ForEach(store.games) { game in
                 gameRow(game)
             }
         }
-        .padding(.leading, Self.titleIndent)
-        .padding(.vertical, Theme.Space.xs)
     }
 
     private func gameRow(_ game: StorageInventory.Game) -> some View {
         let linked = store.linkedGames.contains(game.id)
-        return SettingsRow {
-            Text(game.name).lineLimit(1)
-            if linked {
-                Image(systemName: "link")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .help("Shared from another bottle. Only one copy is stored on disk.")
-            }
-            Spacer(minLength: Theme.Space.md)
-            Text(Self.size(game.bytes))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        } accessory: {
+        return SettingsValue(
+            title: "\(game.name)", value: Self.size(game.bytes), mark: linked ? .symbol("link") : .dot(nil),
+        ) {
             if steam != nil || linked {
-                Button {
+                SettingsAccessoryButton(
+                    symbol: linked ? "link.badge.minus" : "trash",
+                    label: linked
+                        ? String(localized: "Remove the link to \(game.name). The files stay in their own bottle.")
+                        : String(localized: "Uninstall \(game.name) through Steam. It asks first."),
+                ) {
                     if linked {
                         store.unlink(game)
                     } else {
                         steam?.uninstall(game.id)
                     }
-                } label: {
-                    Image(systemName: linked ? "link.badge.minus" : "trash")
                 }
-                .help(linked
-                    ? "Remove the link. The files stay in their own bottle."
-                    : "Uninstall through Steam. It asks first.")
-                .accessibilityLabel(linked ? "Remove the link to \(game.name)" : "Uninstall \(game.name)")
             }
         }
-        .font(.callout)
     }
 
     /// The Windows programs added by hand: what each occupies, and the one
     /// button that forgets it.
     private var programList: some View {
-        VStack(spacing: 4) {
+        SettingsSublist {
             ForEach(store.programs) { program in
-                programRow(program)
+                SettingsValue(
+                    title: "\(program.name)",
+                    value: program.isInsideBottle ? Self.size(program.bytes) : "—",
+                    caption: program.isInsideBottle
+                        ? program.path : String(localized: "\(program.path) · stays in place"),
+                    mark: .dot(nil),
+                ) {
+                    SettingsAccessoryButton(
+                        symbol: "trash",
+                        label: program.isInsideBottle
+                            ? String(localized: "Remove \(program.name) and move its installed files to the Trash")
+                            : String(localized: "Remove \(program.name) from the list. Its files remain in place."),
+                    ) {
+                        store.removeProgram(program)
+                    }
+                }
             }
         }
-        .padding(.leading, Self.titleIndent)
-        .padding(.vertical, Theme.Space.xs)
-    }
-
-    private func programRow(_ program: StorageInventory.Program) -> some View {
-        SettingsRow {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(program.name).lineLimit(1)
-                Text(program.isInsideBottle
-                    ? program.path
-                    : String(localized: "\(program.path) · stays in place"))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            Spacer(minLength: Theme.Space.md)
-            Text(program.isInsideBottle ? Self.size(program.bytes) : "—")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        } accessory: {
-            Button {
-                store.removeProgram(program)
-            } label: {
-                Image(systemName: "trash")
-            }
-            .accessibilityLabel("Remove \(program.name)")
-            .help(program.isInsideBottle
-                ? "Remove this program and move its installed files to the Trash."
-                : "Remove this program from the list. Its files remain in place.")
-        }
-        .font(.callout)
     }
 
     /// Games installed in other bottles, one Link away from playable here.
     @ViewBuilder private var sharingSection: some View {
         if !store.linkable.isEmpty || !store.pendingLinks.isEmpty {
-            Section {
+            SettingsSection(
+                title: "In your other bottles", anchor: .storageSharing,
+                footer: "A link shares another bottle\u{2019}s copy of a game. One copy on disk, no second download. Steam verifies it on first launch. Each bottle keeps its own saves.",
+            ) {
                 ForEach(store.pendingLinks) { candidate in
-                    SettingsRow(caption: String(localized: "Linked. Restart Steam to see it.")) {
-                        LabeledContent {
-                            Image(systemName: "link")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        } label: {
-                            Text(candidate.name).lineLimit(1)
-                        }
+                    SettingsAction(
+                        title: "\(candidate.name)",
+                        caption: String(localized: "Steam shows it after it restarts."),
+                    ) {
+                        SettingsStatus(.done, String(localized: "Linked"))
                     } accessory: {
-                        Button {
+                        SettingsAccessoryButton(
+                            symbol: "arrow.uturn.backward", label: String(localized: "Undo the link"),
+                        ) {
                             store.cancelPendingLink(candidate)
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward")
                         }
-                        .help("Undo the link")
-                        .accessibilityLabel("Undo the link")
                     }
                 }
                 ForEach(store.linkable) { candidate in
-                    SettingsRow(
+                    SettingsAction(
+                        title: "\(candidate.name)",
                         caption: String(localized: "In \u{201C}\(candidate.sourceBottle)\u{201D} · \(candidate.sourceEngine)"),
                     ) {
-                        LabeledContent {
-                            Text(Self.size(candidate.bytes)).monospacedDigit()
-                            Button("Link") { store.link(candidate) }
-                        } label: {
-                            Text(candidate.name).lineLimit(1)
-                        }
+                        SettingsValueText(text: Self.size(candidate.bytes))
+                        Button("Link") { store.link(candidate) }
                     }
                 }
-            } header: {
-                Text("In your other bottles")
-            } footer: {
-                Text("A link shares another bottle's copy of a game. One copy on disk, no second download. Steam verifies it on first launch. Each bottle keeps its own saves.")
             }
-            .highlightable(.storageSharing, highlighted: highlighted)
+            .highlightableSection(.storageSharing, highlighted: highlighted)
         }
     }
-
-    /// Where a row's title starts, past its dot: the edge the detail line and
-    /// the expanded lists share.
-    private static let titleIndent = StorageDot.diameter + Theme.Space.sm
 
     /// One category. `dot` is the color of the bar segment that holds the
     /// entry. A row that opens a list carries a chevron where the others
@@ -202,36 +169,30 @@ struct StorageSettings: View {
         _ entry: StorageInventory.Entry, dot: Color?, isExpanded: Binding<Bool>? = nil,
     ) -> some View {
         let name = InterfaceCopy.localized(entry.name)
-        return SettingsRow(
-            caption: InterfaceCopy.localized(entry.removal?.caution ?? entry.detail),
-            captionInset: Self.titleIndent,
+        // A dash for both "not measured yet" and "nothing there":
+        // `ByteCountFormatter` says "Zero KB", which reads like a bug.
+        return SettingsValue(
+            title: "\(name)", value: entry.bytes <= 0 ? "—" : Self.size(entry.bytes),
+            caption: InterfaceCopy.localized(entry.removal?.caution ?? entry.detail), mark: .dot(dot),
         ) {
-            StorageDot(color: dot)
-            Text(name)
-            Spacer(minLength: Theme.Space.sm)
-            // A dash for both "not measured yet" and "nothing there":
-            // `ByteCountFormatter` says "Zero KB", which reads like a bug.
-            Text(entry.bytes <= 0 ? "—" : Self.size(entry.bytes))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        } accessory: {
             if let isExpanded {
-                Button {
+                SettingsAccessoryButton(
+                    symbol: isExpanded.wrappedValue ? "chevron.down" : "chevron.right",
+                    label: isExpanded.wrappedValue
+                        ? String(localized: "Hide \(name)") : String(localized: "Show \(name)"),
+                ) {
                     withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
                 }
-                .help(isExpanded.wrappedValue ? "Hide the list" : "Show each one")
-                .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(name)" : "Show \(name)")
             } else if entry.removal != nil {
-                Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
-                    .disabled(entry.bytes <= 0)
-                    .help("Move \(name.lowercased()) to the Trash")
-                    .accessibilityLabel("Move \(name.lowercased()) to the Trash")
+                SettingsAccessoryButton(
+                    symbol: "trash", label: String(localized: "Move \(name.lowercased()) to the Trash"),
+                    isDisabled: entry.bytes <= 0,
+                ) {
+                    store.reclaim(entry)
+                }
             }
         }
-        .contentShape(Rectangle())
+        .contentShape(.rect)
         .onTapGesture {
             guard let isExpanded else { return }
             withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
@@ -250,20 +211,11 @@ struct StorageSettings: View {
     }
 }
 
-/// The header over the list of what Sevoflurane itself occupies.
-struct StorageOwnTotalHeader: View {
-    let total: Int64
-    let isMeasuring: Bool
-
-    var body: some View {
-        HStack {
-            Text("Sevoflurane")
-            Spacer()
-            if isMeasuring { ProgressView().controlSize(.small) }
-            Text(StorageSettings.size(total)).monospacedDigit().foregroundStyle(.secondary)
-        }
-        // The rows' sizes end before their accessory slot; so does their total.
-        .padding(.trailing, SettingsRowMetrics.accessoryWidth + SettingsRowMetrics.accessorySpacing)
+private extension String {
+    /// An entry's place among the rows; a segment that stands for no single
+    /// row sorts after them all.
+    func rank(in order: [String: Int]) -> Int {
+        order[self] ?? .max
     }
 }
 
@@ -277,22 +229,21 @@ private struct StorageLibrariesSection: View {
     let steam: SteamActions?
 
     var body: some View {
-        Section {
+        SettingsSection(
+            title: "Game libraries",
+            footer: "Put a library on a drive formatted as APFS or Mac OS Extended. exFAT and FAT drives have no file permissions or links, which Wine and some games rely on.",
+        ) {
             ForEach(libraries) { library in
                 StorageLibraryRow(library: library)
             }
             if let steam {
-                ActionRow(
-                    title: "Add a library",
-                    caption: String(localized: "In Steam\u{2019}s settings, under Storage."),
+                SettingsAction(
+                    title: "Another library",
+                    caption: String(localized: "Steam adds one under Storage in its settings."),
                 ) {
-                    Button("Open Steam Settings\u{2026}") { steam.openSteamSettings() }
+                    Button("Open Steam Settings") { steam.openSteamSettings() }
                 }
             }
-        } header: {
-            Text("Game libraries")
-        } footer: {
-            Text("Put a library on a drive formatted as APFS or Mac OS Extended. exFAT and FAT drives have no file permissions or links, which Wine and some games rely on.")
         }
     }
 }
@@ -301,26 +252,17 @@ private struct StorageLibraryRow: View {
     let library: StorageInventory.Library
 
     var body: some View {
-        SettingsRow(caption: warning ?? "", isWarning: true, captionInset: Self.titleIndent) {
-            Image(systemName: library.isInsideBottle ? "internaldrive" : "externaldrive")
-                .foregroundStyle(.secondary)
-                .frame(width: Self.iconWidth, alignment: .leading)
-                .accessibilityHidden(true)
-            Text(library.isInsideBottle ? InterfaceCopy.localized("Inside the bottle") : library.location)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: Theme.Space.sm)
-            Text(summary).foregroundStyle(.secondary).lineLimit(1)
-        }
+        SettingsValue(
+            title: "\(library.isInsideBottle ? String(localized: "Inside the bottle") : library.location)",
+            value: summary,
+            state: .warning(ifPresent: warning),
+            mark: .symbol(library.isInsideBottle ? "internaldrive" : "externaldrive"),
+        )
         .help(library.location)
     }
 
-    private static let iconWidth: CGFloat = 20
-    /// Where the title starts, past the drive's icon: the caption's edge too.
-    private static let titleIndent = iconWidth + SettingsRowMetrics.accessorySpacing
-
     private var summary: String {
-        var parts = [String(localized: "\(library.games) games")]
+        var parts = [library.games == 1 ? String(localized: "1 game") : String(localized: "\(library.games) games")]
         if library.bytes > 0 {
             parts.append(library.bytes.formatted(.byteCount(style: .file)))
         }
