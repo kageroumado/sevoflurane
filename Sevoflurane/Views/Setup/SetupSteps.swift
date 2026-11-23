@@ -280,7 +280,7 @@ struct SetupInstallStep: View {
 
     private var currentStage: Int {
         if provisioner.activity == .done { return Self.stages.count + 1 }
-        return provisioner.stage?.index ?? 0
+        return provisioner.stage?.rawValue ?? 0
     }
 
     private func caption(forStage index: Int) -> String? {

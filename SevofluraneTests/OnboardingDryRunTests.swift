@@ -247,4 +247,91 @@ struct OnboardingDryRunTests {
         #expect(provisioner.detection?.usableCrossOver == nil)
         #expect(provisioner.needsSetup)
     }
+
+    // MARK: - What a pass reports
+
+    @Test
+    func `a failed pass keeps its stage and the stages done before it`() async {
+        let (provisioner, env) = makeProvisioner(.freshMachine)
+        env.crossOverAppearsOnRecheck = false
+        env.engineFailure = "The Internet connection appears to be offline."
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.stage == .engine)
+        #expect(provisioner.failure?.stage == .engine)
+        #expect(provisioner.failure?.cause == "The Internet connection appears to be offline.")
+        let states = Dictionary(uniqueKeysWithValues: provisioner.reports.map { ($0.stage, $0.state) })
+        #expect(states[.rosetta] == .done)
+        #expect(states[.engine] == .failed)
+        #expect(states[.bottle] == .pending)
+        // No Steam had to be closed, so that stage is not on the list.
+        #expect(states[.steamStop] == nil)
+    }
+
+    @Test
+    func `a retry clears the failure, and a finished pass reports every stage done`() async {
+        let (provisioner, env) = makeProvisioner(.installerFails)
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.failure?.stage == .installer)
+        #expect(provisioner.passFraction < 1)
+        env.installerFailures = 0
+        await provisioner.retry()
+        #expect(provisioner.activity == .done)
+        #expect(provisioner.failure == nil)
+        #expect(provisioner.stage == nil)
+        #expect(provisioner.reports.allSatisfy { $0.state == .done })
+        #expect(provisioner.passFraction == 1)
+    }
+
+    @Test
+    func `a download that fails offline is said as one sentence with advice`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle)
+        let offline = "The Internet connection appears to be offline."
+        env.installerDownloadFailure = NSError(
+            domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet,
+            userInfo: [NSLocalizedDescriptionKey: offline, NSURLErrorFailingURLStringErrorKey: "https://example.com/SteamSetup.exe"],
+        )
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.failure == SetupFailure(stage: .installer, cause: offline, advice: SetupFailureText.networkAdvice))
+        #expect(provisioner.activity == .failed("\(offline) \(SetupFailureText.networkAdvice)"))
+    }
+
+    // MARK: - Whether the assistant opens
+
+    @Test
+    func `the assistant opens on a fresh Mac, resumes on one quit midway, and stays closed on a finished one`() async {
+        let (fresh, _) = makeProvisioner(.freshMachine)
+        await fresh.refreshDetection()
+        #expect(SetupFlow.opening(
+            needsSetup: fresh.needsSetup, assistantInProgress: fresh.environment.assistantInProgress,
+        ) == .fromWelcome)
+
+        // Steam installed, the assistant quit before its last page.
+        let (midway, midwayEnvironment) = makeProvisioner(.provisioned)
+        midwayEnvironment.assistantInProgress = true
+        await midway.refreshDetection()
+        #expect(SetupFlow.opening(
+            needsSetup: midway.needsSetup, assistantInProgress: midway.environment.assistantInProgress,
+        ) == .resumed)
+
+        // Set up by a version that stored nothing about an assistant.
+        let (updated, _) = makeProvisioner(.provisioned)
+        await updated.refreshDetection()
+        #expect(SetupFlow.opening(
+            needsSetup: updated.needsSetup, assistantInProgress: updated.environment.assistantInProgress,
+        ) == .closed)
+    }
+
+    @Test
+    func `a stored engine choice makes the fixture install the built-in engine beside CrossOver`() async {
+        let (provisioner, env) = makeProvisioner(.licensedNoBottle)
+        env.storeEngineChoice(managed: true)
+        await provisioner.refreshDetection()
+        await provisioner.provisionAndConfigure()
+        #expect(provisioner.activity == .done)
+        #expect(env.state.managedEngineVersions == ["dry-run-engine"])
+        #expect(env.usesManagedEngine)
+    }
 }

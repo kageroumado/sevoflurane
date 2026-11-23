@@ -109,10 +109,17 @@ nonisolated enum Engine: Equatable, Sendable, CustomStringConvertible {
     /// CrossOver where Steam is already set up in a CrossOver bottle, else
     /// Dormison.
     static var setupStartsOnCrossOver: Bool {
-        if let stored = Preferences.shared.string(forKey: preferenceKey) {
-            return stored.hasPrefix("crossover")
-        }
-        return SetupProbe.bottles(for: .crossover).contains { $0.name == SteamBottle.name && $0.hasSteam }
+        let usable = SetupProbe.crossoverInfo().map { $0.licensed || !$0.trialExpired } ?? false
+        return SetupFlow.startsOnCrossOver(
+            hasUsableCrossOver: usable,
+            storedChoiceIsManaged: storedChoiceIsManaged,
+            steamIsInCrossOver: SetupProbe.bottles(for: .crossover).contains { $0.name == SteamBottle.name && $0.hasSteam },
+        )
+    }
+
+    /// The stored choice's kind: the built-in engine, CrossOver, or none.
+    static var storedChoiceIsManaged: Bool? {
+        Preferences.shared.string(forKey: preferenceKey).map { $0.hasPrefix("managed") }
     }
 
     /// Moves a stored choice naming an older release or beta

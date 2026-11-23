@@ -126,9 +126,23 @@
         let isSimulation = true
         private(set) var bottleName = SetupScenario.bottleName
         let bottlesRoot = SetupScenario.bottlesRoot
-        /// The fixture's own CrossOver decides the engine stage: a simulated
-        /// machine must not follow the engine this Mac's owner chose.
-        let wantsManagedEngine = false
+        /// The engine choice stored on the fixture machine; `nil` until the
+        /// assistant stores one. A simulated machine never follows the engine
+        /// this Mac's owner chose.
+        var storedEngineIsManaged: Bool?
+        /// The fixture's own CrossOver decides the engine stage until a
+        /// choice is stored.
+        var wantsManagedEngine: Bool {
+            storedEngineIsManaged ?? false
+        }
+
+        /// The fixture's answer to the sharing question.
+        var sharesRunStats: Bool?
+        var assistantInProgress = false
+        /// Whether the fixture is an Apple silicon Mac.
+        var runsD3DMetal = true
+        /// What each of the fixture's Steams holds, by bottle name.
+        var factsByBottle: [String: SteamLibraryFacts] = [:]
 
         private(set) var state: SetupDetection
         /// Per-stage think time; tests pass `.zero`.
@@ -191,6 +205,33 @@
         func chooseBottle(named name: String) {
             log("would name \(name) the bottle this installation drives")
             bottleName = name
+        }
+
+        func storeEngineChoice(managed: Bool) {
+            log("would store the engine choice: \(managed ? "built-in" : "CrossOver")")
+            storedEngineIsManaged = managed
+        }
+
+        /// The built-in engine on a fixture with no usable CrossOver, as the
+        /// engine stage decides it.
+        var usesManagedEngine: Bool {
+            storedEngineIsManaged ?? (state.usableCrossOver == nil)
+        }
+
+        /// Every bottle under the fixture's root lives with the fixture's
+        /// engine; a bottle anywhere else is another engine's.
+        func engineIsManaged(ofBottleAt url: URL) -> Bool? {
+            url.deletingLastPathComponent().standardizedFileURL.path == bottlesRoot.standardizedFileURL.path
+                ? usesManagedEngine : nil
+        }
+
+        func libraryFacts(ofBottleAt url: URL) async -> SteamLibraryFacts {
+            factsByBottle[url.lastPathComponent] ?? SteamLibraryFacts()
+        }
+
+        func answerSharing(_ shares: Bool) {
+            log("would store the sharing answer: \(shares)")
+            sharesRunStats = shares
         }
 
         func detect() async -> SetupDetection {

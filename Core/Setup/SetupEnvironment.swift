@@ -88,6 +88,37 @@ protocol SetupEnvironment: AnyObject {
 
     func setOpenAtLogin(_ enabled: Bool) throws
     var openAtLogin: Bool { get }
+
+    // MARK: What the assistant asks, and where its answers are kept
+
+    /// The stored engine choice: the built-in engine, CrossOver, or none yet.
+    var storedEngineIsManaged: Bool? { get }
+
+    /// Stores the engine the assistant settled on and makes it the one the
+    /// stages address.
+    func storeEngineChoice(managed: Bool)
+
+    /// Whether the engine the stages address is the built-in one.
+    var usesManagedEngine: Bool { get }
+
+    /// Which engine a bottle lives with: the built-in one, CrossOver, or
+    /// (`nil`) a folder setup does not drive.
+    func engineIsManaged(ofBottleAt url: URL) -> Bool?
+
+    /// What tells the Steam in a bottle from the others.
+    func libraryFacts(ofBottleAt url: URL) async -> SteamLibraryFacts
+
+    /// Whether this Mac can run Apple's D3DMetal at all.
+    var runsD3DMetal: Bool { get }
+
+    /// The answer to the sharing question; `nil` until it is given.
+    var sharesRunStats: Bool? { get }
+    func answerSharing(_ shares: Bool)
+
+    /// Whether an assistant started on this Mac and has not finished. Set
+    /// when one opens and cleared by its last page, so a Mac with Steam
+    /// installed and nothing stored reads as finished.
+    var assistantInProgress: Bool { get set }
 }
 
 extension SetupEnvironment {
@@ -112,13 +143,53 @@ extension SetupEnvironment {
         Engine.preferenceWantsManaged
     }
 
+    var storedEngineIsManaged: Bool? {
+        Engine.storedChoiceIsManaged
+    }
+
+    func storeEngineChoice(managed: Bool) {
+        Engine.chooseAtSetup(managed: managed)
+    }
+
+    var usesManagedEngine: Bool {
+        if case .managed = Engine.active { true } else { false }
+    }
+
+    func engineIsManaged(ofBottleAt url: URL) -> Bool? {
+        let root = url.deletingLastPathComponent().standardizedFileURL.path
+        if root == Engine.managedBottlesRoot.standardizedFileURL.path { return true }
+        if root == SteamBottle.bottlesRoot.standardizedFileURL.path { return false }
+        return nil
+    }
+
+    @concurrent
+    nonisolated func libraryFacts(ofBottleAt url: URL) async -> SteamLibraryFacts {
+        SteamLibraryFacts.read(steamRoot: SteamBottle.steamRoot(inBottle: url))
+    }
+
+    var runsD3DMetal: Bool {
+        MacHardware.isAppleSilicon
+    }
+
+    var sharesRunStats: Bool? {
+        Preferences.sharesRunStats
+    }
+
+    func answerSharing(_ shares: Bool) {
+        Preferences.sharesRunStats = shares
+    }
+
     /// Nothing boots in a simulation, so nothing has to settle.
     func settleBottle(named _: String) async {}
 }
 
 nonisolated struct SetupCommandOutcome: Sendable {
     let status: Int32?
+    /// What the command printed; for a failure the app words itself, the
+    /// cause as a sentence.
     let output: String
+    /// What to do about a failure, where the failure says.
+    var advice: String?
 
     var succeeded: Bool {
         status == 0
@@ -128,8 +199,8 @@ nonisolated struct SetupCommandOutcome: Sendable {
         .init(status: 0, output: output)
     }
 
-    static func failure(_ output: String) -> Self {
-        .init(status: 1, output: output)
+    static func failure(_ output: String, advice: String? = nil) -> Self {
+        .init(status: 1, output: output, advice: advice)
     }
 }
 
@@ -172,7 +243,8 @@ final class LiveSetupEnvironment: SetupEnvironment {
             try await EngineInstaller.install(release, progress: progress)
             return .success(release.version)
         } catch {
-            return .failure("\(error)")
+            SetupLog.log("engine install failed: \(error)")
+            return .failure(SetupFailureText.sentence(error), advice: SetupFailureText.advice(error))
         }
     }
 
@@ -447,12 +519,19 @@ final class LiveSetupEnvironment: SetupEnvironment {
         let failure = await BottleDependencies.install(dependency.id) { phase in
             SetupLog.log("provision: \(dependency.name): \(phase)")
         }
-        return failure.map(SetupCommandOutcome.failure) ?? .success()
+        return failure.map { SetupCommandOutcome.failure($0) } ?? .success()
     }
 
     var openAtLogin: Bool {
         SMAppService.mainApp.status == .enabled
     }
+
+    var assistantInProgress: Bool {
+        get { Preferences.app.bool(forKey: Self.assistantInProgressKey) }
+        set { Preferences.app.set(newValue, forKey: Self.assistantInProgressKey) }
+    }
+
+    private static let assistantInProgressKey = "setupAssistantInProgress"
 
     /// Captures stdout and stderr combined, which provisioning quotes in
     /// failure messages.

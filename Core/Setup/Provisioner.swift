@@ -18,24 +18,31 @@ final class Provisioner {
         case done
     }
 
-    /// Where a run is in the fixed stage sequence, for the wizard's progress bar.
-    struct Stage: Equatable {
-        let index: Int
-    }
+    typealias Stage = SetupStage
 
     private(set) var detection: SetupDetection?
     private(set) var activity: Activity = .idle
+    /// The stage a pass is in, kept through a failure so the failed stage
+    /// can be named; `nil` before a pass and after one that succeeded.
     private(set) var stage: Stage?
+    /// Where each stage of the pass stands. A stage with no entry is pending.
+    private(set) var stageStates: [Stage: SetupStageState] = [:]
     /// Progress within the current stage (the engine download), or `nil`
     /// where none is measurable.
     private(set) var stageFraction: Double?
+    /// Bytes the current stage has received, where its total is unknown:
+    /// Steam's own download.
+    private(set) var stageBytes: Int64?
+    /// Why the last pass stopped; `nil` once another starts.
+    private(set) var failure: SetupFailure?
     /// An engine tarball the engine stage installs in place of a download.
     var engineTarball: URL?
     /// Whether this run installs the whole dependency catalog. `nil` reads
     /// ``BottleDependencies/installsEverything`` when the stage runs, because
     /// the wizard's switch is pressed after this object exists.
     var installsEveryDependency: Bool?
-    private let environment: any SetupEnvironment
+    /// What the pass acts on, and what the assistant asks about the Mac.
+    let environment: any SetupEnvironment
 
     init(environment: (any SetupEnvironment)? = nil) {
         self.environment = environment ?? LiveSetupEnvironment()
@@ -49,12 +56,51 @@ final class Provisioner {
             previewActivity: Activity,
             detection: SetupDetection? = nil,
             environment: any SetupEnvironment,
+            stage: Stage? = nil,
+            failure: SetupFailure? = nil,
         ) {
             self.init(environment: environment)
             activity = previewActivity
             self.detection = detection
+            self.stage = stage
+            self.failure = failure
+            if let stage {
+                stageStates[stage] = failure == nil ? .working(fraction: nil) : .failed
+            }
         }
     #endif
+
+    // MARK: - What a pass reports
+
+    /// The stages of the pass in order, each with its state. Closing Steam
+    /// is listed only on a pass that had to.
+    var reports: [SetupStageReport] {
+        Stage.allCases.compactMap { stage in
+            let state = stageStates[stage]
+            if stage == .steamStop, state == nil { return nil }
+            return SetupStageReport(stage: stage, state: activity == .done ? .done : state ?? .pending)
+        }
+    }
+
+    /// How far the pass is, 0 to 1: the stages done, plus the known part of
+    /// the one under way.
+    var passFraction: Double {
+        let reports = reports
+        guard !reports.isEmpty else { return 0 }
+        let done = reports.reduce(0.0) { sum, report in
+            switch report.state {
+            case .done: sum + 1
+            case let .working(fraction): sum + (fraction ?? 0)
+            case .pending, .failed: sum
+            }
+        }
+        return done / Double(reports.count)
+    }
+
+    /// What the pass is doing, in its own words; `nil` while none runs.
+    var phase: String? {
+        if case let .working(phase) = activity { phase } else { nil }
+    }
 
     /// Whether effects are simulated; the wizard badges itself so a
     /// screenshot is never mistaken for a real run.
@@ -108,19 +154,25 @@ final class Provisioner {
         named name: String,
         stoppingClient stopClient: (_ narrate: (String) -> Void) async -> String?,
     ) async -> Bool {
+        // A pass under way owns the activity; the choice moves between passes.
+        guard !isWorking else { return false }
+        failure = nil
+        stageStates = [:]
         if !environment.isSimulation, Self.choosingStopsClient(
             chosen: prefixPath(of: name),
             configured: prefixPath(of: environment.bottleName),
             booted: BootedBottle.target?.prefix.standardizedFileURL.path,
         ) {
-            activity = .working(InterfaceCopy.localized("Stopping Steam…"))
+            beginStage(.steamStop, String(localized: "Stopping Steam…"))
             SetupLog.log("provision: stopping the client before moving to bottle \(name)")
             if let refusal = await stopClient({ activity = .working(InterfaceCopy.localized($0)) }) {
-                activity = .failed(refusal)
+                fail(SetupFailure(stage: .steamStop, cause: refusal, advice: nil), saying: refusal)
                 SetupLog.log("provision: the bottle stays \(environment.bottleName) — \(refusal)")
                 return false
             }
+            stageStates[.steamStop] = .done
         }
+        stage = nil
         activity = .idle
         environment.chooseBottle(named: name)
         return true
@@ -153,30 +205,60 @@ final class Provisioner {
         let interval = PerfProbe.setup.beginInterval("Provision")
         defer { PerfProbe.setup.endInterval("Provision", interval) }
         let bottleName = environment.bottleName
+        failure = nil
+        // Closing Steam, when this pass had to, happened before it began.
+        stageStates = stageStates.filter { $0.key == .steamStop && $0.value == .done }
         do {
-            try await installRosettaIfMissing()
-            try await installEngineIfMissing()
+            try await run(.rosetta) { try await installRosettaIfMissing() }
+            try await run(.engine) { try await installEngineIfMissing() }
             // The engine stage can move the bottles root; the lease follows.
             holdBottle()
-            try await createBottleIfMissing(bottleName)
-            try await installBootstrapper(inBottle: bottleName, force: rebuildingSteam)
-            try await updateClient(inBottle: bottleName, force: rebuildingSteam)
-            try await installGameDependencies()
+            try await run(.bottle) { try await createBottleIfMissing(bottleName) }
+            try await run(.installer) { try await installBootstrapper(inBottle: bottleName, force: rebuildingSteam) }
+            try await run(.client) { try await updateClient(inBottle: bottleName, force: rebuildingSteam) }
+            try await run(.dependencies) { try await installGameDependencies() }
+            stage = nil
             activity = .done
             if !environment.isSimulation { BottleReadiness.recordProvisionSucceeded() }
             SetupLog.log("provision: Steam client present in bottle \(bottleName)")
         } catch {
-            activity = .failed("\(error)")
+            let provision = error as? ProvisionError
+            let said = provision?.description ?? SetupFailureText.sentence(error)
+            let advice = provision.map(\.advice) ?? SetupFailureText.advice(error)
+            fail(
+                SetupFailure(
+                    stage: stage, cause: provision?.cause ?? said,
+                    advice: provision.map { $0.pageAdvice ?? $0.advice } ?? advice,
+                ),
+                saying: [said, advice].compactMap(\.self).joined(separator: " "),
+            )
             if !environment.isSimulation {
                 BottleReadiness.recordProvisionFailed(
-                    "\(error)",
-                    blocksClientStart: (error as? ProvisionError)?.leavesNothingToStart ?? false,
+                    said,
+                    blocksClientStart: provision?.leavesNothingToStart ?? false,
                 )
             }
-            SetupLog.log("provision failed: \(error)")
+            SetupLog.log("provision failed: \(provision?.detail ?? "\(error)")")
         }
-        stage = nil
         stageFraction = nil
+        stageBytes = nil
+    }
+
+    /// Runs one stage of the pass and marks it done; a stage that finds its
+    /// product in place is done at once.
+    private func run(_ stage: Stage, _ body: () async throws -> Void) async throws {
+        self.stage = stage
+        stageFraction = nil
+        stageBytes = nil
+        try await body()
+        stageStates[stage] = .done
+    }
+
+    /// Ends the pass on `failure`, with `text` as what Settings shows.
+    private func fail(_ failure: SetupFailure, saying text: String) {
+        self.failure = failure
+        if let stage = failure.stage { stageStates[stage] = .failed }
+        activity = .failed(text)
     }
 
     /// Re-runs a failed pass from the stage that failed.
@@ -187,9 +269,11 @@ final class Provisioner {
         await provisionAndConfigure()
     }
 
-    private func beginStage(_ index: Int, _ phase: String) {
-        stage = Stage(index: index)
+    private func beginStage(_ stage: Stage, _ phase: String) {
+        self.stage = stage
         stageFraction = nil
+        stageBytes = nil
+        stageStates[stage] = .working(fraction: nil)
         activity = .working(InterfaceCopy.localized(phase))
     }
 
@@ -197,7 +281,7 @@ final class Provisioner {
         let all = installsEveryDependency ?? BottleDependencies.installsEverything
         for dependency in BottleDependencies.provisioned(all: all) {
             guard !environment.isDependencyInstalled(dependency) else { continue }
-            beginStage(6, String(localized: "Installing \(dependency.name)…"))
+            beginStage(.dependencies, String(localized: "Installing \(dependency.name)…"))
             let result = await environment.installDependency(dependency)
             guard result.succeeded, environment.isDependencyInstalled(dependency) else {
                 // Only a required entry ends setup; the rest can be
@@ -207,7 +291,10 @@ final class Provisioner {
                         + "\(result.output.suffix(200))")
                     continue
                 }
-                throw ProvisionError(String(localized: "\(dependency.name) installation failed: \(result.output.suffix(300))"))
+                throw ProvisionError(
+                    String(localized: "\(dependency.name) installation failed: \(result.output.suffix(300))"),
+                    cause: String(localized: "\(dependency.name) did not install."),
+                )
             }
         }
     }
@@ -215,7 +302,7 @@ final class Provisioner {
     /// The whole stack is x86_64, so nothing runs without Rosetta.
     private func installRosettaIfMissing() async throws {
         guard detection?.rosetta == false else { return }
-        beginStage(1, "Installing Rosetta…")
+        beginStage(.rosetta, "Installing Rosetta…")
         SetupLog.log("provision: installing Rosetta")
         let result = await environment.installRosetta()
         guard result.succeeded else {
@@ -223,6 +310,8 @@ final class Provisioner {
             // the error names the command an administrator can run.
             throw ProvisionError(
                 String(localized: "Rosetta install failed: \(result.output.suffix(200)). If this account isn't an administrator, run \"softwareupdate --install-rosetta --agree-to-license\" in Terminal as one, then Try Again."),
+                cause: String(localized: "macOS did not install it."),
+                pageAdvice: String(localized: "An administrator of this Mac can install it. Then try again."),
             )
         }
         await refreshDetection()
@@ -235,12 +324,14 @@ final class Provisioner {
         let managedWanted = detection.usableCrossOver == nil
             || environment.wantsManagedEngine
         if managedWanted, detection.managedEngineVersions.isEmpty {
-            beginStage(2, "Installing the game engine…")
+            beginStage(.engine, "Installing the game engine…")
             SetupLog.log("provision: installing managed engine")
             let result = await environment.installEngine(from: engineTarball, progress: engineProgress())
             guard result.succeeded else {
                 throw ProvisionError(
-                    String(localized: "engine install failed: \(result.output.suffix(200))"),
+                    String(localized: "engine install failed: \(result.output)"),
+                    cause: result.output,
+                    advice: result.advice,
                     leavesNothingToStart: true,
                 )
             }
@@ -252,7 +343,11 @@ final class Provisioner {
             Engine.active = Engine.resolve(from: refreshed)
         }
         guard self.detection?.hasEngine == true else {
-            throw ProvisionError(InterfaceCopy.localized("no usable engine after install"), leavesNothingToStart: true)
+            throw ProvisionError(
+                InterfaceCopy.localized("no usable engine after install"),
+                cause: String(localized: "It did not install."),
+                leavesNothingToStart: true,
+            )
         }
     }
 
@@ -261,17 +356,21 @@ final class Provisioner {
     /// caller decides whether to switch to it.
     func installEngine(from source: URL) async throws -> String {
         guard !isWorking else {
-            throw ProvisionError(InterfaceCopy.localized("setup is already running"))
+            let running = InterfaceCopy.localized("setup is already running")
+            throw ProvisionError(running, cause: running)
         }
-        beginStage(2, "Installing the game engine…")
+        beginStage(.engine, "Installing the game engine…")
         SetupLog.log("installing engine from \(source.path)")
         let result = await environment.installEngine(from: source, progress: engineProgress())
         stage = nil
+        stageStates = [:]
         stageFraction = nil
         activity = .idle
         await refreshDetection()
         guard result.succeeded else {
-            throw ProvisionError(String(localized: "engine install failed: \(result.output.suffix(200))"))
+            throw ProvisionError(
+                String(localized: "engine install failed: \(result.output)"), cause: result.output, advice: result.advice,
+            )
         }
         return result.output
     }
@@ -286,12 +385,15 @@ final class Provisioner {
         { [weak self] phase, fraction in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    // A report that lands after its stage ended belongs to nothing.
+                    guard let self, self.stage == .engine, self.isWorking else { return }
                     let localizedPhase = InterfaceCopy.localized(phase)
-                    if self?.activity != .working(localizedPhase) {
+                    if self.activity != .working(localizedPhase) {
                         SetupLog.log("engine install: \(phase)")
-                        self?.activity = .working(localizedPhase)
+                        self.activity = .working(localizedPhase)
                     }
-                    self?.stageFraction = fraction
+                    self.stageFraction = fraction
+                    self.stageStates[.engine] = .working(fraction: fraction)
                 }
             }
         }
@@ -306,7 +408,7 @@ final class Provisioner {
                 || environment.steamInstallerFailed(inBottle: bottleName))
         }
         if rebuilding == false { return }
-        beginStage(3, "Creating the Steam environment…")
+        beginStage(.bottle, "Creating the Steam environment…")
         if rebuilding == true {
             do {
                 let aside = try await environment.setAsideBottle(named: bottleName)
@@ -314,6 +416,7 @@ final class Provisioner {
             } catch {
                 throw ProvisionError(
                     String(localized: "could not set aside an unfinished bottle: \(error.localizedDescription)"),
+                    cause: SetupFailureText.sentence(error),
                     leavesNothingToStart: true,
                 )
             }
@@ -324,6 +427,7 @@ final class Provisioner {
         guard create.succeeded else {
             throw ProvisionError(
                 String(localized: "bottle creation failed: \(create.output.suffix(200))"),
+                cause: String(localized: "It could not be created."),
                 leavesNothingToStart: true,
             )
         }
@@ -332,6 +436,7 @@ final class Provisioner {
             SetupLog.log("provision: bottle \(bottleName) booted without its 32-bit system DLLs (syswow64)")
             throw ProvisionError(
                 String(localized: "the new bottle has no 32-bit Windows files, so the engine may be damaged"),
+                cause: String(localized: "It came out incomplete."),
                 leavesNothingToStart: true,
             )
         }
@@ -342,7 +447,7 @@ final class Provisioner {
     ) async throws {
         guard force || !steamPresent(inBottle: bottleName) else { return }
 
-        beginStage(4, "Downloading the Steam installer…")
+        beginStage(.installer, "Downloading the Steam installer…")
         SetupLog.log("provision: downloading SteamSetup.exe")
         try await environment.downloadSteamInstaller(intoBottle: bottleName)
 
@@ -358,6 +463,8 @@ final class Provisioner {
                 output.isEmpty
                     ? String(localized: "Steam installer failed (exit \(status)) without printing anything")
                     : String(localized: "Steam installer failed (exit \(status)): \(output.suffix(200))"),
+                cause: String(localized: "It stopped before it finished."),
+                pageAdvice: String(localized: "A second try starts over in a fresh folder."),
                 leavesNothingToStart: true,
             )
         }
@@ -369,7 +476,7 @@ final class Provisioner {
     private func updateClient(inBottle bottleName: String, force: Bool) async throws {
         guard force || !clientFullyUpdated(inBottle: bottleName) else { return }
         beginStage(
-            5,
+            .client,
             steamPresent(inBottle: bottleName)
                 ? "Updating Steam…"
                 : "Downloading Steam (this is the long step)…",
@@ -387,7 +494,7 @@ final class Provisioner {
             } else {
                 SetupLog.log("provision: headless client update")
             }
-            await environment.updateSteamClient(inBottle: bottleName)
+            await updateWhileCountingBytes(inBottle: bottleName)
             await refreshDetection()
             if clientFullyUpdated(inBottle: bottleName) { return }
             let payload = packagePayloadBytes(inBottle: bottleName)
@@ -399,6 +506,8 @@ final class Provisioner {
         else {
             throw ProvisionError(
                 InterfaceCopy.localized("client update finished but steamclient64.dll is missing"),
+                cause: String(localized: "The download did not finish."),
+                advice: SetupFailureText.networkAdvice,
                 leavesNothingToStart: true,
             )
         }
@@ -406,6 +515,22 @@ final class Provisioner {
         // incomplete headless pass is not a failure.
         SetupLog.log("provision: update incomplete after the headless passes — "
             + "the client applies the staged packages at first launch")
+    }
+
+    /// One headless update, with ``stageBytes`` following what lands in the
+    /// client's staging folder: the updater reports nothing, and its total
+    /// is Steam's to know.
+    private func updateWhileCountingBytes(inBottle name: String) async {
+        let counting = Task(name: "Count Steam's download") { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                let bytes = packagePayloadBytes(inBottle: name)
+                if bytes > 0, bytes != stageBytes { stageBytes = bytes }
+            }
+        }
+        await environment.updateSteamClient(inBottle: name)
+        counting.cancel()
     }
 
     private func steamExePath(inBottle name: String) -> String {
@@ -516,13 +641,31 @@ final class Provisioner {
     }
 
     private struct ProvisionError: Error, CustomStringConvertible {
+        /// What failed and why, as Settings says it and the log keeps it.
         let description: String
+        /// The cause alone, for a page that names the failed stage itself.
+        let cause: String
+        /// What to do about it, on every surface.
+        let advice: String?
+        /// What to do about it on a first-run page, where `description`
+        /// says the same to someone with a terminal.
+        let pageAdvice: String?
         /// Whether the failed stage leaves no engine, bottle or Steam, which
         /// holds the client start until a retry or the user overrides it.
         let leavesNothingToStart: Bool
 
-        init(_ description: String, leavesNothingToStart: Bool = false) {
+        var detail: String {
+            description
+        }
+
+        init(
+            _ description: String, cause: String, advice: String? = nil, pageAdvice: String? = nil,
+            leavesNothingToStart: Bool = false,
+        ) {
             self.description = description
+            self.cause = cause
+            self.advice = advice
+            self.pageAdvice = pageAdvice
             self.leavesNothingToStart = leavesNothingToStart
         }
     }

@@ -38,7 +38,7 @@ struct WizardStateTests {
         let provisioner = try await arranged("steam-engine-downloading").provisioner
         let reached = await eventually { provisioner.stageFraction == 0.42 }
         #expect(reached)
-        #expect(provisioner.stage == Provisioner.Stage(index: 2))
+        #expect(provisioner.stage == Provisioner.Stage.engine)
         #expect(provisioner.isWorking)
     }
 
@@ -57,7 +57,7 @@ struct WizardStateTests {
         let finished = await eventually { done.provisioner.activity == .done }
         #expect(finished)
         let adopting = try await arranged("steam-adopting")
-        let held = await eventually { adopting.provisioner.stage == Provisioner.Stage(index: 6) }
+        let held = await eventually { adopting.provisioner.stage == Provisioner.Stage.dependencies }
         #expect(held)
         #expect(adopting.adoptsSteam)
     }
