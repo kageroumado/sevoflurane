@@ -5,6 +5,12 @@ import Foundation
 /// (``KnownFixes/all``), then the community database's list
 /// (`GET /v1/fixes.json`, curated from "plays with fixes" reports).
 ///
+/// The list has two tiers. `fixes` apply by themselves at a game's first
+/// launch (``FixLedger``); `suggested` carry evidence and reach the user only
+/// as a finding to accept (``RunDiagnosis``). The second is its own top-level
+/// array because every released app reads `fixes` alone and applies what it
+/// finds there.
+///
 /// Applied without a click, so taken only signed: `fixes.json.sig` is a base64
 /// Ed25519 signature over the exact bytes from the pinned key
 /// (`kagerou sevostats publish-fixes`). A list whose `serial` is below the
@@ -49,20 +55,36 @@ nonisolated enum FixList {
     /// How far ahead of this Mac's clock a list may say it was issued.
     static let issuedTolerance: TimeInterval = 24 * 3600
 
-    /// Every fix, the built-in table first and winning; the cached list counts
-    /// only while it verifies.
+    /// Every fix that applies by itself, the built-in table first and winning;
+    /// the cached list counts only while it verifies.
     static var current: [KnownFix] {
+        guard let list = cached else { return KnownFixes.all }
+        return merged(builtIn: KnownFixes.all, served: list.fixes)
+    }
+
+    /// The cached list's suggested fixes, less the ones a fix that applies by
+    /// itself already covers.
+    static var suggested: [SuggestedFix] {
+        guard let list = cached else { return [] }
+        return uncovered(list.suggested, by: merged(builtIn: KnownFixes.all, served: list.fixes))
+    }
+
+    /// The cached list, while it verifies.
+    private static var cached: SignedList? {
         guard let body = try? Data(contentsOf: cacheURL),
               let signature = try? Data(contentsOf: cachedSignatureURL),
               case let .taken(list) = verdict(on: body, signature: signature, highestSerial: Preferences.fixListSerial)
-        else { return KnownFixes.all }
-        return merged(builtIn: KnownFixes.all, served: list.fixes)
+        else { return nil }
+        return list
     }
 
     struct SignedList: Equatable {
         let serial: Int
         let issued: Date
+        /// The entries that apply by themselves.
         let fixes: [KnownFix]
+        /// The entries that are only offered.
+        let suggested: [SuggestedFix]
     }
 
     enum Verdict: Equatable {
@@ -91,18 +113,88 @@ nonisolated enum FixList {
         return .taken(SignedList(
             serial: listing.serial, issued: issued,
             fixes: listing.fixes.compactMap(\.fix).filter(\.values.hasSettings),
+            suggested: listing.suggested.compactMap(\.suggestion).filter(\.fix.values.hasSettings),
         ))
     }
 
     // MARK: - Reading a served list
 
     /// The signed payload; entries that fail to decode or set nothing are
-    /// dropped one by one.
+    /// dropped one by one, and a `suggested` that is absent or unreadable is
+    /// empty.
     private struct Listing: Decodable {
         let serial: Int
         let issued: String
         let fixes: [Entry]
+        let suggested: [SuggestedEntry]
+
+        enum CodingKeys: String, CodingKey { case serial, issued, fixes, suggested }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            serial = try container.decode(Int.self, forKey: .serial)
+            issued = try container.decode(String.self, forKey: .issued)
+            fixes = try container.decode([Entry].self, forKey: .fixes)
+            suggested = (try? container.decodeIfPresent([SuggestedEntry].self, forKey: .suggested)) ?? []
+        }
     }
+
+    private struct SuggestedEntry: Decodable {
+        let suggestion: SuggestedFix?
+
+        init(from decoder: any Decoder) throws {
+            suggestion = (try? ServedSuggestion(from: decoder))?.suggestion
+        }
+    }
+
+    /// A `suggested` entry: a fix's own fields and the evidence beside them.
+    private struct ServedSuggestion: Decodable {
+        let served: Served
+        let evidence: ServedEvidence
+
+        enum CodingKeys: String, CodingKey { case evidence }
+
+        init(from decoder: any Decoder) throws {
+            served = try Served(from: decoder)
+            evidence = try decoder.container(keyedBy: CodingKeys.self).decode(ServedEvidence.self, forKey: .evidence)
+        }
+
+        var suggestion: SuggestedFix? {
+            guard let fix = served.fix, let evidence = evidence.admitted else { return nil }
+            return SuggestedFix(fix: fix, evidence: evidence)
+        }
+    }
+
+    private struct ServedEvidence: Decodable {
+        struct Side: Decodable {
+            let values: ConfigValues?
+            let runs: Int
+            let failed: Int
+
+            /// Counts that are possible: some runs, and no more failures than runs.
+            var isCounted: Bool { runs >= 1 && runs <= maximumCount && (0 ... runs).contains(failed) }
+        }
+
+        let macs: Int
+        let without: Side
+        let with: Side
+
+        /// The evidence when its counts are possible and the side without the
+        /// fix failed at least once; that side's values pass the allow-list.
+        var admitted: FixEvidence? {
+            guard (1 ... maximumCount).contains(macs), without.isCounted, with.isCounted, without.failed >= 1
+            else { return nil }
+            let before = without.values.map(FixValues.admitted).flatMap { $0.hasSettings ? $0 : nil }
+            return FixEvidence(
+                macs: macs,
+                without: FixEvidence.Side(values: before, runs: without.runs, failed: without.failed),
+                with: FixEvidence.Side(values: nil, runs: with.runs, failed: with.failed),
+            )
+        }
+    }
+
+    /// Past any count the database could hold.
+    private static let maximumCount = 10_000_000
 
     private struct Entry: Decodable {
         let fix: KnownFix?
@@ -156,6 +248,17 @@ nonisolated enum FixList {
         }
     }
 
+    /// The suggestions that still set a key no fix for the same target sets by
+    /// itself: a promoted fix replaces the suggestion it grew from.
+    static func uncovered(_ suggested: [SuggestedFix], by fixes: [KnownFix]) -> [SuggestedFix] {
+        suggested.filter { suggestion in
+            let covered = fixes
+                .filter { $0.appID == suggestion.fix.appID && $0.exePattern == suggestion.fix.exePattern }
+                .reduce(into: Set<String>()) { keys, own in keys.formUnion(own.values.fields.keys) }
+            return !suggestion.fix.values.fields.keys.allSatisfy(covered.contains)
+        }
+    }
+
     // MARK: - Fetching
 
     /// Refetches a stale or missing list, keeping it only when
@@ -203,7 +306,7 @@ nonisolated enum FixList {
             } else {
                 try? manager.removeItem(at: tagURL)
             }
-            log("fix list: serial \(list.serial) taken, \(list.fixes.count) entries")
+            log("fix list: serial \(list.serial) taken, \(list.fixes.count) entries, \(list.suggested.count) suggested")
         default:
             break
         }

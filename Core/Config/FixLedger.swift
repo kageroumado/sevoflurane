@@ -41,7 +41,8 @@ nonisolated struct AppliedFixes: Codable, Equatable, Sendable {
 /// At a game's first launch, every matching fix (``FixList``) sets the keys
 /// the game lacks, recorded in ``AppliedFixes`` for Undo. A game is decided
 /// once: the record outlives an undo, and a game with an earlier run record is
-/// left alone.
+/// left alone. A fix the user takes from a run's finding
+/// (``adopt(_:source:own:record:date:)``) joins the same record.
 nonisolated enum FixLedger {
     static let root = GameConfig.root.appendingPathComponent("fixes")
 
@@ -89,6 +90,39 @@ nonisolated enum FixLedger {
               let previous = ConfigValues(fields: before.filter { written.contains($0.key) })
         else { return nil }
         return (values, AppliedFixes(fixes: sources, applied: applied, previous: previous, date: date))
+    }
+
+    /// The game's values with `values` written over them, as the user chose
+    /// from a finding, and the record with those keys added; `nil` when the
+    /// game already holds every one. A key the record still holds keeps the
+    /// value it had before the first fix; a table gains the fix's entries.
+    static func adopt(
+        _ values: ConfigValues, source: AppliedFixes.Source, own: ConfigValues, record: AppliedFixes?,
+        date: Date = .now,
+    ) -> (values: ConfigValues, record: AppliedFixes)? {
+        var fields = own.fields
+        var applied = record?.applied.fields ?? [:]
+        var previous = record?.previous.fields ?? [:]
+        var written = false
+        for (key, value) in values.fields {
+            var wanted = value
+            if let table = fields[key] as? [String: Any], let entries = value as? [String: Any] {
+                wanted = table.merging(entries) { _, new in new }
+            }
+            guard !same(fields[key], wanted) else { continue }
+            if !same(fields[key], applied[key]) { previous[key] = fields[key] }
+            fields[key] = wanted
+            applied[key] = wanted
+            written = true
+        }
+        guard written,
+              let adopted = ConfigValues(fields: fields),
+              let nowApplied = ConfigValues(fields: applied),
+              let nowPrevious = ConfigValues(fields: previous)
+        else { return nil }
+        var sources = record?.fixes ?? []
+        if !sources.contains(source) { sources.append(source) }
+        return (adopted, AppliedFixes(fixes: sources, applied: nowApplied, previous: nowPrevious, date: date))
     }
 
     /// Puts `keys` (all when `nil`) back and drops them from the record; a key

@@ -42,6 +42,34 @@ nonisolated struct KnownFix: Equatable, Sendable, Identifiable {
     }
 }
 
+/// What other Macs' runs showed about a suggested fix: how many Macs
+/// reported, and the runs without and with its values.
+nonisolated struct FixEvidence: Equatable, Sendable {
+    struct Side: Equatable, Sendable {
+        /// The configuration these runs shared, where the list names one.
+        var values: ConfigValues?
+        var runs: Int
+        /// Runs that ended as a crash, a watchdog kill or an error exit while starting.
+        var failed: Int
+    }
+
+    var macs: Int
+    /// The runs without the fix's values.
+    var without: Side
+    /// The runs with them.
+    var with: Side
+}
+
+/// A fix the community's runs point at and nobody has promoted. It is offered
+/// after a run that ended badly, with its evidence (``RunDiagnosis``), and
+/// changes nothing until the user takes it.
+nonisolated struct SuggestedFix: Equatable, Sendable, Identifiable {
+    let fix: KnownFix
+    let evidence: FixEvidence
+
+    var id: String { fix.id }
+}
+
 /// The per-game quirk table. ``all`` is the table this app ships;
 /// ``recommended(for:exes:)`` reads it together with the community database's
 /// list (``FixList``). The report window reads the same table.

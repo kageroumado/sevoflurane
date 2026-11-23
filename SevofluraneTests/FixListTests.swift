@@ -287,6 +287,181 @@ struct FixListTests {
         FixLedger.save(planned.record, for: 1, in: root)
         #expect(FixLedger.record(for: 1, in: root) == planned.record)
     }
+
+    // MARK: - Suggested fixes
+
+    /// A list with both tiers, as the wire format in the design note spells it.
+    private static let tiered = Data("""
+    {"serial": 12, "issued": "2026-10-06T00:00:00Z", "someLaterTopLevelKey": {"a": 1},
+     "fixes": [
+      {"id": 1, "appid": 1962700, "title": "Subnautica 2", "values": {"renderer": "d3dmetal"}, "reason": "Seeded."}
+     ],
+     "suggested": [
+      {"id": 31, "appid": 4348910, "title": "Probably Stolen", "values": {"renderer": "dxmt"},
+       "reason": "Crashes on D3DMetal within minutes; sessions of hours on DXMT.", "someLaterKey": true,
+       "evidence": {"macs": 2, "laterCount": 9,
+                    "without": {"values": {"renderer": "d3dmetal"}, "runs": 15, "failed": 11},
+                    "with": {"runs": 6, "failed": 0}}},
+      {"id": 32, "exe": "game-win64-shipping.exe", "title": "Unreal", "values": {"avx": false}, "reason": "Measured.",
+       "evidence": {"macs": 3, "without": {"runs": 9, "failed": 4}, "with": {"runs": 5, "failed": 1}}},
+      {"id": 33, "appid": 7, "title": "No evidence", "values": {"avx": false}, "reason": "Why."},
+      {"id": 34, "appid": 8, "title": "More failures than runs", "values": {"avx": false}, "reason": "Why.",
+       "evidence": {"macs": 2, "without": {"runs": 3, "failed": 4}, "with": {"runs": 5, "failed": 0}}},
+      {"id": 35, "appid": 9, "title": "Never failed without it", "values": {"avx": false}, "reason": "Why.",
+       "evidence": {"macs": 2, "without": {"runs": 3, "failed": 0}, "with": {"runs": 5, "failed": 0}}},
+      {"id": 36, "appid": 10, "title": "A value this version lacks", "values": {"renderer": "metal"}, "reason": "Why.",
+       "evidence": {"macs": 2, "without": {"runs": 3, "failed": 2}, "with": {"runs": 5, "failed": 0}}},
+      {"id": 37, "appid": 11, "title": "No Mac", "values": {"avx": false}, "reason": "Why.",
+       "evidence": {"macs": 0, "without": {"runs": 3, "failed": 2}, "with": {"runs": 5, "failed": 0}}},
+      "not an entry"
+     ]}
+    """.utf8)
+
+    private static func taken(_ body: Data) throws -> FixList.SignedList {
+        guard case let .taken(list) = try verdict(body) else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        return list
+    }
+
+    @Test
+    func `a list carries suggested entries beside the ones that apply by themselves`() throws {
+        let list = try Self.taken(Self.tiered)
+        #expect(list.serial == 12)
+        #expect(list.fixes.map(\.title) == ["Subnautica 2"])
+        #expect(list.suggested.map(\.fix.title) == ["Probably Stolen", "Unreal"])
+        let first = try #require(list.suggested.first)
+        #expect(first.fix.appID == 4_348_910)
+        #expect(first.fix.values == ConfigValues(renderer: .dxmt))
+        #expect(first.evidence == FixEvidence(
+            macs: 2,
+            without: .init(values: ConfigValues(renderer: .d3dmetal), runs: 15, failed: 11),
+            with: .init(values: nil, runs: 6, failed: 0),
+        ))
+        #expect(list.suggested[1].fix.exePattern == "game-win64-shipping.exe")
+        #expect(list.suggested[1].evidence.without.values == nil)
+    }
+
+    @Test
+    func `a list without the suggested array, or with one that is no array, has none`() throws {
+        #expect(try Self.taken(Self.served).suggested.isEmpty)
+        #expect(try Self.taken(Self.served).fixes.count == 3)
+        let broken = Data(#"""
+        {"serial": 3, "issued": "2026-10-06T00:00:00Z", "suggested": {"appid": 1},
+         "fixes": [{"appid": 480, "title": "Spacewar", "values": {"avx": false}, "reason": "Why."}]}
+        """#.utf8)
+        let list = try Self.taken(broken)
+        #expect(list.suggested.isEmpty)
+        #expect(list.fixes.map(\.title) == ["Spacewar"])
+    }
+
+    /// The list's decoding as v1.1.0-beta.1 through v1.15.2 shipped it
+    /// (`Core/Config/FixList.swift`, `Listing`, `Entry`, `Served`), kept here to
+    /// show what an installed app makes of a list that carries `suggested`.
+    private struct ReleasedListing: Decodable {
+        let serial: Int
+        let issued: String
+        let fixes: [ReleasedEntry]
+    }
+
+    private struct ReleasedEntry: Decodable {
+        let fix: KnownFix?
+
+        init(from decoder: any Decoder) throws {
+            fix = (try? ReleasedServed(from: decoder))?.fix
+        }
+    }
+
+    private struct ReleasedServed: Decodable {
+        let appid: Int?
+        let exe: String?
+        let title: String
+        let values: ConfigValues
+        let reason: String
+
+        var fix: KnownFix? {
+            let exe = exe?.lowercased()
+            switch (appid, exe) {
+            case let (appid?, nil) where appid > 0 && appid <= Int(Int32.max): break
+            case let (nil, exe?) where FixValues.isValidExePattern(exe): break
+            default: return nil
+            }
+            let title = FixValues.plainLine(title, limit: 120)
+            let reason = FixValues.plainLine(reason, limit: 600)
+            guard !title.isEmpty, !reason.isEmpty else { return nil }
+            return KnownFix(
+                appID: appid, exePattern: exe, title: title, values: FixValues.admitted(values), reason: reason,
+            )
+        }
+    }
+
+    @Test
+    func `an app already installed reads the same fixes from a list with suggested entries and none of them`() throws {
+        let released = try JSONDecoder().decode(ReleasedListing.self, from: Self.tiered)
+        let fixes = released.fixes.compactMap(\.fix).filter(\.values.hasSettings)
+        #expect(released.serial == 12)
+        #expect(fixes.map(\.title) == ["Subnautica 2"])
+        #expect(try fixes == Self.taken(Self.tiered).fixes)
+        // What it would apply at a first launch of the suggested game: nothing.
+        #expect(KnownFixes.recommended(for: 4_348_910, from: FixList.merged(builtIn: [], served: fixes)).isEmpty)
+    }
+
+    @Test
+    func `a suggestion a fix for the same game already covers is dropped`() throws {
+        let suggested = try Self.taken(Self.tiered).suggested
+        let promoted = KnownFix(
+            appID: 4_348_910, exePattern: nil, title: "Probably Stolen", values: ConfigValues(renderer: .dxmt),
+            reason: "Promoted.",
+        )
+        #expect(FixList.uncovered(suggested, by: [promoted]).map(\.fix.title) == ["Unreal"])
+        let other = KnownFix(
+            appID: 4_348_910, exePattern: nil, title: "Probably Stolen", values: ConfigValues(processors: 8),
+            reason: "Another key.",
+        )
+        #expect(FixList.uncovered(suggested, by: [other]).count == 2)
+        #expect(FixList.uncovered(suggested, by: KnownFixes.all).count == 2)
+    }
+
+    @Test
+    func `a suggestion the user takes is written over the game's value and undone to it`() throws {
+        let source = AppliedFixes.Source(title: "Probably Stolen", reason: "Measured.")
+        let own = ConfigValues(renderer: .d3dmetal, processors: 4)
+        let adopted = try #require(FixLedger.adopt(
+            ConfigValues(renderer: .dxmt), source: source, own: own, record: nil,
+        ))
+        #expect(adopted.values.renderer == .dxmt)
+        #expect(adopted.values.processors == 4)
+        #expect(adopted.record.applied == ConfigValues(renderer: .dxmt))
+        #expect(adopted.record.previous == ConfigValues(renderer: .d3dmetal))
+        #expect(adopted.record.fixes == [source])
+        // Taken again, it changes nothing.
+        #expect(FixLedger.adopt(ConfigValues(renderer: .dxmt), source: source, own: adopted.values, record: adopted.record) == nil)
+        let undone = FixLedger.undo(adopted.record, own: adopted.values)
+        #expect(undone.values == own)
+        #expect(undone.record.applied == .empty)
+    }
+
+    @Test
+    func `a suggestion joins the record a first launch left and keeps what the game had before either`() throws {
+        let first = try #require(FixLedger.plan(
+            own: .empty,
+            fixes: [KnownFix(appID: 1, exePattern: nil, title: "First", values: ConfigValues(renderer: .d3dmetal), reason: "Why.")],
+        ))
+        let source = AppliedFixes.Source(title: "Second", reason: "Measured.")
+        let adopted = try #require(FixLedger.adopt(
+            ConfigValues(renderer: .dxmt, dllOverrides: ["d3d11": "n,b"]), source: source,
+            own: ConfigValues(renderer: .d3dmetal, dllOverrides: ["xinput1_3": "n"]), record: first.record,
+        ))
+        #expect(adopted.values.renderer == .dxmt)
+        #expect(adopted.values.dllOverrides == ["d3d11": "n,b", "xinput1_3": "n"])
+        #expect(adopted.record.fixes.map(\.title) == ["First", "Second"])
+        // The renderer was unset before the first fix, so undo unsets it.
+        #expect(adopted.record.previous.renderer == nil)
+        #expect(adopted.record.previous.dllOverrides == ["xinput1_3": "n"])
+        let undone = FixLedger.undo(adopted.record, own: adopted.values)
+        #expect(undone.values.renderer == nil)
+        #expect(undone.values.dllOverrides == ["xinput1_3": "n"])
+    }
 }
 
 /// Serves a list and no signature beside it, counting the requests.
