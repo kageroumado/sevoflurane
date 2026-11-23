@@ -396,7 +396,7 @@ game-process and console logs, this month's run records with the logs the
 games in them wrote for themselves, and the last two days of crash reports
 from the engine's processes. `--no-steam-logs` leaves Steam's own logs out. The Wine
 log already carries errors and exceptions for every launch; turn on Settings ›
-Engine › Log every library a game loads (`sevo bottle config wine-debug on`)
+Diagnostics › Log every library a game loads (`sevo bottle config wine-debug on`)
 only when a game fails to start and the library it could not resolve is the
 question.
 

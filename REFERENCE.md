@@ -100,7 +100,7 @@ restarts.
 
 ## Reporting a problem
 
-**Settings › About › Save Diagnostics…** saves a ZIP containing logs,
+**Settings › About › Save Diagnostics** saves a ZIP containing logs,
 a `sevo doctor` report, engine details, Steam's own logs and recent crash
 reports. Your account name, home folder paths, the Mac's name and Steam ids are
 taken out of every file in it; look through it before sharing all the same.
@@ -115,8 +115,8 @@ again" turns the question off.
 The main logs are `~/Library/Logs/Sevoflurane.log` and
 `~/Library/Logs/Sevoflurane-wine.log`. The Wine log always records errors and
 exceptions, so a game that exits on its own still leaves a trail. Settings ›
-Diagnostics sets how much a run records, and Settings › Engine › *Log every
-library a game loads* adds each library load when that is not enough.
+Diagnostics sets how much a run records, and its *Log every library a game
+loads* switch adds each library load when that is not enough.
 `sevo runs` lists what every launch ran on and how it ended, and the Reports
 window shows the same records with what each crash left behind.
 
@@ -614,13 +614,13 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
   asleep is woken in place), is sampled to `~/Library/Logs` so the wait can
   be named, and a restart that itself stalls is freed by force-quitting the
   client.
-- **Settings › Recovery**: restart or force-quit Steam, cancel stuck menus,
-  repair the helper or the bottle, reinstall the shader compiler, restart
-  Windows, clear the shader cache, rebuild Steam's environment (keeps games and
-  saves).
+- **Settings › Recovery**: restart or force quit Steam, dismiss stuck menus,
+  repair the helper or Steam's installation, install the shader compiler
+  again, restart Windows, clear the shader cache, rebuild the bottle (keeps
+  games and saves), open Wine configuration.
 - **Common problems**: a built-in guide from the error you see (missing DLL,
   black screen, boxes for text, ignored mod, black intro video, menu freeze,
-  helper that won't start) to its fix.
+  helper that won't start); each row opens the setting that fixes it.
 
 ### Community game database
 
@@ -641,7 +641,7 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
 
 ### Diagnostics
 
-- Three recording levels. Always: run record, frame-time trace, event log,
+- Three recording levels. Standard: run record, frame-time trace, event log,
   Wine errors, a report after a crash. Diagnostics adds exceptions, renderer
   logs and a report after every run. Everything adds library loads, graphics
   logs, minidumps and host samples, for one game.

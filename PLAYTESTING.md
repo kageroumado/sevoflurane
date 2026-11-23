@@ -32,7 +32,7 @@ templates ask for the subset that matters.
    happened to this one, a force quit included, and the logs stop growing with
    it. Leave it on for the whole session; the report is what reads it.
 
-   On a build without Debug mode, the manual equivalent is Settings › Engine ›
+   On a build without Debug mode, the manual equivalent is Settings › Diagnostics ›
    *Log every library a game loads* (`sevo bottle config wine-debug on`), which
    also applies at the next Steam start and has to be turned off by hand.
 
@@ -41,7 +41,7 @@ templates ask for the subset that matters.
    renderer used, and a renderer switch from the menu bar restarts
    Steam, so write the time down.
 
-4. **Note the window mode.** Settings › Engine › Picture › *Resizable windows*.
+4. **Note the window mode.** Settings › Graphics › Picture › *Resizable windows*.
    The default covers games that run in a window; a game that covers the screen
    needs *Fixed-size and full-screen* before it can be moved or resized.
 

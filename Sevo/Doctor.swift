@@ -43,7 +43,7 @@ nonisolated enum Doctor {
         let clientState = await ClientLifecycle.probeClient()
         let bottleProcesses = await ClientLifecycle.bottleProcessIDs()
         // Every report built from this is printed or pasted; the account name stops here.
-        let appStatus = Self.withoutAccount(await AppControl.status())
+        let appStatus = await Self.withoutAccount(AppControl.status())
         // Probe the app's own link port only when the daemon does not already
         // vouch for the app, so a healthy attached app costs no extra request.
         let daemonReportsAttached = (appStatus?["app"] as? String) == "running"
@@ -281,7 +281,7 @@ nonisolated enum Doctor {
                 hint: provision.blocksClientStart
                     ? "the client stays down until this is fixed — sevo setup, "
                     + "or Settings › Engine › Try Again"
-                    : "sevo setup, or Settings › Engine › Repair",
+                    : "sevo setup, or Settings › Recovery › Repair Steam",
                 provisioning: true,
             ))
         }
