@@ -44,10 +44,21 @@ final class SettingsNavigation {
         )
     }
 
-    /// Settings › Diagnostics with the steps for a useful report lit.
+    /// Settings › Diagnostics on the archive row, whose (i) holds the steps
+    /// for a useful report.
     func showReportGuide() {
-        category = .diagnostics
         searchText = ""
-        highlighted = .diagnosticsGuide
+        reveal(.diagnosticsSave)
+    }
+
+    /// Opens a row's pane and lights the row for a moment; a later reveal
+    /// owns the light.
+    func reveal(_ anchor: SettingsAnchor) {
+        category = anchor.category
+        highlighted = anchor
+        Task(name: "Clear settings highlight") {
+            try? await Task.sleep(for: SettingsMetrics.highlight)
+            if highlighted == anchor { highlighted = nil }
+        }
     }
 }
