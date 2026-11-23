@@ -1,5 +1,4 @@
 import AppKit
-import Propofol
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -15,10 +14,10 @@ struct StreamerModeSection: View {
 
     var body: some View {
         @Bindable var store = store
-        Section {
-            ToggleRow(
+        SettingsSection(title: "Streamer Mode") {
+            SettingsToggle(
                 title: "Streamer Mode",
-                caption: String(localized: "Hides your name, picture, wallet and friends in Steam\u{2019}s windows."),
+                caption: String(localized: "Hides your name, picture, wallet, and friends in Steam\u{2019}s windows."),
                 help: .streamerMode,
                 isOn: Binding(
                     get: { isOn },
@@ -29,33 +28,33 @@ struct StreamerModeSection: View {
                 ),
             )
             .highlightable(.generalStreamerMode, highlighted: highlighted)
-            SettingsRow {
-                TextField("Display name", text: $store.name, prompt: Text(verbatim: StreamerMode.defaultDisplayName))
-                    .onSubmit(commitName)
-                    .onChange(of: store.name) { store.storeName() }
+            SettingsField(
+                title: "Display name", prompt: StreamerMode.defaultDisplayName, text: $store.name,
+                onSubmit: commitName,
+            )
+            .onChange(of: store.name) { store.storeName() }
+            SettingsAction(
+                title: "Avatar",
+                caption: store.hasPicture
+                    ? String(localized: "Shown in place of your Steam avatar.")
+                    : String(localized: "A monogram of the display name."),
+                state: .failure(ifPresent: store.pictureFailure),
+            ) {
+                SettingsThumbnail(
+                    image: store.picture,
+                    letters: Monogram.letters(of: StreamerMode.resolvedName(store.name)),
+                    color: Monogram.swiftUIColor(of: StreamerMode.resolvedName(store.name)),
+                )
+                if store.hasPicture {
+                    Button("Use Monogram") {
+                        store.removePicture()
+                        pictureChanged()
+                    }
+                }
+                Button("Choose…") { choosePicture() }
             }
-            pictureRow
         }
         .onAppear { store.load() }
-    }
-
-    private var pictureRow: some View {
-        ActionRow(
-            title: "Avatar",
-            caption: store.pictureFailure ?? (store.hasPicture
-                ? String(localized: "Shown in place of your Steam avatar.")
-                : String(localized: "A monogram of the display name.")),
-            isWarning: store.pictureFailure != nil,
-        ) {
-            StreamerPicturePreview(name: StreamerMode.resolvedName(store.name), picture: store.picture)
-            if store.hasPicture {
-                Button("Use Monogram") {
-                    store.removePicture()
-                    pictureChanged()
-                }
-            }
-            Button("Choose…") { choosePicture() }
-        }
     }
 
     /// The name reaches Steam's pages with the next reload; with the mode on,
@@ -79,33 +78,6 @@ struct StreamerModeSection: View {
 
     private func pictureChanged() {
         if isOn { steam?.applyStreamerMode() }
-    }
-}
-
-/// The picture as Steam's pages will show it: the stored image, or the
-/// monogram drawn with the page's letters and color.
-private struct StreamerPicturePreview: View {
-    let name: String
-    let picture: NSImage?
-
-    /// The preview's edge in points.
-    private static let edge: CGFloat = 24
-
-    var body: some View {
-        Group {
-            if let picture {
-                Image(nsImage: picture).resizable().scaledToFill()
-            } else {
-                ZStack {
-                    Monogram.swiftUIColor(of: name)
-                    Text(verbatim: Monogram.letters(of: name))
-                        .font(.system(size: Self.edge * 0.44, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-            }
-        }
-        .frame(width: Self.edge, height: Self.edge)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 

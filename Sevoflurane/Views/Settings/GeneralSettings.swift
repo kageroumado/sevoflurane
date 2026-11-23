@@ -1,5 +1,4 @@
 import Digoxin
-import Propofol
 import SwiftUI
 
 // MARK: - General
@@ -11,41 +10,41 @@ struct GeneralSettings: View {
     let highlighted: SettingsAnchor?
     /// The supervisor to stand down before an uninstall; `nil` in previews.
     var supervisor: ClientSupervisor?
+    /// The command-line tool as installed with these assistants, for the
+    /// gallery; the Mac's own state otherwise.
+    var automationFixture: [AgentIntegration.Harness]?
 
     var body: some View {
-        Form {
-            GeneralStartupSection(
-                provisioner: provisioner, steam: steam, supervisor: supervisor, highlighted: highlighted,
-            )
-            GeneralAutomationSection(highlighted: highlighted)
+        SettingsForm(highlighted: highlighted) {
+            GeneralStartupSection(provisioner: provisioner, supervisor: supervisor, highlighted: highlighted)
+            GeneralSteamSection(steam: steam, highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             GeneralCustomStyleSection(steam: steam, highlighted: highlighted)
             StreamerModeSection(steam: steam, highlighted: highlighted)
             GeneralCommunitySection(highlighted: highlighted)
             GeneralUsageSection()
             GeneralDiscordSection(highlighted: highlighted)
+            GeneralAutomationSection(highlighted: highlighted, fixture: automationFixture)
             GeneralUninstallSection(
                 provisioner: provisioner, store: store, supervisor: supervisor,
                 highlighted: highlighted,
             )
         }
-        .formStyle(.grouped)
         .task { await store.measure() }
     }
 }
 
-// MARK: - Startup and Steam
+// MARK: - Startup
 
 private struct GeneralStartupSection: View {
     let provisioner: Provisioner
-    let steam: SteamActions?
     let supervisor: ClientSupervisor?
     let highlighted: SettingsAnchor?
     @State private var openAtLogin = false
 
     var body: some View {
-        Section {
-            ToggleRow(title: "Open at login", isOn: $openAtLogin)
+        SettingsSection(title: "Startup") {
+            SettingsToggle(title: "Open at login", isOn: $openAtLogin)
                 .onChange(of: openAtLogin) { _, enabled in
                     // Reading the machine's value in onAppear lands here too.
                     guard enabled != provisioner.openAtLogin else { return }
@@ -57,11 +56,6 @@ private struct GeneralStartupSection: View {
                 AutoRestartRow(supervisor: supervisor)
             }
             GamesFolderRow()
-            if let steam {
-                SteamSettingsRow(steam: steam)
-                    .highlightable(.generalSteamSettings, highlighted: highlighted)
-            }
-            SteamLinksRow()
         }
     }
 }
@@ -73,7 +67,7 @@ private struct GamesFolderRow: View {
     @State private var kept: Bool?
 
     var body: some View {
-        ToggleRow(
+        SettingsToggle(
             title: "Games folder in the Dock",
             caption: String(localized: "Every game that has run, the last played on top."),
             help: .gamesFolder,
@@ -109,7 +103,7 @@ private struct AutoRestartRow: View {
     let supervisor: ClientSupervisor
 
     var body: some View {
-        ToggleRow(
+        SettingsToggle(
             title: "Auto-restart Steam",
             caption: String(localized: "When Steam crashes or stops responding."),
             isOn: Binding(
@@ -120,26 +114,41 @@ private struct AutoRestartRow: View {
     }
 }
 
-private struct SteamSettingsRow: View {
-    let steam: SteamActions
+// MARK: - Steam
+
+private struct GeneralSteamSection: View {
+    let steam: SteamActions?
+    let highlighted: SettingsAnchor?
 
     var body: some View {
-        ActionRow(
-            title: "Steam settings",
-            caption: String(localized: "Downloads, controllers, and the Steam interface."),
-        ) {
-            Button("Open…") { steam.openSteamSettings() }
+        SettingsSection(title: "Steam") {
+            if let steam {
+                SettingsAction(
+                    title: "Steam settings",
+                    caption: String(localized: "Downloads, controllers, and the Steam interface."),
+                ) {
+                    Button("Open Steam Settings") { steam.openSteamSettings() }
+                }
+                .highlightable(.generalSteamSettings, highlighted: highlighted)
+            }
+            SteamLinksRow()
+                .highlightable(.generalSteamLinks, highlighted: highlighted)
         }
     }
 }
 
+/// Which app macOS opens a `steam://` link with. macOS has a way to take the
+/// links and none to give them back, so the row is a button, and a state once
+/// they come here.
 private struct SteamLinksRow: View {
     @State private var steamLinksComeHere = SteamLinks.comeHere
 
     var body: some View {
-        ActionRow(title: "Steam links", caption: caption) {
-            if !steamLinksComeHere {
-                Button("Open Them Here") {
+        SettingsAction(title: "Steam links", caption: caption) {
+            if steamLinksComeHere {
+                SettingsStatus(.done, String(localized: "Open in Sevoflurane"))
+            } else {
+                Button("Open Steam Links in Sevoflurane") {
                     Task(name: "Claim steam links") { steamLinksComeHere = await SteamLinks.claim() }
                 }
             }
@@ -148,161 +157,8 @@ private struct SteamLinksRow: View {
 
     private var caption: String {
         steamLinksComeHere
-            ? InterfaceCopy.localized("Install buttons and invitations on the web open here.")
+            ? String(localized: "Install buttons and invitations on the web.")
             : String(localized: "Install buttons and invitations on the web open in \(SteamLinks.handlerName ?? String(localized: "another app")).")
-    }
-}
-
-// MARK: - Automation
-
-private struct AgentRow: Identifiable {
-    let harness: AgentIntegration.Harness
-    var registered: Bool
-    var busy = false
-    var error: String?
-    var id: String {
-        harness.id
-    }
-}
-
-/// The command-line tool and, once installed, the assistants that can reach
-/// Steam through it.
-private struct GeneralAutomationSection: View {
-    let highlighted: SettingsAnchor?
-    @State private var cliInstalled = false
-    @State private var agents: [AgentRow] = []
-
-    var body: some View {
-        Section {
-            CommandLineToolRow(installed: $cliInstalled, finished: refreshAgents)
-                .highlightable(.generalCli, highlighted: highlighted)
-                .task {
-                    cliInstalled = AgentIntegration.isCLIInstalled
-                    await refreshAgents()
-                }
-            if cliInstalled {
-                if agents.isEmpty {
-                    Text("No supported AI assistant is installed.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach($agents) { $row in
-                        AgentToggleRow(row: $row)
-                            .highlightable(.generalAgents, highlighted: highlighted)
-                    }
-                }
-                ManualCommandRow()
-            }
-        } header: {
-            Text("Automation")
-        } footer: {
-            if cliInstalled {
-                Text("Allow each assistant to control Steam through MCP.")
-            }
-        }
-    }
-
-    private func refreshAgents() async {
-        var rows: [AgentRow] = []
-        for harness in AgentIntegration.detectedHarnesses {
-            await rows.append(AgentRow(harness: harness, registered: AgentIntegration.isRegistered(harness)))
-        }
-        agents = rows
-    }
-}
-
-private struct CommandLineToolRow: View {
-    @Binding var installed: Bool
-    /// Runs after an install or a removal, whatever its outcome.
-    let finished: () async -> Void
-    @State private var busy = false
-    @State private var error: String?
-
-    var body: some View {
-        ActionRow(title: "Command-line tool", caption: error ?? caption, isWarning: error != nil) {
-            if busy {
-                ProgressView().controlSize(.small)
-            }
-            Button(installed ? "Remove" : "Install…") {
-                busy = true
-                Task(name: installed ? "Remove the command-line tool" : "Install the command-line tool") {
-                    if installed {
-                        await AgentIntegration.remove()
-                        error = nil
-                    } else {
-                        error = await AgentIntegration.installCLI()
-                    }
-                    installed = AgentIntegration.isCLIInstalled
-                    await finished()
-                    busy = false
-                }
-            }
-            .disabled(busy)
-        }
-    }
-
-    private var caption: String {
-        installed
-            ? String(localized: "Installed at /usr/local/bin/sevo.")
-            : String(localized: "The sevo command for Terminal and MCP. Asks for an administrator password.")
-    }
-}
-
-private struct AgentToggleRow: View {
-    @Binding var row: AgentRow
-
-    var body: some View {
-        SettingsRow(caption: row.error ?? "", isWarning: true) {
-            LabeledContent {
-                if row.busy {
-                    ProgressView().controlSize(.small)
-                }
-                Toggle(row.harness.displayName, isOn: Binding(
-                    get: { row.registered },
-                    set: { enabled in flip(to: enabled) },
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .disabled(row.busy)
-            } label: {
-                Text(row.harness.displayName)
-                    .help(row.harness.configDescription)
-            }
-        }
-    }
-
-    private func flip(to enabled: Bool) {
-        row.busy = true
-        row.error = nil
-        let harness = row.harness
-        Task(name: "\(enabled ? "Connect" : "Disconnect") \(harness.displayName)") {
-            let failure = enabled
-                ? await AgentIntegration.register(harness)
-                : await AgentIntegration.unregister(harness)
-            row.error = failure
-            row.registered = await AgentIntegration.isRegistered(harness)
-            row.busy = false
-        }
-    }
-}
-
-/// The command for any other MCP assistant, ready to paste.
-private struct ManualCommandRow: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Other MCP assistants")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .top, spacing: Theme.Space.sm) {
-                Text(AgentIntegration.manualCommand)
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                CopyButton(text: AgentIntegration.manualCommand)
-            }
-            .padding(Theme.Space.sm)
-            .background(.quaternary.opacity(0.6), in: Theme.innerShape)
-        }
     }
 }
 
@@ -315,8 +171,8 @@ private struct GeneralSteamPagesSection: View {
     @State private var offersSteamForMac = false
 
     var body: some View {
-        Section {
-            ToggleRow(
+        SettingsSection(title: "Steam pages") {
+            SettingsToggle(
                 title: "Mac compatibility strip",
                 caption: String(localized: "Game pages show how each game runs on a Mac."),
                 help: .compatibilityStrip,
@@ -331,9 +187,9 @@ private struct GeneralSteamPagesSection: View {
             .highlightable(.generalCompatStrip, highlighted: highlighted)
             .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
             if Engine.running.supportsSteamPlayMacOS {
-                ToggleRow(
+                SettingsToggle(
                     title: "Steam for Mac",
-                    caption: String(localized: "Offers Valve's Steam for Mac for a game's macOS version."),
+                    caption: String(localized: "Offers Valve\u{2019}s Steam for Mac for a game\u{2019}s macOS version."),
                     help: .steamForMac,
                     isOn: $offersSteamForMac,
                 )
@@ -345,8 +201,6 @@ private struct GeneralSteamPagesSection: View {
                 }
                 .onAppear { offersSteamForMac = Preferences.offersSteamForMac }
             }
-        } header: {
-            Text("Steam pages")
         }
     }
 }
@@ -362,8 +216,8 @@ private struct GeneralCustomStyleSection: View {
     @State private var folderFailure: String?
 
     var body: some View {
-        Section {
-            ToggleRow(
+        SettingsSection(title: "Custom style") {
+            SettingsToggle(
                 title: "Style Steam with CSS",
                 caption: String(localized: "CSS files in the Styles folder restyle Steam\u{2019}s windows."),
                 help: .customStyle,
@@ -376,18 +230,16 @@ private struct GeneralCustomStyleSection: View {
                 steam?.applyUserStyles()
             }
             .highlightable(.generalCustomStyle, highlighted: highlighted)
-            ToggleRow(title: "Also style store and community pages", isOn: $onWebPages)
+            SettingsToggle(title: "Also style store and community pages", isOn: $onWebPages)
                 .disabled(!isOn)
                 .onChange(of: onWebPages) { _, enabled in
                     guard enabled != Preferences.userStylesOnWebPages else { return }
                     Preferences.userStylesOnWebPages = enabled
                     steam?.applyUserStyles()
                 }
-            ActionRow(title: "Styles folder", caption: folderFailure ?? "", isWarning: true) {
+            SettingsAction(title: "Styles folder", state: .failure(ifPresent: folderFailure)) {
                 Button("Show in Finder") { openFolder() }
             }
-        } header: {
-            Text("Custom style")
         }
         .onAppear {
             isOn = Preferences.userStyles
@@ -418,8 +270,8 @@ private struct GeneralCommunitySection: View {
     @State private var deleteFailure: String?
 
     var body: some View {
-        Section {
-            ToggleRow(
+        SettingsSection(title: "Community") {
+            SettingsToggle(
                 title: "Share run statistics",
                 caption: sentLine
                     ?? String(localized: "Each closed game\u{2019}s frame rate and settings go to the public game database."),
@@ -436,15 +288,14 @@ private struct GeneralCommunitySection: View {
                 }
             }
             .highlightable(.generalShareRuns, highlighted: highlighted)
-            SettingsRow { SharedRunPreview() }
+            SettingsDisclosure(title: "Exactly what is sent") {
+                SettingsCodeBlock(text: SharedRunPreview.json)
+            }
             if state.registered != nil || state.sentRuns > 0 {
-                SettingsRow(caption: deleteFailure ?? "", isWarning: true) {
-                    Spacer()
-                    Button("Delete What I Shared\u{2026}") { isConfirmingDelete = true }
+                SettingsAction(title: "Shared runs", state: .failure(ifPresent: deleteFailure)) {
+                    Button("Delete What I Shared…") { isConfirmingDelete = true }
                 }
             }
-        } header: {
-            Text("Community")
         }
         .onAppear(perform: reload)
         .confirmationDialog(
@@ -491,18 +342,16 @@ private struct GeneralUsageSection: View {
     @State private var status: DigoxinStatus = .off
 
     var body: some View {
-        Section {
-            HelpedRow(
-                caption: statusLine
-                    ?? String(localized: "One anonymous check-in on each day you use Sevoflurane."),
+        SettingsSection(title: "Usage count") {
+            SettingsPicker(
+                title: "Count this Mac",
+                caption: statusLine ?? String(localized: "One anonymous check-in on each day you use Sevoflurane."),
                 help: .usageCount,
+                selection: $tier,
             ) {
-                Picker("Count this Mac", selection: $tier) {
-                    Text("Off").tag(ConsentTier.off)
-                    Text("Counting").tag(ConsentTier.counting)
-                    Text("Counting and crash reports").tag(ConsentTier.crashReports)
-                }
-                .endsOnControlLine()
+                Text("Off").tag(ConsentTier.off)
+                Text("Counting").tag(ConsentTier.counting)
+                Text("Counting and crash reports").tag(ConsentTier.crashReports)
             }
             .onChange(of: tier) { _, tier in
                 // Reading the preference in onAppear lands here too.
@@ -510,8 +359,6 @@ private struct GeneralUsageSection: View {
                 UsageCounting.choose(tier)
                 Task { await refreshStatus() }
             }
-        } header: {
-            Text("Usage count")
         }
         .task {
             tier = Preferences.usageCounting ?? .off
@@ -547,24 +394,12 @@ private struct GeneralDiscordSection: View {
     }
 
     var body: some View {
-        Section {
-            ToggleRow(
-                title: "Discord presence in games",
-                caption: InterfaceCopy.localized(hasDiscordBridge
-                    ? "Games with their own Discord support show their status. Restart Steam to apply a change."
-                    : "Only the built-in engine includes the Discord relay. Select it in Engine settings."),
-                isOn: $discordBridge,
-            )
-            .disabled(!hasDiscordBridge)
-            .onChange(of: discordBridge) { _, enabled in
-                Preferences.discordBridge = enabled
-            }
-            .highlightable(.generalDiscordBridge, highlighted: highlighted)
-            .onAppear {
-                discordBridge = Preferences.discordBridge
-                discordPresence = Preferences.discordPresence
-            }
-            ToggleRow(
+        SettingsSection(
+            title: "Discord",
+            footer: "A game\u{2019}s own presence comes through a relay in the bottle.",
+            reach: .clientRestart,
+        ) {
+            SettingsToggle(
                 title: "Show what you play in Discord",
                 caption: String(localized: "Each game under its own name and box art."),
                 isOn: $discordPresence,
@@ -573,8 +408,152 @@ private struct GeneralDiscordSection: View {
                 Preferences.discordPresence = enabled
             }
             .highlightable(.generalDiscordPresence, highlighted: highlighted)
-        } header: {
-            Text("Discord")
+            SettingsToggle(
+                title: "Discord presence in games",
+                caption: hasDiscordBridge
+                    ? String(localized: "Games with their own Discord support show their status.")
+                    : String(localized: "Only the built-in engine includes the Discord relay."),
+                isOn: $discordBridge,
+            )
+            .disabled(!hasDiscordBridge)
+            .onChange(of: discordBridge) { _, enabled in
+                Preferences.discordBridge = enabled
+            }
+            .highlightable(.generalDiscordBridge, highlighted: highlighted)
+        }
+        .onAppear {
+            discordBridge = Preferences.discordBridge
+            discordPresence = Preferences.discordPresence
+        }
+    }
+}
+
+// MARK: - Automation
+
+private struct AgentRow: Identifiable {
+    let harness: AgentIntegration.Harness
+    var registered: Bool
+    var busy = false
+    var error: String?
+    var id: String {
+        harness.id
+    }
+}
+
+/// The command-line tool and, once installed, the assistants that can reach
+/// Steam through it.
+private struct GeneralAutomationSection: View {
+    let highlighted: SettingsAnchor?
+    let fixture: [AgentIntegration.Harness]?
+    @State private var cliInstalled = false
+    @State private var agents: [AgentRow] = []
+
+    var body: some View {
+        SettingsSection(
+            title: "Automation",
+            footer: cliInstalled ? "Allow each assistant to control Steam through MCP." : nil,
+        ) {
+            CommandLineToolRow(installed: $cliInstalled, finished: refreshAgents)
+                .highlightable(.generalCli, highlighted: highlighted)
+                .task {
+                    if let fixture {
+                        cliInstalled = true
+                        agents = fixture.enumerated().map { AgentRow(harness: $1, registered: $0 == 0) }
+                    } else {
+                        cliInstalled = AgentIntegration.isCLIInstalled
+                        await refreshAgents()
+                    }
+                }
+            if cliInstalled {
+                if agents.isEmpty {
+                    SettingsMessage(text: "No supported AI assistant is installed.")
+                } else {
+                    ForEach($agents) { $row in
+                        AgentToggleRow(row: $row)
+                            .highlightable(
+                                .generalAgents, highlighted: highlighted,
+                                isScrollTarget: row.id == agents.first?.id,
+                            )
+                    }
+                }
+                SettingsCode(title: "Other MCP assistants", code: AgentIntegration.manualCommand)
+            }
+        }
+    }
+
+    private func refreshAgents() async {
+        var rows: [AgentRow] = []
+        for harness in AgentIntegration.detectedHarnesses {
+            await rows.append(AgentRow(harness: harness, registered: AgentIntegration.isRegistered(harness)))
+        }
+        agents = rows
+    }
+}
+
+private struct CommandLineToolRow: View {
+    @Binding var installed: Bool
+    /// Runs after an install or a removal, whatever its outcome.
+    let finished: () async -> Void
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        SettingsAction(
+            title: "Command-line tool", caption: caption, state: .failure(ifPresent: error), isWorking: busy,
+        ) {
+            Button(installed ? "Remove Tool" : "Install Tool…") {
+                busy = true
+                Task(name: installed ? "Remove the command-line tool" : "Install the command-line tool") {
+                    if installed {
+                        await AgentIntegration.remove()
+                        error = nil
+                    } else {
+                        error = await AgentIntegration.installCLI()
+                    }
+                    installed = AgentIntegration.isCLIInstalled
+                    await finished()
+                    busy = false
+                }
+            }
+            .disabled(busy)
+        }
+    }
+
+    private var caption: String {
+        installed
+            ? String(localized: "Installed at /usr/local/bin/sevo.")
+            : String(localized: "The sevo command for Terminal and MCP. Asks for an administrator password.")
+    }
+}
+
+private struct AgentToggleRow: View {
+    @Binding var row: AgentRow
+
+    var body: some View {
+        SettingsToggle(
+            title: "\(row.harness.displayName)",
+            state: .failure(ifPresent: row.error),
+            isWorking: row.busy,
+            isOn: Binding(
+                get: { row.registered },
+                set: { enabled in flip(to: enabled) },
+            ),
+        )
+        .disabled(row.busy)
+        .help(row.harness.configDescription)
+    }
+
+    private func flip(to enabled: Bool) {
+        row.busy = true
+        row.error = nil
+        let harness = row.harness
+        Task(name: "\(enabled ? "Connect" : "Disconnect") \(harness.displayName)") {
+            let failure = enabled
+                ? await AgentIntegration.register(harness)
+                : await AgentIntegration.unregister(harness)
+            row.error = failure
+            row.registered = await AgentIntegration.isRegistered(harness)
+            row.busy = false
         }
     }
 }
@@ -589,12 +568,12 @@ private struct GeneralUninstallSection: View {
     @State private var confirmingUninstall = false
 
     var body: some View {
-        Section {
-            ActionRow(
-                title: "Uninstall Sevoflurane",
-                caption: String(localized: "Removes the app, its engines and toolkits. Removing games is your choice."),
+        SettingsSection(title: "Uninstall") {
+            SettingsAction(
+                title: "Sevoflurane",
+                caption: String(localized: "Removes the app, its engines, and toolkits. Removing games is your choice."),
             ) {
-                Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
+                Button("Uninstall Sevoflurane…", role: .destructive) { confirmingUninstall = true }
                     .disabled(store.isUninstalling)
             }
             .highlightable(.generalUninstall, highlighted: highlighted)
@@ -631,29 +610,5 @@ private struct GeneralUninstallSection: View {
             )
             NSApp.terminate(nil)
         }
-    }
-}
-
-/// A copy button that shows a checkmark for a moment after copying.
-private struct CopyButton: View {
-    let text: String
-    @State private var copied = false
-
-    var body: some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
-            Task {
-                try? await Task.sleep(for: .seconds(1.5))
-                withAnimation(.easeInOut(duration: 0.3)) { copied = false }
-            }
-        } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .foregroundStyle(copied ? Color.green : Color.secondary)
-        }
-        .buttonStyle(.borderless)
-        .help("Copy")
-        .accessibilityLabel("Copy")
     }
 }
