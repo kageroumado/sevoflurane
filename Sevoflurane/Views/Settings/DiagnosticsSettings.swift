@@ -30,21 +30,18 @@ struct DiagnosticsSettings: View {
 
     private var levelSection: some View {
         Section {
-            Picker("Record", selection: levelBinding) {
-                ForEach(DiagnosticLevel.allCases, id: \.self) { level in
-                    Text(level.title).tag(level)
+            HelpedRow(caption: level.caption, help: Self.levelHelp) {
+                Picker("Record", selection: levelBinding) {
+                    ForEach(DiagnosticLevel.allCases, id: \.self) { level in
+                        Text(level.title).tag(level)
+                    }
                 }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
             .highlightable(.diagnosticsLevel, highlighted: highlighted)
-            Text(level.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            LabeledContent("Wine channels") {
+            ActionRow(title: "Wine channels") {
                 Text(level.channels())
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .font(.callout.monospaced())
             }
             DebugModeRow()
                 .highlightable(.diagnosticsDebugMode, highlighted: highlighted)
@@ -54,6 +51,13 @@ struct DiagnosticsSettings: View {
             Text("A level reaches each game the next time it is launched. Debug mode reaches Steam when Steam restarts, and ends when Sevoflurane quits.")
         }
     }
+
+    /// Each level in full, behind the Record row's (i).
+    private static let levelHelp = SettingHelp(
+        title: "How much a run records",
+        summary: "Each level adds to the one before it and costs more speed and disk.",
+        entries: DiagnosticLevel.allCases.map { .init(name: $0.title, text: $0.detail) },
+    )
 
     private var levelBinding: Binding<DiagnosticLevel> {
         Binding(get: { store.level }, set: { store.setLevel($0) })
@@ -87,7 +91,7 @@ struct DiagnosticsSettings: View {
     private static let guide: [LocalizedStringResource] = [
         "Set Record to Diagnostics before you launch the game.",
         "After the game loads, play for at least a minute in an area you can return to.",
-        "To test a setting, change one value at a time and play the same area twice with each value.",
+        "To test a setting, change one value and play the same area twice with each.",
         "When the problem occurs, save a diagnostics archive below.",
         "Set Record back to Off when you are done.",
     ]
@@ -96,15 +100,7 @@ struct DiagnosticsSettings: View {
 
     private var reportsSection: some View {
         Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Run reports")
-                    Text(reportsDetail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
+            ActionRow(title: "Run reports", caption: reportsDetail) {
                 Button("Show in Finder") { store.revealReports() }
                 if let showReports {
                     Button("Open…") { showReports() }
@@ -133,15 +129,17 @@ struct DiagnosticsSettings: View {
     private var capsSection: some View {
         Section {
             ForEach(Self.caps, id: \.what) { cap in
-                LabeledContent(InterfaceCopy.localized(cap.what)) {
-                    Text(InterfaceCopy.localized(cap.limit)).foregroundStyle(.secondary)
+                SettingsRow {
+                    LabeledContent(InterfaceCopy.localized(cap.what)) {
+                        Text(InterfaceCopy.localized(cap.limit))
+                    }
                 }
             }
             .highlightable(.diagnosticsCaps, highlighted: highlighted)
         } header: {
             Text("Storage limits")
         } footer: {
-            Text("Every one of these is enforced as it is written: the oldest goes first, and nothing here can grow without a bound.")
+            Text("Each limit is enforced as files are written; the oldest goes first.")
         }
     }
 
@@ -182,6 +180,7 @@ private struct DebugModeRow: View {
                 set: { DebugModeSwitch.shared.set($0) },
             ))
             .toggleStyle(.switch)
+            .accessibilityLabel("Debug mode")
         }
     }
 }
@@ -190,15 +189,12 @@ private struct SaveDiagnosticsRow: View {
     @State private var error: String?
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Diagnostics archive")
-                Text(error ?? String(localized: "Logs, system details and recent crashes in a ZIP on your Desktop, with your name, paths and Steam ids taken out."))
-                    .font(.caption)
-                    .foregroundStyle(error == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
+        ActionRow(
+            title: "Diagnostics archive",
+            caption: error ?? String(localized: "Logs, system details and recent crashes in a ZIP on your Desktop."),
+            isWarning: error != nil,
+            help: .diagnosticsArchive,
+        ) {
             SaveDiagnosticsButton(title: "Save…", error: $error)
         }
     }

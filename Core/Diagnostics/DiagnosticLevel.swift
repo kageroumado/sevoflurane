@@ -102,6 +102,16 @@ nonisolated enum DiagnosticLevel: Int, CaseIterable, Codable, Sendable, Comparab
         return InterfaceCopy.localized(value)
     }
 
+    /// The level in one line, for the row under the picker.
+    var caption: String {
+        let value = switch self {
+        case .zero: "Each game's run is recorded, and a crash collects its reports."
+        case .one: "Adds Wine's exceptions, each renderer's log and a report after every run."
+        case .two: "Adds every library load and whole crash dumps. Turns off after the next game."
+        }
+        return InterfaceCopy.localized(value)
+    }
+
     var detail: String {
         let value = switch self {
         case .zero:

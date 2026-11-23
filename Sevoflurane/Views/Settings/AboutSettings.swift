@@ -50,15 +50,12 @@ struct AboutSettings: View {
             }
             .controlSize(.small)
             .padding(.top, 6)
-            Text("Saves logs, system details, and recent crash reports in a ZIP file on your Desktop. Your name, file paths, and Steam IDs are removed.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(diagnosticsError
+                ?? String(localized: "Diagnostics go in a ZIP on your Desktop, with your name and file paths removed."))
+                .font(.callout)
+                .foregroundStyle(diagnosticsError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 380)
-            if let diagnosticsError {
-                Text(diagnosticsError).font(.caption).foregroundStyle(.red)
-            }
         }
         .highlightable(.aboutVersion, highlighted: highlighted)
         .padding(.vertical, 28)
