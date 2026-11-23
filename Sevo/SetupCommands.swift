@@ -15,7 +15,7 @@ struct SetupCommand: AsyncParsableCommand {
 
     @Option(
         name: .customLong("engine"),
-        help: "builtin | crossover. Default: CrossOver when usable, else built-in.",
+        help: "builtin | crossover. Default: as the app's assistant starts: the stored choice, else CrossOver where Steam already sits in a CrossOver bottle, else built-in.",
     ) var engine: String?
     @Option(
         name: .customLong("manifest"),
@@ -42,6 +42,11 @@ struct SetupCommand: AsyncParsableCommand {
             throw SevoExit.failed
         }
         Engine.active = try resolveEngine(from: detection)
+        // With nothing to set up the engine in use stands. A Mac that needs
+        // setup and was given no engine takes the assistant's default.
+        if engine == nil, provisioner.needsSetup {
+            Engine.chooseAtSetup(managed: !Engine.setupStartsOnCrossOver)
+        }
         guard provisioner.needsSetup else {
             print("already provisioned — engine \(Engine.active.description), "
                 + "Steam in bottle '\(SteamBottle.name)'")

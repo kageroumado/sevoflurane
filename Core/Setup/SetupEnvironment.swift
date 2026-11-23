@@ -176,7 +176,7 @@ extension SetupEnvironment {
     }
 
     func answerSharing(_ shares: Bool) {
-        Preferences.sharesRunStats = shares
+        SharingConsent.store(shares)
     }
 
     /// Nothing boots in a simulation, so nothing has to settle.

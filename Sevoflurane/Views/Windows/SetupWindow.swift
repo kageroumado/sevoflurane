@@ -2,26 +2,32 @@ import AppKit
 import SwiftUI
 
 /// The setup assistant's window, until its finish button runs. Closing it
-/// keeps the wizard's place, and the popover, the Dock icon and
+/// keeps the assistant's place, and the popover, the Dock icon and
 /// ``AppDelegate``'s reopen bring it back; it must stay reachable, since the
 /// client's windows are held until the finish (``SteamWebHost/holdWindows()``).
 @MainActor
 @Observable
 final class SetupWindow {
-    /// Whether setup has started and not finished, on screen or closed.
-    private(set) var isUnfinished = false
+    /// The assistant that has started and not finished, on screen or closed.
+    /// The popover reads how its work stands from it.
+    private(set) var store: SetupStore?
 
+    /// Whether setup has started and not finished.
+    var isUnfinished: Bool {
+        store != nil || isStagedUnfinished
+    }
+
+    private var isStagedUnfinished = false
     @ObservationIgnored private var window: NSWindow?
     @ObservationIgnored private var closeObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var heightFollower: Task<Void, Never>?
 
-    /// Opens the wizard in a new window, replacing any earlier one.
-    func present(_ view: SetupView) {
+    /// Opens the assistant in a new window, replacing any earlier one.
+    func present(_ store: SetupStore) {
         finish()
-        var view = view
-        view.resizeWindow = { [weak self] tall in self?.resize(tall: tall) }
-        let controller = NSHostingController(rootView: view)
+        let controller = NSHostingController(rootView: SetupView(store: store))
         // Sized here from ``SetupMetrics``: left to the hosting controller, a
-        // tall step grows the window and it never shrinks back.
+        // tall screen grows the window and it never shrinks back.
         controller.sizingOptions = []
         let window = NSWindow(contentViewController: controller)
         window.setContentSize(SetupMetrics.windowSize)
@@ -43,7 +49,12 @@ final class SetupWindow {
             }
         }
         self.window = window
-        isUnfinished = true
+        self.store = store
+        heightFollower = Task(name: "Follow the assistant's height") { [weak self] in
+            for await isTall in Observations({ store.wantsTallWindow }) {
+                self?.resize(tall: isTall)
+            }
+        }
         window.center()
         show()
     }
@@ -74,13 +85,15 @@ final class SetupWindow {
 
     #if DEBUG
         /// Reads as a setup under way with no window behind it, so the gallery
-        /// can draw the popover that leads back to one.
-        func stageUnfinished() {
-            isUnfinished = true
+        /// can draw the popover that leads back to one; `store` is the
+        /// assistant whose work the popover then shows.
+        func stageUnfinished(_ store: SetupStore? = nil) {
+            isStagedUnfinished = true
+            self.store = store
         }
     #endif
 
-    /// Brings the wizard back; answers whether there was one.
+    /// Brings the assistant back; answers whether there was one.
     @discardableResult
     func show() -> Bool {
         guard let window else { return false }
@@ -91,7 +104,7 @@ final class SetupWindow {
         return true
     }
 
-    /// Closes the wizard for good. The Dock tile stays: Steam's promised
+    /// Closes the assistant for good. The Dock tile stays: Steam's promised
     /// window arrives a moment later.
     func finish() {
         guard let window else { return }
@@ -99,8 +112,10 @@ final class SetupWindow {
             NotificationCenter.default.removeObserver(closeObserver)
             self.closeObserver = nil
         }
+        heightFollower?.cancel()
+        heightFollower = nil
         self.window = nil
-        isUnfinished = false
+        store = nil
         ActivationPolicy.becomeRegular(forAWindowWithin: ActivationPolicy.graceForAPromisedWindow)
         window.close()
     }

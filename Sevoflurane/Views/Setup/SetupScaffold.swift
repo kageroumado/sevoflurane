@@ -1,64 +1,95 @@
 import Propofol
 import SwiftUI
 
-/// The measurements every step of the first-run assistant shares.
+/// The measurements every screen of the first-run assistant shares.
 enum SetupMetrics {
-    static let windowSize = CGSize(width: 600, height: 700)
-    /// The window's height while a step hosts Apple's sign-in page, which
+    static let windowSize = CGSize(width: 600, height: 560)
+    /// The window's height while a screen hosts Apple's sign-in page, which
     /// needs the room; kept under the screen's visible height.
     static let tallWindowHeight: CGFloat = 920
-    /// The column the glyph, the titles and the lists sit in.
+    /// The room Apple's page gets inside the tall window.
+    static let applePageHeight: CGFloat = 430
+    /// The column the titles and the lists sit in.
     static let contentInset: CGFloat = 60
-    static let topInset: CGFloat = 64
-    static let glyphSize: CGFloat = 52
-    static let listRadius: CGFloat = 16
-    static let rowMinHeight: CGFloat = 46
-    static let rowIconWidth: CGFloat = 28
+    static let topInset: CGFloat = 52
+    static let heroPicture: CGFloat = 112
+    static let listRadius: CGFloat = 12
     static let footerPadding: CGFloat = 20
 }
 
-/// One step's page: a glyph, a title and subtitle, and the step's lists in
-/// one leading-aligned column.
-struct SetupPage<Content: View>: View {
-    let glyph: String?
-    let title: String
-    let subtitle: String
+/// One screen: its content over the bar with its buttons. A screen with
+/// nothing to press has no bar.
+struct SetupScreenLayout<Content: View, Secondary: View, Primary: View>: View {
+    var hasButtons = true
     @ViewBuilder var content: Content
+    @ViewBuilder var secondary: Secondary
+    @ViewBuilder var primary: Primary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let glyph {
-                Image(systemName: glyph)
-                    .font(.system(size: SetupMetrics.glyphSize, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.tint)
-                    .frame(height: SetupMetrics.glyphSize + 8, alignment: .bottomLeading)
-                    .padding(.bottom, Theme.Space.xl)
-                    .transition(.opacity)
-                    .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if hasButtons {
+                bar
             }
-            Text(InterfaceCopy.localized(title))
-                .font(.title2.weight(.semibold))
-            Text(InterfaceCopy.localized(subtitle))
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: Theme.Space.md) {
-                content
-            }
-            .padding(.top, Theme.Space.xl)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, SetupMetrics.contentInset)
-        .padding(.top, SetupMetrics.topInset)
+    }
+
+    private var bar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: Theme.Space.md) {
+                secondary
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                Spacer(minLength: Theme.Space.md)
+                primary
+                    .buttonStyle(PrimaryCapsuleButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.extraLarge)
+            .padding(SetupMetrics.footerPadding)
+        }
     }
 }
 
-/// A page with its picture, title and caption centered: the welcome and the
-/// finish.
+/// A question or the work: a title and subtitle over the screen's lists, in
+/// one leading-aligned column that scrolls when a screen outgrows the window.
+struct SetupPage<Content: View>: View {
+    let title: LocalizedStringResource
+    var subtitle: LocalizedStringResource?
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                    .font(.title2.weight(.semibold))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+                VStack(alignment: .leading, spacing: Theme.Space.md) {
+                    content
+                }
+                .padding(.top, Theme.Space.xl)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, SetupMetrics.contentInset)
+            .padding(.top, SetupMetrics.topInset)
+            .padding(.bottom, Theme.Space.lg)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+}
+
+/// A screen with its picture, title and caption centered: the welcome and
+/// the finish.
 struct SetupHero<Picture: View, Content: View>: View {
-    let title: String
+    let title: LocalizedStringResource
     let caption: Text
     @ViewBuilder var picture: Picture
     @ViewBuilder var content: Content
@@ -66,7 +97,8 @@ struct SetupHero<Picture: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             picture
-            Text(InterfaceCopy.localized(title))
+                .frame(height: SetupMetrics.heroPicture)
+            Text(title)
                 .font(.title.weight(.semibold))
                 .padding(.top, Theme.Space.lg)
             caption
@@ -76,16 +108,16 @@ struct SetupHero<Picture: View, Content: View>: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 2)
             content
-                .padding(.top, Theme.Space.xl + Theme.Space.sm)
+                .padding(.top, Theme.Space.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, SetupMetrics.contentInset)
-        .padding(.top, SetupMetrics.topInset)
+        .padding(.top, SetupMetrics.topInset + Theme.Space.lg)
     }
 }
 
-/// A grouped inset list: rows on one rounded fill, a hairline between them
-/// that starts where the row titles start.
+/// The assistant's one row container: Settings kit rows on one rounded fill,
+/// a hairline between them.
 struct SetupList<Content: View>: View {
     @ViewBuilder var content: Content
 
@@ -93,11 +125,8 @@ struct SetupList<Content: View>: View {
         VStack(spacing: 0) {
             Group(subviews: content) { rows in
                 ForEach(rows.enumerated(), id: \.element.id) { index, row in
-                    if index > 0 {
-                        Divider()
-                            .padding(.leading, SetupMetrics.rowIconWidth + Theme.Space.md)
-                    }
-                    row
+                    if index > 0 { Divider() }
+                    row.padding(.vertical, Theme.Space.sm)
                 }
             }
         }
@@ -106,126 +135,15 @@ struct SetupList<Content: View>: View {
     }
 }
 
-/// One row of a ``SetupList``.
-struct SetupRow<Accessory: View>: View {
-    let icon: String
-    let title: String
-    var caption: String?
-    var captionStyle: AnyShapeStyle = .init(.secondary)
-    @ViewBuilder var accessory: Accessory
-
-    var body: some View {
-        HStack(spacing: Theme.Space.md) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: SetupMetrics.rowIconWidth)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(InterfaceCopy.localized(title))
-                if let caption {
-                    Text(InterfaceCopy.localized(caption))
-                        .font(.callout)
-                        .foregroundStyle(captionStyle)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            accessory
-        }
-        .padding(.vertical, Theme.Space.sm)
-        .frame(minHeight: SetupMetrics.rowMinHeight)
-    }
-}
-
-/// A row that is one of several exclusive choices: the whole row is the
-/// button, and the mark at its trailing edge says which one is chosen.
-struct SetupChoiceRow: View {
-    let icon: String
-    let title: String
-    var caption: String?
-    /// What the choice costs or is, in the value column: "Free", "Trial".
-    var value: String?
-    let isSelected: Bool
-    let select: () -> Void
-
-    var body: some View {
-        Button(action: select) {
-            SetupRow(icon: icon, title: title, caption: caption) {
-                if let value {
-                    Text(InterfaceCopy.localized(value)).foregroundStyle(.secondary)
-                }
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-                    .accessibilityHidden(true)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-/// The small print under a list.
+/// The small print under a list, in the kit's caption type.
 struct SetupFootnote: View {
-    let text: String
-    var style: AnyShapeStyle = .init(.secondary)
+    let text: LocalizedStringResource
 
     var body: some View {
-        Text(InterfaceCopy.localized(text))
-            .font(.callout)
-            .foregroundStyle(style)
+        Text(text)
+            .font(SettingsType.caption)
+            .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Theme.Space.lg)
-    }
-}
-
-/// The bar under every step: secondary actions leading, the primary trailing.
-struct SetupFooter<Secondary: View, Primary: View>: View {
-    @ViewBuilder var secondary: Secondary
-    @ViewBuilder var primary: Primary
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(spacing: Theme.Space.md) {
-                secondary
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                Spacer(minLength: Theme.Space.md)
-                primary
-                    .buttonStyle(SetupPrimaryButtonStyle())
-                    .keyboardShortcut(.defaultAction)
-            }
-            .controlSize(.extraLarge)
-            .padding(SetupMetrics.footerPadding)
-        }
-    }
-}
-
-/// A step's primary action: the accent in a capsule with a dark label. The
-/// system's prominent style drops its fill in a window that is not key,
-/// which would leave the dark label on a dark button.
-struct SetupPrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Face(configuration: configuration)
-    }
-
-    private struct Face: View {
-        let configuration: Configuration
-        @Environment(\.isEnabled) private var isEnabled
-        @State private var isHovered = false
-
-        var body: some View {
-            configuration.label
-                .font(.body.weight(.medium))
-                .foregroundStyle(Theme.onAccent)
-                .padding(.horizontal, Theme.Space.xl)
-                .frame(minHeight: 36)
-                .background(Color.accentColor.opacity(isHovered ? 1 : 0.92), in: Capsule())
-                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
-                .onHover { isHovered = $0 }
-        }
     }
 }

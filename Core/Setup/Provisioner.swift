@@ -310,7 +310,7 @@ final class Provisioner {
             // the error names the command an administrator can run.
             throw ProvisionError(
                 String(localized: "Rosetta install failed: \(result.output.suffix(200)). If this account isn't an administrator, run \"softwareupdate --install-rosetta --agree-to-license\" in Terminal as one, then Try Again."),
-                cause: String(localized: "macOS did not install it."),
+                cause: "",
                 pageAdvice: String(localized: "An administrator of this Mac can install it. Then try again."),
             )
         }
@@ -345,7 +345,7 @@ final class Provisioner {
         guard self.detection?.hasEngine == true else {
             throw ProvisionError(
                 InterfaceCopy.localized("no usable engine after install"),
-                cause: String(localized: "It did not install."),
+                cause: "",
                 leavesNothingToStart: true,
             )
         }
@@ -427,7 +427,7 @@ final class Provisioner {
         guard create.succeeded else {
             throw ProvisionError(
                 String(localized: "bottle creation failed: \(create.output.suffix(200))"),
-                cause: String(localized: "It could not be created."),
+                cause: "",
                 leavesNothingToStart: true,
             )
         }
@@ -463,7 +463,7 @@ final class Provisioner {
                 output.isEmpty
                     ? String(localized: "Steam installer failed (exit \(status)) without printing anything")
                     : String(localized: "Steam installer failed (exit \(status)): \(output.suffix(200))"),
-                cause: String(localized: "It stopped before it finished."),
+                cause: "",
                 pageAdvice: String(localized: "A second try starts over in a fresh folder."),
                 leavesNothingToStart: true,
             )
@@ -506,7 +506,7 @@ final class Provisioner {
         else {
             throw ProvisionError(
                 InterfaceCopy.localized("client update finished but steamclient64.dll is missing"),
-                cause: String(localized: "The download did not finish."),
+                cause: "",
                 advice: SetupFailureText.networkAdvice,
                 leavesNothingToStart: true,
             )

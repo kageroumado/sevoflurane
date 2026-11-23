@@ -301,9 +301,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let detection = provisioner.detection {
                 Engine.active = Engine.resolve(from: detection)
             }
-            if provisioner.needsSetup {
+            let opening = SetupFlow.opening(
+                needsSetup: provisioner.needsSetup,
+                assistantInProgress: provisioner.environment.assistantInProgress,
+            )
+            switch opening {
+            case .closed:
+                startRunning()
+            case .fromWelcome, .resumed:
+                // Steam is installed already where an assistant is resumed:
+                // it starts behind the questions that are left.
+                if opening == .resumed { startRunning(holdingWindows: true) }
                 showSetupWizard(
                     provisioner: provisioner,
+                    graphics: GraphicsStore(),
+                    resuming: opening == .resumed,
                     onSkipSignIn: { [weak self] in
                         guard let self else { return }
                         EventLog.shared.log(.setup, "finished without signing in to Steam")
@@ -318,8 +330,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.setupWindow.finish()
                     self?.finishOnboarding()
                 }
-            } else {
-                startRunning()
             }
         }
     }
@@ -449,51 +459,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The window the assistant's finish button would bring up, read from
     /// Steam's windows directly: the supervisor's health lags a probe cycle.
     private var setupSteamWindow: SetupSteamWindow {
-        if supervisor.daemonIsUnreachable { return .helperDown(supervisor.statusText.sentenceCased) }
+        if supervisor.daemonIsUnreachable { return .helperDown }
         if host.hasLoginWindow { return .signIn }
         if host.desktop != nil { return .library }
+        if case let .gaveUp(reason) = supervisor.health { return .gaveUp(reason) }
         return .starting
     }
 
     private func showSetupWizard(
         provisioner: Provisioner,
-        graphics: (() -> GraphicsStore)? = nil,
-        onSkipSignIn: (() -> Void)? = nil,
+        graphics: GraphicsStore,
+        resuming: Bool = false,
+        onSkipSignIn: @escaping () -> Void = {},
         onFinished: @escaping () -> Void,
     ) {
-        let store = SetupStore(
-            provisioner: provisioner,
-            stopClient: { [weak self] narrate in
+        var actions = SetupStore.Actions()
+        actions.finish = onFinished
+        actions.skipSignIn = onSkipSignIn
+        // A simulated run starts no Steam: its last screen reads as ready,
+        // and the rest keep their defaults, which touch nothing.
+        if !provisioner.isDryRun {
+            actions.steamWindow = { [weak self] in self?.setupSteamWindow ?? .starting }
+            actions.stopClient = { [weak self] narrate in
                 await self?.supervisor.stopBeforeBottleSwitch(narrate: narrate)
-            },
-            makeGraphics: graphics,
-        )
-        let view = SetupView(
-            store: store,
-            onFinished: onFinished,
-            // A simulated run starts no Steam; its finish opens straight away.
-            steamWindow: { [weak self] in
-                provisioner.isDryRun ? .library : self?.setupSteamWindow ?? .starting
-            },
-            onRepairHelper: { [weak self] in
-                Task(name: "Repair the background helper from setup") {
-                    let result = await DaemonService.repair()
-                    EventLog.shared.log(.setup, "background helper repair from setup: \(result)")
-                    await self?.supervisor.attach()
-                }
-            },
-            onProvisioned: { [weak self] in
-                // A dry-run wizard provisions fixtures; nothing real may start.
-                guard !provisioner.isDryRun else { return }
+            }
+            actions.startClient = { [weak self] in
                 self?.startRunning(holdingWindows: true)
                 // The stop before a bottle switch may have paused supervision;
                 // this start resumes it, and the daemon holds the client while
                 // the provisioning lease stands.
                 self?.supervisor.startAfterSetup()
-            },
-            onSkipSignIn: onSkipSignIn,
-        )
-        setupWindow.present(view)
+            }
+            actions.repairHelper = { [weak self] in
+                guard let self else { return await DaemonService.repair() }
+                let result = await supervisor.repairDaemon()
+                EventLog.shared.log(.setup, "background helper repair from setup: \(result)")
+                return result
+            }
+            actions.openLoginItems = { DaemonService.openLoginItems() }
+            actions.restartSteam = { [weak self] in self?.supervisor.restartNow(reason: "restart from setup") }
+        }
+        setupWindow.present(SetupStore(
+            provisioner: provisioner, graphics: graphics, actions: actions, resuming: resuming,
+        ))
     }
 
     #if DEBUG
@@ -555,7 +563,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 engine: { engine },
                 compatibility: { compatibility },
             )
-            showSetupWizard(provisioner: provisioner, graphics: { graphics }) { [weak self] in
+            showSetupWizard(provisioner: provisioner, graphics: graphics) { [weak self] in
                 self?.setupWindow.finish()
                 self?.demoSettingsWindow?.show()
             }
@@ -576,7 +584,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 environment: DryRunSetupEnvironment(scenario: scenario),
             )
             dryRunProvisioner = provisioner
-            showSetupWizard(provisioner: provisioner) { [weak self] in
+            let graphics = GraphicsStore(environment: DemoGraphicsEnvironment(scenario: .builtInNoToolkit))
+            showSetupWizard(provisioner: provisioner, graphics: graphics) { [weak self] in
                 EventLog.shared.log(
                     .setup,
                     "dry-run: wizard finished — a real run would start the bridge, "

@@ -122,7 +122,6 @@ private struct D3DMetalRow: View {
     @State private var isAddingD3DMetal = false
     @State private var confirmingD3DMetalRemoval = false
     @State private var showingGPTkDownload = false
-    @State private var gptk = GPTkDownload()
 
     var body: some View {
         SettingsPicker(
@@ -147,12 +146,8 @@ private struct D3DMetalRow: View {
         }
         .disabled(isAddingD3DMetal)
         .sheet(isPresented: $showingGPTkDownload) {
-            SettingsSheet(isBusy: gptk.isBusy) { showingGPTkDownload = false } content: {
-                GPTkDownloadPanel(
-                    download: gptk,
-                    install: { url, origin in await store.installD3DMetal(from: url, origin: origin, choosing: false) },
-                    isSimulated: store.isSimulated,
-                )
+            SettingsSheet(isBusy: store.toolkitDownload.isBusy) { showingGPTkDownload = false } content: {
+                GPTkDownloadPanel(download: store.toolkitDownload)
             }
         }
     }
@@ -203,11 +198,7 @@ private struct D3DMetalRow: View {
     }
 
     private func addD3DMetal() {
-        let panel = NSOpenPanel()
-        panel.message = String(localized: "Choose the Game Porting Toolkit disk image you downloaded.")
-        panel.allowedContentTypes = [.diskImage]
-        panel.canChooseDirectories = true
-        guard panel.runModal() == .OK, let source = panel.url else { return }
+        guard let source = ToolkitImagePanel.choose() else { return }
         isAddingD3DMetal = true
         d3dMetalError = nil
         Task(name: "Install D3DMetal") {

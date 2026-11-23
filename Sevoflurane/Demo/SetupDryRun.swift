@@ -170,8 +170,11 @@
         var hold: Hold?
         /// What Rosetta's installer prints as it fails; `nil` installs it.
         var rosettaFailure: String?
-        /// What the engine install fails with; `nil` installs it.
+        /// What the engine install fails with, as the sentence the live
+        /// environment makes of its error; `nil` installs it.
         var engineFailure: String?
+        /// What to do about that failure, where the error says.
+        var engineFailureAdvice: String?
         /// What fetching Steam's installer throws; `nil` fetches it.
         var installerDownloadFailure: (any Error)?
 
@@ -301,7 +304,7 @@
                     await pause()
                 }
             }
-            if let engineFailure { return .failure(engineFailure) }
+            if let engineFailure { return .failure(engineFailure, advice: engineFailureAdvice) }
             state = SetupDetection(
                 rosetta: state.rosetta,
                 crossover: state.crossover,

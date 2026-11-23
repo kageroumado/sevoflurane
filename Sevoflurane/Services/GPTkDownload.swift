@@ -21,11 +21,6 @@ final class GPTkDownload: NSObject {
         var fraction: Double
         var phase: Phase
 
-        /// "D3DMetal 4.0 beta 2", or the filename when it names no version.
-        var title: String {
-            GPTkDownload.version(inFilename: filename).map { "D3DMetal \($0)" } ?? filename
-        }
-
         enum Phase: Equatable {
             case downloading
             case installing
@@ -52,8 +47,17 @@ final class GPTkDownload: NSObject {
         case browser
     }
 
-    var route = Route.here
+    var route = Route.here {
+        didSet { syncFolderWatch() }
+    }
+
     let folderWatch = GPTkFolderWatch()
+    /// Whether Apple's page is loaded here. A simulated run loads nothing:
+    /// the live page asks for real credentials.
+    let loadsApplePage: Bool
+    /// The host of the page the web view is on, so its owner can show whose
+    /// page is asking for a password.
+    private(set) var pageHost: String?
 
     private(set) var items: [Item] = []
     /// Whether the web view has finished its first load, so the panel can show
@@ -61,14 +65,45 @@ final class GPTkDownload: NSObject {
     private(set) var pageLoaded = false
 
     /// Installs a downloaded DMG and answers a failure string, or `nil` on
-    /// success; the panel wires it to `GraphicsStore.installD3DMetal`.
-    var install: (@MainActor (URL, D3DMetalInstaller.Origin) async -> String?)?
+    /// success.
+    private let install: @MainActor (URL, D3DMetalInstaller.Origin) async -> String?
     /// Called with each version as it finishes installing.
     var onInstalled: (@MainActor (String) -> Void)?
 
-    override init() {
+    init(
+        install: @escaping @MainActor (URL, D3DMetalInstaller.Origin) async -> String?,
+        loadsApplePage: Bool = true,
+    ) {
+        self.install = install
+        self.loadsApplePage = loadsApplePage
         super.init()
         folderWatch.onFound = { [weak self] url in self?.installLocal(url, found: true) }
+    }
+
+    /// Whether a view shows Apple's page, or in the gallery its stand-in.
+    var showsApplePage: Bool {
+        #if DEBUG
+            if isStaged { return true }
+        #endif
+        return loadsApplePage
+    }
+
+    /// Whether a view of this download is on screen. The folders are read
+    /// only while one is, on the browser route, in a run that is real.
+    var isOnScreen = false {
+        didSet { syncFolderWatch() }
+    }
+
+    private func syncFolderWatch() {
+        #if DEBUG
+            // A staged download reads as watching already and reads no folder.
+            if isStaged { return }
+        #endif
+        if isOnScreen, route == .browser, loadsApplePage {
+            folderWatch.start()
+        } else {
+            folderWatch.stop()
+        }
     }
 
     /// Installs a disk image already on this Mac and leaves the file in place.
@@ -131,6 +166,7 @@ final class GPTkDownload: NSObject {
         ) {
             isStaged = true
             pageLoaded = true
+            pageHost = Self.pageURL.host()
             self.route = route
             self.autoPhase = autoPhase
             self.items = items
@@ -444,8 +480,18 @@ extension GPTkDownload: WKNavigationDelegate {
         navigationResponse.canShowMIMEType ? .allow : .download
     }
 
-    func webView(_: WKWebView, didFinish _: WKNavigation!) {
+    func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
         pageLoaded = true
+        notePageHost(of: webView)
+    }
+
+    func webView(_ webView: WKWebView, didCommit _: WKNavigation!) {
+        notePageHost(of: webView)
+    }
+
+    private func notePageHost(of webView: WKWebView) {
+        let host = webView.url?.host()
+        if host != pageHost { pageHost = host }
     }
 
     func webView(
@@ -507,7 +553,7 @@ extension GPTkDownload: WKDownloadDelegate {
     }
 
     private func finishInstall(id: Int, from source: URL, origin: D3DMetalInstaller.Origin = .chosen) async {
-        let failure = await install?(source, origin)
+        let failure = await install(source, origin)
         if let failure {
             updatePhase(id: id, .failed(failure))
         } else if let version = Self.version(inFilename: source.lastPathComponent) {

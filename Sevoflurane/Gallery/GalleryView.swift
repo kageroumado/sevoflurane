@@ -264,6 +264,9 @@
                     GalleryTile(fixture.label) {
                         fixture.view
                             .background(.background, in: Theme.cardShape)
+                            .task {
+                                for entry in Fixtures.setupPopovers { await entry.state?.arrange() }
+                            }
                     }
                 }
             }
@@ -414,15 +417,10 @@
         }
     }
 
-    /// The first-run assistant on every step, then on every machine. Shown at
+    /// The first-run assistant on every machine, to be clicked through. Shown at
     /// the wizard's fixed window size, so a tile can be clicked through.
     private struct WizardTiles: View {
         var body: some View {
-            GallerySection("First-run assistant — every step", minimum: 700) {
-                ForEach(Fixtures.wizardSteps, id: \.step) { entry in
-                    GalleryTile(entry.step.title) { wizard(entry.store) }
-                }
-            }
             GallerySection("First-run assistant — every machine", minimum: 700) {
                 ForEach(Fixtures.wizards, id: \.scenario) { entry in
                     GalleryTile(entry.scenario.title) { wizard(entry.store) }
@@ -431,21 +429,21 @@
         }
 
         private func wizard(_ store: SetupStore) -> some View {
-            SetupView(store: store, onFinished: {})
+            SetupView(store: store)
                 .frame(height: SetupMetrics.windowSize.height)
                 .background(.background, in: Theme.cardShape)
                 .clipShape(Theme.cardShape)
         }
     }
 
-    /// The first-run assistant in every state past a step's first look
+    /// The first-run assistant on every screen in every state
     /// (``WizardState``), each walked to its state as its tile appears.
     private struct WizardStateTiles: View {
         var body: some View {
-            GallerySection("First-run assistant — every other state", minimum: 700) {
+            GallerySection("First-run assistant — every screen and state", minimum: 700) {
                 ForEach(WizardState.all) { state in
                     GalleryTile(state.id) {
-                        state.view
+                        SetupView(store: state.store)
                             .frame(height: state.height)
                             .background(.background, in: Theme.cardShape)
                             .clipShape(Theme.cardShape)
@@ -558,15 +556,17 @@
             }
         }
 
-        /// The popover while the first-run assistant is open or set aside.
-        static let setupUnfinished: Popover = {
-            let setup = SetupWindow()
-            setup.stageUnfinished()
-            return Popover(
-                label: "Setup unfinished", host: .preview(),
-                supervisor: ClientSupervisor(previewHealth: .starting), setup: setup,
-            )
-        }()
+        /// The popover while the first-run assistant is open or set aside,
+        /// once for each thing its work can be doing (``WizardState/popovers``).
+        static let setupPopovers: [(name: String, state: WizardState?, popover: Popover)] =
+            WizardState.popovers.map { name, state in
+                let setup = SetupWindow()
+                setup.stageUnfinished(state?.store)
+                return (name, state, Popover(
+                    label: "Setup \(name)", host: .preview(),
+                    supervisor: ClientSupervisor(previewHealth: .starting), setup: setup,
+                ))
+            }
 
         struct Pane {
             let label: String
@@ -635,8 +635,7 @@
         /// Built once and held: a fixture created inside a `body` is a new
         /// observable object on every evaluation, and the gallery would rebuild
         /// itself forever.
-        static let popovers: [Popover] = [
-            setupUnfinished,
+        static let popovers: [Popover] = setupPopovers.map(\.popover) + [
             Popover(
                 label: "Healthy",
                 host: .preview(games: games),
@@ -757,33 +756,12 @@
             SetupScenario.allCases.map { scenario in
                 // Paced: with no think time every stage completes between two
                 // frames and every scenario looks already provisioned.
-                (scenario, wizardStore(Provisioner(environment: DryRunSetupEnvironment(
-                    scenario: scenario, stepDelay: .milliseconds(900),
-                )), startingAt: .welcome))
-            }
-
-        private static func wizardStore(_ provisioner: Provisioner, startingAt step: SetupStep) -> SetupStore {
-            SetupStore(provisioner: provisioner, startingAt: step, makeGraphics: { Fixtures.wizardGraphics })
-        }
-
-        /// Every step of the assistant at once, each on a machine that reaches
-        /// it: the bottle question needs more than one Steam, and the install
-        /// step needs one still to do.
-        static let wizardSteps: [(step: SetupStep, store: SetupStore)] =
-            SetupStep.allCases.map { step in
-                let scenario: SetupScenario = switch step {
-                case .welcome, .engine: .freshMachine
-                case .bottle: .multipleBottles
-                case .steam: .licensedNoBottle
-                case .graphics, .options, .sharing, .done: .provisioned
-                }
-                return (step, wizardStore(Provisioner(
-                    previewActivity: step == .steam ? .working("Downloading Steam…") : .idle,
-                    detection: scenario.fixture,
-                    environment: DryRunSetupEnvironment(
+                (scenario, SetupStore(
+                    provisioner: Provisioner(environment: DryRunSetupEnvironment(
                         scenario: scenario, stepDelay: .milliseconds(900),
-                    ),
-                ), startingAt: step))
+                    )),
+                    graphics: Fixtures.wizardGraphics,
+                ))
             }
 
         static let settings = provisioner(.idle)

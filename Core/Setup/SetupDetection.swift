@@ -51,6 +51,18 @@ nonisolated struct SetupDetection: Sendable, Equatable {
     }
 }
 
+nonisolated extension SetupDetection.CrossOver {
+    /// The engine's name with its version: "CrossOver 26.3".
+    var label: String {
+        String(localized: "CrossOver \(version)")
+    }
+
+    /// Its license in a word: "Licensed." or "Trial."
+    var licenseWord: String {
+        InterfaceCopy.localized(licensed ? "Licensed." : "Trial.")
+    }
+}
+
 nonisolated enum SetupProbe {
     static let crossoverApp = URL(fileURLWithPath: "/Applications/CrossOver.app")
     static let crossoverPreviewApp = URL(fileURLWithPath: "/Applications/CrossOver Preview.app")

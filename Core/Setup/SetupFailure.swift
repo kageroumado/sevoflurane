@@ -32,7 +32,8 @@ nonisolated struct SetupStageReport: Equatable, Identifiable, Sendable {
 }
 
 /// Why a pass stopped: the stage, the cause as one sentence in plain words,
-/// and what to do about it where something can be done.
+/// and what to do about it where something can be done. The cause is empty
+/// where naming the stage that failed says all there is to say.
 nonisolated struct SetupFailure: Equatable, Sendable {
     let stage: SetupStage?
     let cause: String
@@ -40,7 +41,7 @@ nonisolated struct SetupFailure: Equatable, Sendable {
 
     /// The cause and the advice as one line.
     var text: String {
-        [cause, advice].compactMap(\.self).joined(separator: " ")
+        [cause, advice ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
     }
 }
 

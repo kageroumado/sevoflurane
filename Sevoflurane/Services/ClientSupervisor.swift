@@ -355,8 +355,8 @@ final class ClientSupervisor {
             case .refuse:
                 log.log(.supervisor, "setup: the client could not be stopped before the bottle switch (\(answer))")
                 return answer == .busy
-                    ? String(localized: "Steam is still restarting, so setup kept the bottle it had. Try again in a moment.")
-                    : String(localized: "Steam could not be stopped, so setup kept the bottle it had. Try again, or quit Steam from the menu bar first.")
+                    ? String(localized: "It is still restarting. Try again in a moment.")
+                    : String(localized: "It did not answer. Try again.")
             case .waitForRestart:
                 narrate("Waiting for Steam to finish restarting…")
                 while ContinuousClock.now - start < Timing.switchStopBudget,

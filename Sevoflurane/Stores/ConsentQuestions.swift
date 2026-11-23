@@ -39,11 +39,8 @@ final class ConsentQuestions {
     }
 
     func answerSharing(_ shares: Bool) {
-        Preferences.sharesRunStats = shares
+        SharingConsent.store(shares)
         EventLog.shared.log(.app, shares ? "run statistics: sharing" : "run statistics: not sharing")
-        if shares {
-            Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
-        }
         asksSharing = false
     }
 

@@ -152,29 +152,23 @@
             return hosts.count
         }
 
-        /// The first-run assistant at its window's size: each step as
-        /// `setup-<step>.png` on a machine that reaches it, each further state
-        /// of a step as `setup-<step>-<state>.png` (``WizardState``), and the
-        /// popover that leads back to an unfinished setup as
-        /// `setup-popover-unfinished.png`.
+        /// The first-run assistant at its window's size, each screen in each
+        /// state as `setup-<number>-<screen>-<state>.png` (``WizardState``),
+        /// and the popover that leads back to an unfinished setup as
+        /// `setup-popover-<state>.png`.
         private static func writeWizard(to directory: URL, appearance: NSAppearance?) async -> Int {
-            for state in WizardState.all {
+            for state in WizardState.all + Fixtures.setupPopovers.compactMap(\.state) {
                 await state.arrange()
             }
+            // A run ends a few main-actor turns after the button that starts it.
+            try? await Task.sleep(for: settleDelay)
             let width = SetupMetrics.windowSize.width
             // A height of `nil` is the content's own.
             var screens: [(name: String, view: AnyView, width: CGFloat, height: CGFloat?)] =
-                Fixtures.wizardSteps.map { step in
-                    (
-                        "setup-\(step.step.rawValue)", AnyView(SetupView(store: step.store, onFinished: {})),
-                        width, SetupMetrics.windowSize.height,
-                    )
-                }
-            screens += WizardState.all.map { ("setup-\($0.id)", AnyView($0.view), width, $0.height) }
-            screens.append((
-                "setup-popover-unfinished", AnyView(Fixtures.setupUnfinished.view),
-                Theme.popoverWidth + Theme.Space.md * 2, nil,
-            ))
+                WizardState.all.map { ("setup-\($0.id)", AnyView(SetupView(store: $0.store)), width, $0.height) }
+            screens += Fixtures.setupPopovers.map { entry in
+                ("setup-popover-\(entry.name)", AnyView(entry.popover.view), Theme.popoverWidth + Theme.Space.md * 2, nil)
+            }
             let hosts = screens.map { screen in
                 let host = NSHostingView(rootView: screen.view
                     .frame(width: screen.width, height: screen.height)

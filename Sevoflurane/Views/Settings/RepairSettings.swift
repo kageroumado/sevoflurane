@@ -279,12 +279,11 @@ struct RecoverySettings: View {
     }
 
     private var isRebuilding: Bool {
-        if case .working = provisioner.activity { true } else { false }
+        provisioner.isWorking
     }
 
     private var rebuildCaption: String {
-        if case let .working(phase) = provisioner.activity { return phase }
-        return String(localized: "For a damaged Steam client that Repair leaves alone.")
+        provisioner.phase ?? String(localized: "For a damaged Steam client that Repair leaves alone.")
     }
 
     private var rebuildState: SettingsRowState {
@@ -300,18 +299,7 @@ struct RecoverySettings: View {
             } else {
                 await DaemonService.repair()
             }
-            switch result {
-            case .reachable:
-                helper = .done("The background helper is running.")
-            case .alreadyHealthy:
-                helper = .done("The background helper is already healthy.")
-            case .restartedClient:
-                helper = .done("The background helper had given up on Steam. Steam is restarting.")
-            case let .needsApproval(message):
-                helper = .failed(message)
-            case let .failed(reason):
-                helper = .failed(reason)
-            }
+            helper = result.isFailure ? .failed(result.sentence) : .done(result.sentence)
         }
     }
 
@@ -386,12 +374,11 @@ struct RepairRow: View {
     }
 
     private var isWorking: Bool {
-        if case .working = provisioner.activity { true } else { false }
+        provisioner.isWorking
     }
 
     private var caption: String {
-        if case let .working(phase) = provisioner.activity { return phase }
-        return String(localized: "Reinstalls the Windows components Steam needs.")
+        provisioner.phase ?? String(localized: "Reinstalls the Windows components Steam needs.")
     }
 
     private var state: SettingsRowState {

@@ -290,6 +290,16 @@ final class GraphicsStore {
         }
     }
 
+    /// Apple's toolkit download, which installs through this store. One per
+    /// store, so a download begun on one surface is the one another shows.
+    @ObservationIgnored private(set) lazy var toolkitDownload = GPTkDownload(
+        install: { [weak self] url, origin in
+            guard let self else { return String(localized: "The download has nowhere to install to.") }
+            return await installD3DMetal(from: url, origin: origin, choosing: false)
+        },
+        loadsApplePage: !isSimulated,
+    )
+
     /// Answers the failure, if any. `choosing` makes a user-picked disk image
     /// the choice; Apple-page downloads leave the newest version active.
     func installD3DMetal(

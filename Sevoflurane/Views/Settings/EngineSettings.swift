@@ -210,7 +210,7 @@ private struct EngineFileRow: View {
     }
 
     private var caption: String {
-        if isInstallingEngineFile, case let .working(phase) = provisioner.activity {
+        if isInstallingEngineFile, let phase = provisioner.phase {
             return phase
         }
         return String(localized: "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built.")
@@ -271,10 +271,7 @@ private struct EngineSwitchProgress: View {
     }
 
     private var phase: String {
-        if case let .working(phase) = provisioner.activity {
-            return phase
-        }
-        return store.switchPhase ?? String(localized: "Switching…")
+        provisioner.phase ?? store.switchPhase ?? String(localized: "Switching…")
     }
 }
 

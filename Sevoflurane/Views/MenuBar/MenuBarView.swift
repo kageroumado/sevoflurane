@@ -201,12 +201,44 @@ private struct SetupUnfinishedNotice: View {
     let setup: SetupWindow
 
     var body: some View {
-        NoticeCard(
-            symbol: "wand.and.stars", tint: .accentColor,
-            title: "Finish setting up",
-            detail: "Continue setup where you left off. Steam opens from its last step.",
-        ) { setup.show() }
-            .accessibilityLabel("Continue setup")
+        if let store = setup.store, let failure = store.provisioner.failure {
+            // A pass that stopped with the window closed says so here.
+            NoticeCard(
+                symbol: "exclamationmark.triangle.fill", tint: .orange,
+                title: "Setup stopped",
+                detail: "\([failure.stage?.failedSentence ?? "", failure.text].filter { !$0.isEmpty }.joined(separator: " "))",
+            ) {
+                Button("Try Again") { store.tryAgain() }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(Theme.onAccent)
+                Button("Open Setup") { setup.show() }
+                    .buttonStyle(.glass)
+            }
+        } else if let store = setup.store, let stage = store.provisioner.stage, store.provisioner.isWorking {
+            NoticeCard(
+                symbol: "arrow.down.circle", tint: .accentColor, level: store.provisioner.passFraction,
+                title: "Setting up Steam",
+                detail: "\(Self.working(stage, in: store.provisioner))",
+                onTap: { setup.show() },
+            ) { EmptyView() }
+                .accessibilityLabel("Continue setup")
+        } else {
+            NoticeCard(
+                symbol: "wand.and.stars", tint: .accentColor,
+                title: "Finish setting up",
+                detail: setup.store?.workIsDone == true
+                    ? "Steam is installed. It opens from the last screen of setup."
+                    : "Continue setup where you left off. Steam opens from its last step.",
+            ) { setup.show() }
+                .accessibilityLabel("Continue setup")
+        }
+    }
+
+    /// The stage under way with its fraction in digits, where one is known.
+    private static func working(_ stage: SetupStage, in provisioner: Provisioner) -> String {
+        guard let fraction = provisioner.stageFraction else { return stage.workingSentence }
+        let percent = fraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
+        return "\(stage.workingSentence) \(percent)"
     }
 }
 

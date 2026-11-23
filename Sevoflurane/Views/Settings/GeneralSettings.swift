@@ -279,12 +279,7 @@ private struct GeneralPrivacySection: View {
             )
             .onChange(of: shares) { _, shares in
                 guard Preferences.sharesRunStats != shares else { return }
-                Preferences.sharesRunStats = shares
-                if shares {
-                    Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
-                } else {
-                    StatsStore.writeQueue([])
-                }
+                SharingConsent.store(shares)
             }
             .highlightable(.generalShareRuns, highlighted: highlighted)
             SettingsDisclosure(title: "Exactly what is sent") {

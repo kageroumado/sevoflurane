@@ -1,21 +1,8 @@
-import Propofol
-import SwiftUI
+import Foundation
 
-/// Exactly what one shared run sends, as JSON, behind a disclosure.
-struct SharedRunPreview: View {
+/// Exactly what one shared run sends, as JSON: what every surface that asks
+/// about sharing shows behind its disclosure.
+enum SharedRunPreview {
     /// Built once: the sample reads this Mac's hardware.
     static let json = SharedRun.example(appVersion: StatsUploader.appVersion).json
-
-    var body: some View {
-        DisclosureGroup("Show exactly what is sent") {
-            ScrollView {
-                Text(verbatim: Self.json)
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 200)
-            .padding(.top, Theme.Space.xs)
-        }
-    }
 }
