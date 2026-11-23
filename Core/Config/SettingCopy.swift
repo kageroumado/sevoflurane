@@ -1,7 +1,7 @@
 import Foundation
 
-/// A setting's title, caption and (i) text, shared by Settings › Engine and
-/// Settings › Games.
+/// A setting's title, caption and (i) text, shared by the bottle's panes
+/// (Settings › Graphics and Settings › Engine) and Settings › Games.
 nonisolated struct SettingCopy: Sendable {
     let title: String
     var caption = ""
@@ -27,7 +27,7 @@ nonisolated extension SettingCopy {
 
     static let windows = SettingCopy(
         title: "Resizable windows",
-        caption: "A resizable window scales the game's picture to fit.",
+        caption: "A resizable window scales the game’s picture to fit.",
         help: SettingHelp(
             title: "Resizable windows",
             summary: "A game draws at the size it chose. A resizable window scales that picture to "
@@ -59,7 +59,7 @@ nonisolated extension SettingCopy {
 
     static let scaling = SettingHelp(
         title: "Upscaler and final filter",
-        summary: "Two steps, in order, between the game's picture and the window.",
+        summary: "Two steps, in order, between the game’s picture and the window.",
         entries: [
             .init(
                 name: "Upscaler",
@@ -70,30 +70,29 @@ nonisolated extension SettingCopy {
             ),
             .init(
                 name: "Final filter",
-                text: "Fits what the upscaler made to the window's exact size: all of the resizing "
+                text: "Fits what the upscaler made to the window’s exact size: all of the resizing "
                     + "with no shader, the last few percent after one. Lanczos is sharp, "
                     + "Bilinear soft, Nearest keeps hard pixel edges.",
             ),
         ],
-        footnote: "View › Upscaler in a running game's menu bar switches live.",
+        footnote: "View › Upscaler in a running game’s menu bar switches live.",
     )
 
     static let mouse = SettingCopy(
-        title: "Movement",
-        caption: "How the pointer moves during mouse-look.",
+        title: "Mouse-look movement",
         help: SettingHelp(
-            title: "Mouse movement",
+            title: "Mouse-look movement",
             summary: "Applies while a game has taken the pointer, as a first-person camera does. "
-                + "Menus and the desktop keep the Mac's pointer.",
+                + "Menus and the desktop keep the Mac’s pointer.",
             entries: [
                 .init(
                     name: "macOS acceleration",
-                    text: "The pointer's usual curve: a fast flick travels farther than a slow "
+                    text: "The pointer’s usual curve: a fast flick travels farther than a slow "
                         + "sweep of the same length.",
                 ),
                 .init(
-                    name: "Linear (no acceleration)",
-                    text: "The mouse's own movement, unshaped: the same sweep of the hand turns "
+                    name: "Linear",
+                    text: "The mouse’s own movement, unshaped: the same sweep of the hand turns "
                         + "the camera the same amount at any speed. What shooters expect.",
                 ),
             ],
@@ -114,33 +113,32 @@ nonisolated extension SettingCopy {
 
     static let nativeMenuBar = SettingCopy(
         title: "Menus in the menu bar",
-        caption: "A program's own menus move into the macOS menu bar.",
+        caption: "A program’s own menus move into the macOS menu bar.",
         help: SettingHelp(
             title: "Menus in the menu bar",
             summary: "Windows programs draw a row of menus at the top of their window. With this "
                 + "on, Dormison shows those menus in the macOS menu bar, where a shortcut such as Ctrl+N "
                 + "works as ⌘N, and crops the row out of the window. A program with a View "
-                + "menu of its own keeps it, and Sevoflurane's View menu is named Picture.",
-            footnote: "New in this release, so it starts off. Applies from the program's next launch.",
+                + "menu of its own keeps it, and Sevoflurane’s View menu is named Picture.",
+            footnote: "New in this release, so it starts off.",
         ),
     )
 
     static let fps = SettingCopy(
         title: "Frame rate counter",
-        caption: "The frame rate at the top right of the game's window.",
+        caption: "The frame rate at the top right of the game’s window.",
         help: SettingHelp(
             title: "Frame rate counter",
             summary: "Counts the frames the engine put on screen, whichever renderer drew them. "
-                + "Overlay detail sets how much it shows.",
+                + "Counter detail sets how much it shows.",
             footnote: "View › Show Frame Rate (⌥⌘F) switches it while a game runs.",
         ),
     )
 
     static let overlayDetail = SettingCopy(
-        title: "Overlay detail",
-        caption: "What the frame rate counter shows while it is on.",
+        title: "Counter detail",
         help: SettingHelp(
-            title: "Overlay detail",
+            title: "Counter detail",
             summary: "How much the frame rate counter shows. It appears when Frame rate counter is on.",
             entries: [
                 .init(name: OverlayDetail.frameRate.label, text: "One number."),
@@ -152,8 +150,8 @@ nonisolated extension SettingCopy {
                 ),
                 .init(
                     name: OverlayDetail.system.label,
-                    text: "The card with a row for the game's CPU use, the GPU's load, the Mac's power "
-                        + "draw and its temperature.",
+                    text: "The card with a row for the game’s CPU use, the GPU’s load, the Mac’s power "
+                        + "draw, and its temperature.",
                 ),
             ],
             footnote: "View › Overlay Detail switches it while a game runs, and ⌥⌘G picks the "
@@ -163,7 +161,7 @@ nonisolated extension SettingCopy {
 
     static let frameRateLimit = SettingCopy(
         title: "Frame rate limit",
-        caption: "Saves battery and fan noise. Works on Dormison.",
+        caption: "Less heat and fan noise.",
         help: SettingHelp(
             title: "Frame rate limit",
             summary: "Dormison holds each frame until its turn, so the game draws no more frames "
@@ -176,8 +174,8 @@ nonisolated extension SettingCopy {
     )
 
     static let hud = SettingCopy(
-        title: "Performance HUD",
-        caption: "Apple's overlay: frame time, GPU time and memory.",
+        title: "Metal performance HUD",
+        caption: "Apple’s overlay: frame time, GPU time, and memory.",
     )
 
     static let cursorConfine = SettingCopy(
@@ -190,17 +188,17 @@ nonisolated extension SettingCopy {
         caption: "Steam for Mac needs the game installed there.",
         help: SettingHelp(
             title: "Sevoflurane or Steam for Mac",
-            summary: "Steam sells this game for macOS too. Play can run it here or in Valve's Steam for Mac.",
+            summary: "Steam sells this game for macOS too. Play can run it in Sevoflurane or in Valve’s Steam for Mac.",
             entries: [
                 .init(
                     name: GameBuild.windows.label,
-                    text: "Sevoflurane's Steam. On an engine that plays macOS versions, the game page's Version "
+                    text: "Sevoflurane’s Steam. On an engine that plays macOS versions, the game page’s Version "
                         + "button picks macOS or Windows; otherwise this is the Windows version. Every setting "
                         + "on this page applies to the Windows version.",
                 ),
                 .init(
                     name: GameBuild.mac.label,
-                    text: "The game's macOS version, started by Valve's Steam for Mac, which needs the game "
+                    text: "The game’s macOS version, started by Valve’s Steam for Mac, which needs the game "
                         + "installed there. Play opens its install page when the game is not, and the settings "
                         + "on this page stay with the Windows version.",
                 ),
@@ -210,7 +208,7 @@ nonisolated extension SettingCopy {
 
     static let retina = SettingCopy(
         title: "High-resolution mode",
-        caption: "Games see the display's real pixel count. Older games draw tiny text and menus.",
+        caption: "Games see the display’s real pixel count. Older games draw tiny text and menus.",
         help: SettingHelp(
             title: "High-resolution mode",
             summary: "A Retina display has four pixels for every point macOS lays out. Windows "
@@ -218,9 +216,9 @@ nonisolated extension SettingCopy {
             entries: [
                 .init(
                     name: "On",
-                    text: "Games see every pixel, so a 5K display offers 5120 × 2880 in a game's "
+                    text: "Games see every pixel, so a 5K display offers 5120 × 2880 in a game’s "
                         + "resolution list. A program written before high-DPI displays draws "
-                        + "its text, buttons and launcher at half the size.",
+                        + "its text, buttons, and launcher at half the size.",
                 ),
                 .init(
                     name: "Off",
@@ -236,7 +234,7 @@ nonisolated extension SettingCopy {
         caption: "How long threads look for work before they sleep.",
         help: SettingHelp(
             title: "Thread waiting",
-            summary: "A game's threads hand work to each other thousands of times a second. "
+            summary: "A game’s threads hand work to each other thousands of times a second. "
                 + "Putting a thread to sleep and waking it costs far more on macOS than on "
                 + "Windows, so a thread can spin briefly first in case its wake-up is about to "
                 + "arrive.",
@@ -253,8 +251,8 @@ nonisolated extension SettingCopy {
                     name: "Custom",
                     text: "Wait spin and Object spin count loop iterations of about 0.4 ns each: "
                         + "5200 is two microseconds, 0 is off. Wait spin covers a thread "
-                        + "waiting on anything; Object spin covers a contended lock, event or "
-                        + "semaphore. Back off stops the spinning on waits that keep missing.",
+                        + "waiting on anything; Object spin covers a contended lock, event, or "
+                        + "semaphore. Reduce spinning stops it on waits that keep missing.",
                 ),
             ],
             footnote: "Measure with the frame rate counter. Most games show no difference.",
@@ -335,22 +333,22 @@ nonisolated extension SettingCopy {
 
     static let videoDecoding = SettingCopy(
         title: "Video decoding",
-        caption: "Try Software if a game's videos stay blank.",
+        caption: "Try Software if a game’s videos stay blank.",
         help: SettingHelp(
             title: "Video decoding",
             summary: "Windows games play their videos through Media Foundation, which the engine answers "
-                + "with GStreamer. The Mac's video hardware decodes them (VideoToolbox), which costs "
+                + "with GStreamer. The Mac’s video hardware decodes them (VideoToolbox), which costs "
                 + "almost nothing. A video that stays blank while the game waits for it is one that "
-                + "path could not decode, and Sevoflurane offers the other when a game's decoder "
+                + "path could not decode, and Sevoflurane offers the other when a game’s decoder "
                 + "produced nothing.",
             entries: [
                 .init(
                     name: "Hardware (VideoToolbox)",
-                    text: "The Mac's own decoder. The default, and the right choice for nearly every game.",
+                    text: "The Mac’s own decoder. The default, and the right choice for nearly every game.",
                 ),
                 .init(
                     name: "Software",
-                    text: "GStreamer's own decoders, on the CPU. For a game whose videos stay blank, white "
+                    text: "GStreamer’s own decoders, on the CPU. For a game whose videos stay blank, white, "
                         + "or black while its sound plays on.",
                 ),
             ],
@@ -364,7 +362,7 @@ nonisolated extension SettingCopy {
             title: "Report AVX to games",
             summary: "AVX and AVX2 are processor instructions many games since 2020 require. "
                 + "Rosetta translates them either way; this makes it say so, which is what a "
-                + "game's start-up check reads.",
+                + "game’s start-up check reads.",
             entries: [
                 .init(
                     name: "If a game misbehaves",
@@ -381,20 +379,19 @@ nonisolated extension SettingCopy {
             + "for a game often names.",
         entries: [
             .init(
-                name: "Steam's launch options",
+                name: "Steam’s launch options",
                 text: "A line such as DXVK_HUD=1 %command% -windowed, the form Proton fixes are shared in, "
                     + "works too. Sevoflurane moves the variables ahead of %command% here, and Steam "
                     + "keeps %command% -windowed.",
             ),
             .init(
                 name: "Over a setting",
-                text: "A variable a setting above also writes takes that setting's place, and its row "
+                text: "A variable a setting also writes takes that setting’s place, and its row "
                     + "says which.",
             ),
             .init(name: "An empty value", text: "Removes the variable, for a game that misreads one."),
         ],
-        footnote: "Settings › Engine holds the variables every game gets; a game's own win. A change applies "
-            + "the next time the game starts.",
+        footnote: "The bottle holds the variables every game gets; a game’s own win.",
     )
 
     static let dllOverrides = SettingHelp(
@@ -404,15 +401,15 @@ nonisolated extension SettingCopy {
         entries: [
             .init(
                 name: "Native, then built-in",
-                text: "Use the copy the game or an installer brought, and Wine's where there is "
+                text: "Use the copy the game or an installer brought, and Wine’s where there is "
                     + "none. What a mod loader, ReShade or a Visual C++ runtime needs.",
             ),
-            .init(name: "Built-in, then native", text: "Wine's copy first. Wine's usual order."),
+            .init(name: "Built-in, then native", text: "Wine’s copy first. Wine’s usual order."),
             .init(name: "Native only · Built-in only", text: "One of them, with nothing to fall back to."),
             .init(name: "Disabled", text: "The library is not loaded at all."),
         ],
-        footnote: "These are Wine's own overrides, the values winecfg's Libraries tab shows and edits: a "
-            + "game's are stored under its program, the bottle's under every program. The "
-            + "renderer's libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.",
+        footnote: "These are Wine’s own overrides, the values winecfg’s Libraries tab shows and edits: a "
+            + "game’s are stored under its program, the bottle’s under every program. The "
+            + "renderer’s libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.",
     )
 }

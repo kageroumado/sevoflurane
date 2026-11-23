@@ -1,11 +1,12 @@
-import Propofol
 import SwiftUI
 
-/// The catalog's groups as form sections for the store's level.
+/// The catalog's groups as sections for the store's level.
 struct SettingSections: View {
     let store: SettingsStore
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
+    /// The groups this pane shows; every group of the level when `nil`.
+    var groups: Set<SettingGroup>?
     /// The game the sections belong to, over the first of them.
     var heading: String?
     /// What the fix table says about that game.
@@ -13,9 +14,14 @@ struct SettingSections: View {
 
     var body: some View {
         let level = store.level
-        let groups = store.groups
-        ForEach(groups, id: \.group) { group, settings in
-            Section {
+        let shown = store.groups.filter { groups?.contains($0.group) ?? true }
+        ForEach(shown, id: \.group) { group, settings in
+            SettingsSection(
+                title: "\(group.title)",
+                heading: group == shown.first?.group ? heading : nil,
+                footer: Self.footer(of: group, at: level),
+                reach: group == .build ? .nextLaunch : .env,
+            ) {
                 ForEach(settings) { setting in
                     SettingRow(
                         setting: setting, store: store, shaders: shaders,
@@ -24,10 +30,6 @@ struct SettingSections: View {
                     )
                     .highlightable(setting.id.anchor(at: level), highlighted: highlighted)
                 }
-            } header: {
-                SettingGroupHeader(title: group.title, heading: group == groups.first?.group ? heading : nil)
-            } footer: {
-                if let footer = Self.footer(of: group, at: level) { Text(footer) }
             }
         }
     }
@@ -41,35 +43,15 @@ struct SettingSections: View {
 
     private static func footer(of group: SettingGroup, at level: SettingLevel) -> LocalizedStringResource? {
         switch (group, level) {
-        case (.picture, .game):
-            "Inherit takes the value from Settings › Engine. A change applies the next time the game starts."
-        case (.performance, .game):
-            "Leave these on Inherit unless a game needs one. The (i) says what each does and when to change it."
-        case (.performance, .bottle):
-            Engine.active.supportsEnvFiles
-                ? "Defaults for every game on Dormison. Settings › Games changes one game. A change applies at a game's next launch."
-                : "Defaults for every game on Dormison. Settings › Games changes one game. Restart Steam to apply a change."
+        case (.performance, .game): "Leave these on Inherit unless a game needs one."
+        case (.performance, .bottle): "Defaults for every game; a game can set its own."
         default: nil
         }
     }
 }
 
-private struct SettingGroupHeader: View {
-    let title: String
-    let heading: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            if let heading {
-                Text(heading).font(.title3.weight(.medium))
-            }
-            Text(title)
-        }
-    }
-}
-
-/// One setting: its control, caption, restart cost, and the fix table's
-/// recommendation or the fix list's mark with its undo.
+/// One setting: its control and caption, with the fix table's recommendation
+/// or the fix list's mark and undo in the caption's place.
 struct SettingRow: View {
     let setting: Setting
     let store: SettingsStore
@@ -84,41 +66,49 @@ struct SettingRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            if setting.control == .upscaler {
-                UpscalerPicker(
-                    shaders: shaders,
-                    inherited: store.level == .game ? store.inherited(setting).choice : nil,
-                    selection: upscalerSelection,
-                )
-            } else {
-                HelpedRow(caption: caption, help: setting.copy.help) {
-                    SettingControlView(setting: setting, store: store)
-                }
+        let inherits = store.level == .game && setting.inherits
+        switch setting.control {
+        case .upscaler:
+            UpscalerPicker(
+                shaders: shaders,
+                inherited: store.level == .game ? store.inherited(setting).choice : nil,
+                note: note,
+                selection: upscalerSelection,
+            )
+        case .toggle where !inherits:
+            SettingsToggle(
+                title: "\(setting.title)", caption: caption, help: setting.copy.help, note: note,
+                isOn: store.flagBinding(setting),
+            )
+        case .toggle:
+            InheritablePicker(
+                title: "\(setting.title)", caption: caption, help: setting.copy.help, note: note,
+                inherited: setting.label(of: store.inherited(setting)),
+                selection: store.binding(setting).flagTag,
+            ) {
+                Text("On").tag(SettingValue.onTag)
+                Text("Off").tag(SettingValue.offTag)
             }
-            if case .tuning = setting.control, store.effective(setting) == .choice(PerformanceTuning.custom.rawValue),
-               store.own(setting) != nil || store.level == .bottle {
-                TuningParametersFields(parameters: store.tuningParametersBinding)
+        case let .choices(choices) where inherits, let .tuning(choices) where inherits:
+            InheritablePicker(
+                title: "\(setting.title)", caption: caption, help: setting.copy.help, note: note,
+                inherited: setting.label(of: store.inherited(setting)),
+                selection: store.binding(setting).choice,
+            ) {
+                SettingChoiceOptions(choices: choices)
             }
-            if let fixed {
-                FixListMark(reason: fixed.reason, undo: fixed.undo)
-            } else if let recommended, store.own(setting) != recommended.value {
-                RecommendedChip(reason: recommended.reason) {
-                    store.send(.set(setting.id, recommended.value))
-                }
+        case let .choices(choices), let .tuning(choices):
+            SettingsPicker(
+                title: "\(setting.title)", caption: caption, help: setting.copy.help, note: note,
+                selection: store.choiceBinding(setting),
+            ) {
+                SettingChoiceOptions(choices: choices)
             }
         }
-    }
-
-    /// The one line under the control: what the value costs to apply, the
-    /// engine's value while a game inherits it, or what the setting does.
-    private var caption: String {
-        if setting.reach(store.own(setting)) == .clientRestart {
-            return String(localized: "Steam restarts at the next launch, which takes about 30 seconds.")
+        if case .tuning = setting.control, store.effective(setting) == .choice(PerformanceTuning.custom.rawValue),
+           store.own(setting) != nil || store.level == .bottle {
+            TuningParametersRows(parameters: store.tuningParametersBinding)
         }
-        guard store.level == .game, store.own(setting) == nil, setting.control != .toggle, setting.inherits
-        else { return setting.detail?(store.effective(setting)) ?? setting.copy.caption }
-        return String(localized: "Engine's value: \(setting.label(of: store.inherited(setting))).")
     }
 
     /// The picker hands back `nil` for Inherit, which a bottle cannot choose.
@@ -131,115 +121,75 @@ struct SettingRow: View {
             },
         )
     }
-}
 
-/// The control the catalog names, with Inherit at the game level.
-private struct SettingControlView: View {
-    let setting: Setting
-    let store: SettingsStore
-
-    private static let inheritTag = ""
-    private static let onTag = "on"
-    private static let offTag = "off"
-
-    var body: some View {
-        switch (setting.control, store.level) {
-        case (.toggle, .bottle):
-            // Inside the row's stack the switch loses the form's title for VoiceOver.
-            Toggle(setting.title, isOn: store.flagBinding(setting))
-                .accessibilityLabel(setting.title)
-        case (.toggle, .game):
-            Picker(setting.title, selection: tag) {
-                Text("Inherit (\(setting.label(of: store.inherited(setting))))").tag(Self.inheritTag)
-                Text("On").tag(Self.onTag)
-                Text("Off").tag(Self.offTag)
-            }
-            .endsOnControlLine()
-        case let (.choices(choices), level), let (.tuning(choices), level):
-            let inherits = level == .game && setting.inherits
-            Picker(setting.title, selection: inherits ? tag : store.choiceBinding(setting)) {
-                // Plain "Inherit": the caption says what it stands for.
-                if inherits { Text("Inherit").tag(Self.inheritTag) }
-                ForEach(choices) { choice in
-                    Text(choice.label).tag(choice.value)
-                }
-            }
-            .endsOnControlLine()
-        case (.upscaler, _):
-            EmptyView()
+    /// What the setting does, what its value in force does, or what the value
+    /// costs where it alone makes Steam restart.
+    private var caption: String {
+        if SettingReach.env != .clientRestart, setting.reach(store.own(setting)) == .clientRestart {
+            return String(localized: "Steam restarts for this value, about 30 seconds.")
         }
+        return setting.detail?(store.effective(setting)) ?? setting.copy.caption
     }
 
-    /// The level's own value as a picker tag, the empty one for Inherit.
-    private var tag: Binding<String> {
-        Binding(
-            get: {
-                switch store.own(setting) {
-                case nil: Self.inheritTag
-                case let .flag(on): on ? Self.onTag : Self.offTag
-                case let .choice(raw): raw
-                }
-            },
-            set: { tag in
-                let value: SettingValue? = switch (tag, setting.control) {
-                case (Self.inheritTag, _): nil
-                case (_, .toggle): .flag(tag == Self.onTag)
-                default: .choice(tag)
-                }
-                store.send(.set(setting.id, value))
-            },
+    /// The fix list's mark, or the fix table's recommendation where the row
+    /// holds another value.
+    private var note: SettingsRowNote? {
+        if let fixed {
+            return SettingsRowNote(
+                text: "Set by the fix list", actionTitle: "Undo", reason: fixed.reason, action: fixed.undo,
+            )
+        }
+        guard let recommended, store.own(setting) != recommended.value else { return nil }
+        return SettingsRowNote(
+            text: "Recommended: \(setting.label(of: recommended.value))", actionTitle: "Use It",
+            reason: InterfaceCopy.localized(recommended.reason),
+        ) {
+            store.send(.set(setting.id, recommended.value))
+        }
+    }
+}
+
+private struct SettingChoiceOptions: View {
+    let choices: [SettingChoice]
+
+    var body: some View {
+        ForEach(choices) { choice in
+            Text(choice.label).tag(choice.value)
+        }
+    }
+}
+
+/// The three numbers behind the Custom thread-waiting preset.
+private struct TuningParametersRows: View {
+    @Binding var parameters: TuningParameters
+
+    var body: some View {
+        SettingsNumberField(title: "Wait spin", value: $parameters.waitSpin, range: TuningParameters.spinRange)
+        SettingsNumberField(title: "Object spin", value: $parameters.objectSpin, range: TuningParameters.spinRange)
+        SettingsToggle(title: "Reduce spinning after repeated misses", isOn: $parameters.adaptive)
+    }
+}
+
+private extension SettingValue {
+    static let onTag = "on"
+    static let offTag = "off"
+}
+
+private extension Binding<SettingValue?> {
+    /// A choice's stored value, `nil` where the level inherits.
+    var choice: Binding<String?> {
+        Binding<String?>(
+            get: { wrappedValue?.choice },
+            set: { wrappedValue = $0.map(SettingValue.choice) },
         )
     }
-}
 
-/// The fix table's recommendation, with its reason as the tooltip.
-private struct RecommendedChip: View {
-    let reason: String
-    let use: () -> Void
-
-    var body: some View {
-        HStack(spacing: Theme.Space.sm) {
-            Text("Recommended")
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(.tint.opacity(0.15), in: Capsule())
-            Button("Use recommended", action: use)
-                .buttonStyle(.link)
-                .font(.caption)
-                .accessibilityHint(InterfaceCopy.localized(reason))
-            // The button's hint carries the tooltip to VoiceOver.
-            Image(systemName: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-        }
-        .help(InterfaceCopy.localized(reason))
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// Marks a value the fix list set at first launch, with its reason and undo.
-struct FixListMark: View {
-    let reason: String
-    let undo: () -> Void
-
-    var body: some View {
-        HStack(spacing: Theme.Space.xs) {
-            Text("Set by the fix list")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(verbatim: "·")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Button("Undo", action: undo)
-                .buttonStyle(.link)
-                .font(.caption)
-                .accessibilityHint(reason)
-        }
-        .help(reason)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// A switch as a picker's tag, `nil` where the level inherits.
+    var flagTag: Binding<String?> {
+        Binding<String?>(
+            get: { wrappedValue?.flag.map { $0 ? SettingValue.onTag : SettingValue.offTag } },
+            set: { wrappedValue = $0.map { .flag($0 == SettingValue.onTag) } },
+        )
     }
 }
 
@@ -247,10 +197,10 @@ extension SettingID {
     /// The row search flashes for this setting, where search knows one.
     func anchor(at level: SettingLevel) -> SettingsAnchor? {
         switch (self, level) {
-        case (.windows, .bottle): .engineWindows
-        case (.upscaler, .bottle): .engineUpscaler
-        case (.filter, .bottle): .engineFilter
-        case (.mouse, .bottle): .engineMouse
+        case (.windows, .bottle): .graphicsWindows
+        case (.upscaler, .bottle): .graphicsUpscaler
+        case (.filter, .bottle): .graphicsFilter
+        case (.mouse, .bottle): .graphicsMouse
         case (.upscaler, .game): .gamesUpscaler
         default: nil
         }

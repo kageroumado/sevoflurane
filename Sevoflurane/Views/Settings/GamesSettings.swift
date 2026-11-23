@@ -1,4 +1,3 @@
-import Propofol
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -15,6 +14,10 @@ struct GamesSettings: View {
     var selectsFirstGame = false
     /// The gallery's games, shown on a Mac that has none of its own.
     var fixtureGames: [Entry] = []
+    /// The gallery's settings for the selected game, in place of the Mac's.
+    var fixtureForm: SettingsStore?
+    /// Draws the sections an adopted program has, for the gallery.
+    var showsProgramSections = false
     /// A game requested from elsewhere (a game's menu in the popover); taken
     /// and cleared.
     var requestedGame: Binding<SettingsNavigation.GameRequest?> = .constant(nil)
@@ -30,14 +33,21 @@ struct GamesSettings: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            GameList(games: games, selected: Binding(get: { selected }, set: { select($0) }))
-            Divider()
+        SettingsSplit {
+            List(games, selection: Binding(get: { selected }, set: { select($0) })) { entry in
+                SettingsListRow(
+                    title: entry.name,
+                    detail: entry.exes.isEmpty
+                        ? String(localized: "not launched here yet") : entry.exes.joined(separator: ", "),
+                )
+            }
+        } detail: {
             if let selected, let entry = games.first(where: { $0.id == selected }),
                let form, form.scope.game == entry.id {
                 GameForm(
                     gameID: entry.id, name: entry.name, store: form, shaders: shaders,
                     highlighted: highlighted, recommendation: recommendation,
+                    showsProgramSections: showsProgramSections,
                 )
                 // A store belongs to one game, so another game is another form.
                 .id(entry.id)
@@ -76,7 +86,8 @@ struct GamesSettings: View {
             return
         }
         if form?.scope.game != id {
-            form = SettingsStore(scope: .game(id, bottle: SteamBottle.name))
+            form = fixtureForm.flatMap { $0.scope.game == id ? $0 : nil }
+                ?? SettingsStore(scope: .game(id, bottle: SteamBottle.name))
         }
     }
 
@@ -94,42 +105,10 @@ struct GamesSettings: View {
                 Entry(id: id, name: values.name ?? "App \(id)", exes: values.exes ?? [])
             }
             .sorted(by: Self.byName)
-        if games.isEmpty { games = fixtureGames }
+        if games.isEmpty || fixtureForm != nil { games = fixtureGames }
         var choice = selected.flatMap { id in games.contains { $0.id == id } ? id : nil }
         if selectsFirstGame, choice == nil { choice = games.first?.id }
         select(choice)
-    }
-}
-
-// MARK: - The list
-
-private struct GameList: View {
-    let games: [GamesSettings.Entry]
-    @Binding var selected: Int?
-
-    private static let width: CGFloat = 210
-
-    var body: some View {
-        List(games, selection: $selected) { entry in
-            GameListRow(name: entry.name, exes: entry.exes)
-        }
-        .listStyle(.inset)
-        .frame(width: Self.width)
-    }
-}
-
-private struct GameListRow: View {
-    let name: String
-    let exes: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(name).lineLimit(1)
-            Text(exes.isEmpty ? String(localized: "not launched here yet") : exes.joined(separator: ", "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
     }
 }
 
@@ -173,9 +152,10 @@ private struct GameForm: View {
     let shaders: ShaderStore
     let highlighted: SettingsAnchor?
     let recommendation: KnownFixes.Recommendation
+    let showsProgramSections: Bool
 
     var body: some View {
-        Form {
+        SettingsForm(highlighted: highlighted) {
             SettingSections(
                 store: store, shaders: shaders, highlighted: highlighted,
                 heading: name, recommendation: recommendation,
@@ -194,11 +174,13 @@ private struct GameForm: View {
                 if FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
                     FPSUnlockerSection()
                 }
+            } else if showsProgramSections {
+                SteamLibrarySection(programID: gameID)
+                FPSUnlockerSection()
             }
             DockSection(gameID: gameID)
         }
-        .formStyle(.grouped)
-        .highlightable(.gamesSettings, highlighted: highlighted)
+        .highlightableSection(.gamesSettings, highlighted: highlighted)
     }
 }
 
@@ -214,23 +196,16 @@ private struct FixListSection: View {
     let undo: () -> Void
 
     var body: some View {
-        Section {
+        SettingsSection(
+            title: "Set by the fix list",
+            footer: "Set at the game\u{2019}s first launch, where it had no value of its own.",
+        ) {
             ForEach(fixes.fixes, id: \.title) { fix in
-                SettingsRow(caption: InterfaceCopy.localized(fix.reason)) {
-                    Text(fix.title).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                SettingsRow(title: "\(fix.title)", caption: InterfaceCopy.localized(fix.reason)) {}
             }
-            SettingsRow {
-                Text(remaining.joined(separator: ", "))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Undo", action: undo)
+            SettingsAction(title: "Values it holds", caption: remaining.joined(separator: ", ")) {
+                Button("Undo Fixes", action: undo)
             }
-        } header: {
-            Text("Set by the fix list")
-        } footer: {
-            Text("Set at the game's first launch, where it had no value of its own. Undo puts back what it had.")
         }
     }
 
@@ -251,9 +226,9 @@ private struct SteamLibrarySection: View {
     @State private var listed: Bool?
 
     var body: some View {
-        Section {
-            ToggleRow(
-                title: "Show in Steam's library",
+        SettingsSection(title: "Steam library") {
+            SettingsToggle(
+                title: "Show in Steam\u{2019}s library",
                 caption: String(localized: "As a non-Steam game, with Steam Input and the overlay."),
                 help: .steamLibrary,
                 isOn: Binding(
@@ -279,14 +254,14 @@ private struct DockSection: View {
     @State private var kept: Bool?
 
     var body: some View {
-        Section {
-            HelpedRow(
+        SettingsSection(title: "Dock") {
+            SettingsToggle(
+                title: "Keep in Dock",
                 caption: bundle == nil
-                    ? String(localized: "Available after the game's first launch.")
+                    ? String(localized: "Available after the game\u{2019}s first launch.")
                     : String(localized: "A click on its Dock icon starts the game."),
                 help: .dockTile,
-            ) {
-                Toggle("Keep in Dock", isOn: Binding(
+                isOn: Binding(
                     get: { kept ?? false },
                     set: { isOn in
                         guard let bundle else { return }
@@ -295,11 +270,9 @@ private struct DockSection: View {
                             if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
                         }
                     },
-                ))
-                .toggleStyle(.switch)
-                .accessibilityLabel("Keep in Dock")
-                .disabled(bundle == nil)
-            }
+                ),
+            )
+            .disabled(bundle == nil)
         }
         .task(id: gameID) {
             let facts = await Self.read(gameID)
@@ -325,46 +298,35 @@ private struct FPSUnlockerSection: View {
     @State private var target = FPSUnlocker.target
 
     var body: some View {
-        Section {
-            ActionRow(title: "Unlocker") {
-                Text(verbatim: executable?.lastPathComponent ?? ownLabel)
-                    .foregroundStyle(executable == nil && !hasOwn ? .secondary : .primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(executable?.path ?? "")
+        SettingsSection(
+            title: "FPS unlocker",
+            footer: "An unlocker changes the running game\u{2019}s memory, which HoYoverse\u{2019}s terms do not allow, so the switch is yours.",
+        ) {
+            SettingsAction(title: "Unlocker", help: .fpsUnlocker) {
+                SettingsValueText(text: executable?.lastPathComponent ?? ownLabel)
                 Button("Choose…", action: choose)
                 if executable != nil {
-                    Button(hasOwn ? "Use Sevoflurane's" : "Remove") {
+                    Button(hasOwn ? "Use Sevoflurane\u{2019}s" : "Remove") {
                         executable = nil
                         FPSUnlocker.executable = nil
                     }
                 }
             }
-            ToggleRow(title: "Start it with the game", isOn: $isEnabled)
+            SettingsToggle(title: "Start it with the game", isOn: $isEnabled)
                 .disabled(executable == nil && !hasOwn)
                 .onChange(of: isEnabled) { _, on in FPSUnlocker.isEnabled = on }
-            SettingsRow {
-                Picker("Frame rate", selection: $target) {
-                    ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
-                }
-                .endsOnControlLine()
+            SettingsPicker(title: "Frame rate", selection: $target) {
+                ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
             }
             .disabled(executable == nil && !hasOwn)
             .onChange(of: target) { _, fps in FPSUnlocker.target = fps }
-        } header: {
-            HStack(spacing: 6) {
-                Text("FPS unlocker")
-                SettingHelpButton(help: .fpsUnlocker)
-            }
-        } footer: {
-            Text("An unlocker changes the running game's memory, which HoYoverse's terms do not allow, so the switch is yours.")
         }
     }
 
     private var hasOwn: Bool { Engine.active.fpsUnlocker != nil }
 
     private var ownLabel: String {
-        hasOwn ? String(localized: "Sevoflurane's own") : String(localized: "None")
+        hasOwn ? String(localized: "Sevoflurane\u{2019}s own") : String(localized: "None")
     }
 
     /// The offered rates, plus the stored one if missing.
@@ -387,109 +349,5 @@ private struct FPSUnlockerSection: View {
         if !isEnabled {
             isEnabled = true
         }
-    }
-}
-
-// MARK: - DLL overrides
-
-/// This game's DLL load orders over the bottle's, written under
-/// `AppDefaults\<exe>\DllOverrides`.
-private struct GameDLLOverridesSection: View {
-    let store: SettingsStore
-
-    var body: some View {
-        let table = (store.values.dllOverrides ?? [:]).sorted { $0.key < $1.key }
-        Section {
-            ForEach(table, id: \.key) { library, order in
-                DLLOverrideRow(dll: library, mode: order) {
-                    store.send(.setDLLOverride(library: library, order: $0))
-                }
-            }
-            AddDLLOverrideRow { library, order in
-                store.send(.setDLLOverride(library: library, order: order))
-            }
-        } header: {
-            HStack(spacing: 6) {
-                Text("DLL overrides")
-                SettingHelpButton(help: SettingCopy.dllOverrides)
-            }
-        } footer: {
-            Text("For this game alone, from its next launch. winecfg shows the same values; Settings › Engine holds the bottle's.")
-        }
-    }
-}
-
-/// Wine's load orders as the registry spells them, so the picker and `sevo app
-/// config <id> dll` name the same values.
-private let dllOverrideModes: [(mode: String, label: LocalizedStringResource)] = [
-    ("n,b", "Native, then built-in"),
-    ("b,n", "Built-in, then native"),
-    ("n", "Native only"),
-    ("b", "Built-in only"),
-    ("", "Disabled"),
-]
-
-private struct DLLOverrideRow: View {
-    let dll: String
-    let mode: String
-    /// Writes a load order for this DLL; `nil` removes the override.
-    let set: (String?) -> Void
-
-    var body: some View {
-        SettingsRow {
-            Text(dll).font(.body.monospaced())
-            Spacer()
-            Picker("Load order", selection: Binding(get: { mode }, set: { set($0) })) {
-                ForEach(dllOverrideModes, id: \.mode) { choice in
-                    Text(choice.label).tag(choice.mode)
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-            .endsOnControlLine()
-        } accessory: {
-            Button {
-                set(nil)
-            } label: {
-                Image(systemName: "minus.circle")
-            }
-            .help("Remove the override for \(dll)")
-            .accessibilityLabel("Remove the override for \(dll)")
-        }
-    }
-}
-
-private struct AddDLLOverrideRow: View {
-    let add: (_ dll: String, _ mode: String) -> Void
-    @State private var name = ""
-    @State private var mode = "n,b"
-    @State private var libraries: [String] = []
-
-    var body: some View {
-        // Two lines: the form's column is too narrow for name, load order and
-        // button side by side.
-        SettingsRow {
-            VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                DLLNameField(name: $name, names: libraries)
-                HStack {
-                    Picker("Load order", selection: $mode) {
-                        ForEach(dllOverrideModes, id: \.mode) { choice in
-                            Text(choice.label).tag(choice.mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    Spacer()
-                    Button("Add") {
-                        let dll = BuiltinLibraries.normalized(name)
-                        guard !dll.isEmpty else { return }
-                        add(dll, mode)
-                        name = ""
-                    }
-                    .disabled(BuiltinLibraries.normalized(name).isEmpty)
-                }
-            }
-        }
-        .task { libraries = BuiltinLibraries.names() }
     }
 }

@@ -89,7 +89,7 @@ nonisolated enum UpscalerChoice: String, CaseIterable, Sendable {
         let value = switch self {
         case .off: "The window system scales the picture."
         case .lanczos: "No shader. The final filter does all the resizing."
-        case .metalfx: "For 3D games rendered below your display's resolution."
+        case .metalfx: "For 3D games rendered below your display’s resolution."
         }
         return InterfaceCopy.localized(value)
     }
@@ -212,7 +212,7 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
     var label: String {
         let value = switch self {
         case .system: "macOS acceleration"
-        case .linear: "Linear (no acceleration)"
+        case .linear: "Linear"
         }
         return InterfaceCopy.localized(value)
     }
@@ -263,7 +263,7 @@ nonisolated enum OverlayDetail: String, Codable, CaseIterable, Sendable {
         let value = switch self {
         case .frameRate: "Frame rate"
         case .frameTime: "Frame rate and frame time"
-        case .system: "Everything (CPU, GPU, power, temperature)"
+        case .system: "Everything"
         }
         return InterfaceCopy.localized(value)
     }
