@@ -22,6 +22,854 @@
         }
       }
     },
+    "%@ %@ installed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@ installed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@ 已安装"
+          }
+        }
+      }
+    },
+    "%@ %@ received": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@ received"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 已接收 %2$@"
+          }
+        }
+      }
+    },
+    "%@ did not install.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 未能安装。"
+          }
+        }
+      }
+    },
+    "A fresh Steam with no games installed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一个全新的 Steam，尚未安装任何游戏。"
+          }
+        }
+      }
+    },
+    "A second try starts over in a fresh folder.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再次尝试时会在一个全新的文件夹中重新开始。"
+          }
+        }
+      }
+    },
+    "After a game closes, Sevoflurane sends its frame rate, resolution, engine and settings, with your Mac’s model and chip. Nothing identifies you, your Mac or your Steam account.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏关闭后，Sevoflurane 会发送其帧率、分辨率、引擎和设置，以及你的 Mac 的型号和芯片。其中没有任何内容能识别你、你的 Mac 或你的 Steam 账户。"
+          }
+        }
+      }
+    },
+    "An administrator of this Mac can install it. Then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 的管理员可以安装它，之后请重试。"
+          }
+        }
+      }
+    },
+    "Apple’s Rosetta": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple 的 Rosetta"
+          }
+        }
+      }
+    },
+    "Apple’s Rosetta could not be installed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安装 Apple 的 Rosetta。"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回"
+          }
+        }
+      }
+    },
+    "Check the connection, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请检查网络连接，然后重试。"
+          }
+        }
+      }
+    },
+    "Choose the dormison-r<N>.tar.xz you downloaded, or an engine folder you built. Sevoflurane checks the .sig beside a tarball against the engine key.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择你下载的 dormison-r<N>.tar.xz，或你自行构建的引擎文件夹。Sevoflurane 会用引擎密钥校验压缩包旁边的 .sig 文件。"
+          }
+        }
+      }
+    },
+    "Closing Steam": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭 Steam"
+          }
+        }
+      }
+    },
+    "Closing the Steam that is running…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在关闭运行中的 Steam…"
+          }
+        }
+      }
+    },
+    "Don’t Share": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不共享"
+          }
+        }
+      }
+    },
+    "Downloading %@ %@, nothing to click": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Downloading %1$@ %2$@, nothing to click"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 %1$@ %2$@，无需点击任何内容"
+          }
+        }
+      }
+    },
+    "Downloading Steam…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 Steam…"
+          }
+        }
+      }
+    },
+    "Downloading Windows support…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 Windows 支持…"
+          }
+        }
+      }
+    },
+    "Fonts and extras": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字体与附加组件"
+          }
+        }
+      }
+    },
+    "Fonts and extras could not be installed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安装字体与附加组件。"
+          }
+        }
+      }
+    },
+    "Free. Setup downloads Steam and what it needs to run on a Mac. You sign in to Steam at the end.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "免费。设置过程会下载 Steam 以及它在 Mac 上运行所需的一切，最后由你登录 Steam。"
+          }
+        }
+      }
+    },
+    "From CodeWeavers. %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自 CodeWeavers。%@"
+          }
+        }
+      }
+    },
+    "Hide details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏详细信息"
+          }
+        }
+      }
+    },
+    "How games run": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏如何运行"
+          }
+        }
+      }
+    },
+    "in CrossOver": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位于 CrossOver"
+          }
+        }
+      }
+    },
+    "in Sevoflurane": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位于 Sevoflurane"
+          }
+        }
+      }
+    },
+    "Installing Apple’s Rosetta…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装 Apple 的 Rosetta…"
+          }
+        }
+      }
+    },
+    "Installing fonts and extras…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装字体与附加组件…"
+          }
+        }
+      }
+    },
+    "Installs from a dormison-r<N>.tar.xz you downloaded from the Dormison releases, with its .sig beside it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从你在 Dormison 发布页下载的 dormison-r<N>.tar.xz 安装，其 .sig 文件需放在旁边。"
+          }
+        }
+      }
+    },
+    "It did not answer. Try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它没有响应。请重试。"
+          }
+        }
+      }
+    },
+    "It is still restarting. Try again in a moment.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它仍在重新启动。请稍后重试。"
+          }
+        }
+      }
+    },
+    "Its first start can take a minute.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次启动可能需要一分钟。"
+          }
+        }
+      }
+    },
+    "last played %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次游玩于 %@"
+          }
+        }
+      }
+    },
+    "Later: Settings › Graphics.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "之后可在：设置 › 图形。"
+          }
+        }
+      }
+    },
+    "Newer games (DirectX 12)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "较新的游戏（DirectX 12）"
+          }
+        }
+      }
+    },
+    "No games installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安装游戏"
+          }
+        }
+      }
+    },
+    "One thing before it opens.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开之前还有一件事。"
+          }
+        }
+      }
+    },
+    "Open Setup": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开设置向导"
+          }
+        }
+      }
+    },
+    "Open Sevoflurane at login": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登录时打开 Sevoflurane"
+          }
+        }
+      }
+    },
+    "Preparing Steam’s folder…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备 Steam 的文件夹…"
+          }
+        }
+      }
+    },
+    "Rather use your own browser?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更想用自己的浏览器？"
+          }
+        }
+      }
+    },
+    "Reveal in Finder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示"
+          }
+        }
+      }
+    },
+    "Set Up Steam": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置 Steam"
+          }
+        }
+      }
+    },
+    "Setup stopped": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置已停止"
+          }
+        }
+      }
+    },
+    "Setup stopped.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置已停止。"
+          }
+        }
+      }
+    },
+    "Sevoflurane stays in the menu bar: %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevoflurane 会留在菜单栏中：%@"
+          }
+        }
+      }
+    },
+    "Sevoflurane’s background helper starts Steam, and it is not running.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 由 Sevoflurane 的后台助手启动，而它当前没有运行。"
+          }
+        }
+      }
+    },
+    "Sevoflurane’s own engine. Free.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevoflurane 自带的引擎。免费。"
+          }
+        }
+      }
+    },
+    "Share how each game ran, so everyone can see what plays well on which Mac in the public Sevoflurane game database.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共享每个游戏的运行情况，让所有人都能在公开的 Sevoflurane 游戏数据库中看到哪些游戏在哪款 Mac 上运行良好。"
+          }
+        }
+      }
+    },
+    "Show details": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示详细信息"
+          }
+        }
+      }
+    },
+    "Sign in on Apple’s page with any Apple Account and download “Evaluation environment for Windows games 4.0 beta 2” or newer. Sevoflurane installs it the moment it lands.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用任意 Apple 账户在 Apple 的页面上登录，并下载“Evaluation environment for Windows games 4.0 beta 2”或更新版本。下载完成后，Sevoflurane 会立即安装。"
+          }
+        }
+      }
+    },
+    "Sign In to Apple": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登录 Apple"
+          }
+        }
+      }
+    },
+    "Sign in to see your games.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登录即可看到你的游戏。"
+          }
+        }
+      }
+    },
+    "Start Steam Again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新启动 Steam"
+          }
+        }
+      }
+    },
+    "Steam cannot start yet": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 暂时无法启动"
+          }
+        }
+      }
+    },
+    "Steam could not be downloaded.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法下载 Steam。"
+          }
+        }
+      }
+    },
+    "Steam did not start": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 未能启动"
+          }
+        }
+      }
+    },
+    "Steam for Windows and its games, on your Mac": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows 版 Steam 及其游戏，就在你的 Mac 上"
+          }
+        }
+      }
+    },
+    "Steam is installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 已安装"
+          }
+        }
+      }
+    },
+    "Steam is installed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 已安装。"
+          }
+        }
+      }
+    },
+    "Steam is installed. It opens from the last screen of setup.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 已安装。它会从设置向导的最后一屏打开。"
+          }
+        }
+      }
+    },
+    "Steam is starting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 正在启动"
+          }
+        }
+      }
+    },
+    "Steam’s folder": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 的文件夹"
+          }
+        }
+      }
+    },
+    "Steam’s folder could not be prepared.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法准备 Steam 的文件夹。"
+          }
+        }
+      }
+    },
+    "Steam’s installer": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 安装程序"
+          }
+        }
+      }
+    },
+    "Steam’s installer did not finish.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 安装程序未能完成。"
+          }
+        }
+      }
+    },
+    "Stopping Steam…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在停止 Steam…"
+          }
+        }
+      }
+    },
+    "The download has nowhere to install to.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载的内容没有可安装的位置。"
+          }
+        }
+      }
+    },
+    "The optional ones add %lld MB.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选的软件包共增加 %lld MB。"
+          }
+        }
+      }
+    },
+    "The Steam that is running could not be closed.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法关闭运行中的 Steam。"
+          }
+        }
+      }
+    },
+    "They need Apple’s Game Porting Toolkit, a free download from Apple. Apple asks you to sign in with an Apple Account to download it. The sign-in page is Apple’s, and Sevoflurane never sees your password.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它们需要 Apple 的 Game Porting Toolkit，可从 Apple 免费下载。Apple 要求使用 Apple 账户登录后才能下载。登录页面是 Apple 的，Sevoflurane 永远看不到你的密码。"
+          }
+        }
+      }
+    },
+    "This Mac has %lld. Pick the one with your games.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 上有 %lld 个。请选择装有你的游戏的那一个。"
+          }
+        }
+      }
+    },
+    "This Mac has CrossOver, so Steam can run on either.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 装有 CrossOver，因此 Steam 可以在两者之一上运行。"
+          }
+        }
+      }
+    },
+    "Try Again takes up where it stopped.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“重试”会从停下的地方继续。"
+          }
+        }
+      }
+    },
+    "Use a Downloaded File…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用已下载的文件…"
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待中"
+          }
+        }
+      }
+    },
+    "Which Steam?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用哪个 Steam？"
+          }
+        }
+      }
+    },
+    "Windows support": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows 支持"
+          }
+        }
+      }
+    },
+    "Windows support could not be downloaded.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法下载 Windows 支持。"
+          }
+        }
+      }
+    },
+    "Working…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进行中…"
+          }
+        }
+      }
+    },
+    "You can close this window. Setup continues in the menu bar.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以关闭此窗口。设置会在菜单栏中继续。"
+          }
+        }
+      }
+    },
+    "You can switch later in Settings.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "之后可以在设置中切换。"
+          }
+        }
+      }
+    },
+    "Your games are in its library.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的游戏就在它的库中。"
+          }
+        }
+      }
+    },
     "—": {
       "localizations": {
         "zh-Hans": {
@@ -355,17 +1203,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "旁边有 %@"
-          }
-        }
-      }
-    },
-    "%@ comes with this copy. Nothing to download.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此版本已包含 %@，无需下载。"
           }
         }
       }
@@ -843,17 +1680,6 @@
         }
       }
     },
-    "14-day trial": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "14 天试用"
-          }
-        }
-      }
-    },
     "A 32-bit program can address 4 GB, and Windows gives it the lower 2 GB unless its file carries the Large Address Aware flag. Modded and texture-heavy 32-bit games run out of those 2 GB and crash. With this on every 32-bit game gets all 4, flag or no flag.": {
       "extractionState": "manual",
       "localizations": {
@@ -861,16 +1687,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "32 位程序最多可寻址 4 GB；除非文件带有“大地址感知”标志，否则 Windows 只提供低位的 2 GB。经过修改或使用大量纹理的 32 位游戏可能用尽这 2 GB 并崩溃。开启后，所有 32 位游戏都可使用完整的 4 GB，无论是否带有该标志。"
-          }
-        }
-      }
-    },
-    "A bottle named “%@” already exists.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已存在名为“%@”的容器。"
           }
         }
       }
@@ -892,17 +1708,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "点按它在程序坞中的图标即可启动游戏。"
-          }
-        }
-      }
-    },
-    "A command-line tool, and the way AI assistants reach Steam through MCP. Asks for an administrator password.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "安装命令行工具，让 AI 助手通过 MCP 使用 Steam。安装时需要管理员密码。"
           }
         }
       }
@@ -1306,17 +2111,6 @@
         }
       }
     },
-    "A second try keeps what already downloaded.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重试时会保留已下载的文件。"
-          }
-        }
-      }
-    },
     "A Steam account signs in to one Steam at a time. When Steam for Mac signs in, Steam in Sevoflurane goes offline, and it reconnects when you quit Steam for Mac.": {
       "localizations": {
         "zh-Hans": {
@@ -1432,17 +2226,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Windows 程序"
-          }
-        }
-      }
-    },
-    "A Wine engine runs Windows games on your Mac.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wine 引擎可让 Windows 游戏在 Mac 上运行。"
           }
         }
       }
@@ -1687,17 +2470,6 @@
         }
       }
     },
-    "After a game closes, Sevoflurane sends its frame rate, resolution, engine and settings, with your Mac’s model and chip. Nothing names you, your Mac or your account.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏关闭后，Sevoflurane 会发送帧率、分辨率、引擎、设置以及 Mac 机型和芯片信息。这些信息不包含你的姓名、Mac 名称或账号。"
-          }
-        }
-      }
-    },
     "AI assistants (MCP)": {
       "extractionState": "manual",
       "localizations": {
@@ -1819,17 +2591,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "AMD"
-          }
-        }
-      }
-    },
-    "An empty bottle with a fresh Steam.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建新容器并安装 Steam。"
           }
         }
       }
@@ -2279,17 +3040,6 @@
         }
       }
     },
-    "Both can change later, in Settings.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "之后可在“设置”中更改。"
-          }
-        }
-      }
-    },
     "Bottle": {
       "localizations": {
         "zh-Hans": {
@@ -2445,26 +3195,6 @@
         }
       }
     },
-    "Change the Engine File…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更改引擎文件…"
-          }
-        }
-      }
-    },
-    "Check Again": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再次检查"
-          }
-        }
-      }
-    },
     "Check for Updates…": {
       "localizations": {
         "zh-Hans": {
@@ -2492,17 +3222,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在检查客户端…"
-          }
-        }
-      }
-    },
-    "Checking the Steam installed here and updating it.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在检查并更新这里安装的 Steam。"
           }
         }
       }
@@ -2590,16 +3309,6 @@
         }
       }
     },
-    "Choose an Engine File…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择引擎文件…"
-          }
-        }
-      }
-    },
     "Choose an upscaler in Engine or Games.": {
       "extractionState": "stale",
       "localizations": {
@@ -2668,17 +3377,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择帧率解锁器"
-          }
-        }
-      }
-    },
-    "Choose the Game Porting Toolkit disk image you downloaded.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请选择已下载的 Game Porting Toolkit 磁盘映像。"
           }
         }
       }
@@ -2874,45 +3572,12 @@
         }
       }
     },
-    "Close this window any time. Setup carries on in the menu bar, and resumes where it stopped.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可以随时关闭此窗口。设置会在菜单栏中继续，并从中断处恢复。"
-          }
-        }
-      }
-    },
     "Closing Steam and anything running in it. Sevoflurane quits after Steam closes.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "正在关闭 Steam 及其中运行的所有程序。Steam 关闭后，Sevoflurane 会退出。"
-          }
-        }
-      }
-    },
-    "CodeWeavers develops Wine, and both engines are built on it. Switch engines later in Settings.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wine 由 CodeWeavers 开发。两个引擎都基于 Wine，之后可在“设置”中切换。"
-          }
-        }
-      }
-    },
-    "CodeWeavers' paid engine, with per-game fixes and a support team.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CodeWeavers 的付费引擎，提供针对各款游戏的修复和技术支持。"
           }
         }
       }
@@ -3035,17 +3700,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "从上次中断处继续设置。Steam 会从上一步开始打开。"
-          }
-        }
-      }
-    },
-    "Continue to finish setting up.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "继续以完成设置。"
           }
         }
       }
@@ -3429,16 +4083,6 @@
         }
       }
     },
-    "D3DMetal %@ installed": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已安装 D3DMetal %@"
-          }
-        }
-      }
-    },
     "D3DMetal uses the newest installed version. Removing the last version disables DirectX 12 in Dormison.": {
       "localizations": {
         "zh-Hans": {
@@ -3700,34 +4344,12 @@
         }
       }
     },
-    "DirectX 12 games": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DirectX 12 游戏"
-          }
-        }
-      }
-    },
     "DirectX 12 needs a Mac with Apple silicon.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "DirectX 12 需要搭载 Apple 芯片的 Mac。"
-          }
-        }
-      }
-    },
-    "DirectX 12 support": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "支持 DirectX 12"
           }
         }
       }
@@ -3921,16 +4543,6 @@
         }
       }
     },
-    "Download everything": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下载全部"
-          }
-        }
-      }
-    },
     "Download it from Apple again to get it back.": {
       "extractionState": "manual",
       "localizations": {
@@ -3985,16 +4597,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在下载 d3dcompiler_47"
-          }
-        }
-      }
-    },
-    "Downloading D3DMetal %@, nothing to click": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在下载 D3DMetal %@，无需任何操作"
           }
         }
       }
@@ -4146,17 +4748,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "每次游戏关闭后，其帧率和设置会发送到公开的游戏数据库。"
-          }
-        }
-      }
-    },
-    "Each game launches as its own app. When it fills the screen, macOS engages Game Mode on its own. Nothing to toggle.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每款游戏都作为独立 App 启动。进入全屏后，macOS 会自动启用游戏模式，无需手动设置。"
           }
         }
       }
@@ -4422,17 +5013,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "每个游戏都会加上标记，苹果筛选只保留可以在这台 Mac 上运行的游戏。"
-          }
-        }
-      }
-    },
-    "Every game is a real Mac window. Fixed-size games, even old ones that never allowed it, become resizable and go native full screen.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每款游戏都以独立的 Mac 窗口运行。即使游戏原本不支持调整窗口大小，也可以缩放窗口并进入原生全屏。"
           }
         }
       }
@@ -4876,17 +5456,6 @@
         }
       }
     },
-    "Fonts and runtimes": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "字体和运行库"
-          }
-        }
-      }
-    },
     "For 3D games rendered below your display’s resolution.": {
       "extractionState": "manual",
       "localizations": {
@@ -5118,17 +5687,6 @@
         }
       }
     },
-    "Free": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "免费"
-          }
-        }
-      }
-    },
     "Friends": {
       "localizations": {
         "zh-Hans": {
@@ -5201,17 +5759,6 @@
         }
       }
     },
-    "Game engine": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏引擎"
-          }
-        }
-      }
-    },
     "Game libraries": {
       "localizations": {
         "zh-Hans": {
@@ -5229,17 +5776,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "游戏模式"
-          }
-        }
-      }
-    },
-    "Game Mode, automatically": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自动启用游戏模式"
           }
         }
       }
@@ -5333,17 +5869,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "此 %@ 磁盘上的游戏可能出错。请将其重新格式化为 APFS，或在 Steam 中移动游戏。"
-          }
-        }
-      }
-    },
-    "Games run through Dormison, Sevoflurane’s own build of Wine with DirectX 12 support and fixes for the games themselves.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏通过 Dormison 运行。它是 Sevoflurane 自带的 Wine 版本，支持 DirectX 12，并包含针对游戏的修复。"
           }
         }
       }
@@ -5444,32 +5969,12 @@
         }
       }
     },
-    "Get CrossOver": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "获取 CrossOver"
-          }
-        }
-      }
-    },
     "Get It from Apple…": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "从 Apple 获取…"
-          }
-        }
-      }
-    },
-    "Get Started": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "开始使用"
           }
         }
       }
@@ -5511,16 +6016,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "GitHub %@"
-          }
-        }
-      }
-    },
-    "Give the bottle a name.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请为容器命名。"
           }
         }
       }
@@ -6024,16 +6519,6 @@
         }
       }
     },
-    "Install the sevo command": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "安装 sevo 命令"
-          }
-        }
-      }
-    },
     "Install the Visual C++ runtime, or the DirectX runtimes for d3dx9 and xinput.": {
       "extractionState": "manual",
       "localizations": {
@@ -6279,17 +6764,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "从磁盘安装 Dormison，适用于无法访问发布源的 Mac，或在本机构建的引擎。安装后的引擎会出现在“引擎”菜单中，何时启用由“切换”决定。"
-          }
-        }
-      }
-    },
-    "Installs from %@.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从 %@ 安装。"
           }
         }
       }
@@ -6589,17 +7063,6 @@
         }
       }
     },
-    "Licensed": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已获许可"
-          }
-        }
-      }
-    },
     "Licensed.": {
       "extractionState": "manual",
       "localizations": {
@@ -6691,16 +7154,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "记录游戏加载的每个库"
-          }
-        }
-      }
-    },
-    "Log In to Steam": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登录 Steam"
           }
         }
       }
@@ -7030,17 +7483,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "更多操作"
-          }
-        }
-      }
-    },
-    "Most connections take a few minutes.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "通常需要几分钟。"
           }
         }
       }
@@ -7445,17 +7887,6 @@
         }
       }
     },
-    "Not just Steam": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "不止支持 Steam"
-          }
-        }
-      }
-    },
     "not launched here yet": {
       "localizations": {
         "zh-Hans": {
@@ -7586,17 +8017,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "好"
-          }
-        }
-      }
-    },
-    "Old games render small. Sevoflurane can upscale the picture past the game’s own resolution, with filters for 3D games and for 2D anime art.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "旧游戏的画面分辨率通常较低。Sevoflurane 可以将画面放大到超过游戏本身的分辨率，并为 3D 游戏和 2D 动漫风格画面提供滤镜。"
           }
         }
       }
@@ -7758,17 +8178,6 @@
         }
       }
     },
-    "Open any Windows program from Finder. Sevoflurane tells a game from an installer, runs or installs it, and gives it the same treatment.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可从访达打开任何 Windows 程序。Sevoflurane 会识别游戏和安装程序，并运行或安装它们。"
-          }
-        }
-      }
-    },
     "Open Apple’s Download Page": {
       "localizations": {
         "zh-Hans": {
@@ -7825,16 +8234,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开登录项"
-          }
-        }
-      }
-    },
-    "Open My Library": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开我的游戏库"
           }
         }
       }
@@ -7926,28 +8325,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开 %@"
-          }
-        }
-      }
-    },
-    "Optional and free. Any Apple Account works; no paid developer membership.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可选且免费。任何 Apple 账户都可以，无需付费的开发者会员资格。"
-          }
-        }
-      }
-    },
-    "Optional upscaling": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可选的画面缩放"
           }
         }
       }
@@ -8434,17 +8811,6 @@
         }
       }
     },
-    "Ready to play": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "准备开玩"
-          }
-        }
-      }
-    },
     "Rebuild Bottle": {
       "extractionState": "manual",
       "localizations": {
@@ -8839,16 +9205,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "修复"
-          }
-        }
-      }
-    },
-    "Repair Background Helper": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "修复后台辅助程序"
           }
         }
       }
@@ -9669,17 +10025,6 @@
         }
       }
     },
-    "Sevoflurane waits in the menu bar.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sevoflurane 会驻留在菜单栏中。"
-          }
-        }
-      }
-    },
     "Sevoflurane’s own": {
       "extractionState": "manual",
       "localizations": {
@@ -9687,17 +10032,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sevoflurane 自带"
-          }
-        }
-      }
-    },
-    "Sevoflurane's own engine: DirectX 12 through Apple's toolkit, and game upscaling.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sevoflurane 自带的引擎，借助 Apple 的工具包支持 DirectX 12 和游戏画面缩放。"
           }
         }
       }
@@ -9810,28 +10144,7 @@
         }
       }
     },
-    "Share how each game ran, so everyone can see what plays well on which Mac.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分享各款游戏的运行情况，帮助大家了解哪些游戏适合自己的 Mac。"
-          }
-        }
-      }
-    },
     "Share run statistics": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享运行统计数据"
-          }
-        }
-      }
-    },
-    "Share Run Statistics": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
@@ -9899,16 +10212,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "显示 Apple 的页面"
-          }
-        }
-      }
-    },
-    "Show exactly what is sent": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "查看发送的具体内容"
           }
         }
       }
@@ -10106,16 +10409,6 @@
         }
       }
     },
-    "Skip for Now": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂时跳过"
-          }
-        }
-      }
-    },
     "Skip Sign-In": {
       "localizations": {
         "zh-Hans": {
@@ -10305,17 +10598,6 @@
         }
       }
     },
-    "Startup and automation": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "启动和自动化"
-          }
-        }
-      }
-    },
     "State": {
       "localizations": {
         "zh-Hans": {
@@ -10416,16 +10698,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steam 会关闭。Sevoflurane 会移除已下载的引擎和工具包，重设设置，并断开与助手的连接。\n\n选择“卸载并保留游戏”会保留 Steam 及其 %@ 的文件。选择“全部卸载”会将这些文件移到废纸篓，包括本地存档。\n\nSevoflurane 会将自身移到废纸篓并退出。你的 Steam 账户和云存档会保留。"
-          }
-        }
-      }
-    },
-    "Steam could not be stopped, so setup kept the bottle it had. Try again, or quit Steam from the menu bar first.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法停止 Steam，因此设置保留了原有容器。请重试，或先从菜单栏退出 Steam。"
           }
         }
       }
@@ -10532,17 +10804,6 @@
         }
       }
     },
-    "Steam installer": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 安装程序"
-          }
-        }
-      }
-    },
     "Steam installer failed (exit %@) without printing anything": {
       "extractionState": "manual",
       "localizations": {
@@ -10602,16 +10863,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steam 已退出登录"
-          }
-        }
-      }
-    },
-    "Steam is still restarting, so setup kept the bottle it had. Try again in a moment.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 仍在重新启动，因此设置保留了原有容器。请稍后重试。"
           }
         }
       }
@@ -10825,17 +11076,6 @@
         }
       }
     },
-    "Steam, always Retina": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 始终以视网膜分辨率显示"
-          }
-        }
-      }
-    },
     "Steam's API beside it": {
       "extractionState": "manual",
       "localizations": {
@@ -10843,28 +11083,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "旁边有 Steam API"
-          }
-        }
-      }
-    },
-    "Steam's folder": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 文件夹"
-          }
-        }
-      }
-    },
-    "Steam’s interface runs in native WKWebViews at the screen’s real scale, with its menus in the menu bar and Mac notifications.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 界面以屏幕的原生分辨率显示，菜单位于菜单栏中，通知则由 macOS 显示。"
           }
         }
       }
@@ -11226,17 +11444,6 @@
         }
       }
     },
-    "The CrossOver %@ trial on this Mac has ended. License it at codeweavers.com, or use Dormison.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这台 Mac 上的 CrossOver %@ 试用期已结束。请前往 codeweavers.com 购买许可证，或使用 Dormison。"
-          }
-        }
-      }
-    },
     "The database deletes these runs. The next run you share uses a new, unrelated identity.": {
       "localizations": {
         "zh-Hans": {
@@ -11274,17 +11481,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "你添加的 DirectX 12 转译层版本。"
-          }
-        }
-      }
-    },
-    "The engine also installs from a file: dormison-r<N>.tar.xz and its .sig, from the Dormison release.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "也可从 Dormison 发布页下载 dormison-r<N>.tar.xz 及其 .sig 文件来安装引擎。"
           }
         }
       }
@@ -11349,17 +11545,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "游戏 .exe 所在的文件夹。"
-          }
-        }
-      }
-    },
-    "The fonts and legacy runtimes games ask for.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "安装游戏所需的字体和旧版运行库。"
           }
         }
       }
@@ -11933,28 +12118,6 @@
         }
       }
     },
-    "Trial": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "试用版"
-          }
-        }
-      }
-    },
-    "Trial ended": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "试用期已结束"
-          }
-        }
-      }
-    },
     "Trial.": {
       "extractionState": "manual",
       "localizations": {
@@ -12398,37 +12561,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "快捷方式"
-          }
-        }
-      }
-    },
-    "Use a Downloaded Engine…": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用已下载的引擎…"
-          }
-        }
-      }
-    },
-    "Use a name without / or : in it.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名称中不能包含 / 或 :。"
-          }
-        }
-      }
-    },
-    "Use a Steam already on this Mac, or start a new one.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用这台 Mac 上现有的 Steam，或创建新的 Steam 环境。"
           }
         }
       }
@@ -13003,16 +13135,6 @@
         }
       }
     },
-    "Windows games on macOS": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在 macOS 上运行 Windows 游戏"
-          }
-        }
-      }
-    },
     "Windows games play their videos through Media Foundation, which the engine answers with GStreamer. The Mac’s video hardware decodes them (VideoToolbox), which costs almost nothing. A video that stays blank while the game waits for it is one that path could not decode, and Sevoflurane offers the other when a game’s decoder produced nothing.": {
       "extractionState": "manual",
       "localizations": {
@@ -13042,17 +13164,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "你添加的 Windows 程序，以及它们的安装程序写入此处的内容。"
-          }
-        }
-      }
-    },
-    "Windows that behave": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更好用的游戏窗口"
           }
         }
       }
@@ -13311,36 +13422,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "游戏和存档会保留。"
-          }
-        }
-      }
-    },
-    "Your library is in the menu bar under %@.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏库位于菜单栏中的 %@ 下。"
-          }
-        }
-      }
-    },
-    "Your library is in the menu bar under %@. Sign in to Steam to view it.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏库位于菜单栏中的 %@ 下。登录 Steam 后即可查看。"
-          }
-        }
-      }
-    },
-    "Your library is in the menu bar under %@. Steam is starting; the first launch can take a minute.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏库位于菜单栏中的 %@ 下。Steam 正在启动；首次启动可能需要一分钟。"
           }
         }
       }
