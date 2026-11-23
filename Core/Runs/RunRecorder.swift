@@ -259,8 +259,9 @@ final nonisolated class RunRecorder {
     private var handovers: [Int: ContinuousClock.Instant] = [:]
     private static let handoverWindow: Duration = .seconds(5)
 
-    /// A program was pressed: its run's Wine trail starts at the log's end now, since the process
-    /// can write before the reply is handled.
+    /// A program was pressed: its run's Wine trail starts at the log's end now, ahead of
+    /// everything the launch writes. A launch nobody pressed here (`sevo program launch`) starts
+    /// its trail where ``arm(appID:)`` finds the log, just before the helper spawns the process.
     func noteLaunchPressed(appID: Int) {
         pressedOffsets[appID] = (Self.size(of: wineLog), .now)
     }
@@ -582,26 +583,6 @@ final nonisolated class RunRecorder {
         open[appID]?.record.driver = driver
         persist(appID: appID)
         return openRecord(forApp: appID)
-    }
-
-    /// A record for a program whose kernel driver failed and that the app armed no run for (a
-    /// `sevo program launch`), so that the failure can still be shown.
-    static func unrecordedRun(appID: Int, name: String?, driver: String) -> RunRecord {
-        let selection = BottleGraphics.bootedSelection()
-        let engine = BottleGraphics.bootedEngineRoot().flatMap(Engine.booted(fromRoot:)) ?? Engine.active
-        return RunRecord(
-            t: runRecordStamp.string(from: .now),
-            appid: appID,
-            name: name,
-            engine: engine.recordIdentifier,
-            renderer: bottleRenderer(),
-            runner: GameRunner.wine,
-            windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
-            msync: selection?.msync ?? BottleGraphics.currentSelection().msync,
-            macos: macOSVersion,
-            driver: driver,
-            host: hostState(),
-        )
     }
 
     /// One rung of the stall ladder, written into its run; `at` comes from the run's start minus

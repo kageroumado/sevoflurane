@@ -26,18 +26,17 @@ final class GameLaunchWatch {
     /// from it. `RunGame` and the launch-start report arm one launch a moment
     /// apart, and a fresh tail would skip what the shim wrote between them.
     private static let tailReuseWindow: Duration = .seconds(10)
-    /// How long a press's tail waits for the helper's reply; a first companion
-    /// launch takes about a quarter of a minute.
+    /// How long a press's tail waits for the helper's start notice; a first
+    /// companion launch takes about a quarter of a minute.
     private static let pressedTailLife: Duration = .seconds(300)
 
     private var watch: Task<Void, Never>?
     private var lastTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
     /// The chronicle's end when a program was pressed, for the watch its launch
-    /// arms after the helper answers: the process can appear before the reply
-    /// arrives.
+    /// arms when the helper's start notice arrives (``ProgramStartNotice``).
     private var pressedTail: (tail: WineChronicleTail, startedAt: ContinuousClock.Instant)?
 
-    /// A program was pressed; the helper has not answered yet.
+    /// A program was pressed; the helper has not started it yet.
     func noteLaunchPressed() {
         pressedTail = (WineChronicleTail(), .now)
     }

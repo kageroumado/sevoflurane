@@ -15,9 +15,9 @@ struct RunCommand: AsyncParsableCommand {
         its channels with sevo bottle config wine-debug.
         
         A program started here gets no run record, frame trace or collected \
-        report: those open when the app sees a game launch start, as sevo \
-        app launch and the library do. For a diagnostic run of a game, launch \
-        it that way; sevo diag --help has the guide.
+        report: those open when the app sees a launch start, as sevo app \
+        launch, sevo program launch and the library do. For a diagnostic run \
+        of a game, launch it that way; sevo diag --help has the guide.
         """,
     )
 

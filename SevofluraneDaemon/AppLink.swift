@@ -111,6 +111,15 @@ final class AppLink {
         _ = await post("/fixes/applied?appid=\(appID)")
     }
 
+    /// Tells the app a program is about to start here, so the app opens its
+    /// run, window watch and status line before the process can write a line
+    /// (``ProgramStartNotice``). Answers whether the app took the notice;
+    /// with no app attached nothing records the run.
+    func announceProgramStart(programID: Int) async -> Bool {
+        guard isAttached else { return false }
+        return await post(ProgramStartNotice(programID: programID).target, timeout: Timing.notice) != nil
+    }
+
     /// Tells the app a program started here drew nothing after its kernel
     /// driver failed to load, so it explains why.
     func announceKernelDriverFailure(programID: Int, driver: String) async {
@@ -185,20 +194,23 @@ final class AppLink {
         /// A command is local and the app answers it on its main actor, which
         /// can be busy with a page reload.
         static let command: TimeInterval = 15
+        /// The longest a program's spawn waits for the app to take its start
+        /// notice; an app busier than this opens the run when it gets to it.
+        static let notice: TimeInterval = 5
         /// A proxied verb can be a benchmark or a window inventory.
         static let proxy: TimeInterval = 120
         /// For an app not attached: a refused connection fails at once.
         static let detachedProxy: TimeInterval = 10
     }
 
-    private func post(_ path: String, body: Data? = nil) async -> Data? {
+    private func post(_ path: String, body: Data? = nil, timeout: TimeInterval = Timing.command) async -> Data? {
         guard let url = URL(string: "http://127.0.0.1:\(BridgePorts.appLink)\(path)") else {
             return nil
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = body
-        request.timeoutInterval = Timing.command
+        request.timeoutInterval = timeout
         ControlToken.authorize(&request)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,

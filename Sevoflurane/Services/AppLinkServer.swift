@@ -17,6 +17,8 @@ final class AppLinkServer {
     /// Posts the notification with Undo after the helper applied a first
     /// launch's fixes to this app id.
     var onFixesApplied: ((Int) -> Void)?
+    /// The helper is about to spawn this added program.
+    var onProgramStarting: ((ProgramStartNotice) -> Void)?
     /// A program's id and the kernel driver Wine could not load for it.
     var onKernelDriverFailed: ((Int, String) -> Void)?
 
@@ -71,13 +73,8 @@ final class AppLinkServer {
             }
             onFixesApplied?(appID)
             return Self.json(#"{"ok":true}"#)
-        case ("POST", "/program/driver-failed"):
-            let driver = Self.value(of: "driver", in: request.query)
-            guard let id = Int(Self.value(of: "id", in: request.query)), !driver.isEmpty else {
-                return .error(400, "pass ?id=<program id>&driver=<name>")
-            }
-            onKernelDriverFailed?(id, driver)
-            return Self.json(#"{"ok":true}"#)
+        case ("POST", ProgramStartNotice.path), ("POST", "/program/driver-failed"):
+            return programNotice(request)
         case ("POST", "/state"):
             guard let snapshot = try? JSONDecoder()
                 .decode(SupervisorSnapshot.self, from: request.body) else {
@@ -115,6 +112,24 @@ final class AppLinkServer {
         default:
             return await pageVerb(request)
         }
+    }
+
+    /// The helper's word about an added program it starts: that its process
+    /// is about to be spawned, or that a kernel driver failed to load for it.
+    private func programNotice(_ request: HTTPRequest) -> HTTPResponse {
+        if request.path == ProgramStartNotice.path {
+            guard let notice = ProgramStartNotice(query: request.query) else {
+                return .error(400, "pass ?id=<program id>")
+            }
+            onProgramStarting?(notice)
+        } else {
+            let driver = Self.value(of: "driver", in: request.query)
+            guard let id = Int(Self.value(of: "id", in: request.query)), !driver.isEmpty else {
+                return .error(400, "pass ?id=<program id>&driver=<name>")
+            }
+            onKernelDriverFailed?(id, driver)
+        }
+        return Self.json(#"{"ok":true}"#)
     }
 
     /// The app's own verbs, proxied from the control port so `sevo` asks one

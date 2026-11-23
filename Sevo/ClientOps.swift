@@ -443,10 +443,12 @@ nonisolated enum ClientOps {
         guard (200 ..< 300).contains(reply.status) else {
             throw Failure.message(Self.refusalReason(reply.body) ?? "the daemon would not start \(entry.name) — sevo status")
         }
+        let started = (try? JSONDecoder().decode(ProgramLaunchReply.self, from: reply.body))
+            ?? ProgramLaunchReply(recorded: true)
         return Outcome(
             verdict: .confirmed,
             intent: "program launch",
-            note: "\(entry.name) started",
+            note: started.summary(of: entry.name),
         )
     }
 

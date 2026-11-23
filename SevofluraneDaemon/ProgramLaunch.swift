@@ -32,14 +32,18 @@ extension BottleSupervisor {
     /// for it is taken as a new launch rather than the extra click.
     static let spawnSettles: Duration = .seconds(60)
 
-    /// Starts an adopted Windows program, its env files written first.
-    /// Answers a refusal, or `nil` when it started.
-    func launchProgram(id: Int, renderer explicit: Renderer? = nil) async -> ProgramLaunchRefusal? {
+    /// Starts an adopted Windows program, its env files written first and the
+    /// app told just before the spawn. Every launch of an added program that
+    /// the helper makes passes here, whoever asked, so the notice is where the
+    /// app opens the run of each.
+    func launchProgram(
+        id: Int, renderer explicit: Renderer? = nil,
+    ) async -> Result<ProgramLaunchReply, ProgramLaunchRefusal> {
         guard let program = AdoptedPrograms.program(id) else {
-            return .missing("no adopted program with id \(id)")
+            return .failure(.missing("no adopted program with id \(id)"))
         }
         guard program.exists else {
-            return .missing("\(program.url.lastPathComponent) is no longer at \(program.path)")
+            return .failure(.missing("\(program.url.lastPathComponent) is no longer at \(program.path)"))
         }
         let name = program.url.lastPathComponent
         // Checked and marked before the first await: the main actor runs
@@ -47,13 +51,13 @@ extension BottleSupervisor {
         // companion launch would make five prefixes and five games.
         guard programsStarting.insert(id).inserted else {
             note("\(name) is already starting; this request starts nothing")
-            return .busy("\(name) is already starting")
+            return .failure(.busy("\(name) is already starting"))
         }
         defer { programsStarting.remove(id) }
         if let spawnedAt = programsSpawnedAt[id] {
             if ContinuousClock.now - spawnedAt < Self.spawnSettles, await !Self.isRunning(name) {
                 note("\(name) was started \(Int((ContinuousClock.now - spawnedAt).components.seconds)) s ago and has not appeared yet; this request starts nothing")
-                return .busy("\(name) is still starting")
+                return .failure(.busy("\(name) is still starting"))
             }
             programsSpawnedAt[id] = nil
         }
@@ -61,25 +65,44 @@ extension BottleSupervisor {
             // A second copy beside a running one sees another steam.exe
             // child and takes the kernel-driver path: it would only die.
             note("\(name) is already running; this request starts nothing")
-            return .busy("\(name) is already running")
+            return .failure(.busy("\(name) is already running"))
         }
         await prepareLaunch(appID: id)
         stageGraphics(for: name, renderer: explicit, appID: id)
         programsSpawnedAt[id] = .now
         let logOffset = KernelDriverFailure.size()
+        let launched: ProgramLaunchReply
         if SteamParent.wants(program) {
-            if let refusal = await launchUnderSteamParent(program, id: id) {
+            switch await launchUnderSteamParent(program, id: id) {
+            case let .success(started):
+                launched = started
+            case let .failure(refusal):
                 programsSpawnedAt[id] = nil
-                return .failed(refusal)
+                return .failure(refusal)
             }
-            watchForKernelDriverFailure(name, id: id, from: logOffset)
-            return nil
+        } else {
+            ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
+            launched = await announceStart(of: name, id: id)
+            await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
+            note("started \(name) in \(SteamBottle.name)")
         }
-        ConfigMaterializer.materialize(bottle: SteamBottle.name, prefix: SteamBottle.root)
-        await ClientLifecycle.launchInBottle(AdoptedPrograms.invocation(program))
-        note("started \(program.url.lastPathComponent) in \(SteamBottle.name)")
         watchForKernelDriverFailure(name, id: id, from: logOffset)
-        return nil
+        return .success(launched)
+    }
+
+    /// Tells the app the program's process is about to be spawned
+    /// (``AppLink/announceProgramStart(programID:)``). Called once per launch,
+    /// after every refusal a launch can meet and before its spawn.
+    private func announceStart(of name: String, id: Int) async -> ProgramLaunchReply {
+        let recorded = await app.announceProgramStart(programID: id)
+        if !recorded {
+            note(
+                app.isAttached
+                    ? "Sevoflurane did not take the notice that \(name) is starting; this run has no record"
+                    : "Sevoflurane is not running, so this run of \(name) has no record",
+            )
+        }
+        return ProgramLaunchReply(recorded: recorded)
     }
 
     /// Reads Wine's log for a minute after a program starts. A kernel driver
@@ -97,12 +120,14 @@ extension BottleSupervisor {
     /// the bottle's companion prefix. The parent's exit code, the program's,
     /// goes to the run record through ``ProgramExit``: Steam's process log
     /// never names our programs.
-    private func launchUnderSteamParent(_ program: AdoptedProgram, id: Int) async -> String? {
+    private func launchUnderSteamParent(
+        _ program: AdoptedProgram, id: Int,
+    ) async -> Result<ProgramLaunchReply, ProgramLaunchRefusal> {
         let name = program.url.lastPathComponent
         let engine = Engine.active
         if let refusal = await SteamParent.prepare(bottle: SteamBottle.name, engine: engine) {
             note("could not start \(name) under a steam.exe parent: \(refusal)")
-            return refusal
+            return .failure(.failed(refusal))
         }
         let companion = SteamParent.prefix(for: SteamBottle.name)
         let environment = SteamParent.environment(bottle: SteamBottle.name, engine: engine)
@@ -114,6 +139,7 @@ extension BottleSupervisor {
         // `sevo:steam-parent exit` line, the full 32-bit code (ProgramExit).
         var parentEnvironment = environment
         parentEnvironment["SEVO_PROGRAM_APPID"] = String(id)
+        let launched = await announceStart(of: name, id: id)
         await ClientLifecycle.launchInBottle(
             SteamParent.invocation(program),
             environment: parentEnvironment,
@@ -126,7 +152,7 @@ extension BottleSupervisor {
                 await startUnlocker(unlocker, beside: program, environment: environment)
             }
         }
-        return nil
+        return .success(launched)
     }
 
     /// Waits for the companion's previous wineserver to exit: a HoYoverse game

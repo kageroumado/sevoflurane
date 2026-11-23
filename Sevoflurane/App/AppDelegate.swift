@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
         )
         server.onFixesApplied = { [weak self] appID in self?.announceFixesApplied(appID: appID) }
+        server.onProgramStarting = { [weak self] notice in self?.host.take(notice) }
         server.onKernelDriverFailed = { [weak self] id, driver in
             self?.explainKernelDriverFailure(driver, programID: id)
         }

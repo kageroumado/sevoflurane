@@ -9,9 +9,19 @@ protocol ProgramLaunchReporting: AnyObject {
     /// The ticket of the status line this press opened, or nil when a
     /// launch of the program already owns it.
     func beginProgramLaunch(appID: Int) -> UUID?
+    /// Starts the window watch and opens the run record.
     func programDidStart(appID: Int)
     /// Ends the line only for the press that opened it.
     func endProgramLaunch(appID: Int, ticket: UUID?)
+}
+
+extension ProgramLaunchReporting {
+    /// The helper is spawning an added program (``ProgramStartNotice``). This
+    /// is the one place a program's start is reported, for a launch this app
+    /// asked for and for one from `sevo` alike, so each launch opens one run.
+    func take(_ notice: ProgramStartNotice) {
+        programDidStart(appID: notice.programID)
+    }
 }
 
 extension SteamWebHost: ProgramLaunchReporting {}
@@ -51,17 +61,17 @@ final class QuickLaunchStore {
         return image
     }
 
-    /// A launch's steps, told to the Steam host.
+    /// The steps of a launch this store sees, told to the Steam host: the
+    /// press, and a helper that started nothing. The start itself reaches the
+    /// host from the helper (``ProgramLaunchReporting/take(_:)``).
     struct LaunchHooks {
         let pressed: @MainActor (Int) -> UUID?
-        let started: @MainActor (Int) -> Void
         let ended: @MainActor (Int, UUID?) -> Void
 
         /// The steps told to `host`; every store that starts a program,
         /// popover or Dock tile, is wired this way.
         init(reporting host: some ProgramLaunchReporting) {
             pressed = { host.beginProgramLaunch(appID: $0) }
-            started = { host.programDidStart(appID: $0) }
             ended = { host.endProgramLaunch(appID: $0, ticket: $1) }
         }
     }
@@ -104,18 +114,17 @@ final class QuickLaunchStore {
                 return
             }
             launching.remove(entry.id)
-            guard (200 ..< 300).contains(reply.status) else {
-                // 409: already starting or running, which the helper logs itself.
-                if reply.status != 409 {
-                    EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
-                }
-                if origin == .dock, let delegate = NSApp.delegate as? AppDelegate {
-                    delegate.notifications.postLaunchDeclined(name: entry.name, reason: Self.reason(reply.data))
-                }
-                launchHooks?.ended(entry.id, ticket)
-                return
+            // A helper that started the program told the host so before it
+            // answered here; only a refusal is left to report.
+            guard !(200 ..< 300).contains(reply.status) else { return }
+            // 409: already starting or running, which the helper logs itself.
+            if reply.status != 409 {
+                EventLog.shared.log(.client, "could not start \(entry.name): \(Self.reason(reply.data))")
             }
-            launchHooks?.started(entry.id)
+            if origin == .dock, let delegate = NSApp.delegate as? AppDelegate {
+                delegate.notifications.postLaunchDeclined(name: entry.name, reason: Self.reason(reply.data))
+            }
+            launchHooks?.ended(entry.id, ticket)
         }
     }
 

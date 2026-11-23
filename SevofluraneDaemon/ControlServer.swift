@@ -225,10 +225,15 @@ final class ControlServer {
             return .error(400, "pass ?id=<adopted program id>")
         }
         let renderer = Renderer(rawValue: Self.value(of: "renderer", in: query))
-        if let refusal = await supervisor.launchProgram(id: id, renderer: renderer) {
+        switch await supervisor.launchProgram(id: id, renderer: renderer) {
+        case let .failure(refusal):
             return .error(refusal.status, refusal.reason)
+        case let .success(reply):
+            guard let body = try? JSONEncoder().encode(reply) else {
+                return .error(500, "could not encode the reply")
+            }
+            return .ok(body, type: "application/json")
         }
-        return Self.json(#"{"ok":true,"note":"program started"}"#)
     }
 
     /// Runs one Windows program once, unrecorded. The body is the macOS path
