@@ -191,7 +191,7 @@ struct GPUIdentityEnvironmentTests {
         // The label carries the card; the detail says what reporting it buys.
         #expect(GPUIdentity.nvidia.detail.contains("driver checks"))
         #expect(GPUIdentity.amd.detail.contains("rejects the NVIDIA card"))
-        #expect(GPUIdentity.automatic.detail.contains("Mac's own chip"))
+        #expect(GPUIdentity.automatic.detail.contains("Mac’s own chip"))
     }
 
     @Test

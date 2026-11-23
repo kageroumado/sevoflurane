@@ -10,13 +10,13 @@ struct RecoveryTests {
     @Test
     func `the pane offers exactly the four confirming resets`() {
         #expect(RecoverySettings.Reset.allCases == [
-            .forceQuitSteam, .restartWindows, .clearShaderCache, .rebuildSteamEnvironment,
+            .forceQuitSteam, .restartWindows, .clearShaderCache, .rebuildBottle,
         ])
     }
 
     @Test
     func `the rebuild says how long it takes and what it keeps`() {
-        let rebuild = RecoverySettings.Reset.rebuildSteamEnvironment
+        let rebuild = RecoverySettings.Reset.rebuildBottle
         #expect(rebuild.message.contains("games and saves stay"))
         #expect(rebuild.message.lowercased().contains("minutes"))
     }
@@ -58,7 +58,7 @@ struct RecoveryTests {
     @Test
     func `a problem's wording names no beta and no engine release`() {
         for issue in RecoverySettings.knownIssues {
-            for wording in [issue.symptom, issue.fix, issue.detail ?? ""] {
+            for wording in [issue.symptom, issue.fix] {
                 #expect(!wording.contains("beta"))
                 #expect(wording.range(of: #"\br\d+\b"#, options: .regularExpression) == nil)
             }
@@ -66,11 +66,16 @@ struct RecoveryTests {
     }
 
     @Test
-    func `a problem's fix is one line, and the rest is behind its help`() {
+    func `a problem's fix is one line that names no place, and its row jumps to a setting search knows`() {
+        let searchable = Set(SettingsCategory.allCases.flatMap { $0.searchableItems.map(\.id) })
         for issue in RecoverySettings.knownIssues {
             #expect(issue.fix.count <= 80, "\(issue.id)")
-            // A problem with more to say, or an error text to recognize, has the (i) to say it in.
-            #expect((issue.help != nil) == (issue.detail != nil || issue.example != nil), "\(issue.id)")
+            #expect(issue.fix.hasSuffix("."), "\(issue.id)")
+            #expect(!issue.symptom.hasSuffix("."), "\(issue.id)")
+            for place in ["Settings ›", " above", " below"] {
+                #expect(!issue.fix.contains(place), "\(issue.id) names a place: \(place)")
+            }
+            #expect(searchable.contains(issue.target), "\(issue.id)")
         }
     }
 }

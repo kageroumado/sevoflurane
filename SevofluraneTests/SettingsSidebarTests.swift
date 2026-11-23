@@ -63,7 +63,7 @@ struct SettingsSidebarTests {
             // Picking a result moves the selection while the widest set of
             // rows is on screen.
             bindings.category = cycle.isMultiple(of: 2) ? .engine : .games
-            bindings.highlighted = .engineWindows
+            bindings.highlighted = .graphicsWindows
             settle(window)
             bindings.searchText = "en"
             settle(window)
@@ -115,7 +115,7 @@ struct SettingsSearchTests {
     func `the holes the playtest found are closed`() {
         let searchable = SettingsCategory.allCases.flatMap(\.searchableItems)
         for anchor in [
-            SettingsAnchor.gamesUpscaler, .aboutDiagnostics, .engineMouse, .engineWineDiagnostics,
+            SettingsAnchor.gamesUpscaler, .aboutDiagnostics, .graphicsMouse, .diagnosticsWineLog,
         ] {
             #expect(searchable.contains { $0.id == anchor })
         }
