@@ -18,18 +18,17 @@ struct HoYoSettings: View {
                 ForEach(store.rows) { row in
                     HoYoGameRow(row: row, store: store)
                 }
-                HStack {
+                SettingsRow {
                     Spacer()
                     Button("Add Existing Folder…", action: addExisting)
                 }
             } header: {
-                Text("Games")
+                HStack(spacing: 6) {
+                    Text("Games")
+                    SettingHelpButton(help: .hoyoGames)
+                }
             } footer: {
-                Text("""
-                Updates come from the servers HoYoPlay uses, as patches when the game's build is recent enough \
-                and as the changed files otherwise. Honkai: Star Rail is kept up to date but does not start \
-                under Wine, so it is not added to Quick Launch.
-                """)
+                Text("Honkai: Star Rail updates here but does not start under Wine.")
             }
             .highlightable(.hoyoverseGames, highlighted: highlighted)
 
@@ -62,26 +61,17 @@ private struct HoYoGameRow: View {
     let store: HoYoStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 1) {
+        SettingsRow(caption: store.jobs[row.id] == nil ? store.notes[row.id] ?? status : "") {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                LabeledContent {
+                    actions
+                } label: {
                     Text(row.installation.game.displayName)
-                    Text(verbatim: row.installation.folder.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .help(row.installation.folder.path)
                 }
-                Spacer()
-                actions
-            }
-            if let job = store.jobs[row.id] {
-                HoYoProgressRow(job: job) { store.cancel(row.id) }
-            } else {
-                Text(status).font(.callout).foregroundStyle(.secondary)
-            }
-            if let note = store.notes[row.id] {
-                Text(note).font(.callout)
+                if let job = store.jobs[row.id] {
+                    HoYoProgressRow(job: job) { store.cancel(row.id) }
+                }
             }
         }
         .contextMenu {
@@ -114,7 +104,7 @@ private struct HoYoGameRow: View {
         return switch plan.kind {
         case .upToDate: String(localized: "\(installed) — up to date")
         case .patch: String(localized: "\(installed) — \(plan.latest) is out, a patch of up to \(size)")
-        case .download: String(localized: "\(installed) — \(plan.latest) is out; too old to patch, the changed files are downloaded (up to \(size))")
+        case .download: String(localized: "\(installed) — \(plan.latest) is out, a download of up to \(size)")
         }
     }
 }
@@ -130,7 +120,7 @@ private struct HoYoProgressRow: View {
             } else {
                 ProgressView().controlSize(.small)
             }
-            Text(caption).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Text(caption).font(.callout).foregroundStyle(.secondary).monospacedDigit()
             if job.kind != .verify {
                 Button("Stop", action: cancel).controlSize(.small)
             }
@@ -161,44 +151,41 @@ private struct HoYoInstallSection: View {
 
     var body: some View {
         Section {
-            Picker("Game", selection: $game) {
-                ForEach(HoYoGame.allCases, id: \.self) { Text(verbatim: $0.displayName).tag($0) }
+            SettingsRow {
+                Picker("Game", selection: $game) {
+                    ForEach(HoYoGame.allCases, id: \.self) { Text(verbatim: $0.displayName).tag($0) }
+                }
+                .endsOnControlLine()
             }
-            LabeledContent("Voice-over") {
-                HStack {
-                    ForEach(["en-us", "ja-jp", "zh-cn", "ko-kr"], id: \.self) { field in
-                        Toggle(HoYoVoice.name(field), isOn: Binding(
-                            get: { voices.contains(field) },
-                            set: { on in if on { voices.insert(field) } else { voices.remove(field) } },
-                        ))
-                        .toggleStyle(.checkbox)
-                    }
+            ActionRow(title: "Voice-over") {
+                ForEach(["en-us", "ja-jp", "zh-cn", "ko-kr"], id: \.self) { field in
+                    Toggle(HoYoVoice.name(field), isOn: Binding(
+                        get: { voices.contains(field) },
+                        set: { on in if on { voices.insert(field) } else { voices.remove(field) } },
+                    ))
+                    .toggleStyle(.checkbox)
                 }
             }
-            LabeledContent("Folder") {
-                HStack(spacing: 6) {
-                    Text(verbatim: target.path)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(target.path)
-                    Button("Choose…", action: choose)
-                }
+            ActionRow(title: "Folder") {
+                Text(verbatim: target.path)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(target.path)
+                Button("Choose…", action: choose)
             }
             if let installing = store.installing, let job = store.jobs[installing.folder.standardizedFileURL.path] {
-                VStack(alignment: .leading) {
-                    Text("Installing \(installing.game.displayName)")
-                    HoYoProgressRow(job: job) { store.cancel(installing.folder.standardizedFileURL.path) }
+                SettingsRow {
+                    VStack(alignment: .leading) {
+                        Text("Installing \(installing.game.displayName)")
+                        HoYoProgressRow(job: job) { store.cancel(installing.folder.standardizedFileURL.path) }
+                    }
                 }
             } else {
-                HStack {
+                SettingsRow(caption: installNote ?? "") {
                     Spacer()
                     Button("Install") { store.startInstall(game, into: target, voices: voices.sorted()) }
                         .disabled(store.installing != nil)
                 }
-            }
-            if let note = store.notes[target.standardizedFileURL.path], store.installing == nil,
-               HoYoInstallation(folder: target) == nil {
-                Text(note).font(.callout)
             }
         } header: {
             Text("Install a game")
@@ -208,6 +195,12 @@ private struct HoYoInstallSection: View {
             stopped, carries on from where it was when you install into the same folder again.
             """)
         }
+    }
+
+    /// What the last install into the chosen folder left to say.
+    private var installNote: String? {
+        guard store.installing == nil, HoYoInstallation(folder: target) == nil else { return nil }
+        return store.notes[target.standardizedFileURL.path]
     }
 
     /// The chosen folder, or one named after the game in ~/Games.
