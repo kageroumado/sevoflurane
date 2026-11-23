@@ -17,7 +17,6 @@ struct GeneralSettings: View {
             GeneralStartupSection(
                 provisioner: provisioner, steam: steam, supervisor: supervisor, highlighted: highlighted,
             )
-            GeneralDockSection()
             GeneralAutomationSection(highlighted: highlighted)
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             GeneralCustomStyleSection(steam: steam, highlighted: highlighted)
@@ -46,8 +45,7 @@ private struct GeneralStartupSection: View {
 
     var body: some View {
         Section {
-            Toggle("Open at login", isOn: $openAtLogin)
-                .toggleStyle(.switch)
+            ToggleRow(title: "Open at login", isOn: $openAtLogin)
                 .onChange(of: openAtLogin) { _, enabled in
                     // Reading the machine's value in onAppear lands here too.
                     guard enabled != provisioner.openAtLogin else { return }
@@ -58,6 +56,7 @@ private struct GeneralStartupSection: View {
             if let supervisor {
                 AutoRestartRow(supervisor: supervisor)
             }
+            GamesFolderRow()
             if let steam {
                 SteamSettingsRow(steam: steam)
                     .highlightable(.generalSteamSettings, highlighted: highlighted)
@@ -69,13 +68,16 @@ private struct GeneralStartupSection: View {
 
 /// The Games folder in the Dock (``GamesFolder``, ``DockTiles``): every game's
 /// own icon, the last played on top.
-private struct GeneralDockSection: View {
+private struct GamesFolderRow: View {
     /// The switch as last set here; the Dock's own record until then.
     @State private var kept: Bool?
 
     var body: some View {
-        Section {
-            Toggle("Games folder in the Dock", isOn: Binding(
+        ToggleRow(
+            title: "Games folder in the Dock",
+            caption: String(localized: "Every game that has run, the last played on top."),
+            help: .gamesFolder,
+            isOn: Binding(
                 get: { kept ?? false },
                 set: { isOn in
                     kept = isOn
@@ -88,14 +90,8 @@ private struct GeneralDockSection: View {
                         }
                     }
                 },
-            ))
-            .toggleStyle(.switch)
-        } footer: {
-            Text("""
-            A folder of every game that has run, beside the Dock's other folders: each game under its own icon, \
-            the last played on top, a click to start one. Right-click the folder to show it as a grid, a fan or a list.
-            """)
-        }
+            ),
+        )
         .task {
             kept = await Self.readKept()
         }
@@ -113,18 +109,14 @@ private struct AutoRestartRow: View {
     let supervisor: ClientSupervisor
 
     var body: some View {
-        Toggle(isOn: Binding(
-            get: { supervisor.health != .paused },
-            set: { supervisor.setAutoRestart($0) },
-        )) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Auto-restart Steam")
-                Text("Automatically restarts Steam if it crashes or stops responding.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .toggleStyle(.switch)
+        ToggleRow(
+            title: "Auto-restart Steam",
+            caption: String(localized: "When Steam crashes or stops responding."),
+            isOn: Binding(
+                get: { supervisor.health != .paused },
+                set: { supervisor.setAutoRestart($0) },
+            ),
+        )
     }
 }
 
@@ -132,14 +124,10 @@ private struct SteamSettingsRow: View {
     let steam: SteamActions
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Steam settings")
-                Text("Downloads, controllers, and the Steam interface.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+        ActionRow(
+            title: "Steam settings",
+            caption: String(localized: "Downloads, controllers, and the Steam interface."),
+        ) {
             Button("Open…") { steam.openSteamSettings() }
         }
     }
@@ -149,22 +137,19 @@ private struct SteamLinksRow: View {
     @State private var steamLinksComeHere = SteamLinks.comeHere
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Steam links")
-                Text(steamLinksComeHere
-                    ? InterfaceCopy.localized("Install buttons and invitations on the web open here.")
-                    : String(localized: "Install buttons and invitations on the web open in \(SteamLinks.handlerName ?? String(localized: "another app"))."))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+        ActionRow(title: "Steam links", caption: caption) {
             if !steamLinksComeHere {
                 Button("Open Them Here") {
                     Task(name: "Claim steam links") { steamLinksComeHere = await SteamLinks.claim() }
                 }
             }
         }
+    }
+
+    private var caption: String {
+        steamLinksComeHere
+            ? InterfaceCopy.localized("Install buttons and invitations on the web open here.")
+            : String(localized: "Install buttons and invitations on the web open in \(SteamLinks.handlerName ?? String(localized: "another app")).")
     }
 }
 
@@ -234,19 +219,7 @@ private struct CommandLineToolRow: View {
     @State private var error: String?
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Command-line tool")
-                Text(installed
-                    ? "Installed at /usr/local/bin/sevo."
-                    : "Installs the sevo command for Terminal and MCP. Requires an administrator password.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let error {
-                    Text(error).font(.callout).foregroundStyle(.orange)
-                }
-            }
-            Spacer()
+        ActionRow(title: "Command-line tool", caption: error ?? caption, isWarning: error != nil) {
             if busy {
                 ProgressView().controlSize(.small)
             }
@@ -267,19 +240,20 @@ private struct CommandLineToolRow: View {
             .disabled(busy)
         }
     }
+
+    private var caption: String {
+        installed
+            ? String(localized: "Installed at /usr/local/bin/sevo.")
+            : String(localized: "The sevo command for Terminal and MCP. Asks for an administrator password.")
+    }
 }
 
 private struct AgentToggleRow: View {
     @Binding var row: AgentRow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: Theme.Space.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.harness.displayName)
-                        .help(row.harness.configDescription)
-                }
-                Spacer()
+        SettingsRow(caption: row.error ?? "", isWarning: true) {
+            LabeledContent {
                 if row.busy {
                     ProgressView().controlSize(.small)
                 }
@@ -290,12 +264,9 @@ private struct AgentToggleRow: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .disabled(row.busy)
-            }
-            if let error = row.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+            } label: {
+                Text(row.harness.displayName)
+                    .help(row.harness.configDescription)
             }
         }
     }
@@ -320,11 +291,11 @@ private struct ManualCommandRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Other MCP assistants")
-                .font(.caption.weight(.medium))
+                .font(.callout)
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: Theme.Space.sm) {
                 Text(AgentIntegration.manualCommand)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 CopyButton(text: AgentIntegration.manualCommand)
@@ -345,34 +316,32 @@ private struct GeneralSteamPagesSection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Mac compatibility strip", isOn: $compatibilityStrip)
-                    .toggleStyle(.switch)
-                    .onChange(of: compatibilityStrip) { _, enabled in
-                        // Reading the preference in onAppear lands here too.
-                        guard enabled != Preferences.compatibilityStrip else { return }
-                        Preferences.compatibilityStrip = enabled
-                        steam?.applyCompatibilityStrip()
-                    }
-                Text("A game's library and store pages say how it runs on a Mac, whether it has a macOS version, and what its anti-cheat does. The library badges every game, its Apple filter keeps only the games that play on this Mac, and Install warns before a game known to fail. Sevoflurane's own players' runs come first where there are enough.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            ToggleRow(
+                title: "Mac compatibility strip",
+                caption: String(localized: "Game pages show how each game runs on a Mac."),
+                help: .compatibilityStrip,
+                isOn: $compatibilityStrip,
+            )
+            .onChange(of: compatibilityStrip) { _, enabled in
+                // Reading the preference in onAppear lands here too.
+                guard enabled != Preferences.compatibilityStrip else { return }
+                Preferences.compatibilityStrip = enabled
+                steam?.applyCompatibilityStrip()
             }
             .highlightable(.generalCompatStrip, highlighted: highlighted)
             .onAppear { compatibilityStrip = Preferences.compatibilityStrip }
             if Engine.running.supportsSteamPlayMacOS {
-                VStack(alignment: .leading, spacing: 2) {
-                    Toggle("Steam for Mac", isOn: $offersSteamForMac)
-                        .toggleStyle(.switch)
-                        .onChange(of: offersSteamForMac) { _, enabled in
-                            // Reading the preference in onAppear lands here too.
-                            guard enabled != Preferences.offersSteamForMac else { return }
-                            Preferences.offersSteamForMac = enabled
-                            steam?.applyCompatibilityStrip()
-                        }
-                    Text("A game's Play in setting can hand its macOS version to Valve's Steam for Mac, which needs its own sign-in and the game installed there. Otherwise macOS versions install and play in Sevoflurane's Steam.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                ToggleRow(
+                    title: "Steam for Mac",
+                    caption: String(localized: "Offers Valve's Steam for Mac for a game's macOS version."),
+                    help: .steamForMac,
+                    isOn: $offersSteamForMac,
+                )
+                .onChange(of: offersSteamForMac) { _, enabled in
+                    // Reading the preference in onAppear lands here too.
+                    guard enabled != Preferences.offersSteamForMac else { return }
+                    Preferences.offersSteamForMac = enabled
+                    steam?.applyCompatibilityStrip()
                 }
                 .onAppear { offersSteamForMac = Preferences.offersSteamForMac }
             }
@@ -394,41 +363,31 @@ private struct GeneralCustomStyleSection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Style Steam with CSS", isOn: $isOn)
-                    .toggleStyle(.switch)
-                    .onChange(of: isOn) { _, enabled in
-                        // Reading the preference in onAppear lands here too.
-                        guard enabled != Preferences.userStyles else { return }
-                        Preferences.userStyles = enabled
-                        steam?.applyUserStyles()
-                    }
-                Text("Every CSS file in the Styles folder styles Steam\u{2019}s windows, in name order. Saving a file restyles them right away.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            ToggleRow(
+                title: "Style Steam with CSS",
+                caption: String(localized: "CSS files in the Styles folder restyle Steam\u{2019}s windows."),
+                help: .customStyle,
+                isOn: $isOn,
+            )
+            .onChange(of: isOn) { _, enabled in
+                // Reading the preference in onAppear lands here too.
+                guard enabled != Preferences.userStyles else { return }
+                Preferences.userStyles = enabled
+                steam?.applyUserStyles()
             }
             .highlightable(.generalCustomStyle, highlighted: highlighted)
-            Toggle("Also style store and community pages", isOn: $onWebPages)
-                .toggleStyle(.switch)
+            ToggleRow(title: "Also style store and community pages", isOn: $onWebPages)
                 .disabled(!isOn)
                 .onChange(of: onWebPages) { _, enabled in
                     guard enabled != Preferences.userStylesOnWebPages else { return }
                     Preferences.userStylesOnWebPages = enabled
                     steam?.applyUserStyles()
                 }
-            HStack {
-                if let folderFailure {
-                    Text(folderFailure)
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                }
-                Spacer()
-                Button("Open Styles Folder") { openFolder() }
+            ActionRow(title: "Styles folder", caption: folderFailure ?? "", isWarning: true) {
+                Button("Show in Finder") { openFolder() }
             }
         } header: {
             Text("Custom style")
-        } footer: {
-            Text("Most of Steam\u{2019}s class names change with each Steam update. .DesktopUI, .TitleBar, the .Dialog classes, the .SVGIcon_ icons and ARIA roles stay the same; README.css in the folder lists them.")
         }
         .onAppear {
             isOn = Preferences.userStyles
@@ -460,37 +419,28 @@ private struct GeneralCommunitySection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Share run statistics", isOn: $shares)
-                    .toggleStyle(.switch)
-                    .onChange(of: shares) { _, shares in
-                        guard Preferences.sharesRunStats != shares else { return }
-                        Preferences.sharesRunStats = shares
-                        if shares {
-                            Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
-                        } else {
-                            StatsStore.writeQueue([])
-                        }
-                    }
-                Text("After a game closes, its frame rate, resolution, engine and settings go to the public Sevoflurane game database with your Mac\u{2019}s model and chip. Nothing names you, your Mac or your account.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let sent = sentLine {
-                    Text(sent)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+            ToggleRow(
+                title: "Share run statistics",
+                caption: sentLine
+                    ?? String(localized: "Each closed game\u{2019}s frame rate and settings go to the public game database."),
+                help: .shareRuns,
+                isOn: $shares,
+            )
+            .onChange(of: shares) { _, shares in
+                guard Preferences.sharesRunStats != shares else { return }
+                Preferences.sharesRunStats = shares
+                if shares {
+                    Task.detached(name: "Send queued shared runs") { await StatsUploader.shared.flush() }
+                } else {
+                    StatsStore.writeQueue([])
                 }
             }
             .highlightable(.generalShareRuns, highlighted: highlighted)
-            SharedRunPreview()
+            SettingsRow { SharedRunPreview() }
             if state.registered != nil || state.sentRuns > 0 {
-                HStack {
+                SettingsRow(caption: deleteFailure ?? "", isWarning: true) {
+                    Spacer()
                     Button("Delete What I Shared\u{2026}") { isConfirmingDelete = true }
-                    if let deleteFailure {
-                        Text(deleteFailure)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
         } header: {
@@ -542,44 +492,23 @@ private struct GeneralUsageSection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            HelpedRow(
+                caption: statusLine
+                    ?? String(localized: "One anonymous check-in on each day you use Sevoflurane."),
+                help: .usageCount,
+            ) {
                 Picker("Count this Mac", selection: $tier) {
                     Text("Off").tag(ConsentTier.off)
                     Text("Counting").tag(ConsentTier.counting)
                     Text("Counting and crash reports").tag(ConsentTier.crashReports)
                 }
-                .onChange(of: tier) { _, tier in
-                    // Reading the preference in onAppear lands here too.
-                    guard Preferences.usageCounting != tier else { return }
-                    UsageCounting.choose(tier)
-                    Task { await refreshStatus() }
-                }
-                Text("Counts how many people use Sevoflurane. On each day you use it, one anonymous check-in is sent:")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    "\u{2022} Sevoflurane and macOS versions\n"
-                        + "\u{2022} processor, chip family and memory size\n"
-                        + "\u{2022} language and the date\n"
-                        + "\u{2022} how many of the last 7 days you used it",
-                )
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                Text("It never includes which games or programs you run, and nothing in it names you or your account.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Crash reports adds a report when Sevoflurane itself crashes, with your name, your Mac\u{2019}s name and folder paths removed. A game\u{2019}s crash is sent only from the crash prompt. Turning this off deletes everything this Mac sent.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let line = statusLine {
-                    Text(line)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                .endsOnControlLine()
+            }
+            .onChange(of: tier) { _, tier in
+                // Reading the preference in onAppear lands here too.
+                guard Preferences.usageCounting != tier else { return }
+                UsageCounting.choose(tier)
+                Task { await refreshStatus() }
             }
         } header: {
             Text("Usage count")
@@ -619,33 +548,29 @@ private struct GeneralDiscordSection: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Discord presence in games", isOn: $discordBridge)
-                    .toggleStyle(.switch)
-                    .disabled(!hasDiscordBridge)
-                    .onChange(of: discordBridge) { _, enabled in
-                        Preferences.discordBridge = enabled
-                    }
-                Text(InterfaceCopy.localized(hasDiscordBridge
-                        ? "Games with their own Discord support show their status. Restart Steam to apply a change."
-                        : "Only the built-in engine includes the Discord relay. Select it in Engine settings."))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            ToggleRow(
+                title: "Discord presence in games",
+                caption: InterfaceCopy.localized(hasDiscordBridge
+                    ? "Games with their own Discord support show their status. Restart Steam to apply a change."
+                    : "Only the built-in engine includes the Discord relay. Select it in Engine settings."),
+                isOn: $discordBridge,
+            )
+            .disabled(!hasDiscordBridge)
+            .onChange(of: discordBridge) { _, enabled in
+                Preferences.discordBridge = enabled
             }
             .highlightable(.generalDiscordBridge, highlighted: highlighted)
             .onAppear {
                 discordBridge = Preferences.discordBridge
                 discordPresence = Preferences.discordPresence
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Show what you play in Discord", isOn: $discordPresence)
-                    .toggleStyle(.switch)
-                    .onChange(of: discordPresence) { _, enabled in
-                        Preferences.discordPresence = enabled
-                    }
-                Text("Games show as what you play, with their own name and box art.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            ToggleRow(
+                title: "Show what you play in Discord",
+                caption: String(localized: "Each game under its own name and box art."),
+                isOn: $discordPresence,
+            )
+            .onChange(of: discordPresence) { _, enabled in
+                Preferences.discordPresence = enabled
             }
             .highlightable(.generalDiscordPresence, highlighted: highlighted)
         } header: {
@@ -665,15 +590,10 @@ private struct GeneralUninstallSection: View {
 
     var body: some View {
         Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Uninstall Sevoflurane").font(.headline)
-                    Text("Removes Sevoflurane and its downloaded engines and toolkits. You can choose whether to remove games.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
+            ActionRow(
+                title: "Uninstall Sevoflurane",
+                caption: String(localized: "Removes the app, its engines and toolkits. Removing games is your choice."),
+            ) {
                 Button("Uninstall…", role: .destructive) { confirmingUninstall = true }
                     .disabled(store.isUninstalling)
             }

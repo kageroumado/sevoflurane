@@ -16,43 +16,37 @@ struct StreamerModeSection: View {
     var body: some View {
         @Bindable var store = store
         Section {
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Streamer Mode", isOn: Binding(
+            ToggleRow(
+                title: "Streamer Mode",
+                caption: String(localized: "Hides your name, picture, wallet and friends in Steam\u{2019}s windows."),
+                help: .streamerMode,
+                isOn: Binding(
                     get: { isOn },
                     set: { enabled in
                         StreamerMode.isOn = enabled
                         steam?.applyStreamerMode()
                     },
-                ))
-                .toggleStyle(.switch)
-                Text("Hides your Steam name, picture, wallet balance and friends in every Steam window, for recording and streaming.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("Friends appear as AI models such as Claude, ChatGPT and Gemini.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
+                ),
+            )
             .highlightable(.generalStreamerMode, highlighted: highlighted)
-            TextField("Display name", text: $store.name, prompt: Text(verbatim: StreamerMode.defaultDisplayName))
-                .onSubmit(commitName)
-                .onChange(of: store.name) { store.storeName() }
+            SettingsRow {
+                TextField("Display name", text: $store.name, prompt: Text(verbatim: StreamerMode.defaultDisplayName))
+                    .onSubmit(commitName)
+                    .onChange(of: store.name) { store.storeName() }
+            }
             pictureRow
         }
         .onAppear { store.load() }
     }
 
     private var pictureRow: some View {
-        HStack(spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Avatar")
-                Text(store.hasPicture ? "Shown in place of your Steam avatar." : "A monogram of the display name.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let pictureFailure = store.pictureFailure {
-                    Text(pictureFailure).font(.callout).foregroundStyle(.orange)
-                }
-            }
-            Spacer()
+        ActionRow(
+            title: "Avatar",
+            caption: store.pictureFailure ?? (store.hasPicture
+                ? String(localized: "Shown in place of your Steam avatar.")
+                : String(localized: "A monogram of the display name.")),
+            isWarning: store.pictureFailure != nil,
+        ) {
             StreamerPicturePreview(name: StreamerMode.resolvedName(store.name), picture: store.picture)
             if store.hasPicture {
                 Button("Use Monogram") {
@@ -95,7 +89,7 @@ private struct StreamerPicturePreview: View {
     let picture: NSImage?
 
     /// The preview's edge in points.
-    private static let edge: CGFloat = 32
+    private static let edge: CGFloat = 24
 
     var body: some View {
         Group {
