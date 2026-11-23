@@ -72,6 +72,33 @@ makes. `sevo eval` runs JavaScript in the app's context page; `sevo cdp`
 runs it in the bottled client's own `SharedJSContext`, which is a second
 copy of the same UI and reacts to the same events.
 
+## What the app depends on inside Steam
+
+Steam ships a new client every few weeks and promises nothing about its
+insides. Everything the app reaches for in there is listed once, in
+`Core/Steam/SteamSurface*.swift`: the `SteamClient` methods it calls and the
+argument count each takes, the window calls and browser views it answers, the
+stores on `window` and their members, the webpack class maps it finds by
+their keys, class names, popup names, routes and `steam://` links. Each entry
+says what the app uses it for and carries a probe.
+
+- **Swift takes the names from the catalog**: `SteamSurface.Call.runGame.path`,
+  `.invocation(…)` for a call's JavaScript, `SteamSurface.Popup`,
+  `SteamSurface.WindowCall`.
+- **Injected JavaScript spells the names out**, in `steamclient_shim.js` and
+  in the scripts held in Swift strings, so a script stays readable and can be
+  pasted into `sevo eval`. `SteamSurfaceDriftTests` reads every script and
+  fails when one names a Steam internal the catalog lacks, when a
+  `SteamClient` call passes another argument count than the catalog records,
+  and when the catalog lists a name no source uses. A new dependency goes in
+  the catalog in the same change.
+- **`sevo steam audit`** runs every probe against a client's `steamui` files
+  and prints what is missing or changed. It reads files and starts nothing,
+  so it checks a client that is not installed.
+- **`Tools/steam-canary.sh`** downloads the public beta's `steamui` package
+  from Valve, unpacks it in a scratch folder of its own and audits it. The beta leads the stable client by days: what is missing there
+  is what breaks next.
+
 ## Fidelity rules
 
 The non-obvious bugs in this project are almost always a violation of one of
