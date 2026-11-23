@@ -167,24 +167,34 @@ private struct GameForm: View {
                     store.undoFixes(nil)
                 }
             }
-            if let program = AdoptedPrograms.program(gameID) {
-                if SteamLibraryShortcuts.canList(program) {
-                    SteamLibrarySection(programID: gameID)
-                }
-                if FPSUnlocker.games.contains(program.url.lastPathComponent.lowercased()) {
-                    FPSUnlockerSection()
-                }
-            } else if showsProgramSections {
-                SteamLibrarySection(programID: gameID)
+            if showsUnlocker {
                 FPSUnlockerSection()
             }
-            DockSection(gameID: gameID)
+            SettingsSection(title: "Shortcuts") {
+                if listsInSteam {
+                    SteamLibraryRow(programID: gameID)
+                }
+                DockRow(gameID: gameID)
+            }
         }
         .highlightableSection(.gamesSettings, highlighted: highlighted)
     }
 }
 
-// MARK: - The fix list
+private extension GameForm {
+    /// An adopted program Steam can list as a non-Steam game.
+    var listsInSteam: Bool {
+        AdoptedPrograms.program(gameID).map(SteamLibraryShortcuts.canList) ?? showsProgramSections
+    }
+
+    /// An adopted program an unlocker runs beside.
+    var showsUnlocker: Bool {
+        AdoptedPrograms.program(gameID)
+            .map { FPSUnlocker.games.contains($0.url.lastPathComponent.lowercased()) } ?? showsProgramSections
+    }
+}
+
+// MARK: - Known fixes
 
 /// What the fix list set at the first launch and still holds, with one undo:
 /// the native runner and DLL overrides have no row of their own to carry the
@@ -197,7 +207,7 @@ private struct FixListSection: View {
 
     var body: some View {
         SettingsSection(
-            title: "Set by the fix list",
+            title: "Known fixes",
             footer: "Set at the game\u{2019}s first launch, where it had no value of its own.",
         ) {
             ForEach(fixes.fixes, id: \.title) { fix in
@@ -220,26 +230,24 @@ private struct FixListSection: View {
 
 /// Whether an adopted program is listed in Steam's library as a non-Steam game
 /// (``SteamLibraryShortcuts``).
-private struct SteamLibrarySection: View {
+private struct SteamLibraryRow: View {
     let programID: Int
     /// The switch as last set here; the record until then.
     @State private var listed: Bool?
 
     var body: some View {
-        SettingsSection(title: "Steam library") {
-            SettingsToggle(
-                title: "Show in Steam\u{2019}s library",
-                caption: String(localized: "As a non-Steam game, with Steam Input and the overlay."),
-                help: .steamLibrary,
-                isOn: Binding(
-                    get: { listed ?? (AdoptedPrograms.program(programID)?.inSteamLibrary == true) },
-                    set: { isOn in
-                        listed = isOn
-                        SteamLibraryShortcuts.shared.setListed(isOn, programID: programID)
-                    },
-                ),
-            )
-        }
+        SettingsToggle(
+            title: "Show in Steam\u{2019}s library",
+            caption: String(localized: "As a non-Steam game, with Steam Input and the overlay."),
+            help: .steamLibrary,
+            isOn: Binding(
+                get: { listed ?? (AdoptedPrograms.program(programID)?.inSteamLibrary == true) },
+                set: { isOn in
+                    listed = isOn
+                    SteamLibraryShortcuts.shared.setListed(isOn, programID: programID)
+                },
+            ),
+        )
     }
 }
 
@@ -247,33 +255,31 @@ private struct SteamLibrarySection: View {
 
 /// The game's own Dock tile (``DockTiles``). Its bundle exists once the game
 /// has launched.
-private struct DockSection: View {
+private struct DockRow: View {
     let gameID: Int
     @State private var bundle: URL?
     /// The switch as last set here; the Dock's own record until then.
     @State private var kept: Bool?
 
     var body: some View {
-        SettingsSection(title: "Dock") {
-            SettingsToggle(
-                title: "Keep in Dock",
-                caption: bundle == nil
-                    ? String(localized: "Available after the game\u{2019}s first launch.")
-                    : String(localized: "A click on its Dock icon starts the game."),
-                help: .dockTile,
-                isOn: Binding(
-                    get: { kept ?? false },
-                    set: { isOn in
-                        guard let bundle else { return }
-                        kept = isOn
-                        Task.detached(name: isOn ? "Keep \(gameID) in the Dock" : "Take \(gameID) out of the Dock") {
-                            if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
-                        }
-                    },
-                ),
-            )
-            .disabled(bundle == nil)
-        }
+        SettingsToggle(
+            title: "Keep in Dock",
+            caption: bundle == nil
+                ? String(localized: "Available after the game\u{2019}s first launch.")
+                : String(localized: "A click on its Dock icon starts the game."),
+            help: .dockTile,
+            isOn: Binding(
+                get: { kept ?? false },
+                set: { isOn in
+                    guard let bundle else { return }
+                    kept = isOn
+                    Task.detached(name: isOn ? "Keep \(gameID) in the Dock" : "Take \(gameID) out of the Dock") {
+                        if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
+                    }
+                },
+            ),
+        )
+        .disabled(bundle == nil)
         .task(id: gameID) {
             let facts = await Self.read(gameID)
             bundle = facts.bundle
@@ -300,7 +306,7 @@ private struct FPSUnlockerSection: View {
     var body: some View {
         SettingsSection(
             title: "FPS unlocker",
-            footer: "An unlocker changes the running game\u{2019}s memory, which HoYoverse\u{2019}s terms do not allow, so the switch is yours.",
+            footer: "An unlocker changes the running game\u{2019}s memory, which HoYoverse\u{2019}s terms do not allow.",
         ) {
             SettingsAction(title: "Unlocker", help: .fpsUnlocker) {
                 SettingsValueText(text: executable?.lastPathComponent ?? ownLabel)

@@ -1284,12 +1284,12 @@
         }
       }
     },
-    "A restart applies the change at once.": {
+    "Pending change": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "重新启动后，更改立即生效。"
+            "value": "待生效的更改"
           }
         }
       }
@@ -1403,12 +1403,12 @@
         }
       }
     },
-    "A version changed": {
+    "Steam is still running on the earlier versions.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "版本已更改"
+            "value": "Steam 仍在使用之前的版本运行。"
           }
         }
       }
@@ -1899,12 +1899,12 @@
         }
       }
     },
-    "An unlocker changes the running game’s memory, which HoYoverse’s terms do not allow, so the switch is yours.": {
+    "An unlocker changes the running game’s memory, which HoYoverse’s terms do not allow.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "解锁器会修改运行中游戏的内存，而 HoYoverse 的条款不允许这样做，因此是否开启由你决定。"
+            "value": "解锁器会修改运行中游戏的内存，而 HoYoverse 的条款不允许这样做。"
           }
         }
       }
@@ -3858,16 +3858,6 @@
         }
       }
     },
-    "Dock": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "程序坞"
-          }
-        }
-      }
-    },
     "Does not run: it crashes, or its anti-cheat refuses to run.": {
       "localizations": {
         "zh-Hans": {
@@ -4552,13 +4542,13 @@
         }
       }
     },
-    "Every window with a title bar": {
+    "Every window": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "所有带标题栏的窗口"
+            "value": "所有窗口"
           }
         }
       }
@@ -4852,24 +4842,24 @@
         }
       }
     },
-    "Fixed-size windows": {
+    "Fixed-size": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "固定尺寸窗口"
+            "value": "固定尺寸"
           }
         }
       }
     },
-    "Fixed-size windows and full-screen games": {
+    "Fixed-size and full-screen": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "固定尺寸窗口和全屏游戏"
+            "value": "固定尺寸和全屏"
           }
         }
       }
@@ -4992,12 +4982,12 @@
         }
       }
     },
-    "For every program in this bottle; winecfg shows the same values.": {
+    "For every program in this bottle; Wine configuration shows the same values.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "适用于此容器中的所有程序；winecfg 会显示相同的值。"
+            "value": "适用于此容器中的所有程序；Wine 配置会显示相同的值。"
           }
         }
       }
@@ -5034,12 +5024,12 @@
         }
       }
     },
-    "For this game alone; winecfg shows the same values.": {
+    "For this game alone; Wine configuration shows the same values.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅对这款游戏生效；winecfg 会显示相同的值。"
+            "value": "仅对这款游戏生效；Wine 配置会显示相同的值。"
           }
         }
       }
@@ -5641,13 +5631,13 @@
         }
       }
     },
-    "Hardware (VideoToolbox)": {
+    "Hardware": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "硬件（VideoToolbox）"
+            "value": "硬件"
           }
         }
       }
@@ -6072,17 +6062,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "安装到容器"
-          }
-        }
-      }
-    },
-    "Install Shader Compiler": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "安装着色器编译器"
           }
         }
       }
@@ -8687,13 +8666,13 @@
         }
       }
     },
-    "Registers the helper fresh. Approve it in Login Items if asked.": {
+    "For a helper that will not start. Approve it in Login Items if asked.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "重新注册辅助程序。如果系统提示，请在“登录项”中允许它运行。"
+            "value": "用于辅助程序无法启动的情况。如果系统提示，请在“登录项”中允许它运行。"
           }
         }
       }
@@ -9531,22 +9510,22 @@
         }
       }
     },
-    "Set by the fix list": {
+    "Set by a known fix": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "由修复列表设置"
+            "value": "由已知修复设置"
           }
         }
       }
     },
-    "Set by the fix list: %@": {
+    "Set by known fixes: %@": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "由修复列表设置：%@"
+            "value": "由已知修复设置：%@"
           }
         }
       }
@@ -10430,12 +10409,12 @@
         }
       }
     },
-    "Steam adds one under Storage in its settings.": {
+    "Steam adds a library on any drive.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 Steam 设置的“存储空间”中添加。"
+            "value": "Steam 可以在任意磁盘上添加游戏库。"
           }
         }
       }
@@ -10720,16 +10699,6 @@
         }
       }
     },
-    "Steam library": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 库"
-          }
-        }
-      }
-    },
     "Steam links": {
       "localizations": {
         "zh-Hans": {
@@ -10854,12 +10823,12 @@
         }
       }
     },
-    "Steam started on %@": {
+    "Steam is still running on %@.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steam 启动时使用的是 %@"
+            "value": "Steam 仍在使用 %@ 运行。"
           }
         }
       }
@@ -11319,13 +11288,13 @@
         }
       }
     },
-    "The client itself, without its games.": {
+    "Steam’s own files, without its games.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "客户端本身，不含游戏。"
+            "value": "Steam 自身的文件，不含游戏。"
           }
         }
       }
@@ -11436,13 +11405,13 @@
         }
       }
     },
-    "The first time a game starts, the settings the fix list names for it are set where the game has none of its own.": {
+    "The first time a game starts, the settings a known fix names for it are set where the game has none of its own.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "游戏首次启动时，修复列表为其指定的设置会应用到游戏自身未设置的项。"
+            "value": "游戏首次启动时，已知修复为其指定的设置会应用到游戏自身未设置的项。"
           }
         }
       }
@@ -11627,17 +11596,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "安装程序未能启动。"
-          }
-        }
-      }
-    },
-    "The last attempt stopped: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次尝试已停止：%@"
           }
         }
       }
@@ -11996,13 +11954,13 @@
         }
       }
     },
-    "These are Wine’s own overrides, the values winecfg’s Libraries tab shows and edits: a game’s are stored under its program, the bottle’s under every program. The renderer’s libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.": {
+    "These are Wine’s own overrides, the values Wine configuration’s Libraries tab shows and edits: a game’s are stored under its program, the bottle’s under every program. The renderer’s libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这些是 Wine 自身的覆盖设置，也是 winecfg“函数库”标签页显示和编辑的值：单个游戏的设置存储在其程序下，容器设置适用于所有程序。渲染器库（d3d9 至 d3d12、dxgi）由优先级更高的“渲染器”设置决定。"
+            "value": "这些是 Wine 自身的覆盖设置，也是 Wine 配置的“函数库”标签页显示和编辑的值：单个游戏的设置存储在其程序下，容器设置适用于所有程序。渲染器库（d3d9 至 d3d12、dxgi）由优先级更高的“渲染器”设置决定。"
           }
         }
       }
@@ -12518,12 +12476,12 @@
         }
       }
     },
-    "Usage count": {
+    "Shortcuts": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用统计"
+            "value": "快捷方式"
           }
         }
       }
@@ -13292,13 +13250,13 @@
         }
       }
     },
-    "winecfg: Windows version, drives, audio, and DLL overrides.": {
+    "Windows version, drives, audio, and DLL overrides.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "winecfg：Windows 版本、驱动器、音频和 DLL 覆盖设置。"
+            "value": "Windows 版本、驱动器、音频和 DLL 覆盖设置。"
           }
         }
       }
@@ -13600,6 +13558,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "~/Library/Logs/Sevoflurane-wine.log 始终会记录错误。开启后还会记录每次异常和库加载，因此日志会迅速增大。"
+          }
+        }
+      }
+    },
+    "CuNNy’s NVL weights, a small neural upscaler for visual novels and art.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CuNNy 的 NVL 权重，一个适用于视觉小说和插画的小型神经网络放大器。"
           }
         }
       }

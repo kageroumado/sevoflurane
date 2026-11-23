@@ -45,7 +45,7 @@ struct GameDLLOverridesSection: View {
     var body: some View {
         SettingsSection(
             title: "DLL overrides", anchor: .engineOverrides, help: SettingCopy.dllOverrides,
-            footer: "For this game alone; winecfg shows the same values.", reach: .nextLaunch,
+            footer: "For this game alone; Wine configuration shows the same values.", reach: .nextLaunch,
         ) {
             KeyValueEditor(
                 entries: (store.values.dllOverrides ?? [:])
@@ -72,7 +72,7 @@ struct BottleDLLOverridesSection: View {
     var body: some View {
         SettingsSection(
             title: "DLL overrides", anchor: .engineOverrides, help: SettingCopy.dllOverrides,
-            footer: "For every program in this bottle; winecfg shows the same values.", reach: .nextLaunch,
+            footer: "For every program in this bottle; Wine configuration shows the same values.", reach: .nextLaunch,
         ) {
             KeyValueEditor(
                 entries: compatibility.overrides.map { KeyValueEditor.Entry(key: $0.dll, value: $0.mode) },

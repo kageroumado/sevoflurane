@@ -136,7 +136,7 @@ struct SettingRow: View {
     private var note: SettingsRowNote? {
         if let fixed {
             return SettingsRowNote(
-                text: "Set by the fix list", actionTitle: "Undo", reason: fixed.reason, action: fixed.undo,
+                text: "Set by a known fix", actionTitle: "Undo", reason: fixed.reason, action: fixed.undo,
             )
         }
         guard let recommended, store.own(setting) != recommended.value else { return nil }

@@ -10,7 +10,7 @@ sessions recorded by Sevoflurane when players opt in to **Share run statistics**
 Shared runs include the engine, renderer, hardware, resolution, gameplay frame
 rate and how the session ended; the database uses these to calculate its verdicts.
 
-To contribute, enable **Settings › General › Community › Share run statistics**
+To contribute, enable **Settings › General › Privacy › Share run statistics**
 and play. Games appear as players share their runs.
 
 <p align="center"><a href="https://kagerou.glass/sevoflurane/games/"><img src=".github/compatibility.svg" alt="Find your game — community compatibility database" width="360" height="80"></a></p>
@@ -558,7 +558,7 @@ it. Every row has a one-line summary and an (i) for the full explanation.
   built-in table plus the community database's signed list, curated from
   "plays with fixes" reports) is applied by itself at a game's first launch
   where the game has no value of its own, announced with an Undo; the settings
-  it set say "Set by the fix list" with their undo. Engine › Apply known fixes
+  it set say "Set by a known fix" with their undo. Engine › Apply known fixes
   automatically turns it off.
 - **HoYoverse**: install, update and verify HoYoverse games (above).
 - **Storage**, **Recovery**, **Diagnostics**: below.
@@ -624,7 +624,7 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
 
 ### Community game database
 
-- Settings › General › Community › **Share run statistics** (asked once) sends
+- Settings › General › Privacy › **Share run statistics** (asked once) sends
   each finished run to
   [kagerou.glass/sevoflurane/games](https://kagerou.glass/sevoflurane/games):
   game, engine, renderer, settings, macOS, chip, duration, gameplay frame rate

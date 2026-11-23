@@ -154,7 +154,7 @@ extension SettingHelp {
 
     static let knownFixes = SettingHelp(
         title: "Apply known fixes automatically",
-        summary: "The first time a game starts, the settings the fix list names for it are set where "
+        summary: "The first time a game starts, the settings a known fix names for it are set where "
             + "the game has none of its own.",
         entries: [
             .init(name: "Undo", text: "The game’s own settings show each one with an undo."),

@@ -343,7 +343,7 @@ nonisolated extension SettingCopy {
                 + "produced nothing.",
             entries: [
                 .init(
-                    name: "Hardware (VideoToolbox)",
+                    name: "Hardware",
                     text: "The Mac’s own decoder. The default, and the right choice for nearly every game.",
                 ),
                 .init(
@@ -408,7 +408,7 @@ nonisolated extension SettingCopy {
             .init(name: "Native only · Built-in only", text: "One of them, with nothing to fall back to."),
             .init(name: "Disabled", text: "The library is not loaded at all."),
         ],
-        footnote: "These are Wine’s own overrides, the values winecfg’s Libraries tab shows and edits: a "
+        footnote: "These are Wine’s own overrides, the values Wine configuration’s Libraries tab shows and edits: a "
             + "game’s are stored under its program, the bottle’s under every program. The "
             + "renderer’s libraries (d3d9 to d3d12, dxgi) follow the Renderer setting, which wins.",
     )

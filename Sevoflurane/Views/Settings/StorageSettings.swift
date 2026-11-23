@@ -239,7 +239,8 @@ private struct StorageLibrariesSection: View {
             if let steam {
                 SettingsAction(
                     title: "Another library",
-                    caption: String(localized: "Steam adds one under Storage in its settings."),
+                    caption: String(localized: "Steam adds a library on any drive."),
+                    mark: .dot(nil),
                 ) {
                     Button("Open Steam Settings") { steam.openSteamSettings() }
                 }

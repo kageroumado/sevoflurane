@@ -53,25 +53,24 @@ private struct HoYoGameRow: View {
     let store: HoYoStore
 
     var body: some View {
-        let job = store.jobs[row.id]
-        SettingsAction(title: "\(row.installation.game.displayName)", caption: store.notes[row.id] ?? status) {
-            if let plan = row.plan, plan.kind != .upToDate {
-                Button("Update") { store.startUpdate(row.id) }
+        if let job = store.jobs[row.id] {
+            HoYoProgressRow(job: job, title: row.installation.game.displayName) { store.cancel(row.id) }
+                .help(row.installation.folder.path)
+        } else {
+            SettingsAction(title: "\(row.installation.game.displayName)", caption: store.notes[row.id] ?? status) {
+                if let plan = row.plan, plan.kind != .upToDate {
+                    Button("Update") { store.startUpdate(row.id) }
+                }
+                if store.problems[row.id] != nil {
+                    Button("Repair") { store.startRepair(row.id) }
+                }
+                Button("Verify Files") { store.startVerify(row.id) }
             }
-            if store.problems[row.id] != nil {
-                Button("Repair") { store.startRepair(row.id) }
+            .help(row.installation.folder.path)
+            .contextMenu {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([row.installation.folder]) }
+                Button("Stop Listing") { store.forget(row.id) }
             }
-            Button("Verify Files") { store.startVerify(row.id) }
-        }
-        .disabled(job != nil)
-        .help(row.installation.folder.path)
-        .contextMenu {
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([row.installation.folder]) }
-            Button("Stop Listing") { store.forget(row.id) }
-                .disabled(job != nil)
-        }
-        if let job {
-            HoYoProgressRow(job: job) { store.cancel(row.id) }
         }
     }
 
@@ -94,12 +93,12 @@ private struct HoYoGameRow: View {
 /// stops it.
 private struct HoYoProgressRow: View {
     let job: HoYoStore.Job
-    var title: String?
+    let title: String
     let cancel: () -> Void
 
     var body: some View {
         SettingsProgress(
-            title: title ?? phase, fraction: job.progress?.fraction, caption: amounts,
+            title: title, fraction: job.progress?.fraction, caption: amounts,
             stop: job.kind == .verify ? nil : cancel,
         )
     }
@@ -115,12 +114,12 @@ private struct HoYoProgressRow: View {
         }
     }
 
-    /// The stage under a title of its own, then how much of the total is done.
+    /// The stage, then how much of the total is done.
     private var amounts: String {
-        guard let progress = job.progress, progress.bytesTotal > 0 else { return title == nil ? "" : phase }
+        guard let progress = job.progress, progress.bytesTotal > 0 else { return phase }
         let done = ByteCountFormatter.string(fromByteCount: progress.bytesDone, countStyle: .file)
         let total = ByteCountFormatter.string(fromByteCount: progress.bytesTotal, countStyle: .file)
-        return title == nil ? "\(done) / \(total)" : "\(phase) \(done) / \(total)"
+        return "\(phase) \(done) / \(total)"
     }
 }
 

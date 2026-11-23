@@ -82,7 +82,7 @@ it. Killing the app tests something else.
 
 ## After the session
 
-1. **Save the report.** Settings › Diagnostics › *Diagnostics archive*, or from a
+1. **Save the report.** Settings › Diagnostics › Reports › *Save Diagnostics*, or from a
    terminal:
 
    ```bash

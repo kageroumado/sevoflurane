@@ -43,8 +43,6 @@ struct DiagnosticsSettings: View {
                     }
                 }
                 .highlightable(.diagnosticsReports, highlighted: highlighted)
-            }
-            SettingsSection(title: "Diagnostics archive") {
                 SaveDiagnosticsRow()
                     .highlightable(.diagnosticsSave, highlighted: highlighted)
             }

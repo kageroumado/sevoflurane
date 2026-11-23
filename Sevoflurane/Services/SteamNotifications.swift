@@ -263,7 +263,7 @@ final class SteamNotifications {
         }
         let content = UNMutableNotificationContent()
         content.title = name
-        content.body = String(localized: "Set by the fix list: \(settings.joined(separator: ", "))")
+        content.body = String(localized: "Set by known fixes: \(settings.joined(separator: ", "))")
         content.categoryIdentifier = Self.fixesCategory.identifier
         content.userInfo = Route.fixes(appID: appID).userInfo
         content.threadIdentifier = Route.fixes(appID: appID).threadIdentifier

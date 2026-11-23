@@ -43,7 +43,9 @@ struct GraphicsSettings: View {
                 }
                 .highlightable(.graphicsGpu, highlighted: highlighted)
                 if let bootedRenderer = store.bootedRenderer {
-                    RestartNotice(title: "Steam started on \(bootedRenderer.label)", steam: steam)
+                    RestartNotice(
+                        waiting: String(localized: "Steam is still running on \(bootedRenderer.label)."), steam: steam,
+                    )
                 }
             }
             SettingsSection(title: "Renderer versions", reach: .nextLaunch) {
@@ -54,8 +56,10 @@ struct GraphicsSettings: View {
                 ForEach(RendererVersions.Component.allCases) { component in
                     RendererVersionRow(store: store, component: component)
                 }
-                if store.rendererVersionsChangedSinceBoot {
-                    RestartNotice(title: "A version changed", steam: steam)
+                if store.rendererVersionsChangedSinceBoot, store.bootedRenderer == nil {
+                    RestartNotice(
+                        waiting: String(localized: "Steam is still running on the earlier versions."), steam: steam,
+                    )
                 }
             }
             ShaderPackagesSection(shaders: shaders, highlighted: highlighted)
@@ -72,13 +76,15 @@ struct GraphicsSettings: View {
     }
 }
 
-/// A change that waits for the next game, with the way to apply it at once.
+/// A change that waits for the next game: what Steam still runs on, and the
+/// restart that takes the change now. One restart takes a renderer and a
+/// version together, so the card that names the renderer carries the row.
 private struct RestartNotice: View {
-    let title: LocalizedStringResource
+    let waiting: String
     let steam: SteamActions?
 
     var body: some View {
-        SettingsAction(title: title, caption: String(localized: "A restart applies the change at once.")) {
+        SettingsAction(title: "Pending change", caption: waiting) {
             if let steam {
                 Button("Restart Steam") { steam.restartClient() }
             }

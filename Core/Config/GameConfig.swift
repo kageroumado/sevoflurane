@@ -26,9 +26,9 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
     var label: String {
         let value = switch self {
         case .off: "Never"
-        case .fixed: "Fixed-size windows"
-        case .window: "Fixed-size windows and full-screen games"
-        case .all: "Every window with a title bar"
+        case .fixed: "Fixed-size"
+        case .window: "Fixed-size and full-screen"
+        case .all: "Every window"
         }
         return InterfaceCopy.localized(value)
     }
@@ -279,7 +279,7 @@ nonisolated enum VideoDecoding: String, Codable, CaseIterable, Sendable {
 
     var label: String {
         let value = switch self {
-        case .hardware: "Hardware (VideoToolbox)"
+        case .hardware: "Hardware"
         case .software: "Software"
         }
         return InterfaceCopy.localized(value)

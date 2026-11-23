@@ -6,7 +6,7 @@
 
 [社区兼容性数据库](https://kagerou.glass/sevoflurane/games/?lang=zh-CN)可以查看游戏在不同 Mac 和渲染器上的运行情况。数据来自玩家开启**共享运行统计数据**后，由 Sevoflurane 自动记录的实际游玩过程。每次共享包含引擎、渲染器、硬件、分辨率、游玩时的帧率和结束方式，数据库再根据这些记录判断运行情况。
 
-想贡献数据，在**设置 › 通用 › 社区 › 共享运行统计数据**中开启，然后照常玩就好。有人分享运行记录后，游戏就会出现在数据库里。
+想贡献数据，在**设置 › 通用 › 隐私 › 共享运行统计数据**中开启，然后照常玩就好。有人分享运行记录后，游戏就会出现在数据库里。
 
 有一个 App 要通过另一个 App 来用：在 **Wallpaper Engine** 的创意工坊订阅壁纸，同一位开发者的免费 App [Phosphene](https://kagerou.glass/phosphene/?from=sevoflurane) 就会找到它们，并作为 Mac 的墙纸播放。它的页面会这样说明，点“开始”会打开创意工坊并推荐 Phosphene，Mac 筛选也会保留它。
 
@@ -336,7 +336,7 @@ msync 是 CrossOver 的同步后端。Windows 的事件、互斥体和信号量�
 
 ### 社区游戏数据库
 
-- “设置 › 通用 › 社区 › **共享运行统计数据**”（只询问一次）会把每次结束的运行记录发送到 [kagerou.glass/sevoflurane/games](https://kagerou.glass/sevoflurane/games)：游戏、引擎、渲染器、设置、macOS 版本、芯片、运行时长、游戏帧率和结束方式。
+- “设置 › 通用 › 隐私 › **共享运行统计数据**”（只询问一次）会把每次结束的运行记录发送到 [kagerou.glass/sevoflurane/games](https://kagerou.glass/sevoflurane/games)：游戏、引擎、渲染器、设置、macOS 版本、芯片、运行时长、游戏帧率和结束方式。
 - 数据不包含能指明你或你的 Mac 身份的信息：没有标题、路径或账户，启动时间也会取整到小时。可以预览实际发送的完整内容。
 - 运行记录使用安全隔区中生成的密钥签名，Mac 支持时还会通过 App Attest 验证。**删除我共享的内容…**（或 `sevo stats delete`）会删除这些记录，并生成新的匿名身份。
 - 在“报告”窗口回答“运行得怎么样？”，或使用 `sevo report`，可以添加结论（可玩、需修复后可玩、可启动、无法运行）和可选备注。

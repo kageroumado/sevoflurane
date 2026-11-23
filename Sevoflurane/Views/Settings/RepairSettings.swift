@@ -239,7 +239,7 @@ struct RecoverySettings: View {
             }
             .highlightable(.recoveryClearShaderCache, highlighted: highlighted)
             SettingsAction(
-                title: "Steam client", caption: rebuildCaption, state: rebuildState, isWorking: isRebuilding,
+                title: "Bottle", caption: rebuildCaption, state: rebuildState, isWorking: isRebuilding,
             ) {
                 Button("Rebuild Bottle…") { pendingReset = .rebuildBottle }
                     .disabled(isRebuilding)
@@ -247,7 +247,7 @@ struct RecoverySettings: View {
             .highlightable(.recoveryRebuildSteam, highlighted: highlighted)
             SettingsAction(
                 title: "Wine configuration",
-                caption: String(localized: "winecfg: Windows version, drives, audio, and DLL overrides."),
+                caption: String(localized: "Windows version, drives, audio, and DLL overrides."),
             ) {
                 Button("Open Wine Configuration") { compatibility.openWineConfiguration() }
             }
@@ -289,7 +289,7 @@ struct RecoverySettings: View {
 
     private var rebuildState: SettingsRowState {
         guard case let .failed(reason) = provisioner.activity else { return .normal }
-        return .failure(String(localized: "The last attempt stopped: \(reason)"))
+        return .failure(reason)
     }
 
     private func repairHelper() {
@@ -327,7 +327,7 @@ struct RecoverySettings: View {
 
         var caption: String {
             switch self {
-            case .idle, .failed: String(localized: "Registers the helper fresh. Approve it in Login Items if asked.")
+            case .idle, .failed: String(localized: "For a helper that will not start. Approve it in Login Items if asked.")
             case .working: String(localized: "Rebuilding the background helper…")
             case let .done(message): InterfaceCopy.localized(message)
             }
@@ -347,7 +347,7 @@ private struct ShaderCompilerRow: View {
 
     var body: some View {
         SettingsAction(title: "Direct3D shader compiler", caption: caption, state: state, isWorking: row.busy) {
-            Button("Install Shader Compiler", action: install)
+            Button("Install (\(row.dependency.download))", action: install)
                 .disabled(row.busy)
         }
     }

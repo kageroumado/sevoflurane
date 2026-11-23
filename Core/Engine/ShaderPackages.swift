@@ -81,7 +81,7 @@ nonisolated enum ShaderPackages {
         Available(
             name: "cunny-nvl",
             title: "CuNNy NVL",
-            description: "CuNNy's NVL weights, a small neural upscaler for visual novels and art.",
+            description: "CuNNy’s NVL weights, a small neural upscaler for visual novels and art.",
             content: "Trained on visual-novel screenshots and illustrations",
             license: "LGPL-3.0-only",
             version: "1",

@@ -63,7 +63,7 @@ nonisolated enum StorageInventory {
             Entry(
                 id: "client",
                 name: "Steam client",
-                detail: "The client itself, without its games.",
+                detail: "Steam’s own files, without its games.",
                 url: steam,
                 bytes: -1,
                 removal: nil,

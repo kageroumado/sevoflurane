@@ -21,8 +21,7 @@ struct GeneralSettings: View {
             GeneralSteamPagesSection(steam: steam, highlighted: highlighted)
             GeneralCustomStyleSection(steam: steam, highlighted: highlighted)
             StreamerModeSection(steam: steam, highlighted: highlighted)
-            GeneralCommunitySection(highlighted: highlighted)
-            GeneralUsageSection()
+            GeneralPrivacySection(highlighted: highlighted)
             GeneralDiscordSection(highlighted: highlighted)
             GeneralAutomationSection(highlighted: highlighted, fixture: automationFixture)
             GeneralUninstallSection(
@@ -262,7 +261,7 @@ private struct GeneralCustomStyleSection: View {
 
 /// Whether closed runs go to the community database, what has gone, and the way
 /// to take it back.
-private struct GeneralCommunitySection: View {
+private struct GeneralPrivacySection: View {
     let highlighted: SettingsAnchor?
     @State private var shares = false
     @State private var state = StatsStore.State()
@@ -270,7 +269,7 @@ private struct GeneralCommunitySection: View {
     @State private var deleteFailure: String?
 
     var body: some View {
-        SettingsSection(title: "Community") {
+        SettingsSection(title: "Privacy") {
             SettingsToggle(
                 title: "Share run statistics",
                 caption: sentLine
@@ -296,6 +295,7 @@ private struct GeneralCommunitySection: View {
                     Button("Delete What I Shared…") { isConfirmingDelete = true }
                 }
             }
+            GeneralUsageRow()
         }
         .onAppear(perform: reload)
         .confirmationDialog(
@@ -337,28 +337,26 @@ private struct GeneralCommunitySection: View {
 
 /// Whether this Mac is counted among Sevoflurane's users, and whether
 /// Sevoflurane's own crashes are reported.
-private struct GeneralUsageSection: View {
+private struct GeneralUsageRow: View {
     @State private var tier = ConsentTier.off
     @State private var status: DigoxinStatus = .off
 
     var body: some View {
-        SettingsSection(title: "Usage count") {
-            SettingsPicker(
-                title: "Count this Mac",
-                caption: statusLine ?? String(localized: "One anonymous check-in on each day you use Sevoflurane."),
-                help: .usageCount,
-                selection: $tier,
-            ) {
-                Text("Off").tag(ConsentTier.off)
-                Text("Counting").tag(ConsentTier.counting)
-                Text("Counting and crash reports").tag(ConsentTier.crashReports)
-            }
-            .onChange(of: tier) { _, tier in
-                // Reading the preference in onAppear lands here too.
-                guard Preferences.usageCounting != tier else { return }
-                UsageCounting.choose(tier)
-                Task { await refreshStatus() }
-            }
+        SettingsPicker(
+            title: "Count this Mac",
+            caption: statusLine ?? String(localized: "One anonymous check-in on each day you use Sevoflurane."),
+            help: .usageCount,
+            selection: $tier,
+        ) {
+            Text("Off").tag(ConsentTier.off)
+            Text("Counting").tag(ConsentTier.counting)
+            Text("Counting and crash reports").tag(ConsentTier.crashReports)
+        }
+        .onChange(of: tier) { _, tier in
+            // Reading the preference in the task lands here too.
+            guard Preferences.usageCounting != tier else { return }
+            UsageCounting.choose(tier)
+            Task { await refreshStatus() }
         }
         .task {
             tier = Preferences.usageCounting ?? .off
