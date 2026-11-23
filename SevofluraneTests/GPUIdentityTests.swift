@@ -189,9 +189,9 @@ struct GPUIdentityEnvironmentTests {
         #expect(GPUIdentity.amd.label(for: chip) == "AMD Radeon RX 7700 XT")
         #expect(GPUIdentity.automatic.label(for: chip) == "Apple M1 Max")
         // The label carries the card; the detail says what reporting it buys.
-        #expect(GPUIdentity.nvidia.detail.contains("NVIDIA card"))
-        #expect(GPUIdentity.amd.detail.contains("AMD card"))
-        #expect(GPUIdentity.automatic.detail.contains("your Mac's chip"))
+        #expect(GPUIdentity.nvidia.detail.contains("driver checks"))
+        #expect(GPUIdentity.amd.detail.contains("rejects the NVIDIA card"))
+        #expect(GPUIdentity.automatic.detail.contains("Mac's own chip"))
     }
 
     @Test

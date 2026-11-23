@@ -23,40 +23,29 @@ struct GraphicsSettings: View {
         let bootedRenderer = store.bootedRenderer
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Picker("Game renderer", selection: graphics.renderer) {
-                            ForEach(store.availableRenderers, id: \.self) { renderer in
-                                Text(renderer.label).tag(renderer)
-                            }
+                HelpedRow(
+                    caption: store.selection.renderer.detail,
+                    help: SettingCopy.renderers(store.availableRenderers, footnote: applyRendererCopy),
+                ) {
+                    Picker("Game renderer", selection: graphics.renderer) {
+                        ForEach(store.availableRenderers, id: \.self) { renderer in
+                            Text(renderer.label).tag(renderer)
                         }
-                        SettingHelpButton(
-                            help: SettingCopy.renderers(store.availableRenderers, footnote: applyRendererCopy),
-                        )
                     }
-                    Text(store.selection.renderer.detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    .endsOnControlLine()
                 }
                 .highlightable(.graphicsRenderer, highlighted: highlighted)
-                VStack(alignment: .leading, spacing: 4) {
+                HelpedRow(caption: store.selection.gpu.detail, help: .reportedGPU) {
                     Picker("GPU reported to games", selection: graphics.gpu) {
                         ForEach(GPUIdentity.allCases, id: \.self) { identity in
                             Text(identity.label).tag(identity)
                         }
                     }
-                    Text(store.selection.gpu.detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    .endsOnControlLine()
                 }
                 .highlightable(.graphicsGpu, highlighted: highlighted)
                 if let bootedRenderer {
-                    HStack {
-                        Text("Steam started on \(bootedRenderer.label). \(applyRendererCopy)")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer()
+                    ActionRow(title: "Steam started on \(bootedRenderer.label)", caption: applyRendererCopy) {
                         if let steam {
                             Button("Restart Steam") { steam.restartClient() }
                         }
@@ -93,12 +82,7 @@ struct GraphicsSettings: View {
             if store.rendererVersionsChangedSinceBoot {
                 // The renderer picker above says this for a renderer change;
                 // a version change is the same restage.
-                HStack {
-                    Text(applyRendererCopy)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer()
+                ActionRow(title: "A version changed", caption: applyRendererCopy) {
                     if let steam {
                         Button("Restart Steam") { steam.restartClient() }
                     }
@@ -120,22 +104,13 @@ private struct DX12HostNotice: View {
     let macRunsD3DMetal: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if macRunsD3DMetal {
-                Text("Update the engine for DirectX 12")
-                    .font(.callout.weight(.medium))
-                Text("In Engine settings, choose an engine that includes D3DMetal. Downloaded toolkits stay installed.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("DirectX 12 needs Apple silicon")
-                    .font(.callout.weight(.medium))
-                Text("D3DMetal runs only on Macs with Apple silicon.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        SettingsRow(
+            caption: macRunsD3DMetal
+                ? String(localized: "Choose an engine that includes D3DMetal in Settings › Engine. Your toolkits stay.")
+                : "",
+        ) {
+            (macRunsD3DMetal ? Text("Update the engine for DirectX 12") : Text("DirectX 12 needs a Mac with Apple silicon"))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -157,43 +132,36 @@ private struct D3DMetalRow: View {
             get: { store.activeD3DMetal ?? "" },
             set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
         )
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Picker("D3DMetal", selection: selection) {
-                    if store.engineHasOwnD3DMetal {
-                        Text("CrossOver's own").tag("")
-                    } else if store.d3dMetalVersions.isEmpty {
-                        Text("None added").tag("")
-                    }
-                    ForEach(store.d3dMetalVersions, id: \.version) { entry in
-                        Text(entry.version).tag(entry.version)
-                    }
-                }
-                .disabled(isAddingD3DMetal || (store.d3dMetalVersions.isEmpty && !store.engineHasOwnD3DMetal))
-                actionsMenu
-            }
+        SettingsRow(caption: caption, isWarning: d3dMetalError != nil && !isAddingD3DMetal) {
             if isAddingD3DMetal {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Installing the toolkit…")
-                        .font(.callout).foregroundStyle(.secondary)
+                ProgressView().controlSize(.small)
+            }
+            Picker("D3DMetal", selection: selection) {
+                if store.engineHasOwnD3DMetal {
+                    Text("CrossOver's own").tag("")
+                } else if store.d3dMetalVersions.isEmpty {
+                    Text("None added").tag("")
                 }
-            } else if store.d3dMetalVersions.isEmpty {
-                Text(store.engineHasOwnD3DMetal
-                    ? "CrossOver ships the version it supports. Add a newer one from Apple to replace it."
-                    : "Adds support for DirectX 12 games.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(store.d3dMetalVersions, id: \.version) { entry in
+                    Text(entry.version).tag(entry.version)
+                }
             }
-            if let d3dMetalError {
-                Label(d3dMetalError, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .endsOnControlLine()
+            .disabled(isAddingD3DMetal || (store.d3dMetalVersions.isEmpty && !store.engineHasOwnD3DMetal))
+        } accessory: {
+            actionsMenu
         }
         .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
+    }
+
+    /// What the toolkit is doing, what went wrong, or what adding one buys.
+    private var caption: String {
+        if isAddingD3DMetal { return String(localized: "Installing the toolkit…") }
+        if let d3dMetalError { return d3dMetalError }
+        guard store.d3dMetalVersions.isEmpty else { return "" }
+        return store.engineHasOwnD3DMetal
+            ? String(localized: "CrossOver ships the version it supports. Add a newer one from Apple to replace it.")
+            : String(localized: "Adds support for DirectX 12 games.")
     }
 
     /// Apple's download, a disk image, and removal of the chosen version.
@@ -212,6 +180,7 @@ private struct D3DMetalRow: View {
                 .labelStyle(.iconOnly)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("More actions")
         .disabled(isAddingD3DMetal)
@@ -306,16 +275,12 @@ private struct ShaderPackagesSection: View {
             }
             ShaderFetchStatus(shaders: shaders)
         } header: {
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
                 Text("Upscalers")
-                Text("Extra upscalers for games drawn at low resolution: pixel art, anime, visual novels. MetalFX and the final filter are built in.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textCase(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingHelpButton(help: .upscalerPackages)
             }
         } footer: {
-            Text("Choose one for every game in Engine \u{203A} Upscaler, or for one game in Games. While a game runs, View \u{203A} Upscaler in its menu bar switches it live.")
+            Text("For games drawn at low resolution: pixel art, anime, visual novels.")
         }
         .highlightable(.graphicsShaders, highlighted: highlighted)
         .confirmationDialog(
@@ -341,18 +306,14 @@ private struct InstalledShaderRow: View {
     let remove: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            ShaderPackageSummary(
-                title: package.title,
-                version: package.manifest.version,
-                license: package.manifest.license,
-                description: package.manifest.description,
-                content: package.manifest.content,
-            )
-            Spacer(minLength: Theme.Space.sm)
-            if let source = package.manifest.source {
-                ShaderProjectLink(source: source)
-            }
+        ShaderPackageRow(
+            title: package.title,
+            version: package.manifest.version,
+            license: package.manifest.license,
+            description: package.manifest.description,
+            content: package.manifest.content,
+            source: package.manifest.source,
+        ) {
             Button("Remove…", action: remove)
                 .disabled(isBusy)
         }
@@ -365,46 +326,45 @@ private struct DownloadableShaderRow: View {
     let download: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            ShaderPackageSummary(
-                title: entry.title, version: entry.version, license: entry.license,
-                description: entry.description, content: entry.content,
-            )
-            Spacer(minLength: Theme.Space.sm)
-            if let source = entry.source {
-                ShaderProjectLink(source: source)
-            }
+        ShaderPackageRow(
+            title: entry.title, version: entry.version, license: entry.license,
+            description: entry.description, content: entry.content, source: entry.source,
+        ) {
             Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download", action: download)
                 .disabled(isBusy)
         }
     }
 }
 
-/// A package's title, version and license over its description (or its contents
-/// when the description is empty).
-private struct ShaderPackageSummary: View {
+/// A package: its title, version and license, its one button, the project's
+/// website, and its description (or its contents when the description is empty).
+private struct ShaderPackageRow<Action: View>: View {
     let title: String
     let version: String
     let license: String
     let description: String
     let content: String
+    let source: URL?
+    @ViewBuilder var action: Action
 
     private var summary: String {
         description.trimmingCharacters(in: .whitespaces).isEmpty ? content : description
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(title)
-                Text("\(version) · \(license)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        SettingsRow(caption: InterfaceCopy.localized(summary)) {
+            LabeledContent {
+                action
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+                    Text(title)
+                    Text("\(version) · \(license)")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text(InterfaceCopy.localized(summary))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        } accessory: {
+            if let source { ShaderProjectLink(source: source) }
         }
     }
 }
@@ -440,36 +400,31 @@ private struct RendererVersionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Picker(component.label, selection: selection) {
-                    Text(state.defaultVersion.map { "Engine's own (\($0))" } ?? "Engine's own").tag("")
-                    ForEach(state.installed) { entry in
-                        Text(entry.version).tag(entry.version)
-                    }
+        SettingsRow(caption: caption, isWarning: state.error != nil && state.busy == nil) {
+            if state.busy != nil {
+                ProgressView().controlSize(.small)
+            }
+            Picker(component.label, selection: selection) {
+                Text(state.defaultVersion.map { "Engine's own (\($0))" } ?? "Engine's own").tag("")
+                ForEach(state.installed) { entry in
+                    Text(entry.version).tag(entry.version)
                 }
-                .disabled(state.busy != nil)
-                actionsMenu
             }
-            if let busy = state.busy {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(busy).font(.callout).foregroundStyle(.secondary)
-                }
-            } else if let newer = state.newer {
-                Text(newer.tested
-                    ? "\(newer.version) is available and tested with this engine."
-                    : "\(newer.version) is available and untested here.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            if let error = state.error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .endsOnControlLine()
+            .disabled(state.busy != nil)
+        } accessory: {
+            actionsMenu
         }
+    }
+
+    /// What the row is doing, what went wrong, or the release it could move to.
+    private var caption: String {
+        if let busy = state.busy { return busy }
+        if let error = state.error { return error }
+        guard let newer = state.newer else { return "" }
+        return newer.tested
+            ? String(localized: "\(newer.version) is available and tested with this engine.")
+            : String(localized: "\(newer.version) is available and untested here.")
     }
 
     /// The feed's releases, a release from disk, Reset and removal.
@@ -498,6 +453,7 @@ private struct RendererVersionRow: View {
                 .labelStyle(.iconOnly)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("More actions")
         .disabled(state.busy != nil)

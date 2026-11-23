@@ -39,14 +39,12 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
 
     /// What picking this identity buys, the same on every Mac.
     var detail: String {
-        switch self {
-        case .automatic:
-            "Reports your Mac's chip to the DirectX 11 and 12 renderers. Wine's built-in renderer reports its own card."
-        case .nvidia:
-            "Reports an NVIDIA card, which passes most GPU and driver checks. Speed still depends on your Mac."
-        case .amd:
-            "Reports an AMD card. Try this if a game rejects the NVIDIA card."
+        let value = switch self {
+        case .automatic: "Your Mac's own chip. Some games reject a card they do not know."
+        case .nvidia: "Passes most GPU and driver checks. Speed still depends on your Mac."
+        case .amd: "Try this if a game rejects the NVIDIA card."
         }
+        return InterfaceCopy.localized(value)
     }
 
     /// The environment every renderer reads, so a renderer change keeps what
