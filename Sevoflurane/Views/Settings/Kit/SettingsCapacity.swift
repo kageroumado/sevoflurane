@@ -14,38 +14,22 @@ extension StorageBreakdown.Segment.Kind {
 
 // MARK: - Volume overview
 
-/// The volume's name and fill, its capacity bar, and the bar's legend.
+/// A volume's capacity bar, and the bar's legend.
 struct StorageVolumeOverview: View {
-    let volume: StorageInventory.Volume
     let breakdown: StorageBreakdown
+    /// The legend's segments, in the order the rows under the bar list them.
+    let legend: [StorageBreakdown.Segment]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            StorageVolumeHeader(name: volume.name, used: volume.used, capacity: volume.capacity)
             StorageCapacityBar(
                 segments: breakdown.segments,
                 capacity: breakdown.capacity,
                 available: breakdown.available,
             )
-            StorageLegend(segments: breakdown.segments)
+            StorageLegend(segments: legend)
         }
         .padding(.vertical, Theme.Space.xs)
-    }
-}
-
-struct StorageVolumeHeader: View {
-    let name: String
-    let used: Int64
-    let capacity: Int64
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(name).font(.headline)
-            Spacer(minLength: Theme.Space.md)
-            Text("\(StorageSettings.size(used)) of \(StorageSettings.size(capacity)) used")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
     }
 }
 
@@ -59,8 +43,8 @@ struct StorageCapacityBar: View {
     let available: Int64
 
     enum Metrics {
-        static let height: CGFloat = 18
-        static let cornerRadius: CGFloat = 5
+        static let height = SettingsMetrics.barHeight
+        static let cornerRadius = SettingsMetrics.barRadius
         /// The hairline between neighbors, where the pane shows through.
         static let gap: CGFloat = 1
         /// The narrowest a segment is drawn, so a small entry stays visible.
@@ -111,17 +95,14 @@ struct StorageCapacityBar: View {
 
 // MARK: - Legend
 
-/// The color of one segment, as the legend and the rows show it. A row with
-/// nothing in the bar passes `nil` and keeps the column's width.
+/// The color of one segment, as the legend shows it.
 struct StorageDot: View {
-    let color: Color?
-
-    static let diameter: CGFloat = 8
+    let color: Color
 
     var body: some View {
         Circle()
-            .fill(color ?? .clear)
-            .frame(width: Self.diameter, height: Self.diameter)
+            .fill(color)
+            .frame(width: SettingsMetrics.dot, height: SettingsMetrics.dot)
             .accessibilityHidden(true)
     }
 }
@@ -137,7 +118,7 @@ struct StorageLegend: View {
                 HStack(spacing: Theme.Space.xs) {
                     StorageDot(color: segment.kind.color)
                     Text(InterfaceCopy.localized(segment.name))
-                        .font(.caption)
+                        .font(SettingsType.legend)
                         .foregroundStyle(.secondary)
                         .fixedSize()
                 }
@@ -187,5 +168,15 @@ struct WrappingLayout: Layout {
             lineHeight = max(lineHeight, size.height)
         }
         return origins
+    }
+}
+
+/// The rows a row opens into: each game under Games. They sit in the card of
+/// the row that owns them, closer together than rows of their own.
+struct SettingsSublist<Rows: View>: View {
+    @ViewBuilder var rows: Rows
+
+    var body: some View {
+        VStack(spacing: SettingsMetrics.captionGap) { rows }
     }
 }
