@@ -695,6 +695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func showRecovery(_: Any?) {
+        if setupWindow.show() { return }
         settingsWindow.showRecovery()
     }
 

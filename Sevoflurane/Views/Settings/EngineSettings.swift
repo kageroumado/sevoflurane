@@ -400,10 +400,14 @@ private struct InstallEverythingToggle: View {
     @State private var installsEverything = BottleDependencies.installsEverything
 
     var body: some View {
-        SettingsToggle(title: "Install every package in new bottles", isOn: $installsEverything)
-            .onChange(of: installsEverything) { _, value in
-                BottleDependencies.installsEverything = value
-            }
+        SettingsToggle(
+            title: "Install every package in new bottles",
+            caption: String(localized: "The optional ones add \(BottleDependencies.optionalDownloadMegabytes) MB."),
+            isOn: $installsEverything,
+        )
+        .onChange(of: installsEverything) { _, value in
+            BottleDependencies.installsEverything = value
+        }
     }
 }
 

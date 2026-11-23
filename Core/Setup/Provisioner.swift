@@ -3,7 +3,7 @@ import Observation
 import os
 
 /// The idempotent provisioning state machine behind the first-run assistant
-/// and Settings › Repair. Every stage is detect → perform → re-detect, so a
+/// and Settings › Recovery. Every stage is detect → perform → re-detect, so a
 /// relaunch mid-setup continues where it left off.
 ///
 /// Machine-touching effects live behind ``SetupEnvironment`` so the DEBUG
@@ -38,8 +38,8 @@ final class Provisioner {
     /// An engine tarball the engine stage installs in place of a download.
     var engineTarball: URL?
     /// Whether this run installs the whole dependency catalog. `nil` reads
-    /// ``BottleDependencies/installsEverything`` when the stage runs, because
-    /// the wizard's switch is pressed after this object exists.
+    /// the standing preference, ``BottleDependencies/installsEverything``,
+    /// when the stage runs; a test or a fixture names its own.
     var installsEveryDependency: Bool?
     /// What the pass acts on, and what the assistant asks about the Mac.
     let environment: any SetupEnvironment
@@ -572,7 +572,7 @@ final class Provisioner {
     /// driver ignores the tray values, so `BottleSupervisor.suppressWineTray`
     /// removes its status item once the client is up.
     func configureBottle(named name: String) async {
-        // Never touches `activity`: the wizard's Continue button gates on `.done`.
+        // Never touches `activity`: the assistant moves on when a pass reads `.done`.
         await environment.configureBottle(named: name)
     }
 

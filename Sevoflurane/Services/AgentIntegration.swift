@@ -2,8 +2,7 @@ import AppKit
 import Foundation
 
 /// Puts the bundled `sevo` on PATH and registers its MCP server with the AI
-/// agents on this machine, on explicit opt-in (the wizard or Settings ›
-/// General). Each agent is its own switch, and nothing is written for one
+/// agents on this machine, on explicit opt-in (Settings › General). Each agent is its own switch, and nothing is written for one
 /// that isn't installed.
 @MainActor
 enum AgentIntegration {
@@ -47,17 +46,6 @@ enum AgentIntegration {
             return failure
         }
         EventLog.enqueue(.app, "sevo CLI installed at \(symlinkPath)")
-        return nil
-    }
-
-    /// The wizard's one-checkbox path: the symlink, then every agent found.
-    static func install() async -> String? {
-        if let failure = await installCLI() {
-            return failure
-        }
-        for harness in Harness.allCases where isDetected(harness) {
-            _ = await register(harness)
-        }
         return nil
     }
 

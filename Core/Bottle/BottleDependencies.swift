@@ -71,6 +71,14 @@ nonisolated enum BottleDependencies {
     private static let everythingKey = "installAllDependencies"
 
     /// What provisioning installs, in catalog order.
+    /// What the optional entries download together, in megabytes, summed
+    /// from the sizes the catalog states.
+    static var optionalDownloadMegabytes: Int {
+        catalog.filter { !$0.required }.reduce(0) { sum, dependency in
+            sum + (Int(dependency.download.prefix(while: \.isNumber)) ?? 0)
+        }
+    }
+
     static func provisioned(all: Bool = installsEverything) -> [Dependency] {
         catalog.filter { $0.required || all }
     }
