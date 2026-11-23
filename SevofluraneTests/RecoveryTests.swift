@@ -58,9 +58,19 @@ struct RecoveryTests {
     @Test
     func `a problem's wording names no beta and no engine release`() {
         for issue in RecoverySettings.knownIssues {
-            #expect(!issue.symptom.contains("beta"))
-            #expect(!issue.fix.contains("beta"))
-            #expect(issue.fix.range(of: #"\br\d+\b"#, options: .regularExpression) == nil)
+            for wording in [issue.symptom, issue.fix, issue.detail ?? ""] {
+                #expect(!wording.contains("beta"))
+                #expect(wording.range(of: #"\br\d+\b"#, options: .regularExpression) == nil)
+            }
+        }
+    }
+
+    @Test
+    func `a problem's fix is one line, and the rest is behind its help`() {
+        for issue in RecoverySettings.knownIssues {
+            #expect(issue.fix.count <= 80, "\(issue.id)")
+            // A problem with more to say, or an error text to recognize, has the (i) to say it in.
+            #expect((issue.help != nil) == (issue.detail != nil || issue.example != nil), "\(issue.id)")
         }
     }
 }

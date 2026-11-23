@@ -68,7 +68,20 @@ struct RecoverySettings: View {
         let symptom: String
         /// What the game or Windows prints, when the problem has a wording.
         var example: String?
+        /// Where the fix is, in one line.
         let fix: String
+        /// Why it happens and the fix in full, behind the row's (i).
+        var detail: String?
+
+        /// The (i), for a problem with more to say than its one line.
+        var help: SettingHelp? {
+            guard detail != nil || example != nil else { return nil }
+            return SettingHelp(
+                title: symptom,
+                summary: detail ?? fix,
+                entries: example.map { [.init(name: "What it looks like", text: $0)] } ?? [],
+            )
+        }
     }
 
     /// Only problems with a fix a person can reach from Settings.
@@ -78,7 +91,8 @@ struct RecoverySettings: View {
             symptom: "A game says a file is missing and will not start.",
             example: "\u{201C}VCRUNTIME140.dll was not found\u{201D} · MSVCP140.dll · "
                 + "d3dx9_43.dll · XINPUT1_3.dll",
-            fix: "These files come with Windows runtimes that games expect to be there. Install "
+            fix: "Install its runtime in Settings › Engine › Game dependencies.",
+            detail: "These files come with Windows runtimes that games expect to be there. Install "
                 + "Visual C++ runtime for VCRUNTIME and MSVCP, DirectX runtimes for d3dx9, xinput "
                 + "and xaudio, in Settings › Engine › Game dependencies.",
         ),
@@ -86,7 +100,8 @@ struct RecoverySettings: View {
             id: "dll-own-copy",
             symptom: "A mod, a fix or a loader is installed and the game ignores it.",
             example: "ReShade · a widescreen fix · dinput8.dll · version.dll · winmm.dll · d3d9.dll",
-            fix: "Wine uses its own copy of a library it knows. Add a DLL override for that file "
+            fix: "Add a DLL override for its file in Settings › Games.",
+            detail: "Wine uses its own copy of a library it knows. Add a DLL override for that file "
                 + "in Settings › Games, set to Native, then built-in, so the game's copy wins.",
         ),
         KnownIssue(
@@ -98,13 +113,15 @@ struct RecoverySettings: View {
         KnownIssue(
             id: "fonts-missing",
             symptom: "A launcher shows empty buttons, or text is boxes.",
-            fix: "Install Core fonts, and Japanese, Chinese & Korean fonts for a game in those "
+            fix: "Install fonts in Settings › Engine › Game dependencies.",
+            detail: "Install Core fonts, and Japanese, Chinese & Korean fonts for a game in those "
                 + "languages, in Settings › Engine › Game dependencies.",
         ),
         KnownIssue(
             id: "wrong-renderer",
             symptom: "A game starts and its picture is wrong, flickers or stays black.",
-            fix: "Choose another renderer for that game in Settings › Games. The (i) beside "
+            fix: "Choose another renderer for that game in Settings › Games.",
+            detail: "Choose another renderer for that game in Settings › Games. The (i) beside "
                 + "Game renderer in Settings › Graphics says what each one is for.",
         ),
         KnownIssue(
@@ -115,8 +132,7 @@ struct RecoverySettings: View {
         KnownIssue(
             id: "menus-freeze-27",
             symptom: "Steam's menus freeze and the app looks stuck.",
-            fix: "Cancel stuck menus above. macOS 27 can leave a menu tracking; Steam keeps "
-                + "running behind it.",
+            fix: "Cancel stuck menus above. Steam keeps running behind a frozen menu.",
         ),
         KnownIssue(
             id: "helper-wont-start",
@@ -159,13 +175,13 @@ struct RecoverySettings: View {
         Section {
             actionRow(
                 "Restart Steam",
-                detail: "Closes Steam and reopens it. The first thing to try when it acts up.",
+                detail: "The first thing to try when Steam acts up.",
                 button: "Restart", disabled: supervisor == nil,
             ) { supervisor?.restartNow() }
                 .highlightable(.recoveryRestartSteam, highlighted: highlighted)
             actionRow(
                 "Force-quit Steam",
-                detail: "Kills Steam at once, then reopens it — for when a restart won't take.",
+                detail: "For when a restart won't take. A running game keeps playing.",
                 button: "Force-quit", disabled: supervisor == nil,
             ) { pendingReset = .forceQuitSteam }
                 .highlightable(.recoveryForceQuit, highlighted: highlighted)
@@ -188,14 +204,14 @@ struct RecoverySettings: View {
 
     private var menuDetail: String {
         lastMenuResult
-            ?? "Ends a frozen Steam menu. Steam's menus can hang on macOS 27."
+            ?? "Steam's menus can freeze on macOS 27."
     }
 
     // MARK: - Background helper
 
     private var helperSection: some View {
         Section {
-            HStack(spacing: 10) {
+            SettingsRow {
                 helperActivity
                 Spacer()
                 Button("Repair") { repairHelper() }
@@ -237,15 +253,13 @@ struct RecoverySettings: View {
             shaderCompilerRow
             actionRow(
                 "Restart Windows",
-                detail: "Stops every Windows process in the bottle, Wine's server included, and "
-                    + "starts again. For when restarting Steam has not helped.",
+                detail: "For when restarting Steam has not helped.",
                 button: "Restart", disabled: supervisor == nil,
             ) { pendingReset = .restartWindows }
                 .highlightable(.recoveryWineRestart, highlighted: highlighted)
             actionRow(
                 "Clear the shader cache",
-                detail: "Trashes Steam's shader cache so it rebuilds on the next launch. "
-                    + "For a black screen or a stuck loading bar. Your games and saves stay.",
+                detail: "For a black screen or a stuck loading bar.",
                 button: "Clear", disabled: supervisor == nil,
             ) { pendingReset = .clearShaderCache }
                 .highlightable(.recoveryClearShaderCache, highlighted: highlighted)
@@ -257,7 +271,7 @@ struct RecoverySettings: View {
                 .highlightable(.recoveryRebuildSteam, highlighted: highlighted)
             actionRow(
                 "Wine configuration",
-                detail: "Opens winecfg: Windows version, drives, audio, and DLL overrides.",
+                detail: "winecfg: Windows version, drives, audio and DLL overrides.",
                 button: "Open…",
             ) { compatibility.openWineConfiguration() }
                 .highlightable(.recoveryWinecfg, highlighted: highlighted)
@@ -270,15 +284,11 @@ struct RecoverySettings: View {
 
     @ViewBuilder private var shaderCompilerRow: some View {
         if let row = compatibility.rows.first(where: { $0.id == "d3dcompiler" }) {
-            HStack(alignment: .center, spacing: Theme.Space.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Reinstall the Direct3D shader compiler")
-                    Text(InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : shaderCompilerDetail(row)))
-                        .font(.caption)
-                        .foregroundStyle(row.error == nil ? Color.secondary : Color.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: Theme.Space.sm)
+            ActionRow(
+                title: "Reinstall the Direct3D shader compiler",
+                caption: InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : shaderCompilerDetail(row)),
+                isWarning: row.error != nil && !row.busy,
+            ) {
                 if row.busy {
                     ProgressView().controlSize(.small)
                 } else {
@@ -303,20 +313,10 @@ struct RecoverySettings: View {
     private var knownIssuesSection: some View {
         Section {
             ForEach(Self.knownIssues) { issue in
-                VStack(alignment: .leading, spacing: 2) {
+                HelpedRow(caption: InterfaceCopy.localized(issue.fix), help: issue.help) {
                     Text(InterfaceCopy.localized(issue.symptom))
-                    if let example = issue.example {
-                        Text(InterfaceCopy.localized(example))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Text(InterfaceCopy.localized(issue.fix))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 2)
             }
         } header: {
             Text("Common problems")
@@ -332,17 +332,11 @@ struct RecoverySettings: View {
         _ title: String, detail: String, button: String, disabled: Bool = false,
         action: @escaping () -> Void,
     ) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(InterfaceCopy.localized(title))
-                Text(InterfaceCopy.localized(detail))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        SettingsRow(caption: InterfaceCopy.localized(detail)) {
+            LabeledContent(InterfaceCopy.localized(title)) {
+                Button(InterfaceCopy.localized(button), action: action)
+                    .disabled(disabled)
             }
-            Spacer()
-            Button(InterfaceCopy.localized(button), action: action)
-                .disabled(disabled)
         }
     }
 
@@ -378,9 +372,7 @@ struct RecoverySettings: View {
         if case let .failed(reason) = provisioner.activity {
             return String(localized: "The last attempt stopped: \(reason)")
         }
-        return "Stops Steam and installs the client over this bottle again — for a "
-            + "client whose own files are damaged and that Repair leaves alone. "
-            + "Your games and saves stay."
+        return "For a damaged Steam client that Repair leaves alone."
     }
 
     private func repairHelper() {
