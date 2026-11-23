@@ -14437,6 +14437,56 @@
           }
         }
       }
+    },
+    "Game database": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏数据库"
+          }
+        }
+      }
+    },
+    "Open the game database": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开游戏数据库"
+          }
+        }
+      }
+    },
+    "See how games run on other Macs, in the game database": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在游戏数据库中查看游戏在其他 Mac 上的运行情况"
+          }
+        }
+      }
+    },
+    "How games run on other Macs, from shared runs.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "根据共享的运行记录，了解游戏在其他 Mac 上的运行情况。"
+          }
+        }
+      }
+    },
+    "Open Website": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开网站"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

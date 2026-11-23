@@ -290,6 +290,9 @@ private struct GeneralPrivacySection: View {
                     Button("Delete What I Shared…") { isConfirmingDelete = true }
                 }
             }
+            SettingsAction(title: "Game database", caption: "How games run on other Macs, from shared runs.") {
+                Button("Open Website") { NSWorkspace.shared.open(GameDatabase.pageURL) }
+            }
             GeneralUsageRow()
         }
         .onAppear(perform: reload)

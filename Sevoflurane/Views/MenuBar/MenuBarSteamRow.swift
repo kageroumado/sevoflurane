@@ -9,8 +9,8 @@ private enum ZoneMetrics {
     static let controlHeight: CGFloat = 30
 }
 
-/// Open Steam, then the friends list, Discord and status as icons that show
-/// their word on hover.
+/// Open Steam, then the friends list, the game database, Discord and status
+/// as icons that show their word on hover.
 struct SteamRow: View {
     let host: SteamWebHost
     let supervisor: ClientSupervisor
@@ -20,6 +20,7 @@ struct SteamRow: View {
             HStack(spacing: Theme.Space.xs) {
                 OpenSteamButton(host: host, supervisor: supervisor)
                 FriendsButton(host: host)
+                GameDatabaseButton()
                 DiscordButton()
                 StatusChip(host: host, supervisor: supervisor)
             }
@@ -160,6 +161,26 @@ private struct FriendsButton: View {
         .keyboardShortcut("f")
         .accessibilityLabel(MenuBarView.friendsLabel(unreadChats: unreadChats))
         .help(MenuBarView.friendsLabel(unreadChats: unreadChats))
+    }
+}
+
+/// The community game database's website, in the browser.
+private struct GameDatabaseButton: View {
+    @State private var isHovered = false
+
+    var body: some View {
+        Button { NSWorkspace.shared.open(GameDatabase.pageURL) } label: {
+            HoverLabel(symbol: "checklist", word: "Game database", isHovered: isHovered)
+                .foregroundStyle(.secondary)
+                .contentShape(Capsule())
+                .glassEffect(.regular.interactive(), in: Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { isHovered = hovering }
+        }
+        .accessibilityLabel(String(localized: "Open the game database"))
+        .help("See how games run on other Macs, in the game database")
     }
 }
 
