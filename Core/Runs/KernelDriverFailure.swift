@@ -42,18 +42,21 @@ nonisolated enum KernelDriverFailure {
     }
 
     /// What `text`, the log since the program's launch, says about it. The
-    /// program's processes are its own executable and any process started
-    /// with no Steam app id outside Wine's own: a launcher's game is the
-    /// second. A frame presented by any of them answers ``Outcome/presented``
-    /// whatever driver failed.
-    static func outcome(in text: String, program exe: String) -> Outcome {
+    /// program's processes are its own executable, any process started under
+    /// `appID`, and any process started with no Steam app id outside Wine's
+    /// own: a launcher's game is the last. A frame presented by any of them
+    /// answers ``Outcome/presented`` whatever driver failed.
+    static func outcome(in text: String, program exe: String, appID: Int? = nil) -> Outcome {
         let wanted = exe.lowercased()
+        let ownID = appID.map(String.init)
         var programPIDs: Set<Substring> = []
         var presentedPIDs: Set<Substring> = []
         for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix("sevo:") {
             if let match = line.firstMatch(of: run) {
                 let name = match.output.2.lowercased()
-                if name == wanted || (match.output.3 == "none" && !wineOwn.contains(name)) {
+                let started = match.output.3
+                if name == wanted || ownID.map({ $0 == started }) == true
+                    || (started == "none" && !wineOwn.contains(name)) {
                     programPIDs.insert(match.output.1)
                 }
             } else if let match = line.firstMatch(of: firstPresent) {

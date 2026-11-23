@@ -4,7 +4,7 @@ import Foundation
 /// engine's `engine-info.json`, the bottle's env files, launcher bundles,
 /// Steam's logs, this month's runs with their game logs, and two days of
 /// crash reports, every file passed through ``Redaction``. `sevo diag` and
-/// the app's crash prompt share it; what only a face knows arrives through
+/// the app's panel about a run share it; what only a face knows arrives through
 /// ``faceReport``.
 nonisolated enum Diagnostics {
     /// What the building face knows, as JSON text.

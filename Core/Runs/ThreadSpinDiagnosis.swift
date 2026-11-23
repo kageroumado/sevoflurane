@@ -26,14 +26,12 @@ nonisolated enum ThreadSpinDiagnosis {
     static let smallestCap = 2
 
     /// The suggestion for `record`, or nil when its threads were quiet, the game
-    /// already has a cap, the run was short, or the user asked not to hear it.
+    /// already has a cap, or the run was short.
     ///
-    /// - Parameters:
-    ///   - currentCap: The game's processors setting as it resolves now; `0` or
-    ///     nil is every processor.
-    ///   - asks: Whether the offer is still wanted for this game.
-    static func suggestion(for record: RunRecord, currentCap: Int?, asks: Bool = true) -> Suggestion? {
-        guard asks, (currentCap ?? 0) <= 0, let threads = record.threads,
+    /// - Parameter currentCap: The game's processors setting as it resolves
+    ///   now; `0` or nil is every processor.
+    static func suggestion(for record: RunRecord, currentCap: Int?) -> Suggestion? {
+        guard (currentCap ?? 0) <= 0, let threads = record.threads,
               threads.samples >= minimumSamples,
               threads.busy >= minimumBusy,
               Double(threads.busy) >= minimumShare * Double(threads.processors) else { return nil }

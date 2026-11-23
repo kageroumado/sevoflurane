@@ -76,10 +76,10 @@ struct RunReportModelTests {
     }
 
     @Test
-    func `the crash prompt carries the same model and queues the report with its send`() {
+    func `the panel's report carries the same model and queues the report with its send`() {
         let (report, sent, ledger) = Self.model()
         defer { try? FileManager.default.removeItem(at: ledger) }
-        let model = CrashPromptModel(
+        let model = ReportSendModel(
             record: SharedReportTests.fullRecord(),
             bundle: { _ in throw CocoaError(.fileNoSuchFile) },
             upload: ReportUpload(installToken: "t", version: "1+1"),

@@ -6,10 +6,7 @@ import Testing
 /// A game that keeps a worker spinning on every processor: how its busy threads
 /// are counted, what a run keeps of them, and when the app offers to limit the
 /// processors it sees.
-///
-/// Serialized: one test installs `RunRecorder.didClose`, which is one static hook.
 @MainActor
-@Suite(.serialized)
 struct ThreadSpinTests {
     private let manager = FileManager.default
 
@@ -54,19 +51,30 @@ struct ThreadSpinTests {
         ])
     }
 
-    /// Prompts that count what they would have shown.
+    /// A panel that counts the causes it would have shown.
     private final class Shown {
-        var crashes: [RunRecord] = []
-        var spins: [ThreadSpinDiagnosis.Suggestion] = []
+        var causes: [[RunDiagnosis.Cause]] = []
     }
 
-    private static func prompts(
+    private static func prompt(
         defaults: UserDefaults = freshDefaults(), settings: InMemorySettingsEnvironment = settings(),
-    ) -> (CrashPrompt, ThreadSpinPrompt, Shown) {
+    ) -> (RunDiagnosisPrompt, Shown) {
         let shown = Shown()
-        let crash = CrashPrompt(defaults: defaults) { shown.crashes.append($0) }
-        let spin = ThreadSpinPrompt(defaults: defaults, settings: settings) { shown.spins.append($1) }
-        return (crash, spin, shown)
+        let prompt = RunDiagnosisPrompt(defaults: defaults, settings: settings, suggested: { [] }) {
+            shown.causes.append($1.map(\.cause))
+        }
+        return (prompt, shown)
+    }
+
+    private static func model(
+        _ record: RunRecord, defaults: UserDefaults = freshDefaults(),
+        settings: InMemorySettingsEnvironment = settings(), ledger: URL? = nil,
+    ) -> RunDiagnosisModel {
+        RunDiagnosisModel(
+            record: record,
+            findings: RunDiagnosis.findings(for: record, in: RunDiagnosis.Context(current: ConfigValues(processors: 0))),
+            defaults: defaults, settings: settings, ledger: ledger,
+        )
     }
 
     // MARK: - Counting
@@ -182,14 +190,13 @@ struct ThreadSpinTests {
     }
 
     @Test
-    func `a game with a cap, a short run, or a game asked about is left alone`() {
+    func `a game with a cap or a short run is left alone`() {
         #expect(ThreadSpinDiagnosis.suggestion(for: Self.record(), currentCap: 8) == nil)
         let short = Self.record(threads: RunRecord.Threads(busy: 15, processors: 16, samples: 9))
         #expect(ThreadSpinDiagnosis.suggestion(for: short, currentCap: nil) == nil)
         // The samples decide, whatever the frame trace counted as gameplay.
         let measured = Self.record(threads: RunRecord.Threads(busy: 15, processors: 16, samples: 23), durationSeconds: 25)
         #expect(ThreadSpinDiagnosis.suggestion(for: measured, currentCap: nil)?.cap == 8)
-        #expect(ThreadSpinDiagnosis.suggestion(for: Self.record(), currentCap: nil, asks: false) == nil)
     }
 
     @Test
@@ -202,65 +209,96 @@ struct ThreadSpinTests {
     // MARK: - The offer
 
     @Test
-    func `a spinning run that ended normally opens the offer once`() {
-        let (crash, spin, shown) = Self.prompts()
+    func `a spinning run that ended normally opens the panel once`() {
+        let (prompt, shown) = Self.prompt()
         let run = Self.record()
-        crash.offerAfterClose(run, spin: spin)
-        crash.offerAfterClose(run, spin: spin)
-        #expect(shown.crashes.isEmpty)
-        #expect(shown.spins == [ThreadSpinDiagnosis.Suggestion(busy: 15, processors: 16, cap: 8)])
+        #expect(prompt.offer(run))
+        #expect(!prompt.offer(run))
+        #expect(shown.causes == [[.threadSpin]])
     }
 
     @Test
-    func `a crash takes the run, on its first closing and its second`() {
-        let (crash, spin, shown) = Self.prompts()
+    func `a crash leads the panel and the processor limit is a row under it`() {
+        let (prompt, shown) = Self.prompt()
         let run = Self.record(exit: RunRecord.Exit(kind: .crash, code: 3))
-        crash.offerAfterClose(run, spin: spin)
-        crash.offerAfterClose(run, spin: spin)
-        #expect(shown.crashes.count == 1)
-        #expect(shown.spins.isEmpty)
-        #expect(ThreadSpinPromptPolicy.suggestion(for: run, crashShown: true, currentCap: 0, asks: true) == nil)
-        #expect(ThreadSpinPromptPolicy.suggestion(for: run, crashShown: false, currentCap: 0, asks: true) != nil)
+        #expect(prompt.offer(run))
+        #expect(!prompt.offer(run))
+        #expect(shown.causes == [[.crashed, .threadSpin]])
     }
 
     @Test
     func `a game already capped is not offered`() {
-        let (crash, spin, shown) = Self.prompts(settings: Self.settings(processors: 8))
-        crash.offerAfterClose(Self.record(), spin: spin)
-        #expect(shown.spins.isEmpty)
+        let (prompt, shown) = Self.prompt(settings: Self.settings(processors: 8))
+        #expect(!prompt.offer(Self.record()))
+        #expect(shown.causes.isEmpty)
     }
 
     @Test
-    func `don't ask for this game keeps the offer for other games`() {
+    func `don't show this again mutes the cause for this game and keeps it for others`() {
         let defaults = Self.freshDefaults()
-        let model = ThreadSpinPromptModel(
-            record: Self.record(), suggestion: .init(busy: 15, processors: 16, cap: 8),
-            defaults: defaults, settings: Self.settings(),
-        )
-        model.stopAsking()
-        #expect(!Preferences.asksAboutThreadSpin(forApp: 310_360, in: defaults))
-        #expect(Preferences.asksAboutThreadSpin(forApp: 508_440, in: defaults))
+        let model = Self.model(Self.record(), defaults: defaults)
+        #expect(model.face == .findings)
+        #expect(model.canStopAsking)
+        model.stopsAsking = true
+        model.notNow()
+        #expect(Preferences.quietCauses(forApp: 310_360, in: defaults) == [.threadSpin])
+        #expect(Preferences.quietCauses(forApp: 508_440, in: defaults).isEmpty)
 
-        let (crash, spin, shown) = Self.prompts(defaults: defaults)
-        crash.offerAfterClose(Self.record(), spin: spin)
-        crash.offerAfterClose(Self.record(appid: 508_440), spin: spin)
-        #expect(shown.spins.count == 1)
+        let (prompt, shown) = Self.prompt(defaults: defaults)
+        #expect(!prompt.offer(Self.record()))
+        #expect(prompt.offer(Self.record(appid: 508_440)))
+        #expect(shown.causes.count == 1)
     }
 
     @Test
-    func `limiting writes the cap into the game's own settings`() {
+    func `not now without the mute changes nothing`() {
+        let defaults = Self.freshDefaults()
+        let settings = Self.settings()
+        let model = Self.model(Self.record(), defaults: defaults, settings: settings)
+        var finished = 0
+        model.onFinish = { finished += 1 }
+        model.dismiss()
+        #expect(finished == 1)
+        #expect(Preferences.quietCauses(forApp: 310_360, in: defaults).isEmpty)
+        #expect(settings.updates.isEmpty)
+    }
+
+    @Test
+    func `limiting writes the cap into the game's own settings, where Undo finds it`() throws {
+        let ledger = manager.temporaryDirectory.appendingPathComponent("thread-spin-ledger-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: ledger) }
         let settings = Self.settings()
         var finished = false
-        let model = ThreadSpinPromptModel(
-            record: Self.record(), suggestion: .init(busy: 15, processors: 16, cap: 8),
-            defaults: Self.freshDefaults(), settings: settings,
-        )
+        let model = Self.model(Self.record(), settings: settings, ledger: ledger)
         model.onFinish = { finished = true }
-        #expect(model.title == "Higurashi Hou kept 15 threads busy the whole time")
-        #expect(model.limitTitle == "Limit to 8 Processors")
-        #expect(model.body.contains("Telling the game it has 8 processors lets them sleep."))
-        model.limit()
-        #expect(settings.values(.game(310_360, bottle: SteamBottle.name)).processors == 8)
+        #expect(model.headline.sentence == "Higurashi Hou kept 15 threads busy the whole time, which slows its picture.")
+        #expect(model.headline.action?.label == "Limit to 8 Processors")
+        model.perform(model.headline)
+        let scope = SettingScope.game(310_360, bottle: SteamBottle.name)
+        #expect(settings.values(scope).processors == 8)
         #expect(finished)
+        #expect(model.taken == [.threadSpin])
+
+        let recorded = try #require(FixLedger.record(for: 310_360, in: ledger))
+        #expect(recorded.applied.processors == 8)
+        #expect(recorded.previous.processors == 0)
+        #expect(recorded.fixes.map(\.title) == ["Processor limit"])
+        let undone = FixLedger.undo(recorded, own: settings.values(scope))
+        #expect(undone.values.processors == 0)
+    }
+
+    @Test
+    func `sending the report from a finding comes back to the finding`() {
+        let model = Self.model(Self.record())
+        var finished = 0
+        model.onFinish = { finished += 1 }
+        model.showReport()
+        #expect(model.face == .report)
+        // Escape on the report is Don't Send, which leaves the finding to answer.
+        model.dismiss()
+        #expect(model.face == .findings)
+        #expect(finished == 0)
+        model.dismiss()
+        #expect(finished == 1)
     }
 }

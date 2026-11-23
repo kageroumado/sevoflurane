@@ -21,8 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supervisor: supervisor, host: host, bridge: bridge, presentStats: runRecorder.presentStats,
         )
         server.onFixesApplied = { [weak self] appID in self?.announceFixesApplied(appID: appID) }
-        server.onKernelDriverFailed = { id, driver in
-            QuickLaunchStore.explainKernelDriverFailure(driver, programID: id)
+        server.onKernelDriverFailed = { [weak self] id, driver in
+            self?.explainKernelDriverFailure(driver, programID: id)
         }
         return server
     }()
@@ -96,7 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatsUploader.log = { EventLog.enqueue(.app, "stats: \($0)") }
         FixList.log = { EventLog.enqueue(.app, $0) }
         Diagnostics.faceReport = { await Diagnostics.appFaceReport() }
-        CrashPrompt.shared.install()
+        RunDiagnosisPrompt.shared.showGuide = { [weak self] guide, record in
+            switch guide {
+            case .gameSettings: self?.showGameSettings(id: record.appid, name: record.name ?? "App \(record.appid)")
+            }
+        }
+        RunDiagnosisPrompt.shared.install()
         RunRecorder.didRecord = { record, wineTail in
             Self.collectReports(record, wineTail: wineTail)
             StatsUploader.submit(record)
@@ -254,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         + "nothing on this Mac will be touched",
                 )
                 startDemo()
-                if CrashPrompt.wasRequestedAtLaunch { CrashPrompt.shared.offerFixture() }
+                if RunDiagnosisPrompt.wasRequestedAtLaunch { RunDiagnosisPrompt.shared.offerFixture() }
                 return true
             }
             return false

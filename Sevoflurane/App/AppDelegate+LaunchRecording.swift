@@ -171,6 +171,16 @@ extension AppDelegate {
         }
     }
 
+    /// A program the helper saw draw nothing after its kernel driver failed to
+    /// load, however it was started: the driver goes into the program's open
+    /// run, and the panel says what happened.
+    func explainKernelDriverFailure(_ driver: String, programID: Int) {
+        guard let name = AdoptedPrograms.entry(programID)?.name else { return }
+        let record = runRecorder.noteKernelDriver(driver, forApp: programID)
+            ?? RunRecorder.unrecordedRun(appID: programID, name: name, driver: driver)
+        RunDiagnosisPrompt.shared.offer(record)
+    }
+
     /// Watches every process the app owns and unwedges a game that has stopped
     /// doing anything. On at every level: the ladder turns a freeze into an
     /// ending the record can name.

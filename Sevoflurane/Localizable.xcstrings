@@ -527,17 +527,6 @@
         }
       }
     },
-    "%@ kept %lld threads busy the whole time": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ 的 %2$lld 个线程一直处于忙碌状态"
-          }
-        }
-      }
-    },
     "%@ manages this bottle": {
       "localizations": {
         "zh-Hans": {
@@ -571,16 +560,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 在启动时出错退出。"
-          }
-        }
-      }
-    },
-    "%@ showed no window": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 未显示任何窗口"
           }
         }
       }
@@ -3868,27 +3847,6 @@
         }
       }
     },
-    "Don't Ask for This Game": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此游戏不再询问"
-          }
-        }
-      }
-    },
-    "Don't Send": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "不发送"
-          }
-        }
-      }
-    },
     "Done": {
       "localizations": {
         "zh-Hans": {
@@ -5359,17 +5317,6 @@
         }
       }
     },
-    "Games built this way start one worker per processor, and under Rosetta the workers never rest, which starves the picture. Telling the game it has %lld processors lets them sleep.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这类游戏会为每个处理器启动一个工作线程，而在 Rosetta 下这些线程从不休息，画面因此得不到算力。告诉游戏它只有 %lld 个处理器，工作线程就能休眠。"
-          }
-        }
-      }
-    },
     "Games folder in the Dock": {
       "localizations": {
         "zh-Hans": {
@@ -6387,16 +6334,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已安装 %@。请选择要保留的程序。"
-          }
-        }
-      }
-    },
-    "It tried to load %@, a Windows kernel driver, usually kernel-level anti-cheat, and kernel drivers cannot run on a Mac. If the program requires it, that is why it stopped.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "它尝试加载 Windows 内核驱动程序 %@（通常是内核级反作弊组件），而内核驱动程序无法在 Mac 上运行。如果该程序需要这个驱动程序，这就是它停止的原因。"
           }
         }
       }
@@ -9500,16 +9437,6 @@
         }
       }
     },
-    "Set at the game’s first launch, where it had no value of its own.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在游戏首次启动时设置，仅用于游戏本身未设置的项。"
-          }
-        }
-      }
-    },
     "Set by a known fix": {
       "localizations": {
         "zh-Hans": {
@@ -11632,17 +11559,6 @@
         }
       }
     },
-    "The limit takes effect the next time the game starts.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "限制将在游戏下次启动时生效。"
-          }
-        }
-      }
-    },
     "the Mac is hot%@": {
       "extractionState": "manual",
       "localizations": {
@@ -13569,6 +13485,710 @@
           "stringUnit": {
             "state": "translated",
             "value": "CuNNy 的 NVL 权重，一个适用于视觉小说和插画的小型神经网络放大器。"
+          }
+        }
+      }
+    },
+    "%@ needs a Windows kernel driver, which cannot run on a Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 需要 Windows 内核驱动，而内核驱动无法在 Mac 上运行。"
+          }
+        }
+      }
+    },
+    "%@ failed to load, and the game drew nothing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 加载失败，游戏没有显示任何画面。"
+          }
+        }
+      }
+    },
+    "%@ could not start without %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 缺少 %2$@，无法启动。"
+          }
+        }
+      }
+    },
+    "No package Sevoflurane installs carries %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevoflurane 可安装的组件包中没有 %@。"
+          }
+        }
+      }
+    },
+    "%@ is part of %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 包含在 %2$@ 中。"
+          }
+        }
+      }
+    },
+    "%@ shows a blank picture where a video should play.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 在应播放视频的地方显示空白画面。"
+          }
+        }
+      }
+    },
+    "The Mac’s hardware decoder returned none of %lld %@ frames.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 的硬件解码器收到 %1$lld 帧 %2$@，一帧也没有输出。"
+          }
+        }
+      }
+    },
+    "The software decoders returned none of %lld %@ frames.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "软件解码器收到 %1$lld 帧 %2$@，一帧也没有输出。"
+          }
+        }
+      }
+    },
+    "Use Software Decoding": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用软件解码"
+          }
+        }
+      }
+    },
+    "Use Hardware Decoding": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用硬件解码"
+          }
+        }
+      }
+    },
+    "The hardware decoder returned none of this game’s video frames in a run on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上的一次运行中，硬件解码器没有输出这款游戏的任何视频帧。"
+          }
+        }
+      }
+    },
+    "The software decoders returned none of this game’s video frames in a run on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上的一次运行中，软件解码器没有输出这款游戏的任何视频帧。"
+          }
+        }
+      }
+    },
+    "%@ also fails on %@ on other Macs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 在其他 Mac 上使用 %2$@ 时同样会出错。"
+          }
+        }
+      }
+    },
+    "%@ also fails on other Macs with these settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 在其他 Mac 上使用这些设置时同样会出错。"
+          }
+        }
+      }
+    },
+    "1 Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 台 Mac"
+          }
+        }
+      }
+    },
+    "%lld Macs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 台 Mac"
+          }
+        }
+      }
+    },
+    "%@: %lld of %lld runs failed without the change, %lld of %lld with it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@：未更改时 %3$lld 次运行中有 %2$lld 次失败，更改后 %5$lld 次中有 %4$lld 次失败。"
+          }
+        }
+      }
+    },
+    "%@: %lld of %lld runs failed on %@, %lld of %lld on %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@：使用 %4$@ 的 %3$lld 次运行中有 %2$lld 次失败，使用 %7$@ 的 %6$lld 次中有 %5$lld 次失败。"
+          }
+        }
+      }
+    },
+    "Set %@ to %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将“%1$@”设为“%2$@”"
+          }
+        }
+      }
+    },
+    "Apply Suggested Fix": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用建议的修复"
+          }
+        }
+      }
+    },
+    "%@ failed while starting and never drew a window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 在启动时出错，始终没有显示窗口。"
+          }
+        }
+      }
+    },
+    "Unity quit with status 1. Its Player.log, in the report, says why.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unity 以状态码 1 退出。报告中的 Player.log 记录了原因。"
+          }
+        }
+      }
+    },
+    "%@ crashed in the game’s own code.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 在游戏自身的代码中崩溃。"
+          }
+        }
+      }
+    },
+    "Unreal quit with status 3 and wrote a callstack, which the report carries.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreal 以状态码 3 退出并写下了调用栈，报告中包含它。"
+          }
+        }
+      }
+    },
+    "%@ froze, and Sevoflurane ended it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 卡死，Sevoflurane 已将其结束。"
+          }
+        }
+      }
+    },
+    "Its last stall lasted %lld s and nothing got it moving.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它最后一次停滞持续了 %lld 秒，始终没有恢复。"
+          }
+        }
+      }
+    },
+    "Nothing got it moving again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它始终没有恢复。"
+          }
+        }
+      }
+    },
+    "%@ (%@) in %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%3$@ 中的%1$@（%2$@）"
+          }
+        }
+      }
+    },
+    "%@ (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（%2$@）"
+          }
+        }
+      }
+    },
+    "Exit status %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出状态码 %lld"
+          }
+        }
+      }
+    },
+    "An unhandled exception": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未处理的异常"
+          }
+        }
+      }
+    },
+    "%@, %@ in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@，发生在运行 %2$@ 后。"
+          }
+        }
+      }
+    },
+    "Exit status %@ after %@, before any window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行 %2$@ 后以状态码 %1$@ 退出，此前没有显示任何窗口。"
+          }
+        }
+      }
+    },
+    "Exit status %@ after %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行 %2$@ 后以状态码 %1$@ 退出。"
+          }
+        }
+      }
+    },
+    "Exit status %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出状态码 %@。"
+          }
+        }
+      }
+    },
+    "%@ stopped answering, and you ended it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 停止响应，你已将其结束。"
+          }
+        }
+      }
+    },
+    "Its window took no clicks, keys or its close button.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它的窗口不响应点击、按键和关闭按钮。"
+          }
+        }
+      }
+    },
+    "%@ kept %lld threads busy the whole time, which slows its picture.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 有 %2$lld 个线程一直处于忙碌状态，拖慢了画面。"
+          }
+        }
+      }
+    },
+    "Its workers never rest on %lld processors. Told of %lld, they sleep.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %1$lld 个处理器上，它的工作线程从不休息。告知它只有 %2$lld 个处理器后，它们就会休眠。"
+          }
+        }
+      }
+    },
+    "A run on this Mac kept a worker spinning on every processor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上的一次运行中，每个处理器上都有一个工作线程在空转。"
+          }
+        }
+      }
+    },
+    "A run on this Mac could not start without a library this package carries.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台 Mac 上的一次运行因缺少此组件包中的一个库而无法启动。"
+          }
+        }
+      }
+    },
+    "Processor limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "处理器限制"
+          }
+        }
+      }
+    },
+    "%@ is missing part of its picture.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 的画面缺少一部分。"
+          }
+        }
+      }
+    },
+    "DXMT could not convert a shader to Metal, so a pass never ran.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DXMT 无法将一个着色器转换为 Metal，因此有一个渲染通道没有运行。"
+          }
+        }
+      }
+    },
+    "Choose Another Renderer": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择其他渲染器"
+          }
+        }
+      }
+    },
+    "Nothing in this run of %@ points at a problem.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 的这次运行中没有发现任何问题的迹象。"
+          }
+        }
+      }
+    },
+    "the game": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏"
+          }
+        }
+      }
+    },
+    "It": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它"
+          }
+        }
+      }
+    },
+    "it": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它"
+          }
+        }
+      }
+    },
+    "%lld s": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 秒"
+          }
+        }
+      }
+    },
+    "%lld min": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 分钟"
+          }
+        }
+      }
+    },
+    "Access violation": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问冲突"
+          }
+        }
+      }
+    },
+    "Stack overflow": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "栈溢出"
+          }
+        }
+      }
+    },
+    "Illegal instruction": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "非法指令"
+          }
+        }
+      }
+    },
+    "Division by zero": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "除以零"
+          }
+        }
+      }
+    },
+    "Stack buffer overrun": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "栈缓冲区溢出"
+          }
+        }
+      }
+    },
+    "Missing library": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少库"
+          }
+        }
+      }
+    },
+    "C++ exception": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C++ 异常"
+          }
+        }
+      }
+    },
+    "Applies the next time the game starts. Settings › Games can undo it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下次启动游戏时生效。可在“设置 › 游戏”中撤销。"
+          }
+        }
+      }
+    },
+    "Don’t show this again for this game": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此游戏不再显示此提示"
+          }
+        }
+      }
+    },
+    "Send Report…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送报告…"
+          }
+        }
+      }
+    },
+    "Don’t Send": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不发送"
+          }
+        }
+      }
+    },
+    "%@ could not be installed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安装 %1$@：%2$@"
+          }
+        }
+      }
+    },
+    "Undo puts back what the game had before.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销会恢复游戏之前的设置。"
           }
         }
       }

@@ -119,42 +119,11 @@ final class QuickLaunchStore {
         }
     }
 
-    /// Explains a program the helper saw draw nothing after its kernel
-    /// driver failed to load, however it was started. One alert per program
-    /// at a time.
-    static func explainKernelDriverFailure(_ driver: String, programID: Int) {
-        guard let name = AdoptedPrograms.entry(programID)?.name,
-              explaining.insert(name).inserted else { return }
-        ModalAlerts.present {
-            explainKernelDriver(driver, program: name)
-            explaining.remove(name)
-        }
-    }
-
-    /// The programs whose kernel-driver alert is up.
-    private static var explaining: Set<String> = []
-
     /// The reason in a helper refusal, whose body is `"<status> <reason>"`.
     private static func reason(_ body: Data) -> String {
         let text = String(decoding: body, as: UTF8.self)
         guard let space = text.firstIndex(of: " ") else { return text }
         return String(text[text.index(after: space)...])
-    }
-
-    /// Explains a program that drew nothing after its kernel driver failed.
-    /// The app comes forward first: otherwise the alert opens behind the front
-    /// app's windows and its modal session swallows the popover's clicks.
-    private static func explainKernelDriver(_ driver: String, program: String) {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "\(program) showed no window")
-        alert.informativeText = String(localized: """
-        It tried to load \(driver), a Windows kernel driver, usually kernel-level anti-cheat, and kernel \
-        drivers cannot run on a Mac. If the program requires it, that is why it stopped.
-        """)
-        alert.addButton(withTitle: String(localized: "OK"))
-        NSApp.activate()
-        alert.window.level = .floating
-        alert.runModal()
     }
 
     /// Forgets a program and leaves its executable in place; installed files

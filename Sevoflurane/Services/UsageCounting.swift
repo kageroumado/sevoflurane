@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Independent of ``Preferences/sharesRunStats``. A check-in carries the
 /// versions, chip family, memory class, language and days used in the last
-/// week, and names no game or program. Game crashes go through ``CrashPrompt``.
+/// week, and names no game or program. Game crashes go through ``RunDiagnosisPrompt``.
 nonisolated enum UsageCounting {
     static let app = "sevoflurane"
 

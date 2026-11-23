@@ -2,45 +2,11 @@ import AppKit
 import Foundation
 import Observation
 
-/// Which endings deserve a word with the user, and how one run is told from its
-/// neighbors; pure, so it is testable without a window.
-nonisolated enum CrashPromptPolicy {
-    /// A crash, the stall watchdog's kill, or an error exit while the game was
-    /// starting.
-    static func deserves(_ record: RunRecord) -> Bool {
-        switch record.exit?.kind {
-        case .crash, .watchdog: true
-        case .exitError: quitWhileStarting(record)
-        default: false
-        }
-    }
-
-    /// An error exit before the game was up: under ``startingSeconds``, or under
-    /// ``windowlessSeconds`` (or unmeasured) without ever showing a window. A
-    /// game's own crash handler often ends this way; an error exit after play is
-    /// how plenty of games quit.
-    static func quitWhileStarting(_ record: RunRecord) -> Bool {
-        guard record.exit?.kind == .exitError else { return false }
-        if let duration = record.durationSeconds, duration < startingSeconds { return true }
-        return record.windowAfterSeconds == nil && (record.durationSeconds ?? 0) < windowlessSeconds
-    }
-
-    /// How long a game is still starting, for ``quitWhileStarting(_:)``.
-    static let startingSeconds: Double = 30
-    static let windowlessSeconds: Double = 120
-
-    /// A run's identity: its start and its app. The same run can close twice (a
-    /// reattach, then the client's notification).
-    static func key(for record: RunRecord) -> String {
-        "\(record.t)/\(record.appid)"
-    }
-}
-
-/// What the prompt knows and does: the run, its known failure, and the three
-/// answers.
+/// Sending one run's report from the panel that explains it
+/// (``RunDiagnosisModel``): the zip, its upload, and the three answers.
 @MainActor
 @Observable
-final class CrashPromptModel {
+final class ReportSendModel {
     enum Stage: Equatable {
         case asking
         case preparing
@@ -51,7 +17,7 @@ final class CrashPromptModel {
         case failed(String)
     }
 
-    /// Where the prompt writes its zip; a sent report leaves nothing behind.
+    /// Where the zip is written; a sent report leaves nothing behind.
     static let reportsDirectory = AppIdentity.supportFolder
         .appendingPathComponent("Reports")
 
@@ -60,7 +26,6 @@ final class CrashPromptModel {
         + "account names and Steam ids removed."
 
     let record: RunRecord
-    let known: KnownFailures.Entry?
     /// The community report beside the crash report: Send queues it too when a
     /// verdict was picked.
     let report: RunReportModel
@@ -91,24 +56,9 @@ final class CrashPromptModel {
         self.bundle = bundle ?? { try await Diagnostics.bundle(to: $0, steamLogs: true, onlyRun: record) }
         self.upload = upload
         self.report = report ?? RunReportModel(record: record)
-        known = KnownFailures.match(record)
     }
 
     // MARK: - What the panel shows
-
-    var title: String {
-        let name = record.name ?? String(localized: "The game")
-        return CrashPromptPolicy.quitWhileStarting(record)
-            ? String(localized: "\(name) quit with an error while starting.")
-            : String(localized: "\(name) stopped unexpectedly.")
-    }
-
-    /// The known failure's sentence and its fix, when this run matches one.
-    var knownSentence: String? {
-        known.map { [InterfaceCopy.localized($0.summary), $0.fix.map(InterfaceCopy.localized)]
-            .compactMap(\.self).joined(separator: " ")
-        }
-    }
 
     var keptSentence: String {
         let name = zip?.lastPathComponent ?? String(localized: "the zip")
@@ -135,6 +85,8 @@ final class CrashPromptModel {
         let shownOnly = sending == nil && (stage == .asking || stage == .preparing)
         if shownOnly {
             let building = preparing
+            // A later Send builds the zip again; this one is on its way to the Trash.
+            preparing = nil
             Task(name: "Trash the declined crash report") {
                 guard let zip = await building?.value else { return }
                 try? FileManager.default.trashItem(at: zip, resultingItemURL: nil)

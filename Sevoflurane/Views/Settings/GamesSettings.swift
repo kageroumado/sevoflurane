@@ -196,9 +196,9 @@ private extension GameForm {
 
 // MARK: - Known fixes
 
-/// What the fix list set at the first launch and still holds, with one undo:
-/// the native runner and DLL overrides have no row of their own to carry the
-/// mark.
+/// What the fix list set at the first launch, or the user took from a run's
+/// finding (``RunDiagnosis``), and the game still holds, with one undo: the
+/// native runner and DLL overrides have no row of their own to carry the mark.
 private struct FixListSection: View {
     let fixes: AppliedFixes
     /// The stored names of the keys the fix list still holds.
@@ -208,7 +208,7 @@ private struct FixListSection: View {
     var body: some View {
         SettingsSection(
             title: "Known fixes",
-            footer: "Set at the game\u{2019}s first launch, where it had no value of its own.",
+            footer: "Undo puts back what the game had before.",
         ) {
             ForEach(fixes.fixes, id: \.title) { fix in
                 SettingsRow(title: "\(fix.title)", caption: InterfaceCopy.localized(fix.reason)) {}

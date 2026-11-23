@@ -92,6 +92,13 @@ nonisolated struct RunInProgress: Sendable {
         )
         record.crash = ending.crash ?? Self.statusCrash(code: code, ended: ended)
         record.exit = RunRecord.Exit(kind: ended, code: code)
+        if record.runner == GameRunner.wine {
+            record.missingDLL = MissingLibrary.library(
+                forExecutable: record.exe,
+                endedDLLNotFound: record.crash?.code == MissingLibrary.statusDLLNotFound, in: wineTail,
+            )
+            record.driver = Self.failedDriver(of: record, in: lines)
+        }
         RunLog.append(record, in: runsRoot)
         RunRecorder.log("run recorded — \(record.summary)")
         RunRecorder.didClose(record)
@@ -99,6 +106,18 @@ nonisolated struct RunInProgress: Sendable {
     }
 
     private static let programExitPoll: TimeInterval = 0.25
+
+    /// The kernel driver that failed to load for a run that drew nothing: the one the helper's
+    /// watch already named, else the one `lines` name. A run the present counter saw a frame of
+    /// has none, whatever failed before it drew.
+    static func failedDriver(of record: RunRecord, in lines: String) -> String? {
+        guard record.fps == nil else { return nil }
+        if let driver = record.driver { return driver }
+        guard case let .driverFailed(driver) = KernelDriverFailure.outcome(
+            in: lines, program: record.exe ?? "", appID: record.appid,
+        ) else { return nil }
+        return driver
+    }
 
     /// How a run ended. A stop on record outranks the exit status: the stop ends the process whole,
     /// which reads as 0, and Steam's own `TerminateProcess` reads as 1.
@@ -553,6 +572,36 @@ final nonisolated class RunRecorder {
         guard var run = open[appID] else { return nil }
         run.record.durationSeconds = Self.seconds(since: run.started)
         return run.record
+    }
+
+    /// The helper saw a kernel driver fail to load while the program drew nothing
+    /// (``KernelDriverFailure/watch(from:program:log:)``). Answers the open run's record with the
+    /// driver kept in it, or nil when no run of `appID` is open.
+    func noteKernelDriver(_ driver: String, forApp appID: Int) -> RunRecord? {
+        guard open[appID] != nil else { return nil }
+        open[appID]?.record.driver = driver
+        persist(appID: appID)
+        return openRecord(forApp: appID)
+    }
+
+    /// A record for a program whose kernel driver failed and that the app armed no run for (a
+    /// `sevo program launch`), so that the failure can still be shown.
+    static func unrecordedRun(appID: Int, name: String?, driver: String) -> RunRecord {
+        let selection = BottleGraphics.bootedSelection()
+        let engine = BottleGraphics.bootedEngineRoot().flatMap(Engine.booted(fromRoot:)) ?? Engine.active
+        return RunRecord(
+            t: runRecordStamp.string(from: .now),
+            appid: appID,
+            name: name,
+            engine: engine.recordIdentifier,
+            renderer: bottleRenderer(),
+            runner: GameRunner.wine,
+            windows: GameConfig.windows(bottle: SteamBottle.name, game: appID).value.rawValue,
+            msync: selection?.msync ?? BottleGraphics.currentSelection().msync,
+            macos: macOSVersion,
+            driver: driver,
+            host: hostState(),
+        )
     }
 
     /// One rung of the stall ladder, written into its run; `at` comes from the run's start minus

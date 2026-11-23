@@ -102,6 +102,8 @@
                 print("gallery export: \(panes) panes in \(directory.path)")
                 let steps = await writeWizard(to: directory, appearance: window.appearance)
                 print("gallery export: \(steps) first-run screens in \(directory.path)")
+                let panels = await writeRunPanels(to: directory, appearance: window.appearance)
+                print("gallery export: \(panels) run panels in \(directory.path)")
                 NSApp.terminate(nil)
             }
         }
@@ -172,6 +174,39 @@
             }
             try? await Task.sleep(for: settleDelay)
             for entry in hosts {
+                entry.host.layoutSubtreeIfNeeded()
+                let rect = entry.host.bounds
+                guard let bitmap = entry.host.bitmapImageRepForCachingDisplay(in: rect) else { continue }
+                entry.host.cacheDisplay(in: rect, to: bitmap)
+                try? bitmap.representation(using: .png, properties: [:])?
+                    .write(to: directory.appendingPathComponent("\(entry.name).png"))
+            }
+            return hosts.count
+        }
+
+        /// The panel about a run at its own size, once per cause, as
+        /// `view-run-<cause>.png` (``RunDiagnosisFixtures``).
+        private static func writeRunPanels(to directory: URL, appearance: NSAppearance?) async -> Int {
+            let hosts = RunDiagnosisFixtures.panels.map { panel in
+                // The panel is key whenever it is up; an offscreen window never is.
+                let host = NSHostingView(rootView: RunDiagnosisView(model: panel.model)
+                    .environment(\.appearsActive, true)
+                    .background(Color(nsColor: .windowBackgroundColor)))
+                let window = NSWindow(
+                    contentRect: NSRect(origin: CGPoint(x: -20000, y: -20000), size: host.fittingSize),
+                    styleMask: [.borderless], backing: .buffered, defer: false,
+                )
+                window.contentView = host
+                if let appearance {
+                    window.appearance = appearance
+                    window.backgroundColor = .windowBackgroundColor
+                }
+                window.orderBack(nil)
+                return (name: "view-run-\(panel.id)", host: host, window: window)
+            }
+            try? await Task.sleep(for: settleDelay)
+            for entry in hosts {
+                entry.window.setContentSize(entry.host.fittingSize)
                 entry.host.layoutSubtreeIfNeeded()
                 let rect = entry.host.bounds
                 guard let bitmap = entry.host.bitmapImageRepForCachingDisplay(in: rect) else { continue }

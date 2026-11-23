@@ -24,6 +24,7 @@
                 Text(verbatim: "Sevoflurane UI Gallery")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                 PopoverTiles()
+                RunDiagnosisTiles()
                 SettingsTiles()
                 EngineTiles()
                 ToolTiles()
@@ -267,6 +268,20 @@
                         )
                         .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
                         .background(.background, in: Theme.cardShape)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The panel about a run, once per cause and once with several findings.
+    private struct RunDiagnosisTiles: View {
+        var body: some View {
+            GallerySection("What happened to a run", minimum: RunDiagnosisView.width) {
+                ForEach(RunDiagnosisFixtures.panels) { panel in
+                    GalleryTile(panel.id) {
+                        RunDiagnosisView(model: panel.model)
+                            .background(.background, in: Theme.cardShape)
                     }
                 }
             }

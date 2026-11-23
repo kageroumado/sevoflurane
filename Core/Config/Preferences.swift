@@ -195,34 +195,35 @@ nonisolated extension Preferences {
         defaults.object(forKey: asksAfterCrashKey) as? Bool ?? true
     }
 
-    /// Games muted from the processor-limit offer (``ThreadSpinDiagnosis``).
-    static let quietThreadSpinAppsKey = "quietThreadSpinApps"
-
-    /// Whether `appID` may get the processor-limit offer.
-    static func asksAboutThreadSpin(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
-        !(defaults.array(forKey: quietThreadSpinAppsKey) as? [Int] ?? []).contains(appID)
+    /// Where the games muted for a finding's cause are kept. A cause whose
+    /// finding only offers the report has no mute of its own: ``asksAfterCrash``
+    /// speaks for all of them.
+    static func quietAppsKey(for cause: RunDiagnosis.Cause) -> String? {
+        switch cause {
+        case .threadSpin: "quietThreadSpinApps"
+        case .videoDecodedNothing: "quietVideoDecodingApps"
+        case .suggestedFix: "quietSuggestedFixApps"
+        case .missingLibrary: "quietMissingLibraryApps"
+        case .kernelDriver: "quietKernelDriverApps"
+        case .droppedShader: "quietDroppedShaderApps"
+        case .unityStartup, .unrealException, .stalled, .crashed, .quitWhileStarting, .notAnswering, .unexplained:
+            nil
+        }
     }
 
-    /// Keeps the processor-limit offer from opening for `appID` again.
-    static func stopAskingAboutThreadSpin(forApp appID: Int, in defaults: UserDefaults = shared) {
-        let quiet = defaults.array(forKey: quietThreadSpinAppsKey) as? [Int] ?? []
+    /// The causes muted for `appID`.
+    static func quietCauses(forApp appID: Int, in defaults: UserDefaults = shared) -> Set<RunDiagnosis.Cause> {
+        Set(RunDiagnosis.Cause.allCases.filter { cause in
+            quietAppsKey(for: cause).map { (defaults.array(forKey: $0) as? [Int] ?? []).contains(appID) } ?? false
+        })
+    }
+
+    /// Keeps a finding of `cause` from opening a panel for `appID` again.
+    static func stopAsking(about cause: RunDiagnosis.Cause, forApp appID: Int, in defaults: UserDefaults = shared) {
+        guard let key = quietAppsKey(for: cause) else { return }
+        let quiet = defaults.array(forKey: key) as? [Int] ?? []
         guard !quiet.contains(appID) else { return }
-        defaults.set(quiet + [appID], forKey: quietThreadSpinAppsKey)
-    }
-
-    /// Games muted from the video-decoding offer (``VideoDecodingDiagnosis``).
-    static let quietVideoDecodingAppsKey = "quietVideoDecodingApps"
-
-    /// Whether `appID` may get the video-decoding offer.
-    static func asksAboutVideoDecoding(forApp appID: Int, in defaults: UserDefaults = shared) -> Bool {
-        !(defaults.array(forKey: quietVideoDecodingAppsKey) as? [Int] ?? []).contains(appID)
-    }
-
-    /// Keeps the video-decoding offer from opening for `appID` again.
-    static func stopAskingAboutVideoDecoding(forApp appID: Int, in defaults: UserDefaults = shared) {
-        let quiet = defaults.array(forKey: quietVideoDecodingAppsKey) as? [Int] ?? []
-        guard !quiet.contains(appID) else { return }
-        defaults.set(quiet + [appID], forKey: quietVideoDecodingAppsKey)
+        defaults.set(quiet + [appID], forKey: key)
     }
 
     /// A random per-install token that groups sent reports; it names nothing

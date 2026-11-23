@@ -60,15 +60,12 @@ nonisolated enum VideoDecodingDiagnosis {
         var offered: VideoDecoding { current.other }
     }
 
-    /// The suggestion for `record`, or nil when its videos decoded, the
-    /// game's decoding has changed since the run, or the user asked not to
-    /// hear it.
+    /// The suggestion for `record`, or nil when its videos decoded or the
+    /// game's decoding has changed since the run.
     ///
-    /// - Parameters:
-    ///   - current: The game's video decoding as it resolves now.
-    ///   - asks: Whether the offer is still wanted for this game.
-    static func suggestion(for record: RunRecord, current: VideoDecoding, asks: Bool = true) -> Suggestion? {
-        guard asks, let video = record.video, video.decoding == current.rawValue else { return nil }
+    /// - Parameter current: The game's video decoding as it resolves now.
+    static func suggestion(for record: RunRecord, current: VideoDecoding) -> Suggestion? {
+        guard let video = record.video, video.decoding == current.rawValue else { return nil }
         return Suggestion(video: video, current: current)
     }
 }

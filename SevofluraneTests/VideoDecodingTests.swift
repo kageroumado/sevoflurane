@@ -195,86 +195,87 @@ struct VideoDecodingTests {
     }
 
     @Test
-    func `a run that decoded, a decoding changed since, or a game asked about is left alone`() {
+    func `a run that decoded, or a decoding changed since, is left alone`() {
         #expect(VideoDecodingDiagnosis.suggestion(for: Self.record(video: nil), current: .hardware) == nil)
         #expect(VideoDecodingDiagnosis.suggestion(for: Self.record(), current: .software) == nil)
-        #expect(VideoDecodingDiagnosis.suggestion(for: Self.record(), current: .hardware, asks: false) == nil)
-        #expect(VideoDecodingPromptPolicy.suggestion(for: Self.record(), crashShown: true, current: .hardware, asks: true) == nil)
-        #expect(VideoDecodingPromptPolicy.suggestion(for: Self.record(), crashShown: false, current: .hardware, asks: true) != nil)
     }
 
     // MARK: - The offer
 
     private final class Shown {
-        var crashes: [RunRecord] = []
-        var videos: [VideoDecodingDiagnosis.Suggestion] = []
-        var spins: [ThreadSpinDiagnosis.Suggestion] = []
+        var causes: [[RunDiagnosis.Cause]] = []
     }
 
-    private static func prompts(
+    private static func prompt(
         defaults: UserDefaults = freshDefaults(), settings: InMemorySettingsEnvironment = settings(),
-    ) -> (CrashPrompt, VideoDecodingPrompt, ThreadSpinPrompt, Shown) {
+    ) -> (RunDiagnosisPrompt, Shown) {
         let shown = Shown()
-        let crash = CrashPrompt(defaults: defaults) { shown.crashes.append($0) }
-        let video = VideoDecodingPrompt(defaults: defaults, settings: settings) { shown.videos.append($1) }
-        let spin = ThreadSpinPrompt(defaults: defaults, settings: settings) { shown.spins.append($1) }
-        return (crash, video, spin, shown)
+        let prompt = RunDiagnosisPrompt(defaults: defaults, settings: settings, suggested: { [] }) {
+            shown.causes.append($1.map(\.cause))
+        }
+        return (prompt, shown)
     }
 
     @Test
-    func `a starved run opens the offer once, while it runs or at its close`() {
-        let (crash, video, spin, shown) = Self.prompts()
-        let run = Self.record()
-        #expect(video.offer(run, crashShown: false))
-        crash.offerAfterClose(run, spin: spin, video: video)
-        crash.offerAfterClose(run, spin: spin, video: video)
-        #expect(shown.crashes.isEmpty)
-        #expect(shown.videos.map(\.offered) == [.software])
-        #expect(shown.spins.isEmpty)
+    func `a starved run opens the panel once, while it runs or at its close`() {
+        let (prompt, shown) = Self.prompt()
+        var open = Self.record()
+        open.exit = nil
+        #expect(prompt.offer(open))
+        #expect(!prompt.offer(Self.record()))
+        #expect(!prompt.offer(Self.record()))
+        #expect(shown.causes == [[.videoDecodedNothing]])
     }
 
     @Test
-    func `a crash takes the run, and the video offer outranks the processor one`() {
-        let (crash, video, spin, shown) = Self.prompts()
-        crash.offerAfterClose(Self.record(exit: RunRecord.Exit(kind: .crash, code: 3)), spin: spin, video: video)
-        #expect(shown.crashes.count == 1)
-        #expect(shown.videos.isEmpty)
-        // Another run of the game: a run is considered once, whatever it was offered.
-        var spinning = Self.record(t: "2026-10-31T21:00:00Z")
-        spinning.threads = RunRecord.Threads(busy: 15, processors: 16, samples: 30)
-        crash.offerAfterClose(spinning, spin: spin, video: video)
-        #expect(shown.videos.count == 1)
-        #expect(shown.spins.isEmpty)
+    func `a run told of its video while it was up is told of its crash at the close`() {
+        let (prompt, shown) = Self.prompt()
+        var open = Self.record()
+        open.exit = nil
+        #expect(prompt.offer(open))
+        #expect(prompt.offer(Self.record(exit: RunRecord.Exit(kind: .crash, code: 3))))
+        #expect(shown.causes == [[.videoDecodedNothing], [.crashed]])
     }
 
     @Test
-    func `a game asked about stays quiet, and a game already switched is not offered`() {
+    func `the video leads a crash and the processor limit in one panel`() {
+        let (prompt, shown) = Self.prompt()
+        var run = Self.record(exit: RunRecord.Exit(kind: .crash, code: 3))
+        run.threads = RunRecord.Threads(busy: 15, processors: 16, samples: 30)
+        #expect(prompt.offer(run))
+        #expect(shown.causes == [[.videoDecodedNothing, .crashed, .threadSpin]])
+    }
+
+    @Test
+    func `a game muted stays quiet, and a game already switched is not offered`() {
         let defaults = Self.freshDefaults()
-        let (crash, video, spin, shown) = Self.prompts(defaults: defaults)
-        Preferences.stopAskingAboutVideoDecoding(forApp: 3_224_770, in: defaults)
-        crash.offerAfterClose(Self.record(), spin: spin, video: video)
-        #expect(shown.videos.isEmpty)
-        #expect(!Preferences.asksAboutVideoDecoding(forApp: 3_224_770, in: defaults))
-        #expect(Preferences.asksAboutVideoDecoding(forApp: 1, in: defaults))
+        let (prompt, shown) = Self.prompt(defaults: defaults)
+        Preferences.stopAsking(about: .videoDecodedNothing, forApp: 3_224_770, in: defaults)
+        #expect(!prompt.offer(Self.record()))
+        #expect(shown.causes.isEmpty)
+        #expect(Preferences.quietCauses(forApp: 3_224_770, in: defaults) == [.videoDecodedNothing])
+        #expect(Preferences.quietCauses(forApp: 1, in: defaults).isEmpty)
+        // The mute an installed app wrote is read.
+        #expect(defaults.array(forKey: "quietVideoDecodingApps") as? [Int] == [3_224_770])
 
-        let (_, switched, _, shownSwitched) = Self.prompts(settings: Self.settings(decoding: .software))
-        #expect(!switched.offer(Self.record(), crashShown: false))
-        #expect(shownSwitched.videos.isEmpty)
+        let (switched, shownSwitched) = Self.prompt(settings: Self.settings(decoding: .software))
+        #expect(!switched.offer(Self.record()))
+        #expect(shownSwitched.causes.isEmpty)
     }
 
     @Test
-    func `taking the offer writes the other decoder to the game's settings`() throws {
+    func `taking the offer writes the other decoder to the game's settings`() {
         let settings = Self.settings()
         let record = Self.record()
-        let suggestion = try VideoDecodingDiagnosis.Suggestion(video: #require(record.video), current: .hardware)
-        let model = VideoDecodingPromptModel(
-            record: record, suggestion: suggestion, defaults: Self.freshDefaults(), settings: settings,
+        let model = RunDiagnosisModel(
+            record: record, findings: RunDiagnosis.findings(for: record),
+            defaults: Self.freshDefaults(), settings: settings, ledger: nil,
         )
         var finished = 0
         model.onFinish = { finished += 1 }
-        #expect(model.switchTitle == "Use Software Decoding")
-        #expect(model.title.contains("Umamusume"))
-        model.switchDecoding()
+        #expect(model.headline.action?.label == "Use Software Decoding")
+        #expect(model.headline.sentence.contains("Umamusume"))
+        model.perform(model.headline)
         #expect(settings.values(.game(3_224_770, bottle: SteamBottle.name)).videoDecoding == .software)
         #expect(finished == 1)
     }

@@ -46,7 +46,7 @@ struct RunReportCard: View {
 }
 
 /// The verdict, the note with its counter, and the configuration as chips.
-/// The Reports window and the crash prompt share it.
+/// The Reports window and the panel about a run share it.
 struct RunReportFields: View {
     @Bindable var model: RunReportModel
 

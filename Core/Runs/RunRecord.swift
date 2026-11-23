@@ -77,6 +77,12 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
     var threads: Threads? = nil
     /// A video decoder the game fed and got nothing from, when the run had one.
     var video: Video? = nil
+    /// A Windows kernel driver Wine could not load while nothing of the run had drawn
+    /// (``KernelDriverFailure``), `HoYoKProtect.sys`.
+    var driver: String? = nil
+    /// A library the loader could not find for the run's executable (``MissingLibrary``),
+    /// `MSVCP140.dll`.
+    var missingDLL: String? = nil
     var host: Host
 
     enum CodingKeys: String, CodingKey {
@@ -115,6 +121,8 @@ nonisolated struct RunRecord: Codable, Equatable, Identifiable, Sendable {
         case energy
         case threads
         case video
+        case driver
+        case missingDLL = "missing_dll"
         case host
     }
 

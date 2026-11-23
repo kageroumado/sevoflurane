@@ -35,7 +35,7 @@ Needs macOS 26 or later and a Steam account. Free and open source (MIT). Games t
 - **Storage:** per-game and category sizes, cache/engine cleanup, external libraries, and sharing installed games across bottles with separate saves.
 - **Recovery:** client watchdog, crash-loop detection, lost-wake recovery, orphan cleanup, helper/bottle repair, cache resets, and recovery guides. A running game survives a Sevoflurane crash; reopening reattaches.
 - **Community:** opt-in run statistics with a payload preview, per-game verdicts and notes, engine/chip comparisons, and deletion of shared data.
-- **Diagnostics:** run records, frame-time traces, logs, crash reports, per-game recording levels, redacted report sharing, Process Monitor, CPU-cap and video-decoding suggestions, and `sevo perf compare`.
+- **Diagnostics:** run records, frame-time traces, logs, crash reports, per-game recording levels, redacted report sharing, Process Monitor, one panel after a failed run that names the cause and its fix (missing library, kernel driver, CPU cap, video decoding), and `sevo perf compare`.
 - **Automation and updates:** CLI/MCP, idle-time app updates, engine/renderer update notices, and engine switching.
 - [Detailed feature reference](REFERENCE.md#full-feature-list). Dormison-specific features require that engine.
 

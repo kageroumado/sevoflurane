@@ -2,12 +2,13 @@ import Foundation
 import Testing
 @testable import Sevoflurane
 
-/// When the app speaks up after a run, and when it holds its tongue.
+/// When the panel about a run opens and when it stays shut, on the records
+/// the recorder closes.
 ///
-/// Serialized: three of these install `RunRecorder.didClose`, which is one static hook.
+/// Serialized: several of these install `RunRecorder.didClose`, which is one static hook.
 @MainActor
 @Suite(.serialized)
-struct CrashPromptTests {
+struct RunDiagnosisPromptTests {
     private static func record(
         t: String = "2026-09-18T10:00:00Z",
         appid: Int = 508_440,
@@ -29,19 +30,31 @@ struct CrashPromptTests {
         )
     }
 
-    /// A prompt that counts what it would have shown.
+    /// A panel that counts what it would have shown.
     private final class Shown {
         var records: [RunRecord] = []
+        var causes: [[RunDiagnosis.Cause]] = []
     }
 
-    private static func prompt(defaults: UserDefaults = freshDefaults()) -> (CrashPrompt, Shown) {
+    private static func prompt(
+        defaults: UserDefaults = freshDefaults(), suggested: [SuggestedFix] = [],
+    ) -> (RunDiagnosisPrompt, Shown) {
         let shown = Shown()
-        let prompt = CrashPrompt(defaults: defaults) { shown.records.append($0) }
+        let settings = InMemorySettingsEnvironment(seed: [.bottle(SteamBottle.name): ConfigValues()])
+        let prompt = RunDiagnosisPrompt(defaults: defaults, settings: settings, suggested: { suggested }) {
+            shown.records.append($0)
+            shown.causes.append($1.map(\.cause))
+        }
         return (prompt, shown)
     }
 
+    /// Whether a panel opens for `record` with nothing muted.
+    private static func raises(_ record: RunRecord) -> Bool {
+        !RunDiagnosis.raised(RunDiagnosis.findings(for: record)).isEmpty
+    }
+
     private static func freshDefaults() -> UserDefaults {
-        let suite = "CrashPromptTests.\(UUID().uuidString)"
+        let suite = "RunDiagnosisPromptTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         return defaults
@@ -49,30 +62,32 @@ struct CrashPromptTests {
 
     @Test
     func `a crash and a watchdog kill are the endings that prompt`() {
-        #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: 1))))
-        #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .crash, code: nil))))
-        #expect(CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: .watchdog, code: nil))))
+        #expect(Self.raises(Self.record(exit: RunRecord.Exit(kind: .crash, code: 1))))
+        #expect(Self.raises(Self.record(exit: RunRecord.Exit(kind: .crash, code: nil))))
+        #expect(Self.raises(Self.record(exit: RunRecord.Exit(kind: .watchdog, code: nil))))
         for kind in [
             RunRecord.Exit.Kind.user, .crashAtExit, .stopped, .stoppedByTool, .steamTerminate, .appQuit, .unknown,
+            .endedNotResponding,
         ] {
-            #expect(!CrashPromptPolicy.deserves(Self.record(exit: RunRecord.Exit(kind: kind, code: 0))))
+            #expect(!Self.raises(Self.record(exit: RunRecord.Exit(kind: kind, code: 0))))
         }
-        #expect(!CrashPromptPolicy.deserves(Self.record(exit: nil)))
+        #expect(!Self.raises(Self.record(exit: nil)))
     }
 
     @Test
     func `exit status 1 eight seconds in with no window is offered as a quit while starting`() {
         var record = Self.record(exit: RunRecord.Exit(kind: .exitError, code: 1))
         record.durationSeconds = 8
-        #expect(CrashPromptPolicy.deserves(record))
+        #expect(Self.raises(record))
         let (prompt, shown) = Self.prompt()
         #expect(prompt.offer(record))
         #expect(shown.records.count == 1)
-        let model = CrashPromptModel(record: record, upload: ReportUpload(installToken: "t", version: "1+1"))
-        #expect(model.title == "Totally Accurate Battle Simulator quit with an error while starting.")
+        #expect(shown.causes == [[.quitWhileStarting]])
+        #expect(RunDiagnosis.findings(for: record).first?.sentence
+            == "Totally Accurate Battle Simulator quit with an error while starting.")
         // A window shown, but gone again within the first seconds, is still starting.
         record.windowAfterSeconds = 3
-        #expect(CrashPromptPolicy.deserves(record))
+        #expect(Self.raises(record))
     }
 
     @Test
@@ -80,16 +95,64 @@ struct CrashPromptTests {
         var record = Self.record(exit: RunRecord.Exit(kind: .exitError, code: 1))
         record.windowAfterSeconds = 4
         record.durationSeconds = 600
-        #expect(!CrashPromptPolicy.deserves(record))
+        #expect(!Self.raises(record))
         let (prompt, shown) = Self.prompt()
         #expect(!prompt.offer(record))
         #expect(shown.records.isEmpty)
     }
 
     @Test
-    func `a crash keeps the crash wording`() {
-        let model = CrashPromptModel(record: Self.record(), upload: ReportUpload(installToken: "t", version: "1+1"))
-        #expect(model.title == "Totally Accurate Battle Simulator stopped unexpectedly.")
+    func `a crash keeps the crash wording and opens on the report`() {
+        let record = Self.record()
+        let findings = RunDiagnosis.findings(for: record)
+        #expect(findings.first?.sentence == "Totally Accurate Battle Simulator stopped unexpectedly.")
+        let model = RunDiagnosisModel(
+            record: record, findings: findings,
+            report: ReportSendModel(record: record, upload: ReportUpload(installToken: "t", version: "1+1")),
+            defaults: Self.freshDefaults(), settings: InMemorySettingsEnvironment(), ledger: nil,
+        )
+        #expect(model.face == .report)
+        #expect(model.opensOnReport)
+        #expect(!model.canStopAsking)
+    }
+
+    @Test
+    func `never ask again on the report turns the report's panel off`() {
+        let defaults = Self.freshDefaults()
+        let record = Self.record()
+        let model = RunDiagnosisModel(
+            record: record, findings: RunDiagnosis.findings(for: record),
+            report: ReportSendModel(record: record, upload: ReportUpload(installToken: "t", version: "1+1")),
+            defaults: defaults, settings: InMemorySettingsEnvironment(), ledger: nil,
+        )
+        var finished = 0
+        model.onFinish = { finished += 1 }
+        model.report.neverAskAgain = true
+        model.dismiss()
+        #expect(finished == 1)
+        #expect(!Preferences.asksAfterCrash(in: defaults))
+        let (prompt, shown) = Self.prompt(defaults: defaults)
+        #expect(!prompt.offer(Self.record(t: "2026-09-18T11:00:00Z")))
+        #expect(shown.records.isEmpty)
+    }
+
+    @Test
+    func `a suggested fix leads the panel of a crashed run, with the crash left to it`() {
+        let suggestion = SuggestedFix(
+            fix: KnownFix(
+                appID: 508_440, exePattern: nil, title: "TABS", values: ConfigValues(renderer: .d3dmetal),
+                reason: "Measured.",
+            ),
+            evidence: FixEvidence(
+                macs: 2, without: .init(values: ConfigValues(renderer: .dxmt), runs: 15, failed: 11),
+                with: .init(values: nil, runs: 6, failed: 0),
+            ),
+        )
+        let (prompt, shown) = Self.prompt(suggested: [suggestion])
+        #expect(prompt.offer(Self.record()))
+        #expect(shown.causes == [[.suggestedFix]])
+        // A run that ended well reads no suggestion.
+        #expect(!prompt.offer(Self.record(t: "2026-09-18T12:00:00Z", exit: RunRecord.Exit(kind: .user, code: 0))))
     }
 
     @Test
@@ -124,10 +187,10 @@ struct CrashPromptTests {
     func `the panel names the game and the known failure`() {
         var record = Self.record()
         record.runtime = "unity"
-        let model = CrashPromptModel(record: record, upload: ReportUpload(installToken: "t", version: "1+1"))
-        #expect(model.title == "Totally Accurate Battle Simulator stopped unexpectedly.")
-        #expect(model.known?.id == "unity-exit-1-no-window")
-        #expect(model.knownSentence?.contains("Player.log") == true)
+        let first = RunDiagnosis.findings(for: record).first
+        #expect(first?.cause == .unityStartup)
+        #expect(first?.sentence == "Totally Accurate Battle Simulator failed while starting and never drew a window.")
+        #expect(first?.evidence.contains("Player.log") == true)
     }
 
     /// The hook the app installs, exercised through the recorder that fires
@@ -216,7 +279,7 @@ struct CrashPromptTests {
         let ended = try #require(record)
         #expect(ended.exit?.kind == expected)
         #expect(ended.crash?.code == "0xc0000409")
-        #expect(CrashPromptPolicy.deserves(ended) == (expected == .crash))
+        #expect(Self.raises(ended) == (expected == .crash))
     }
 
     @Test(arguments: [
@@ -258,7 +321,7 @@ struct CrashPromptTests {
         #expect(ended.crash == nil)
         // The error exit never showed a window, so it is offered as a quit
         // while starting; a stop never is.
-        #expect(CrashPromptPolicy.deserves(ended) == (expected == .exitError))
+        #expect(Self.raises(ended) == (expected == .exitError))
     }
 
     /// A game whose own crash handler exited with status 1 after the engine
@@ -273,7 +336,7 @@ struct CrashPromptTests {
         #expect(ended.exit?.kind == .crash)
         #expect(ended.exit?.code == 1)
         #expect(ended.crash == RunRecord.Crash(code: "0xc0000005", address: "0x1400014fe", module: "crash.exe"))
-        #expect(CrashPromptPolicy.deserves(ended))
+        #expect(Self.raises(ended))
     }
 
     @Test
@@ -297,7 +360,7 @@ struct CrashPromptTests {
         #expect(ended.exit?.kind == .crash)
         #expect(ended.crash?.code == "0xc0000005")
         #expect(ended.crash?.address == "0x1400123A")
-        #expect(CrashPromptPolicy.deserves(ended))
+        #expect(Self.raises(ended))
     }
 
     @Test
@@ -306,7 +369,7 @@ struct CrashPromptTests {
         #expect(ended.exit?.kind == .crash)
         #expect(ended.exit?.code == -1_073_741_819)
         #expect(ended.crash == RunRecord.Crash(code: "0xc0000005"))
-        #expect(CrashPromptPolicy.deserves(ended))
+        #expect(Self.raises(ended))
     }
 
     @Test
@@ -317,7 +380,7 @@ struct CrashPromptTests {
         """)
         #expect(ended.exit?.kind == .crashAtExit)
         #expect(ended.crash?.code == "0xc0000409")
-        #expect(!CrashPromptPolicy.deserves(ended))
+        #expect(!Self.raises(ended))
     }
 
     @Test(arguments: [
@@ -347,7 +410,7 @@ struct CrashPromptTests {
         try Data("""
         [2026-09-28 03:10:01] AppID \(appID) adding PID 1400 as a tracked process ""C:\\crash.exe""
         [2026-09-28 03:10:09] AppID \(appID) no longer tracking PID 1400, exit code \(exitCode)
-
+        
         """.utf8).write(to: processLog)
         try Data((wineLog + "\n").utf8).write(to: wine)
         RunRecorder(runs: root, wineLog: wine, processLog: processLog).reattach()
@@ -376,6 +439,56 @@ struct CrashPromptTests {
         func first(forApp appID: Int) -> RunRecord? {
             lock.withLock { records.first { $0.appid == appID } }
         }
+    }
+
+    @Test
+    func `a run that ended on a missing library keeps its name and says so`() async throws {
+        let ended = try await Self.close(appID: 413_175, exitCode: -1_073_741_515, wineLog: #"""
+        sevo:run pid=27651 exe=crash.exe appid=413175 engine=dormison-r18 wpid=0288
+        0288:err:module:import_dll Library MSVCP140.dll (which is needed by L"C:\\game\\crash.exe") not found
+        """#)
+        #expect(ended.exit?.kind == .crash)
+        #expect(ended.missingDLL == "MSVCP140.dll")
+        #expect(ended.driver == nil)
+        #expect(RunDiagnosis.findings(for: ended).map(\.cause) == [.missingLibrary])
+    }
+
+    @Test
+    func `a run that drew nothing after its kernel driver failed keeps the driver and says so`() async throws {
+        let ended = try await Self.close(appID: 413_176, exitCode: 1, wineLog: #"""
+        sevo:run pid=27651 exe=crash.exe appid=413176 engine=dormison-r18 wpid=0288
+        0124:err:ntoskrnl:ZwLoadDriver failed to create driver L"\\Driver\\EasyAntiCheat": c0000142
+        """#)
+        #expect(ended.driver == "EasyAntiCheat.sys")
+        #expect(RunDiagnosis.findings(for: ended).map(\.cause) == [.kernelDriver])
+        let (prompt, shown) = Self.prompt()
+        #expect(prompt.offer(ended))
+        #expect(shown.causes == [[.kernelDriver]])
+
+        let drew = try await Self.close(appID: 413_177, exitCode: 1, wineLog: #"""
+        sevo:run pid=27651 exe=crash.exe appid=413177 engine=dormison-r18 wpid=0288
+        0124:err:ntoskrnl:ZwLoadDriver failed to create driver L"\\Driver\\EasyAntiCheat": c0000142
+        sevo:gfx pid=27651 first present +5210ms surface=0x1 layer=on-screen
+        """#)
+        #expect(drew.driver == nil)
+    }
+
+    @Test
+    func `the helper's word of a failed driver goes into the open run, and nowhere without one`() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("run-diagnosis-tests-\(UUID().uuidString)")
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let wine = root.appendingPathComponent("wine.log")
+        try Data().write(to: wine)
+        let recorder = RunRecorder(runs: root, wineLog: wine, processLog: root.appendingPathComponent("p.txt"))
+        #expect(recorder.noteKernelDriver("HoYoKProtect.sys", forApp: 413_178) == nil)
+        recorder.arm(appID: 413_178)
+        let open = try #require(recorder.noteKernelDriver("HoYoKProtect.sys", forApp: 413_178))
+        #expect(open.driver == "HoYoKProtect.sys")
+        #expect(open.exit == nil)
+        #expect(RunDiagnosis.findings(for: open).map(\.cause) == [.kernelDriver])
+        #expect(RunLog.armedRuns(in: root).first?.record.driver == "HoYoKProtect.sys")
     }
 
     @Test
