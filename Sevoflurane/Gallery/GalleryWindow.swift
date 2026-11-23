@@ -98,7 +98,55 @@
                     top += stripHeight
                 }
                 print("gallery export: \(strip) strips of \(Int(height)) pt in \(directory.path)")
+                let panes = await writePanes(to: directory, appearance: window.appearance)
+                print("gallery export: \(panes) panes in \(directory.path)")
                 NSApp.terminate(nil)
+            }
+        }
+
+        /// The height a pane's window starts at, under any pane's content, so
+        /// each scroll view reports its content's own height.
+        private static let probeHeight: CGFloat = 120
+
+        /// Each Settings pane as `pane-<name>.png`: the real window's detail
+        /// width and the pane's whole height, so a row can be measured in the
+        /// column it is read in.
+        private static func writePanes(to directory: URL, appearance: NSAppearance?) async -> Int {
+            let width = GalleryView.detailWidth
+            let hosts = GalleryView.settingsPanes.map { pane in
+                let host = NSHostingView(rootView: pane.view.background(Color(nsColor: .windowBackgroundColor)))
+                let window = NSWindow(
+                    contentRect: NSRect(x: -20000, y: -20000, width: width, height: pane.fixedHeight ?? probeHeight),
+                    styleMask: [.borderless], backing: .buffered, defer: false,
+                )
+                window.contentView = host
+                if let appearance {
+                    window.appearance = appearance
+                    window.backgroundColor = .windowBackgroundColor
+                }
+                window.orderBack(nil)
+                return (pane: pane, host: host, window: window)
+            }
+            try? await Task.sleep(for: settleDelay)
+            for entry in hosts where entry.pane.fixedHeight == nil {
+                let height = scrollViews(in: entry.host).compactMap { $0.documentView?.frame.height }.max()
+                entry.window.setContentSize(NSSize(width: width, height: height ?? probeHeight))
+                entry.host.layoutSubtreeIfNeeded()
+            }
+            try? await Task.sleep(for: settleDelay)
+            for entry in hosts {
+                let rect = entry.host.bounds
+                guard let bitmap = entry.host.bitmapImageRepForCachingDisplay(in: rect) else { continue }
+                entry.host.cacheDisplay(in: rect, to: bitmap)
+                try? bitmap.representation(using: .png, properties: [:])?
+                    .write(to: directory.appendingPathComponent("pane-\(entry.pane.id).png"))
+            }
+            return hosts.count
+        }
+
+        private static func scrollViews(in view: NSView) -> [NSScrollView] {
+            view.subviews.flatMap { subview in
+                (subview as? NSScrollView).map { [$0] } ?? scrollViews(in: subview)
             }
         }
     }

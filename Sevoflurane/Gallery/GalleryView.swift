@@ -33,6 +33,97 @@
         }
     }
 
+    /// One Settings pane whole, for ``GalleryExport`` to write to its own file.
+    struct GalleryPane: Identifiable {
+        let id: String
+        /// A pane that fills what it is given instead of scrolling; the others
+        /// are written at their content's height.
+        var fixedHeight: CGFloat?
+        let view: AnyView
+
+        init(_ id: String, fixedHeight: CGFloat? = nil, @ViewBuilder view: () -> some View) {
+            self.id = id
+            self.fixedHeight = fixedHeight
+            self.view = AnyView(view())
+        }
+    }
+
+    extension GalleryView {
+        /// The detail column of the real window: 800 less the sidebar.
+        static let detailWidth: CGFloat = 610
+
+        /// Every Settings pane as the running app draws it: with Steam's actions
+        /// and a supervisor, so the rows that need them are there.
+        static var settingsPanes: [GalleryPane] {
+            let steam = SteamActions(
+                openSteamSettings: {}, uninstall: { _ in }, restartClient: {}, cancelStuckMenus: { [] },
+                applyCompatibilityStrip: {}, applyUserStyles: {}, applyStreamerMode: {},
+            )
+            let builtIn = Fixtures.enginePanes.first { $0.scenario == .builtInOnly }
+            let crossOver = Fixtures.enginePanes.first { $0.scenario == .crossOverAndBuiltIn }
+            let noToolkit = Fixtures.graphicsPanes.first { $0.scenario == .builtInNoToolkit }
+            let linkable = Fixtures.storagePanes.first { $0.scenario == .linkableGames }
+            return [
+                GalleryPane("general") {
+                    GeneralSettings(
+                        provisioner: Fixtures.settings, store: Fixtures.storage, steam: steam,
+                        highlighted: nil, supervisor: Fixtures.healthySupervisor,
+                    )
+                },
+                GalleryPane("graphics") {
+                    GraphicsSettings(
+                        store: Fixtures.graphics, shaders: Fixtures.shaders, steam: steam, highlighted: nil,
+                    )
+                },
+                GalleryPane("graphics-no-toolkit") {
+                    if let noToolkit {
+                        GraphicsSettings(store: noToolkit.store, shaders: Fixtures.shaders, highlighted: nil)
+                    }
+                },
+                GalleryPane("engine") {
+                    if let builtIn {
+                        EngineSettings(
+                            store: builtIn.store, graphics: Fixtures.graphics, shaders: Fixtures.shaders,
+                            compatibility: Fixtures.compatibility, provisioner: builtIn.provisioner,
+                            highlighted: nil,
+                        )
+                    }
+                },
+                GalleryPane("engine-crossover") {
+                    if let crossOver {
+                        EngineSettings(
+                            store: crossOver.store, graphics: Fixtures.graphics, shaders: Fixtures.shaders,
+                            compatibility: Fixtures.compatibility, provisioner: crossOver.provisioner,
+                            highlighted: nil,
+                        )
+                    }
+                },
+                GalleryPane("games") {
+                    GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
+                },
+                GalleryPane("hoyoverse") { HoYoSettings(highlighted: nil, store: Fixtures.hoyo) },
+                GalleryPane("storage") {
+                    StorageSettings(store: Fixtures.storage, steam: steam, highlighted: nil)
+                },
+                GalleryPane("storage-linkable") {
+                    if let linkable {
+                        StorageSettings(store: linkable.store, steam: steam, highlighted: nil)
+                    }
+                },
+                GalleryPane("recovery") {
+                    RecoverySettings(
+                        provisioner: Fixtures.settings, compatibility: Fixtures.compatibility,
+                        supervisor: Fixtures.healthySupervisor, steam: steam, highlighted: nil,
+                    )
+                },
+                GalleryPane("diagnostics") {
+                    DiagnosticsSettings(store: Fixtures.diagnostics, highlighted: nil, showReports: {})
+                },
+                GalleryPane("about", fixedHeight: 518) { AboutSettings(highlighted: nil) },
+            ]
+        }
+    }
+
     /// The menu-bar popover in each client state.
     private struct PopoverTiles: View {
         var body: some View {
