@@ -31,7 +31,6 @@ struct SettingsHelpPopover: View {
                 .font(SettingsType.helpTitle)
             Text(help.summary)
                 .font(SettingsType.helpBody)
-                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(help.entries, id: \.name) { entry in
                 VStack(alignment: .leading, spacing: SettingsMetrics.popoverTermGap) {

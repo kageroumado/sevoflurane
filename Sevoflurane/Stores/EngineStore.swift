@@ -72,7 +72,11 @@ final class EngineStore {
     var activeEngine: Engine { environment.activeEngine }
     var activeBottle: String { environment.activeBottle }
 
-    // Whether the staged pair differs from what's running.
+    /// Whether the staged pair differs from what's running.
+    var hasChanges: Bool {
+        stagedEngine != activeEngine || stagedBottle != activeBottle
+    }
+
     #if DEBUG
         /// Puts the store where the gallery draws it: a switch under way, or
         /// one that failed and stands.
@@ -85,10 +89,6 @@ final class EngineStore {
             clientStartIsBlocked = blocksClient
         }
     #endif
-
-    var hasChanges: Bool {
-        stagedEngine != activeEngine || stagedBottle != activeBottle
-    }
 
     /// Whether the staged bottle would be created from scratch.
     var stagedBottleIsNew: Bool {

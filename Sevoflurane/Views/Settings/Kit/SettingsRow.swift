@@ -17,10 +17,12 @@ enum SettingsRowState: Equatable {
         message.map(SettingsRowState.warning) ?? .normal
     }
 
+    /// The state's reason as a sentence. One passed up from an error starts
+    /// in lowercase and ends bare.
     var message: String? {
         switch self {
         case .normal: nil
-        case let .warning(message), let .failure(message): message
+        case let .warning(message), let .failure(message): message.asSentence
         }
     }
 
@@ -30,6 +32,18 @@ enum SettingsRowState: Equatable {
         case .warning: .warning
         case .failure: .failure
         }
+    }
+}
+
+private extension String {
+    /// Starts with a capital where its first word is a plain word, and ends
+    /// with a full stop.
+    var asSentence: String {
+        let text = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = text.last else { return text }
+        let firstWord = text.prefix { !$0.isWhitespace }
+        let head = firstWord.allSatisfy(\.isLetter) ? text.prefix(1).uppercased() + text.dropFirst() : text
+        return ".!?…。！？".contains(last) ? head : head + "."
     }
 }
 
@@ -167,7 +181,7 @@ struct SettingsCaption: View {
         } else {
             Text(text)
                 .font(SettingsType.caption)
-                .foregroundStyle(isState ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isState ? HierarchicalShapeStyle.primary : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

@@ -63,7 +63,7 @@
                     .disabled(true)
                 SettingsToggle(
                     title: "With a note",
-                    note: SettingsRowNote(text: "Set by the fix list", actionTitle: "Undo", reason: "Why it was set.") {},
+                    note: SettingsRowNote(text: "Set by a known fix", actionTitle: "Undo", reason: "Why it was set.") {},
                     isOn: $values.isOn,
                 )
             }
@@ -90,7 +90,7 @@
                 SettingsPicker(title: "Disabled", selection: $values.choice) { options }
                     .disabled(true)
                 InheritablePicker(
-                    title: "Inheritable", caption: "The setting's own description.", help: Self.help,
+                    title: "Inheritable", caption: "The setting\u{2019}s own description.", help: Self.help,
                     inherited: "Second", selection: $values.inherited,
                 ) { options }
             }

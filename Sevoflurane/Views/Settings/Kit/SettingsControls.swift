@@ -184,6 +184,7 @@ struct SettingsField<Actions: View>: View {
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .frame(width: SettingsMetrics.valueWidth)
+                .padding(.trailing, Actions.self == EmptyView.self ? SettingsMetrics.fieldInset : 0)
                 .onSubmit(onSubmit)
             actions
         }
@@ -214,6 +215,7 @@ struct SettingsNumberField: View {
                 .multilineTextAlignment(.trailing)
                 .monospacedDigit()
                 .frame(width: SettingsMetrics.numberField)
+                .padding(.trailing, SettingsMetrics.fieldInset)
         }
     }
 

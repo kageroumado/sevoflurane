@@ -20,6 +20,8 @@ enum SettingsMetrics {
     static let captionGap = Theme.Space.xs
     /// How far inside its own trailing edge a pop-up button draws its chevron.
     static let popUpInset: CGFloat = 3.5
+    /// How far past its own trailing edge a bordered field draws its outline.
+    static let fieldInset: CGFloat = 1
     /// The column a row's leading mark sits in: a storage dot, a drive.
     static let markWidth: CGFloat = 16
     /// A storage dot's diameter.
@@ -64,7 +66,7 @@ enum SettingsMetrics {
 /// Every font of the Settings window.
 enum SettingsType {
     /// The name over a pane's sections: the selected game.
-    static let heading = Font.title3.weight(.medium)
+    static let heading = Font.title3.weight(.semibold)
     /// A row's title, and a control's own text.
     static let title = Font.body
     /// The one line under a row.
