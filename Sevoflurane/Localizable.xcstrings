@@ -22,22 +22,6 @@
         }
       }
     },
-    "%@ %@ installed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@ %2$@ installed"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ %2$@ 已安装"
-          }
-        }
-      }
-    },
     "%@ %@ received": {
       "localizations": {
         "en": {
@@ -54,12 +38,38 @@
         }
       }
     },
+    "%@ did not download: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ did not download: %2$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 未能下载：%2$@"
+          }
+        }
+      }
+    },
     "%@ did not install.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ 未能安装。"
+          }
+        }
+      }
+    },
+    "%@ is installed. Games that need the newer version wait for this one.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已安装。需要较新版本的游戏要等这一个下载完成。"
           }
         }
       }
@@ -74,12 +84,42 @@
         }
       }
     },
-    "A second try starts over in a fresh folder.": {
+    "A game or a download that is running in it stops when Steam closes.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "再次尝试时会在一个全新的文件夹中重新开始。"
+            "value": "Steam 关闭时，其中正在运行的游戏或下载也会停止。"
+          }
+        }
+      }
+    },
+    "A part of Sevoflurane that starts Steam is not running.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevoflurane 中负责启动 Steam 的部分没有运行。"
+          }
+        }
+      }
+    },
+    "about %lld minutes left": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大约剩余 %lld 分钟"
+          }
+        }
+      }
+    },
+    "about 1 minute left": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大约剩余 1 分钟"
           }
         }
       }
@@ -134,6 +174,16 @@
         }
       }
     },
+    "Built into Sevoflurane. Free.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内置于 Sevoflurane。免费。"
+          }
+        }
+      }
+    },
     "Check the connection, then try again.": {
       "localizations": {
         "zh-Hans": {
@@ -154,6 +204,36 @@
         }
       }
     },
+    "Click Download next to “%@”, outlined on the page. It installs by itself.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点按页面上已用边框标出的“%@”旁边的“Download”。它会自动安装。"
+          }
+        }
+      }
+    },
+    "Click Download next to “Evaluation environment for Windows games 4.0 beta 2” or newer. It installs by itself.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点按“Evaluation environment for Windows games 4.0 beta 2”或更新版本旁边的“Download”。它会自动安装。"
+          }
+        }
+      }
+    },
+    "Close Steam": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭 Steam"
+          }
+        }
+      }
+    },
     "Closing Steam": {
       "localizations": {
         "zh-Hans": {
@@ -164,12 +244,42 @@
         }
       }
     },
-    "Closing the Steam that is running…": {
+    "Closing Steam…": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在关闭运行中的 Steam…"
+            "value": "正在关闭 Steam…"
+          }
+        }
+      }
+    },
+    "Continue Setup": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续设置"
+          }
+        }
+      }
+    },
+    "CrossOver is on this Mac, so Steam can use it instead.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 上装有 CrossOver，Steam 也可以改用它来运行。"
+          }
+        }
+      }
+    },
+    "D3DMetal %@ installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D3DMetal %@ 已安装"
           }
         }
       }
@@ -184,18 +294,22 @@
         }
       }
     },
-    "Downloading %@ %@, nothing to click": {
+    "Downloaded it on another Mac? Choose the File…": {
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "Downloading %1$@ %2$@, nothing to click"
-          }
-        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在下载 %1$@ %2$@，无需点击任何内容"
+            "value": "已在另一台 Mac 上下载？选取文件…"
+          }
+        }
+      }
+    },
+    "Downloading D3DMetal %@, nothing to click": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 D3DMetal %@，无需点击任何内容"
           }
         }
       }
@@ -220,6 +334,26 @@
         }
       }
     },
+    "downloading, %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载，%@"
+          }
+        }
+      }
+    },
+    "Fix It": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修复"
+          }
+        }
+      }
+    },
     "Fonts and extras": {
       "localizations": {
         "zh-Hans": {
@@ -240,22 +374,22 @@
         }
       }
     },
-    "Free. Setup downloads Steam and what it needs to run on a Mac. You sign in to Steam at the end.": {
+    "Free. Setup downloads Steam and what it needs to run on a Mac.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "免费。设置过程会下载 Steam 以及它在 Mac 上运行所需的一切，最后由你登录 Steam。"
+            "value": "免费。设置过程会下载 Steam 以及它在 Mac 上运行所需的一切。"
           }
         }
       }
     },
-    "From CodeWeavers. %@": {
+    "Game Porting Toolkit": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "来自 CodeWeavers。%@"
+            "value": "Game Porting Toolkit"
           }
         }
       }
@@ -300,6 +434,26 @@
         }
       }
     },
+    "installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安装"
+          }
+        }
+      }
+    },
+    "installing": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装"
+          }
+        }
+      }
+    },
     "Installing Apple’s Rosetta…": {
       "localizations": {
         "zh-Hans": {
@@ -320,32 +474,22 @@
         }
       }
     },
-    "Installs from a dormison-r<N>.tar.xz you downloaded from the Dormison releases, with its .sig beside it.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从你在 Dormison 发布页下载的 dormison-r<N>.tar.xz 安装，其 .sig 文件需放在旁边。"
-          }
-        }
-      }
-    },
-    "It did not answer. Try again.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "它没有响应。请重试。"
-          }
-        }
-      }
-    },
     "It is still restarting. Try again in a moment.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "它仍在重新启动。请稍后重试。"
+          }
+        }
+      }
+    },
+    "It opens when setup closes.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置关闭后它就会打开。"
           }
         }
       }
@@ -380,6 +524,16 @@
         }
       }
     },
+    "less than a minute left": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩余不到 1 分钟"
+          }
+        }
+      }
+    },
     "Newer games (DirectX 12)": {
       "localizations": {
         "zh-Hans": {
@@ -400,22 +554,12 @@
         }
       }
     },
-    "One thing before it opens.": {
+    "One question before it opens.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "打开之前还有一件事。"
-          }
-        }
-      }
-    },
-    "Open Setup": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "打开设置向导"
+            "value": "打开之前还有一个问题。"
           }
         }
       }
@@ -440,12 +584,32 @@
         }
       }
     },
-    "Rather use your own browser?": {
+    "Quit": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "更想用自己的浏览器？"
+            "value": "退出"
+          }
+        }
+      }
+    },
+    "Quit Sevoflurane. Setup takes up where it stopped when it opens again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出 Sevoflurane。再次打开时，设置会从停下的地方继续。"
+          }
+        }
+      }
+    },
+    "Quit Steam yourself, then try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请自行退出 Steam，然后重试。"
           }
         }
       }
@@ -460,12 +624,52 @@
         }
       }
     },
+    "Saved it somewhere else?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存到了别的位置？"
+          }
+        }
+      }
+    },
     "Set Up Steam": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "设置 Steam"
+          }
+        }
+      }
+    },
+    "Setup has a question left.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置还剩一个问题。"
+          }
+        }
+      }
+    },
+    "Setup has to close it to go on.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置需要先将其关闭才能继续。"
+          }
+        }
+      }
+    },
+    "Setup is not finished": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置尚未完成"
           }
         }
       }
@@ -500,32 +704,12 @@
         }
       }
     },
-    "Sevoflurane’s background helper starts Steam, and it is not running.": {
+    "Share how each game ran, so everyone can see, on each game’s page, what plays well on which Mac.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steam 由 Sevoflurane 的后台助手启动，而它当前没有运行。"
-          }
-        }
-      }
-    },
-    "Sevoflurane’s own engine. Free.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sevoflurane 自带的引擎。免费。"
-          }
-        }
-      }
-    },
-    "Share how each game ran, so everyone can see what plays well on which Mac in the public Sevoflurane game database.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共享每个游戏的运行情况，让所有人都能在公开的 Sevoflurane 游戏数据库中看到哪些游戏在哪款 Mac 上运行良好。"
+            "value": "共享每个游戏的运行情况，让所有人都能在各游戏的页面上看到哪些游戏在哪款 Mac 上运行良好。"
           }
         }
       }
@@ -540,12 +724,12 @@
         }
       }
     },
-    "Sign in on Apple’s page with any Apple Account and download “Evaluation environment for Windows games 4.0 beta 2” or newer. Sevoflurane installs it the moment it lands.": {
+    "Sign in on Apple’s page with any Apple Account and download “Evaluation environment for Windows games 4.0 beta 2” or newer, Apple’s name for the toolkit.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用任意 Apple 账户在 Apple 的页面上登录，并下载“Evaluation environment for Windows games 4.0 beta 2”或更新版本。下载完成后，Sevoflurane 会立即安装。"
+            "value": "使用任意 Apple 账户在 Apple 的页面上登录，并下载“Evaluation environment for Windows games 4.0 beta 2”或更新版本，这是 Apple 对该工具包的称呼。"
           }
         }
       }
@@ -590,6 +774,16 @@
         }
       }
     },
+    "Steam closed right after starting.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 刚启动就关闭了。"
+          }
+        }
+      }
+    },
     "Steam could not be downloaded.": {
       "localizations": {
         "zh-Hans": {
@@ -630,22 +824,12 @@
         }
       }
     },
-    "Steam is installed.": {
+    "Steam is running": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steam 已安装。"
-          }
-        }
-      }
-    },
-    "Steam is installed. It opens from the last screen of setup.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Steam 已安装。它会从设置向导的最后一屏打开。"
+            "value": "Steam 正在运行"
           }
         }
       }
@@ -656,6 +840,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steam 正在启动"
+          }
+        }
+      }
+    },
+    "Steam is still running and did not quit.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 仍在运行，未能退出。"
+          }
+        }
+      }
+    },
+    "Steam opens from its last screen.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steam 会从设置的最后一屏打开。"
           }
         }
       }
@@ -690,12 +894,12 @@
         }
       }
     },
-    "Steam’s installer did not finish.": {
+    "Steam’s installer stopped before it finished.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steam 安装程序未能完成。"
+            "value": "Steam 安装程序在完成之前停止了。"
           }
         }
       }
@@ -730,22 +934,12 @@
         }
       }
     },
-    "The Steam that is running could not be closed.": {
+    "They need Apple’s Game Porting Toolkit, a free download from Apple. Apple asks you to sign in with an Apple Account to download it. Apple’s own page asks for it, and Sevoflurane never sees your password.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法关闭运行中的 Steam。"
-          }
-        }
-      }
-    },
-    "They need Apple’s Game Porting Toolkit, a free download from Apple. Apple asks you to sign in with an Apple Account to download it. The sign-in page is Apple’s, and Sevoflurane never sees your password.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "它们需要 Apple 的 Game Porting Toolkit，可从 Apple 免费下载。Apple 要求使用 Apple 账户登录后才能下载。登录页面是 Apple 的，Sevoflurane 永远看不到你的密码。"
+            "value": "它们需要 Apple 的 Game Porting Toolkit，可从 Apple 免费下载。Apple 要求使用 Apple 账户登录后才能下载。登录是在 Apple 自己的页面上进行的，Sevoflurane 永远看不到你的密码。"
           }
         }
       }
@@ -760,32 +954,52 @@
         }
       }
     },
-    "This Mac has CrossOver, so Steam can run on either.": {
+    "Try Again runs it from the start.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这台 Mac 装有 CrossOver，因此 Steam 可以在两者之一上运行。"
+            "value": "“重试”会从头运行它。"
           }
         }
       }
     },
-    "Try Again takes up where it stopped.": {
+    "Turn on Sevoflurane under “Allow in the Background”, then come back.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "“重试”会从停下的地方继续。"
+            "value": "请在“允许在后台”下打开 Sevoflurane，然后回到这里。"
           }
         }
       }
     },
-    "Use a Downloaded File…": {
+    "Two versions. Some games need the newer one.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用已下载的文件…"
+            "value": "共两个版本。部分游戏需要较新的那个。"
+          }
+        }
+      }
+    },
+    "Uses your CrossOver license.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用你的 CrossOver 许可证。"
+          }
+        }
+      }
+    },
+    "Uses your CrossOver trial.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用你的 CrossOver 试用期。"
           }
         }
       }
@@ -796,6 +1010,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待中"
+          }
+        }
+      }
+    },
+    "Waiting for the download in your Downloads folder.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等待下载内容出现在你的“下载”文件夹中。"
           }
         }
       }
@@ -856,6 +1080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "之后可以在设置中切换。"
+          }
+        }
+      }
+    },
+    "You sign in to Steam at the end.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最后由你登录 Steam。"
           }
         }
       }
@@ -3478,26 +3712,6 @@
         }
       }
     },
-    "Click Download on “%@”, outlined below. It installs here when its download ends.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请点按下方框出的“%@”的“Download”。下载完成后会在此处安装。"
-          }
-        }
-      }
-    },
-    "Click Download on “Evaluation environment for Windows games 4.0 beta 2” or newer. It installs here when its download ends.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请点按“Evaluation environment for Windows games 4.0 beta 2”或更新版本的“Download”。下载完成后会在此处安装。"
-          }
-        }
-      }
-    },
     "Click to install version %@": {
       "localizations": {
         "zh-Hans": {
@@ -3690,16 +3904,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "继续设置"
-          }
-        }
-      }
-    },
-    "Continue setup where you left off. Steam opens from its last step.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从上次中断处继续设置。Steam 会从上一步开始打开。"
           }
         }
       }
@@ -5334,16 +5538,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在查找最新版本…"
-          }
-        }
-      }
-    },
-    "Finish setting up": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完成设置"
           }
         }
       }
@@ -10405,16 +10599,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "模拟设置。不会更改这台 Mac 上的任何内容。"
-          }
-        }
-      }
-    },
-    "Skip Sign-In": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跳过登录"
           }
         }
       }
