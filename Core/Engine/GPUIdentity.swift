@@ -40,7 +40,7 @@ nonisolated enum GPUIdentity: String, CaseIterable, Codable, Sendable {
     /// What picking this identity buys, the same on every Mac.
     var detail: String {
         let value = switch self {
-        case .automatic: "Your Mac's own chip. Some games reject a card they do not know."
+        case .automatic: "Your Mac’s own chip. Some games reject a card they do not know."
         case .nvidia: "Passes most GPU and driver checks. Speed still depends on your Mac."
         case .amd: "Try this if a game rejects the NVIDIA card."
         }

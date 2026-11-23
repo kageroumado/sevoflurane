@@ -37,7 +37,7 @@ nonisolated enum BottleDependencies {
         ),
         Dependency(
             id: "d3dcompiler", name: "Direct3D shader compiler",
-            detail: "Fixes shader errors, black screens and crashes while shaders compile.",
+            detail: "Fixes shader errors, black screens, and crashes while shaders compile.",
             download: "8 MB", required: true,
         ),
         Dependency(
@@ -47,7 +47,7 @@ nonisolated enum BottleDependencies {
             download: "96 MB", required: false,
         ),
         Dependency(
-            id: "cjkfonts", name: "Japanese, Chinese & Korean fonts",
+            id: "cjkfonts", name: "Japanese, Chinese, and Korean fonts",
             detail: "Source Han Sans, all four regions.",
             download: "220 MB", required: false,
         ),

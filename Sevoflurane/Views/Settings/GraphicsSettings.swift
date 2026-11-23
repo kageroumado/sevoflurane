@@ -1,17 +1,17 @@
-import Propofol
 import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - Graphics
 
-/// What the pane, its notice and the renderer popover all say about a renderer
-/// change reaching a game.
-private let applyRendererCopy =
-    InterfaceCopy.localized("Launch a game from the menu bar to apply changes. Steam restarts if needed.")
-
+/// Settings › Graphics: the renderer and the GPU games are told about, each
+/// renderer's versions, the upscaler packages, and every game's picture and
+/// mouse defaults.
 struct GraphicsSettings: View {
     let store: GraphicsStore
     let shaders: ShaderStore
+    /// The active bottle's defaults, whose Picture and Mouse groups this pane
+    /// shows; `nil` on an engine that reads none of them.
+    var defaults: SettingsStore?
     var steam: SteamActions?
     let highlighted: SettingsAnchor?
 
@@ -20,78 +20,68 @@ struct GraphicsSettings: View {
     }
 
     var body: some View {
-        let bootedRenderer = store.bootedRenderer
-        Form {
-            Section {
-                HelpedRow(
+        SettingsForm(highlighted: highlighted) {
+            SettingsSection(title: "Renderer", reach: .nextLaunch) {
+                SettingsPicker(
+                    title: "Renderer",
                     caption: store.selection.renderer.detail,
-                    help: SettingCopy.renderers(store.availableRenderers, footnote: applyRendererCopy),
+                    help: SettingCopy.renderers(store.availableRenderers),
+                    selection: graphics.renderer,
                 ) {
-                    Picker("Game renderer", selection: graphics.renderer) {
-                        ForEach(store.availableRenderers, id: \.self) { renderer in
-                            Text(renderer.label).tag(renderer)
-                        }
+                    ForEach(store.availableRenderers, id: \.self) { renderer in
+                        Text(renderer.label).tag(renderer)
                     }
-                    .endsOnControlLine()
                 }
                 .highlightable(.graphicsRenderer, highlighted: highlighted)
-                HelpedRow(caption: store.selection.gpu.detail, help: .reportedGPU) {
-                    Picker("GPU reported to games", selection: graphics.gpu) {
-                        ForEach(GPUIdentity.allCases, id: \.self) { identity in
-                            Text(identity.label).tag(identity)
-                        }
+                SettingsPicker(
+                    title: "GPU reported to games", caption: store.selection.gpu.detail, help: .reportedGPU,
+                    selection: graphics.gpu,
+                ) {
+                    ForEach(GPUIdentity.allCases, id: \.self) { identity in
+                        Text(identity.label).tag(identity)
                     }
-                    .endsOnControlLine()
                 }
                 .highlightable(.graphicsGpu, highlighted: highlighted)
-                if let bootedRenderer {
-                    ActionRow(title: "Steam started on \(bootedRenderer.label)", caption: applyRendererCopy) {
-                        if let steam {
-                            Button("Restart Steam") { steam.restartClient() }
-                        }
-                    }
+                if let bootedRenderer = store.bootedRenderer {
+                    RestartNotice(title: "Steam started on \(bootedRenderer.label)", steam: steam)
                 }
-            } header: {
-                Text("Renderer")
-            } footer: {
-                // While a change waits, the row above says this with its
-                // button.
-                if bootedRenderer == nil { Text(applyRendererCopy) }
             }
-            rendererVersionsSection
+            SettingsSection(title: "Renderer versions", reach: .nextLaunch) {
+                if !store.canHostD3DMetal {
+                    DX12HostNotice(macRunsD3DMetal: store.macRunsD3DMetal)
+                }
+                D3DMetalRow(store: store)
+                ForEach(RendererVersions.Component.allCases) { component in
+                    RendererVersionRow(store: store, component: component)
+                }
+                if store.rendererVersionsChangedSinceBoot {
+                    RestartNotice(title: "A version changed", steam: steam)
+                }
+            }
             ShaderPackagesSection(shaders: shaders, highlighted: highlighted)
+            if let defaults {
+                SettingSections(
+                    store: defaults, shaders: shaders, highlighted: highlighted, groups: [.picture, .mouse],
+                )
+            }
         }
-        .formStyle(.grouped)
         .onAppear {
             store.loadRendererReleases()
             shaders.load()
         }
     }
+}
 
-    /// Every renderer's versions: Apple's D3DMetal from the user's download,
-    /// and the engine's DXMT and DXVK beside any added release.
-    private var rendererVersionsSection: some View {
-        Section {
-            if !store.canHostD3DMetal {
-                DX12HostNotice(macRunsD3DMetal: store.macRunsD3DMetal)
+/// A change that waits for the next game, with the way to apply it at once.
+private struct RestartNotice: View {
+    let title: LocalizedStringResource
+    let steam: SteamActions?
+
+    var body: some View {
+        SettingsAction(title: title, caption: String(localized: "A restart applies the change at once.")) {
+            if let steam {
+                Button("Restart Steam") { steam.restartClient() }
             }
-            D3DMetalRow(store: store)
-            ForEach(RendererVersions.Component.allCases) { component in
-                RendererVersionRow(store: store, component: component)
-            }
-            if store.rendererVersionsChangedSinceBoot {
-                // The renderer picker above says this for a renderer change;
-                // a version change is the same restage.
-                ActionRow(title: "A version changed", caption: applyRendererCopy) {
-                    if let steam {
-                        Button("Restart Steam") { steam.restartClient() }
-                    }
-                }
-            }
-        } header: {
-            Text("Renderer versions")
-        } footer: {
-            Text("A change applies the same way. Reset restores the engine's own version.")
         }
     }
 }
@@ -104,18 +94,19 @@ private struct DX12HostNotice: View {
     let macRunsD3DMetal: Bool
 
     var body: some View {
-        SettingsRow(
-            caption: macRunsD3DMetal
-                ? String(localized: "Choose an engine that includes D3DMetal in Settings › Engine. Your toolkits stay.")
-                : "",
-        ) {
-            (macRunsD3DMetal ? Text("Update the engine for DirectX 12") : Text("DirectX 12 needs a Mac with Apple silicon"))
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if macRunsD3DMetal {
+            SettingsJump(
+                title: "Update the engine for DirectX 12",
+                caption: String(localized: "Your toolkits stay."),
+                target: .engineSelection,
+            )
+        } else {
+            SettingsMessage(text: "DirectX 12 needs a Mac with Apple silicon.")
         }
     }
 }
 
-/// The D3DMetal row, shaped like the two below: the picker, then a menu for
+/// The D3DMetal row, shaped like the two after it: the picker, then a menu for
 /// Apple's download, a disk image, and removal. An empty tag is CrossOver's
 /// own copy or the placeholder. Never make the selection `String?`: that
 /// crashes the compiler's IRGen.
@@ -128,36 +119,41 @@ private struct D3DMetalRow: View {
     @State private var gptk = GPTkDownload()
 
     var body: some View {
-        let selection = Binding<String>(
-            get: { store.activeD3DMetal ?? "" },
-            set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
-        )
-        SettingsRow(caption: caption, isWarning: d3dMetalError != nil && !isAddingD3DMetal) {
-            if isAddingD3DMetal {
-                ProgressView().controlSize(.small)
+        SettingsPicker(
+            title: "D3DMetal", caption: caption,
+            state: .failure(ifPresent: isAddingD3DMetal ? nil : d3dMetalError),
+            isWorking: isAddingD3DMetal,
+            selection: Binding<String>(
+                get: { store.activeD3DMetal ?? "" },
+                set: { store.chooseD3DMetal(version: $0.isEmpty ? nil : $0) },
+            ),
+        ) {
+            if store.engineHasOwnD3DMetal {
+                Text("CrossOver\u{2019}s own").tag("")
+            } else if store.d3dMetalVersions.isEmpty {
+                Text("None added").tag("")
             }
-            Picker("D3DMetal", selection: selection) {
-                if store.engineHasOwnD3DMetal {
-                    Text("CrossOver's own").tag("")
-                } else if store.d3dMetalVersions.isEmpty {
-                    Text("None added").tag("")
-                }
-                ForEach(store.d3dMetalVersions, id: \.version) { entry in
-                    Text(entry.version).tag(entry.version)
-                }
+            ForEach(store.d3dMetalVersions, id: \.version) { entry in
+                Text(entry.version).tag(entry.version)
             }
-            .endsOnControlLine()
-            .disabled(isAddingD3DMetal || (store.d3dMetalVersions.isEmpty && !store.engineHasOwnD3DMetal))
         } accessory: {
             actionsMenu
         }
-        .sheet(isPresented: $showingGPTkDownload) { gptkDownloadSheet }
+        .disabled(isAddingD3DMetal)
+        .sheet(isPresented: $showingGPTkDownload) {
+            SettingsSheet(isBusy: gptk.isBusy) { showingGPTkDownload = false } content: {
+                GPTkDownloadPanel(
+                    download: gptk,
+                    install: { url, origin in await store.installD3DMetal(from: url, origin: origin, choosing: false) },
+                    isSimulated: store.isSimulated,
+                )
+            }
+        }
     }
 
-    /// What the toolkit is doing, what went wrong, or what adding one buys.
+    /// What the toolkit is doing, or what adding one buys.
     private var caption: String {
         if isAddingD3DMetal { return String(localized: "Installing the toolkit…") }
-        if let d3dMetalError { return d3dMetalError }
         guard store.d3dMetalVersions.isEmpty else { return "" }
         return store.engineHasOwnD3DMetal
             ? String(localized: "CrossOver ships the version it supports. Add a newer one from Apple to replace it.")
@@ -166,7 +162,7 @@ private struct D3DMetalRow: View {
 
     /// Apple's download, a disk image, and removal of the chosen version.
     private var actionsMenu: some View {
-        Menu {
+        SettingsAccessoryMenu {
             Button("Get It from Apple…") { showingGPTkDownload = true }
             Button("Add from a Disk Image…") { addD3DMetal() }
             if let removable = removableD3DMetal {
@@ -175,15 +171,7 @@ private struct D3DMetalRow: View {
                     confirmingD3DMetalRemoval = true
                 }
             }
-        } label: {
-            Label("More actions", systemImage: "ellipsis.circle")
-                .labelStyle(.iconOnly)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More actions")
-        .disabled(isAddingD3DMetal)
         .confirmationDialog(
             "Remove D3DMetal \(removableD3DMetal ?? "")?",
             isPresented: $confirmingD3DMetalRemoval,
@@ -206,28 +194,6 @@ private struct D3DMetalRow: View {
               store.d3dMetalVersions.contains(where: { $0.version == active })
         else { return nil }
         return active
-    }
-
-    /// Apple's download page, in-app: the user signs in, and the toolkits
-    /// install straight into the engine.
-    private var gptkDownloadSheet: some View {
-        VStack(spacing: 0) {
-            GPTkDownloadPanel(
-                download: gptk,
-                install: { url, origin in await store.installD3DMetal(from: url, origin: origin, choosing: false) },
-                isSimulated: store.isSimulated,
-            )
-            .padding(16)
-            Divider()
-            HStack {
-                Spacer()
-                Button("Done") { showingGPTkDownload = false }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(gptk.isBusy)
-            }
-            .padding(16)
-        }
-        .frame(width: 760, height: 820)
     }
 
     private func addD3DMetal() {
@@ -255,34 +221,40 @@ private struct ShaderPackagesSection: View {
 
     var body: some View {
         let isBusy = shaders.busy != nil
-        Section {
+        SettingsSection(
+            title: "Upscalers", anchor: .graphicsShaders, help: .upscalerPackages,
+            footer: "For games drawn at low resolution: pixel art, anime, visual novels.",
+        ) {
             ForEach(shaders.installed) { package in
-                InstalledShaderRow(package: package, isBusy: isBusy) {
-                    removingShaderPackage = package
+                ShaderPackageRow(
+                    title: package.title, version: package.manifest.version, license: package.manifest.license,
+                    description: package.manifest.description, content: package.manifest.content,
+                    source: package.manifest.source,
+                ) {
+                    Button("Remove…") { removingShaderPackage = package }
+                        .disabled(isBusy)
                 }
             }
             ForEach(shaders.downloadable) { entry in
-                DownloadableShaderRow(entry: entry, isBusy: isBusy) {
-                    Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
+                ShaderPackageRow(
+                    title: entry.title, version: entry.version, license: entry.license,
+                    description: entry.description, content: entry.content, source: entry.source,
+                ) {
+                    Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download") {
+                        Task(name: "Fetch shader package \(entry.name)") { await shaders.install(entry) }
+                    }
+                    .disabled(isBusy)
                 }
             }
             if shaders.installed.isEmpty, shaders.downloadable.isEmpty {
-                Text(shaders.catalogLoaded
-                    ? "No packages installed. The download catalog is unreachable."
-                    : "Looking…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                SettingsMessage(
+                    text: shaders.catalogLoaded
+                        ? "No packages installed. The download catalog is unreachable." : "Looking…",
+                )
             }
             ShaderFetchStatus(shaders: shaders)
-        } header: {
-            HStack(spacing: 6) {
-                Text("Upscalers")
-                SettingHelpButton(help: .upscalerPackages)
-            }
-        } footer: {
-            Text("For games drawn at low resolution: pixel art, anime, visual novels.")
         }
-        .highlightable(.graphicsShaders, highlighted: highlighted)
+        .highlightableSection(.graphicsShaders, highlighted: highlighted)
         .confirmationDialog(
             "Remove \(removingShaderPackage?.title ?? "")?",
             isPresented: Binding(
@@ -300,44 +272,9 @@ private struct ShaderPackagesSection: View {
     }
 }
 
-private struct InstalledShaderRow: View {
-    let package: ShaderPackages.Package
-    let isBusy: Bool
-    let remove: () -> Void
-
-    var body: some View {
-        ShaderPackageRow(
-            title: package.title,
-            version: package.manifest.version,
-            license: package.manifest.license,
-            description: package.manifest.description,
-            content: package.manifest.content,
-            source: package.manifest.source,
-        ) {
-            Button("Remove…", action: remove)
-                .disabled(isBusy)
-        }
-    }
-}
-
-private struct DownloadableShaderRow: View {
-    let entry: ShaderPackages.Available
-    let isBusy: Bool
-    let download: () -> Void
-
-    var body: some View {
-        ShaderPackageRow(
-            title: entry.title, version: entry.version, license: entry.license,
-            description: entry.description, content: entry.content, source: entry.source,
-        ) {
-            Button(entry.size.map { "Download (\(StorageSettings.size($0)))" } ?? "Download", action: download)
-                .disabled(isBusy)
-        }
-    }
-}
-
-/// A package: its title, version and license, its one button, the project's
-/// website, and its description (or its contents when the description is empty).
+/// A package: its title, its version and license, its one button, the
+/// project's website, and its description (or its contents when the
+/// description is empty).
 private struct ShaderPackageRow<Action: View>: View {
     let title: String
     let version: String
@@ -352,37 +289,19 @@ private struct ShaderPackageRow<Action: View>: View {
     }
 
     var body: some View {
-        SettingsRow(caption: InterfaceCopy.localized(summary)) {
-            LabeledContent {
-                action
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
-                    Text(title)
-                    Text("\(version) · \(license)")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
+        SettingsAction(title: "\(title)", caption: InterfaceCopy.localized(summary)) {
+            SettingsValueText(text: "\(version) · \(license)")
+            action
         } accessory: {
-            if let source { ShaderProjectLink(source: source) }
+            if let source {
+                SettingsAccessoryLink(label: "Project website", destination: source)
+            }
         }
-    }
-}
-
-private struct ShaderProjectLink: View {
-    let source: URL
-
-    var body: some View {
-        Link(destination: source) {
-            Label("Project website", systemImage: "arrow.up.right.square")
-                .labelStyle(.iconOnly)
-        }
-        .help("Project website")
     }
 }
 
 /// One renderer's version picker (the engine's own, then every added version),
-/// its fetch menu, and Reset.
+/// and its menu: the feed's releases, a release from disk, Reset and removal.
 private struct RendererVersionRow: View {
     let store: GraphicsStore
     let component: RendererVersions.Component
@@ -392,44 +311,37 @@ private struct RendererVersionRow: View {
         store.rendererVersions[component] ?? .init()
     }
 
-    private var selection: Binding<String> {
-        Binding(
-            get: { state.chosen ?? "" },
-            set: { store.chooseRendererVersion(component, version: $0.isEmpty ? nil : $0) },
-        )
-    }
-
     var body: some View {
-        SettingsRow(caption: caption, isWarning: state.error != nil && state.busy == nil) {
-            if state.busy != nil {
-                ProgressView().controlSize(.small)
+        SettingsPicker(
+            title: "\(component.label)", caption: caption,
+            state: .failure(ifPresent: state.busy == nil ? state.error : nil),
+            isWorking: state.busy != nil,
+            selection: Binding(
+                get: { state.chosen ?? "" },
+                set: { store.chooseRendererVersion(component, version: $0.isEmpty ? nil : $0) },
+            ),
+        ) {
+            Text(state.defaultVersion.map { "Engine\u{2019}s own (\($0))" } ?? "Engine\u{2019}s own").tag("")
+            ForEach(state.installed) { entry in
+                Text(entry.version).tag(entry.version)
             }
-            Picker(component.label, selection: selection) {
-                Text(state.defaultVersion.map { "Engine's own (\($0))" } ?? "Engine's own").tag("")
-                ForEach(state.installed) { entry in
-                    Text(entry.version).tag(entry.version)
-                }
-            }
-            .endsOnControlLine()
-            .disabled(state.busy != nil)
         } accessory: {
             actionsMenu
         }
+        .disabled(state.busy != nil)
     }
 
-    /// What the row is doing, what went wrong, or the release it could move to.
+    /// What the row is doing, or the release it could move to.
     private var caption: String {
         if let busy = state.busy { return busy }
-        if let error = state.error { return error }
         guard let newer = state.newer else { return "" }
         return newer.tested
             ? String(localized: "\(newer.version) is available and tested with this engine.")
             : String(localized: "\(newer.version) is available and untested here.")
     }
 
-    /// The feed's releases, a release from disk, Reset and removal.
     private var actionsMenu: some View {
-        Menu {
+        SettingsAccessoryMenu {
             Section("Download") {
                 if state.downloadable.isEmpty {
                     Text(state.releasesLoaded ? "No newer versions available" : "Looking…")
@@ -443,20 +355,12 @@ private struct RendererVersionRow: View {
             Button("Add from Folder or Archive…") { addFromDisk() }
             if let chosen = state.chosen {
                 Divider()
-                Button("Reset to Engine's Own") {
+                Button("Reset to Engine\u{2019}s Own") {
                     store.chooseRendererVersion(component, version: nil)
                 }
                 Button("Remove \(chosen)…", role: .destructive) { confirmingRemoval = true }
             }
-        } label: {
-            Label("More actions", systemImage: "ellipsis.circle")
-                .labelStyle(.iconOnly)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More actions")
-        .disabled(state.busy != nil)
         .confirmationDialog(
             "Remove \(component.label) \(state.chosen ?? "")?",
             isPresented: $confirmingRemoval, titleVisibility: .visible,
@@ -468,7 +372,7 @@ private struct RendererVersionRow: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The engine's built-in version is used.")
+            Text("The engine\u{2019}s built-in version is used.")
         }
     }
 
