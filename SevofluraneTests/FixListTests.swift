@@ -355,6 +355,30 @@ struct FixListTests {
         #expect(list.fixes.map(\.title) == ["Spacewar"])
     }
 
+    /// What `publish/sevostats-fixes.py build` wrote from one fix row and one
+    /// suggestion the server computed (Probably Stolen's counts), byte for
+    /// byte but for the issue time.
+    private static let builderWritten = Data(#"""
+    {"fixes":[{"appid":787480,"id":7,"reason":"D3DMetal crashes at the title screen.","title":"Use DXMT","values":{"renderer":"dxmt"}}],"issued":"2026-10-06T00:00:00Z","serial":4,"suggested":[{"appid":4348910,"evidence":{"macs":2,"with":{"failed":0,"runs":6},"without":{"failed":11,"runs":15,"values":{"renderer":"d3dmetal"}}},"reason":"Across 2 Macs, 11 of 15 runs with D3DMetal ended in a crash, a freeze or an error while starting, and 0 of 6 with DXMT.","title":"Renderer DXMT in place of D3DMetal","values":{"renderer":"dxmt"}}]}
+    """#.utf8)
+
+    @Test
+    func `the list the admin's builder writes is taken whole, the suggestion with its evidence`() throws {
+        let list = try Self.taken(Self.builderWritten)
+        #expect(list.serial == 4)
+        #expect(list.fixes.map(\.title) == ["Use DXMT"])
+        let suggestion = try #require(list.suggested.first)
+        #expect(list.suggested.count == 1)
+        #expect(suggestion.fix.appID == 4_348_910)
+        #expect(suggestion.fix.values == ConfigValues(renderer: .dxmt))
+        #expect(suggestion.fix.title == "Renderer DXMT in place of D3DMetal")
+        #expect(suggestion.evidence.macs == 2)
+        #expect(suggestion.evidence.without == FixEvidence.Side(
+            values: ConfigValues(renderer: .d3dmetal), runs: 15, failed: 11,
+        ))
+        #expect(suggestion.evidence.with == FixEvidence.Side(values: nil, runs: 6, failed: 0))
+    }
+
     /// The list's decoding as v1.1.0-beta.1 through v1.15.2 shipped it
     /// (`Core/Config/FixList.swift`, `Listing`, `Entry`, `Served`), kept here to
     /// show what an installed app makes of a list that carries `suggested`.
