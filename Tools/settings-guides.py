@@ -25,7 +25,7 @@ SAME = 3
 # Elements on a title line closer than this are one element (a word gap is 4 pt).
 ELEMENT_GAP = 9.0
 # A row's edge is off its pane's line beyond this.
-OFF_LINE = 1.0
+OFF_LINE = 1.5
 
 
 @dataclass
@@ -47,8 +47,9 @@ class Row:
     widest_under: float
 
     @property
-    def left(self) -> float:
-        return self.elements[0].left
+    def left(self) -> float | None:
+        """The title's left edge; a row that is only a control has none."""
+        return self.elements[0].left if self.elements[0].kind == "title" else None
 
     @property
     def accessory(self) -> Element | None:
@@ -57,7 +58,8 @@ class Row:
 
     @property
     def control(self) -> Element | None:
-        rest = self.elements[1:-1] if self.accessory else self.elements[1:]
+        rest = self.elements[:-1] if self.accessory else self.elements
+        rest = rest[1:] if self.left is not None else rest
         return rest[-1] if rest else None
 
 
@@ -117,33 +119,36 @@ def measure(path: Path) -> tuple[Pane, Image.Image]:
     is_background = (np.abs(pixels - background).max(axis=2) <= SAME)
     card_color = most_common(pixels[~is_background].reshape(-1, 3))
     is_card = (np.abs(pixels - card_color).max(axis=2) <= SAME)
-    content = ~is_background & ~is_card
+    outside_content = ~is_background & ~is_card
 
     # A card's body: scanlines whose pixels a little inside both edges are card-colored.
     columns = np.flatnonzero(is_card.sum(axis=0) > 0.1 * is_card.sum(axis=0).max())
     card_left, card_right = int(columns.min()), int(columns.max()) + 1
     pane.card_left, pane.card_right = card_left / scale, card_right / scale
+    # Inside a card anything off the card's color is content, a white switch knob included.
+    # Rows are read inside the card's padding, clear of its rounded corners.
+    inner_left, inner_right = card_left + int(6 * scale), card_right - int(6 * scale)
     probe = int(3 * scale)
     in_card = is_card[:, card_left + probe] & is_card[:, card_right - 1 - probe]
     # Content can reach neither probe column, so short gaps inside a card are rows of it.
     cards = merge(runs(in_card), gap=2 * scale)
     cards = [(top, bottom) for top, bottom in cards if bottom - top > 12 * scale]
 
-    inner_width = card_right - card_left
+    inner_width = inner_right - inner_left
     for index, (top, bottom) in enumerate(cards):
-        body = content[top:bottom, card_left:card_right]
+        body = ~is_card[top:bottom, inner_left:inner_right]
         # A separator: a line of content most of the card wide and at most 1.5 pt tall.
         separators = [
             span for span in runs(body.sum(axis=1) > 0.8 * inner_width) if span[1] - span[0] <= 1.5 * scale
         ]
         edges = [0] + [edge for span in separators for edge in span] + [bottom - top]
         for row_top, row_bottom in zip(edges[::2], edges[1::2]):
-            row = measure_row(body[row_top:row_bottom], index, top + row_top, card_left, scale)
+            row = measure_row(body[row_top:row_bottom], index, top + row_top, inner_left, scale)
             if row:
                 pane.rows.append(row)
 
     # Headers and footers: text on the background between cards.
-    outside = content.copy()
+    outside = outside_content.copy()
     for top, bottom in cards:
         outside[top:bottom] = False
     for top, bottom in merge(runs(outside.any(axis=1)), gap=1 * scale):
@@ -212,7 +217,7 @@ def line_of(values: list[float]) -> float | None:
 
 def lines_of(pane: Pane) -> dict[str, float | None]:
     return {
-        "left": line_of([row.left for row in pane.rows]),
+        "left": line_of([row.left for row in pane.rows if row.left is not None]),
         "control": line_of([row.control.right for row in pane.rows if row.control]),
         "accessory": line_of(
             [(row.accessory.left + row.accessory.right) / 2 for row in pane.rows if row.accessory]
@@ -232,7 +237,7 @@ def annotate(pane: Pane, image: Image.Image, lines: dict[str, float | None], out
     for row in pane.rows:
         y = row.title_center * scale
         draw.line([(pane.card_left * scale, y), (pane.card_right * scale, y)], fill=(0, 0, 0, 40), width=1)
-        marks = [("left", row.left)]
+        marks = [("left", row.left)] if row.left is not None else []
         if row.control:
             marks.append(("control", row.control.right))
         if row.accessory:
@@ -242,8 +247,9 @@ def annotate(pane: Pane, image: Image.Image, lines: dict[str, float | None], out
             fill = (255, 0, 200, 255) if off else colors[name]
             draw.line([(x * scale, y - 7 * scale), (x * scale, y + 7 * scale)], fill=fill, width=3 if off else 2)
         if row.lines_under > 1:
+            edge = row.elements[0].left * scale
             draw.rectangle(
-                [(row.left * scale - 6, y + 8 * scale), (row.left * scale - 3, y + (8 + 14 * row.lines_under) * scale)],
+                [(edge - 6, y + 8 * scale), (edge - 3, y + (8 + 14 * row.lines_under) * scale)],
                 fill=(255, 0, 200, 255),
             )
     image.save(out)
@@ -295,7 +301,7 @@ def main() -> None:
         off = sum(
             1
             for row in pane.rows
-            if (lines["left"] is not None and abs(row.left - lines["left"]) > OFF_LINE)
+            if (row.left is not None and lines["left"] is not None and abs(row.left - lines["left"]) > OFF_LINE)
             or (row.control and lines["control"] is not None and abs(row.control.right - lines["control"]) > OFF_LINE)
             or (
                 row.accessory
