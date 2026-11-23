@@ -27,11 +27,22 @@ nonisolated struct SteamUIBundle: Sendable {
     let styles: [File]
     /// The client's UI build number (`changelist.txt`), when the folder has one.
     let version: String?
+    /// The page that loads the scripts (`index.html`), when the folder has one.
+    let page: File?
+    /// The bundler the UI is built with, nil when the files show neither.
+    let build: SteamSurface.Build?
 
-    init(scripts: [File], styles: [File] = [], version: String? = nil) {
+    init(scripts: [File], styles: [File] = [], version: String? = nil, page: File? = nil) {
         self.scripts = scripts
         self.styles = styles
         self.version = version
+        self.page = page
+        // A webpack build names its registry in every chunk; a page of ES modules loads an entry script.
+        if scripts.contains(where: { $0.contains(SteamSurface.webpackRegistry) }) {
+            build = .webpack
+        } else {
+            build = Self.entry(of: page, in: scripts) == nil ? nil : .modules
+        }
     }
 
     /// A made-up bundle of one script, for tests.
@@ -63,11 +74,15 @@ nonisolated struct SteamUIBundle: Sendable {
         }
         guard !scripts.isEmpty else { throw LoadFailure.noScripts(folder.path) }
         let changelist = try? String(contentsOf: folder.appendingPathComponent("changelist.txt"), encoding: .utf8)
+        let page = (try? Data(contentsOf: folder.appendingPathComponent(Self.pageName)))
+            .map { File(path: Self.pageName, bytes: ContiguousArray($0)) }
         self.init(
             scripts: scripts, styles: styles,
-            version: changelist?.trimmingCharacters(in: .whitespacesAndNewlines),
+            version: changelist?.trimmingCharacters(in: .whitespacesAndNewlines), page: page,
         )
     }
+
+    private static let pageName = "index.html"
 
     /// String tables, 60 MB of them, which name nothing the app depends on.
     private static let localization = "localization/"
@@ -167,9 +182,26 @@ nonisolated extension SteamUIBundle.File {
     /// each as written, and the offset just past its `)`. Nil when the call
     /// does not close within ``callWindow`` bytes.
     func arguments(from start: Int) -> (list: [String], end: Int)? {
+        guard let (pieces, end) = argumentRanges(from: start) else { return nil }
+        var list = pieces.map { text($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        if list.count == 1, list[0].isEmpty { list = [] }
+        return (list, end)
+    }
+
+    /// Where each top-level argument of the call whose `(` ends just before
+    /// `start` begins and ends, leading spaces left out.
+    func argumentOffsets(from start: Int) -> [Range<Int>]? {
+        argumentRanges(from: start)?.pieces.map { range in
+            var lower = range.lowerBound
+            while lower < range.upperBound, bytes[lower] == UInt8(ascii: " ") { lower += 1 }
+            return lower ..< range.upperBound
+        }
+    }
+
+    private func argumentRanges(from start: Int) -> (pieces: [Range<Int>], end: Int)? {
         var depth = 0
         var quote: UInt8?
-        var pieces: [String] = []
+        var pieces: [Range<Int>] = []
         var pieceStart = start
         var index = start
         let limit = min(bytes.count, start + Self.callWindow)
@@ -184,13 +216,12 @@ nonisolated extension SteamUIBundle.File {
                 depth += 1
             } else if byte == UInt8(ascii: ")") || byte == UInt8(ascii: "]") || byte == UInt8(ascii: "}") {
                 if depth == 0 {
-                    let last = text(pieceStart ..< index).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !last.isEmpty || !pieces.isEmpty { pieces.append(last) }
+                    pieces.append(pieceStart ..< index)
                     return (pieces, index + 1)
                 }
                 depth -= 1
             } else if byte == UInt8(ascii: ","), depth == 0 {
-                pieces.append(text(pieceStart ..< index).trimmingCharacters(in: .whitespacesAndNewlines))
+                pieces.append(pieceStart ..< index)
                 pieceStart = index + 1
             }
             index += 1
@@ -275,5 +306,143 @@ nonisolated extension SteamUIBundle.File {
             index = valueEnd + 1
         }
         return (keys, upper - lower + 1)
+    }
+}
+
+// MARK: - The build
+
+nonisolated extension SteamUIBundle {
+    /// The script the page loads as an ES module, the root of everything a
+    /// build of ES modules runs.
+    var entry: File? {
+        Self.entry(of: page, in: scripts)
+    }
+
+    private static func entry(of page: File?, in scripts: [File]) -> File? {
+        guard let page else { return nil }
+        for offset in page.offsets(ofQuoted: "type=\"module\"") {
+            // The tag's `src`, before or after its type.
+            let tag = page.text(offset - 300 ..< offset + 300)
+            for source in tag.matches(of: #/src=["']\/?([^"'?]+)/#) {
+                if let script = scripts.first(where: { $0.path == String(source.1) }) { return script }
+            }
+        }
+        return nil
+    }
+}
+
+nonisolated extension SteamUIBundle.File {
+    /// The chunks an ES module names: those its `import` statements load
+    /// before it runs, and those it loads on demand.
+    var chunkLinks: (imported: [String], onDemand: [String]) {
+        var imported: [String] = []
+        var named: [String] = []
+        for offset in offsets(ofQuoted: "\"./") {
+            var end = offset + 1
+            while end < bytes.count, end < offset + 200, !Self.isQuote(bytes[end]) { end += 1 }
+            guard end < bytes.count, bytes[end] == bytes[offset] else { continue }
+            let link = text(offset + 1 ..< end)
+            guard link.split(separator: "?").first?.hasSuffix(".js") == true else { continue }
+            // `from"./x.js"` and `import"./x.js"` are statements; `import("./x.js")` loads on demand.
+            let before = text(offset - 8 ..< offset).trimmingCharacters(in: .whitespaces)
+            if before.hasSuffix("from") || before.hasSuffix("import") {
+                if !imported.contains(link) { imported.append(link) }
+            } else if !named.contains(link) {
+                named.append(link)
+            }
+        }
+        let onDemand = named.filter { !imported.contains($0) }
+        return (imported, onDemand)
+    }
+}
+
+// MARK: - Reading a class from a chunk's text
+
+nonisolated extension SteamUIBundle.File {
+    /// The class `recipe` names in this file, nil when the file lacks the
+    /// recipe's tokens or the code beside them has another shape.
+    func className(for recipe: SteamSurface.ClassRecipe) -> String? {
+        let marker = "className:"
+        for anchor in offsets(of: recipe.anchor) {
+            if !recipe.beside.isEmpty {
+                let lower = max(0, anchor - recipe.reach)
+                let upper = min(bytes.count, anchor + recipe.anchor.utf8.count + recipe.reach)
+                guard search(recipe.beside, in: lower ..< upper, backwards: false) != nil else { continue }
+            }
+            var cursor: Int? = anchor
+            for _ in 0 ... recipe.skip {
+                guard let from = cursor else { break }
+                cursor = recipe.after
+                    ? search(marker, in: from + 1 ..< bytes.count, backwards: false)
+                    : search(marker, in: 0 ..< from, backwards: true)
+            }
+            guard let cursor else { return nil }
+            return classValue(at: cursor + marker.utf8.count, argument: recipe.argument, depth: 0)
+        }
+        return nil
+    }
+
+    /// The class the expression at `offset` names: a literal, a constant
+    /// read at its nearest definition before `offset`, or one argument of a call.
+    private func classValue(at offset: Int, argument: Int, depth: Int) -> String? {
+        guard depth < Self.classDepth, offset >= 0, offset < bytes.count else { return nil }
+        if Self.isQuote(bytes[offset]) {
+            var end = offset + 1
+            while end < bytes.count, bytes[end] != bytes[offset] { end += 1 }
+            let literal = text(offset + 1 ..< end)
+            let isClass = !literal.isEmpty && literal.utf8.allSatisfy { Self.isName($0, [UInt8(ascii: "-")]) }
+            return isClass ? literal : nil
+        }
+        var end = offset
+        while end < bytes.count, Self.isName(bytes[end]) { end += 1 }
+        guard end > offset, end < bytes.count else { return nil }
+        if bytes[end] == UInt8(ascii: "(") {
+            guard let pieces = argumentOffsets(from: end + 1), !pieces.isEmpty else { return nil }
+            let index = argument >= 0 ? argument : pieces.count + argument
+            guard pieces.indices.contains(index) else { return nil }
+            // `shown&&X` names X.
+            let piece = pieces[index]
+            let shown = search("&&", in: piece, backwards: true)
+            return classValue(at: shown.map { $0 + 2 } ?? piece.lowerBound, argument: 0, depth: depth + 1)
+        }
+        guard let defined = definition(of: text(offset ..< end), before: offset) else { return nil }
+        return classValue(at: defined, argument: argument, depth: depth + 1)
+    }
+
+    /// How many constants and calls a class may be read through.
+    private static let classDepth = 5
+
+    /// The offset just past `name=` at the nearest assignment before `offset`.
+    private func definition(of name: String, before offset: Int) -> Int? {
+        let needle = name + "="
+        var limit = offset
+        while let found = search(needle, in: 0 ..< limit, backwards: true) {
+            let after = found + needle.utf8.count
+            let previous = found > 0 ? bytes[found - 1] : UInt8(ascii: " ")
+            let isAssignment = after < bytes.count && bytes[after] != UInt8(ascii: "=")
+            if isAssignment, !Self.isName(previous), previous != UInt8(ascii: ".") { return after }
+            limit = found
+        }
+        return nil
+    }
+
+    /// The first or last place `needle` lies wholly inside `range`.
+    private func search(_ needle: String, in range: Range<Int>, backwards: Bool) -> Int? {
+        let pattern = Array(needle.utf8)
+        let lower = max(0, range.lowerBound)
+        let upper = min(bytes.count, range.upperBound)
+        guard !pattern.isEmpty, upper - lower >= pattern.count else { return nil }
+        return bytes.withUnsafeBufferPointer { haystack -> Int? in
+            let last = upper - pattern.count
+            var index = backwards ? last : lower
+            while index >= lower, index <= last {
+                if haystack[index] == pattern[0],
+                   (1 ..< pattern.count).allSatisfy({ haystack[index + $0] == pattern[$0] }) {
+                    return index
+                }
+                index += backwards ? -1 : 1
+            }
+            return nil
+        }
     }
 }

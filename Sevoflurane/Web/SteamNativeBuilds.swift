@@ -48,110 +48,22 @@ enum SteamNativeBuilds {
     /// game with a macOS build (the last game asked of the details store).
     ///
     /// The test is found as the export true for `linux` and false for
-    /// `windows` and `macos`; the component by the page's localization key.
-    /// If either is missing only the Properties page is lost, as the result
-    /// says.
-    static let contextScript = """
-    (function () {
+    /// `windows` and `macos`; the component by the page's localization key
+    /// (``SteamPageResolver``). If either is missing only the Properties
+    /// page is lost, as the result says.
+    static let contextScript = "(function () {\n" + SteamPageResolver.source + context + "\n})()"
+
+    private static let context = """
       var lib = window.__sevoNativeBuilds;
       if (lib) { lib.enabled = true; return "reapplied"; }
-      if (!window.webpackChunksteamui || !window.appDetailsStore) return "waiting";
-      var req = null;
-      try { webpackChunksteamui.push([["sevo-native-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) {}
-      if (!req || !req.m) return "waiting";
-    
-      var PLATFORMS = ["windows", "macos", "linux"];
-      var LABEL = '"#AppProperties_CompatibilityPage"';
-    
-      function eachExport(exports, visit) {
-        if (!exports || typeof exports !== "object") return;
-        Object.keys(exports).forEach(function (key) {
-          var value;
-          try { value = exports[key]; } catch (e) { return; }
-          visit(value);
-        });
-      }
-    
-      /* Steam's Linux test and the config object it reads, from the small
-         modules that read the platform. */
-      function linuxTest() {
-        var modules = [];
-        for (var id in req.m) {
-          var source = String(req.m[id]);
-          if (source.length < 20000 && source.indexOf("PLATFORM") !== -1) {
-            try { modules.push(req(id)); } catch (e) {}
-          }
-        }
-        var configs = [];
-        modules.forEach(function (exports) {
-          eachExport(exports, function (value) {
-            if (value && typeof value === "object" && PLATFORMS.indexOf(value.PLATFORM) !== -1 && configs.indexOf(value) === -1) configs.push(value);
-          });
-        });
-        for (var c = 0; c < configs.length; c++) {
-          var config = configs[c], real = config.PLATFORM, found = null;
-          var answers = function (test, platform) {
-            config.PLATFORM = platform;
-            try { return test() === true; } catch (e) { return null; } finally { config.PLATFORM = real; }
-          };
-          modules.forEach(function (exports) {
-            eachExport(exports, function (value) {
-              if (found || typeof value !== "function" || value.length !== 0 || !value.name) return;
-              var source = String(value);
-              if (source.length > 200 || source.indexOf("PLATFORM") === -1) return;
-              if (answers(value, "linux") === true && answers(value, "windows") === false && answers(value, "macos") === false) found = value.name;
-            });
-          });
-          if (found) return { config: config, name: found };
-        }
-        return null;
-      }
-    
-      /* The function that owns the code at `at`: the walk out to the block
-         around it, then that block's head. */
-      function enclosingName(source, at) {
-        for (var i = at, depth = 0; i >= 0; i--) {
-          var ch = source.charAt(i);
-          if (ch === "}") depth++;
-          else if (ch === "{" && depth > 0) depth--;
-          else if (ch === "{") {
-            var head = source.slice(Math.max(0, i - 160), i);
-            var hit = head.match(/function\\s*([\\w$]+)\\s*\\([^()]*\\)\\s*$/)
-              || head.match(/([\\w$]+)\\s*=\\s*(?:async\\s*)?(?:function\\s*[\\w$]*\\s*)?\\([^()]*\\)\\s*(?:=>\\s*)?$/)
-              || head.match(/([\\w$]+)\\s*=\\s*(?:async\\s*)?[\\w$]+\\s*=>\\s*$/);
-            if (hit) return hit[1];
-          }
-        }
-        return null;
-      }
-    
-      function nearestFunction(source, at) {
-        var start = source.lastIndexOf("function ", at);
-        var hit = start === -1 ? null : source.slice(start, start + 64).match(/^function\\s*([\\w$]+)\\s*\\(/);
-        return hit ? hit[1] : null;
-      }
-    
-      /* Every function that may list the page. Two readings of each owner,
-         so a brace inside a string that misleads the walk still leaves the
-         other; a name only counts when the stack shows it calling the test. */
-      function pageListers() {
-        var names = [];
-        for (var id in req.m) {
-          var source = String(req.m[id]);
-          for (var at = source.indexOf(LABEL); at !== -1; at = source.indexOf(LABEL, at + 1)) {
-            [enclosingName(source, at), nearestFunction(source, at)].forEach(function (name) {
-              if (name && names.indexOf(name) === -1) names.push(name);
-            });
-          }
-        }
-        return names;
-      }
+      var steam = steamSurface(window);
+      if (!window.appDetailsStore || !steam.ready()) return "waiting";
     
       /* Lists the page, or says why it cannot. */
       function listPage() {
-        var test = linuxTest();
+        var test = steam.platformTest();
         if (!test) return "no exported function answers as the Linux test";
-        var names = pageListers();
+        var names = steam.pageListers();
         if (!names.length) return "no function holds the page's label";
         var descriptor = Object.getOwnPropertyDescriptor(test.config, "PLATFORM");
         if (!descriptor || !descriptor.configurable || !("value" in descriptor)) return "the platform is not a plain property";
@@ -202,7 +114,6 @@ enum SteamNativeBuilds {
       lib = window.__sevoNativeBuilds = { enabled: true, page: false };
       var missing = listPage();
       return missing ? "installed without the Compatibility page: " + missing : "installed";
-    })()
     """
 
     /// Turns the context half off: Steam's own rule lists the Compatibility
@@ -219,7 +130,7 @@ enum SteamNativeBuilds {
 
     /// The desktop window's half: the install menu and the play bar's Version
     /// entry. Idempotent and self-reapplying, like ``SteamCompatBadge``.
-    static let script = "(function () {\n" + platformGlyphs + text + desktop + "\n})()"
+    static let script = "(function () {\n" + SteamPageResolver.source + platformGlyphs + text + desktop + "\n})()"
 
     /// The menu's localized progress and failure lines.
     private static var text: String {
@@ -289,6 +200,7 @@ enum SteamNativeBuilds {
       var NAMES = { macos: "macOS version", windows: "Windows version" };
       var SHORT = { macos: "macOS", windows: "Windows" };
       var answers = {};
+      var steam = steamSurface(ctx);
       var classes = null;
       var menu = null;
     
@@ -297,27 +209,10 @@ enum SteamNativeBuilds {
           .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       }
     
-      /* The play bar's class modules, found by their semantic keys like the
-         compat strip's. */
+      /* Steam's classes for the Play button, the play bar and its compact
+         button. */
       function resolve() {
-        if (classes) return classes;
-        var chunk = ctx.webpackChunksteamui;
-        if (!chunk || typeof chunk.push !== "function") return null;
-        var req = null;
-        try { chunk.push([["sevo-native-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) { return null; }
-        if (!req || !req.m) return null;
-        var found = {};
-        for (var id in req.m) {
-          var source = String(req.m[id]);
-          if (source.length > 20000) continue;
-          try {
-            if (!found.play && source.indexOf('PlayButtonContainer:"') !== -1 && source.indexOf('StreamingSelector:"') !== -1) found.play = req(id);
-            if (!found.bar && source.indexOf('ActionSection:"') !== -1 && source.indexOf('GameStatsSection:"') !== -1) found.bar = req(id);
-            if (!found.button && source.indexOf('AppDetailsButton:"') !== -1) found.button = req(id);
-          } catch (e) {}
-        }
-        if (!found.play || !found.bar || !found.play.PlayButton || !found.bar.GameStatsSection) return null;
-        classes = found;
+        if (!classes) classes = steam.classes(["play", "bar"], ["button"]);
         return classes;
       }
     

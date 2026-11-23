@@ -26,9 +26,10 @@ nonisolated enum SteamSurface {
         case global
         /// A property or method of one of Steam's objects.
         case member
-        /// A CSS-module class map, found through webpack by its keys.
+        /// A CSS-module class map: found through webpack by its keys, or
+        /// read class by class from the text of a build of ES modules.
         case classMap
-        /// Text by which a webpack module is found.
+        /// Text by which one of Steam's modules is found.
         case marker
         /// A class name Steam's markup carries unhashed.
         case cssClass
@@ -83,9 +84,14 @@ nonisolated enum SteamSurface {
         /// The name, standing alone. With `passes`, a definition that takes
         /// that many arguments.
         case identifier(passes: Int?)
-        /// A class map holding every `signature` key, in a module no longer
-        /// than `limit` characters, with every one of the entry's tokens.
-        case classMap(signature: [String], limit: Int)
+        /// A class map. On a webpack build, an object holding every
+        /// `signature` key and every one of `keys`, in a module no longer
+        /// than `limit` characters. On a build of ES modules, what `modules`
+        /// says; nil there means the app has no way to the classes.
+        case classMap(signature: [String], keys: [String], limit: Int, modules: ModulesAnchor? = nil)
+        /// The way to Steam's modules: webpack's registry on `window`, or
+        /// the entry script a page of ES modules loads and what it imports.
+        case moduleRegistry
         /// Every one of these texts, somewhere in the scripts.
         case text([String])
         /// The class, in a style sheet or a script.

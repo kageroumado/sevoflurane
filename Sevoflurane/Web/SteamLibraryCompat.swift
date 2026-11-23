@@ -10,7 +10,7 @@ import Foundation
 /// window's script (``script``) draws the badges and the chip from it.
 ///
 /// The filter is Steam's own MobX filter class (`MatchesImpl`,
-/// `MatchesScoredImpl`), found through webpack by a string its module logs;
+/// `MatchesScoredImpl`), found by ``SteamPageResolver``;
 /// both methods are wrapped on the prototype so that, with the chip on, an
 /// app that does not play on a Mac fails to match. Only the library's two
 /// filters (the left list's and the grids') are affected; dynamic
@@ -28,28 +28,13 @@ enum SteamLibraryCompat {
     static let settled: Set<String> = ["installed", "installed without the filter", "reapplied", "removed", "not installed"]
 
     /// The context page's half: verdicts, the filter patch, and the switch.
-    static let contextScript = """
-    (function () {
+    static let contextScript = "(function () {\n" + SteamPageResolver.source + context + "\n})()"
+
+    private static let context = """
       var lib = window.__sevoLibraryCompat;
       if (lib) { lib.enable(); return "reapplied"; }
-      if (!window.webpackChunksteamui || !window.collectionStore || !window.uiStore) return "waiting";
-      var req = null;
-      try { webpackChunksteamui.push([["sevo-library-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) {}
-      if (!req || !req.m) return "waiting";
-    
-      /* The first module whose source carries the marker and whose exports
-         `pick` accepts. Only modules the library has already loaded carry
-         either marker, so requiring them runs nothing. */
-      function find(marker, pick) {
-        for (var id in req.m) {
-          if (String(req.m[id]).indexOf(marker) === -1) continue;
-          try {
-            var found = pick(req(id));
-            if (found) return found;
-          } catch (e) {}
-        }
-        return null;
-      }
+      var steam = steamSurface(window);
+      if (!window.collectionStore || !window.uiStore || !steam.ready()) return "waiting";
     
       var KEY = \(JSLiteral.string(storageKey));
       var stored = false;
@@ -113,20 +98,8 @@ enum SteamLibraryCompat {
       function patch() {
         if (lib.available || Date.now() - lastPatch < 5000) return;
         lastPatch = Date.now();
-        var Filter = find("Found SteamDeckUnsupported set in AppFilter", function (exports) {
-          for (var key in exports) {
-            var proto = exports[key] && exports[key].prototype;
-            if (proto && typeof proto.MatchesImpl === "function" && typeof proto.MatchesScoredImpl === "function"
-                && Object.getOwnPropertyDescriptor(proto, "bIsEmpty")) return exports[key];
-          }
-          return null;
-        });
-        var observable = find("[MobX]", function (exports) {
-          for (var key in exports) {
-            if (typeof exports[key] === "function" && typeof exports[key].box === "function") return exports[key];
-          }
-          return null;
-        });
+        var Filter = steam.libraryFilter();
+        var observable = steam.observable();
     
         if (!box && observable) box = observable.box(plain, { deep: false });
         if (Filter && box) {
@@ -226,7 +199,6 @@ enum SteamLibraryCompat {
       patch();
       refresh();
       return lib.available ? "installed" : "installed without the filter";
-    })()
     """
 
     /// Stands the context page's half down: the filter matches as Steam's
@@ -244,7 +216,8 @@ enum SteamLibraryCompat {
     /// from the props on each element's React fiber. Idempotent and
     /// self-reapplying, like ``SteamCompatBadge``.
     static var script: String {
-        "(function () {\n" + SteamCompatBadge.glyphs + SteamNativeBuilds.platformGlyphs + text + desktop + "\n})()"
+        "(function () {\n" + SteamPageResolver.source + SteamCompatBadge.glyphs + SteamNativeBuilds.platformGlyphs
+            + text + desktop + "\n})()"
     }
 
     /// The tooltip text for each mark and the filter, localized: a name and
@@ -319,35 +292,13 @@ enum SteamLibraryCompat {
         "#sevo-lib-tip b{display:block;color:#fff;font-weight:600}"
       ].join("\\n");
     
+      var steam = steamSurface(ctx);
       var names = null;
     
-      /* The class modules behind the library search, the left list's rows
-         and the grid's tiles, found by their semantic keys like the strip's. */
+      /* Steam's classes for the library search, the left list's rows, the
+         grid's tiles and the filter bar. */
       function resolve() {
-        if (names) return names;
-        var chunk = ctx.webpackChunksteamui;
-        if (!chunk || typeof chunk.push !== "function") return null;
-        var req = null;
-        try { chunk.push([["sevo-library-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) { return null; }
-        if (!req || !req.m) return null;
-        var found = {};
-        var wanted = {
-          search: "AdvancedSearchContainer", row: "GameListEntryContainer", tile: "LibraryItemBox",
-          filters: "ViewFiltersBar"
-        };
-        for (var id in req.m) {
-          var source = String(req.m[id]);
-          if (source.length > 20000) continue;
-          for (var role in wanted) {
-            if (found[role] || source.indexOf(wanted[role] + ':"') === -1) continue;
-            try {
-              var exports = req(id);
-              if (exports && exports[wanted[role]]) found[role] = exports;
-            } catch (e) {}
-          }
-        }
-        if (!found.search || !found.row || !found.tile) return null;
-        names = found;
+        if (!names) names = steam.classes(["search", "row", "tile"], ["filters"]);
         return names;
       }
     

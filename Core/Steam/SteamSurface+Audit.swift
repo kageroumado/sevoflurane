@@ -80,8 +80,14 @@ nonisolated extension SteamSurface {
             global(entry.name, in: bundle)
         case let .identifier(passes):
             identifier(entry.name, passes: passes, in: bundle)
-        case let .classMap(signature, limit):
-            classMap(signature: signature, keys: entry.tokens, limit: limit, in: bundle)
+        case let .classMap(signature, keys, limit, modules):
+            if bundle.build == .modules {
+                classes(keys: keys, anchor: modules, in: bundle)
+            } else {
+                classMap(signature: signature, keys: keys, limit: limit, in: bundle)
+            }
+        case .moduleRegistry:
+            if bundle.build == .modules { moduleEntry(in: bundle) } else { global(entry.name, in: bundle) }
         case let .text(needles):
             text(needles, in: bundle)
         case .cssClass:
@@ -231,6 +237,72 @@ private nonisolated extension SteamSurface {
     /// What webpack writes around a class map: `e=>{e.exports=…}`.
     static let moduleWrapper = 24
 
+    /// A class map's counterpart on a build of ES modules.
+    static func classes(keys: [String], anchor: ModulesAnchor?, in bundle: SteamUIBundle) -> (Status, String) {
+        switch anchor {
+        case nil:
+            return (.missing, "a build of ES modules has no class map, and the app has no other way to \(keys.joined(separator: ", "))")
+        case let .recipes(recipes):
+            return classes(read: recipes, in: bundle)
+        case let .props(props, markup):
+            let named = props.allSatisfy { name in bundle.scripts.contains { !$0.wordOffsets(of: name).isEmpty } }
+            let drawn = markup.allSatisfy { text in bundle.scripts.contains { $0.containsQuoted(text) } }
+            let what = props.joined(separator: " and ")
+            return named && drawn
+                ? (.found, "ES modules: an element whose component takes \(what)")
+                : (.missing, "ES modules: no component takes \(what) beside \(markup.joined(separator: ", "))")
+        }
+    }
+
+    /// Each recipe's class, read from the first chunk that holds its tokens
+    /// and looked up in the style sheets.
+    static func classes(read recipes: [ClassRecipe], in bundle: SteamUIBundle) -> (Status, String) {
+        guard !recipes.isEmpty else { return (.missing, "ES modules: the app has no way to these classes") }
+        var home: SteamUIBundle.File?
+        var read = 0
+        var lost: [String] = []
+        var unstyled: [String] = []
+        for recipe in recipes {
+            // The chunk that answered the last recipe very likely answers this one.
+            var name = home?.className(for: recipe)
+            if name == nil {
+                for file in bundle.scripts {
+                    name = file.className(for: recipe)
+                    if name != nil {
+                        home = file
+                        break
+                    }
+                }
+            }
+            guard let name else {
+                if !recipe.optional { lost.append(recipe.key) }
+                continue
+            }
+            read += 1
+            if styleSheet(naming: name, in: bundle) == nil { unstyled.append("\(recipe.key) as \(name)") }
+        }
+        if !lost.isEmpty {
+            return (.missing, "ES modules: no chunk holds the code that names \(lost.joined(separator: ", "))")
+        }
+        if !unstyled.isEmpty {
+            return (.changed, "ES modules: read \(unstyled.joined(separator: ", ")), which no style sheet styles")
+        }
+        return (.found, "ES modules: \(read) \(read == 1 ? "class" : "classes") read from \(home?.path ?? "the chunks")")
+    }
+
+    /// The way to Steam's modules on a build of ES modules: the entry script
+    /// and the chunks it names.
+    static func moduleEntry(in bundle: SteamUIBundle) -> (Status, String) {
+        guard let entry = bundle.entry else { return (.missing, "the page loads no module script") }
+        let links = entry.chunkLinks
+        guard !links.imported.isEmpty else { return (.missing, "\(entry.path) imports no chunk") }
+        guard !links.onDemand.isEmpty else {
+            return (.changed, "\(entry.path) names no chunk it loads on demand, where the library's code is read from")
+        }
+        let imported = links.imported.count
+        return (.found, "ES modules: \(entry.path) imports \(imported) \(imported == 1 ? "chunk" : "chunks") and names \(links.onDemand.count) more")
+    }
+
     static func text(_ needles: [String], in bundle: SteamUIBundle) -> (Status, String) {
         let lost = needles.filter { needle in !bundle.scripts.contains { $0.containsQuoted(needle) } }
         return lost.isEmpty
@@ -238,16 +310,21 @@ private nonisolated extension SteamSurface {
             : (.missing, "no script holds \(lost.map { "‘\($0)’" }.joined(separator: ", "))")
     }
 
-    static func cssClass(_ name: String, in bundle: SteamUIBundle) -> (Status, String) {
+    /// The first style sheet with a selector for the class.
+    static func styleSheet(naming name: String, in bundle: SteamUIBundle) -> SteamUIBundle.File? {
         let dash: Set<UInt8> = [UInt8(ascii: "-")]
         let selector = "." + name
-        let styled = bundle.styles.first { sheet in
+        return bundle.styles.first { sheet in
             sheet.offsets(of: selector).contains { offset in
                 let after = offset + selector.utf8.count
                 return after >= sheet.bytes.count || !SteamUIBundle.File.isName(sheet.bytes[after], dash)
             }
         }
-        if let styled { return (.found, "styled in \(styled.path)") }
+    }
+
+    static func cssClass(_ name: String, in bundle: SteamUIBundle) -> (Status, String) {
+        let dash: Set<UInt8> = [UInt8(ascii: "-")]
+        if let styled = styleSheet(naming: name, in: bundle) { return (.found, "styled in \(styled.path)") }
         if let script = bundle.scripts.first(where: { !$0.wordOffsets(of: name, extra: dash).isEmpty }) {
             return (.found, "named in \(script.path)")
         }

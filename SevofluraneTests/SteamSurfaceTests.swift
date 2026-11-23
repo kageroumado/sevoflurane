@@ -173,7 +173,8 @@ struct SteamSurfaceTests {
 
     private let strip = Entry(
         .classMap, "the Deck strip", "placing the strip",
-        .classMap(signature: ["DeckVerifiedInfo"], limit: 400), tokens: ["DeckVerifiedInfo", "Container"],
+        .classMap(signature: ["DeckVerifiedInfo"], keys: ["DeckVerifiedInfo", "Container"], limit: 400),
+        tokens: ["DeckVerifiedInfo", "Container"],
     )
 
     @Test

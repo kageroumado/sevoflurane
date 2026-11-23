@@ -11,13 +11,11 @@ import Foundation
 /// Details panel naming every source. Both pages read one
 /// ``GameCompatRecord``.
 ///
-/// On the library page the slot is found through webpack: Steam's class
-/// names are content hashes, but the module exporting them is a plain
-/// `{DeckVerifiedInfo: "hash", Container: "hash", …}` object, so its source
-/// is searched for the semantic key. Steam's UI runs in the opener (the
-/// shared context page) and renders into this popup, so webpack, the router
-/// and the app store are reached through `window.opener`. The record comes
-/// from the bridge's `/__compat/<appid>`.
+/// On the library page the slot is found by ``SteamPageResolver``: under the
+/// game page's row of links, whichever build of Steam's UI draws it. Steam's
+/// UI runs in the opener (the shared context page) and renders into this
+/// popup, so its modules, the router and the app store are reached through
+/// `window.opener`. The record comes from the bridge's `/__compat/<appid>`.
 ///
 /// The store page is a native web view at Steam's origin, which cannot reach
 /// the bridge; it asks the `sevoCompat` message handler
@@ -27,7 +25,7 @@ import Foundation
 /// sits on the Document, which survives Steam's `document.open()`.
 enum SteamCompatBadge {
     /// The library page's strip.
-    static let script = "(function () {\n" + common + library + "\n})()"
+    static let script = "(function () {\n" + SteamPageResolver.source + common + library + "\n})()"
 
     /// The store page's strip, installed as a user script on the store's
     /// child web views.
@@ -351,31 +349,7 @@ enum SteamCompatBadge {
     
       /* Steam's UI runs in the opener; this popup is where it renders. */
       var ctx = window.opener || window;
-      var classes = null;
-    
-      /* The class module behind Steam's own strip, found by its semantic keys.
-         Class-name modules are pure `e.exports = {…}` objects, so requiring
-         one has no side effect; every other module is left alone. */
-      function resolveClasses() {
-        if (classes) return classes;
-        var chunk = ctx.webpackChunksteamui;
-        if (!chunk || typeof chunk.push !== "function") return null;
-        var req = null;
-        try { chunk.push([["sevo-compat-" + Date.now()], {}, function (r) { req = r; }]); } catch (e) { return null; }
-        if (!req || !req.m) return null;
-        for (var id in req.m) {
-          var source = String(req.m[id]);
-          if (source.length > 4000 || source.indexOf('DeckVerifiedInfo:"') === -1) continue;
-          try {
-            var exports = req(id);
-            if (exports && exports.Container && exports.DeckVerifiedInfo) {
-              classes = { container: exports.Container };
-              return classes;
-            }
-          } catch (e) {}
-        }
-        return null;
-      }
+      var steam = steamSurface(ctx);
     
       function currentAppID() {
         try {
@@ -430,19 +404,10 @@ enum SteamCompatBadge {
           .catch(function () { settle(strip, panel, appid, null); });
       }
     
-      /* Steam's own slot is inside the game-info block, which the desktop
-         page keeps collapsed behind its (i) button — a strip there would be
-         invisible until someone opened it. The strip goes right under the
-         page's tab bar instead (Store Page · DLC · Community Hub …), the
-         next sibling of that collapsed block, where it spans the page like
-         the bar above it. The block itself is the fallback slot. */
+      /* Right under the page's row of links (Store Page · DLC · Community
+         Hub …), where the strip spans the page like the row above it. */
       function placement() {
-        var names = resolveClasses();
-        var container = names && document.querySelector("." + names.container);
-        if (!container) return null;
-        var block = container.parentElement;
-        var tabBar = block && block.nextElementSibling;
-        return tabBar ? { after: tabBar } : { inside: container };
+        return steam.stripSlot(document);
       }
     
       function placed(slot, where) {

@@ -33,7 +33,7 @@ nonisolated extension SteamSurface {
         global("friendStore", "friends' names and states"),
         global("NotificationStore", "the toast Steam is about to show, for a Mac notification"),
         global("MainWindowBrowserManager", "the main window's current route"),
-        global("webpackChunksteamui", "reaching Steam's webpack modules"),
+        Entry(.global, "webpackChunksteamui", "reaching Steam's modules", .moduleRegistry),
     ]
 
     static let members: [Entry] = boot + library + details + filters + navigation + popups + modals

@@ -15,6 +15,11 @@ import Testing
 /// markup, and `steam://` links. A camel-case property of Steam's
 /// (`allApps`, `modals`) looks like the app's own code, so those are held
 /// one way only: listed and unused fails, used and unlisted does not.
+///
+/// The page's resolver (``SteamPageResolver``) is held to the catalog's two
+/// builds: its webpack class maps to ``SteamSurface/ClassGroup``, its
+/// recipes to ``SteamSurface/classRecipes``, and the props it finds a
+/// component by to the catalog's tokens.
 struct SteamSurfaceDriftTests {
     // MARK: - SteamClient paths
 
@@ -196,6 +201,53 @@ struct SteamSurfaceDriftTests {
             }
         }
         #expect(unused.isEmpty, "catalog entries no source names: \(unused)")
+    }
+
+    // MARK: - The two builds
+
+    @Test @MainActor
+    func `the resolver's webpack maps are the catalog's class groups`() {
+        for group in SteamSurface.ClassGroup.allCases {
+            let signature = group.signature.map { "\"\($0)\"" }.joined(separator: ", ")
+            let line = "\(group.rawValue): { has: [\(signature)], limit: \(group.limit), needs: ["
+            #expect(SteamPageResolver.source.contains(line), "\(group.rawValue)")
+        }
+    }
+
+    @Test @MainActor
+    func `the resolver carries every recipe and names the links bar's props`() {
+        #expect(SteamPageResolver.source.contains("var RECIPES = " + SteamSurface.classRecipesLiteral + ";"))
+        for prop in SteamSurface.linksBarProps {
+            #expect(SteamPageResolver.source.contains("\"\(prop)\" in props"))
+        }
+        #expect(SteamPageResolver.source.contains(#"querySelectorAll('[role="link"]')"#))
+    }
+
+    @Test @MainActor
+    func `every class the scripts read has a recipe, or only finds its webpack module`() {
+        // Keys the scripts read as classes: named after a map (`classes.play.PlayButton`, `f.Filters`).
+        let sources = [SteamNativeBuilds.script, SteamLibraryCompat.script, SteamCompatBadge.script]
+        for group in SteamSurface.ClassGroup.allCases where group != .strip {
+            let recipes = Set(SteamSurface.classRecipes.filter { $0.group == group }.map(\.key))
+            for key in group.keys where !recipes.contains(key) {
+                #expect(group.signature.contains(key), "\(group.rawValue).\(key) has no recipe")
+                let read = sources.contains { $0.contains(".\(group.rawValue).\(key)") }
+                #expect(!read, "the scripts read \(group.rawValue).\(key), which a build of ES modules cannot answer")
+            }
+            #expect(recipes.isSubset(of: group.keys))
+        }
+    }
+
+    @Test @MainActor
+    func `every prop the scripts find a component by is in the catalog`() {
+        var unlisted: Set<String> = []
+        for unit in Sources.scripts {
+            for match in unit.text.matches(of: #/"([A-Za-z_]\w*)"\s+in\s+props/#) where !Sources.accounted.contains(String(match.1)) {
+                unlisted.insert("\(match.1) (\(unit.path))")
+            }
+        }
+        #expect(unlisted.isEmpty, "props of Steam's components the catalog lacks: \(unlisted.sorted())")
+        #expect(Sources.scripts.contains { $0.text.contains("in props") })
     }
 
     // MARK: - What the shim answers

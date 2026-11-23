@@ -1,7 +1,7 @@
 import Foundation
 
-/// What the injected scripts find in Steam's pages: webpack modules by their
-/// text, class names, routes and links, settings and fixed values.
+/// What the injected scripts find in Steam's pages: modules by their text,
+/// class names, routes and links, settings and fixed values.
 nonisolated extension SteamSurface {
     /// The longest module source the scripts look at when hunting a class map.
     static let classMapModuleLimit = 20000
@@ -9,51 +9,16 @@ nonisolated extension SteamSurface {
     /// The compatibility strip reads only modules this short.
     static let deckStripModuleLimit = 4000
 
-    static let classMaps: [Entry] = [
+    /// One entry for each class map. The strip's entry also lists what
+    /// finds its place on a build of ES modules: the links bar's props and
+    /// the role of a link in it.
+    static let classMaps: [Entry] = ClassGroup.allCases.map { group in
         Entry(
-            .classMap, "the Deck compatibility strip's classes", "placing the Mac compatibility strip under a game page's tab bar",
-            .classMap(signature: ["DeckVerifiedInfo"], limit: deckStripModuleLimit),
-            tokens: ["DeckVerifiedInfo", "Container"],
-        ),
-        Entry(
-            .classMap, "the Play button's classes", "the Install button's version mark and the ▾ beside it",
-            .classMap(signature: ["PlayButtonContainer", "StreamingSelector"], limit: classMapModuleLimit),
-            tokens: ["PlayButtonContainer", "StreamingSelector", "PlayButton", "ButtonChild", "ShowingStreaming"],
-        ),
-        Entry(
-            .classMap, "the play bar's classes", "the play bar's Version entry",
-            .classMap(signature: ["ActionSection", "GameStatsSection"], limit: classMapModuleLimit),
-            tokens: [
-                "ActionSection", "GameStatsSection", "GameStat", "GameStatIcon", "GameStatRight", "PlayBarLabel",
-                "PlayBarDetailLabel", "ClickablePlayBarItem",
-            ],
-        ),
-        Entry(
-            .classMap, "the game page's compact button class", "the Version entry's button, like Cloud Status's",
-            .classMap(signature: ["AppDetailsButton"], limit: classMapModuleLimit),
-            tokens: ["AppDetailsButton"],
-        ),
-        Entry(
-            .classMap, "the library search's classes", "the Mac filter chip beside the search field",
-            .classMap(signature: ["AdvancedSearchContainer"], limit: classMapModuleLimit),
-            tokens: ["AdvancedSearchContainer", "Container"],
-        ),
-        Entry(
-            .classMap, "the left list's row classes", "a Mac verdict on every game's row",
-            .classMap(signature: ["GameListEntryContainer"], limit: classMapModuleLimit),
-            tokens: ["GameListEntryContainer"],
-        ),
-        Entry(
-            .classMap, "the grid's tile classes", "a Mac verdict on every game's tile",
-            .classMap(signature: ["LibraryItemBox"], limit: classMapModuleLimit),
-            tokens: ["LibraryItemBox"],
-        ),
-        Entry(
-            .classMap, "the library filter bar's classes", "the Mac filter chip in the filter bar",
-            .classMap(signature: ["ViewFiltersBar"], limit: classMapModuleLimit),
-            tokens: ["ViewFiltersBar", "Filters", "CheckboxWithImage", "Active"],
-        ),
-    ]
+            .classMap, group.name, group.use,
+            .classMap(signature: group.signature, keys: group.keys, limit: group.limit, modules: group.modulesAnchor),
+            tokens: group.keys + (group == .strip ? linksBarProps + ["link"] : []),
+        )
+    }
 
     /// The localization key of Properties › Compatibility, by which the
     /// component that lists the page is found.
