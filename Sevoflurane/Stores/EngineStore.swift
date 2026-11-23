@@ -240,7 +240,9 @@ final class EngineStore {
             built.append(EngineOption(
                 engine: .crossover,
                 label: crossover.label,
-                detail: crossover.licenseWord,
+                detail: String(
+                    localized: "\(crossover.licenseWord) Resizable windows, upscaling and a Dock icon per game need Dormison.",
+                ),
             ))
         }
         if let preview = detection.usableCrossOverPreview {

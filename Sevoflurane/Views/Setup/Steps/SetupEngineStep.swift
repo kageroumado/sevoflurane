@@ -2,20 +2,23 @@ import Propofol
 import SwiftUI
 
 /// Asked where a new Steam could run on either engine: a Mac with a
-/// CrossOver that works, whose owner has something to judge by.
+/// CrossOver that works. Dormison is the one to take: resizable windows,
+/// upscaling, a game's own Dock icon, frame-rate limits and Mac versions of
+/// games exist only on it.
 struct SetupEngineStep: View {
     let store: SetupStore
 
     var body: some View {
         SetupScreenLayout {
             SetupPage(
-                title: "How games run",
-                subtitle: "CrossOver is on this Mac, so Steam can use it instead.",
+                title: "Engine",
+                subtitle: "The part that runs Windows games on this Mac.",
             ) {
                 SetupList {
                     SettingsChoice(
                         title: "Dormison",
-                        caption: String(localized: "Built into Sevoflurane. Free."),
+                        caption: String(localized: "Sevoflurane’s own engine. Every feature, free."),
+                        value: String(localized: "Recommended"),
                         isSelected: store.engineChoice == .builtIn,
                     ) {
                         store.engineChoice = .builtIn
@@ -24,14 +27,17 @@ struct SetupEngineStep: View {
                         SettingsChoice(
                             title: "\(crossover.label)",
                             caption: crossover.licensed
-                                ? String(localized: "Uses your CrossOver license.")
-                                : String(localized: "Uses your CrossOver trial."),
+                                ? String(localized: "Uses your CrossOver license. Fewer features.")
+                                : String(localized: "Uses your CrossOver trial. Fewer features."),
                             isSelected: store.engineChoice == .crossover,
                         ) {
                             store.engineChoice = .crossover
                         }
                     }
                 }
+                SetupFootnote(
+                    text: "Only with Dormison: resizable game windows, upscaling, each game as its own app in the Dock, frame-rate limits, and Mac versions of games.",
+                )
                 SetupFootnote(text: "You can switch later in Settings.")
             }
         } secondary: {

@@ -154,12 +154,12 @@
         }
       }
     },
-    "Built into Sevoflurane. Free.": {
+    "Sevoflurane’s own engine. Every feature, free.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "内置于 Sevoflurane。免费。"
+            "value": "Sevoflurane 自己的引擎。全部功能可用，免费。"
           }
         }
       }
@@ -244,12 +244,12 @@
         }
       }
     },
-    "CrossOver is on this Mac, so Steam can use it instead.": {
+    "The part that runs Windows games on this Mac.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这台 Mac 上装有 CrossOver，Steam 也可以改用它来运行。"
+            "value": "在这台 Mac 上运行 Windows 游戏的部分。"
           }
         }
       }
@@ -380,16 +380,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏详细信息"
-          }
-        }
-      }
-    },
-    "How games run": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏如何运行"
           }
         }
       }
@@ -964,22 +954,22 @@
         }
       }
     },
-    "Uses your CrossOver license.": {
+    "Uses your CrossOver license. Fewer features.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用你的 CrossOver 许可证。"
+            "value": "使用你的 CrossOver 许可证。功能较少。"
           }
         }
       }
     },
-    "Uses your CrossOver trial.": {
+    "Uses your CrossOver trial. Fewer features.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用你的 CrossOver 试用期。"
+            "value": "使用你的 CrossOver 试用期。功能较少。"
           }
         }
       }
@@ -14484,6 +14474,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "打开网站"
+          }
+        }
+      }
+    },
+    "Recommended": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐"
+          }
+        }
+      }
+    },
+    "Only with Dormison: resizable game windows, upscaling, each game as its own app in the Dock, frame-rate limits, and Mac versions of games.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅 Dormison 支持：可调整大小的游戏窗口、画面放大、每款游戏在程序坞中作为独立应用、帧率限制，以及游戏的 Mac 版本。"
+          }
+        }
+      }
+    },
+    "%@ Resizable windows, upscaling and a Dock icon per game need Dormison.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@可调整大小的窗口、画面放大和每款游戏的程序坞图标需要 Dormison。"
           }
         }
       }

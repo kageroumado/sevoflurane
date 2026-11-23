@@ -5,11 +5,17 @@ import SwiftUI
 struct SettingsChoice: View {
     let title: LocalizedStringResource
     var caption = ""
+    /// A word beside the mark, where one choice is the one to take.
+    var value = ""
     let isSelected: Bool
     let select: () -> Void
 
     var body: some View {
-        SettingsRow(title: title, caption: caption) {} accessory: {
+        SettingsRow(title: title, caption: caption) {
+            if !value.isEmpty {
+                SettingsValueText(text: value)
+            }
+        } accessory: {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                 .accessibilityHidden(true)
