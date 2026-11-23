@@ -1,3 +1,4 @@
+import Propofol
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -12,6 +13,8 @@ struct GamesSettings: View {
     @State private var selected: Int?
     /// Opens on the first game, for the gallery.
     var selectsFirstGame = false
+    /// The gallery's games, shown on a Mac that has none of its own.
+    var fixtureGames: [Entry] = []
     /// A game requested from elsewhere (a game's menu in the popover); taken
     /// and cleared.
     var requestedGame: Binding<SettingsNavigation.GameRequest?> = .constant(nil)
@@ -91,6 +94,7 @@ struct GamesSettings: View {
                 Entry(id: id, name: values.name ?? "App \(id)", exes: values.exes ?? [])
             }
             .sorted(by: Self.byName)
+        if games.isEmpty { games = fixtureGames }
         var choice = selected.flatMap { id in games.contains { $0.id == id } ? id : nil }
         if selectsFirstGame, choice == nil { choice = games.first?.id }
         select(choice)
@@ -212,15 +216,11 @@ private struct FixListSection: View {
     var body: some View {
         Section {
             ForEach(fixes.fixes, id: \.title) { fix in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(fix.title)
-                    Text(InterfaceCopy.localized(fix.reason))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                SettingsRow(caption: InterfaceCopy.localized(fix.reason)) {
+                    Text(fix.title).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            HStack {
+            SettingsRow {
                 Text(remaining.joined(separator: ", "))
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -252,18 +252,18 @@ private struct SteamLibrarySection: View {
 
     var body: some View {
         Section {
-            Toggle("Show in Steam's library", isOn: Binding(
-                get: { listed ?? (AdoptedPrograms.program(programID)?.inSteamLibrary == true) },
-                set: { isOn in
-                    listed = isOn
-                    SteamLibraryShortcuts.shared.setListed(isOn, programID: programID)
-                },
-            ))
-        } footer: {
-            Text("""
-            Listed as a non-Steam game, it starts from Steam's library and Big Picture, with Steam Input and the \
-            overlay, and keeps the settings, Dock tile and run records it has here.
-            """)
+            ToggleRow(
+                title: "Show in Steam's library",
+                caption: String(localized: "As a non-Steam game, with Steam Input and the overlay."),
+                help: .steamLibrary,
+                isOn: Binding(
+                    get: { listed ?? (AdoptedPrograms.program(programID)?.inSteamLibrary == true) },
+                    set: { isOn in
+                        listed = isOn
+                        SteamLibraryShortcuts.shared.setListed(isOn, programID: programID)
+                    },
+                ),
+            )
         }
     }
 }
@@ -280,25 +280,25 @@ private struct DockSection: View {
 
     var body: some View {
         Section {
-            Toggle("Keep in Dock", isOn: Binding(
-                get: { kept ?? false },
-                set: { isOn in
-                    guard let bundle else { return }
-                    kept = isOn
-                    Task.detached(name: isOn ? "Keep \(gameID) in the Dock" : "Take \(gameID) out of the Dock") {
-                        if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
-                    }
-                },
-            ))
-            .disabled(bundle == nil)
-        } footer: {
-            if bundle == nil {
-                Text("The game gets an icon of its own in the Dock at its first launch; after that it can stay there.")
-            } else {
-                Text("""
-                Its own icon in the Dock, where a click starts it. While the game runs, right-clicking the icon \
-                offers the same under Options.
-                """)
+            HelpedRow(
+                caption: bundle == nil
+                    ? String(localized: "Available after the game's first launch.")
+                    : String(localized: "A click on its Dock icon starts the game."),
+                help: .dockTile,
+            ) {
+                Toggle("Keep in Dock", isOn: Binding(
+                    get: { kept ?? false },
+                    set: { isOn in
+                        guard let bundle else { return }
+                        kept = isOn
+                        Task.detached(name: isOn ? "Keep \(gameID) in the Dock" : "Take \(gameID) out of the Dock") {
+                            if isOn { DockTiles.keep(bundle) } else { DockTiles.remove(bundle) }
+                        }
+                    },
+                ))
+                .toggleStyle(.switch)
+                .accessibilityLabel("Keep in Dock")
+                .disabled(bundle == nil)
             }
         }
         .task(id: gameID) {
@@ -326,39 +326,38 @@ private struct FPSUnlockerSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Unlocker") {
-                HStack(spacing: 6) {
-                    Text(verbatim: executable?.lastPathComponent ?? ownLabel)
-                        .foregroundStyle(executable == nil && !hasOwn ? .secondary : .primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(executable?.path ?? "")
-                    Button("Choose…", action: choose)
-                    if executable != nil {
-                        Button(hasOwn ? "Use Sevoflurane's" : "Remove") {
-                            executable = nil
-                            FPSUnlocker.executable = nil
-                        }
+            ActionRow(title: "Unlocker") {
+                Text(verbatim: executable?.lastPathComponent ?? ownLabel)
+                    .foregroundStyle(executable == nil && !hasOwn ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(executable?.path ?? "")
+                Button("Choose…", action: choose)
+                if executable != nil {
+                    Button(hasOwn ? "Use Sevoflurane's" : "Remove") {
+                        executable = nil
+                        FPSUnlocker.executable = nil
                     }
                 }
             }
-            Toggle("Start it with the game", isOn: $isEnabled)
+            ToggleRow(title: "Start it with the game", isOn: $isEnabled)
                 .disabled(executable == nil && !hasOwn)
                 .onChange(of: isEnabled) { _, on in FPSUnlocker.isEnabled = on }
-            Picker("Frame rate", selection: $target) {
-                ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
+            SettingsRow {
+                Picker("Frame rate", selection: $target) {
+                    ForEach(targets, id: \.self) { Text(verbatim: "\($0) fps").tag($0) }
+                }
+                .endsOnControlLine()
             }
             .disabled(executable == nil && !hasOwn)
             .onChange(of: target) { _, fps in FPSUnlocker.target = fps }
         } header: {
-            Text("FPS unlocker")
+            HStack(spacing: 6) {
+                Text("FPS unlocker")
+                SettingHelpButton(help: .fpsUnlocker)
+            }
         } footer: {
-            Text("""
-            Genshin holds itself to 60 fps. Sevoflurane's engine carries an unlocker (genshin-fps-unlock's, MIT); \
-            switched on, it starts beside the game 30 seconds after the game's process appears. Choose another, such as \
-            unlockfps_nc.exe, to use that one instead. An unlocker changes the running game's memory, which \
-            HoYoverse's terms do not allow, so the switch is yours.
-            """)
+            Text("An unlocker changes the running game's memory, which HoYoverse's terms do not allow, so the switch is yours.")
         }
     }
 
@@ -437,7 +436,7 @@ private struct DLLOverrideRow: View {
     let set: (String?) -> Void
 
     var body: some View {
-        HStack {
+        SettingsRow {
             Text(dll).font(.body.monospaced())
             Spacer()
             Picker("Load order", selection: Binding(get: { mode }, set: { set($0) })) {
@@ -446,13 +445,14 @@ private struct DLLOverrideRow: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 180)
+            .fixedSize()
+            .endsOnControlLine()
+        } accessory: {
             Button {
                 set(nil)
             } label: {
                 Image(systemName: "minus.circle")
             }
-            .buttonStyle(.borderless)
             .help("Remove the override for \(dll)")
             .accessibilityLabel("Remove the override for \(dll)")
         }
@@ -468,24 +468,26 @@ private struct AddDLLOverrideRow: View {
     var body: some View {
         // Two lines: the form's column is too narrow for name, load order and
         // button side by side.
-        VStack(alignment: .leading, spacing: 8) {
-            DLLNameField(name: $name, names: libraries)
-            HStack {
-                Picker("Load order", selection: $mode) {
-                    ForEach(dllOverrideModes, id: \.mode) { choice in
-                        Text(choice.label).tag(choice.mode)
+        SettingsRow {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                DLLNameField(name: $name, names: libraries)
+                HStack {
+                    Picker("Load order", selection: $mode) {
+                        ForEach(dllOverrideModes, id: \.mode) { choice in
+                            Text(choice.label).tag(choice.mode)
+                        }
                     }
+                    .labelsHidden()
+                    .fixedSize()
+                    Spacer()
+                    Button("Add") {
+                        let dll = BuiltinLibraries.normalized(name)
+                        guard !dll.isEmpty else { return }
+                        add(dll, mode)
+                        name = ""
+                    }
+                    .disabled(BuiltinLibraries.normalized(name).isEmpty)
                 }
-                .labelsHidden()
-                .fixedSize()
-                Spacer()
-                Button("Add") {
-                    let dll = BuiltinLibraries.normalized(name)
-                    guard !dll.isEmpty else { return }
-                    add(dll, mode)
-                    name = ""
-                }
-                .disabled(BuiltinLibraries.normalized(name).isEmpty)
             }
         }
         .task { libraries = BuiltinLibraries.names() }

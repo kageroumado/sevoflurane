@@ -63,6 +63,9 @@
             let crossOver = Fixtures.enginePanes.first { $0.scenario == .crossOverAndBuiltIn }
             let noToolkit = Fixtures.graphicsPanes.first { $0.scenario == .builtInNoToolkit }
             let linkable = Fixtures.storagePanes.first { $0.scenario == .linkableGames }
+            let linked = Fixtures.storagePanes.first { $0.scenario == .alreadyLinked }
+            let crossOverGraphics = Fixtures.graphicsPanes.first { $0.scenario == .crossOver }
+            let failedInstalls = Fixtures.compatibilityPanes.first { $0.scenario == .installFails }
             return [
                 GalleryPane("general") {
                     GeneralSettings(
@@ -99,7 +102,10 @@
                     }
                 },
                 GalleryPane("games") {
-                    GamesSettings(shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true)
+                    GamesSettings(
+                        shaders: Fixtures.shaders, highlighted: nil, selectsFirstGame: true,
+                        fixtureGames: Fixtures.games.map { .init(id: $0.id, name: $0.name, exes: []) },
+                    )
                 },
                 GalleryPane("hoyoverse") { HoYoSettings(highlighted: nil, store: Fixtures.hoyo) },
                 GalleryPane("storage") {
@@ -108,6 +114,36 @@
                 GalleryPane("storage-linkable") {
                     if let linkable {
                         StorageSettings(store: linkable.store, steam: steam, highlighted: nil)
+                    }
+                },
+                GalleryPane("storage-linked") {
+                    if let linked {
+                        StorageSettings(store: linked.store, steam: steam, highlighted: nil)
+                    }
+                },
+                GalleryPane("graphics-crossover") {
+                    if let crossOverGraphics {
+                        GraphicsSettings(
+                            store: crossOverGraphics.store, shaders: Fixtures.shaders, steam: steam,
+                            highlighted: nil,
+                        )
+                    }
+                },
+                GalleryPane("engine-failed-installs") {
+                    if let builtIn, let failedInstalls {
+                        EngineSettings(
+                            store: builtIn.store, graphics: Fixtures.graphics, shaders: Fixtures.shaders,
+                            compatibility: failedInstalls.store, provisioner: builtIn.provisioner,
+                            highlighted: nil,
+                        )
+                    }
+                },
+                GalleryPane("recovery-failed") {
+                    if let failed = Fixtures.repairs.last {
+                        RecoverySettings(
+                            provisioner: failed.provisioner, compatibility: Fixtures.compatibility,
+                            supervisor: Fixtures.healthySupervisor, steam: steam, highlighted: nil,
+                        )
                     }
                 },
                 GalleryPane("recovery") {
