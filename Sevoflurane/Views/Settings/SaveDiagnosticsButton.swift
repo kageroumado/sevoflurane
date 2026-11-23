@@ -3,12 +3,11 @@ import SwiftUI
 
 /// The button that saves the zip, with its own progress and its own error.
 struct SaveDiagnosticsButton: View {
-    let title: LocalizedStringKey
     @Binding var error: String?
     @State private var isSaving = false
 
     var body: some View {
-        Button(isSaving ? "Saving…" : title) {
+        Button(isSaving ? "Saving…" : "Save Diagnostics") {
             isSaving = true
             error = nil
             Task(name: "Save diagnostics") {
