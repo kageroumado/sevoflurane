@@ -616,9 +616,15 @@ Environment at its next launch, `PROTON_USE_WINED3D` and
 - A Steam client stuck on its main thread is caught by three questions only
   that thread answers, asked every 30 seconds; a stall gets an msync+
   lost-wake sweep before anything restarts it (a thread a game's exit left
-  asleep is woken in place), is sampled to `~/Library/Logs` so the wait can
-  be named, and a restart that itself stalls is freed by force-quitting the
-  client.
+  asleep is woken in place), and a restart that itself stalls is freed by
+  force-quitting the client.
+- Before a client that stopped answering is restarted (on its main thread,
+  or on its DevTools port), `steam.exe` and its web helpers are sampled, and
+  the samples (gzip), the end of the Wine log and the dumps Steam wrote
+  meanwhile go to a folder of their own in
+  `~/Library/Logs/Sevoflurane-stuck-steam`, so the wait can be named. The
+  event log names a known fault found in that log. One episode keeps at most
+  32 MB and all of them 128 MB, the oldest removed first.
 - **Settings › Recovery**: restart or force quit Steam, dismiss stuck menus,
   repair the helper or Steam's installation, install the shader compiler
   again, restart Windows, clear the shader cache, rebuild the bottle (keeps

@@ -11,10 +11,20 @@ nonisolated struct ClientOutage: Sendable, Equatable {
     let began: Date
     /// The largest patience during the outage, 1 on an idle Mac.
     private(set) var patience: Double
+    /// Whether the mute client of this outage has been sampled
+    /// (``StuckClientSample``): once per outage, however many probes decide
+    /// on a restart before one takes.
+    private(set) var isSampled = false
 
     init(began: Date = .now, patience: Double) {
         self.began = began
         self.patience = max(1, patience)
+    }
+
+    /// Answers whether this outage's sample is still to take, and marks it taken.
+    mutating func takeSample() -> Bool {
+        defer { isSampled = true }
+        return !isSampled
     }
 
     /// Keeps the larger patience.

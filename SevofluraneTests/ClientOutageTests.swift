@@ -43,6 +43,24 @@ struct ClientOutageTests {
     }
 
     @Test
+    func `an outage's client is sampled once, and the next outage's again`() {
+        var outage = ClientOutage(began: began, patience: 1)
+        #expect(!outage.isSampled)
+        let first = outage.takeSample()
+        #expect(first)
+        #expect(outage.isSampled)
+        // A second probe that decides on a restart takes no second sample.
+        let second = outage.takeSample()
+        outage.meet(patience: 3)
+        let underLoad = outage.takeSample()
+        #expect(!second)
+        #expect(!underLoad)
+        var next = ClientOutage(began: at(900), patience: 1)
+        let ofTheNext = next.takeSample()
+        #expect(ofTheNext)
+    }
+
+    @Test
     func `a run armed in the last three minutes is a game in flight, an older one is not`() {
         let now = at(600)
         #expect(ClientOutage.gameInFlight(armedAt: [at(500)], within: ClientOutage.launchWindow, at: now))

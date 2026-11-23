@@ -34,6 +34,7 @@ extension BottleSupervisor {
             stuckReported = false
             return false
         }
+        if nativeSilences == 0 { nativeSilentSince = .now }
         nativeSilences += 1
         if stuckReported {
             // Swept, sampled and reported already: the restart waits for the game.
@@ -50,9 +51,7 @@ extension BottleSupervisor {
         )
         guard nativeSilences >= MainThreadProbe.silencesToAct else { return false }
         if await sweptLostWakes() { return false }
-        if let sample = await StuckClientSample.capture() {
-            log.log(.client, "sampled the stuck steam.exe to \(sample.path)")
-        }
+        await keepStuckClientEvidence(.mainThread, since: nativeSilentSince ?? .now)
         if await Self.isGameRunning() {
             stuckReported = true
             fault = .degraded("Steam stopped answering — restart the client when the game is done")
@@ -65,6 +64,24 @@ extension BottleSupervisor {
         nativeSilences = 0
         await restartClient(reason: "steam.exe stopped answering on its main thread")
         return true
+    }
+
+    /// Samples a client that stopped answering and keeps the Wine log's end
+    /// and Steam's dumps beside the samples (``StuckClientSample``), then says
+    /// in the log what was kept and any known fault the Wine log names.
+    /// Returns once the samples are written, which bounds how long the
+    /// restart that follows is held back; that restart ends the processes
+    /// sampled.
+    ///
+    /// - Parameter began: When the first probe of the episode went unanswered.
+    func keepStuckClientEvidence(_ probe: StuckClientSample.Probe, since began: Date) async {
+        guard let kept = await StuckClientSample.capture(probe, began: began) else {
+            log.log(.client, "found no steam.exe or web helper to sample")
+            return
+        }
+        for line in StuckClientSample.lines(describing: kept) {
+            log.log(.client, line)
+        }
     }
 
     /// Asks msync+ to wake threads a dead game left asleep before a stuck

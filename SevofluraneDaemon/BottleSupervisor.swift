@@ -237,6 +237,8 @@ final class BottleSupervisor {
     /// how many in a row it left unanswered.
     var lastNativeProbe = Date.distantPast
     var nativeSilences = 0
+    /// When the first question of the current run of silences went unanswered.
+    var nativeSilentSince: Date?
     /// Whether the last main-thread probe got no answer from the page, so the
     /// next one that does not is not logged again.
     var nativeProbeUnanswered = false
@@ -753,23 +755,42 @@ final class BottleSupervisor {
             && (gameProtected || outage.busyGraceHolds(muteWindow: Timing.muteClient))
         let deadLongEnough = !busyButConnected && clientFailures >= 3
             && outage.muteLongEnough(muteWindow: Timing.muteClient)
-        if !wineWindows.isEmpty, hasSeenClientUp {
-            await restartClient(
-                reason: reason + " with a Wine dialog up — Steam's own watchdog likely fired",
-            )
+        let restart: String? = if !wineWindows.isEmpty, hasSeenClientUp {
+            reason + " with a Wine dialog up — Steam's own watchdog likely fired"
         } else if !processAlive || deadLongEnough {
-            let cause = if processAlive {
+            if processAlive {
                 withPressure(reason + " for \(Int(outage.elapsed()))s")
             } else if hasSeenClientUp {
                 "the client process is gone"
             } else {
                 "starting the client"
             }
-            await restartClient(reason: cause)
-        } else if hasSeenClientUp {
-            fault = .degraded(withPressure(reason))
-            transition(logging: .client, withPressure(reason))
+        } else {
+            nil
         }
+        guard let restart else {
+            if hasSeenClientUp {
+                fault = .degraded(withPressure(reason))
+                transition(logging: .client, withPressure(reason))
+            }
+            return
+        }
+        // A live client about to be replaced is sampled first: the restart
+        // ends the processes that hold the only record of the wait. The
+        // conditions are the ones `restartClient` starts under.
+        if processAlive, wantsClient, !isQuitting {
+            await keepMuteClientEvidence()
+            // A restart asked for while the sample ran is this one.
+            guard !isRestarting else { return }
+        }
+        await restartClient(reason: restart)
+    }
+
+    /// Keeps what this outage's mute client leaves (``StuckClientSample``),
+    /// once per outage.
+    private func keepMuteClientEvidence() async {
+        guard outage?.takeSample() == true, let began = outage?.began else { return }
+        await keepStuckClientEvidence(.devTools, since: began)
     }
 
     /// Reports progress while a launch converges: CDP arrives past ~15 s, and a
