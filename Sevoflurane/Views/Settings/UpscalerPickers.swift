@@ -31,6 +31,7 @@ struct UpscalerPicker: View {
                         Text("\(selection) (not installed)").tag(selection)
                     }
                 }
+                .endsOnControlLine()
             }
             .disabled(shaders.busy != nil)
             ShaderFetchStatus(shaders: shaders)
@@ -70,7 +71,7 @@ struct UpscalerPicker: View {
             return String(localized: "This package is missing. Games fall back to Lanczos.")
         }
         guard selection == nil, pending == nil, inherited != nil else { return choice.detail }
-        return String(localized: "Engine's value: \(choice.label). \(choice.detail)")
+        return String(localized: "Engine's value: \(choice.label).")
     }
 }
 

@@ -29,6 +29,20 @@ struct SettingCatalogTests {
     }
 
     @Test
+    func `a caption is one line in the narrowest pane, and says more than its title`() {
+        // Settings › Games gives a row about 340 points, which holds 56 characters of a caption;
+        // Settings › Engine gives one 550 points.
+        for setting in SettingCatalog.all {
+            let caption = setting.copy.caption
+            #expect(caption.count <= (setting.levels.contains(.game) ? 56 : 90), "\(setting.id): \(caption)")
+            #expect(caption.isEmpty || !caption.localizedStandardContains(setting.title), "\(setting.id)")
+        }
+        for filter in FinalFilter.allCases {
+            #expect(filter.detail.count <= 56, "\(filter)")
+        }
+    }
+
+    @Test
     func `a row offered for some games is left out for the rest`() {
         // The test home has no Steam app cache, so no game lists a macOS build.
         #expect(SettingCatalog.settings(in: .build, at: .game, game: 1_145_350).isEmpty)

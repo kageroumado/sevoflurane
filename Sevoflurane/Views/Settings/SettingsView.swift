@@ -720,27 +720,6 @@ private struct SettingsPane: View {
     }
 }
 
-/// A control with its caption under the whole row; inside a picker's label a
-/// long value squeezes it.
-struct CaptionedRow<Control: View>: View {
-    let caption: String
-    /// Orange for a caption that reports a failure.
-    var isWarning = false
-    @ViewBuilder var control: Control
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            control
-            if !caption.isEmpty {
-                Text(caption)
-                    .font(.callout)
-                    .foregroundStyle(isWarning ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
 /// Flashes a row the search sent the user to.
 private struct HighlightModifier: ViewModifier {
     let anchor: SettingsAnchor?

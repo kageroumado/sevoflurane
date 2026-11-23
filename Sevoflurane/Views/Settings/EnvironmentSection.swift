@@ -31,7 +31,7 @@ struct EnvironmentSection: View {
     private var footer: LocalizedStringResource {
         switch store.level {
         case .game:
-            "For this game alone, from its next launch, over Settings › Engine's. Steam's launch options can set these too: KEY=VALUE %command%."
+            "For this game alone, from its next launch, over Settings › Engine's."
         case .bottle:
             "For every game, from its next launch. Settings › Games adds a game's own."
         }
@@ -48,36 +48,38 @@ private struct EnvironmentRow: View {
     @State private var draft = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            HStack {
-                Text(verbatim: "\(name)=").font(.body.monospaced())
-                TextField("Value", text: $draft, prompt: Text("empty removes it"))
-                    .labelsHidden()
-                    .font(.body.monospaced())
-                    .onSubmit(commit)
-                Button {
-                    // Reset the draft first, or the row's disappearance would
-                    // store the unsaved edit and bring the variable back.
-                    draft = value
-                    set(nil)
-                } label: {
-                    Image(systemName: "minus.circle")
-                }
-                .buttonStyle(.borderless)
-                .help("Remove \(name)")
-                .accessibilityLabel("Remove \(name)")
+        SettingsRow(caption: problem ?? managed ?? "", isWarning: problem != nil) {
+            Text(verbatim: "\(name)=").font(.body.monospaced())
+            TextField("Value", text: $draft, prompt: Text("empty removes it"))
+                .labelsHidden()
+                .font(.body.monospaced())
+                .onSubmit(commit)
+        } accessory: {
+            Button {
+                // Reset the draft first, or the row's disappearance would
+                // store the unsaved edit and bring the variable back.
+                draft = value
+                set(nil)
+            } label: {
+                Image(systemName: "minus.circle")
             }
-            if let problem = UserEnvironment.problem(name: name, value: draft), draft != value {
-                Text(problem.message).font(.caption).foregroundStyle(.red)
-            } else if let setting = UserEnvironment.managingSetting(of: name) {
-                Text("Takes the place of the \(setting) setting.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .help("Remove \(name)")
+            .accessibilityLabel("Remove \(name)")
         }
         .onAppear { draft = value }
         .onChange(of: value) { _, stored in draft = stored }
         .onDisappear(perform: commit)
+    }
+
+    /// Why the edited value cannot be stored.
+    private var problem: String? {
+        draft == value ? nil : UserEnvironment.problem(name: name, value: draft)?.message
+    }
+
+    private var managed: String? {
+        UserEnvironment.managingSetting(of: name).map {
+            String(localized: "Takes the place of the \($0) setting.")
+        }
     }
 
     private func commit() {
@@ -93,29 +95,30 @@ private struct AddEnvironmentRow: View {
     @State private var value = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            HStack {
-                TextField("Name", text: $name, prompt: Text(verbatim: "DXVK_HUD"))
-                    .labelsHidden()
-                    .font(.body.monospaced())
-                    .frame(maxWidth: 180)
-                    .onSubmit(submit)
-                Text(verbatim: "=").font(.body.monospaced())
-                TextField("Value", text: $value, prompt: Text(verbatim: "1"))
-                    .labelsHidden()
-                    .font(.body.monospaced())
-                    .onSubmit(submit)
-                Button(existing.contains(trimmedName) ? "Replace" : "Add", action: submit)
-                    .disabled(trimmedName.isEmpty || problem != nil)
-            }
-            if !trimmedName.isEmpty, let problem {
-                Text(problem.message).font(.caption).foregroundStyle(.red)
-            } else if let setting = UserEnvironment.managingSetting(of: trimmedName) {
-                Text("Takes the place of the \(setting) setting.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        SettingsRow(caption: caption, isWarning: !trimmedName.isEmpty && problem != nil) {
+            TextField("Name", text: $name, prompt: Text(verbatim: "DXVK_HUD"))
+                .labelsHidden()
+                .font(.body.monospaced())
+                .frame(maxWidth: Self.nameWidth)
+                .onSubmit(submit)
+            Text(verbatim: "=").font(.body.monospaced())
+            TextField("Value", text: $value, prompt: Text(verbatim: "1"))
+                .labelsHidden()
+                .font(.body.monospaced())
+                .onSubmit(submit)
+            Button(existing.contains(trimmedName) ? "Replace" : "Add", action: submit)
+                .disabled(trimmedName.isEmpty || problem != nil)
         }
+    }
+
+    /// The name field's width, which holds the longest variable a fix names.
+    private static let nameWidth: CGFloat = 180
+
+    private var caption: String {
+        if !trimmedName.isEmpty, let problem { return problem.message }
+        return UserEnvironment.managingSetting(of: trimmedName).map {
+            String(localized: "Takes the place of the \($0) setting.")
+        } ?? ""
     }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }

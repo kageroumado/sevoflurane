@@ -101,7 +101,7 @@ private struct EnginePicker: View {
     @Binding var bottleChoice: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        SettingsRow(caption: store.options.first { $0.engine == store.stagedEngine }?.detail ?? "") {
             Picker("Engine", selection: Binding(
                 get: { store.stagedEngine.description },
                 set: { id in
@@ -115,14 +115,8 @@ private struct EnginePicker: View {
                     Text(option.label).tag(option.id)
                 }
             }
+            .endsOnControlLine()
             .disabled(store.isSwitching)
-            if let detail = store.options.first(
-                where: { $0.engine == store.stagedEngine },
-            )?.detail {
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 }
@@ -133,18 +127,21 @@ private struct BottlePicker: View {
     @Binding var bottleChoice: String
 
     var body: some View {
-        Picker("Bottle", selection: $bottleChoice) {
-            ForEach(store.bottles, id: \.name) { bottle in
-                Text(bottle.hasSteam ? bottle.name : String(localized: "\(bottle.name) (no Steam yet)"))
-                    .tag(bottle.name)
+        SettingsRow {
+            Picker("Bottle", selection: $bottleChoice) {
+                ForEach(store.bottles, id: \.name) { bottle in
+                    Text(bottle.hasSteam ? bottle.name : String(localized: "\(bottle.name) (no Steam yet)"))
+                        .tag(bottle.name)
+                }
+                Text("New bottle…").tag(EngineSelectionSection.newBottleTag)
+                // A staged name not on disk yet keeps its own row, so the picker
+                // never shows an empty selection.
+                if store.stagedBottleIsNew, !store.stagedBottle.isEmpty,
+                   bottleChoice == store.stagedBottle {
+                    Text("\(store.stagedBottle) (new)").tag(store.stagedBottle)
+                }
             }
-            Text("New bottle…").tag(EngineSelectionSection.newBottleTag)
-            // A staged name not on disk yet keeps its own row, so the picker
-            // never shows an empty selection.
-            if store.stagedBottleIsNew, !store.stagedBottle.isEmpty,
-               bottleChoice == store.stagedBottle {
-                Text("\(store.stagedBottle) (new)").tag(store.stagedBottle)
-            }
+            .endsOnControlLine()
         }
         .disabled(store.isSwitching)
         .onChange(of: bottleChoice) { _, choice in
@@ -161,7 +158,7 @@ private struct NewBottleField: View {
     @State private var newBottleName = ""
 
     var body: some View {
-        HStack {
+        SettingsRow {
             TextField("Bottle name", text: $newBottleName)
                 .textFieldStyle(.roundedBorder)
             Button("Use") {
@@ -182,28 +179,18 @@ private struct EngineUpdateRow: View {
 
     var body: some View {
         if let newer = store.newerEngine {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(Engine.managedDisplayName(newer.version)) is available")
-                    Text(newer.notes ?? InterfaceCopy.localized("A newer Dormison than any installed here."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
+            ActionRow(
+                title: "\(Engine.managedDisplayName(newer.version)) is available",
+                caption: newer.notes ?? InterfaceCopy.localized("A newer Dormison than any installed here."),
+            ) {
                 Button("Update") { store.useDefaultEngine() }
                     .disabled(store.isSwitching)
             }
         } else if store.canResetToDefault, let label = store.defaultEngineLabel {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Default engine")
-                    Text("\(label) is what a fresh installation runs.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
+            ActionRow(
+                title: "Default engine",
+                caption: String(localized: "\(label) is what a fresh installation runs."),
+            ) {
                 Button("Reset") { store.useDefaultEngine() }
                     .disabled(store.isSwitching)
             }
@@ -223,14 +210,17 @@ private struct EngineFileRow: View {
     @State private var engineFileError: String?
 
     var body: some View {
-        CaptionedRow(caption: InterfaceCopy.localized(engineFileDetail), isWarning: engineFileError != nil) {
-            LabeledContent("Engine from a file or folder") {
-                if isInstallingEngineFile {
-                    ProgressView().controlSize(.small)
-                }
-                Button("Choose…") { installEngineFile() }
-                    .disabled(isInstallingEngineFile || store.isSwitching)
+        ActionRow(
+            title: "Engine from a file or folder",
+            caption: InterfaceCopy.localized(engineFileDetail),
+            isWarning: engineFileError != nil,
+            help: .engineFile,
+        ) {
+            if isInstallingEngineFile {
+                ProgressView().controlSize(.small)
             }
+            Button("Choose…") { installEngineFile() }
+                .disabled(isInstallingEngineFile || store.isSwitching)
         }
     }
 
@@ -239,8 +229,7 @@ private struct EngineFileRow: View {
             return phase
         }
         return engineFileError
-            ?? "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built. "
-            + "Sevoflurane checks the .sig beside a tarball."
+            ?? "A dormison-r<N>.tar.xz you downloaded, or an engine folder you built."
     }
 
     private func installEngineFile() {
@@ -284,22 +273,21 @@ private struct EngineSwitchRow: View {
                 }
             }
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(switchSummary)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let error = store.switchError {
-                    Text(error).font(.callout).foregroundStyle(.orange)
-                }
-                HStack {
-                    Spacer()
-                    Button("Cancel") {
-                        store.revert()
-                        bottleChoice = store.stagedBottle
+            SettingsRow(caption: store.switchError ?? "", isWarning: true) {
+                VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                    Text(switchSummary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Spacer()
+                        Button("Cancel") {
+                            store.revert()
+                            bottleChoice = store.stagedBottle
+                        }
+                        Button("Switch") { store.apply() }
+                            .buttonStyle(.borderedProminent)
                     }
-                    Button("Switch") { store.apply() }
-                        .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -329,24 +317,22 @@ private struct EngineStandingFailure: View {
     let error: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(error)
-                .font(.callout)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-            if store.clientStartIsBlocked {
-                Text("Steam cannot start until this is fixed.")
+        SettingsRow(
+            caption: store.clientStartIsBlocked ? String(localized: "Steam cannot start until this is fixed.") : "",
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Text(error)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Spacer()
-                if store.clientStartIsBlocked {
-                    Button("Start Steam Anyway") { store.startClientAnyway() }
+                HStack {
+                    Spacer()
+                    if store.clientStartIsBlocked {
+                        Button("Start Steam Anyway") { store.startClientAnyway() }
+                    }
+                    Button("Try Again") { store.retryProvisioning() }
+                        .buttonStyle(.borderedProminent)
                 }
-                Button("Try Again") { store.retryProvisioning() }
-                    .buttonStyle(.borderedProminent)
             }
         }
     }
@@ -359,12 +345,13 @@ private struct CrossOverNotice: View {
 
     var body: some View {
         Section {
-            CaptionedRow(caption: InterfaceCopy.localized("Its dependencies and Windows settings are CrossOver's to change.")) {
-                LabeledContent("\(engine.description) manages this bottle") {
-                    Button("Open \(engine == .crossoverPreview ? "Preview" : "CrossOver")") {
-                        if let app = engine.crossoverApp {
-                            NSWorkspace.shared.openApplication(at: app, configuration: .init())
-                        }
+            ActionRow(
+                title: "\(engine.description) manages this bottle",
+                caption: InterfaceCopy.localized("Its dependencies and Windows settings are CrossOver's to change."),
+            ) {
+                Button("Open \(engine == .crossoverPreview ? "Preview" : "CrossOver")") {
+                    if let app = engine.crossoverApp {
+                        NSWorkspace.shared.openApplication(at: app, configuration: .init())
                     }
                 }
             }
@@ -383,16 +370,11 @@ private struct MsyncSection: View {
 
     var body: some View {
         Section {
-            Toggle(isOn: msyncBinding) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(crossOver ? "Enhanced synchronization (msync)" : "Enhanced synchronization (msync+)")
-                    Text("Reduces synchronization overhead. Turn it off if a game freezes.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
+            ToggleRow(
+                title: crossOver ? "Enhanced synchronization (msync)" : "Enhanced synchronization (msync+)",
+                caption: String(localized: "Reduces synchronization overhead. Turn it off if a game freezes."),
+                isOn: msyncBinding,
+            )
             .highlightable(.engineMsync, highlighted: highlighted)
         } footer: {
             Text("Restart Steam to apply this setting.")
@@ -420,16 +402,12 @@ private struct KnownFixesSection: View {
 
     var body: some View {
         Section {
-            Toggle(isOn: $applies) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Apply known fixes automatically")
-                    Text("The first time a game starts, settings the fix list names for it are set where the game has none of its own. Settings › Games shows each one with an undo.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .toggleStyle(.switch)
+            ToggleRow(
+                title: "Apply known fixes automatically",
+                caption: String(localized: "At a game's first launch, where the game has no setting of its own."),
+                help: .knownFixes,
+                isOn: $applies,
+            )
             .onChange(of: applies) { _, on in Preferences.appliesKnownFixes = on }
             .highlightable(.engineKnownFixes, highlighted: highlighted)
         }
@@ -472,15 +450,11 @@ private struct DownloadEverythingToggle: View {
     @State private var downloadEverything = BottleDependencies.installsEverything
 
     var body: some View {
-        Toggle(isOn: $downloadEverything) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Download everything")
-                Text("A new bottle gets the fonts and legacy runtimes too, not the required ones alone.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        ToggleRow(
+            title: "Download everything",
+            caption: String(localized: "A new bottle also gets the fonts and legacy runtimes."),
+            isOn: $downloadEverything,
+        )
         .onChange(of: downloadEverything) { _, value in
             BottleDependencies.installsEverything = value
         }
@@ -493,35 +467,28 @@ private struct DependencyInstallRow: View {
     let compatibility: CompatibilityStore
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.dependency.name)
-                Text(InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : row.dependency.detail))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let error = row.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+        SettingsRow(caption: caption, isWarning: row.error != nil && !row.busy) {
+            LabeledContent(row.dependency.name) {
+                if row.busy {
+                    ProgressView().controlSize(.small)
+                } else if row.installed {
+                    Label("Installed", systemImage: "checkmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.green)
+                        .labelStyle(.titleAndIcon)
+                } else {
+                    Button("Install \(row.dependency.download)") {
+                        compatibility.install(row.id)
+                    }
+                    .disabled(store.isSwitching)
                 }
-            }
-            Spacer(minLength: Theme.Space.sm)
-            if row.busy {
-                ProgressView().controlSize(.small)
-            } else if row.installed {
-                Label("Installed", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .labelStyle(.titleAndIcon)
-            } else {
-                Button("Install \(row.dependency.download)") {
-                    compatibility.install(row.id)
-                }
-                .disabled(store.isSwitching)
             }
         }
+    }
+
+    private var caption: String {
+        if row.busy { return InterfaceCopy.localized(row.phase ?? "working…") }
+        return row.error ?? row.dependency.detail
     }
 }
 
@@ -538,7 +505,7 @@ private struct DLLOverridesSection: View {
             }
             NewDLLOverrideRow(compatibility: compatibility)
             if let error = compatibility.overrideError {
-                Text(error).font(.caption).foregroundStyle(.orange)
+                Text(error).font(.callout).foregroundStyle(.orange)
             }
         } header: {
             HStack(spacing: 6) {
@@ -557,19 +524,19 @@ private struct DLLOverrideRow: View {
     let compatibility: CompatibilityStore
 
     var body: some View {
-        HStack(spacing: Theme.Space.md) {
-            Text(override.dll)
-                .font(.system(.body, design: .monospaced))
-            Spacer()
-            Text(override.mode)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        SettingsRow {
+            LabeledContent {
+                Text(override.mode)
+            } label: {
+                Text(override.dll)
+                    .font(.system(.body, design: .monospaced))
+            }
+        } accessory: {
             Button {
                 compatibility.removeOverride(override)
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(.borderless)
             .help("Remove the \(override.dll) override")
             .accessibilityLabel("Remove the \(override.dll) override")
         }
@@ -583,21 +550,26 @@ private struct NewDLLOverrideRow: View {
     @State private var newOverrideMode = BottleDependencies.overrideModes[0]
     @State private var libraries: [String] = []
 
+    /// The load-order picker's width, which holds its longest value.
+    private static let modeWidth: CGFloat = 140
+
     var body: some View {
-        HStack(spacing: Theme.Space.md) {
-            DLLNameField(name: $newOverrideDLL, names: libraries)
-            Picker("Load order", selection: $newOverrideMode) {
-                ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
-                    Text(mode).tag(mode)
+        SettingsRow {
+            HStack(spacing: Theme.Space.md) {
+                DLLNameField(name: $newOverrideDLL, names: libraries)
+                Picker("Load order", selection: $newOverrideMode) {
+                    ForEach(BottleDependencies.overrideModes, id: \.self) { mode in
+                        Text(mode).tag(mode)
+                    }
                 }
+                .labelsHidden()
+                .frame(width: Self.modeWidth)
+                Button("Add") {
+                    compatibility.setOverride(dll: BuiltinLibraries.normalized(newOverrideDLL), mode: newOverrideMode)
+                    newOverrideDLL = ""
+                }
+                .disabled(BuiltinLibraries.normalized(newOverrideDLL).isEmpty)
             }
-            .labelsHidden()
-            .frame(width: 140)
-            Button("Add") {
-                compatibility.setOverride(dll: BuiltinLibraries.normalized(newOverrideDLL), mode: newOverrideMode)
-                newOverrideDLL = ""
-            }
-            .disabled(BuiltinLibraries.normalized(newOverrideDLL).isEmpty)
         }
         .task { libraries = BuiltinLibraries.names() }
     }
@@ -632,14 +604,10 @@ private struct WineConfigurationRow: View {
     let compatibility: CompatibilityStore
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Windows settings")
-                Text("Windows version, drives, audio, and game overrides.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+        ActionRow(
+            title: "Wine configuration",
+            caption: String(localized: "winecfg: Windows version, drives, audio and DLL overrides."),
+        ) {
             Button("Open…") { compatibility.openWineConfiguration() }
                 .disabled(store.isSwitching)
         }
@@ -650,16 +618,12 @@ private struct WineDiagnosticsToggle: View {
     @State private var wineDiagnostics = WineLog.isDiagnosing
 
     var body: some View {
-        Toggle(isOn: $wineDiagnostics) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Log every library a game loads")
-                Text("~/Library/Logs/Sevoflurane-wine.log always records errors. This setting also records every exception and library load, so the log grows quickly.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .toggleStyle(.switch)
+        ToggleRow(
+            title: "Log every library a game loads",
+            caption: String(localized: "The Wine log grows quickly while this is on."),
+            help: .wineLog,
+            isOn: $wineDiagnostics,
+        )
         .onChange(of: wineDiagnostics) { _, enabled in
             WineLog.setDiagnosing(enabled)
         }
@@ -673,15 +637,17 @@ struct RepairRow: View {
     let highlighted: SettingsAnchor?
 
     var body: some View {
-        HStack(spacing: 10) {
-            activity
-            Spacer()
-            Button("Repair") {
-                Task(name: "Repair the installation") {
-                    await provisioner.provisionAndConfigure()
+        SettingsRow(caption: failure ?? "", isWarning: true) {
+            HStack(spacing: Theme.Space.sm) {
+                activity
+                Spacer()
+                Button("Repair") {
+                    Task(name: "Repair the installation") {
+                        await provisioner.provisionAndConfigure()
+                    }
                 }
+                .disabled(isWorking)
             }
-            .disabled(isWorking)
         }
         .highlightable(.engineRepair, highlighted: highlighted)
         .task { await provisioner.refreshDetection() }
@@ -693,16 +659,10 @@ struct RepairRow: View {
         case let .working(phase):
             ProgressView().controlSize(.small)
             Text(phase)
-        case let .failed(reason):
+        case .failed:
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Repair could not finish.")
-                Text(reason)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text("Repair could not finish.")
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -714,5 +674,9 @@ struct RepairRow: View {
 
     private var isWorking: Bool {
         if case .working = provisioner.activity { true } else { false }
+    }
+
+    private var failure: String? {
+        if case let .failed(reason) = provisioner.activity { reason } else { nil }
     }
 }

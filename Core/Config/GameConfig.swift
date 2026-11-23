@@ -114,7 +114,7 @@ nonisolated enum FinalFilter: String, Codable, CaseIterable, Sendable {
     /// One line on what the filter does to the picture.
     var detail: String {
         let value = switch self {
-        case .nearest: "Copies pixels. Crisp at whole-number scales, uneven at the rest."
+        case .nearest: "Copies pixels. Crisp at whole scales, uneven between."
         case .bilinear: "Blends neighboring pixels. The softest of the three."
         case .lanczos: "Sharp resampling for fractional scales."
         }
@@ -752,7 +752,8 @@ nonisolated enum GameConfig {
     private static func parentProcessName() -> String {
         var name = [CChar](repeating: 0, count: 256)
         let length = proc_name(getppid(), &name, UInt32(name.count))
-        return length > 0 ? String(cString: name) : "pid \(getppid())"
+        guard length > 0 else { return "pid \(getppid())" }
+        return String(decoding: name.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     private static let changeStamp: DateFormatter = {

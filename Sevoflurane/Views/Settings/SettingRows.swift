@@ -100,11 +100,6 @@ struct SettingRow: View {
                store.own(setting) != nil || store.level == .bottle {
                 TuningParametersFields(parameters: store.tuningParametersBinding)
             }
-            if setting.reach(store.own(setting)) == .clientRestart {
-                Text("Steam restarts at the next launch, which takes about 30 seconds.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
             if let fixed {
                 FixListMark(reason: fixed.reason, undo: fixed.undo)
             } else if let recommended, store.own(setting) != recommended.value {
@@ -115,13 +110,15 @@ struct SettingRow: View {
         }
     }
 
-    /// The line under the control, led by the engine's value while inheriting.
+    /// The one line under the control: what the value costs to apply, the
+    /// engine's value while a game inherits it, or what the setting does.
     private var caption: String {
-        let what = setting.detail?(store.effective(setting)) ?? setting.copy.caption
+        if setting.reach(store.own(setting)) == .clientRestart {
+            return String(localized: "Steam restarts at the next launch, which takes about 30 seconds.")
+        }
         guard store.level == .game, store.own(setting) == nil, setting.control != .toggle, setting.inherits
-        else { return what }
-        let inherited = String(localized: "Engine's value: \(setting.label(of: store.inherited(setting))).")
-        return what.isEmpty ? inherited : "\(inherited) \(what)"
+        else { return setting.detail?(store.effective(setting)) ?? setting.copy.caption }
+        return String(localized: "Engine's value: \(setting.label(of: store.inherited(setting))).")
     }
 
     /// The picker hands back `nil` for Inherit, which a bottle cannot choose.
@@ -157,6 +154,7 @@ private struct SettingControlView: View {
                 Text("On").tag(Self.onTag)
                 Text("Off").tag(Self.offTag)
             }
+            .endsOnControlLine()
         case let (.choices(choices), level), let (.tuning(choices), level):
             let inherits = level == .game && setting.inherits
             Picker(setting.title, selection: inherits ? tag : store.choiceBinding(setting)) {
@@ -166,6 +164,7 @@ private struct SettingControlView: View {
                     Text(choice.label).tag(choice.value)
                 }
             }
+            .endsOnControlLine()
         case (.upscaler, _):
             EmptyView()
         }

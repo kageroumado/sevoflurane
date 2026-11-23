@@ -80,7 +80,7 @@ nonisolated extension SettingCopy {
 
     static let mouse = SettingCopy(
         title: "Movement",
-        caption: "What a game gets while it holds the pointer for mouse-look.",
+        caption: "How the pointer moves during mouse-look.",
         help: SettingHelp(
             title: "Mouse movement",
             summary: "Applies while a game has taken the pointer, as a first-person camera does. "
@@ -102,7 +102,7 @@ nonisolated extension SettingCopy {
 
     static let modeset = SettingCopy(
         title: "Fake display-mode changes",
-        caption: "A game that switches the screen's resolution gets a window instead.",
+        caption: "A game that switches resolution gets a window instead.",
         help: SettingHelp(
             title: "Fake display-mode changes",
             summary: "Older games ask Windows to switch the display to 800 × 600 or 1024 × 768 and "
@@ -114,8 +114,7 @@ nonisolated extension SettingCopy {
 
     static let nativeMenuBar = SettingCopy(
         title: "Menus in the menu bar",
-        caption: "A program's own menus, such as Game and Help, move into the macOS menu bar, "
-            + "and the strip in its window is hidden.",
+        caption: "A program's own menus move into the macOS menu bar.",
         help: SettingHelp(
             title: "Menus in the menu bar",
             summary: "Windows programs draw a row of menus at the top of their window. With this "
@@ -182,13 +181,13 @@ nonisolated extension SettingCopy {
     )
 
     static let cursorConfine = SettingCopy(
-        title: "Keep the pointer in the window",
-        caption: "During mouse-look the pointer stays off your other displays.",
+        title: "Confine the pointer",
+        caption: "In mouse-look, it stays off your other displays.",
     )
 
     static let build = SettingCopy(
         title: "Play in",
-        caption: "Steam for Mac runs the macOS version, with the game installed there.",
+        caption: "Steam for Mac needs the game installed there.",
         help: SettingHelp(
             title: "Sevoflurane or Steam for Mac",
             summary: "Steam sells this game for macOS too. Play can run it here or in Valve's Steam for Mac.",
@@ -234,7 +233,7 @@ nonisolated extension SettingCopy {
 
     static let tuning = SettingCopy(
         title: "Thread waiting",
-        caption: "How long a game's threads look for work before they sleep.",
+        caption: "How long threads look for work before they sleep.",
         help: SettingHelp(
             title: "Thread waiting",
             summary: "A game's threads hand work to each other thousands of times a second. "
@@ -264,8 +263,7 @@ nonisolated extension SettingCopy {
 
     static let processors = SettingCopy(
         title: "Processors",
-        caption: "Some older games start one worker thread per processor and keep them all busy; "
-            + "fewer processors let them rest.",
+        caption: "Fewer can smooth a game that keeps every processor busy.",
         help: SettingHelp(
             title: "Processors",
             summary: "How many processors a game is told the Mac has. Games built on Unity 5 start "
@@ -286,7 +284,7 @@ nonisolated extension SettingCopy {
 
     static let unifiedMemory = SettingCopy(
         title: "Unified memory",
-        caption: "Experimental. Tells games the GPU shares the Mac's memory, so textures are written once.",
+        caption: "Experimental. Games write each texture to memory once.",
         help: SettingHelp(
             title: "Unified memory",
             summary: "A Mac has one pool of memory that the processor and the graphics chip both "
@@ -314,7 +312,7 @@ nonisolated extension SettingCopy {
 
     static let largeAddressAware = SettingCopy(
         title: "4 GB for 32-bit games",
-        caption: "A 32-bit game may use 4 GB where Windows would give it 2.",
+        caption: "Windows would give them 2 GB.",
         help: SettingHelp(
             title: "4 GB for 32-bit games",
             summary: "A 32-bit program can address 4 GB, and Windows gives it the lower 2 GB unless "
@@ -337,7 +335,7 @@ nonisolated extension SettingCopy {
 
     static let videoDecoding = SettingCopy(
         title: "Video decoding",
-        caption: "Title and cut-scene videos through the Mac's video hardware, or through software when they stay blank.",
+        caption: "Try Software if a game's videos stay blank.",
         help: SettingHelp(
             title: "Video decoding",
             summary: "Windows games play their videos through Media Foundation, which the engine answers "
@@ -361,7 +359,7 @@ nonisolated extension SettingCopy {
 
     static let avx = SettingCopy(
         title: "Report AVX to games",
-        caption: "Games that check for AVX at launch find it.",
+        caption: "For games that refuse to start without AVX.",
         help: SettingHelp(
             title: "Report AVX to games",
             summary: "AVX and AVX2 are processor instructions many games since 2020 require. "
