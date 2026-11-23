@@ -100,6 +100,8 @@
                 print("gallery export: \(strip) strips of \(Int(height)) pt in \(directory.path)")
                 let panes = await writePanes(to: directory, appearance: window.appearance)
                 print("gallery export: \(panes) panes in \(directory.path)")
+                let steps = await writeWizard(to: directory, appearance: window.appearance)
+                print("gallery export: \(steps) first-run screens in \(directory.path)")
                 NSApp.terminate(nil)
             }
         }
@@ -143,6 +145,39 @@
                     .write(to: directory.appendingPathComponent(
                         "\(entry.pane.isWholePane ? "pane" : "view")-\(entry.pane.id).png",
                     ))
+            }
+            return hosts.count
+        }
+
+        /// The first-run assistant at its window's size: each step as
+        /// `setup-<step>.png` on a machine that reaches it.
+        private static func writeWizard(to directory: URL, appearance: NSAppearance?) async -> Int {
+            let screens: [(name: String, store: SetupStore)] =
+                Fixtures.wizardSteps.map { ("setup-\($0.step.rawValue)", $0.store) }
+            let hosts = screens.map { screen in
+                let host = NSHostingView(rootView: SetupView(store: screen.store, onFinished: {})
+                    .frame(width: SetupMetrics.windowSize.width, height: SetupMetrics.windowSize.height)
+                    .background(Color(nsColor: .windowBackgroundColor)))
+                let window = NSWindow(
+                    contentRect: NSRect(origin: CGPoint(x: -20000, y: -20000), size: SetupMetrics.windowSize),
+                    styleMask: [.borderless], backing: .buffered, defer: false,
+                )
+                window.contentView = host
+                if let appearance {
+                    window.appearance = appearance
+                    window.backgroundColor = .windowBackgroundColor
+                }
+                window.orderBack(nil)
+                return (name: screen.name, host: host, window: window)
+            }
+            try? await Task.sleep(for: settleDelay)
+            for entry in hosts {
+                entry.host.layoutSubtreeIfNeeded()
+                let rect = entry.host.bounds
+                guard let bitmap = entry.host.bitmapImageRepForCachingDisplay(in: rect) else { continue }
+                entry.host.cacheDisplay(in: rect, to: bitmap)
+                try? bitmap.representation(using: .png, properties: [:])?
+                    .write(to: directory.appendingPathComponent("\(entry.name).png"))
             }
             return hosts.count
         }

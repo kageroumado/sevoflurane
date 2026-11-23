@@ -1,6 +1,7 @@
 #!/bin/bash
 # Writes the Debug UI gallery to PNG strips: every settings pane, popover state
-# and first-run step, from fixtures, touching nothing on this Mac.
+# and first-run step, from fixtures, touching nothing on this Mac. Each
+# Settings pane is also pane-<name>.png and each first-run step setup-<step>.png.
 #   Tools/gallery-export.sh <output directory> [derived data path]
 # SEVO_GALLERY_APPEARANCE=dark in the environment writes the dark appearance.
 set -euo pipefail
