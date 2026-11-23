@@ -6,6 +6,8 @@ Sevoflurane 为 Mac 带来类似 Proton 的体验，在同一个 Steam 界面中
 
 <a href="https://kagerou.glass/get/sevoflurane?from=readme"><img src=".github/download.zh-CN.svg" alt="下载 Mac 版 Sevoflurane" width="360" height="80"></a>
 
+需要 macOS 26 或更高版本，以及一个 Steam 账户。免费开源（MIT）。依赖 Windows 内核级反作弊的游戏无法运行。
+
 ![Mac 窗口里的 Steam 游戏库，筛选出能在这台 Mac 上玩的游戏；游戏的版本菜单列出 macOS 版和 Windows 版；macOS 版作为独立应用打开，有自己的程序坞图标；DirectX 12 的 Windows 游戏《地平线 零之曙光》在 Mac 窗口里运行；视觉小说调整窗口大小](.github/sevoflurane-film.zh-CN.avif)
 
 ## 特色
@@ -39,9 +41,16 @@ Sevoflurane 为 Mac 带来类似 Proton 的体验，在同一个 Steam 界面中
 
 </details>
 
+## 有何不同
+
+- **Mac 版 Steam** 只列出有 Mac 版本的游戏。Sevoflurane 的游戏库还能安装并运行它们的 Windows 版本。
+- **CrossOver 等 Wine 前端**把 Windows 版 Steam 客户端当作又一个 Windows 程序运行，窗口由 Wine 绘制。Sevoflurane 让客户端留在后台，把 Steam、每款游戏及其设置显示在 Mac 窗口里。
+- **引擎：** Sevoflurane 自带 [Dormison](https://github.com/kageroumado/dormison)，一个自行维护的 Wine 分支，也可以改用已安装的 CrossOver。
+
 ## 其他信息
 
 - [游戏兼容性](https://kagerou.glass/sevoflurane/games/?lang=zh-CN) · [渲染器、限制及命令行参考](REFERENCE.zh-CN.md)。
 - **Intel Mac** 的支持有限：DirectX 9–11 游戏可通过 DXMT、DXVK 或 wined3d 运行；DirectX 12 需要 Apple 芯片。
-- **设置 → 关于 → 保存诊断…**收集报告。[贡献指南](CONTRIBUTING.md)。
+- **设置 → 关于 → 存储诊断信息**收集报告。[贡献指南](CONTRIBUTING.md)。
+- **隐私：** 运行统计和每日使用计数默认关闭，由你决定是否开启。发行版均经过签名和公证。
 - 提问、试玩与发布消息：[Discord](https://discord.gg/BJYJvZGqHX) · [问题反馈](https://github.com/kageroumado/sevoflurane/issues)。

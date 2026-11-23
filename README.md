@@ -6,6 +6,8 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 
 <a href="https://kagerou.glass/get/sevoflurane?from=readme"><img src=".github/download.svg" alt="Download Sevoflurane for Mac" width="360" height="80"></a>
 
+Needs macOS 26 or later and a Steam account. Free and open source (MIT). Games that need Windows kernel anti-cheat do not run.
+
 ![Steam's library in a Mac window, filtered to the games that play on this Mac; a game's version menu offering its macOS and Windows versions; the macOS version open as its own app with its own Dock icon; Horizon Zero Dawn, a DirectX 12 Windows game, in a Mac window; a visual novel resized](.github/sevoflurane-film.avif)
 
 ## Highlights
@@ -39,9 +41,16 @@ Sevoflurane brings a Proton-like experience to Mac, running Windows and macOS ga
 
 </details>
 
+## How it differs
+
+- **Steam for Mac** lists only games that have a Mac version. Sevoflurane’s library also installs and plays their Windows versions.
+- **CrossOver and other Wine front ends** run the Windows Steam client as one more Windows program, in windows Wine draws. Sevoflurane keeps that client in the background and shows Steam, each game and its settings in Mac windows.
+- **Engines:** Sevoflurane ships [Dormison](https://github.com/kageroumado/dormison), its own Wine fork, and can run on an installed CrossOver instead.
+
 ## Notes
 
 - [Game compatibility](https://kagerou.glass/sevoflurane/games/) · [Renderer choices and limits](REFERENCE.md#renderers).
 - **Intel Macs** have limited support: DirectX 9–11 games run through DXMT, DXVK or wined3d; DirectX 12 needs Apple silicon.
 - **Settings → About → Save Diagnostics** collects a report. [CLI/MCP reference](REFERENCE.md#command-line) · [Contributing](CONTRIBUTING.md).
+- **Privacy:** run statistics and the daily usage count are off until you turn them on. Releases are signed and notarized.
 - Questions, playtests and release news: [Discord](https://discord.gg/BJYJvZGqHX) · [Issues](https://github.com/kageroumado/sevoflurane/issues).
