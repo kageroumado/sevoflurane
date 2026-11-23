@@ -33,11 +33,10 @@ struct StorageSettings: View {
                     }
                 }
                 if store.needsClientRestart, let steam {
-                    HStack {
-                        Text("Restart Steam to see linked and unlinked games.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        Spacer()
+                    ActionRow(
+                        title: "Links changed",
+                        caption: String(localized: "Restart Steam to see linked and unlinked games."),
+                    ) {
                         Button("Restart Steam") {
                             store.applyPendingLinks()
                             steam.restartClient()
@@ -74,7 +73,7 @@ struct StorageSettings: View {
 
     private func gameRow(_ game: StorageInventory.Game) -> some View {
         let linked = store.linkedGames.contains(game.id)
-        return HStack(spacing: Theme.Space.md) {
+        return SettingsRow {
             Text(game.name).lineLimit(1)
             if linked {
                 Image(systemName: "link")
@@ -86,27 +85,22 @@ struct StorageSettings: View {
             Text(Self.size(game.bytes))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            Group {
-                if steam != nil || linked {
-                    Button {
-                        if linked {
-                            store.unlink(game)
-                        } else {
-                            steam?.uninstall(game.id)
-                        }
-                    } label: {
-                        Image(systemName: linked ? "link.badge.minus" : "trash")
+        } accessory: {
+            if steam != nil || linked {
+                Button {
+                    if linked {
+                        store.unlink(game)
+                    } else {
+                        steam?.uninstall(game.id)
                     }
-                    .buttonStyle(.borderless)
-                    .help(linked
-                        ? "Remove the link. The files stay in their own bottle."
-                        : "Uninstall through Steam. It asks first.")
-                    .accessibilityLabel(linked ? "Remove the link to \(game.name)" : "Uninstall \(game.name)")
-                } else {
-                    Color.clear.frame(height: 0)
+                } label: {
+                    Image(systemName: linked ? "link.badge.minus" : "trash")
                 }
+                .help(linked
+                    ? "Remove the link. The files stay in their own bottle."
+                    : "Uninstall through Steam. It asks first.")
+                .accessibilityLabel(linked ? "Remove the link to \(game.name)" : "Uninstall \(game.name)")
             }
-            .frame(width: Self.actionColumnWidth)
         }
         .font(.callout)
     }
@@ -124,13 +118,12 @@ struct StorageSettings: View {
     }
 
     private func programRow(_ program: StorageInventory.Program) -> some View {
-        HStack(spacing: Theme.Space.md) {
+        SettingsRow {
             VStack(alignment: .leading, spacing: 1) {
                 Text(program.name).lineLimit(1)
                 Text(program.isInsideBottle
                     ? program.path
                     : String(localized: "\(program.path) · stays in place"))
-                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -139,13 +132,12 @@ struct StorageSettings: View {
             Text(program.isInsideBottle ? Self.size(program.bytes) : "—")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+        } accessory: {
             Button {
                 store.removeProgram(program)
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(.borderless)
-            .frame(width: Self.actionColumnWidth)
             .accessibilityLabel("Remove \(program.name)")
             .help(program.isInsideBottle
                 ? "Remove this program and move its installed files to the Trash."
@@ -159,43 +151,35 @@ struct StorageSettings: View {
         if !store.linkable.isEmpty || !store.pendingLinks.isEmpty {
             Section {
                 ForEach(store.pendingLinks) { candidate in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(candidate.name).lineLimit(1)
-                            Text("Linked. Restart Steam to see it.")
-                                .font(.caption)
+                    SettingsRow(caption: String(localized: "Linked. Restart Steam to see it.")) {
+                        LabeledContent {
+                            Image(systemName: "link")
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        } label: {
+                            Text(candidate.name).lineLimit(1)
                         }
-                        Spacer(minLength: Theme.Space.md)
-                        Image(systemName: "link")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    } accessory: {
                         Button {
                             store.cancelPendingLink(candidate)
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
                         }
-                        .buttonStyle(.borderless)
                         .help("Undo the link")
                         .accessibilityLabel("Undo the link")
                     }
-                    .font(.callout)
                 }
                 ForEach(store.linkable) { candidate in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
+                    SettingsRow(
+                        caption: String(localized: "In \u{201C}\(candidate.sourceBottle)\u{201D} · \(candidate.sourceEngine)"),
+                    ) {
+                        LabeledContent {
+                            Text(Self.size(candidate.bytes)).monospacedDigit()
+                            Button("Link") { store.link(candidate) }
+                        } label: {
                             Text(candidate.name).lineLimit(1)
-                            Text("In \u{201C}\(candidate.sourceBottle)\u{201D} · \(candidate.sourceEngine)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
-                        Spacer(minLength: Theme.Space.md)
-                        Text(Self.size(candidate.bytes))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        Button("Link") { store.link(candidate) }
                     }
-                    .font(.callout)
                 }
             } header: {
                 Text("In your other bottles")
@@ -206,9 +190,6 @@ struct StorageSettings: View {
         }
     }
 
-    /// The column at the trailing edge that holds a row's one control, kept
-    /// for a row with none so the sizes share an edge.
-    private static let actionColumnWidth: CGFloat = 20
     /// Where a row's title starts, past its dot: the edge the detail line and
     /// the expanded lists share.
     private static let titleIndent = StorageDot.diameter + Theme.Space.sm
@@ -221,47 +202,34 @@ struct StorageSettings: View {
         _ entry: StorageInventory.Entry, dot: Color?, isExpanded: Binding<Bool>? = nil,
     ) -> some View {
         let name = InterfaceCopy.localized(entry.name)
-        return HStack(spacing: Theme.Space.md) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: Theme.Space.sm) {
-                    StorageDot(color: dot)
-                    Text(name)
-                }
-                Text(InterfaceCopy.localized(entry.removal?.caution ?? entry.detail))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, Self.titleIndent)
-            }
+        return SettingsRow(
+            caption: InterfaceCopy.localized(entry.removal?.caution ?? entry.detail),
+            captionInset: Self.titleIndent,
+        ) {
+            StorageDot(color: dot)
+            Text(name)
             Spacer(minLength: Theme.Space.sm)
             // A dash for both "not measured yet" and "nothing there":
             // `ByteCountFormatter` says "Zero KB", which reads like a bug.
             Text(entry.bytes <= 0 ? "—" : Self.size(entry.bytes))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-            Group {
-                if let isExpanded {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
-                    }
-                    .help(isExpanded.wrappedValue ? "Hide the list" : "Show each one")
-                    .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(name)" : "Show \(name)")
-                } else if entry.removal != nil {
-                    Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
-                        .disabled(entry.bytes <= 0)
-                        .help("Move \(name.lowercased()) to the Trash")
-                        .accessibilityLabel("Move \(name.lowercased()) to the Trash")
-                } else {
-                    // Holds the column: a frame on a `Group` with nothing in
-                    // it takes no space, and the size would slide right.
-                    Color.clear.frame(height: 0)
+        } accessory: {
+            if let isExpanded {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
                 }
+                .help(isExpanded.wrappedValue ? "Hide the list" : "Show each one")
+                .accessibilityLabel(isExpanded.wrappedValue ? "Hide \(name)" : "Show \(name)")
+            } else if entry.removal != nil {
+                Button { store.reclaim(entry) } label: { Image(systemName: "trash") }
+                    .disabled(entry.bytes <= 0)
+                    .help("Move \(name.lowercased()) to the Trash")
+                    .accessibilityLabel("Move \(name.lowercased()) to the Trash")
             }
-            .buttonStyle(.borderless)
-            .frame(width: Self.actionColumnWidth)
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -294,6 +262,8 @@ struct StorageOwnTotalHeader: View {
             if isMeasuring { ProgressView().controlSize(.small) }
             Text(StorageSettings.size(total)).monospacedDigit().foregroundStyle(.secondary)
         }
+        // The rows' sizes end before their accessory slot; so does their total.
+        .padding(.trailing, SettingsRowMetrics.accessoryWidth + SettingsRowMetrics.accessorySpacing)
     }
 }
 
@@ -312,11 +282,10 @@ private struct StorageLibrariesSection: View {
                 StorageLibraryRow(library: library)
             }
             if let steam {
-                HStack {
-                    Text("Add a library in Steam\u{2019}s settings, under Storage.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                ActionRow(
+                    title: "Add a library",
+                    caption: String(localized: "In Steam\u{2019}s settings, under Storage."),
+                ) {
                     Button("Open Steam Settings\u{2026}") { steam.openSteamSettings() }
                 }
             }
@@ -332,27 +301,23 @@ private struct StorageLibraryRow: View {
     let library: StorageInventory.Library
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Space.md) {
+        SettingsRow(caption: warning ?? "", isWarning: true, captionInset: Self.titleIndent) {
             Image(systemName: library.isInsideBottle ? "internaldrive" : "externaldrive")
                 .foregroundStyle(.secondary)
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(library.isInsideBottle ? InterfaceCopy.localized("Inside the bottle") : library.location)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(summary)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if let warning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+                .frame(width: Self.iconWidth, alignment: .leading)
+                .accessibilityHidden(true)
+            Text(library.isInsideBottle ? InterfaceCopy.localized("Inside the bottle") : library.location)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: Theme.Space.sm)
+            Text(summary).foregroundStyle(.secondary).lineLimit(1)
         }
         .help(library.location)
     }
+
+    private static let iconWidth: CGFloat = 20
+    /// Where the title starts, past the drive's icon: the caption's edge too.
+    private static let titleIndent = iconWidth + SettingsRowMetrics.accessorySpacing
 
     private var summary: String {
         var parts = [String(localized: "\(library.games) games")]
@@ -368,9 +333,9 @@ private struct StorageLibraryRow: View {
     private var warning: String? {
         switch library.fileSystem {
         case let .foreign(name):
-            String(localized: "This drive is \(name). Games here can fail to install, update or start. Reformat it as APFS, or move the games to another library in Steam.")
+            String(localized: "Games on this \(name) drive can fail. Reformat it as APFS, or move them in Steam.")
         case let .network(name):
-            String(localized: "This library is on a \(name) network share. Updates and saves are slow and can fail there.")
+            String(localized: "On a \(name) network share, updates and saves are slow and can fail.")
         case .mac, .unknown:
             nil
         }
