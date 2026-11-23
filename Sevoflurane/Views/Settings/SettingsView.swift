@@ -690,9 +690,11 @@ private struct SettingsPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The toolbar's safe area fits a title and subtitle; the form runs
         // under the titlebar and this bar holds back only the title's height,
-        // giving the soft edge effect a bar to fade under.
+        // giving the soft edge effect a bar to fade under. The bar holds a
+        // space of text, never a clear color: under an empty bar the edge
+        // draws no fade and scrolled rows show through the title.
         .safeAreaBar(edge: .top) {
-            Color.clear.frame(height: SettingsMetrics.titleBar)
+            Text(verbatim: " ").frame(width: 1, height: SettingsMetrics.titleBar)
         }
         .scrollEdgeEffectStyle(.soft, for: .all)
         .navigationTitle(category.title)

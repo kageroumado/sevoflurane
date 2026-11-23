@@ -65,6 +65,25 @@ struct SettingsKitTests {
         }
     }
 
+    /// A game's row is 336 pt: its title, then "Inherit (value)" in a pop-up
+    /// that is cut before the title is. Measured on the installed build, the
+    /// two hold 29 characters between them.
+    @Test
+    func `a choice fits beside Inherit in a game's row`() {
+        for setting in SettingCatalog.all where setting.levels.contains(.game) {
+            let choices: [SettingChoice] = switch setting.control {
+            case let .choices(choices), let .tuning(choices): choices
+            case .toggle, .upscaler: []
+            }
+            for choice in choices {
+                #expect(
+                    setting.copy.title.count + choice.label.count <= 29,
+                    "\(setting.copy.title): “\(choice.label)” is cut in Settings › Games",
+                )
+            }
+        }
+    }
+
     // MARK: - Scratch
 
     /// A setting's title, caption and every string of its help.

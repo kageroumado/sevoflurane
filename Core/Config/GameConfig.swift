@@ -27,7 +27,7 @@ nonisolated enum WindowTreatment: String, Codable, CaseIterable, Sendable {
         let value = switch self {
         case .off: "Never"
         case .fixed: "Fixed-size"
-        case .window: "Fixed-size and full-screen"
+        case .window: "Full-screen"
         case .all: "Every window"
         }
         return InterfaceCopy.localized(value)
@@ -211,7 +211,7 @@ nonisolated enum MouseCurve: String, Codable, CaseIterable, Sendable {
 
     var label: String {
         let value = switch self {
-        case .system: "macOS acceleration"
+        case .system: "macOS"
         case .linear: "Linear"
         }
         return InterfaceCopy.localized(value)
@@ -262,7 +262,7 @@ nonisolated enum OverlayDetail: String, Codable, CaseIterable, Sendable {
     var label: String {
         let value = switch self {
         case .frameRate: "Frame rate"
-        case .frameTime: "Frame rate and frame time"
+        case .frameTime: "Frame time too"
         case .system: "Everything"
         }
         return InterfaceCopy.localized(value)

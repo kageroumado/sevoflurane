@@ -4853,13 +4853,13 @@
         }
       }
     },
-    "Fixed-size and full-screen": {
+    "Full-screen": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "固定尺寸和全屏"
+            "value": "全屏"
           }
         }
       }
@@ -5117,13 +5117,13 @@
         }
       }
     },
-    "Frame rate and frame time": {
+    "Frame time too": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "帧率和帧时间"
+            "value": "以及帧时间"
           }
         }
       }
@@ -6883,13 +6883,13 @@
         }
       }
     },
-    "macOS acceleration": {
+    "macOS": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS 加速"
+            "value": "macOS"
           }
         }
       }

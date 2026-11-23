@@ -43,7 +43,7 @@ templates ask for the subset that matters.
 
 4. **Note the window mode.** Settings › Graphics › Picture › *Resizable windows*.
    The default covers games that run in a window; a game that covers the screen
-   needs *Fixed-size and full-screen* before it can be moved or resized.
+   needs *Full-screen* before it can be moved or resized.
 
 5. **Keep the app running.** Quit it with ⌘Q, never Force Quit, unless force
    quitting is the thing under test. A force-quit leaves the bottle running with

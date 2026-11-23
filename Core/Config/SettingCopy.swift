@@ -86,7 +86,7 @@ nonisolated extension SettingCopy {
                 + "Menus and the desktop keep the Mac’s pointer.",
             entries: [
                 .init(
-                    name: "macOS acceleration",
+                    name: MouseCurve.system.label,
                     text: "The pointer’s usual curve: a fast flick travels farther than a slow "
                         + "sweep of the same length.",
                 ),
