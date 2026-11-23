@@ -103,6 +103,7 @@ sevo run PROGRAM [ARGS]
 sevo debug on|off|status
 sevo streamer on|off|status
 sevo sync sweep [--json]
+sevo steam audit [--bundle FOLDER] [--json]
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo control [--post] /PATH
@@ -110,7 +111,7 @@ sevo benchmark
 sevo logs [--tail N] [-f] [--wine]
 ```
 
-`sevo recover --deep` 还会清除网页缓存并修复客户端。`sevo sync sweep` 请 msync+ 唤醒睡在已可用对象上的线程（例如游戏退出时恰好在设置客户端等待的某个对象，导致 steam.exe 主线程一直沉睡），并指出是哪个对象、还有谁共享它。`sevo diag save` 保存报告时，会附带容器中 Steam 自身的引导、连接、webhelper、游戏进程和控制台日志；加上 `--no-steam-logs` 可以省略这些日志。`sevo perf compare` 会比较设置更改前后，游戏的平均帧率和 1% low 是否有可测量的变化；`sevo holds` 会列出是什么让显示器保持唤醒。
+`sevo recover --deep` 还会清除网页缓存并修复客户端。`sevo sync sweep` 请 msync+ 唤醒睡在已可用对象上的线程（例如游戏退出时恰好在设置客户端等待的某个对象，导致 steam.exe 主线程一直沉睡），并指出是哪个对象、还有谁共享它。`sevo steam audit` 读取某个 Steam 客户端的 `steamui` 文件（默认是容器里的，也可以用 `--bundle` 指定文件夹），列出 Sevoflurane 依赖、而该客户端缺失或已改动的 Steam 界面内部项；只要有缺失项就以 1 退出，并且不会启动任何程序。`sevo diag save` 保存报告时，会附带容器中 Steam 自身的引导、连接、webhelper、游戏进程和控制台日志；加上 `--no-steam-logs` 可以省略这些日志。`sevo perf compare` 会比较设置更改前后，游戏的平均帧率和 1% low 是否有可测量的变化；`sevo holds` 会列出是什么让显示器保持唤醒。
 
 退出码：0 表示成功，1 表示操作失败，2 表示调用方式无效，3 表示安装不完整，4 表示无法连接客户端。App 运行时，客户端的启动、退出和重启等命令会经过它的监管程序。
 

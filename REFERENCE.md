@@ -164,6 +164,7 @@ sevo run PROGRAM [ARGS]
 sevo debug on|off|status
 sevo streamer on|off|status
 sevo sync sweep [--json]
+sevo steam audit [--bundle FOLDER] [--json]
 sevo eval 'JS'
 sevo cdp 'JS' [TARGET]
 sevo control [--post] /PATH
@@ -175,6 +176,10 @@ sevo logs [--tail N] [-f] [--wine]
 `sevo sync sweep` asks msync+ to wake threads left asleep on an object that is
 available, such as steam.exe's main thread after a game exited while it set
 something the client waits on, and names the object and who shares it.
+`sevo steam audit` reads a Steam client's `steamui` files, the bottle's own or
+the folder `--bundle` names, and lists every part of Steam's interface that
+Sevoflurane depends on and that client lacks or has changed; it exits 1 when
+one is missing, and starts nothing.
 `sevo diag save` writes the report, with Steam's own bootstrap, connection,
 webhelper, game-process and console logs from the bottle; `--no-steam-logs`
 leaves them out. `sevo perf compare` reports whether a setting change measurably

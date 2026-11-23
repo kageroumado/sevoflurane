@@ -39,6 +39,7 @@ in short.
 | `sevo debug on` / `off` | Records everything until the app quits. Needs the app running. |
 | `sevo streamer on` / `off` / `status` | Streamer Mode: Steam's windows show a chosen name and picture, no wallet balance, and friends as AI models. A running app reloads Steam's windows to apply it. |
 | `sevo client restart` / `sevo recover [--deep]` | Restarts Steam, or brings a stuck client back; `--deep` also clears its web cache and repairs it. |
+| `sevo steam audit [--bundle <folder>] [--json]` | Checks a Steam client's `steamui` files for every part of Steam's interface the app depends on, and lists what is missing or changed. Reads files only; exits 1 when something is missing. |
 | `sevo sync sweep [--json]` | msync+'s lost-wake sweep: wakes threads left asleep on an available object (a game that exited mid-set can strand steam.exe's main thread) and names the object and its holders. Safe with a game running; recover runs it before restarting. |
 | `sevo daemon repair` | Re-registers the background helper when it will not start. |
 | `sevo storage [--games]` | What Sevoflurane, the bottle and each game occupy. |

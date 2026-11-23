@@ -82,7 +82,7 @@ nonisolated enum ChromiumSurface {
 
     /// One byte pass, looking up the identifier before every `(`: the bundle
     /// is 80 MB, and a String search per token took ten seconds.
-    private static func audit(_ text: [UInt8], file: String) -> [Finding] {
+    static func audit(_ text: [UInt8], file: String) -> [Finding] {
         let wanted = chromiumOnly.filter { !suppliedByShim.contains($0.name) }
         let byMember = Dictionary(grouping: wanted) { member(of: $0.token) }
         let lengths = Set(byMember.keys.map(\.utf8.count))
@@ -93,7 +93,7 @@ nonisolated enum ChromiumSurface {
                 var start = index
                 while start > 0, isIdentifier(bytes[start - 1]) { start -= 1 }
                 guard lengths.contains(index - start) else { continue }
-                let name = String(decoding: bytes[start..<index], as: UTF8.self)
+                let name = String(decoding: bytes[start ..< index], as: UTF8.self)
                 for api in byMember[name] ?? [] where !reported.contains(api.name) {
                     guard hasQualifier(api.token, endingAt: start, in: bytes),
                           !isGuarded(api.token, before: start, in: bytes)
@@ -117,14 +117,14 @@ nonisolated enum ChromiumSurface {
         let qualifier = Array(token.utf8.dropLast(member(of: token).utf8.count))
         guard !qualifier.isEmpty else { return true }
         let from = start - qualifier.count
-        guard from >= 0, bytes[from..<start].elementsEqual(qualifier) else { return false }
+        guard from >= 0, bytes[from ..< start].elementsEqual(qualifier) else { return false }
         return from == 0 || !isIdentifier(bytes[from - 1])
     }
 
     private static func isIdentifier(_ byte: UInt8) -> Bool {
-        (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
-            || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte)
-            || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+        (UInt8(ascii: "a") ... UInt8(ascii: "z")).contains(byte)
+            || (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains(byte)
+            || (UInt8(ascii: "0") ... UInt8(ascii: "9")).contains(byte)
             || byte == UInt8(ascii: "_") || byte == UInt8(ascii: "$")
     }
 
@@ -134,7 +134,7 @@ nonisolated enum ChromiumSurface {
         let window = slice(bytes, index - guardWindow, index)
         let name = member(of: token)
         let tests = [
-            "\"\(name)\"in", "\"\(name)\" in", "'\(name)'in", "'\(name)' in",
+            "\"\(name)\"in", "\"\(name)\" in", "'\(name)'in", "'\(name)' in", "`\(name)`in", "`\(name)` in",
             "typeof \(token)", "typeof window.\(token)",
             ".\(name)&&", ".\(name) &&", ".\(name)?", ".\(name)!=", ".\(name)==",
         ]
@@ -143,6 +143,6 @@ nonisolated enum ChromiumSurface {
     }
 
     private static func slice(_ bytes: UnsafeBufferPointer<UInt8>, _ lower: Int, _ upper: Int) -> String {
-        String(decoding: bytes[max(0, lower)..<min(bytes.count, upper)], as: UTF8.self)
+        String(decoding: bytes[max(0, lower) ..< min(bytes.count, upper)], as: UTF8.self)
     }
 }
