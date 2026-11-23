@@ -169,6 +169,36 @@ struct SetupStoreTests {
     }
 
     @Test
+    func `a stage that fails twice offers the diagnostics archive, and saving it says what went wrong`() async {
+        let environment = DryRunSetupEnvironment(scenario: .freshMachine, stepDelay: .zero, detection: Self.plainMac)
+        environment.crossOverAppearsOnRecheck = false
+        environment.sharesRunStats = false
+        environment.installerFailures = .max
+        var actions = SetupStore.Actions()
+        actions.saveDiagnostics = { "The Desktop is read-only." }
+        let store = SetupStore(
+            provisioner: Provisioner(environment: environment),
+            graphics: GraphicsStore(environment: DemoGraphicsEnvironment(scenario: .builtInWithToolkit, stepDelay: .zero)),
+            actions: actions,
+        )
+        await store.prepare()
+        store.begin()
+        let failed = await eventually { store.hasFailed }
+        #expect(failed)
+        #expect(!store.offersDiagnostics)
+        let offered = await eventually {
+            if !store.offersDiagnostics { store.tryAgain() }
+            return store.offersDiagnostics
+        }
+        #expect(offered)
+        store.saveDiagnostics()
+        let said = await eventually { store.diagnosticsFailure != nil }
+        #expect(said)
+        #expect(store.diagnosticsFailure == "The Desktop is read-only.")
+        #expect(!store.isSavingDiagnostics)
+    }
+
+    @Test
     func `a failed engine download offers a file, which the retry installs`() async {
         let rig = makeRig(.freshMachine, detection: Self.plainMac) { $0.engineFailure = "The Internet connection appears to be offline." }
         await rig.store.prepare()

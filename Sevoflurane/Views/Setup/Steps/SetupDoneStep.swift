@@ -33,6 +33,8 @@ struct SetupDoneStep: View {
             if state == .signIn {
                 Button("Not Now") { store.skipSignIn() }
                     .help("Run Windows programs from Quick Launch. You can sign in to Steam later from the menu bar.")
+            } else if state == .gaveUp {
+                SetupDiagnosticsOffer(store: store)
             }
         } primary: {
             switch state {

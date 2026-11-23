@@ -135,7 +135,7 @@
         }
 
         private static func refusesToClose(_: (String) -> Void) async -> String? {
-            String(localized: "Quit Steam yourself, then try again.")
+            String(localized: "Try again. If it keeps happening, restart your Mac.")
         }
 
         // MARK: - The welcome and the questions
@@ -177,12 +177,6 @@
 
         private static let progressStates: [WizardState] = [
             progress("4-progress-early") { $0.hold = .engineDownload(fraction: 0.42) },
-            make("4-progress-time-left", environment: { $0.hold = .engineDownload(fraction: 0.42) }, walk: { store in
-                await begin(store)
-                await wait { store.provisioner.stageFraction != nil }
-                // A simulated download has no rate to estimate from.
-                store.provisioner.stage(secondsLeft: 240)
-            }),
             progress("4-progress-details", details: true) { $0.hold = .clientUpdate },
             progress("4-progress-late") { $0.hold = .dependency },
             progress("4-progress-sharing", asks: [.sharing]) { $0.hold = .engineDownload(fraction: 0.42) },
@@ -196,6 +190,16 @@
             },
             progress("4-progress-failed-steam-download", details: true) { $0.installerDownloadFailure = offline },
             progress("4-progress-failed-installer") { $0.installerFailures = .max },
+            make("4-progress-failed-twice", environment: { $0.installerFailures = .max }, walk: { store in
+                await begin(store)
+                await wait { store.hasFailed }
+                // The retry is taken once the failed pass has ended, a turn
+                // after its failure shows.
+                await wait {
+                    if !store.offersDiagnostics { store.tryAgain() }
+                    return store.offersDiagnostics
+                }
+            }),
             progress("4-progress-done-sharing", asks: [.sharing]),
             make("4-progress-adopting", on: .multipleBottles, machine: nil, environment: { $0.hold = .dependency }, walk: { store in
                 await begin(store)

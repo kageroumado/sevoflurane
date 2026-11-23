@@ -46,6 +46,9 @@ final class SetupStore {
         var repairHelper: () async -> DaemonService.RepairResult = { .alreadyHealthy }
         var openLoginItems: () -> Void = {}
         var restartSteam: () -> Void = {}
+        /// Writes the diagnostics archive to the Desktop and shows it;
+        /// answers what went wrong.
+        var saveDiagnostics: () async -> String? = { nil }
     }
 
     let provisioner: Provisioner
@@ -69,6 +72,11 @@ final class SetupStore {
     /// What the last helper repair came to.
     private(set) var helperRepair: DaemonService.RepairResult?
     private(set) var isRepairingHelper = false
+    private(set) var isSavingDiagnostics = false
+    /// Why the diagnostics archive could not be written.
+    private(set) var diagnosticsFailure: String?
+    /// How often each stage has failed in this assistant.
+    private var failures: [SetupStage: Int] = [:]
     /// Whether Sevoflurane opens at login once the assistant is finished.
     var opensAtLogin: Bool
 
@@ -302,10 +310,29 @@ final class SetupStore {
     }
 
     private func passEnded() {
+        if let stage = provisioner.failure?.stage { failures[stage, default: 0] += 1 }
         guard provisioner.activity == .done else { return }
         startClientOnce()
         refreshCards()
         finishIfNothingIsLeft()
+    }
+
+    /// Whether the stage that failed has failed before in this assistant:
+    /// trying again has not helped, so the screen offers the archive to send.
+    var offersDiagnostics: Bool {
+        guard let stage = provisioner.failure?.stage else { return false }
+        return failures[stage, default: 0] >= 2
+    }
+
+    func saveDiagnostics() {
+        guard !isSavingDiagnostics else { return }
+        isSavingDiagnostics = true
+        diagnosticsFailure = nil
+        Task(name: "Save diagnostics from setup") { [weak self] in
+            guard let self else { return }
+            diagnosticsFailure = await actions.saveDiagnostics()
+            isSavingDiagnostics = false
+        }
     }
 
     private func startClientOnce() {

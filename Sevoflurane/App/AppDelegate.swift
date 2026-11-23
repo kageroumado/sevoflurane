@@ -502,6 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return result
             }
             actions.openLoginItems = { DaemonService.openLoginItems() }
+            actions.saveDiagnostics = { await DiagnosticsArchive.save() }
             actions.restartSteam = { [weak self] in self?.supervisor.restartNow(reason: "restart from setup") }
         }
         setupWindow.present(SetupStore(

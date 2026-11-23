@@ -35,12 +35,6 @@ final class Provisioner {
     private(set) var stageBytes: Int64?
     /// Why the last pass stopped; `nil` once another starts.
     private(set) var failure: SetupFailure?
-    /// How long the current stage's download still takes, in seconds: known
-    /// only for a download whose total is known, once its rate has settled.
-    private(set) var stageSecondsLeft: Int?
-    /// When the current stage's download was first measured, and how far it
-    /// was then.
-    private var downloadOrigin: (at: ContinuousClock.Instant, fraction: Double)?
     /// An engine tarball the engine stage installs in place of a download.
     var engineTarball: URL?
     /// Whether this run installs the whole dependency catalog. `nil` reads
@@ -250,7 +244,6 @@ final class Provisioner {
         }
         stageFraction = nil
         stageBytes = nil
-        stageSecondsLeft = nil
     }
 
     /// Runs one stage of the pass and marks it done; a stage that finds its
@@ -259,8 +252,6 @@ final class Provisioner {
         self.stage = stage
         stageFraction = nil
         stageBytes = nil
-        stageSecondsLeft = nil
-        downloadOrigin = nil
         try await body()
         stageStates[stage] = .done
     }
@@ -405,44 +396,10 @@ final class Provisioner {
                     }
                     self.stageFraction = fraction
                     self.stageStates[.engine] = .working(fraction: fraction)
-                    self.estimateTimeLeft(at: fraction)
                 }
             }
         }
     }
-
-    /// How long a download must have run, and how far it must have moved,
-    /// before its rate says anything.
-    private static let settlingTime = Duration.seconds(8)
-    private static let settlingProgress = 0.03
-
-    /// Estimates the rest of a download from its rate since it was first
-    /// measured. Nothing is said until the rate has settled.
-    private func estimateTimeLeft(at fraction: Double?) {
-        guard let fraction, fraction < 1 else {
-            stageSecondsLeft = nil
-            return
-        }
-        let now = ContinuousClock.now
-        guard let origin = downloadOrigin else {
-            downloadOrigin = (now, fraction)
-            return
-        }
-        let elapsed = now - origin.at
-        let moved = fraction - origin.fraction
-        guard elapsed >= Self.settlingTime, moved >= Self.settlingProgress else { return }
-        let seconds = Double(elapsed.components.seconds) * (1 - fraction) / moved
-        let rounded = Int(seconds.rounded())
-        if rounded != stageSecondsLeft { stageSecondsLeft = rounded }
-    }
-
-    #if DEBUG
-        /// Gives the stage under way a time left, for the gallery: a
-        /// simulated download has no rate.
-        func stage(secondsLeft: Int) {
-            stageSecondsLeft = secondsLeft
-        }
-    #endif
 
     private func createBottleIfMissing(_ bottleName: String) async throws {
         // A Steam-less bottle whose boot never finished, or that Steam's

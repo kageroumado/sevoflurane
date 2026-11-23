@@ -45,9 +45,6 @@ struct WizardStateTests {
         #expect(provisioner.stage == .engine)
         #expect(provisioner.isWorking)
         #expect(provisioner.passFraction > 0)
-        #expect(provisioner.stageSecondsLeft == nil)
-        let timed = try await arranged("4-progress-time-left").provisioner
-        #expect(timed.stageSecondsLeft == 240)
     }
 
     @Test
@@ -60,6 +57,11 @@ struct WizardStateTests {
         let offline = try await arranged("4-progress-failed-steam-download").provisioner.failure
         #expect(offline?.cause == "The Internet connection appears to be offline.")
         #expect(offline?.advice == SetupFailureText.networkAdvice)
+        let once = try await arranged("4-progress-failed-installer")
+        #expect(!once.offersDiagnostics)
+        let twice = try await arranged("4-progress-failed-twice")
+        let offered = await eventually { twice.offersDiagnostics }
+        #expect(offered)
     }
 
     @Test

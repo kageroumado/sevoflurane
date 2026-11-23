@@ -31,7 +31,9 @@ struct SetupProgressStep: View {
             switch card {
             case .sharing: Button("Don\u{2019}t Share") { store.answerSharing(false) }
             case .toolkit: Button("Not Now") { store.declineToolkit() }
-            case nil: EmptyView()
+            case nil:
+                // A stage that failed twice is past what trying again mends.
+                if store.offersDiagnostics { SetupDiagnosticsOffer(store: store) }
             }
         } primary: {
             switch card {
@@ -65,8 +67,7 @@ struct SetupProgressStep: View {
 }
 
 /// How far the pass is: the stage under way in words, one bar across every
-/// stage with its fraction in digits, the time a download of known size
-/// still takes, and a failure where it stopped.
+/// stage with its fraction in digits, and a failure where it stopped.
 struct SetupPassSummary: View {
     let store: SetupStore
 
@@ -117,20 +118,10 @@ struct SetupPassSummary: View {
         return String(localized: "\(working) \(bytes.formatted(.byteCount(style: .file))) received")
     }
 
-    /// How far the whole pass is, in digits: the number the bar draws. A
-    /// download of known size adds the time it still takes.
+    /// How far the whole pass is, in digits: the number the bar draws.
     private var amount: String? {
         guard provisioner.isWorking else { return nil }
-        let percent = provisioner.passFraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
-        guard let seconds = provisioner.stageSecondsLeft else { return percent }
-        return "\(percent) · \(Self.timeLeft(seconds))"
-    }
-
-    /// "about 4 minutes left", in whole minutes; under one, "less than a minute left".
-    static func timeLeft(_ seconds: Int) -> String {
-        let minutes = Int((Double(seconds) / 60).rounded())
-        guard minutes >= 1 else { return String(localized: "less than a minute left") }
-        return minutes == 1 ? String(localized: "about 1 minute left") : String(localized: "about \(minutes) minutes left")
+        return provisioner.passFraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
     }
 }
 
@@ -160,6 +151,21 @@ private struct SetupFailureNote: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The way out when trying again does not help: the diagnostics archive on
+/// the Desktop, and where to send it.
+struct SetupDiagnosticsOffer: View {
+    let store: SetupStore
+
+    var body: some View {
+        Button(store.isSavingDiagnostics ? "Saving…" : "Save Diagnostics") { store.saveDiagnostics() }
+            .disabled(store.isSavingDiagnostics)
+        Text(store.diagnosticsFailure ?? String(localized: "Send the file on Discord or in a GitHub issue."))
+            .font(SettingsType.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
     }
 }
 
@@ -262,7 +268,7 @@ extension SetupStage {
     /// The stage as the one that failed.
     var failedSentence: String {
         switch self {
-        case .steamStop: String(localized: "Steam is still running and did not quit.")
+        case .steamStop: String(localized: "Steam is still running and did not close.")
         case .rosetta: String(localized: "Apple\u{2019}s Rosetta could not be installed.")
         case .engine: String(localized: "Windows support could not be downloaded.")
         case .bottle: String(localized: "Steam\u{2019}s folder could not be prepared.")

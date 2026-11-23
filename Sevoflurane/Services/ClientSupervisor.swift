@@ -356,7 +356,7 @@ final class ClientSupervisor {
                 log.log(.supervisor, "setup: the client could not be stopped before the bottle switch (\(answer))")
                 return answer == .busy
                     ? String(localized: "It is still restarting. Try again in a moment.")
-                    : String(localized: "Quit Steam yourself, then try again.")
+                    : String(localized: "Try again. If it keeps happening, restart your Mac.")
             case .waitForRestart:
                 narrate("Waiting for Steam to finish restarting…")
                 while ContinuousClock.now - start < Timing.switchStopBudget,
